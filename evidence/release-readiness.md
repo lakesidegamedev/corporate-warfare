@@ -1,6 +1,6 @@
 # Release readiness map
 
-Updated 2026-10-25 against main `0383ead`. This maps every release requirement to its real
+Updated 2026-10-25 against main `30a545c`. This maps every release requirement to its real
 evidence or its concrete blocker. It is not a completion claim: a requirement is only done when
 its ledger entry names reviewed evidence that satisfies the gate.
 
@@ -42,7 +42,7 @@ its ledger entry names reviewed evidence that satisfies the gate.
 | R34 | automated | pending | Score at week 260 works (seed 3 total 62); needs explainability and continue fixtures. |
 | R35 | human | pending | Seven-step onboarding implemented; accessibility audit and final assets pending. |
 | R36 | automated | active | 640-run sweep and distributions in `evidence/balance-report.md`; rival outcome variance is now non-zero but score variance is still flat for a passive investor. |
-| R37 | device | blocked | No device measurement; needs A15-class hardware and a signed build. |
+| R37 | device | blocked | Representative/grown/stress fixtures and a Linux engine baseline exist (evidence/performance-baseline.md); A15-class device measurement needs a signed build. |
 | R38 | human | blocked | Needs three independent testers; none recruited. |
 | R39 | human | active | Icon, privacy manifest and release notes exist; owner review of metadata/rating/attribution pending. |
 | R40 | cross-platform | active | Unsigned archive passes; signed export blocked on Apple credentials. |

@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `0383ead`.
-Kanban: 254781. Merged PRs: #8 through #27.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `30a545c`.
+Kanban: 254781. Merged PRs: #8 through #32.
 
 ## What exists now
 
@@ -18,7 +18,9 @@ Kanban: 254781. Merged PRs: #8 through #27.
 - Release track: app icon, privacy manifest and portable audit, metadata drafts, fail-closed
   signed release workflow with bounded App Store Connect processing check.
 - Evidence: ledger/units, commands, cross-platform session hash, industry scenarios, adversarial
-  saves, balance distributions, corporate lifecycles, brand demand, workflows.
+  saves, balance distributions, corporate lifecycles, brand demand, workflows, persistent-investor
+  recovery, and a Linux engine baseline for representative/grown/stress fixtures.
+- Release aids: static accessibility audit, portable privacy audit, owner-action runbook.
 
 ## Verified
 
@@ -27,6 +29,8 @@ Kanban: 254781. Merged PRs: #8 through #27.
   (`20261025T070655Z-5df8bceb` latest).
 - Corridor at seed 3: 0 rival failures at 52 weeks, 4-6 at 260 across seeds, 11 over thirty
   years; guided firm solvent at every horizon; score 62 at week 260.
+- Engine baseline on this host: representative (31 firms, 290 facilities) p50 0.55 ms; grown
+  (217/2,030) p50 6.46 ms; stress (992/9,280) p50 82.98 ms. Device timing still required.
 - Hosted Verify and Apple smoke last ran green at PR #11. Since PR #12 GitHub Actions fails in
   seconds for billing, so every Swift change after the onboarding PR is syntax-checked only and
   has **not** been compiled by Xcode or run in a simulator.
