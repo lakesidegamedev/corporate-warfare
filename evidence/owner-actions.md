@@ -10,7 +10,7 @@ Symptom: every workflow fails in 2-4 seconds before any step runs, with
 to be increased."
 
 Action: restore the account payment method or raise the Actions spending limit in GitHub billing
-settings.
+settings, or use the owner-approved public-repository path in `evidence/handoff-muse.md`.
 
 Then immediately possible:
 
@@ -19,7 +19,7 @@ Then immediately possible:
   runs the eight save-lifecycle tests and the session hash test, and archives an unsigned device
   app.
 - Expected canonical hash in `EngineBridgeTests` and the Rust pin:
-  `3ef82f5bc26de9d2c1c88cf8c2eca42c5d4866226ed5d22a8dbe731e8f5f7e7b`.
+  `6731ed7cf42d0a410e94b55f3aefad6fbe51453cbe3a6803548fa7edbfb633ad`.
   If the simulator disagrees, that is a real cross-platform finding, not a reason to change the
   pin without investigating.
 
