@@ -40,7 +40,7 @@ Kanban: 254781. Merged PRs: #8 through #56.
 
 ## Verified
 
-- Local: 210 tests pass; shared scheduler job `20261025T105708Z-09b44a1f` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
+- Local: 209 tests pass; shared scheduler job `20261025T105708Z-09b44a1f` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
   warnings` clean; design and plan validators pass; shared scheduler jobs passed
   (`20261025T070655Z-5df8bceb` latest). Defense procurement has six unit tests and its
   industry budget scenario; fiscal budgets now follow actual labour and corporate receipts.
