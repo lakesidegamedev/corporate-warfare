@@ -135,8 +135,10 @@
       ],
       "gate": "automated",
       "acceptance": "Player is separate from firms, retains unpledged assets after control loss, and can found or manage another firm without resetting career losses.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R12-career.json"
+      ]
     },
     {
       "id": "R13",

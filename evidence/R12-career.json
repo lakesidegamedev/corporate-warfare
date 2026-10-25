@@ -1,0 +1,14 @@
+{
+  "requirement": "R12",
+  "result": "pass",
+  "commit": "f28b40b85a6c723f09b81cdf1fedd4c68aab25c8",
+  "procedure": "cargo test --locked --workspace; cw-session career_recovery tests losing_control_keeps_personal_cash_and_allows_a_new_firm and destitution_offers_one_management_contract_with_a_cooldown",
+  "artifacts": [
+    "crates/cw-session/tests/career_recovery.rs",
+    "crates/cw-sim/src/commands.rs",
+    "crates/cw-sim/src/economy/insolvency.rs",
+    "evidence/release-readiness.md"
+  ],
+  "limitations": "Automated engine/session fixture only. The phone recovery route has not been compiled or run on a simulator since GitHub Actions billing began failing.",
+  "verified_at": "2026-10-25"
+}
