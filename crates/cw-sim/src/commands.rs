@@ -2166,6 +2166,35 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_issuance_leaves_shares_and_cash_unchanged() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 144, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let primary = world.investor.primary_group.unwrap();
+        crate::economy::equity::refresh_valuation(&mut world, &dataset);
+        let fair = world.firm(primary).unwrap().shares.fair_cents;
+        let issued = world.firm(primary).unwrap().shares.issued;
+        let cash = world.firm(primary).unwrap().book.cash();
+        // Outside investor 7 has less capital than this issuance; the command must not
+        // partially credit shares or cash.
+        if let Some(holder) = world.outside.investors.get_mut(7) {
+            holder.capital_cents = 1;
+        }
+        let command = envelope(
+            &world,
+            CommandIntent::IssueShares {
+                firm: primary,
+                qty: 1_000_000,
+                price_cents: fair * 95 / 100,
+                buyer_outside: 7,
+            },
+        );
+        let result = apply(&mut world, &dataset, &command);
+        assert!(result.is_err());
+        assert_eq!(world.firm(primary).unwrap().shares.issued, issued);
+        assert_eq!(world.firm(primary).unwrap().book.cash(), cash);
+    }
+
+    #[test]
     fn a_legal_price_change_succeeds() {
         let dataset = Dataset::load().unwrap();
         let mut world = seed::build(&dataset, 143, ScenarioKind::Guided, ScenarioMode::Sandbox);

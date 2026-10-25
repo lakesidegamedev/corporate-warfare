@@ -589,6 +589,35 @@ mod tests {
     }
 
     #[test]
+    fn the_cross_platform_fixture_hash_is_pinned() {
+        // This exact sequence runs in the iOS XCTest bridge. Equal hashes on Linux and iOS are
+        // the cross-platform determinism evidence for this scenario.
+        let mut session = Session::create(config(42)).unwrap();
+        let primary = session.world.investor.primary_group.unwrap();
+        let price = session.dataset.reference_price(0);
+        session
+            .submit(cw_sim::commands::CommandEnvelope {
+                command_id_high: 42,
+                command_id_low: 1,
+                actor: 0,
+                expected_revision: session.revision(),
+                submitted_tick: 0,
+                intent: CommandIntent::SetPrice {
+                    firm: primary,
+                    product: 0,
+                    price_cents: price,
+                },
+            })
+            .unwrap();
+        session.advance(2);
+        let hash = session.canonical_hash();
+        assert_eq!(
+            hash,
+            "7f9584938e0b201905a1f577c0527f499475b923ef8debe048efd342e43fbb6a"
+        );
+    }
+
+    #[test]
     fn duplicate_command_ids_are_idempotent() {
         let mut session = Session::create(config(175)).unwrap();
         let primary = session.world.investor.primary_group.unwrap();
