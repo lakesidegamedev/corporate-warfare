@@ -42,10 +42,15 @@ final class AppStore: ObservableObject {
     @Published var lastErrorKey: String?
 
     private let engine = Engine()
+    private let saveManager: SaveManager
     private var runTask: Task<Void, Never>?
     /// Increments whenever the run loop starts or stops, so a cancelled loop cannot clear the
     /// handle of a newer one.
     private var runGeneration = 0
+
+    init(saveManager: SaveManager = .shared) {
+        self.saveManager = saveManager
+    }
 
     struct MarketRow: Identifiable {
         let product: ProductDto
@@ -63,7 +68,7 @@ final class AppStore: ObservableObject {
     }
 
     func restoreLatestIfAvailable() async {
-        saves = SaveManager.shared.list()
+        saves = saveManager.list()
         guard let latest = saves.first else { return }
         // A failed launch import leaves the app on the Start screen with a named recovery issue
         // instead of silently starting a new career over the top of the damaged slot.
@@ -86,7 +91,7 @@ final class AppStore: ObservableObject {
 
     func resume(_ save: StoredSave, silent: Bool = false) async {
         do {
-            let data = try SaveManager.shared.load(save)
+            let data = try saveManager.load(save)
             let overview = try await engine.loadSave(data)
             apply(overview)
             recoveryIssue = nil
@@ -95,7 +100,7 @@ final class AppStore: ObservableObject {
         } catch {
             // The issue names the slot from its own sidecar; a missing sidecar stays "unknown"
             // rather than claiming week zero.
-            let metadata = SaveManager.shared.metadata(forSlot: save.slot)
+            let metadata = saveManager.metadata(forSlot: save.slot)
             noteImportFailure(
                 slot: save.slot,
                 week: metadata?.week,
@@ -110,7 +115,7 @@ final class AppStore: ObservableObject {
     /// by `SaveManager.recover`, and the live session is replaced only after that check passes.
     func recover(slot: String) async {
         do {
-            let candidate = try SaveManager.shared.recover(slot: slot)
+            let candidate = try saveManager.recover(slot: slot)
             let overview = try await engine.loadSave(candidate.data)
             apply(overview)
             recoveryIssue = nil
@@ -222,7 +227,7 @@ final class AppStore: ObservableObject {
             labour = nil
             policyState = nil
         }
-        saves = SaveManager.shared.list()
+        saves = saveManager.list()
         score = await engine.score()
         await loadMarkets()
     }
@@ -282,6 +287,7 @@ final class AppStore: ObservableObject {
     func suspendAndSave(timeoutSeconds: Double = 3) async {
         guard sessionReady else { return }
         let engine = self.engine
+        let saveManager = self.saveManager
         let week = overview?.tick ?? 0
         let slot = SaveManager.autosaveSlot(week: week)
 
@@ -289,7 +295,7 @@ final class AppStore: ObservableObject {
             do {
                 let data = try await engine.exportSave()
                 let hash = await engine.canonicalHash()
-                try SaveManager.shared.write(
+                try saveManager.write(
                     data,
                     slot: slot,
                     week: week,
@@ -343,8 +349,8 @@ final class AppStore: ObservableObject {
         guard sessionReady else { return }
         let slot = SaveManager.manualSlot()
         let written = await save(slot: slot, kind: .manual)
-        SaveManager.shared.pruneManualSlots()
-        saves = SaveManager.shared.list()
+        saveManager.pruneManualSlots()
+        saves = saveManager.list()
         if written {
             statusLine = "Saved \(slot)."
         }
@@ -357,7 +363,7 @@ final class AppStore: ObservableObject {
             let data = try await engine.exportSave()
             let hash = await engine.canonicalHash()
             let week = overview?.tick ?? 0
-            _ = try SaveManager.shared.write(
+            _ = try saveManager.write(
                 data,
                 slot: slot,
                 week: week,
@@ -384,14 +390,14 @@ final class AppStore: ObservableObject {
     ) {
         let key = ErrorKey.of(error) ?? "error.invalid_save"
         lastErrorKey = key
-        SaveManager.shared.markUnreadable(slot: slot)
-        let preserved = SaveManager.shared.preserveFailingCopy(slot: slot)
+        saveManager.markUnreadable(slot: slot)
+        let preserved = saveManager.preserveFailingCopy(slot: slot)
         recoveryIssue = SaveRecoveryIssue(
             slot: slot,
             week: week,
             savedAt: savedAt,
             errorKey: key,
-            hasLastGood: SaveManager.shared.hasLastGood(slot: slot),
+            hasLastGood: saveManager.hasLastGood(slot: slot),
             preservedCopy: preserved
         )
         if !silent {
@@ -407,7 +413,7 @@ final class AppStore: ObservableObject {
     /// its own sheet instead of racing a single app-wide presentation.
     func makeDiagnostics() -> DiagnosticExport? {
         let info = engineInfo()
-        let saves = SaveManager.shared.list()
+        let saves = saveManager.list()
         let bundle = DiagnosticBundle(
             generatedAt: SaveMetadata.string(from: Date()),
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
@@ -430,7 +436,7 @@ final class AppStore: ObservableObject {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(bundle)
-            let url = try SaveManager.shared.writeDiagnosticBundle(data)
+            let url = try saveManager.writeDiagnosticBundle(data)
             return DiagnosticExport(url: url, summary: bundle.reviewSummary)
         } catch {
             errorMessage = "The diagnostics file could not be written."
