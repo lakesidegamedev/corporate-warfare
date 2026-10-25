@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `a8f8627`.
-Kanban: 254781. Merged PRs: #8 through #51.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `89a6cb5`.
+Kanban: 254781. Merged PRs: #8 through #52.
 
 ## What exists now
 
@@ -32,14 +32,17 @@ Kanban: 254781. Merged PRs: #8 through #51.
   divestitures, bond maturity pays the final coupon, private firm data needs information rights,
   bank runs pay depositors pro rata, insurance claims settle the following week, and the
   release verifier checks the compiled asset catalog while export uses the App Store Connect
-  key, the clock pauses before grace, strikes and imminent deadlines, and quality investment is a
-  bounded funded lever.
+  key, the clock pauses before grace, strikes and imminent deadlines, quality investment is a
+  bounded funded lever, and defense demand runs through funded 52-week procurement contracts with
+  deposits, accepted delivery, deferred unmet demand and a two-week penalty grace.
 
 ## Verified
 
-- Local: 171 tests pass; shared scheduler job `20261025T075056Z-dd9c6d94` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
+- Local: 202 tests pass; shared scheduler job `20261025T101346Z-6ff42003` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
   warnings` clean; design and plan validators pass; shared scheduler jobs passed
-  (`20261025T070655Z-5df8bceb` latest).
+  (`20261025T070655Z-5df8bceb` latest). Defense procurement has six unit tests and its
+  industry budget scenario; fiscal budgets still use the seeded baseline because weekly
+  labour-income tax is not posted, so a trailing-receipt mean would be invented.
 - Corridor at seed 3: 0 rival failures at 52 weeks, 4-5 at 260 across seeds, 10 over thirty
   years; guided firm solvent and in control at every horizon; score 61 at week 260.
 - Engine baseline on this host: representative (31 firms, 290 facilities) p50 0.55 ms; grown
