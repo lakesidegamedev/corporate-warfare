@@ -274,7 +274,10 @@ fn a_parent_guarantee_backs_a_failed_subsidiary_only_up_to_its_cap() {
         insolvency::settle(&mut world, &dataset);
     }
     let paid = parent_cash - world.firm(parent).unwrap().book.cash();
-    assert!(paid > 0, "the guarantee is called when unpaid claims remain");
+    assert!(
+        paid > 0,
+        "the guarantee is called when unpaid claims remain"
+    );
     assert!(paid >= 0, "the guarantor is never credited by the failure");
     assert!(paid <= 10_000_000, "payment is capped by the guarantee");
     assert_eq!(
