@@ -112,13 +112,18 @@ jobs:
       - name: Export for App Store Connect
         env:
           TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           sed "s/__TEAM_ID__/$TEAM/" apple/ExportOptions.plist.in > "$RUNNER_TEMP/ExportOptions.plist"
           xcodebuild -exportArchive \
             -archivePath apple/build/CorporateWarfare.xcarchive \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -exportPath "$RUNNER_TEMP/export" \
-            -allowProvisioningUpdates
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/private_keys/AuthKey_${KEY_ID}.p8" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER"
 
       - name: Record provenance
         run: |
