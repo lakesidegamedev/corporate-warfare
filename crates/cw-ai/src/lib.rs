@@ -462,14 +462,20 @@ fn acquisition_bid(
     }
     // Benefit proxy: a tenth of the target's trailing annual revenue, less the premium paid
     // over a 20 percent haircut of the public fair estimate.
-    let weeks = entity.book.recent_weeks().len().max(1) as i64;
-    let revenue: i64 = entity
-        .book
-        .recent_weeks()
-        .iter()
-        .map(|week| week.revenue)
-        .sum::<i64>()
-        / weeks;
+    // Published revenue for a listed target; a private one is judged on its public fair
+    // estimate alone (a twentieth of it a year as the contribution proxy).
+    let revenue: i64 = if entity.shares.ipo_done {
+        let weeks = entity.book.recent_weeks().len().max(1) as i64;
+        entity
+            .book
+            .recent_weeks()
+            .iter()
+            .map(|week| week.revenue)
+            .sum::<i64>()
+            / weeks
+    } else {
+        entity.shares.fair_cents.saturating_mul(eligible) / 20 / 52 * 10
+    };
     let haircut = entity.shares.fair_cents * 80 / 100;
     let premium = (price - haircut).max(0).saturating_mul(wanted);
     let benefit = revenue * 52 / 10 - premium / 10;
@@ -697,12 +703,16 @@ fn distressed_target(world: &World, buyer: Handle) -> Option<Handle> {
         .firms
         .iter()
         .filter(|(handle, firm)| {
-            let losses: i64 = firm
-                .book
-                .recent_weeks()
-                .iter()
-                .map(|week| week.net_income)
-                .sum();
+            // Only a listed company publishes statements; a private one shows only its mark.
+            let losses: i64 = if firm.shares.ipo_done {
+                firm.book
+                    .recent_weeks()
+                    .iter()
+                    .map(|week| week.net_income)
+                    .sum()
+            } else {
+                0
+            };
             let discounted = firm.shares.mark_cents * 100 < firm.shares.fair_cents * 80;
             !group.contains(handle)
                 && !player_controlled(world, *handle)
@@ -1027,5 +1037,55 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_private_companys_books_do_not_reach_rival_decisions() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 174, ScenarioKind::Founder, ScenarioMode::Sandbox);
+        for _ in 0..20 {
+            cw_sim::tick::advance(&mut world, &dataset);
+            world.pending_pause = None;
+        }
+        let private = world
+            .firms
+            .iter()
+            .find(|(handle, firm)| {
+                !firm.shares.ipo_done && firm.operative() && !player_controlled(&world, *handle)
+            })
+            .map(|(handle, _)| handle)
+            .unwrap();
+        let before: Vec<String> = propose(&world, &dataset)
+            .iter()
+            .filter(|p| p.actor != private.0)
+            .map(|p| format!("{p:?}"))
+            .collect();
+        // A $100m private loss in the statements only; cash and the public mark are unchanged.
+        let tick = world.tick;
+        let entity = world.firms.get_mut(private).unwrap();
+        entity
+            .book
+            .commit(
+                tick,
+                cw_core::ledger::Txn::new()
+                    .debit(
+                        cw_core::ledger::Account::OperatingExpense,
+                        10_000_000_000,
+                        "hidden",
+                    )
+                    .credit(
+                        cw_core::ledger::Account::ShareCapital,
+                        10_000_000_000,
+                        "hidden",
+                    ),
+            )
+            .unwrap();
+        let _ = entity.book.close_week(tick);
+        let after: Vec<String> = propose(&world, &dataset)
+            .iter()
+            .filter(|p| p.actor != private.0)
+            .map(|p| format!("{p:?}"))
+            .collect();
+        assert_eq!(before, after);
     }
 }
