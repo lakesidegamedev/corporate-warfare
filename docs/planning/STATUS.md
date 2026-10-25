@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `e3e525b`.
-Kanban: 254781. Merged PRs: #8 through #53.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `70ae3eb`.
+Kanban: 254781. Merged PRs: #8 through #54.
 
 ## What exists now
 
@@ -40,12 +40,14 @@ Kanban: 254781. Merged PRs: #8 through #53.
 
 ## Verified
 
-- Local: 205 tests pass; shared scheduler job `20261025T102837Z-7fc36536` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
+- Local: 206 tests pass; shared scheduler job `20261025T103801Z-9681f4b9` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
   warnings` clean; design and plan validators pass; shared scheduler jobs passed
   (`20261025T070655Z-5df8bceb` latest). Defense procurement has six unit tests and its
   industry budget scenario; fiscal budgets now follow actual labour and corporate receipts.
-  Labour tax is withheld on gross earned wages because households have no per-worker cash ledger,
-  and transfer support still draws from the training budget; both are named refinements.
+  Labour tax is withheld on wages firms actually paid, attributed pro rata across employing
+  regions; deferred payroll is an overdue liability and is not taxed. Withholding is a regional
+  aggregate rather than per-worker, and transfer support still draws from the training budget;
+  both are named refinements.
 - Corridor at seed 3: 0 rival failures at 52 weeks, 4-5 at 260 across seeds, 10 median over
   thirty years; guided firm solvent and in control at every horizon; score 61 at week 260.
 - Engine baseline on this host: representative (31 firms, 290 facilities) p50 0.55 ms; grown
