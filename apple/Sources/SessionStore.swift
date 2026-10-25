@@ -73,6 +73,50 @@ actor Engine {
         session?.events() ?? []
     }
 
+    func groupTree() -> [GroupNodeDto] {
+        session?.groupTree() ?? []
+    }
+
+    func boardVotes(firm: UInt64) -> [BoardVoteDto] {
+        session?.boardVotes(firm: firm) ?? []
+    }
+
+    func labour(firm: UInt64) -> LabourDto? {
+        session?.labour(firm: firm)
+    }
+
+    func policyState(firm: UInt64) -> PolicyStateDto? {
+        session?.policyState(firm: firm)
+    }
+
+    func institutions() -> [InstitutionDto] {
+        session?.institutions() ?? []
+    }
+
+    func recovery() -> RecoveryDto? {
+        session?.recovery()
+    }
+
+    func fundingBuyers() -> [BuyerDto] {
+        session?.fundingBuyers() ?? []
+    }
+
+    func insuranceQuote(insurer: UInt64, facility: UInt64, limit: Int64) -> QuoteDto? {
+        session?.insuranceQuote(insurer: insurer, facility: facility, limitCents: limit)
+    }
+
+    func previewIssue(firm: UInt64, qty: Int64, priceCents: Int64) -> PreviewDto? {
+        session?.previewIssue(firm: firm, qty: qty, priceCents: priceCents)
+    }
+
+    func previewBuild(firm: UInt64, recipe: UInt32, blocks: UInt32) -> PreviewDto? {
+        session?.previewBuild(firm: firm, recipe: recipe, blocks: blocks)
+    }
+
+    func previewJson(_ json: String) -> PreviewDto? {
+        session?.previewJson(json: json)
+    }
+
     func setPrice(firm: UInt64, product: UInt32, price: Int64) -> ReceiptDto? {
         session?.setPrice(firm: firm, product: product, priceCents: price)
     }
@@ -93,8 +137,8 @@ actor Engine {
         session?.payDividend(firm: firm, amountCents: amount)
     }
 
-    func submit(json: String) -> ReceiptDto? {
-        session?.submitJson(json: json)
+    func submit(json: String, actor: UInt64 = 0) -> ReceiptDto? {
+        session?.submitJsonAs(actor: actor, json: json)
     }
 
     func exportSave() throws -> Data {

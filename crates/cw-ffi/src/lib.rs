@@ -219,10 +219,14 @@ pub struct DealDto {
     pub handle: u64,
     pub buyer: String,
     pub target: String,
+    pub buyer_handle: u64,
+    pub target_handle: u64,
+    pub kind: String,
     pub state: String,
     pub offer_price_cents: i64,
     pub escrow_cents: i64,
     pub committed_shares: i64,
+    pub deadline: Option<u32>,
     pub review_deadline: Option<u32>,
 }
 
@@ -276,6 +280,151 @@ pub struct ProductDto {
     pub name: String,
     pub reference_price_cents: i64,
     pub kind: String,
+}
+
+#[derive(uniffi::Record)]
+pub struct RecipeDto {
+    pub index: u32,
+    pub id: String,
+    pub industry: String,
+    pub output: String,
+    pub capex_cents: i64,
+    pub build_weeks: u32,
+    pub weekly_output_lots: i64,
+}
+
+/// One node of the investor's controlled group tree, breadth first from a direct holding.
+#[derive(uniffi::Record)]
+pub struct GroupNodeDto {
+    pub handle: u64,
+    pub name: String,
+    pub region: String,
+    pub industry: String,
+    pub parent: Option<u64>,
+    pub depth: u32,
+    /// The parent firm's voting share of this firm, or the investor's when it has no parent.
+    pub control_bps: i32,
+    pub investor_votes_bps: i32,
+    /// The investor's economic look-through fraction of this firm in basis points.
+    pub look_through_bps: i32,
+    pub cash_cents: i64,
+    pub status: String,
+    pub directly_controlled: bool,
+}
+
+/// A labelled preview. `blocked_key` is a stable domain key, never Rust text in product copy.
+#[derive(uniffi::Record)]
+pub struct PreviewDto {
+    pub revision: u64,
+    pub cash_change_cents: i64,
+    pub assumptions: Vec<String>,
+    pub warnings: Vec<String>,
+    pub blocked_key: Option<String>,
+    pub blocked_detail: Option<String>,
+}
+
+#[derive(uniffi::Record)]
+pub struct LabourDto {
+    pub firm: u64,
+    /// idle, ballot, demanding or striking.
+    pub state: String,
+    pub demand_deadline: Option<u32>,
+    pub strike_until: Option<u32>,
+    pub organisation_bps: i32,
+    pub ballot_support_bps: i32,
+    pub demand_cents: i64,
+    pub last_offer_cents: i64,
+    pub settlement_cost_cents: i64,
+    pub current_wage_cents: i64,
+    pub employees: i64,
+}
+
+#[derive(uniffi::Record)]
+pub struct PolicyRequestDto {
+    pub kind: String,
+    pub region_name: String,
+    pub fee_cents: i64,
+    pub decision_week: u32,
+    pub resolved: bool,
+    pub success: bool,
+    pub cooldown_until: u32,
+}
+
+#[derive(uniffi::Record)]
+pub struct RegionCooldownDto {
+    pub region: u32,
+    pub name: String,
+    pub available_week: u32,
+    pub active: bool,
+}
+
+#[derive(uniffi::Record)]
+pub struct PolicyStateDto {
+    pub firm: u64,
+    pub fee_cents: i64,
+    pub reputation_bps: i32,
+    pub requests: Vec<PolicyRequestDto>,
+    pub cooldowns: Vec<RegionCooldownDto>,
+}
+
+#[derive(uniffi::Record)]
+pub struct InstitutionDto {
+    pub handle: u64,
+    pub name: String,
+    pub region: String,
+    /// bank, insurer or both.
+    pub kind: String,
+    pub controlled: bool,
+    pub deposit_rate_bps: i32,
+    pub cash_cents: i64,
+    pub equity_cents: i64,
+    pub deposits_cents: i64,
+    pub loans_cents: i64,
+    pub coverage_cents: i64,
+    pub specialist: bool,
+    /// True when the institution meets its own liquidity requirement.
+    pub liquidity_ok: bool,
+    /// True when the institution meets its own capital requirement.
+    pub capital_ok: bool,
+}
+
+#[derive(uniffi::Record)]
+pub struct RecoveryDto {
+    pub eligible: bool,
+    /// recovery.available, recovery.not_destitute, recovery.cooldown or recovery.no_target.
+    pub reason_key: String,
+    pub cash_cents: i64,
+    pub next_eligible_week: u32,
+    pub signing_bonus_cents: i64,
+    pub managed_firms: u32,
+    pub candidate: Option<String>,
+    pub formation_fee_cents: i64,
+    pub minimum_capital_cents: i64,
+}
+
+#[derive(uniffi::Record)]
+pub struct BoardVoteDto {
+    pub id: u32,
+    pub subject: String,
+    pub deadline: u32,
+    pub yes: u32,
+    pub no: u32,
+    pub resolved: bool,
+    pub passed: bool,
+}
+
+#[derive(uniffi::Record)]
+pub struct QuoteDto {
+    pub weekly_premium_cents: i64,
+    pub blocked_key: Option<String>,
+    pub blocked_detail: Option<String>,
+}
+
+#[derive(uniffi::Record)]
+pub struct BuyerDto {
+    pub index: u32,
+    pub name: String,
+    pub capital_cents: i64,
 }
 
 #[derive(uniffi::Object)]
@@ -461,10 +610,14 @@ fn deal_dto(line: DealLine) -> DealDto {
         handle: line.handle,
         buyer: line.buyer,
         target: line.target,
+        buyer_handle: line.buyer_handle,
+        target_handle: line.target_handle,
+        kind: line.kind,
         state: line.state,
         offer_price_cents: line.offer_price_cents,
         escrow_cents: line.escrow_cents,
         committed_shares: line.committed_shares,
+        deadline: line.deadline,
         review_deadline: line.review_deadline,
     }
 }
@@ -515,6 +668,47 @@ pub fn products() -> Vec<ProductDto> {
             })
             .collect(),
         Err(_) => Vec::new(),
+    }
+}
+
+/// Facility templates with their capex and build time, for build and founder forms.
+#[uniffi::export]
+pub fn recipes() -> Vec<RecipeDto> {
+    match cw_data::Dataset::load() {
+        Ok(dataset) => dataset
+            .recipes
+            .iter()
+            .enumerate()
+            .map(|(index, recipe)| RecipeDto {
+                index: index as u32,
+                id: recipe.id.clone(),
+                industry: recipe.industry.clone(),
+                output: recipe.output.clone(),
+                capex_cents: recipe.capex_cents,
+                build_weeks: recipe.build_weeks,
+                weekly_output_lots: recipe.weekly_output_lots,
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+fn preview_dto(preview: cw_sim::commands::Preview) -> PreviewDto {
+    PreviewDto {
+        revision: preview.revision,
+        cash_change_cents: preview.cash_change_cents,
+        assumptions: preview.assumptions,
+        warnings: preview.warnings,
+        blocked_key: preview.blocked.as_ref().map(|error| error.key().to_owned()),
+        blocked_detail: preview.blocked.as_ref().map(|error| format!("{error:?}")),
+    }
+}
+
+fn policy_kind_key(kind: cw_sim::state::PolicyKind) -> &'static str {
+    match kind {
+        cw_sim::state::PolicyKind::PermitAcceleration => "permit_acceleration",
+        cw_sim::state::PolicyKind::TrainingGrant => "training_grant",
+        cw_sim::state::PolicyKind::TaxAdjustment => "tax_adjustment",
     }
 }
 
@@ -679,8 +873,16 @@ impl SessionHandle {
         }
     }
 
-    /// Submit any catalogue command as JSON. Returns a typed rejection instead of throwing.
+    /// Submit any catalogue command as JSON for the investor actor.
     pub fn submit_json(&self, json: String) -> ReceiptDto {
+        self.submit_json_as(cw_sim::commands::INVESTOR_ACTOR, json)
+    }
+
+    /// Submit any catalogue command as JSON for an explicit legal actor.
+    ///
+    /// The investor is `0`; a firm handle lets a parent firm operate a controlled subsidiary
+    /// through the same authority service the simulation already uses.
+    pub fn submit_json_as(&self, actor: u64, json: String) -> ReceiptDto {
         let intent: cw_sim::commands::CommandIntent = match serde_json::from_str(&json) {
             Ok(intent) => intent,
             Err(error) => {
@@ -693,62 +895,500 @@ impl SessionHandle {
                 };
             }
         };
-        self.submit_intent(intent)
+        self.submit_intent(actor, intent)
     }
 
     /// Set the selected firm's asking price for one product.
     pub fn set_price(&self, firm: u64, product: u32, price_cents: i64) -> ReceiptDto {
-        self.submit_intent(cw_sim::commands::CommandIntent::SetPrice {
-            firm: cw_core::ids::Handle(firm),
-            product: product as u16,
-            price_cents,
-        })
+        self.submit_intent(
+            cw_sim::commands::INVESTOR_ACTOR,
+            cw_sim::commands::CommandIntent::SetPrice {
+                firm: cw_core::ids::Handle(firm),
+                product: product as u16,
+                price_cents,
+            },
+        )
     }
 
     /// Set the weekly wage offer for one skill tier.
     pub fn set_wage_offer(&self, firm: u64, tier: u32, wage_cents: i64) -> ReceiptDto {
-        self.submit_intent(cw_sim::commands::CommandIntent::SetWageOffer {
-            firm: cw_core::ids::Handle(firm),
-            tier: tier as u8,
-            wage_cents,
-        })
+        self.submit_intent(
+            cw_sim::commands::INVESTOR_ACTOR,
+            cw_sim::commands::CommandIntent::SetWageOffer {
+                firm: cw_core::ids::Handle(firm),
+                tier: tier as u8,
+                wage_cents,
+            },
+        )
     }
 
     /// Set the production target across the firm's operating facilities.
     pub fn set_production_target(&self, firm: u64, target_bps: i32) -> ReceiptDto {
-        self.submit_intent(cw_sim::commands::CommandIntent::SetProductionTarget {
-            firm: cw_core::ids::Handle(firm),
-            target_bps,
-        })
+        self.submit_intent(
+            cw_sim::commands::INVESTOR_ACTOR,
+            cw_sim::commands::CommandIntent::SetProductionTarget {
+                firm: cw_core::ids::Handle(firm),
+                target_bps,
+            },
+        )
     }
 
     /// Build a facility from a template index in the published product list.
     pub fn build_facility(&self, firm: u64, region: u32, recipe: u32, blocks: u32) -> ReceiptDto {
-        self.submit_intent(cw_sim::commands::CommandIntent::BuildFacility {
-            firm: cw_core::ids::Handle(firm),
-            region: region as u8,
-            recipe: recipe as u16,
-            blocks: blocks as u8,
-        })
+        self.submit_intent(
+            cw_sim::commands::INVESTOR_ACTOR,
+            cw_sim::commands::CommandIntent::BuildFacility {
+                firm: cw_core::ids::Handle(firm),
+                region: region as u8,
+                recipe: recipe as u16,
+                blocks: blocks as u8,
+            },
+        )
     }
 
     /// Pay a dividend from the firm's distributable retained earnings.
     pub fn pay_dividend(&self, firm: u64, amount_cents: i64) -> ReceiptDto {
-        self.submit_intent(cw_sim::commands::CommandIntent::PayDividend {
-            firm: cw_core::ids::Handle(firm),
-            amount_cents,
-        })
+        self.submit_intent(
+            cw_sim::commands::INVESTOR_ACTOR,
+            cw_sim::commands::CommandIntent::PayDividend {
+                firm: cw_core::ids::Handle(firm),
+                amount_cents,
+            },
+        )
+    }
+
+    /// The investor's controlled group as a breadth-first tree with control percentages.
+    pub fn group_tree(&self) -> Vec<GroupNodeDto> {
+        use std::collections::{BTreeSet, VecDeque};
+
+        use cw_sim::economy::ownership;
+        use cw_sim::state::HolderId;
+
+        let session = self.lock();
+        let world = &session.world;
+        let mut seen: BTreeSet<cw_core::ids::Handle> = BTreeSet::new();
+        let mut queue: VecDeque<(cw_core::ids::Handle, Option<u64>, u32)> = VecDeque::new();
+        for root in ownership::controlled_by(world, HolderId::Investor) {
+            if seen.insert(root) {
+                queue.push_back((root, None, 0));
+            }
+        }
+        let mut nodes = Vec::new();
+        while let Some((handle, parent, depth)) = queue.pop_front() {
+            let Some(firm) = world.firms.get(handle) else {
+                continue;
+            };
+            let control_bps = match parent {
+                Some(parent_handle) => world
+                    .firms
+                    .get(handle)
+                    .map(|entity| {
+                        let eligible = entity.shares.eligible_votes().max(1);
+                        (entity
+                            .shares
+                            .qty(HolderId::Firm(cw_core::ids::Handle(parent_handle)))
+                            as i128
+                            * 10_000
+                            / eligible as i128) as i32
+                    })
+                    .unwrap_or(0),
+                None => firm.shares.vote_bps(HolderId::Investor),
+            };
+            nodes.push(GroupNodeDto {
+                handle: handle.0,
+                name: firm.name.clone(),
+                region: world
+                    .regions
+                    .get(firm.region as usize)
+                    .map(|region| region.name.clone())
+                    .unwrap_or_default(),
+                industry: cw_sim::state::INDUSTRY_NAMES
+                    .get(firm.industry as usize)
+                    .copied()
+                    .unwrap_or("Firm")
+                    .to_owned(),
+                parent,
+                depth,
+                control_bps,
+                investor_votes_bps: firm.shares.vote_bps(HolderId::Investor),
+                look_through_bps: ownership::investor_look_through_bps(world, handle) as i32,
+                cash_cents: firm.book.cash(),
+                status: if firm.operative() {
+                    "operating".to_owned()
+                } else {
+                    "distressed".to_owned()
+                },
+                directly_controlled: firm.shares.controller() == Some(HolderId::Investor),
+            });
+            for child in ownership::controlled_by(world, HolderId::Firm(handle)) {
+                if seen.insert(child) {
+                    queue.push_back((child, Some(handle.0), depth + 1));
+                }
+            }
+        }
+        nodes
+    }
+
+    /// Preview any catalogue intent from its JSON shape without reserving anything.
+    pub fn preview_json(&self, json: String) -> PreviewDto {
+        let intent: cw_sim::commands::CommandIntent = match serde_json::from_str(&json) {
+            Ok(intent) => intent,
+            Err(error) => {
+                return PreviewDto {
+                    revision: 0,
+                    cash_change_cents: 0,
+                    assumptions: Vec::new(),
+                    warnings: Vec::new(),
+                    blocked_key: Some("error.malformed_command".to_owned()),
+                    blocked_detail: Some(error.to_string()),
+                };
+            }
+        };
+        let session = self.lock();
+        preview_dto(session.preview(cw_sim::commands::INVESTOR_ACTOR, &intent))
+    }
+
+    /// Typed dilution preview used by the issuance sheet.
+    pub fn preview_issue(&self, firm: u64, qty: i64, price_cents: i64) -> PreviewDto {
+        let session = self.lock();
+        preview_dto(session.preview(
+            cw_sim::commands::INVESTOR_ACTOR,
+            &cw_sim::commands::CommandIntent::IssueShares {
+                firm: cw_core::ids::Handle(firm),
+                qty,
+                price_cents,
+                buyer_outside: 0,
+            },
+        ))
+    }
+
+    /// Typed build preview used by the facility and founder sheets.
+    pub fn preview_build(&self, firm: u64, recipe: u32, blocks: u32) -> PreviewDto {
+        let session = self.lock();
+        preview_dto(session.preview(
+            cw_sim::commands::INVESTOR_ACTOR,
+            &cw_sim::commands::CommandIntent::BuildFacility {
+                firm: cw_core::ids::Handle(firm),
+                region: 0,
+                recipe: recipe as u16,
+                blocks: blocks as u8,
+            },
+        ))
+    }
+
+    /// Current worker bargaining and strike state for one firm.
+    pub fn labour(&self, firm: u64) -> LabourDto {
+        use cw_sim::state::BargainState;
+
+        let session = self.lock();
+        let Some(entity) = session.world.firms.get(cw_core::ids::Handle(firm)) else {
+            return LabourDto {
+                firm,
+                state: "idle".to_owned(),
+                demand_deadline: None,
+                strike_until: None,
+                organisation_bps: 0,
+                ballot_support_bps: 0,
+                demand_cents: 0,
+                last_offer_cents: 0,
+                settlement_cost_cents: 0,
+                current_wage_cents: 0,
+                employees: 0,
+            };
+        };
+        let (state, demand_deadline, strike_until) = match entity.union.state {
+            BargainState::Idle => ("idle", None, None),
+            BargainState::Ballot => ("ballot", None, None),
+            BargainState::Demanding { deadline } => ("demanding", Some(deadline.0), None),
+            BargainState::Striking { until, .. } => ("striking", None, Some(until.0)),
+        };
+        LabourDto {
+            firm,
+            state: state.to_owned(),
+            demand_deadline,
+            strike_until,
+            organisation_bps: entity.union.organisation_bps,
+            ballot_support_bps: entity.union.ballot_support_bps,
+            demand_cents: entity.union.demand_cents,
+            last_offer_cents: entity.union.last_offer_cents,
+            settlement_cost_cents: entity.union.settlement_cost_cents,
+            current_wage_cents: entity.policies.wage_offer[0],
+            employees: entity.total_employees(&session.world.facilities),
+        }
+    }
+
+    /// Lobbying fee, history and per-region cooldown for one firm.
+    pub fn policy_state(&self, firm: u64) -> PolicyStateDto {
+        let session = self.lock();
+        let world = &session.world;
+        let Some(entity) = world.firms.get(cw_core::ids::Handle(firm)) else {
+            return PolicyStateDto {
+                firm,
+                fee_cents: 0,
+                reputation_bps: 0,
+                requests: Vec::new(),
+                cooldowns: Vec::new(),
+            };
+        };
+        let requests: Vec<PolicyRequestDto> = entity
+            .policy_requests
+            .iter()
+            .map(|request| PolicyRequestDto {
+                kind: policy_kind_key(request.kind).to_owned(),
+                region_name: world
+                    .regions
+                    .get(request.region as usize)
+                    .map(|region| region.name.clone())
+                    .unwrap_or_default(),
+                fee_cents: request.fee_cents,
+                decision_week: request.decision.0,
+                resolved: request.resolved,
+                success: request.success,
+                cooldown_until: request.cooldown_until.0,
+            })
+            .collect();
+        let cooldowns: Vec<RegionCooldownDto> = world
+            .regions
+            .iter()
+            .enumerate()
+            .map(|(index, region)| {
+                let mut available_week = world.tick.0;
+                let mut active = false;
+                for request in &entity.policy_requests {
+                    if request.region != index as u8 {
+                        continue;
+                    }
+                    if !request.resolved {
+                        active = true;
+                    }
+                    if request.cooldown_until.0 > available_week {
+                        available_week = request.cooldown_until.0;
+                    }
+                }
+                RegionCooldownDto {
+                    region: index as u32,
+                    name: region.name.clone(),
+                    available_week,
+                    active,
+                }
+            })
+            .collect();
+        let fee_cents = cw_sim::economy::policy::request_fee(world, cw_core::ids::Handle(firm));
+        PolicyStateDto {
+            firm,
+            fee_cents,
+            reputation_bps: entity.reputation_bps,
+            requests,
+            cooldowns,
+        }
+    }
+
+    /// Every bank and insurer in the world with its own liquidity and capital test result.
+    pub fn institutions(&self) -> Vec<InstitutionDto> {
+        let session = self.lock();
+        let world = &session.world;
+        let mut rows = Vec::new();
+        for (handle, firm) in world.firms.iter() {
+            if firm.bank.is_none() && firm.insurer.is_none() {
+                continue;
+            }
+            let deposits = cw_sim::economy::banking::deposits(world, handle);
+            let loans = cw_sim::economy::banking::loan_assets(world, handle);
+            let coverage: i64 = world
+                .insurance
+                .iter()
+                .filter(|(_, policy)| {
+                    policy.insurer == handle && policy.status == cw_sim::state::PolicyStatus::Active
+                })
+                .map(|(_, policy)| policy.limit_cents)
+                .sum();
+            let cash = firm.book.cash();
+            let equity = firm.book.total_equity();
+            let specialist = firm
+                .insurer
+                .as_ref()
+                .map(|model| model.specialist_concentration)
+                .or_else(|| firm.bank.as_ref().map(|_| false))
+                .unwrap_or(false);
+            let kind = match (firm.bank.is_some(), firm.insurer.is_some()) {
+                (true, true) => "bank_insurer",
+                (true, false) => "bank",
+                (false, true) => "insurer",
+                (false, false) => "institution",
+            };
+            let (liquidity_ok, capital_ok) = if firm.insurer.is_some() {
+                let overhead =
+                    2 * cw_sim::economy::insolvency::mandatory_weekly_outflow(world, handle);
+                let capital_need = coverage * 10 / 100;
+                let capital_need = if specialist {
+                    capital_need * 2
+                } else {
+                    capital_need
+                };
+                (
+                    cash >= overhead + coverage * 5 / 100,
+                    equity >= capital_need,
+                )
+            } else {
+                (
+                    cash >= deposits * 2_000 / 10_000,
+                    equity * 10_000 >= loans * 1_200,
+                )
+            };
+            rows.push(InstitutionDto {
+                handle: handle.0,
+                name: firm.name.clone(),
+                region: world
+                    .regions
+                    .get(firm.region as usize)
+                    .map(|region| region.name.clone())
+                    .unwrap_or_default(),
+                kind: kind.to_owned(),
+                controlled: firm.shares.controller() == Some(cw_sim::state::HolderId::Investor),
+                deposit_rate_bps: firm
+                    .bank
+                    .as_ref()
+                    .map(|model| model.deposit_rate_bps)
+                    .unwrap_or(0),
+                cash_cents: cash,
+                equity_cents: equity,
+                deposits_cents: deposits,
+                loans_cents: loans,
+                coverage_cents: coverage,
+                specialist,
+                liquidity_ok,
+                capital_ok,
+            });
+        }
+        rows
+    }
+
+    /// Whether the recovery management contract is available, and why it is not.
+    pub fn recovery(&self) -> RecoveryDto {
+        let session = self.lock();
+        let world = &session.world;
+        let destitute = world.investor.cash_cents < 2_500_000
+            && world.investor_firms().is_empty()
+            && world.investor.managed_firms.is_empty();
+        let next_eligible_week = if world.investor.recovery_used > 0 {
+            world.investor.last_recovery_week + 260
+        } else {
+            0
+        };
+        let candidate = world
+            .firms
+            .iter()
+            .filter(|(_, firm)| firm.operative() && firm.shares.controller().is_none())
+            .map(|(_, firm)| firm.name.clone())
+            .next();
+        let reason_key = if !destitute {
+            "recovery.not_destitute"
+        } else if next_eligible_week > world.tick.0 {
+            "recovery.cooldown"
+        } else if candidate.is_none() {
+            "recovery.no_target"
+        } else {
+            "recovery.available"
+        };
+        RecoveryDto {
+            eligible: reason_key == "recovery.available",
+            reason_key: reason_key.to_owned(),
+            cash_cents: world.investor.cash_cents,
+            next_eligible_week,
+            signing_bonus_cents: 10_000_000,
+            managed_firms: world.investor.managed_firms.len() as u32,
+            candidate,
+            formation_fee_cents: cw_data::Difficulty::Standard.formation_fee_cents(),
+            minimum_capital_cents: 25_000_000,
+        }
+    }
+
+    /// Outside investors that can fund a primary issuance.
+    pub fn funding_buyers(&self) -> Vec<BuyerDto> {
+        let session = self.lock();
+        session
+            .world
+            .outside
+            .investors
+            .iter()
+            .enumerate()
+            .map(|(index, investor)| BuyerDto {
+                index: index as u32,
+                name: investor.name.clone(),
+                capital_cents: investor.capital_cents,
+            })
+            .collect()
+    }
+
+    /// Pending board votes so the phone can cast a real vote id.
+    pub fn board_votes(&self, firm: u64) -> Vec<BoardVoteDto> {
+        let session = self.lock();
+        session
+            .world
+            .firms
+            .get(cw_core::ids::Handle(firm))
+            .map(|entity| {
+                entity
+                    .board
+                    .pending_votes
+                    .iter()
+                    .map(|vote| BoardVoteDto {
+                        id: vote.id,
+                        subject: vote.subject.clone(),
+                        deadline: vote.deadline.0,
+                        yes: vote.yes as u32,
+                        no: vote.no as u32,
+                        resolved: vote.resolved,
+                        passed: vote.passed,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Quote a property policy without binding it.
+    pub fn insurance_quote(&self, insurer: u64, facility: u64, limit_cents: i64) -> QuoteDto {
+        let session = self.lock();
+        let world = &session.world;
+        let Some(region) = world
+            .facilities
+            .get(cw_core::ids::Handle(facility))
+            .map(|entity| entity.region)
+        else {
+            return QuoteDto {
+                weekly_premium_cents: 0,
+                blocked_key: Some("error.invalid_entity".to_owned()),
+                blocked_detail: Some("facility".to_owned()),
+            };
+        };
+        match cw_sim::economy::insurance::quote(
+            world,
+            cw_core::ids::Handle(insurer),
+            region,
+            limit_cents,
+        ) {
+            Ok(premium) => QuoteDto {
+                weekly_premium_cents: premium,
+                blocked_key: None,
+                blocked_detail: None,
+            },
+            Err(error) => QuoteDto {
+                weekly_premium_cents: 0,
+                blocked_key: Some(error.key().to_owned()),
+                blocked_detail: Some(format!("{error:?}")),
+            },
+        }
     }
 }
 
 impl SessionHandle {
-    fn submit_intent(&self, intent: cw_sim::commands::CommandIntent) -> ReceiptDto {
+    fn submit_intent(&self, actor: u64, intent: cw_sim::commands::CommandIntent) -> ReceiptDto {
         let mut session = self.lock();
         let revision = session.revision();
         let envelope = cw_sim::commands::CommandEnvelope {
             command_id_high: 0x5357_4946_5400_0000,
             command_id_low: revision,
-            actor: 0,
+            actor,
             expected_revision: revision,
             submitted_tick: session.world.tick.0,
             intent,
@@ -813,5 +1453,159 @@ mod tests {
         let price = dataset.reference_price(0);
         let receipt = session.set_price(primary, 0, price);
         assert!(receipt.accepted, "{:?}", receipt.error_detail);
+    }
+
+    #[test]
+    fn the_group_tree_starts_at_a_directly_controlled_firm() {
+        let session = SessionHandle::new(184, true, false).unwrap();
+        let tree = session.group_tree();
+        assert!(!tree.is_empty());
+        assert!(
+            tree.iter()
+                .any(|node| node.depth == 0 && node.directly_controlled)
+        );
+        assert!(tree.iter().all(|node| node.depth < 16));
+    }
+
+    #[test]
+    fn the_issuance_preview_reports_dilution_without_mutating() {
+        let session = SessionHandle::new(185, true, false).unwrap();
+        let primary = session.overview().primary_firm.unwrap();
+        let before = session.revision();
+        let preview = session.preview_issue(primary, 1_000_000, 100);
+        assert_eq!(preview.blocked_key, None);
+        assert!(preview.cash_change_cents > 0);
+        assert!(
+            preview
+                .assumptions
+                .iter()
+                .any(|line| line.contains("votes"))
+        );
+        assert_eq!(session.revision(), before);
+    }
+
+    #[test]
+    fn preview_json_parses_the_phone_shapes() {
+        let session = SessionHandle::new(186, true, false).unwrap();
+        let primary = session.overview().primary_firm.unwrap();
+        let json = format!(
+            "{{\"IssueShares\":{{\"firm\":{primary},\"qty\":1000,\"price_cents\":250,\"buyer_outside\":0}}}}"
+        );
+        let preview = session.preview_json(json);
+        assert_eq!(preview.blocked_key, None);
+        assert_eq!(preview.cash_change_cents, 250_000);
+        let malformed = session.preview_json("{\"Nope\":{}}".to_owned());
+        assert_eq!(
+            malformed.blocked_key.as_deref(),
+            Some("error.malformed_command")
+        );
+    }
+
+    #[test]
+    fn labour_policy_and_recovery_read_models_are_populated() {
+        let session = SessionHandle::new(187, true, false).unwrap();
+        let primary = session.overview().primary_firm.unwrap();
+        let labour = session.labour(primary);
+        assert_eq!(labour.firm, primary);
+        assert!(!labour.state.is_empty());
+        let policy = session.policy_state(primary);
+        assert!(policy.fee_cents >= 2_500_000);
+        assert_eq!(policy.cooldowns.len(), session.regions(None).len());
+        let recovery = session.recovery();
+        assert!(!recovery.reason_key.is_empty());
+        assert!(!recipes().is_empty());
+        assert!(!session.institutions().is_empty());
+        assert!(!session.funding_buyers().is_empty());
+    }
+
+    #[test]
+    fn every_phone_command_shape_parses_as_an_intent() {
+        let session = SessionHandle::new(188, true, false).unwrap();
+        let primary = session.overview().primary_firm.unwrap();
+        let facility = session
+            .facilities(primary)
+            .first()
+            .map(|row| row.handle)
+            .unwrap_or(1);
+        let insurer = session
+            .institutions()
+            .iter()
+            .find(|row| row.kind.contains("insurer"))
+            .map(|row| row.handle)
+            .unwrap_or(1);
+        let bank = session
+            .institutions()
+            .iter()
+            .find(|row| row.kind.contains("bank"))
+            .map(|row| row.handle)
+            .unwrap_or(1);
+        let bodies = vec![
+            format!(r#"{{"SetPrimaryGroup":{{"firm":{primary}}}}}"#),
+            format!(r#"{{"CallMeeting":{{"firm":{primary}}}}}"#),
+            format!(r#"{{"NominateCEO":{{"firm":{primary},"investor":true}}}}"#),
+            format!(r#"{{"CastVote":{{"firm":{primary},"vote_id":1,"approve":true}}}}"#),
+            format!(
+                r#"{{"ProposeBoardAction":{{"firm":{primary},"subject":"merger_authority"}}}}"#
+            ),
+            format!(
+                r#"{{"StartDiligence":{{"buyer":{primary},"target":{primary},"kind":"SharePurchase","price_cents":100,"max_shares":1000}}}}"#
+            ),
+            r#"{"FundTender":{"deal":1}}"#.to_owned(),
+            r#"{"RespondTender":{"deal":1,"accept":true}}"#.to_owned(),
+            r#"{"WithdrawOffer":{"deal":1}}"#.to_owned(),
+            r#"{"ProposeMerger":{"deal":1}}"#.to_owned(),
+            r#"{"SubmitRemedy":{"deal":1,"divest_share_bps":500}}"#.to_owned(),
+            format!(
+                r#"{{"PlaceShareOrder":{{"investor":true,"firm":{primary},"buy":true,"qty":10,"limit_price_cents":100}}}}"#
+            ),
+            format!(
+                r#"{{"IssueShares":{{"firm":{primary},"qty":1000,"price_cents":100,"buyer_outside":0}}}}"#
+            ),
+            format!(r#"{{"RepurchaseShares":{{"firm":{primary},"qty":10}}}}"#),
+            format!(r#"{{"RetireTreasury":{{"firm":{primary},"qty":10}}}}"#),
+            format!(r#"{{"PayDividend":{{"firm":{primary},"amount_cents":100}}}}"#),
+            format!(r#"{{"LaunchIPO":{{"firm":{primary},"new_shares":1000,"price_cents":100}}}}"#),
+            format!(r#"{{"RequestLoan":{{"firm":{primary},"amount_cents":100}}}}"#),
+            format!(
+                r#"{{"IssueBond":{{"firm":{primary},"principal_cents":100,"coupon_bps":700,"weeks":104}}}}"#
+            ),
+            format!(r#"{{"DepositFunds":{{"bank":{bank},"firm":{primary},"amount_cents":100}}}}"#),
+            format!(r#"{{"WithdrawFunds":{{"bank":{bank},"firm":{primary},"amount_cents":100}}}}"#),
+            format!(
+                r#"{{"ApproveLoan":{{"bank":{bank},"borrower":{primary},"amount_cents":100}}}}"#
+            ),
+            format!(
+                r#"{{"QuotePolicy":{{"insurer":{insurer},"facility":{facility},"limit_cents":100,"deductible_cents":10}}}}"#
+            ),
+            format!(
+                r#"{{"BindPolicy":{{"insurer":{insurer},"insured":{primary},"facility":{facility},"limit_cents":100,"deductible_cents":10}}}}"#
+            ),
+            r#"{"CancelPolicy":{"policy":1}}"#.to_owned(),
+            format!(r#"{{"SetUnderwritingLimit":{{"insurer":{insurer},"specialist":true}}}}"#),
+            format!(
+                r#"{{"RespondBargaining":{{"firm":{primary},"choice":"Counter","offer_cents":100}}}}"#
+            ),
+            format!(r#"{{"ProposeSettlement":{{"firm":{primary},"amount_cents":100}}}}"#),
+            format!(
+                r#"{{"FileLobbyRequest":{{"firm":{primary},"region":0,"request":"TrainingGrant"}}}}"#
+            ),
+            r#""AcceptManagementContract""#.to_owned(),
+            format!(
+                r#"{{"FoundFirm":{{"name":"Test","region":0,"capital_cents":25000000,"recipe":0}}}}"#
+            ),
+            format!(r#"{{"SetPrice":{{"firm":{primary},"product":0,"price_cents":100}}}}"#),
+            format!(r#"{{"SetWageOffer":{{"firm":{primary},"tier":0,"wage_cents":100}}}}"#),
+            format!(r#"{{"SetProductionTarget":{{"firm":{primary},"target_bps":9000}}}}"#),
+            format!(r#"{{"BuildFacility":{{"firm":{primary},"region":0,"recipe":0,"blocks":1}}}}"#),
+            r#"{"RespondEvent":{"event":1,"choice":"x"}}"#.to_owned(),
+        ];
+        for body in bodies {
+            let preview = session.preview_json(body.clone());
+            assert_ne!(
+                preview.blocked_key.as_deref(),
+                Some("error.malformed_command"),
+                "{body}"
+            );
+        }
     }
 }

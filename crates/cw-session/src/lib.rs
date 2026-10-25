@@ -8,6 +8,7 @@ pub mod dto;
 pub mod save;
 
 use cw_core::error::DomainError;
+use cw_core::money::round_even_div;
 use cw_data::{Dataset, Difficulty};
 use cw_sim::commands::{CommandEnvelope, CommandIntent, CommandReceipt, Preview, apply};
 use cw_sim::state::{ScenarioKind, ScenarioMode, World};
@@ -16,6 +17,17 @@ use serde::{Deserialize, Serialize};
 pub use dto::*;
 
 pub const MAX_ADVANCE_WEEKS: u32 = 16;
+
+/// A labelled cash preview for an intent whose settlement price is already explicit.
+fn cash_preview(revision: u64, cash_change_cents: i64, assumptions: Vec<String>) -> Preview {
+    Preview {
+        revision,
+        cash_change_cents,
+        assumptions,
+        warnings: Vec::new(),
+        blocked: None,
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScenarioConfig {
@@ -171,6 +183,7 @@ impl Session {
     /// Never reserves or mutates. Submit still validates.
     pub fn preview(&self, actor: u64, intent: &CommandIntent) -> Preview {
         let _ = actor;
+        let revision = self.world.revision;
         match intent {
             CommandIntent::BuildFacility {
                 firm,
@@ -195,15 +208,301 @@ impl Session {
             CommandIntent::PayDividend {
                 firm: _,
                 amount_cents,
-            } => Preview {
-                revision: self.world.revision,
-                cash_change_cents: -*amount_cents,
-                assumptions: vec!["paid from distributable retained earnings".to_owned()],
-                warnings: Vec::new(),
-                blocked: None,
-            },
+            } => cash_preview(
+                revision,
+                -*amount_cents,
+                vec!["paid from distributable retained earnings".to_owned()],
+            ),
+            CommandIntent::SetPrice {
+                product,
+                price_cents,
+                ..
+            } => {
+                let reference = self
+                    .dataset
+                    .products
+                    .get(*product as usize)
+                    .map(|entry| entry.reference_price_cents)
+                    .unwrap_or(0);
+                cash_preview(
+                    revision,
+                    0,
+                    vec![
+                        format!("reference price {reference} cents per lot"),
+                        format!("your asking price {price_cents} cents per lot"),
+                        "no cash moves until a sale settles".to_owned(),
+                    ],
+                )
+            }
+            CommandIntent::SetWageOffer {
+                firm,
+                tier,
+                wage_cents,
+            } => {
+                let prevailing = self
+                    .world
+                    .firms
+                    .get(*firm)
+                    .and_then(|entity| self.world.regions.get(entity.region as usize))
+                    .and_then(|region| region.labour.get(*tier as usize))
+                    .map(|tier| tier.prevailing_wage_cents)
+                    .unwrap_or(0);
+                cash_preview(
+                    revision,
+                    0,
+                    vec![
+                        format!("prevailing weekly wage {prevailing} cents in this region"),
+                        format!("your weekly offer {wage_cents} cents per worker"),
+                        "payroll settles with the next advanced week".to_owned(),
+                    ],
+                )
+            }
+            CommandIntent::RepurchaseShares { firm, qty } => {
+                let fair = self
+                    .world
+                    .firms
+                    .get(*firm)
+                    .map(|f| f.shares.fair_cents)
+                    .unwrap_or(0);
+                let mut assumptions = vec![
+                    "estimated at the current fair value per share".to_owned(),
+                    "the cleared price is set at settlement".to_owned(),
+                    "bought shares move to treasury".to_owned(),
+                ];
+                if *qty <= 0 {
+                    assumptions.push("quantity must be positive".to_owned());
+                }
+                cash_preview(
+                    revision,
+                    qty.saturating_mul(fair).saturating_neg(),
+                    assumptions,
+                )
+            }
+            CommandIntent::RetireTreasury { qty, .. } => {
+                let mut assumptions = vec![
+                    "cancellation reduces issued and treasury shares together".to_owned(),
+                    "no cash moves".to_owned(),
+                ];
+                if *qty <= 0 {
+                    assumptions.push("quantity must be positive".to_owned());
+                }
+                cash_preview(revision, 0, assumptions)
+            }
+            CommandIntent::LaunchIPO {
+                new_shares,
+                price_cents,
+                ..
+            } => {
+                let proceeds = new_shares.saturating_mul(*price_cents);
+                let fee = round_even_div(proceeds as i128 * 200, 10_000) as i64;
+                let fee = fee.max(10_000_000).min(proceeds);
+                cash_preview(
+                    revision,
+                    proceeds - fee,
+                    vec![
+                        format!("gross proceeds {proceeds} cents"),
+                        format!("underwriting fee {fee} cents (2 percent, minimum $100,000)"),
+                        "at least ten percent of post-issue shares must be sold".to_owned(),
+                    ],
+                )
+            }
+            CommandIntent::RequestLoan { amount_cents, .. } => cash_preview(
+                revision,
+                *amount_cents,
+                vec![
+                    "funded by an outside lender over 104 weeks".to_owned(),
+                    "the rate is the policy rate plus the grade spread".to_owned(),
+                ],
+            ),
+            CommandIntent::IssueBond {
+                principal_cents,
+                coupon_bps,
+                weeks,
+                ..
+            } => {
+                let fee = round_even_div(*principal_cents as i128 * 200, 10_000) as i64;
+                cash_preview(
+                    revision,
+                    principal_cents - fee,
+                    vec![
+                        format!("bond issue fee {fee} cents (2 percent)"),
+                        format!("coupon {coupon_bps} basis points"),
+                        format!("matures in {weeks} weeks"),
+                    ],
+                )
+            }
+            CommandIntent::DepositFunds { amount_cents, .. } => cash_preview(
+                revision,
+                -*amount_cents,
+                vec!["firm cash leaves; a matching bank deposit claim is created".to_owned()],
+            ),
+            CommandIntent::WithdrawFunds { amount_cents, .. } => cash_preview(
+                revision,
+                *amount_cents,
+                vec!["paid only from actual bank cash and up to the deposit claim".to_owned()],
+            ),
+            CommandIntent::ApproveLoan { amount_cents, .. } => cash_preview(
+                revision,
+                -*amount_cents,
+                vec![
+                    "bank cash falls by the full principal".to_owned(),
+                    "the borrower receives the same principal".to_owned(),
+                    "liquidity and capital tests apply".to_owned(),
+                ],
+            ),
+            CommandIntent::StartDiligence {
+                price_cents,
+                max_shares,
+                ..
+            } => {
+                let escrow = cw_sim::economy::deals::escrow_required(*price_cents, *max_shares);
+                let fee =
+                    round_even_div(*price_cents as i128 * *max_shares as i128 * 50, 10_000) as i64;
+                cash_preview(
+                    revision,
+                    -(escrow + fee),
+                    vec![
+                        format!("escrow {escrow} cents includes the 2 percent transaction fee"),
+                        format!("diligence fee {fee} cents (0.5 percent of bid value)"),
+                        "two weeks of diligence, then a four-week offer".to_owned(),
+                    ],
+                )
+            }
+            CommandIntent::RespondTender { deal, accept } => {
+                let Some(entity) = self.world.deals.get(*deal) else {
+                    return cash_preview(revision, 0, vec!["unknown deal".to_owned()]);
+                };
+                if !*accept {
+                    return cash_preview(
+                        revision,
+                        0,
+                        vec!["declining changes nothing and keeps the shares".to_owned()],
+                    );
+                }
+                let qty = self.world.investor_holds(entity.target);
+                cash_preview(
+                    revision,
+                    qty.saturating_mul(entity.offer_price_cents),
+                    vec![
+                        format!("your {qty} shares at {} cents", entity.offer_price_cents),
+                        "tendered shares transfer to the bidder".to_owned(),
+                    ],
+                )
+            }
+            CommandIntent::FileLobbyRequest { firm, .. } => {
+                let fee = cw_sim::economy::policy::request_fee(&self.world, *firm);
+                cash_preview(
+                    revision,
+                    -fee,
+                    vec![
+                        format!("request fee {fee} cents"),
+                        "the fee is max($25,000, 0.1 percent of group assets)".to_owned(),
+                        "decision in four weeks; success is uncertain".to_owned(),
+                    ],
+                )
+            }
+            CommandIntent::ProposeSettlement { amount_cents, .. } => cash_preview(
+                revision,
+                -*amount_cents,
+                vec!["the offer must be at least 95 percent of the current demand".to_owned()],
+            ),
+            CommandIntent::QuotePolicy { limit_cents, .. } => {
+                let premium = cw_sim::economy::insurance::weekly_premium(*limit_cents);
+                cash_preview(
+                    revision,
+                    0,
+                    vec![
+                        format!("weekly premium {premium} cents"),
+                        "annual premium = limit x 200 basis points x 1.25".to_owned(),
+                    ],
+                )
+            }
+            CommandIntent::RespondBargaining { choice, .. } => cash_preview(
+                revision,
+                0,
+                vec![match choice {
+                    cw_sim::commands::BargainingChoice::Accept => {
+                        "accepting adopts the union's wage demand".to_owned()
+                    }
+                    cw_sim::commands::BargainingChoice::Counter => {
+                        "a counter sends your weekly offer; a second unresolved week can strike"
+                            .to_owned()
+                    }
+                    cw_sim::commands::BargainingChoice::Reject => {
+                        "rejecting risks a strike and lost output".to_owned()
+                    }
+                }],
+            ),
+            CommandIntent::AcceptManagementContract => cash_preview(
+                revision,
+                10_000_000,
+                vec!["one-time signing bonus from the distressed outside investor".to_owned()],
+            ),
+            CommandIntent::FoundFirm {
+                capital_cents,
+                recipe,
+                ..
+            } => {
+                let fee = Difficulty::Standard.formation_fee_cents();
+                let capex = self
+                    .dataset
+                    .recipes
+                    .get(*recipe as usize)
+                    .map(|template| template.capex_cents)
+                    .unwrap_or(0);
+                cash_preview(
+                    revision,
+                    -(capital_cents + fee),
+                    vec![
+                        format!("paid-in capital {capital_cents} cents becomes the firm's cash"),
+                        format!("formation fee {fee} cents to outside legal services"),
+                        format!(
+                            "template capex {capex} cents is escrowed from the paid-in capital"
+                        ),
+                        "the investor needs at least the minimum capital plus the fee".to_owned(),
+                    ],
+                )
+            }
+            CommandIntent::PlaceShareOrder {
+                investor,
+                firm,
+                buy,
+                qty,
+                limit_price_cents,
+            } => {
+                let name = self
+                    .world
+                    .firms
+                    .get(*firm)
+                    .map(|entity| entity.name.clone())
+                    .unwrap_or_default();
+                let reserved = if *buy {
+                    qty.saturating_mul(*limit_price_cents).saturating_neg()
+                } else {
+                    qty.saturating_mul(*limit_price_cents)
+                };
+                cash_preview(
+                    revision,
+                    reserved,
+                    vec![
+                        format!("{qty} shares of {name} at a {limit_price_cents} cent limit"),
+                        format!(
+                            "reserved from {}",
+                            if *investor {
+                                "your personal account"
+                            } else {
+                                "the firm's account"
+                            }
+                        ),
+                        "price impact is 10 percent of quantity over weekly float, capped at 25 percent"
+                            .to_owned(),
+                        "the quote expires at the next boundary and revalidates cash and ownership"
+                            .to_owned(),
+                    ],
+                )
+            }
             _ => Preview {
-                revision: self.world.revision,
+                revision,
                 ..Default::default()
             },
         }

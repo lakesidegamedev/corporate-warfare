@@ -175,10 +175,15 @@ pub struct DealLine {
     pub handle: u64,
     pub buyer: String,
     pub target: String,
+    pub buyer_handle: u64,
+    pub target_handle: u64,
+    pub kind: String,
     pub state: String,
     pub offer_price_cents: i64,
     pub escrow_cents: i64,
     pub committed_shares: i64,
+    /// The next boundary the player must act before, when the state has one.
+    pub deadline: Option<u32>,
     pub review_deadline: Option<u32>,
 }
 
@@ -415,10 +420,24 @@ pub fn deals(world: &World) -> Vec<DealLine> {
                 .get(deal.target)
                 .map(|f| f.name.clone())
                 .unwrap_or_default(),
+            buyer_handle: deal.buyer.0,
+            target_handle: deal.target.0,
+            kind: match deal.kind {
+                cw_sim::state::DealKind::SharePurchase => "share_purchase",
+                cw_sim::state::DealKind::AssetPurchase => "asset_purchase",
+                cw_sim::state::DealKind::Merger => "merger",
+            }
+            .to_owned(),
             state: deal.state.key().to_owned(),
             offer_price_cents: deal.offer_price_cents,
             escrow_cents: deal.escrow_cents,
             committed_shares: deal.committed_shares,
+            deadline: match deal.state {
+                cw_sim::state::DealState::Diligence => Some(deal.diligence_until.0),
+                cw_sim::state::DealState::OfferOpen => Some(deal.offer_deadline.0),
+                cw_sim::state::DealState::Review => deal.review_deadline.map(|tick| tick.0),
+                _ => None,
+            },
             review_deadline: deal.review_deadline.map(|tick| tick.0),
         })
         .collect()
