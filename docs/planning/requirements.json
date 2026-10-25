@@ -306,7 +306,7 @@
       ],
       "gate": "automated",
       "acceptance": "Every DATA-CONTENT industry row has recipe/service/demand/cost rules, decisions and a playable tested scenario; names in picker are insufficient.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -318,7 +318,7 @@
       ],
       "gate": "automated",
       "acceptance": "Funded bounded technology and brand/quality influence demand/cost over time; no guaranteed sales or negative unit costs.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {

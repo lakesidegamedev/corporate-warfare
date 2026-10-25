@@ -1,0 +1,10 @@
+{
+  "packet": "P25",
+  "commit": "8674b93a38771dbce547a68251e8855711faf808",
+  "result": "partial-pass",
+  "artifacts": [
+    "crates/cw-sim/tests/industries.rs (18 scenarios, one per industry)",
+    "crates/cw-data/src/lib.rs (17 templates, 25 products, 15 industry rows)"
+  ],
+  "limitations": "Headless scenarios only. Phone playability per industry (R26) is still required. Corridor solvency (gateway buy side, media/construction demand) is a recorded blocker."
+}
