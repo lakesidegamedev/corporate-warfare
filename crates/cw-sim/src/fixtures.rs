@@ -7,9 +7,8 @@
 use std::collections::BTreeMap;
 
 use cw_core::ids::Handle;
-use cw_data::Dataset;
 
-use crate::state::{Facility, FacilityStatus, HolderId, OutsideHolder, ShareBook, ShareLot, World};
+use crate::state::{FacilityStatus, HolderId, OutsideHolder, ShareBook, ShareLot, World};
 
 /// Scale a valid world by cloning firms, facilities and supply contracts.
 ///
