@@ -275,6 +275,7 @@ dependencies = [
  "cw-data",
  "cw-session",
  "cw-sim",
+ "serde",
  "serde_json",
 ]
 

@@ -355,6 +355,13 @@ mod tests {
                 assert!(lot.qty.0 >= 0);
             }
         }
+        for (_, facility) in world.facilities.iter() {
+            assert!(
+                facility.deposit_remaining.0 >= 0,
+                "facility {} consumed a deposit it does not have",
+                facility.recipe
+            );
+        }
         for region in &world.regions {
             assert!(region.households.savings_cents >= 0);
         }

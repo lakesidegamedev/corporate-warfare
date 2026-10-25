@@ -1,0 +1,3268 @@
+{
+  "schema": "cw-balance-sweep/1",
+  "engine_version": "0.1.0",
+  "interface_version": 1,
+  "rules_version": 1,
+  "dataset_hash": "8aa1dc570dd24b7e7207049c724e6a94bd8a7b683f0cc1a12be77f16c52cb489",
+  "policy": "growth",
+  "scenario": "guided",
+  "mode": "five_year",
+  "weeks": 260,
+  "seed_from": 1,
+  "seed_count": 100,
+  "runs": [
+    {
+      "seed": 1,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "0b83983429bcbc0af26c42183594998965b3ca4e54d377a40f17078214cea850",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 2,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "7081e90d9f1bf1991f1f8f40aaf348014877522f26af7280ef05ab4d13349a7f",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 3,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "ecd8cdab48c9fae34a507cc789517004ed8dbbc782ed2aacb5c07dd8438723dc",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 4,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "b641cc8a9bbee59584e214c160a11266b69a9de9eae0c57646a96c881f94db0a",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 5,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "cf44868b338a2939a7756868efca475666bc28265c431af5e6efc75eee7c0255",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 6,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "07174c45f0e8a5a23c6e7ca20bf9f28ee96354e394a6f320990af4dd9d5191c3",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 7,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "5d6afea5bf5af742fe9321d7032634277218680fe973348de5dda86562f4b21c",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 8,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "19117b1b250362dd1d57542b33af28b34100827ab15c9ee4f8dd62cb52ab6620",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 9,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "5109ada4bdffb7983d198316fee03da8ab2a9f5a72f73433c17cc8e0c9eafbf7",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 10,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "add38575cc37673d24a926f0a07869af248828c196030c62b27e0f481b9324e6",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 11,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "9244cceae0280520d7f6b5979b8278925327a3b88906292955d9decc1656d0f8",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 12,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "80d0859184cfe2684d3cc3296d5e24945485bc3fe6a2fe3e23edbfeaefaf3d82",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 13,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "7c3a8fd6b72693f978c8414e519d6b3baf18794997d1c42febf092c0fc55ab33",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 14,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "f63290f18210065b806fd58db735fcfffbf6af23cb2c4a370002564b947cdedf",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 15,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "ed859c023e87e02d64e17ac87f4acb658f88f30691a37f19ce1d89fe9bbc0640",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 16,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "b0346db5c47d94474b1af4213cf41479e72ccd67384e0a6e3fd543f64194348c",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 17,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "48fe1df1f10be5a67e7c5258f6f2c8b213ab0d328fa56dc74081c6bde791c4fb",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 18,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "4d5ece122d98d45bee04b48bc7fa2851d67b3d495fa4bd8f80e0966a22cabba0",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 19,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "2317785e0819c40b594c94de92abc2a8a7969b5a4526b825640688366ad271f2",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 20,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "5ec92be3677d7d0f5c46c583bdd0c21253f3167f38d8bce5ebfe12face5c35b4",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 21,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "ead1ca1245d93e9136d09fe1f6c6b68b4b62cf69c7f33613c85132f687459608",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 22,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "18ce832e5777e921ac5f2bc5a1e73ac2272d0582453fadcb48bc485ad324b716",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 23,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "69cd0fc1149ab5ca93ab67e549cc9f3595b2c47450094f50dc4b9f3ff0d66a9c",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 24,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "2d7689477faaaa212fc66a83e4277a6a1f7033f5b10c5db13ff8654974dff863",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 25,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "704b9c8f0913fdc961d3d901794a03c0230c62fa493309e1eacb5b1138a8b3a6",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 26,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "a70b82daacbe8d4035ff5ac421732a6851005b4eff9683e6d04c014cd565fcac",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 27,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "dc5e8a90f3fbef93ae23ad5cf599420f17c6c020127c4cd5d0c9924272b59edc",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 28,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "ef8001658e677ecff5a7a11824c2f0995cb3df2633d5734079ec636869e4b7fc",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 29,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "5a5ae50d097f592b9ebea558f1af777d57bee9f050025cb85dbb1a06ab6a1f27",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 30,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "7957b8db0aeb3c4a7de822fbd353546d99e2e60cf98ef0b11a98f80bc86d82bd",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 31,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "f88fad6216f9142c23e58302b14d96a538dff065ef90006a90658d32982929b6",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 32,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "36c38986b8cec26e0726d45401fbf1b86a23a202f9908b8ce6959fbf956a2a06",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 33,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "0fbd73ec71829f3624631548226f373afbecd91a96a910a6a99abeaef3d3708e",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 34,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "adcba98ad94130f4cbdb79440d532cc8140c9bb0255bea245a8cde4c8c8025e3",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 35,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "8eb40967d7a4d361b95ad967e7e2c9793c6976b50d6650285c72511786d18b24",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 36,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "2fb716899b76da01396f307f394bff1ebc313010c5ac4255a4ecc5070ad2b887",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 37,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "04ebbc40a82638ae7bf1312161bf4f3a6d19ce20153d6ec01bedaa4d7ef01731",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 38,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "6b2696e3579c40b3ec8c35594958a104d1f04d41bf9b03a21996fe738ec60e60",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 39,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "7f076bc0c5aa901c0d0a4aa24ed0ce453877fae9cc8768e5de61ef455dcb7da1",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 40,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "3b9f71457a8862ee840dae0387e7b4240ece24e2564cde8dab88e927e1640f8a",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 41,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "0f51ae7715493f8a753c53aba98d389ef98af2f81eb6c8e91ef116d6940719d1",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 42,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "abd3b68d951d22d440ba5facd099bb9f2fb95a0056d93587f01ffab74549e7ba",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 43,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "36bb4733cf4fdd407ef3e7ccea6d94f5d0f09e8a5c877ae5df5b605e850848e6",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 44,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "c26d72e15a6cc4d0bf9cb9cf31de02e8a087b1093e552758a615c0e68d1122da",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 45,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "acd60e140b86f979abc166ef6845141a16910f60c6f23b563371188b650b8587",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 46,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "dbaebe62121402cfa326743de937fd42836424164f4c9f357a918ea706a74773",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 47,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "0422c0193b833e7f1808bca2ef083f99b768e4839b13dd31db5fde1d186acdb1",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 48,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "aab256bee0f22b396712727e72353f011fbe9daea9d736d02a27aafe8b7473f0",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 49,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "92cfff3cb2ae118b4dae7a366c5b44d1f14ca9ad8f506092fecb897f973f3e84",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 50,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "5a6674d1baa6497a7cdd98e9a7087c78e70aa2a533ba4ba7489e2bc3f009b88b",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 51,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "f291b33433e335510670f84f7be7651a5841b010679ba2af4ab02fa71bd28c22",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 52,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "53e72af136623a8c561a2996d91fc0d39d3c514a673af8dfecdaf6dbbbcbad55",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 53,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "e1815a040cb23341ad1fd3878401b12c852d657cec64eb3b708bffb2b7b649ce",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 54,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "5103733a44a8ebb2efdd0c8128af37aecb45cd4a04b781fe00395f1d34f6d8c2",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 55,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "14dcaf6792fcffe95b9be8678cfd3979ce2778636708dfbc28f0bf034c93c21b",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 56,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "93f39fbdd573821b3900a25933e4fe6824cf97298de6ce8e29f4bc1b2ba3d216",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 57,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "bca377f430d2f274f60d73fc06f933e348fad7db27555cddeee120d79179064d",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 58,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "98a4bee23a2374212398c27888cdc638f855822ed6ac6677f11f24e0b6d4a850",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 59,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "62def5b37d0807d4af8bf806d8037d32bbbf8a08e9aee8381f4e23e14a9d5c64",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 60,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "2e1f99c1c4709264a508ddcc85557aa4fd2e5ef1469d40fd6423e001cdf33580",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 61,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "55c82ef9c59fc360a1189dbc017dee0bf8c37660c6f044801c6d9b9cc901edfb",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 62,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "59c009d674d68bbf64dde5bd256f46acad7529a9be0dc2701648cc6dc606e03f",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 63,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "16a48ad0b0ed045485d24b9ff6186479d48240dd58a8cf726cf786f059c64713",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 64,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "fc3f755151bf06804ec13150466885b5d854652e3661d8c11ddc3babec07293e",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 65,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "05cdabd9db1d24455a18bd10b849e4fc56eb02a53282edbf97866f82112a672b",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 66,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "e73000d558dea168d7c8dc95318732a8aa4d7f8391017dc746551177bdef4be4",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 67,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "e69f8a89b79b1bcb8eae2bbc3bf79762e6cba6c720ce87a45bd7b2c4c65d7688",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 68,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "ad926f10ed4181b31ce220bae8b6cf2c78c0df3732e442d188b091749dae9dc3",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 69,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "13fded6e1d6b7a3da2ed33f33a2956665a5c380986dd8db750c4254bebb26434",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 70,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "26e54a931c883f6557147744d0a465cea85b8537036f0d5f0cbe891c87a07724",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 71,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "02db83b05b1be2826b034b659df5c1c8a8eaaac519f9933b3223a6694072f51c",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 72,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "278936dba54be8b86546ad714373a4e8a8b48bfdbcef4970833c104c69f659d2",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 73,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "120c8574e020800d243c3fc771fa8adebb9118e03c69c9d396f393a7afd5ebd8",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 74,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "5ad62cbb9310c8a1fe01d4b6bc44bb69532bab902fefdb76b989fb5f54076259",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 75,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "09205240d3c3fc591e800b781a6650e211e395763dbb2752ea439e5fd363e2c7",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 76,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "d9f5308220f935c64feb8850e641452077dca2703a00525d09ce897a78c8be78",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 77,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "ca0ebabcd5f34652d08218b11e7826aca5bf8a67479a65a713801a4047f18cc1",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 78,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "c95a4c8ab0d6685a5a357544ae7f371941f2750ae681c9112295acc21dbb3c96",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 79,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "b001c3faccdb06c7926bc2801d0d1f33fa6178845a59019d487125580163955a",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 80,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "1455c212c8b73ec8aa28f391c0ccf8b8bb7ca6cc15556f23a78ecc176aee48af",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 81,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "a3735eb689b5c73765ec39603507d6d1d0545dfb1c42a2de5b34d5398cf36e82",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 82,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "8ee95954e093bf5e63d7b30a44387e35c454c95857295777b3cdb92419b0230e",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 83,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "d0d4bd24b7b1772623ccfbbb6449a3f917329e52f0b56b156c8a661755ff588f",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 84,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "004367b01a3b4731a902eb142e1467e98b02501d418c378fb526d709f6088a2d",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 85,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "ff11146132ffe35b3c14fe07aeb0d3e68a6a09f33a015fcade27af4cf988c06b",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 86,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "8d42963e0bc6e55f75af9f31f7ad41c321b538ee683c097893e8b417dc0eba8d",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 87,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "6e4522c07ec60d63f243a6affa02c03922ee8246f9aa3638e4fe192c4ac81b28",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 88,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "e3feaab471f857c4ddbcf06879952824357205373d6508e2ef76b1a802a8bcad",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 89,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "7e750a64a733bbf4763122f5f754a73ffda382e2da1d5188cb44dc366b5547f8",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 90,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "31906a8907d2b3d3f50260331adeea39a28153a6585bd7c60ad48cabf1b341db",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 91,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "cb538c4cd581f7c0551fd17d703c7530d144891c146ed8ef2dd7dd7609706a93",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 92,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "759531f3b62b5eb38c387ab10fbc63f413c7cb8118610e90cf7d39312beeafa4",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 93,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "dac9b259ac9e286f34cf5814abfbb9467750618de8620d28ff1d4939586cbc68",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 94,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "395bbfa2d3d24178b7e683da4daf5631551cddf92e387199a04e4bab425f6990",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 95,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "ae481e456620f8e6e1e2a1f492f762416da2ce8e777279d818dd17902e0a12ae",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 96,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "8f0a9431820df4e0932e2f197d51c9cc10f00cd291514a4f733143251c933b89",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 97,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "f1794aba0e40182cedf9fafe43a3f2747c09c0c206fc6b0fc0fc190b5150c98f",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 98,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "17efb24e9b26df8447375104995e3c7ea6bd829b26e96bf6ca53e1084b2b8cb4",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 99,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "9dac36d9d50eb9d86700042c8a490b2e047b70bbe90973080b755def43a02e4d",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    },
+    {
+      "seed": 100,
+      "final_week": 260,
+      "paused": "five_year_score",
+      "score": {
+        "total": 60,
+        "return_component": 48,
+        "resilience_component": 100,
+        "control_component": 13,
+        "conduct_component": 100,
+        "personal_net_worth_cents": 403280000
+      },
+      "investor_net_worth_cents": 403280000,
+      "investor_cash_cents": 349280000,
+      "controlled_firms": 1,
+      "dissolved": 3,
+      "past_due": 2,
+      "weeks_with_past_due": 0,
+      "deals_settled": 0,
+      "canonical_hash": "0e447ee254dac0e03da5182131fa9210d443a4a09d82d2a7918d7de6bc6a8b1d",
+      "policy": {
+        "attempted": 131,
+        "accepted": 131,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      }
+    }
+  ],
+  "summary": {
+    "controlled_firms": {
+      "count": 100,
+      "min": 1,
+      "median": 1,
+      "max": 1,
+      "mean": 1
+    },
+    "deals_settled": {
+      "count": 100,
+      "min": 0,
+      "median": 0,
+      "max": 0,
+      "mean": 0
+    },
+    "dissolved": {
+      "count": 100,
+      "min": 3,
+      "median": 3,
+      "max": 3,
+      "mean": 3
+    },
+    "investor_net_worth_cents": {
+      "count": 100,
+      "min": 403280000,
+      "median": 403280000,
+      "max": 403280000,
+      "mean": 403280000
+    },
+    "past_due": {
+      "count": 100,
+      "min": 2,
+      "median": 2,
+      "max": 2,
+      "mean": 2
+    },
+    "score_total": {
+      "count": 100,
+      "min": 60,
+      "median": 60,
+      "max": 60,
+      "mean": 60
+    },
+    "weeks_with_past_due": {
+      "count": 100,
+      "min": 0,
+      "median": 0,
+      "max": 0,
+      "mean": 0
+    }
+  },
+  "outliers": [],
+  "errors": []
+}

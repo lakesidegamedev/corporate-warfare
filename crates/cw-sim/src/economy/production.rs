@@ -484,8 +484,14 @@ fn run_facility(
                 );
             }
         }
+        // Only a deposit-bearing facility (ore) consumes recoverable stock. Every other recipe
+        // starts at zero and must stay at zero; subtracting output unconditionally drove the
+        // field negative on ordinary plants and made the conservation check meaningless.
         let facility = world.facilities.get_mut(handle).unwrap();
-        facility.deposit_remaining = facility.deposit_remaining.saturating_sub(output);
+        if !facility.deposit_remaining.is_zero() {
+            facility.deposit_remaining =
+                facility.deposit_remaining.max_zero().saturating_sub(output);
+        }
     }
     update_facility_result(
         world,
@@ -591,6 +597,38 @@ mod tests {
         for (_, firm) in world.firms.iter() {
             for ((_, _), lot) in &firm.inventory {
                 assert!(lot.qty.0 >= 0, "inventory never negative");
+            }
+        }
+    }
+
+    #[test]
+    fn only_ore_facilities_consume_a_deposit() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 23, ScenarioKind::Founder, ScenarioMode::Sandbox);
+        let assignments: Vec<(Handle, [i64; 3])> = world
+            .facilities
+            .iter()
+            .map(|(handle, facility)| (handle, facility.full_workers(&dataset)))
+            .collect();
+        for (handle, full) in assignments {
+            if let Some(f) = world.facilities.get_mut(handle) {
+                f.workers = full;
+            }
+        }
+        produce(&mut world, &dataset);
+        for (_, facility) in world.facilities.iter() {
+            let output = &dataset.recipes[facility.recipe as usize].output;
+            if output == "ore" {
+                assert!(
+                    facility.deposit_remaining.0 >= 0,
+                    "a mine cannot extract more than its deposit"
+                );
+            } else {
+                assert_eq!(
+                    facility.deposit_remaining,
+                    MilliLots::ZERO,
+                    "only a mine has a deposit to consume"
+                );
             }
         }
     }

@@ -32,6 +32,12 @@ Kanban: 254781. Milestone issues: 1-6. Merged PRs: #8 foundation, #9 release tra
   `SaveLifecycleTests` covers all of it; the suite has **not run on the Mac runner yet**.
 - `cw-cli`: doctor, run, sweep, replay. Release workflow: archive, verify, sign/export, upload,
   bounded App Store Connect processing check, fail-closed when secrets are absent.
+- `cw-cli`: doctor, run, sweep, replay. `sweep` now runs explainable reference
+  policies (conservative, growth, acquirer) through `Session::submit`, emits
+  per-seed JSON and min/median/max distributions, and checks ledger/cash/stock
+  invariants every run. First P33 report: `evidence/balance-report.md` (640
+  release-build runs). Release workflow: archive, verify, sign/export, upload,
+  bounded App Store Connect processing check, fail-closed when secrets are absent.
 
 ## Verified
 
@@ -39,9 +45,14 @@ Kanban: 254781. Milestone issues: 1-6. Merged PRs: #8 foundation, #9 release tra
   `cargo clippy --workspace --all-targets -D warnings` clean.
 - Hosted Verify and Apple smoke passed on PRs #8 (40163354063 / 40163354065), #9, #10 and #11.
 - iPhone simulator XCTest verified the canonical hash `7b781159...` at PR #11.
-- After the industry fix merge the fixture hash is `cb14891544da9a770548d832c8a54d787d7926614c840fbd309fba85312ff21d`,
+- After the P33 deposit fix the fixture hash is `3ef82f5bc26de9d2c1c88cf8c2eca42c5d4866226ed5d22a8dbe731e8f5f7e7b`,
   computed on Linux. The matching iOS run is **not yet verified**; R05 is therefore `active`,
   not done.
+- P33 first distributions published (2026-10-25): guided and founder 100 × 260 weeks for all
+  three reference policies, 20 × 1,560 weeks conservative, 20-seed no-policy control. No early
+  stops, no invariant violations, deterministic hashes on repeat. Seed variance is near zero
+  because macro price drift and optional event resolution are not implemented (recorded in
+  DECISIONS D22); R36 stays open.
 - Requirements done: R03, R04, R31. R05 is active pending a Mac-runner pass on the new pin.
 
 ## Blockers (honest, newest first)
@@ -66,7 +77,9 @@ Kanban: 254781. Milestone issues: 1-6. Merged PRs: #8 foundation, #9 release tra
    regions, media advertising demand from marketer budgets is unused, and construction projects do
    not consume contractor service/equipment. Producers without a local buyer earn nothing. This is
    the next product-quality blocker, not a test artefact.
-5. **Device, human playtest and balance gates not started** (P33-P35, R36-R38).
+5. **Device, human playtest and balance gates not started** (P34-P35, R37-R38). P33 now has a
+   harness and a first report, but R36 stays open until nominal price drift and event resolution
+   make seeds economically distinct and the distribution is re-run.
 
 ## Exact next moves
 
@@ -77,9 +90,10 @@ Kanban: 254781. Milestone issues: 1-6. Merged PRs: #8 foundation, #9 release tra
    run that reaches 260 weeks with explainable firm failures rather than silent starvation.
 3. Extend phone flows to every command family (subsidiaries, boards, takeover, banking, insurance,
    labour, policy, recovery) and complete the P31 accessibility audit at 320pt and AX text.
-4. P32 remaining: run the new `SaveLifecycleTests` (interrupted write, last-good fallback, future
-   schema, poisoned slot) on the Mac runner and record the evidence; then the migration fixtures.
-5. P33 balance sweeps, P34 device profiling, P35 three independent playtests.
+4. P32 remaining: run the new `SaveLifecycleTests` on the Mac runner and record
+   the evidence; then the migration fixtures.
+5. Implement nominal price drift and optional-event resolution, then re-run the
+   P33 sweeps (DECISIONS D22); P34 device profiling, P35 three independent playtests.
 6. Apple: resolve blocker 3, dispatch the release workflow, poll processing, install on a real
    iPhone and run the acceptance route. Only then can the goal close.
 
