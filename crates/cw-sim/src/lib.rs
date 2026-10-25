@@ -7,6 +7,7 @@
 
 pub mod commands;
 pub mod economy;
+pub mod fixtures;
 pub mod state;
 pub mod tick;
 

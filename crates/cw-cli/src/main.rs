@@ -22,6 +22,7 @@ fn main() {
         Some("replay") => replay(&arguments[1..]),
         Some("diagnose") => diagnose(&arguments[1..]),
         Some("report") => report(&arguments[1..]),
+        Some("bench") => bench(&arguments[1..]),
         _ => {
             eprintln!(
                 "Usage: cw-cli <doctor|run|sweep|replay|diagnose|report>\n\
@@ -911,6 +912,41 @@ fn report(arguments: &[String]) {
             totals.ebit / 100
         );
     }
+}
+
+fn bench(arguments: &[String]) {
+    use std::time::Instant;
+    let envelope = flag(arguments, "--envelope").unwrap_or_else(|| "representative".to_owned());
+    let weeks: u32 = flag(arguments, "--weeks")
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(3);
+    let dataset = cw_data::Dataset::load().expect("dataset");
+    let base = cw_sim::economy::seed::build(
+        &dataset,
+        501,
+        cw_sim::state::ScenarioKind::Guided,
+        cw_sim::state::ScenarioMode::Sandbox,
+    );
+    let Some(mut world) = cw_sim::fixtures::envelope(&base, &envelope) else {
+        eprintln!("unknown envelope {envelope}");
+        std::process::exit(2);
+    };
+    let (firms, facilities, contracts) = cw_sim::fixtures::counts(&world);
+    let mut times = Vec::new();
+    for _ in 0..weeks {
+        let start = Instant::now();
+        cw_sim::tick::advance(&mut world, &dataset);
+        times.push(start.elapsed().as_secs_f64() * 1_000.0);
+    }
+    times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let p50 = times[times.len() / 2];
+    let p99 = times[(times.len() as f64 * 0.99).ceil() as usize - 1];
+    let total: f64 = times.iter().sum();
+    println!(
+        "envelope={envelope} firms={firms} facilities={facilities} contracts={contracts} weeks={weeks} \
+         p50_ms={p50:.2} p99_ms={p99:.2} max_ms={:.2} total_ms={total:.2}",
+        times.last().copied().unwrap_or(0.0)
+    );
 }
 
 fn replay(arguments: &[String]) {
