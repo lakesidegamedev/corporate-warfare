@@ -80,6 +80,7 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
         firms: Default::default(),
         facilities: Default::default(),
         contracts: Default::default(),
+        procurements: Default::default(),
         shipments: Vec::new(),
         loans: Default::default(),
         bonds: Default::default(),
@@ -172,6 +173,7 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
     refresh_region_incomes(&mut world, dataset);
     build_gateways(&mut world, dataset);
     seed_supply_contracts(&mut world, dataset);
+    crate::economy::procurement::ensure_contracts(&mut world, dataset);
     compute_household_baselines(&mut world, dataset);
     seed_share_marks(&mut world, dataset);
 

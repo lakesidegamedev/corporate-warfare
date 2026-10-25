@@ -593,14 +593,12 @@ fn source_id(source: OfferSource) -> u64 {
 }
 
 fn clear_government(world: &mut World, dataset: &Dataset) {
-    // Defence procurement and care episodes are funded from fiscal budgets. Each budget is a
-    // weekly national ceiling, not a per-region allowance, so spending is consumed as the
-    // regions are served.
-    let defence = dataset.product_index["defense"];
+    // Care episodes are funded from the healthcare budget. It is a weekly national ceiling, not
+    // a per-region allowance, so spending is consumed as the regions are served. Defence runs
+    // through funded procurement contracts rather than a spot book.
     let care = dataset.product_index["care"];
-    let procurement = world.government.procurement_budget_cents.max(0);
     let healthcare = world.government.healthcare_budget_cents.max(0);
-    for (product, budget) in [(defence, procurement), (care, healthcare)] {
+    for (product, budget) in [(care, healthcare)] {
         let mut remaining = budget;
         for region in 0..world.regions.len() {
             if remaining <= 0 {

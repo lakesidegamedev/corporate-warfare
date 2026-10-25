@@ -30,7 +30,7 @@ final class EngineBridgeTests: XCTestCase {
         // when rival command ids began using the persisted sequence counter, and again when
         // ordinary facilities stopped consuming a nonexistent ore deposit. This constant needs
         // a fresh simulator run on the Mac runner before R05 is claimed again.
-        XCTAssertEqual(session.canonicalHash(), "2ee957c55392262ac0ee3e276c4f449f628fc95c3ed9b0692d25390391ace286")
+        XCTAssertEqual(session.canonicalHash(), "2538fa8ba2174503b1ad9931ec5c7ebea9f46c9cacc4fcdede4c2d67c8cc38fe")
 
         let data = try session.exportSave()
         XCTAssertGreaterThan(data.count, 1_000)

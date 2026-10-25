@@ -1770,6 +1770,10 @@ fn defense_procurement_is_capped_by_the_government_budget() {
     let price = dataset.reference_price(defense);
     let budget = price * 4;
     world.government.procurement_budget_cents = budget;
+    // Isolate the funded cash leg: without a deposit, every accepted lot is paid from budget.
+    for (_, procurement) in world.procurements.iter_mut() {
+        procurement.unearned_cents = 0;
+    }
     let defense_firms = firms_in(&world, "defense");
     let stock_in = |world: &World, firms: &[Handle]| -> i64 {
         firms

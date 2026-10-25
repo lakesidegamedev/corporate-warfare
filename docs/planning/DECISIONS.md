@@ -292,3 +292,15 @@ quality plus the prescribed 1,000 bps ceiling. It is an operating expense, never
 sale, and is exposed through a Finance form with a product picker. Test:
 `research::tests::quality_investment_is_bounded_and_funded`; canonical hash re-pinned to
 `2ee957c5...`.
+
+### Defense procurement, 2026-10-25
+
+Defense demand is now funded procurement rather than a government spot book. Each operative
+defense producer in a region receives a 52-week contract at reference price for its recipe
+capacity, with a ten percent deposit held as government prepaid expense and supplier unearned
+revenue. Settlement accepts only output the budget and treasury can fund, earns the deposit
+first, pays the balance on delivery, preserves deferred quantity and charges five percent of
+undelivered value after a two-week grace. New and acquired defense plants can win contracts.
+Weekly delivery plus grace is the milestone mechanism; no separate milestone object is invented.
+The fiscal budgets remain seeded baselines because weekly labour-income tax is not yet posted,
+so a trailing-receipt mean would be fabricated. Evidence: `evidence/defense-procurement.md`.
