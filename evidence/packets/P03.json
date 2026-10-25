@@ -1,0 +1,7 @@
+{
+  "packet": "P03",
+  "commit": "753730f26636840e5c7709758a13936532acff09",
+  "result": "pass",
+  "artifacts": ["evidence/R04-commands.json"],
+  "limitations": "Command-family fixtures, not exhaustive fuzzing."
+}

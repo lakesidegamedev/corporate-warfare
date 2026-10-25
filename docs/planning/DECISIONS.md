@@ -29,3 +29,16 @@ reinsurance and bounded policy model are now prescribed in docs/rules/. These ar
 author-selected defaults, not newly claimed owner quotations. Implement first; change
 only with documented economic/test evidence and architect decision. Product choices
 D01-D05 remain owner authority. Source observations remain distinct from calibration.
+
+## Implementation decisions, 2026-10-25 (DeepSeek goal session)
+
+These are engineering choices inside the approved design, recorded with their evidence and
+revisit conditions. None changes an owner product decision.
+
+| ID | State | Decision | Consequence / revisit condition |
+|---|---|---|---|
+| D14 | Implemented | Saves use the pinned postcard payload with a BLAKE3 checksum, length bounds and no compression in v0.1. | Build stays pure Rust on every target and the 64 MB bound is enforced directly. Revisit with measured save sizes; adding zstd must preserve the checksum-over-payload and bounds rules. |
+| D15 | Implemented | Spot books are per destination region; inter-region trade runs through contracts and shipments with freight and lead time. | No stock teleports and the one-pass allocator stays bounded. Cross-region ad-hoc spot can be added later without changing conservation rules. |
+| D16 | Blocked fixture | Corridor uses the verified 2004 EA codes and names with no county membership rows, plus labelled calibration. | R01/R02 cannot be signed off until a provenance-traceable crosswalk is recovered. Never replace the fixture with invented counties. |
+| D17 | Implemented | Within the 32-account chart, bank customer loans and customer deposit claims are carried in `Receivables`. | Keeps one chart for all legal entities and prevents double-counting outside cash. Documented in the banking module; revisit if a separate receivable class is justified. |
+| D18 | Implemented | The full command catalogue crosses FFI as JSON with a typed rejection record; frequent phone flows also have typed methods. | Keeps the boundary small while every family is reachable and validated by the engine. Revisit if DTO cost or type safety on a hot path warrants typed methods for more intents. |

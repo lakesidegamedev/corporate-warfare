@@ -1,0 +1,15 @@
+{
+  "requirement": "R03",
+  "commit": "753730f26636840e5c7709758a13936532acff09",
+  "verified_at": "2026-10-25",
+  "procedure": "cargo test -p cw-core -p cw-data, then cargo test --workspace. The ledger tests encode the borrowing/repayment, capex/CIP/completion, inventory purchase and sale, negative-cash rejection, unbalanced-transaction rejection, journal compaction and chart-balance fixtures. The farm worked example is recomputed independently from content/initial-balance.json in cw-data.",
+  "result": "pass",
+  "artifacts": [
+    "crates/cw-core/src/money.rs (half-even rounding, largest-remainder allocation, sub-cent carry tests)",
+    "crates/cw-core/src/quantity.rs (milli-lot value and allocation tests)",
+    "crates/cw-core/src/ledger.rs (balanced postings, borrowing, capex, inventory, compaction tests)",
+    "crates/cw-data/src/balance.rs (farm worked example)",
+    "https://github.com/lakesidegamedev/corporate-warfare/actions/runs/40163354063"
+  ],
+  "limitations": "Covers the ledger oracle only. It does not prove any market, labour, corporate or release behaviour."
+}

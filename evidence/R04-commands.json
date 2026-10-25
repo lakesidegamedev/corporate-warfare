@@ -1,0 +1,14 @@
+{
+  "requirement": "R04",
+  "commit": "753730f26636840e5c7709758a13936532acff09",
+  "verified_at": "2026-10-25",
+  "procedure": "cargo test -p cw-core -p cw-sim -p cw-session. Tests cover generation-checked handles, swap-remove reference repair, stale revision rejection, unauthorised price rejection with no mutation, failed issuance rollback, duplicate command idempotency, and rejected commands returning typed keys.",
+  "result": "pass",
+  "artifacts": [
+    "crates/cw-core/src/ids.rs",
+    "crates/cw-sim/src/commands.rs",
+    "crates/cw-session/src/lib.rs",
+    "https://github.com/lakesidegamedev/corporate-warfare/actions/runs/40163354063"
+  ],
+  "limitations": "Rejection coverage is by family fixture, not an exhaustive fuzz of every command path; P32 remains the adversarial sequence packet."
+}
