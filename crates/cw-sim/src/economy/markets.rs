@@ -463,6 +463,21 @@ enum OfferSource {
     Gateway(usize),
 }
 
+/// One week's household spending budget. Disposable wage income supplies ninety percent;
+/// after a shortfall against the disposable baseline, at most one percent of savings may
+/// supplement the budget. The supplement is deducted when it is committed, and any unspent
+/// category budget returns to savings after clearing.
+fn weekly_household_budget(household: &crate::state::Household) -> (i64, i64) {
+    let income = household.last_income_cents.max(0);
+    let baseline = household.baseline_income_cents.max(0);
+    let savings = household.savings_cents.max(0);
+    let mut budget = income * 90 / 100;
+    let shortfall = (baseline * 90 / 100 - budget).max(0);
+    let supplement = (savings / 100).min(shortfall).max(0);
+    budget += supplement;
+    (budget, supplement)
+}
+
 fn clear_households(world: &mut World, dataset: &Dataset) {
     let consumer_ids = [
         "food_retail",
@@ -473,11 +488,11 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
         "lease",
     ];
     for region_index in 0..world.regions.len() {
-        let income = world.regions[region_index]
-            .households
-            .last_income_cents
-            .max(0);
-        let budget_total = income * 90 / 100;
+        let (budget_total, supplement) =
+            weekly_household_budget(&world.regions[region_index].households);
+        if supplement > 0 {
+            world.regions[region_index].households.savings_cents -= supplement;
+        }
         let weights = world.regions[region_index].households.weights.clone();
         let baseline = world.regions[region_index].households.baseline_lots.clone();
         let last_prices = world.regions[region_index]
@@ -1200,6 +1215,57 @@ mod tests {
             first, second,
             "industrial buyers value delivered cost and quality, not brand"
         );
+    }
+
+    #[test]
+    fn a_wage_shortfall_can_draw_one_percent_of_savings() {
+        let mut household = crate::state::Household {
+            savings_cents: 1_000_000,
+            last_income_cents: 0,
+            baseline_income_cents: 100_000,
+            weights: BTreeMap::new(),
+            baseline_lots: BTreeMap::new(),
+            last_sale_price_cents: BTreeMap::new(),
+            spend_cents: BTreeMap::new(),
+        };
+        let (budget, supplement) = weekly_household_budget(&household);
+        assert_eq!(supplement, 10_000, "at most one percent of savings");
+        assert_eq!(budget, 10_000);
+        household.savings_cents -= supplement;
+        assert_eq!(household.savings_cents, 990_000);
+        household.last_income_cents = 100_000;
+        let (budget, supplement) = weekly_household_budget(&household);
+        assert_eq!(supplement, 0, "no supplement when income is at baseline");
+        assert_eq!(budget, 90_000);
+        household.savings_cents = 0;
+        household.last_income_cents = 0;
+        let (budget, supplement) = weekly_household_budget(&household);
+        assert_eq!(supplement, 0);
+        assert_eq!(budget, 0);
+    }
+
+    #[test]
+    fn a_week_with_no_wages_spends_at_most_one_percent_of_savings() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            77,
+            crate::state::ScenarioKind::Guided,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        for region in &mut world.regions {
+            region.households.last_income_cents = 0;
+            region.households.baseline_income_cents = 100_000;
+            region.households.savings_cents = 1_000_000;
+        }
+        clear_households(&mut world, &dataset);
+        for region in &world.regions {
+            assert!(
+                region.households.savings_cents >= 990_000,
+                "a zero-income week can spend at most one percent of savings"
+            );
+            assert!(region.households.savings_cents <= 1_000_000);
+        }
     }
 
     #[test]
