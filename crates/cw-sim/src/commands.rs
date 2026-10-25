@@ -2118,7 +2118,7 @@ fn start_facility(
         capex_cents: cost,
         accumulated_depreciation: 0,
         workers: [0; 3],
-        target_bps: 8_500,
+        target_bps: 10_000,
         quality_bps: 10_000,
         deposit_remaining: if template.output == "ore" {
             MilliLots::from_lots(template.weekly_output_lots * blocks as i64 * 52 * 20)

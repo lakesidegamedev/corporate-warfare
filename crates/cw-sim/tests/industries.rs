@@ -206,7 +206,7 @@ fn add_facility(
         workers: recipe
             .workers_low_mid_high
             .map(|workers| workers * blocks as i64),
-        target_bps: 8_500,
+        target_bps: 10_000,
         quality_bps: 10_000,
         deposit_remaining: MilliLots::ZERO,
         last_output: MilliLots::ZERO,
@@ -425,7 +425,7 @@ fn energy_generators_are_dispatched_and_power_is_a_weekly_allocated_service() {
             dataset.recipes[world.facilities.get(facility).unwrap().recipe as usize]
                 .weekly_output_lots,
         )
-        .scale_bps(8_500);
+        .scale_bps(10_000);
         assert!(output <= capacity, "output within planned capacity");
         generator_output += output.0;
         assert!(
@@ -1582,7 +1582,7 @@ fn telecommunications_installed_capacity_is_finite_and_sells_subscriptions() {
     tick::advance(&mut world, &dataset);
 
     let output = facility_output(&world, network);
-    let installed_capacity = MilliLots::from_lots(1_000 * blocks).scale_bps(8_500);
+    let installed_capacity = MilliLots::from_lots(1_000 * blocks).scale_bps(10_000);
     assert!(output.is_positive());
     assert!(
         output <= installed_capacity,

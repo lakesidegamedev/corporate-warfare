@@ -29,13 +29,13 @@
     {
       "id": "electricity",
       "name": "Electricity service",
-      "reference_price_cents": 100000,
+      "reference_price_cents": 120000,
       "kind": "local_service"
     },
     {
       "id": "chemicals",
       "name": "Industrial chemicals",
-      "reference_price_cents": 50000,
+      "reference_price_cents": 60000,
       "kind": "goods"
     },
     {
@@ -59,25 +59,25 @@
     {
       "id": "construction",
       "name": "Construction work",
-      "reference_price_cents": 1000000,
+      "reference_price_cents": 1200000,
       "kind": "project_service"
     },
     {
       "id": "freight",
       "name": "Freight work",
-      "reference_price_cents": 10000,
+      "reference_price_cents": 12000,
       "kind": "transport_service"
     },
     {
       "id": "food_retail",
       "name": "Delivered consumer food",
-      "reference_price_cents": 15000,
+      "reference_price_cents": 17000,
       "kind": "consumer_goods"
     },
     {
       "id": "goods_retail",
       "name": "Delivered consumer goods",
-      "reference_price_cents": 250000,
+      "reference_price_cents": 300000,
       "kind": "consumer_goods"
     },
     {
@@ -113,7 +113,7 @@
     {
       "id": "defense",
       "name": "Procurement delivery",
-      "reference_price_cents": 1000000,
+      "reference_price_cents": 1100000,
       "kind": "contract_goods"
     },
     {

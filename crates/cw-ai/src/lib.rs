@@ -190,12 +190,33 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         }
     }
 
+    // Recovery: a firm that is profitable again restores capacity and marketing instead of
+    // staying permanently shrunk, which otherwise ratchets corridor demand down over years.
+    let recovered_income: i64 = entity
+        .book
+        .recent_weeks()
+        .iter()
+        .map(|week| week.net_income)
+        .sum();
+    if recovered_income > 0
+        && entity.book.cash() > reserve * 2
+        && entity.policies.production_target_bps < 8_500
+    {
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::SetProductionTarget {
+                firm,
+                target_bps: 8_500,
+            },
+        });
+    }
+
     // Brand builders and retailers fund marketing, which is the only source of media revenue.
     if weights[2] >= 3 || entity.industry == 7 || revenue > 0 {
         // Marketing is a real revenue-funded demand channel for media. Five percent of trailing
         // weekly revenue is enough to keep the corridor's two studios operating without turning
         // into a hidden subsidy.
-        let budget = (revenue * 100 / 10_000).max(10_000);
+        let budget = (revenue * 300 / 10_000).max(10_000);
         if entity.book.cash() > reserve + budget * 4 && entity.policies.marketing_budget_cents == 0
         {
             proposals.push(Proposal {
@@ -237,8 +258,15 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         .iter()
         .map(|week| week.net_income)
         .sum();
+    let total_blocks: i64 = entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .map(|facility| facility.blocks as i64)
+        .sum();
     if weights[1] >= 3
         && entity.facilities.len() < 2
+        && total_blocks < 3
         && fully_staffed
         && recent_profit > 0
         && entity.book.cash() > reserve * 2

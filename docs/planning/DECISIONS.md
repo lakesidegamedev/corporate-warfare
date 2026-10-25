@@ -63,3 +63,24 @@ pass must price outputs to cover delivered input cost plus payroll at realistic 
 must give media and carriers demand that scales with corridor activity. Do not call the economy
 viable until a 260-week run keeps most rivals alive and the guided firm solvent under a stated
 reference policy.
+
+### Viability calibration result, 2026-10-25
+
+After the second viability pass and this calibration, seed 3 measures:
+
+| Horizon | Dissolved | Past due | Guided firm | Score |
+|---|---|---|---|---|
+| 52 weeks | 0 of 31 | 0 | operating, $783k cash | n/a |
+| 260 weeks | 3 of 31 | 2 | operating, $935k cash | 62 (return 50, resilience 100, control 20, conduct 100) |
+| 1,560 weeks | 11 of 31 | 0 | operating, $3.5M cash, fair value up 2.7x | n/a |
+
+Calibration changes behind this (all authored game calibration, not historical facts):
+operating plants run at planned full capacity by default; the gateway quotes five percent either
+side of the reference index and is sized to the corridor's weekly volume; freight is ten cents
+per lot-kilometre; marketing is three percent of trailing revenue for firms with revenue; media,
+carrier and generator crews were right-sized; rival expansion stops at three blocks; a profitable
+firm restores capacity and marketing.
+
+Remaining: eleven rivals fail across thirty years with no entry, and the score's control
+component is low because the investor keeps most wealth in personal cash. That is a playtest and
+balance question (P33, P35), not a code defect.
