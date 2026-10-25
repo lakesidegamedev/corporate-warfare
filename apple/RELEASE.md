@@ -16,20 +16,18 @@ States are deliberately separate. A green job means only the state it printed, n
 
 ## Required owner actions (currently blocking)
 
-As of 2026-10-25 the repository is public, Verify and Apple smoke are green on main `319fe31`,
-and the `appstore` environment exists. Release run 40209622603 failed closed with the exact
-missing-secret list below. Only Apple signing remains before an upload attempt.
+As of 2026-10-25 (1.0.0 branch) Verify and Apple smoke run on every PR and the `appstore`
+environment exists. Release run 40209622603 failed closed because the four signing secrets are
+missing. The intended key is the studio App Store Connect API key already used for the other
+Lakeside iOS apps; its issuer ID and team ID are stored only as secrets elsewhere, and GitHub
+never returns secret values, so they must be supplied again for this repository.
 
-1. Confirm the App Store Connect team, the app record for bundle ID
-   `net.lakesidegames.corporatewarfare`, and the intended internal tester group.
-2. Provide the least-privileged App Store Connect API key to the repository or the `appstore`
-   environment as secrets:
-   - `APPLE_API_ISSUER`
-   - `APPLE_API_KEY` (the key identifier)
-   - `APPLE_API_KEY_CONTENT` (the `.p8` contents)
-   - `APPLE_DEVELOPMENT_TEAM`
-   Alternatively name an approved existing studio key path to reuse. Keys found on this host
-   belong to other products and were not read, copied or used.
+1. Create the App Store Connect app record for bundle ID `net.lakesidegames.corporatewarfare`
+   on the same team as Ask and Ops, and name the internal tester group. The API cannot create
+   app records.
+2. Supply that key's issuer ID and team ID. The operator then sets
+   `APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_CONTENT` and `APPLE_DEVELOPMENT_TEAM` on
+   the `appstore` environment, restricted to `main` deployments.
 3. Confirm agreements are accepted and the team can create provisioning profiles.
 
 Until those exist, run the workflow anyway: it fails closed with
@@ -39,7 +37,7 @@ Until those exist, run the workflow anyway: it fails closed with
 
 Use **Actions -> Release -> Run workflow** on a tested commit with:
 
-- `version`: marketing version, for example `0.1.0`
+- `version`: marketing version, for example `1.0.0`
 - `build`: unique increasing build number
 - `confirm`: exactly `UPLOAD`
 

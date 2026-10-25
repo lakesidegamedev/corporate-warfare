@@ -19,14 +19,50 @@ use crate::state::{PolicyKind, PolicyRequest, World};
 
 pub const REQUEST_COOLDOWN_WEEKS: u32 = 26;
 const DECISION_WEEKS: u32 = 4;
+/// Wins inside this window lower the next request's odds by 500 bps each.
+const RECENT_WIN_WEEKS: u32 = 104;
+/// Layoffs are judged over the four weeks up to a decision.
+const LAYOFF_WINDOW_WEEKS: u32 = 4;
+/// A mass layoff releases at least a tenth of the group's workforce inside the window.
+const MASS_LAYOFF_BPS: i64 = 1_000;
+const BACKLASH_BPS: i32 = 250;
+
+/// Group assets without double counting: each member's assets less its holdings in other
+/// companies, since those holdings are the other members' assets again.
+fn group_assets(world: &World, firm: Handle) -> i64 {
+    crate::economy::deals::competition_group(world, firm)
+        .into_iter()
+        .filter_map(|member| world.firm(member))
+        .map(|entity| {
+            (entity.book.total_assets() - entity.book.balance(Account::Investments)).max(0)
+        })
+        .sum()
+}
 
 pub fn request_fee(world: &World, firm: Handle) -> i64 {
-    let group_assets = world
-        .firms
-        .get(firm)
-        .map(|entity| entity.book.total_assets().max(0))
-        .unwrap_or(0);
-    (group_assets * 10 / 10_000).max(2_500_000)
+    (group_assets(world, firm) * 10 / 10_000).max(2_500_000)
+}
+
+/// Success odds in bps: clamp(2000 + reputation/4 - recent group wins * 500, 1000, 5000).
+pub fn success_bps(world: &World, firm: Handle) -> i32 {
+    let reputation = world.firm(firm).map(|f| f.reputation_bps).unwrap_or(0);
+    let since = world.tick.0.saturating_sub(RECENT_WIN_WEEKS);
+    let wins = crate::economy::deals::competition_group(world, firm)
+        .into_iter()
+        .filter_map(|member| world.firm(member))
+        .flat_map(|entity| entity.policy_requests.iter())
+        .filter(|request| request.resolved && request.success && request.created.0 >= since)
+        .count() as i32;
+    (2_000 + reputation / 4 - wins * 500).clamp(1_000, 5_000)
+}
+
+/// True while any company in the group has a request open or cooling down in the region.
+pub fn cooling_down(world: &World, firm: Handle, region: u8) -> bool {
+    crate::economy::deals::competition_group(world, firm)
+        .into_iter()
+        .filter_map(|member| world.firm(member))
+        .flat_map(|entity| entity.policy_requests.iter())
+        .any(|request| request.region == region && world.tick.0 < request.cooldown_until.0)
 }
 
 pub fn file_request(
@@ -41,21 +77,19 @@ pub fn file_request(
             kind: cw_core::error::EntityKind::Firm,
         });
     };
-    // One request per group and region, including the 26-week cooldown after a decision.
-    let mut group = crate::economy::ownership::controlled_group(world, firm);
-    group.push(firm);
-    for member in group {
-        let Some(candidate) = world.firm(member) else {
-            continue;
-        };
-        for request in &candidate.policy_requests {
-            if request.region == region && world.tick.0 < request.cooldown_until.0 {
-                return Err(DomainError::SolvencyRestriction {
-                    entity: firm.0,
-                    reason: cw_core::error::SolvencyReason::PastDue,
-                });
-            }
-        }
+    if region as usize >= world.regions.len() {
+        return Err(DomainError::InvalidEntity {
+            handle: region as u64,
+            kind: cw_core::error::EntityKind::Region,
+        });
+    }
+    // One request per group and region, including the 26-week cooldown after a decision. The
+    // group is the whole ultimate-controller group, so a sibling company cannot skip it.
+    if cooling_down(world, firm, region) {
+        return Err(DomainError::WrongPhase {
+            expected: "policy_cooldown_elapsed",
+            actual: "policy_cooldown",
+        });
     }
     let fee = request_fee(world, firm);
     let cash = entity.book.cash().max(0);
@@ -66,22 +100,17 @@ pub fn file_request(
             available: cash,
         });
     }
-    // One saved draw at creation; the result cannot be rerolled by reopening a screen.
-    let mut rng = Rng::entity_stream(world.seed ^ world.tick.0 as u64, TAG_POLICY, firm);
-    let wins = entity
-        .policy_requests
-        .iter()
-        .filter(|request| request.resolved && request.success)
-        .count() as i32;
-    let probability = (2_000 + entity.reputation_bps / 4 - wins * 500).clamp(1_000, 5_000);
-    let success = rng.chance_bps(probability);
-    if kind == PolicyKind::TrainingGrant && world.government.training_budget_cents < fee / 5 {
-        // The grant needs a finite government budget or it is declined.
+    if kind == PolicyKind::TrainingGrant && world.government.training_budget_cents <= 0 {
+        // The grant needs a finite government budget or it is declined before any fee.
         return Err(DomainError::SolvencyRestriction {
             entity: firm.0,
             reason: cw_core::error::SolvencyReason::CoverageTooLow,
         });
     }
+    // One saved draw at creation; the result cannot be rerolled by reopening a screen.
+    let probability = success_bps(world, firm);
+    let mut rng = Rng::entity_stream(world.seed ^ world.tick.0 as u64, TAG_POLICY, firm);
+    let success = rng.chance_bps(probability);
     let _ = world.firms.get_mut(firm).unwrap().book.commit(
         world.tick,
         Txn::new().credit(Account::Cash, fee, "lobbying fee").debit(
@@ -115,6 +144,12 @@ pub fn file_request(
 
 pub fn weekly(world: &mut World) {
     let handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
+    let horizon = world.tick.0.saturating_sub(LAYOFF_WINDOW_WEEKS);
+    for handle in &handles {
+        if let Some(entity) = world.firms.get_mut(*handle) {
+            entity.layoffs.retain(|(week, _)| *week > horizon);
+        }
+    }
     for handle in handles {
         let due: Vec<(usize, PolicyRequest)> = world
             .firms
@@ -157,40 +192,60 @@ fn apply_success(world: &mut World, firm: Handle, request: &PolicyRequest) {
             }
         }
         PolicyKind::TrainingGrant => {
-            let subsidy = (request.fee_cents / 5).min(world.government.training_budget_cents);
-            if subsidy > 0 {
-                world.government.training_budget_cents -= subsidy;
-                if let Some(region) = world.regions.get_mut(region) {
-                    region.policy.training_grant_until = Some(Tick(world.tick.0 + 26));
-                }
-                // Funded from the finite government account, never minted.
-                let _ = world.government.book.commit(
-                    world.tick,
-                    Txn::new()
-                        .credit(Account::Cash, subsidy, "training grant")
-                        .debit(Account::OperatingExpense, subsidy, "training grant"),
-                );
-                if let Some(entity) = world.firms.get_mut(firm) {
-                    let _ = entity.book.commit(
-                        world.tick,
-                        Txn::new()
-                            .debit(Account::Cash, subsidy, "training grant")
-                            .credit(Account::OtherIncome, subsidy, "training grant"),
-                    );
-                }
+            // Opens the regional window in which retraining is twenty percent subsidised from
+            // the finite government training budget (labour.rs). No cash is paid here.
+            if let Some(region) = world.regions.get_mut(region) {
+                region.policy.training_grant_until = Some(Tick(world.tick.0 + 26));
             }
         }
     }
+    let _ = firm;
 }
 
-/// A failed campaign with concurrent layoffs damages reputation.
+/// Workers the group released in the layoff window, against its current workforce.
+pub fn mass_layoffs(world: &World, firm: Handle) -> bool {
+    let group = crate::economy::deals::competition_group(world, firm);
+    let released: i64 = group
+        .iter()
+        .filter_map(|member| world.firm(*member))
+        .flat_map(|entity| entity.layoffs.iter())
+        .map(|(_, count)| *count)
+        .sum();
+    let employed: i64 = group
+        .iter()
+        .filter_map(|member| world.firm(*member))
+        .map(|entity| entity.total_employees(&world.facilities))
+        .sum();
+    released > 0 && released * 10_000 >= (employed + released) * MASS_LAYOFF_BPS
+}
+
+/// The lobby backlash card's outcome: disclosing a campaign run during mass layoffs costs 250
+/// bps reputation, cancelling it costs 100 bps and forfeits the fee. Recorded publicly in the
+/// news feed. The card is the only path, so the penalty is never applied twice.
 pub fn backlash(world: &mut World, firm: Handle, cancel: bool) {
-    let penalty = if cancel { 100 } else { 250 };
+    let penalty = if cancel { 100 } else { BACKLASH_BPS };
+    let Some(entity) = world.firms.get_mut(firm) else {
+        return;
+    };
+    entity.reputation_bps = (entity.reputation_bps - penalty).max(-2_000);
+    let subject = entity.name.clone();
+    world.news.push(crate::state::NewsItem {
+        week: world.tick,
+        key: "news.lobbying_backlash".to_owned(),
+        subject,
+        amount_cents: penalty as i64,
+        quantity: Default::default(),
+    });
+}
+
+/// Cancel the firm's open campaigns: they resolve unsuccessful and the fee is not refunded.
+pub fn cancel_open(world: &mut World, firm: Handle) {
     if let Some(entity) = world.firms.get_mut(firm) {
-        entity.reputation_bps = (entity.reputation_bps - penalty).max(-2_000);
+        for request in entity.policy_requests.iter_mut().filter(|r| !r.resolved) {
+            request.resolved = true;
+            request.success = false;
+        }
     }
-    world.regulatory_breaches += 0;
-    let _ = firm;
 }
 
 #[cfg(test)]

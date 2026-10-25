@@ -1,0 +1,12 @@
+{
+  "requirement": "R22",
+  "result": "pass",
+  "commit": "3fa5a327af92b62415627d3a344c18bb774cf811",
+  "procedure": "cargo test --locked --workspace; takeovers.rs review_happens_before_settlement_and_rejection_moves_nothing, a_feasible_remedy_settles_as_a_minority_stake, an_infeasible_remedy_is_refused_and_the_deal_rejected, a_shell_subsidiary_cannot_bypass_review, neutral_concentration_and_hhi_only_triggers (hand-computed HHI 3400->5200, 5272->5512).",
+  "artifacts": [
+    "crates/cw-sim/src/economy/deals.rs",
+    "crates/cw-sim/tests/takeovers.rs"
+  ],
+  "limitations": "The only remedy is divesting the target stake below control; divesting other plant to an outside buyer is not offered. HHI uses trailing 13-week unit sales of the markets the target serves.",
+  "verified_at": "2026-10-25"
+}

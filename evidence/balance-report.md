@@ -1,407 +1,169 @@
-# P33 balance distributions: first report
+# P33 balance distributions: release report
 
 Date: 2026-10-25. Packet: P33. Requirement: R36 (automated gate).
-Base commit: `30d1b0c` (`origin/main`), worktree `worktrees/balance` on `feat/balance`.
-This is the first reproducible report, not an R36 sign-off: it covers one difficulty
-(Standard), synthetic reference policies and no human playtest.
+Tested commit: `3fa5a327af92b62415627d3a344c18bb774cf811` on `release/1.0.0`. Engine `1.0.0`, interface `1`,
+rules `1`, dataset hash `8aa1dc570dd24b7e7207049c724e6a94bd8a7b683f0cc1a12be77f16c52cb489`.
+This replaces the first report (base `30d1b0c`). Standard difficulty only; scripted reference
+policies, not human play. It is not a fun sign-off: R38 independent playtests remain.
 
-All numbers below come from the committed JSON in `evidence/balance/`. Nothing is typed by
-hand except the dollar conversion of integer cents. Engine `0.1.0`, interface `1`, rules `1`,
-dataset hash `8aa1dc570dd24b7e7207049c724e6a94bd8a7b683f0cc1a12be77f16c52cb489`.
+Every number comes from the committed JSON in `evidence/balance/` or from the diagnostic
+`cargo run --release -p cw-session --example dissolution_census -- 20`. Nothing is typed by
+hand except the dollar conversion of cents.
 
 ## 1. What ran
 
-Release build on the Contabo VPS (AMD EPYC, 18 vCPU, Linux 7.0, rustc 1.96.0). Runs were
-sequential, one process at a time, with no other sweep running.
+Release build on the Contabo VPS (AMD EPYC, 18 vCPU, Linux 7.0), one sweep at a time.
 
 ```sh
-cd /root/projects/corporate-warfare/worktrees/balance
 cargo build --release -p cw-cli
+./target/release/cw-cli sweep --policy <conservative|growth|acquirer> --scenario <guided|founder> --five-year --seeds 100 --weeks 260 --from 1 --json evidence/balance/<scenario>-<policy>-260.json
+./target/release/cw-cli sweep --policy <conservative|growth|acquirer> --scenario guided --sandbox --seeds 20 --weeks 1560 --from 1 --json evidence/balance/guided-<policy>-1560.json
+./target/release/cw-cli sweep --policy none --scenario guided --five-year --seeds 20 --weeks 260 --from 1 --json evidence/balance/guided-none-260.json
 ```
 
-| # | Command (one line each) | Wall time | Runs |
-|---|---|---|---|
-| 1 | `./target/release/cw-cli sweep --policy conservative --scenario guided --five-year --seeds 100 --weeks 260 --from 1 --json evidence/balance/guided-conservative-260.json` | 22.9 s | 100 |
-| 2 | `./target/release/cw-cli sweep --policy growth --scenario guided --five-year --seeds 100 --weeks 260 --from 1 --json evidence/balance/guided-growth-260.json` | 23.3 s | 100 |
-| 3 | `./target/release/cw-cli sweep --policy acquirer --scenario guided --five-year --seeds 100 --weeks 260 --from 1 --json evidence/balance/guided-acquirer-260.json` | 23.2 s | 100 |
-| 4 | `./target/release/cw-cli sweep --policy conservative --scenario founder --five-year --seeds 100 --weeks 260 --from 1 --json evidence/balance/founder-conservative-260.json` | 22.2 s | 100 |
-| 5 | `./target/release/cw-cli sweep --policy growth --scenario founder --five-year --seeds 100 --weeks 260 --from 1 --json evidence/balance/founder-growth-260.json` | 21.2 s | 100 |
-| 6 | `./target/release/cw-cli sweep --policy acquirer --scenario founder --five-year --seeds 100 --weeks 260 --from 1 --json evidence/balance/founder-acquirer-260.json` | 22.6 s | 100 |
-| 7 | `./target/release/cw-cli sweep --policy conservative --scenario guided --sandbox --seeds 20 --weeks 1560 --from 1 --json evidence/balance/guided-conservative-1560.json` | 23.4 s | 20 |
-| 8 | `./target/release/cw-cli sweep --policy none --scenario guided --five-year --seeds 20 --weeks 260 --from 1 --json evidence/balance/guided-none-260.json` | 4.4 s | 20 |
-
-Total wall time: 2 min 43 s. Seeds are consecutive ranges `1..100` and `1..20`; `--seeds N`
-means "N consecutive seeds starting at `--from`". Every run reached its target week: there
-were no early pauses, no session-creation errors and no invariant violations in any of the 640
-runs.
-
-Determinism spot check (same seed twice, release binary):
+Wall times:
 
 ```
-seed=7 ... acquirer hash=6214db9b715cd6ab613a5a8e9ea9443b00f51d68827bea6f1e78f57c69dd6c2d (twice)
-seed=3 ... conservative 1560 hash=5400eed1e974b459f2654dcdc5ccb6930010c081c8ce6da7758c88e722383592 (twice)
+guided-conservative-260 rc=0 25.7s err=0
+guided-growth-260 rc=0 25.3s err=0
+guided-acquirer-260 rc=0 27.2s err=0
+founder-conservative-260 rc=0 24.8s err=0
+founder-growth-260 rc=0 25.0s err=0
+founder-acquirer-260 rc=0 24.6s err=0
+guided-conservative-1560 rc=0 24.6s err=0
+guided-growth-1560 rc=0 23.5s err=0
+guided-acquirer-1560 rc=0 23.2s err=0
+guided-none-260 rc=0 4.9s err=0
 ```
 
-The swept seed-3 acquirer hash also matches a direct `run` after the final build.
+860 careers in total. Every run reached its target week, with no session errors and no
+invariant violations: every ledger balanced, no negative cash, stock or deposit. Determinism
+spot check: seed 7 acquirer, run twice from the release binary, gave
+`0e447f65bb9fee21cc4a3d97099b650fcccef7ca2b4dcbe53c1e8695caff05a0` both times.
 
-## 2. Harness
+What changed in the harness since the first report: reference policies now answer mandatory
+event cards through `RespondEvent` (first choice; the no-action baseline takes its passive
+choice), because the corrected event deck now raises real mandatory cards; the acquirer
+respects private-company information rights; the sweep reports rival outcomes by archetype;
+and "player controls nothing" counts companies the investor ultimately controls, where the
+first report counted any company it held a share in.
 
-`cw-cli sweep` now takes:
+## 2. Distributions
 
-```
---policy none|conservative|growth|acquirer   (default none)
---scenario guided|founder                    (--guided/--founder kept as aliases)
---five-year | --sandbox                      (default five-year)
---seeds N --from N --weeks N
---json PATH                                  (machine-readable report)
---verbose                                    (policy decisions and skip reasons)
-```
+| Run | Seeds | Score min/median/max | Personal net worth $m min/median/max | Rivals dissolved min/median/max | Rival deals settled min/median/max | Player controls nothing | Early stops | Invariant failures | Tukey outliers | Policy rejections |
+|---|---:|---|---|---|---|---:|---:|---:|---:|---|
+| guided-conservative-260 | 100 | 55/62/62 | 4.01/4.33/4.34 | 0/1/5 | 6/13/20 | 0 | 0 | 0 | 15 | none |
+| guided-growth-260 | 100 | 53/60/60 | 3.69/4.02/4.03 | 0/1/5 | 6/12/20 | 0 | 0 | 0 | 12 | none |
+| guided-acquirer-260 | 100 | 51/60/60 | 3.49/4.06/4.09 | 0/1/5 | 9/14/20 | 1 | 0 | 0 | 29 | none |
+| founder-conservative-260 | 100 | 47/57/57 | 2.01/3.00/3.02 | 0/1/6 | 9/16/24 | 1 | 0 | 0 | 15 | none |
+| founder-growth-260 | 100 | 44/54/55 | 2.01/2.50/2.58 | 0/1/6 | 9/17/24 | 4 | 0 | 0 | 17 | found_firm 33 |
+| founder-acquirer-260 | 100 | 47/53/54 | 1.98/2.40/2.46 | 0/1/6 | 8/15/22 | 17 | 0 | 0 | 27 | found_firm 162 |
+| guided-conservative-1560 | 20 | n/a | 3.67/4.25/5.02 | 5/9/13 | 28/35/46 | 0 | 0 | 0 | 0 | none |
+| guided-growth-1560 | 20 | n/a | 3.49/3.49/3.76 | 5/9/14 | 30/38/48 | 17 | 0 | 0 | 4 | none |
+| guided-acquirer-1560 | 20 | n/a | 3.49/3.66/4.46 | 5/10/15 | 26/36/45 | 8 | 0 | 0 | 0 | none |
+| guided-none-260 | 20 | 55/62/62 | 4.21/4.40/4.40 | 0/1/4 | 6/12/17 | 0 | 0 | 0 | 7 | none |
 
-Each JSON run row contains: seed, final week, paused reason, score total and components,
-personal net worth, investor cash, controlled group size, dissolved count, past-due count,
-weeks with past due, settled deals, canonical hash, policy attempt/accept/reject counts and
-rejection reasons, and the conservation invariants. The report also contains min/median/max/mean
-distributions, early-stop and Tukey outliers, dataset/engine versions and any errors.
-
-Invariants checked on every final state: every firm and the investor ledger balanced, no
-negative cash, no negative inventory lot, no negative facility deposit. A violation is printed
-with the firm and product/facility; it is a defect, not a balance result.
-
-"Controlled firms" in the JSON counts the controlled *group*, including subsidiaries of a
-controlled firm, matching `ownership::group_value` and the score's control component. The
-direct-only DTO is not used for this metric.
-
-### Reference policies
-
-All policies decide every four weeks (`CADENCE_WEEKS = 4`), at week 0 and then `tick % 4 == 0`,
-while the clock is not paused. They read `Session::overview`/`Query::*` and two documented
-projections already used by the UI (`mandatory_weekly_outflow` and secured/unsecured borrowing
-capacity), then submit ordinary `CommandIntent`s through `Session::submit` with a distinct
-command-id namespace. The common validator and solvency service accept or reject every action;
-the policy never writes `World` state. A unit test asserts that every revision increment in a
-policy turn comes from an accepted command.
-
-* **Conservative operator.** Holds 13 weeks of mandatory payroll and debt service, runs the
-  plant at 100% of capacity, spends 1% of trailing weekly revenue on marketing, nothing on
-  research. It borrows only to bridge a genuine shortfall (cash below half the floor), only
-  while liabilities stay below half of assets and the new principal below a quarter of assets.
-* **Growth operator.** Holds 8 weeks of outflow, runs at 100%, spends 4% of weekly revenue on
-  marketing and 2% on research. The thinner buffer is deliberate: a bad stretch becomes
-  leverage rather than an output cut. The same credit gate applies.
-* **Acquirer.** Holds 10 weeks of outflow, runs at 100%, spends 2% on marketing. When no deal
-  is live and the reserve survives the escrow, it starts a funded diligence on the weakest
-  operating peer (most negative trailing 13-week net income, or grade C/D), offering 110% of
-  fair value or 115% of the exchange mark, whichever is higher, for a bare voting majority
-  (`eligible / 2 + 1` shares). Acquired firms remain in the controlled group for the score.
-* **Founder bootstrap (all three).** In the founder scenario there is no inherited firm. The
-  policy founds a farm in region 035, named Lakeside Holdings, with $3.0M of paid-in capital
-  ($2.0M plant plus $1.0M working capital) at week 0, then operates it as above. The bootstrap
-  is identical across policies so the distribution isolates operating choices.
-
-Policy iteration (harness, not content): the first draft throttled production to 85% (conservative)
-and 95% (acquirer) when cash thinned. On this fixture that destroyed about $8.7k of contribution
-a week against a demand-limited plant (week-10 seed 3: 100% target, 13-week net income
--$148,782.64; 85% target, -$262,000.70). The published policies hold full capacity and cut
-discretionary marketing/research instead. The first draft also re-founded a firm inside the
-guided scenario after a dissolution and borrowed every cadence into a debt spiral; the current
-code gates founding on `ScenarioKind::Founder` and gates credit to a deep shortfall plus
-leverage caps. Those were policy/harness defects, not content tuning.
-
-## 3. Distributions
-
-### 3.1 Guided, five-year (primary distribution)
-
-100 seeds × 260 weeks for each reference policy; 20 seeds for the no-policy control. Net worth
-is personal net worth in dollars; score is the integer five-year total.
-
-| Policy | Seeds | Score min / median / max (mean) | Net worth min / median / max | Dissolved | Past due | Controlled | Weeks past due | Deals settled |
-|---|---:|---|---:|---:|---:|---:|---:|
-| none (control) | 20 | 62 / 62 / 62 (62) | $4,416,800 / $4,416,800 / $4,416,800 | 3 / 3 / 3 | 2 / 2 / 2 | 1 / 1 / 1 | 0 / 0 / 0 | 0 / 0 / 0 |
-| conservative | 100 | 62 / 62 / 62 (62) | $4,344,800 / $4,344,800 / $4,344,800 | 3 / 3 / 3 | 2 / 2 / 2 | 1 / 1 / 1 | 0 / 0 / 0 | 0 / 0 / 0 |
-| growth | 100 | 60 / 60 / 60 (60) | $4,032,800 / $4,032,800 / $4,032,800 | 3 / 3 / 3 | 2 / 2 / 2 | 1 / 1 / 1 | 0 / 0 / 0 | 0 / 0 / 0 |
-| acquirer | 100 | 61 / 61 / 61 (61) | $4,032,800 / $4,038,800 / $4,044,800 | 3 / 3 / 3 | 2 / 2 / 2 | 2 / 2 / 2 | 0 / 0 / 0 | 1 / 1 / 1 |
-
-Score components (constant within a policy except where noted):
-
-| Policy | Return | Resilience | Control | Conduct | Total |
+| Guided five-year policy | Return | Resilience | Control | Conduct | Total (medians) |
 |---|---:|---:|---:|---:|---:|
-| none | 50 | 100 | 20 | 100 | 62 |
 | conservative | 50 | 100 | 19 | 100 | 62 |
 | growth | 48 | 100 | 13 | 100 | 60 |
-| acquirer | 48 | 100 | 25 | 100 | 61 |
+| acquirer | 48 | 100 | 14 | 100 | 60 |
+| none | 50 | 100 | 20 | 100 | 62 |
 
-The acquirer's mean net worth is $4,038,680. The spread is acquisition pricing, not a failure:
-three seeds end at $4,032,800 (no net-of-premium gain) and one at $4,044,800; every seed settled
-one deal and controls two firms.
+`guided-conservative-260` rival archetypes (a win is a surviving firm whose book equity grew):
 
-All three policies exercised the legal-credit path. The opening $500,000 loan is fully amortised
-by week 104, so the week-260 debt of $14,517.73 (conservative), $10,185.20 (growth) and
-$13,581.38 (acquirer) is new policy borrowing against secured capacity, not the seeded loan.
+| Archetype | Firm-runs | Wins | Losses | Dissolved | Deals settled/started | Commands accepted | Rejected |
+|---|---:|---:|---:|---:|---|---:|---:|
+| brand_builder | 600 | 438 | 162 | 11 | 0/0 | 100561 | 0 |
+| consolidator | 700 | 555 | 145 | 25 | 1000/4083 | 18252 | 69 |
+| cost_leader | 700 | 387 | 313 | 77 | 0/0 | 72316 | 0 |
+| technologist | 600 | 562 | 38 | 9 | 0/0 | 7551 | 0 |
+| vulture | 400 | 367 | 33 | 9 | 295/1463 | 7758 | 4 |
 
-### 3.2 Founder, five-year (secondary distribution)
+`guided-conservative-1560` rival archetypes (a win is a surviving firm whose book equity grew):
 
-Same 100 seeds, founder bootstrap. This scenario starts with the investor's $5.0M cash; the
-policy converts $3.0M into a newly founded farm, so net worth and return are naturally lower
-than the guided portfolio even when the firm is healthy.
+| Archetype | Firm-runs | Wins | Losses | Dissolved | Deals settled/started | Commands accepted | Rejected |
+|---|---:|---:|---:|---:|---|---:|---:|
+| brand_builder | 120 | 57 | 63 | 40 | 0/0 | 60547 | 0 |
+| consolidator | 140 | 93 | 47 | 32 | 529/2077 | 21479 | 208 |
+| cost_leader | 140 | 38 | 102 | 48 | 0/0 | 42062 | 0 |
+| technologist | 120 | 76 | 44 | 41 | 0/0 | 7670 | 0 |
+| vulture | 80 | 46 | 34 | 20 | 199/980 | 11518 | 200 |
 
-| Policy | Seeds | Score min / median / max (mean) | Net worth min / median / max | Dissolved | Past due | Controlled | Weeks past due | Deals settled |
-|---|---:|---|---:|---:|---:|---:|---:|
-| conservative | 100 | 58 / 58 / 58 (58) | $3,145,000 / $3,145,000 / $3,145,000 | 5 / 5 / 5 | 2 / 2 / 2 | 1 / 1 / 1 | 0 / 0 / 0 | 0 / 0 / 0 |
-| growth | 100 | 55 / 55 / 55 (55) | $2,625,000 / $2,635,000 / $2,635,000 | 5 / 5 / 5 | 2 / 2 / 2 | 1 / 1 / 1 | 0 / 0 / 0 | 0 / 0 / 0 |
-| acquirer | 100 | 57 / 58 / 58 (57) | $2,595,000 / $2,625,000 / $2,635,000 | 5 / 5 / 5 | 2 / 2 / 2 | 2 / 2 / 2 | 0 / 0 / 0 | 1 / 1 / 1 |
+Read with care: "Player controls nothing" means the investor ends the run without a company,
+because it failed and was liquidated or, for a founder, was never founded.
 
-Components: conservative 40/100/37/100; growth 38/100/24–25/100; acquirer 37–38/100/51–52/100
-(total 57–58). The acquirer's higher control component (51–52) is the acquired media firm in
-the controlled group; its lower return is the acquisition premium.
+## 3. Rival population by industry and archetype
 
-### 3.3 Thirty-year careers (sandbox, conservative)
+Twenty guided five-year careers with no player policy, 600 rival firm-runs; rows with zero
+dissolutions are omitted:
 
-20 seeds × 1,560 weeks, guided, sandbox. There is no five-year score in sandbox mode
-(`score = null` in the JSON).
+| Industry | Archetype | Firm-runs | Dissolved |
+|---|---|---:|---:|
+| construction | consolidator | 20 | 1 |
+| construction | cost_leader | 20 | 7 |
+| defense | vulture | 20 | 1 |
+| extraction | consolidator | 20 | 2 |
+| healthcare | technologist | 20 | 1 |
+| manufacturing | technologist | 20 | 1 |
+| retail | cost_leader | 20 | 2 |
+| technology | vulture | 20 | 2 |
 
-| Policy | Seeds | Final week | Net worth min / median / max | Dissolved | Past due | Controlled | Deals |
-|---|---:|---:|---|---:|---:|---:|---:|
-| conservative | 20 | 1,560 | $5,154,800 / $5,154,800 / $5,154,800 | 11 / 11 / 11 | 0 / 0 / 0 | 1 / 1 / 1 | 0 / 0 / 0 |
+Total: 17 of 600 (2.8 percent). On `main` at `3814eca` the same census dissolved about 99 of
+600, and every seed lost both agriculture firms, the construction cost leader and the energy
+cost leader.
 
-The guided firm survives all thirty years under the conservative policy, but eleven of thirty-one
-rivals dissolve and no replacement entrants appear.
+## 4. Outliers and exploits investigated
 
-## 4. Outliers
+Defects found by these distributions and fixed before this run (each has fixtures):
 
-No run stopped early: `final_week == weeks` and `paused = "five_year_score"` (or `null` in
-sandbox) for all 640 runs. There was no failing tick, panic, negative cash, negative stock or
-unbalanced ledger to report as a failure.
+1. **Agriculture extinct every run (rival AI).** Farms lose money in Q1/Q4 and earn it in Q2/Q3
+   at reference prices. After one losing quarter the AI cut production to 60 percent, which
+   kept most wages and fixed cost, lost the profitable season and spiralled. The rules order a
+   cash squeeze as discretionary cuts, sale, funded credit, restructuring. Rivals now cut output
+   only when the plant loses money per unit at full capacity or is demand-limited (revenue under
+   half of capacity, or four weeks of output unsold), and otherwise borrow. Farm deaths went
+   from 40/40 to 0/40.
+2. **Energy cost leader always failed.** Profitable but bleeding cash through principal, and the
+   AI only reacted to negative income. It now answers a cash squeeze directly. 20/20 to 0/20.
+3. **Construction cost leader always failed.** It doubled capacity after an opening quarter of
+   full order books. Rivals now wait a quarter, expand only into observed unmet demand, and
+   contractors only when projects queue in the region. 20/20 to 7/20.
+4. **Rival M&A never happened.** Every rival bid targeted a past-due firm, which the validator
+   refuses, so rival takeovers were dead code on `main` (0 settled in every seed). Now a median of 12
+   to 17 settle per five-year career.
+5. **Money leaks in liquidation.** Asset-sale proceeds were minted, lenders were never paid and
+   dissolved firms kept cash and live contracts. Replaced by a conserving waterfall (R25
+   evidence, `tests/liquidation.rs`).
+6. **Loan quote exploit.** `AcceptLoanQuote` let the borrower name its own rate, term and size
+   (for example 0.01 percent over 10,000 weeks, above capacity). It now requires the quoted rate,
+   a 13 to 260 week term and the borrower's credit capacity.
+7. **Token-stake exploit.** One share in a rival froze its AI, and score control counted every
+   company the investor held a share in. Both now use ultimate control.
+8. **Conduct charged for rivals.** Rejected rival bids and rival wage failures reduced the
+   player's conduct score. Now only the player's own record counts.
+9. **Hidden information.** The rival takeover screen read private companies' income statements.
+   It now uses public data only (`a_private_companys_books_do_not_reach_rival_decisions`).
 
-Statistical outliers (Tukey 1.5×IQR) are reported because the distributions are degenerate:
-when the interquartile range is zero, any deviation is flagged. All are week-260 rows, not
-failures:
+Remaining outliers, judged and left as they are:
 
-| Sweep | Seed | Metric | Value | Week | Reading |
-|---|---:|---|---:|---:|---|
-| guided acquirer | 24, 68, 76 | net worth | $4,032,800 | 260 | Deal settled, but the premium/mark left no net gain; score still 61 |
-| guided acquirer | 89 | net worth | $4,044,800 | 260 | Cheaper/favourable acquisition price; score still 61 |
-| founder acquirer | 24, 68 | net worth | $2,595,000 | 260 | Same acquisition-price effect; score 57 instead of 58 |
+* **Founder acquirer, 17/100 lose the company.** The reference acquirer locks about a third of
+  a fresh founder's cash into a tender in week 4, then borrows. A young firm that over-reaches
+  can fail; 162 rejected `found_firm` attempts are the policy trying to re-found without enough
+  capital. This is the policy's deliberate risk profile, not an engine defect.
+* **Thirty-year growth policy, 17/20 end without a company.** The growth reference policy
+  borrows every few weeks through year 17 and fails with four weeks past due; equity is
+  correctly wiped out by the waterfall. The conservative policy keeps its company in 20/20.
+  Leverage without a repayment rule is a real way to lose, and is left to human playtests to
+  judge.
+* **Cost leaders lose more often than other archetypes** (387 wins and 313 losses over five
+  years, against 562 and 38 for technologists). Cost leaders are seeded into the low-margin
+  primary industries; the gap is industry structure, now without deterministic extinction.
+* Tukey outliers in the JSON are tails of the same distributions; there are no early stops,
+  and no seed shows conservation or invariant failures.
 
-No exploit sequence was found by the sweeps. The policies used only ordinary commands and the
-validator rejected nothing in any published run (`accepted == attempted`), so there is no
-rejected-command exploit evidence in this report.
+## 5. Limits
 
-## 5. Defects found and fixed
-
-### D33-1: every facility consumed a deposit it did not have
-
-`production::produce` unconditionally did
-`facility.deposit_remaining.saturating_sub(output)`. `saturating_sub` on `MilliLots` clamps at
-`i64::MIN`, not zero, so ordinary plants (deposit starts at zero) drifted deeply negative; on
-seed 1 at week 260, 27 facility records were negative (for example Harvest Market Stores
--624,000,000 milli-lots). The field is only stocked for ore mines.
-
-Fix: only a facility with a non-zero deposit consumes it, clamped at zero
-(`crates/cw-sim/src/economy/production.rs`). Regression tests:
-`only_ore_facilities_consume_a_deposit` and the 12-week `tick` conservation test now assert
-every facility deposit is non-negative.
-
-Before → after on seed 1 (`--policy none --weeks 260`): negative deposits 27 → 0; negative
-inventory 0 → 0; ledgers balanced in both. The pinned canonical fixture hash moved
-`5437029f…` → `3ef82f5b…`; the Rust and Swift constants were updated together. The iOS XCTest
-was not run in this session, so R05 cross-platform equality is not re-signed here.
-
-### D33-2: founder construction released the same escrow twice
-
-`FoundFirm` moved the whole capex from restricted cash into work in progress and then created
-the facility with `escrow_cents = full capex`. Completion released that escrow again, so a
-founded firm carried work in progress and *negative* restricted cash forever. On seed 3,
-founder conservative at week 260, the firm had $558,706 of cash but fair value **0**; work in
-progress was $2.0M and restricted cash -$2.0M.
-
-Fix: `FoundFirm` now mirrors `BuildFacility`: 40% construction service is paid from escrow into
-work in progress and to contractors, 60% equipment stays in escrow until completion
-(`crates/cw-sim/src/commands.rs`). Regression test
-`a_founded_firm_capitalises_its_plant_once` asserts balanced books, zero restricted cash, zero
-work in progress, capitalised fixed assets and a positive fair value.
-
-Before → after (seed 3, founder conservative, week 260): fair value $0 → 117 cents per share ($1.17); score
-50 → 58; personal net worth $1,975,000 → $3,145,000; work in progress $2.0M → $0; restricted
-cash -$2.0M → $0.
-
-### D33-3: reference-policy defects (harness, not content)
-
-* The first draft's 85%/95% output cuts lost about $8.7k a week against a demand-limited plant,
-  and the conservative firm dissolved around week 150. Full-capacity policies now survive the
-  five-year horizon (conservative score 56 → 62; net worth $3,492,800 → $4,344,800). No content
-  was changed.
-* The first draft founded a replacement firm after a guided firm dissolved, spending $2.5M of
-  investor cash. Founding is now allowed only in `ScenarioKind::Founder`.
-* The first draft borrowed every cadence to top up a reserve, compounding debt service into the
-  reserve. Credit is now limited to a deep shortfall with leverage caps.
-
-## 6. Defects and limitations not fixed
-
-These are root causes named by the sweep. Fixing them is a content/economy change, not a
-mechanical defect, so P33 records them instead of tuning the score.
-
-1. **Macro price drift is a no-op.** `crates/cw-sim/src/tick.rs::apply_macro_price_drift`
-   literally does `let _ = index; let _ = dataset;`. The 200 BPS annual nominal price index
-   accumulates in `macro_state`, but reference prices and demand never see it. Macro impulses
-   therefore only move the policy rate. This is the main reason the 100 guided conservative and
-   growth seeds are identical to the cent; acquirer variation comes from loan pricing and deal
-   marks. Next: implement nominal drift with the rational weekly accumulator from
-   CONTENT-PACING, then re-run this report.
-2. **Optional event cards are drawn but never resolved.** The quarter check can open cards, but
-   neither the rival AI nor the reference policies submit `RespondEvent`, so the cards have no
-   economic effect. Seed-driven event variety does not reach the distribution. Next: an
-   event-response policy fixture (separate from these reference players) and a seeded event
-   distribution check.
-3. **The starter farm is structurally loss-making at reference prices.** Week 10, seed 3,
-   100% capacity: revenue 4,910,810 cents against cogs 1,987,826 + wages 3,584,400 + opex
-   181,923 + interest 87,833 → EBIT -1,035,647 cents (about -$10.4k) per week. The guided firm
-   stays solvent on its $1.0M opening cash, and its fair value is supported by the 40% book
-   floor, not earnings. This is the P29/P35 economy question behind the flat return component;
-   it was not tuned here.
-4. **Score discrimination is low on this fixture.** Return is 50 for the control and
-   conservative policies (ending net worth equals the seeded starting value), resilience and
-   conduct are 100, and only control moves (13–25). A $12,000 acquirer net-worth spread still
-   rounds to the same score of 61. The rounding is the documented rule; the low spread is a
-   content/scoring follow-up.
-5. **Long-run attrition without entry.** Eleven of thirty-one rivals dissolve over thirty years
-   and no national entrant replaces them, so the sandbox market shrinks even while the guided
-   firm compounds.
-
-## 7. Limitations
-
-* Synthetic, explainable policies, not human players. No win-rate claim is made; a 40–60%
-  human win rate is not measurable from these runs.
-* One difficulty (Standard) and one dataset hash. Easy/Hard do not exist yet per
-  CONTENT-PACING ("begin with Standard only"), so "distributions across difficulty baselines"
-  is not satisfied.
-* Consecutive seed ranges 1–100 and 1–20, not an independent random sample.
-* The five-year score exists only at week 260 in five-year mode; sandbox runs have no score.
-* The policies are reference points, not an optimum. Changing their cadence, reserve or
-  marketing constants will change the distributions; the constants are documented in
-  `crates/cw-cli/src/policy.rs`.
-* Linux release build only. No macOS/iOS XCTest, no hosted CI (GitHub Actions billing is still
-  blocked on the host), no device/thermal measurement, no live database or host worldsim.
-* The Swift canonical-hash constant was updated with the Rust constant but not re-verified on
-  the Mac runner; R05 remains a platform gate.
-
-## 8. Reproduction
-
-The eight commands in section 1 reproduce every number. To inspect a single seed:
-
-```sh
-./target/release/cw-cli run --weeks 260 --seed 3 --guided --five-year --policy acquirer
-./target/release/cw-cli diagnose --weeks 10 --seed 3 --guided --focus "Lakeside Holdings"
-```
-
-Committed evidence: `evidence/balance/guided-*.json`, `founder-*.json` (640 run rows in total).
-Checks for this change: `cargo fmt --all -- --check`,
-`cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`.
-
-## Post-calibration re-run, 2026-10-25 (after applied modifiers, macro regimes and training)
-
-Release build, 100 guided five-year seeds per policy, 260 weeks, seeds 1-100. Commands:
-
-```
-./target/release/cw-cli sweep --seeds 100 --weeks 260 --guided --five-year --policy <policy>
-```
-
-| Policy | Score min/median/max | Net worth min/median/max | Dissolved median (min-max) | Controlled median (min) | Outliers |
-|---|---|---|---|---|---|
-| conservative | 56 / 62 / 62 | $3,492,800 / $4,344,800 / $4,344,800 | 5 (4-10) | 1 (0) | 23 |
-| growth | 56 / 60 / 60 | $3,492,800 / $4,032,800 / $4,038,800 | 5 (4-10) | 1 (0) | 28 |
-| acquirer | 56 / 61 / 66 | $3,492,800 / $4,038,800 / $4,044,800 | 5 (4-10) | 2 (0) | 37 |
-
-Interpretation: the corridor stays populated (median five rival exits across five years) and most
-careers end solvent. A minority of seeds (roughly five per hundred under the conservative policy)
-lose the guided firm entirely: the starter farm's main buyers fail during a demand or supply
-shock, contracts stop paying and the farm's thin margin cannot cover the gap. That is a real
-failure mode, not a crash, and the investor keeps personal cash and the recovery route. The
-reference policies are deliberately simple and do not replace a human player's pricing, buyer
-diversification or expansion decisions.
-
-Still open for R36: score dispersion is narrow for passive policies; the outlier flags are mostly
-acquisition-price variants; no human playtest has judged whether the difficulty reads as fair.
-
-## Post-finance re-run, 2026-10-25
-
-After the interest-carry, board, merger, asset-purchase, bank-run and claim-timing changes:
-
-```
-./target/release/cw-cli sweep --seeds 100 --weeks 260 --guided --five-year --policy conservative
-./target/release/cw-cli sweep --seeds 20 --weeks 1560 --from 1 --guided --sandbox --policy conservative
-```
-
-| Horizon | Runs | Score min/median/max | Dissolved median (min-max) | Controlled median (min) | Net worth min/median |
-|---|---|---:|---:|---:|---:|
-| 260 weeks | 100 | 56 / 62 / 62 | 5 (4-10) | 1 (0) | $3.49M / $4.34M |
-| 1,560 weeks | 20 | n/a | 12 (10-17) | 0 (0) | $3.49M / $4.15M |
-
-At five years the corridor is stable and most careers end solvent. Over thirty years the
-conservative reference policy loses control of the guided firm in most seeds, keeps personal cash,
-and does not found a replacement. That is the designed failure-and-recovery path, but the
-reference policy does not exercise recovery, so it understates what an active player can do. R36
-remains open: the score distribution is narrow for passive policies and no human has judged the
-difficulty.
-
-## Defense procurement re-run, 2026-10-25
-
-After replacing the defense spot book with funded 52-week contracts, deposits and accepted
-delivery settlement:
-
-| Horizon | Runs | Score min/median/max | Dissolved median (min-max) | Controlled median (min) | Net worth min/median |
-|---|---|---:|---:|---:|---:|
-| 260 weeks | 100 | 56 / 62 / 62 | 5 (3-10) | 1 (0) | $3.49M / $4.34M |
-
-Seed 3 (guided, conservative, 260 weeks) is back to four dissolved rivals, controlled firm in
-control, score 61. The contract renewal path keeps defense demand open after the first 52 weeks
-and is available to new producers.
-
-## Labour tax and trailing budgets, 2026-10-25
-
-After withholding twenty percent of earned labour income and recomputing the three fiscal
-budgets from the trailing thirteen-week receipt window:
-
-| Horizon | Runs | Score min/median/max | Dissolved median (min-max) | Controlled median (min) | Net worth min/median |
-|---|---|---:|---:|---:|---:|
-| 260 weeks | 100 | 56 / 62 / 62 | 5 (3-10) | 1 (0) | $3.49M / $4.34M |
-| 1,560 weeks | 20 | n/a | 10 (6-14) | 1 (0) | $3.49M / $4.83M |
-
-The five-year distribution is unchanged after withholding was restricted to wages actually
-paid. Over thirty years the median conservative career now keeps control of the guided firm and
-median net worth rises from $4.15M to $4.83M, with fewer rival exits (ten rather than twelve).
-Seed 3 is still four dissolved rivals and score 61.
-
-## Household disposable baseline, 2026-10-25
-
-Baseline lots, initial savings and the 1 percent savings supplement now use disposable income
-after labour tax. The conservative distributions are unchanged: 100 five-year seeds score
-56/62/62 with dissolved median 5 and controlled median 1; 20 thirty-year seeds have dissolved
-median 10 and controlled median 1. Seed 3 is still four dissolved rivals and score 61.
-
-## Transfer-support accounting, 2026-10-25
-
-Tier-aware transfer need and unpaid-need reporting do not change the distributions: seed 3 is
-still four dissolved rivals and score 61, and the 100 five-year conservative runs score
-56/62/62 with dissolved median 5.
-
-## Widened distributions, 2026-10-25
-
-To remove small-sample noise before further tuning:
-
-```
-./target/release/cw-cli sweep --seeds 1000 --weeks 260 --guided --five-year --policy conservative
-./target/release/cw-cli sweep --seeds 100 --weeks 1560 --from 1 --guided --sandbox --policy conservative
-```
-
-| Horizon | Runs | Score min/median/max | Dissolved median (min-max) | Controlled median (min) | Net worth min/median |
-|---|---|---:|---:|---:|---:|
-| 260 weeks | 1,000 | 56 / 62 / 62 | 5 (3-10) | 1 (0) | $3.49M / $4.34M |
-| 1,560 weeks | 100 | n/a | 10 (6-15) | 0 (0) | $3.49M / $3.49M |
-
-The 1,000-seed five-year distribution is stable: no errors, no rare crash or insolvency
-cliff, and the same score band. The wider thirty-year sample corrects the earlier 20-seed
-impression: the conservative reference policy loses control of the guided firm in the
-median seed and does not found a replacement, so median net worth stays at the personal
-cash floor. That is the designed failure-and-recovery path, but the reference policy does
-not exercise recovery. R36 remains open for a human difficulty judgement; the automated
-runs show no new root defect.
+Standard difficulty only. Easy and Hard need published rule sets first (CONTENT-PACING).
+Reference policies are scripted. A balanced distribution is necessary but not sufficient: the
+fun and fairness judgment belongs to R38.

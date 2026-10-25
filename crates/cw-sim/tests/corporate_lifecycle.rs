@@ -321,6 +321,7 @@ fn a_legal_merger_moves_assets_debt_facilities_and_contracts() {
         created: Tick(0),
         carry: 0,
         defaulted: false,
+        arrears_cents: 0,
     });
     world.firms.get_mut(target).unwrap().loans.push(loan);
     let deal = world.deals.insert(cw_sim::state::Deal {
@@ -341,6 +342,7 @@ fn a_legal_merger_moves_assets_debt_facilities_and_contracts() {
         remedy_share_bps: 0,
         hostile: false,
         diligence_paid: true,
+        investor_tendered: false,
     });
     let dataset = Dataset::load().unwrap();
     let revision = world.revision;

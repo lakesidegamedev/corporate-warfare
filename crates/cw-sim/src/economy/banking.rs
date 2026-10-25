@@ -301,6 +301,7 @@ pub fn approve_loan(
         created: world.tick,
         carry: 0,
         defaulted: false,
+        arrears_cents: 0,
     };
     let handle = world.loans.insert(loan);
     if let Some(firm) = world.firms.get_mut(borrower) {

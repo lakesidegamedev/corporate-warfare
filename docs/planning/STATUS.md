@@ -1,102 +1,87 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `3814eca` (code).
-Kanban: 254781. Merged PRs: #8 through #69.
+Date: 2026-10-25. Version: 1.0.0 (engine, workspace crates and iOS marketing version).
+Branch: `release/1.0.0` (PR #70). Kanban: 254781.
 
 ## What exists now
 
 - Rust engine: checked units and ledger, deterministic session/replay/saves, weekly economy
   (labour with layoffs, production, utilities, one-pass markets, freight, contracts, gateways),
-  corporate systems (ownership, boards, exchange, issuance/dividends/buybacks/IPO, credit,
-  banking, insurance, deals and antitrust, unions, lobbying, insolvency), R&D/brand, rival AI,
-  events (rivals answer their own cards), five-year score with continue.
-- CLI: `doctor`, `run`, `diagnose`, `report`, `sweep` (three reference policies, JSON, invariant
-  checks), `replay`.
+  corporate systems (ownership, boards, exchange, issuance/dividends/buybacks/IPO, credit with
+  arrears, banking, insurance, deals and antitrust, unions, lobbying, insolvency), R&D/brand,
+  rival AI, a 24-card event deck with real triggers, macro regimes, and a five-year score with
+  continue.
+- CLI: `doctor`, `run`, `diagnose`, `report`, `sweep` (three reference policies plus a
+  no-action baseline, JSON, invariant checks, rival archetype telemetry), `replay`. Diagnostic
+  examples in `crates/cw-session/examples/` (`event_census`, `dissolution_census`,
+  `firm_trace`).
 - SwiftUI app: portfolio, group tree, company hub for every corporate family, regions, markets,
   inbox, cash bridge, onboarding, score breakdown, save recovery with rolling last-good and a
   reviewed diagnostic bundle, lifecycle stop-and-save.
 - Release track: app icon, privacy manifest and portable audit, metadata drafts, fail-closed
   signed release workflow with bounded App Store Connect processing check.
-- Evidence: ledger/units, commands, cross-platform session hash, industry scenarios, adversarial
-  saves, balance distributions, corporate lifecycles, brand demand, workflows, persistent-investor
-  recovery, and a Linux engine baseline for representative/grown/stress fixtures.
-- Release aids: static accessibility audit, portable privacy audit, owner-action runbook, and a
-  single recommended next action with its reason on the portfolio.
-- Macro: demand and supply modifiers now apply, macro recessions/booms come from the macro
-  stream, optional cards expire, and the technology frontier advances yearly.
-- Corporate correctness: union ballots form bargaining units, parent guarantees are called up to
-  their cap, bond trades price accrued interest, loan interest carries sub-cents, lobbying has a
-  post-decision group cooldown, tax modifiers expire, legal mergers move the whole entity,
-  construction service is capacity-bounded once per week, asset purchases settle without shares,
-  board limits gate large debt, capex, issuance and mergers, antitrust remedies are real
-  divestitures, bond maturity pays the final coupon, private firm data needs information rights,
-  bank runs pay depositors pro rata, insurance claims settle the following week, and the
-  release verifier checks the compiled asset catalog while export uses the App Store Connect
-  key, the clock pauses before grace, strikes and imminent deadlines, quality investment is a
-  bounded funded lever, defense demand runs through funded 52-week procurement contracts with
-  deposits, accepted delivery, deferred unmet demand and a two-week penalty grace, and labour
-  income pays twenty percent tax into a real receipt series that recomputes the three fiscal
-  budgets from the trailing thirteen-week mean.
+
+## 1.0.0 engine pass (this branch)
+
+Auditing the open requirements against `docs/rules/` turned up defects in both open and
+previously closed systems. All are fixed, with hand-computed fixtures:
+
+- Deals and antitrust (R21/R22). Review now runs before settlement, tenders are prorated and paid
+  from escrow, and squeeze-out pays minorities. The player's tender is settled from escrow
+  (before, it minted cash). Groups are judged at the ultimate controller, so a shell cannot
+  bypass review. Remedies are checked for feasibility, and mergers pay remaining minorities.
+- Lobbying (R24). Cooldown and fee are group-wide, and a won training grant no longer pays twice.
+  The backlash penalty goes through its event card only.
+- Rival AI (R28). Strategic slots are scored and capped at four actions. A token player stake no
+  longer freezes a rival, and rivals use public data only. Rival M&A works: on `main` it never
+  settled once. Rivals follow the rules' solvency order instead of idling seasonal plant, and
+  expand only into observed demand.
+- Events (R29). Fourteen of the 24 cards could never open; every card now has a real trigger.
+  Handlers no longer delete goods in transit or reach other firms. Macro regimes come from the
+  macro stream, answering needs authority over the company, and tender cards address the
+  investor.
+- Score (R34). Control counts controlled holdings once and ignores passive stakes. Conduct counts
+  only the player's own record.
+- Liquidation (R25, reopened). Asset sales minted proceeds, lenders were never paid, and dead
+  firms kept cash and contracts. It is now a conserving waterfall.
+- Credit and governance (R17/R18, reopened). A missed principal payment counted the debt twice;
+  it is now arrears. Passed board votes now actually authorise. The loan-quote exploit is
+  closed: a borrower could name its own rate, term and size.
+- Retooled plants now return to service (before, retooling bricked them).
 
 ## Verified
 
-- Local: 213 tests pass; shared scheduler job `20261025T113141Z-7b3791c9` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
-  warnings` clean; design and plan validators pass; shared scheduler jobs passed
-  (`20261025T070655Z-5df8bceb` latest). Defense procurement has six unit tests and its
-  industry budget scenario; fiscal budgets now follow actual labour and corporate receipts.
-  Labour tax is withheld on wages firms actually paid, attributed pro rata across employing
-  regions; deferred payroll is an overdue liability and is not taxed. Withholding is a regional
-  aggregate rather than per-worker, and transfer support still draws from the training budget;
-  both are named refinements. Household baselines and opening savings use disposable income,
-  and a wage-shortfall week may draw at most one percent of savings into demand. Transfer
-  support uses each unemployed tier's baseline wage and reports any unfunded need. The hostile
-  session sequence now covers 540 commands over twenty weeks.
-- Corridor at seed 3: 0 rival failures at 52 weeks, 4-5 at 260; score 61 at week 260. Widened
-  runs: 1,000 five-year seeds score 56/62/62 with dissolved median 5 (3-10); 100 thirty-year
-  seeds have dissolved median 10 (6-15) and the conservative policy loses control in the
-  median seed without founding a replacement.
-- Geography is now an owner-approved authored corridor. The eleven region IDs/names are frozen,
-  the fixture says authored estimates and no county membership, and R01/R02 plus P01/P05 are
-  closed with that limitation.
-- Requirements closed with reviewed automated evidence: R01-R14, R18-R20, R23, R25-R27, R30 and
-  R31 (23 done); 19 active/pending, zero blocked.
-- Engine baseline on this host: representative (31 firms, 290 facilities) p50 0.55 ms; grown
-  (217/2,030) p50 6.46 ms; stress (992/9,280) p50 82.98 ms. Device timing still required.
-- Hosted Verify and Apple smoke are green on `main` `319fe31`: the SwiftUI app compiles for the
-  simulator and device archive, the Rust bridge links, and 14 XCTests pass with hash
-  `6731ed7c...`. The newer suite includes real `AppStore` coverage for new career, selection,
-  advance, stop-save/restore and a rejected phone command. The repository is public and Actions
-  runs normally.
+- Local at `3fa5a32`: `cargo test --locked --workspace`, `cargo clippy --workspace --all-targets
+  -D warnings`, `cargo fmt --check`, `tools/plan_check.py`, `tools/design_check.py` and the tools
+  unit tests all pass. The canonical cross-platform hash is re-pinned in Rust and Swift to
+  `1d5209e2...`; hosted Apple smoke must confirm it on the simulator.
+- Balance (R36): 860 careers at `3fa5a32` (`evidence/balance-report.md`). Zero invariant
+  failures, zero early stops, deterministic. Guided five-year conservative median score is 62.
+  Rival five-year dissolutions are 17 of 600 firm-runs, against about 99 on `main`, and no
+  industry dies out every run (agriculture was 40/40).
+- Requirements: 33 of 42 done with evidence (R01-R31 and R34, R36). Packets: 71 of 117
+  checklist steps done. Fifteen packets have every step evidenced but are held `active` until
+  the upstream packets P06, P07, P09, P14, P15, P19 and P20 get their own line-by-line checklist
+  audit.
 
-## Blockers
+## Remaining, in critical-path order
 
-1. **Apple signing and TestFlight.** The repository is public and hosted Verify/Apple smoke are
-   green, but no App Store Connect app record or signing secrets exist. Release run 40209622603
-   failed closed with `blocked: missing signing secrets: APPLE_API_ISSUER APPLE_API_KEY
-   APPLE_API_KEY_CONTENT APPLE_DEVELOPMENT_TEAM`. Owner/Muse must add those four secrets to the
-   `appstore` environment for `net.lakesidegames.corporatewarfare` and confirm the internal tester
-   group.
-2. **Device and human gates.** No physical iPhone measurements (R37), no three independent
-   testers (R38), no TestFlight installation (R42), and no human completion of the phone
-   acceptance route (R32/R33/R35).
-3. **UI test target.** An XCUITest flow exists but hung the simulator runner on its first run and
-   is intentionally outside the default test scheme. Unit, bridge, save and device-archive CI
-   remain green.
-
-
-## Next moves, in order
-
-1. Owner/Muse supplies the App Store Connect app record and the four signing secrets named in
-   `evidence/handoff-muse.md`; dispatch `Release` and poll processing.
-2. Install the processed build on a real iPhone and run the offline acceptance route.
-3. Owner decides the geography: supply the official crosswalk or approve a named custom corridor.
-   Until then R01/R02 and their dependants cannot be signed off.
-4. With a signed build: device profiling (R37), three playtests (R38), then R41/R42.
+1. **Apple signing / TestFlight (R40 signing step, R41).** The studio App Store Connect key
+   used for the other Lakeside iOS apps is the intended key, but its issuer ID and team ID are
+   stored only as secrets elsewhere and GitHub never returns secret values. The owner must
+   create the App Store Connect app record for `net.lakesidegames.corporatewarfare` (the API
+   cannot) and supply the issuer ID and team ID. Then the four secrets go into the `appstore`
+   environment and the `Release` workflow is dispatched with version `1.0.0`
+   (`apple/RELEASE.md`).
+2. **Human and device gates.** R32/R33/R35 phone acceptance and accessibility, R37 A15-class
+   device timing, R38 three independent testers, R42 installed acceptance flight, and the R39
+   review of final assets, privacy, rating and export answers. None of these can be done from
+   Linux.
+3. **Packet audit.** A line-by-line audit of P06, P07, P09, P14, P15, P19 and P20 against their
+   tests, then close the fifteen held packets.
+4. **UI test target.** `apple/UITests/AppFlowUITests.swift` hung the simulator runner and stays
+   outside the default scheme.
 
 Resume with:
-`cd /root/projects/corporate-warfare && git pull && cargo test --locked --workspace`
-then read this file and `evidence/release-readiness.md`.
-
-## Pause
-
-Paused at the owner's request on 2026-10-25. Restart from `docs/planning/CODEX-HANDOFF.md`.
+`cd /root/projects/corporate-warfare && git pull && cargo test --locked --workspace`, then read
+this file, `evidence/balance-report.md` and `apple/RELEASE.md`.

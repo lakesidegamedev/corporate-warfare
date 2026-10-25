@@ -1,8 +1,13 @@
 {
-  "requirement": "R18", "result": "pass",
-  "commit": "e64890149018d798f1fe18cbbcda4e974bac5f17",
-  "procedure": "cargo test --locked --workspace; credit tests for negative-equity grade D, secured-capacity pledge reuse, final bond coupon before principal, missed debt service default and exact 52-week interest carry; corporate lifecycle bank loan chain.",
-  "artifacts": ["crates/cw-sim/src/economy/credit.rs","crates/cw-sim/tests/corporate_lifecycle.rs"],
+  "requirement": "R18",
+  "result": "pass",
+  "commit": "3fa5a327af92b62415627d3a344c18bb774cf811",
+  "procedure": "cargo test --locked --workspace; credit tests for negative-equity grade D, secured-capacity pledge reuse, final bond coupon before principal, missed debt service default and exact 52-week interest carry; corporate lifecycle bank loan chain. Plus crates/cw-sim/tests/credit.rs: the final instalment clears the last cent to the named lender, and a missed instalment becomes arrears owed once, collected first, with the borrower past due until it clears. Accept-quote rate, term and capacity checks in commands::tests.",
+  "artifacts": [
+    "crates/cw-sim/src/economy/credit.rs",
+    "crates/cw-sim/tests/corporate_lifecycle.rs",
+    "crates/cw-sim/tests/credit.rs"
+  ],
   "limitations": "Ratings are explained in-game thresholds, not agency ratings. Secured capacity is a 50 percent tangible-asset rule; no external credit bureau.",
   "verified_at": "2026-10-25"
 }

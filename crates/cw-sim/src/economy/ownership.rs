@@ -259,20 +259,17 @@ pub fn stake_value(world: &World, firm: Handle) -> i64 {
     entity.shares.fair_cents * entity.shares.eligible_votes() * bps / 10_000
 }
 
-/// Group value for the score: controlled productive-group value, control adjusted.
+/// Group value for the score: the investor's direct holdings in companies it controls, at fair
+/// value. A controlled parent's fair value already carries its subsidiaries through look-through
+/// stake values, so subsidiaries are not added again, and a passive minority stake is not
+/// control.
 pub fn group_value(world: &World) -> i64 {
-    let mut seen: BTreeMap<Handle, i64> = BTreeMap::new();
-    for (handle, firm) in world.firms.iter() {
-        if firm.shares.qty(HolderId::Investor) == 0 {
-            continue;
-        }
-        for member in controlled_group(world, handle) {
-            let value = stake_value(world, member);
-            let entry = seen.entry(member).or_default();
-            *entry = (*entry).max(value);
-        }
-    }
-    seen.values().sum()
+    world
+        .firms
+        .iter()
+        .filter(|(_, firm)| firm.shares.controller() == Some(HolderId::Investor))
+        .map(|(_, firm)| firm.shares.qty(HolderId::Investor) * firm.shares.fair_cents)
+        .sum()
 }
 
 pub fn invalidate(world: &mut World, root: Handle) {
@@ -539,6 +536,7 @@ mod tests {
             created: world.tick,
             carry: 0,
             defaulted: false,
+            arrears_cents: 0,
         });
         let group = controlled_group(&world, root);
         let gross_assets: i64 = group

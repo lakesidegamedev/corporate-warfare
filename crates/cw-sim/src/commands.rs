@@ -610,6 +610,9 @@ fn apply_intent(
                 tech_progress_cents: 0,
                 brand_bps: Default::default(),
                 reputation_bps: 0,
+                layoffs: Vec::new(),
+                staff_history: Vec::new(),
+                outside_peak_bps: 0,
                 policy_requests: Vec::new(),
                 guarantees: Vec::new(),
                 last_strategic_week: 0,
@@ -880,9 +883,10 @@ fn apply_intent(
             if let Some(stored) = world.facilities.get_mut(*facility) {
                 stored.recipe = *recipe;
                 stored.status = FacilityStatus::Retooling {
-                    until: Tick(world.tick.0 + template.build_weeks / 2),
+                    until: Tick(world.tick.0 + (template.build_weeks / 2).max(1)),
                 };
                 stored.capex_cents += cost;
+                stored.escrow_cents += cost;
             }
             Ok(())
         }
@@ -1326,6 +1330,7 @@ fn apply_intent(
                 created: world.tick,
                 carry: 0,
                 defaulted: false,
+                arrears_cents: 0,
             };
             let handle = world.loans.insert(loan);
             world.firms.get_mut(*borrower).unwrap().loans.push(handle);
@@ -1613,6 +1618,7 @@ fn apply_intent(
                 created: world.tick,
                 carry: 0,
                 defaulted: false,
+                arrears_cents: 0,
             };
             let handle = world.loans.insert(loan);
             world.firms.get_mut(*firm).unwrap().loans.push(handle);
@@ -1625,9 +1631,28 @@ fn apply_intent(
             weeks,
         } => {
             require_control(world, actor, *firm)?;
-            if *amount_cents <= 0 || *rate_bps <= 0 || *weeks == 0 {
+            // A quote is the lender's price, not the borrower's: the rate must be at least the
+            // policy rate plus the borrower's grade spread, the term between a quarter and five
+            // years, and the amount inside secured plus unsecured capacity.
+            if *amount_cents <= 0 || *rate_bps <= 0 || !(13..=260).contains(weeks) {
                 return Err(DomainError::Arithmetic {
                     detail: ArithmeticFault::OutOfRange,
+                });
+            }
+            let quoted =
+                world.macro_state.policy_rate_bps + firm_ref(world, *firm)?.grade.spread_bps();
+            if *rate_bps < quoted {
+                return Err(DomainError::SolvencyRestriction {
+                    entity: firm.0,
+                    reason: SolvencyReason::CreditGradeTooLow,
+                });
+            }
+            let capacity = crate::economy::credit::secured_capacity(world, *firm)
+                + crate::economy::credit::unsecured_capacity(world, *firm);
+            if *amount_cents > capacity {
+                return Err(DomainError::SolvencyRestriction {
+                    entity: firm.0,
+                    reason: SolvencyReason::CoverageTooLow,
                 });
             }
             let debt_after = firm_ref(world, *firm)?.book.debt() + *amount_cents;
@@ -1665,6 +1690,7 @@ fn apply_intent(
                 created: world.tick,
                 carry: 0,
                 defaulted: false,
+                arrears_cents: 0,
             };
             let handle = world.loans.insert(loan);
             world.firms.get_mut(*firm).unwrap().loans.push(handle);
@@ -1685,44 +1711,7 @@ fn apply_intent(
                     available: cash,
                 });
             }
-            let borrower = entity.borrower;
-            let lender = entity.lender;
-            let _ = world.firms.get_mut(borrower).unwrap().book.commit(
-                world.tick,
-                Txn::new()
-                    .credit(Account::Cash, payment, "repayment")
-                    .debit(Account::Loans, payment, "repayment"),
-            );
-            match lender {
-                Lender::Outside(index) => {
-                    if let Some(holder) = world.outside.lenders.get_mut(index as usize) {
-                        holder.capital_cents += payment;
-                    }
-                }
-                Lender::Firm(handle) => {
-                    if let Some(firm) = world.firms.get_mut(handle) {
-                        let _ = firm.book.commit(
-                            world.tick,
-                            Txn::new()
-                                .debit(Account::Cash, payment, "repayment received")
-                                .credit(Account::Receivables, payment, "repayment received"),
-                        );
-                    }
-                }
-                Lender::Bank(handle) => {
-                    if let Some(firm) = world.firms.get_mut(handle) {
-                        let _ = firm.book.commit(
-                            world.tick,
-                            Txn::new()
-                                .debit(Account::Cash, payment, "repayment received")
-                                .credit(Account::Receivables, payment, "repayment received"),
-                        );
-                    }
-                }
-            }
-            if let Some(stored) = world.loans.get_mut(*loan) {
-                stored.principal_remaining_cents -= payment;
-            }
+            crate::economy::credit::repay(world, *loan, payment);
             Ok(())
         }
         CommandIntent::IssueBond {
@@ -1889,58 +1878,7 @@ fn apply_intent(
                     reason: AuthorityReason::NotOwner,
                 });
             }
-            let entity = world.deals.get(*deal).ok_or(DomainError::InvalidEntity {
-                handle: deal.0,
-                kind: EntityKind::Deal,
-            })?;
-            if !matches!(
-                entity.state,
-                crate::state::DealState::OfferOpen | crate::state::DealState::Diligence
-            ) {
-                return Err(DomainError::WrongPhase {
-                    expected: "offer_open",
-                    actual: entity.state.key(),
-                });
-            }
-            if !accept {
-                return Ok(());
-            }
-            let qty = world.investor_holds(entity.target);
-            if qty <= 0 {
-                return Err(DomainError::InsufficientStock {
-                    product: 0,
-                    required: 1,
-                    available: 0,
-                });
-            }
-            let price = entity.offer_price_cents;
-            let cash = qty.saturating_mul(price);
-            world.investor.cash_cents += cash;
-            let _ = world.investor.book.commit(
-                world.tick,
-                Txn::new().debit(Account::Cash, cash, "tender").credit(
-                    Account::Investments,
-                    cash,
-                    "tender",
-                ),
-            );
-            let buyer = entity.buyer;
-            if let Some(target) = world.firms.get_mut(entity.target) {
-                target
-                    .shares
-                    .transfer(HolderId::Investor, HolderId::Firm(buyer), qty, cash);
-            }
-            if let Some(bidder) = world.firms.get_mut(buyer) {
-                let _ = bidder.book.commit(
-                    world.tick,
-                    Txn::new()
-                        .credit(Account::RestrictedCash, cash, "tender")
-                        .debit(Account::Investments, cash, "tender"),
-                );
-            }
-            if world.investor.primary_group == Some(entity.target) {
-                world.investor.primary_group = None;
-            }
+            deals::respond_tender(world, *deal, *accept)?;
             Ok(())
         }
         CommandIntent::WithdrawOffer { deal } => {
@@ -1991,6 +1929,9 @@ fn apply_intent(
                     target: target.0,
                 });
             }
+            // Remaining minority holders are paid in cash before their shares are retired.
+            let settled = entity.clone();
+            deals::buy_out_minorities(world, &settled)?;
             let target_book = firm_ref(world, target)?.book.clone();
             let investment_cost = world
                 .firm(target)
@@ -2126,6 +2067,11 @@ fn apply_intent(
             deal,
             divest_share_bps,
         } => {
+            let entity = world.deals.get(*deal).ok_or(DomainError::InvalidEntity {
+                handle: deal.0,
+                kind: EntityKind::Deal,
+            })?;
+            require_control(world, actor, entity.buyer)?;
             deals::submit_remedy(world, *deal, *divest_share_bps)?;
             Ok(())
         }
@@ -2287,6 +2233,29 @@ fn apply_intent(
             Ok(())
         }
         CommandIntent::RespondEvent { event, choice } => {
+            // Only whoever runs the addressed company may answer its card; a card with no
+            // company subject belongs to the investor.
+            let subject = world
+                .events
+                .pending
+                .iter()
+                .find(|pending| pending.id == *event)
+                .and_then(|pending| pending.subject_firm);
+            match subject {
+                // The investor answers for every company it ultimately controls, including a
+                // subsidiary it runs through a parent.
+                Some(firm)
+                    if actor == INVESTOR_ACTOR
+                        && crate::economy::events_engine::player_side(world, firm) => {}
+                Some(firm) if world.firms.contains(firm) => require_control(world, actor, firm)?,
+                _ if actor != INVESTOR_ACTOR => {
+                    return Err(DomainError::NoAuthority {
+                        actor,
+                        reason: AuthorityReason::NotOwner,
+                    });
+                }
+                _ => {}
+            }
             crate::economy::events_engine::respond(world, dataset, *event, choice)?;
             Ok(())
         }
@@ -2414,6 +2383,7 @@ fn start_facility(
         last_inputs_short: false,
         last_staff_ratio_bps: 10_000,
         mothballed_since: None,
+        outage: None,
     }
 }
 
@@ -2522,9 +2492,19 @@ mod tests {
         );
         apply(&mut world, &dataset, &command).expect("founding accepted");
         let firm = world.investor.primary_group.unwrap();
-        for _ in 0..build_weeks {
+        // No permit bonus is active, so the project draws the permit card; left unanswered it
+        // takes the four-week delay.
+        for _ in 0..build_weeks + 4 {
             crate::tick::advance(&mut world, &dataset);
+            world.pending_pause = None;
         }
+        assert!(
+            world
+                .events
+                .pending
+                .iter()
+                .any(|event| event.card == "permit_delay" && event.subject_firm == Some(firm))
+        );
         let entity = world.firms.get(firm).unwrap();
         assert!(entity.book.is_balanced());
         assert!(entity.book.cash() >= 0);
@@ -2543,6 +2523,39 @@ mod tests {
             entity.shares.fair_cents > 0,
             "a solvent founded firm must not be valued at zero"
         );
+    }
+
+    #[test]
+    fn a_loan_quote_cannot_name_its_own_rate_term_or_size() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 143, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world.investor.primary_group.unwrap();
+        let quoted =
+            world.macro_state.policy_rate_bps + world.firm(firm).unwrap().grade.spread_bps();
+        let capacity = crate::economy::credit::secured_capacity(&world, firm)
+            + crate::economy::credit::unsecured_capacity(&world, firm);
+        let attempt = |world: &World, amount: i64, rate: i32, weeks: u32| {
+            envelope(
+                world,
+                CommandIntent::AcceptLoanQuote {
+                    firm,
+                    amount_cents: amount,
+                    rate_bps: rate,
+                    weeks,
+                },
+            )
+        };
+        for (amount, rate, weeks) in [
+            (capacity.clamp(1, 1_000_000), 1, 52),
+            (capacity.clamp(1, 1_000_000), quoted, 10_000),
+            (capacity + 1, quoted, 52),
+        ] {
+            let command = attempt(&world, amount, rate, weeks);
+            assert!(
+                apply(&mut world, &dataset, &command).is_err(),
+                "{amount} at {rate} for {weeks}"
+            );
+        }
     }
 
     #[test]

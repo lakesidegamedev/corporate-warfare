@@ -126,16 +126,47 @@ fn drive(session: &mut Session, weeks: u32, runner: &mut PolicyRunner) -> (u32, 
     let mut advanced = 0;
     let mut paused = None;
     while advanced < weeks {
+        // Answer every waiting mandatory card before advancing, so a backlog cannot stall.
+        let waiting: Vec<u64> = session
+            .world
+            .events
+            .pending
+            .iter()
+            .filter(|event| {
+                !event.resolved
+                    && event.mandatory
+                    && event
+                        .subject_firm
+                        .map(|firm| {
+                            cw_sim::economy::events_engine::player_side(&session.world, firm)
+                        })
+                        .unwrap_or(true)
+            })
+            .map(|event| event.id)
+            .collect();
+        for event in waiting {
+            runner.answer_event(session, event);
+        }
         let result = session.advance(1);
         advanced += result.weeks_advanced;
         if let Some(reason) = result.pause.clone() {
-            // Mandatory events and the scored horizon need a human; advisory pauses are cleared
-            // so a scripted policy can keep running.
-            if reason.starts_with("event:") || reason == "five_year_score" {
+            // A mandatory card is answered by the policy through the command path; the scored
+            // horizon stops the run; advisory pauses are cleared so the policy keeps running.
+            if let Some(event) = reason
+                .strip_prefix("event:")
+                .and_then(|id| id.parse::<u64>().ok())
+            {
+                if !runner.answer_event(session, event) {
+                    paused = Some(reason);
+                    break;
+                }
+                session.dismiss_pause();
+            } else if reason == "five_year_score" {
                 paused = Some(reason);
                 break;
+            } else {
+                session.dismiss_pause();
             }
-            session.dismiss_pause();
         }
         if result.weeks_advanced == 0 {
             break;
@@ -307,6 +338,72 @@ struct RunReport {
     canonical_hash: String,
     policy: PolicyStats,
     invariants: Invariants,
+    /// Rival outcomes by archetype: a win is a surviving firm whose book equity grew, a loss
+    /// is a dissolved firm or one whose equity fell.
+    archetypes: BTreeMap<String, ArchetypeRow>,
+}
+
+#[derive(serde::Serialize, Default, Clone)]
+struct ArchetypeRow {
+    firms: u64,
+    wins: u64,
+    losses: u64,
+    dissolved: u64,
+    accepted_commands: u64,
+    rejected_commands: u64,
+    deals_started: u64,
+    deals_settled: u64,
+}
+
+fn opening_equity(session: &Session) -> BTreeMap<u64, i64> {
+    session
+        .world
+        .firms
+        .iter()
+        .map(|(handle, firm)| (handle.0, firm.book.total_equity()))
+        .collect()
+}
+
+fn archetype_rows(
+    session: &Session,
+    opening: &BTreeMap<u64, i64>,
+) -> BTreeMap<String, ArchetypeRow> {
+    let mut rows: BTreeMap<String, ArchetypeRow> = BTreeMap::new();
+    for (handle, firm) in session.world.firms.iter() {
+        let Some(archetype) = firm.archetype else {
+            continue;
+        };
+        let Some(start) = opening.get(&handle.0) else {
+            continue;
+        };
+        let row = rows.entry(archetype.key().to_owned()).or_default();
+        row.firms += 1;
+        let dissolved = matches!(firm.status, cw_sim::state::FirmStatus::Dissolved);
+        let merged = matches!(firm.status, cw_sim::state::FirmStatus::Merged { .. });
+        if dissolved {
+            row.dissolved += 1;
+            row.losses += 1;
+        } else if !merged && firm.book.total_equity() > *start {
+            row.wins += 1;
+        } else if !merged {
+            row.losses += 1;
+        }
+        for (_, deal) in session.world.deals.iter() {
+            if deal.buyer == handle {
+                row.deals_started += 1;
+                if deal.state == cw_sim::state::DealState::Settled {
+                    row.deals_settled += 1;
+                }
+            }
+        }
+    }
+    for (key, actions) in &session.ai_log.by_archetype {
+        if let Some(row) = rows.get_mut(key) {
+            row.accepted_commands = actions.accepted;
+            row.rejected_commands = actions.rejected;
+        }
+    }
+    rows
 }
 
 #[derive(serde::Serialize)]
@@ -343,6 +440,7 @@ struct SweepReport {
     seed_count: u64,
     runs: Vec<RunReport>,
     summary: BTreeMap<String, Distribution>,
+    archetypes: BTreeMap<String, ArchetypeRow>,
     outliers: Vec<Outlier>,
     errors: Vec<String>,
 }
@@ -358,14 +456,13 @@ fn observe(session: &Session, seed: u64, paused: Option<String>) -> RunReport {
         past_due = rows.iter().filter(|firm| firm.status == "past_due").count() as u64;
     }
     // "Controlled" means the group, not only the directly held firm: a settled acquisition is
-    // controlled through the parent, exactly as `group_value` and the score already treat it.
+    // controlled through the parent.
     let mut group: std::collections::BTreeSet<u64> = std::collections::BTreeSet::new();
-    for (handle, firm) in session.world.firms.iter() {
-        if firm.shares.qty(cw_sim::state::HolderId::Investor) == 0 {
-            continue;
-        }
-        for member in cw_sim::economy::ownership::controlled_group(&session.world, handle) {
-            group.insert(member.0);
+    for (handle, _) in session.world.firms.iter() {
+        if cw_sim::economy::ownership::ultimate_controller(&session.world, handle)
+            == Some(cw_sim::state::HolderId::Investor)
+        {
+            group.insert(handle.0);
         }
     }
     let controlled = group.len() as u64;
@@ -436,6 +533,7 @@ fn observe(session: &Session, seed: u64, paused: Option<String>) -> RunReport {
         canonical_hash: session.canonical_hash(),
         policy: PolicyStats::default(),
         invariants,
+        archetypes: BTreeMap::new(),
     }
 }
 
@@ -529,6 +627,7 @@ fn sweep(arguments: &[String]) {
             }
         };
         dataset_hash = session.dataset_hash().to_owned();
+        let opening = opening_equity(&session);
         let mut runner = PolicyRunner::new(policy, verbose);
         let (advanced, paused) = drive(&mut session, weeks, &mut runner);
         if advanced < weeks && paused.is_none() {
@@ -536,6 +635,7 @@ fn sweep(arguments: &[String]) {
         }
         let mut row = observe(&session, seed, paused);
         row.policy = runner.stats.clone();
+        row.archetypes = archetype_rows(&session, &opening);
         if !row.invariants.ledger_balanced
             || row.invariants.negative_cash > 0
             || row.invariants.negative_stock > 0
@@ -604,6 +704,21 @@ fn sweep(arguments: &[String]) {
         runs.iter().map(|run| run.deals_settled as i64).collect(),
     );
 
+    let mut archetype_totals: BTreeMap<String, ArchetypeRow> = BTreeMap::new();
+    for run in &runs {
+        for (key, row) in &run.archetypes {
+            let total = archetype_totals.entry(key.clone()).or_default();
+            total.firms += row.firms;
+            total.wins += row.wins;
+            total.losses += row.losses;
+            total.dissolved += row.dissolved;
+            total.accepted_commands += row.accepted_commands;
+            total.rejected_commands += row.rejected_commands;
+            total.deals_started += row.deals_started;
+            total.deals_settled += row.deals_settled;
+        }
+    }
+
     let mut outliers: Vec<Outlier> = runs
         .iter()
         .filter(|run| run.final_week < weeks)
@@ -654,6 +769,7 @@ fn sweep(arguments: &[String]) {
         seed_count: seeds,
         runs,
         summary,
+        archetypes: archetype_totals,
         outliers,
         errors,
     };
@@ -671,6 +787,19 @@ fn sweep(arguments: &[String]) {
         println!(
             "summary {name} count={} min={} median={} max={} mean={}",
             dist.count, dist.min, dist.median, dist.max, dist.mean
+        );
+    }
+    for (key, row) in &report.archetypes {
+        println!(
+            "archetype {key} firms={} wins={} losses={} dissolved={} accepted={} rejected={} deals={}/{}",
+            row.firms,
+            row.wins,
+            row.losses,
+            row.dissolved,
+            row.accepted_commands,
+            row.rejected_commands,
+            row.deals_settled,
+            row.deals_started
         );
     }
     println!(

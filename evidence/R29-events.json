@@ -1,0 +1,14 @@
+{
+  "requirement": "R29",
+  "result": "pass",
+  "commit": "3fa5a327af92b62415627d3a344c18bb774cf811",
+  "procedure": "cargo test --locked --workspace; crates/cw-sim/tests/events.rs (18 fixtures: every card and choice resolves with balanced books; each state trigger opens from its real transition; scoped freight, outage, recall, permit, covenant and tender handlers; rival mandatory cards never pause the player; dissolved subjects resolve; pending cards survive reload; authority; both starts run a year). cw-session example event_census for natural-play frequency.",
+  "artifacts": [
+    "crates/cw-sim/src/economy/events_engine.rs",
+    "crates/cw-sim/tests/events.rs",
+    "content/events/events.json",
+    "crates/cw-session/examples/event_census.rs"
+  ],
+  "limitations": "Several player-only cards (review, tender, covenant, hostile stake, bargaining) appear only after the corresponding player action or state. Fuel shocks reduce fuel supply a fifth rather than setting a reference price. Recession recovery is a clean 26-week end, not a two-quarter taper.",
+  "verified_at": "2026-10-25"
+}

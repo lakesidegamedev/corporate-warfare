@@ -311,6 +311,8 @@ pub struct Facility {
     pub last_inputs_short: bool,
     pub last_staff_ratio_bps: i32,
     pub mothballed_since: Option<Tick>,
+    /// Temporary capacity cap from an outage card: (cap bps, last affected week exclusive).
+    pub outage: Option<(i32, Tick)>,
 }
 
 impl Facility {
@@ -493,6 +495,14 @@ pub struct Firm {
     pub tech_progress_cents: i64,
     pub brand_bps: BTreeMap<(u8, u16), i32>,
     pub reputation_bps: i32,
+    /// Workers released by week, kept for four weeks so a failed lobbying campaign can be
+    /// judged against concurrent mass layoffs.
+    pub layoffs: Vec<(u32, i64)>,
+    /// Employees at each of the last five week closes, newest last, for churn detection.
+    pub staff_history: Vec<i64>,
+    /// Largest outside vote share at the last week close, so a hostile stake is reported when
+    /// it crosses a quarter, not every week it stays there.
+    pub outside_peak_bps: i32,
     pub policy_requests: Vec<PolicyRequest>,
     pub guarantees: Vec<Guarantee>,
     pub last_strategic_week: u32,
@@ -731,6 +741,9 @@ pub struct Loan {
     pub created: Tick,
     pub carry: i64,
     pub defaulted: bool,
+    /// Principal that fell due and was not paid. It stays owed to this lender, is collected
+    /// first at the next service, and keeps the borrower past due until it clears.
+    pub arrears_cents: i64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -896,6 +909,8 @@ pub struct Deal {
     pub remedy_share_bps: i32,
     pub hostile: bool,
     pub diligence_paid: bool,
+    /// The player investor has tendered its shares; they move only at settlement.
+    pub investor_tendered: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -921,6 +936,7 @@ pub enum PolicyKind {
 pub enum RegimeKind {
     Recession,
     Boom,
+    FuelShock,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -944,6 +960,9 @@ pub struct PendingEvent {
     pub opened: Tick,
     pub mandatory: bool,
     pub resolved: bool,
+    /// The deal a tender card is about. Tender cards are addressed to the investor as a
+    /// shareholder, not to the target company, so they carry the deal instead of a subject.
+    pub deal: Option<Handle>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -181,6 +181,15 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
     seed_share_marks(&mut world, dataset);
 
     world.investor.starting_net_worth_cents = investor_net_worth(&world, dataset);
+    // Opening registers are the baseline, so a co-investor present at the start is not reported
+    // as a new hostile stake in week one.
+    let handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
+    for handle in handles {
+        let peak = crate::economy::events_engine::outside_peak_bps(&world, handle);
+        if let Some(firm) = world.firms.get_mut(handle) {
+            firm.outside_peak_bps = peak;
+        }
+    }
     world
 }
 
@@ -299,6 +308,9 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
             tech_progress_cents: 0,
             brand_bps: BTreeMap::new(),
             reputation_bps: 0,
+            layoffs: Vec::new(),
+            staff_history: Vec::new(),
+            outside_peak_bps: 0,
             policy_requests: Vec::new(),
             guarantees: Vec::new(),
             last_strategic_week: 0,
@@ -414,6 +426,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
                     created: Tick::OPENING,
                     carry: 0,
                     defaulted: false,
+                    arrears_cents: 0,
                 });
                 world.firms.get_mut(handle).unwrap().loans.push(loan_handle);
                 if let Some(lender) = world.outside.lenders.get_mut(0) {
@@ -495,6 +508,9 @@ fn placeholder_firm() -> Firm {
         tech_progress_cents: 0,
         brand_bps: BTreeMap::new(),
         reputation_bps: 0,
+        layoffs: Vec::new(),
+        staff_history: Vec::new(),
+        outside_peak_bps: 0,
         policy_requests: Vec::new(),
         guarantees: Vec::new(),
         last_strategic_week: 0,
@@ -592,6 +608,7 @@ fn open_facility(
         last_inputs_short: false,
         last_staff_ratio_bps: 10_000,
         mothballed_since: None,
+        outage: None,
     };
     if recipe.output == "ore" {
         facility.deposit_remaining =
@@ -722,6 +739,7 @@ fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
         created: Tick::OPENING,
         carry: 0,
         defaulted: false,
+        arrears_cents: 0,
     });
     world.firms.get_mut(handle).unwrap().loans.push(loan_handle);
 

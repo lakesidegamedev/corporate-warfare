@@ -1,0 +1,14 @@
+{
+  "requirement": "R21",
+  "result": "pass",
+  "commit": "3fa5a327af92b62415627d3a344c18bb774cf811",
+  "procedure": "cargo test --locked --workspace; crates/cw-sim/tests/takeovers.rs (15 fixtures with hand-worked escrow, fee, proration, squeeze-out and refund arithmetic) plus corporate_lifecycle::a_legal_merger_moves_assets_debt_facilities_and_contracts and a_funded_hostile_tender_transfers_control_and_pays_minorities.",
+  "artifacts": [
+    "crates/cw-sim/src/economy/deals.rs",
+    "crates/cw-sim/tests/takeovers.rs",
+    "crates/cw-sim/tests/corporate_lifecycle.rs",
+    "crates/cw-sim/src/commands.rs"
+  ],
+  "limitations": "Asset purchases assume no liabilities and cannot target a player-controlled company (no player consent step). Hostile defences beyond holder reservation factors and the defence-meeting card are not modelled. The 90 percent squeeze-out is an explicit game threshold, not statutory law.",
+  "verified_at": "2026-10-25"
+}

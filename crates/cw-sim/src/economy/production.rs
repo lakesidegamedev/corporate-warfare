@@ -309,6 +309,11 @@ fn run_facility(
         }
     }
     let mut ratio = facility.target_bps.min(staff_ratio).max(0);
+    if let Some((cap, until)) = facility.outage
+        && world.tick.0 < until.0
+    {
+        ratio = ratio.min(cap);
+    }
     if !utility {
         ratio = ratio.min(power_ratio_bps);
     }

@@ -311,7 +311,11 @@ impl PolicyRunner {
             if firm.controlled || firm.investor_votes_bps != 0 || firm.status != "operating" {
                 continue;
             }
-            let finance = finance(session, firm.handle);
+            // Private rivals keep their books to themselves; the policy sees only what the
+            // player could inspect.
+            let Some(finance) = inspect(session, firm.handle) else {
+                continue;
+            };
             let distressed =
                 finance.net_income_trailing_cents < 0 || firm.grade == "C" || firm.grade == "D";
             if distressed {
@@ -377,6 +381,33 @@ impl PolicyRunner {
         }
     }
 
+    /// Answer a mandatory card through the normal command path. Active policies take the
+    /// card's first (acting) choice; the no-action baseline takes its passive choice.
+    pub fn answer_event(&mut self, session: &mut Session, event: u64) -> bool {
+        let Some(card) = session
+            .world
+            .events
+            .pending
+            .iter()
+            .find(|pending| pending.id == event)
+            .and_then(|pending| session.dataset.event(&pending.card))
+        else {
+            return false;
+        };
+        let choice = if self.policy == ReferencePolicy::None {
+            card.choices
+                .iter()
+                .find(|choice| choice.handler == "no_action")
+                .or_else(|| card.choices.last())
+        } else {
+            card.choices.first()
+        };
+        let Some(choice) = choice.map(|choice| choice.id.clone()) else {
+            return false;
+        };
+        self.submit(session, CommandIntent::RespondEvent { event, choice })
+    }
+
     fn submit(&mut self, session: &mut Session, intent: CommandIntent) -> bool {
         let key = intent.key().to_owned();
         let envelope = CommandEnvelope {
@@ -409,6 +440,14 @@ impl PolicyRunner {
     }
 }
 
+fn inspect(session: &Session, firm: u64) -> Option<FinanceSummary> {
+    match session.query(Query::Finance(firm)) {
+        Detail::Finance(finance) => Some(finance),
+        _ => None,
+    }
+}
+
+/// Finance for a company the investor controls, which is always inspectable.
 fn finance(session: &Session, firm: u64) -> FinanceSummary {
     match session.query(Query::Finance(firm)) {
         Detail::Finance(finance) => finance,

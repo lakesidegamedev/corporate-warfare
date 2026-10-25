@@ -31,6 +31,29 @@ pub fn defer_expense(world: &mut World, firm: Handle, amount: i64, expense: Acco
     mark_past_due(entity, world.tick);
 }
 
+/// Put a firm into the payment-grace state for an unpaid amount already on its books.
+pub fn mark_firm_past_due(world: &mut World, firm: Handle) {
+    let now = world.tick;
+    if let Some(entity) = world.firms.get_mut(firm) {
+        mark_past_due(entity, now);
+    }
+}
+
+/// Loan principal that fell due and is still unpaid.
+fn loan_arrears(world: &World, firm: Handle) -> i64 {
+    world
+        .firm(firm)
+        .map(|entity| {
+            entity
+                .loans
+                .iter()
+                .filter_map(|handle| world.loans.get(*handle))
+                .map(|loan| loan.arrears_cents)
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
 fn mark_past_due(firm: &mut crate::state::Firm, now: Tick) {
     // A dissolved, liquidating or merged firm cannot re-enter the payment-grace state. Late
     // interest or contract postings used to resurrect it, which hid a liquidation from reports.
@@ -91,7 +114,7 @@ pub fn settle(world: &mut World, dataset: &Dataset) -> Vec<(Handle, &'static str
                     .unwrap()
                     .book
                     .balance(Account::OverduePayables);
-                if overdue <= 0 {
+                if overdue <= 0 && loan_arrears(world, handle) == 0 {
                     if let Some(firm) = world.firms.get_mut(handle) {
                         firm.status = FirmStatus::Operating;
                         firm.payout_freeze = false;
@@ -166,107 +189,84 @@ fn restructure(world: &mut World, firm: Handle, debt: i64) {
     }
 }
 
-/// Liquidate assets at 40 percent carrying value and distribute by seniority.
-fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
+/// Liquidate: realise non-cash assets at 40 percent of carrying value through finite outside
+/// buyers, pool them with the firm's own cash, and pay claims strictly by seniority: secured
+/// loans, then administrative and payroll arrears, then unsecured loans, bonds and deposits pro
+/// rata, then equity. Every payment reaches a real claimant; nothing is minted or left behind
+/// in a dissolved shell. Open contracts and deals end with the firm.
+pub fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
     let book = match world.firms.get(firm) {
         Some(entity) => entity.book.clone(),
         None => return,
     };
-    let assets = book.total_assets().max(0) * 40 / 100;
-    // Finite outside buyer funds: a sale without a buyer delays, never mints cash.
-    let buyer_cash: i64 = world
-        .outside
-        .lenders
+    // Open bids return their escrow first; it is the firm's own money.
+    let open_deals: Vec<Handle> = world
+        .deals
         .iter()
-        .map(|lender| lender.capital_cents)
+        .filter(|(_, deal)| deal.buyer == firm && !deal.state.terminal())
+        .map(|(handle, _)| handle)
+        .collect();
+    for deal in open_deals {
+        let _ = crate::economy::deals::withdraw(world, deal);
+    }
+    let book_after_refunds = world.firm(firm).map(|f| f.book.clone()).unwrap_or(book);
+    let book = book_after_refunds;
+
+    // 1. Asset sale to finite outside buyers. A sale without enough buyer funds sells what
+    //    it can; it never mints cash.
+    let asset_accounts = [
+        Account::FixedAssets,
+        Account::AccumulatedDepreciation,
+        Account::Inventory,
+        Account::Receivables,
+        Account::OtherAssets,
+        Account::WorkInProgress,
+    ];
+    let carrying: i64 = asset_accounts
+        .iter()
+        .map(|account| book.balance(*account))
         .sum();
-    let proceeds = assets.min(buyer_cash);
-    let mut remaining = proceeds;
-
-    // Priority: secured claims (loans with collateral) then payroll/administrative then
-    // unsecured (deposits, bonds, ordinary loans) then equity.
-    let secured: i64 = world
-        .firms
-        .get(firm)
-        .map(|entity| {
-            entity
-                .loans
-                .iter()
-                .filter_map(|handle| world.loans.get(*handle))
-                .filter(|loan| loan.secured)
-                .map(|loan| loan.principal_remaining_cents)
-                .sum()
-        })
-        .unwrap_or(0);
-    let secured_paid = remaining.min(secured);
-    remaining -= secured_paid;
-
-    let overdue = -book.balance(Account::OverduePayables);
-    let administrative = overdue.max(0);
-    let admin_paid = remaining.min(administrative);
-    remaining -= admin_paid;
-
-    let unsecured = -book.balance(Account::Loans)
-        - book.balance(Account::Bonds)
-        - book.balance(Account::Deposits);
-    let unsecured = unsecured.max(0) - secured;
-    let unsecured_paid = remaining.min(unsecured);
-    let _ = unsecured_paid;
-    let _ = remaining;
-
-    // A failed firm's unrelated cash is never taken: only its own assets are realised.
+    let wanted = carrying.max(0) * 40 / 100;
+    let mut proceeds = 0i64;
+    for buyer in world.outside.investors.iter_mut() {
+        if proceeds >= wanted {
+            break;
+        }
+        let take = (wanted - proceeds).min(buyer.capital_cents.max(0));
+        buyer.capital_cents -= take;
+        proceeds += take;
+    }
     if let Some(entity) = world.firms.get_mut(firm) {
-        let carrying = book.balance(Account::FixedAssets)
-            + book.balance(Account::Inventory)
-            + book.balance(Account::Receivables)
-            + book.balance(Account::OtherAssets)
-            + book.balance(Account::WorkInProgress);
-        let loss = (carrying - proceeds).max(0);
-        let _ = entity.book.commit(
-            world.tick,
-            Txn::new()
-                .debit(Account::Cash, proceeds, "liquidation proceeds")
-                .debit(Account::OtherIncome, loss, "liquidation loss")
-                .credit(
-                    Account::FixedAssets,
-                    book.balance(Account::FixedAssets),
-                    "asset sale",
-                )
-                .credit(
-                    Account::Inventory,
-                    book.balance(Account::Inventory),
-                    "stock sale",
-                )
-                .credit(
-                    Account::Receivables,
-                    book.balance(Account::Receivables),
-                    "receivable sale",
-                )
-                .credit(
-                    Account::OtherAssets,
-                    book.balance(Account::OtherAssets),
-                    "other asset sale",
-                )
-                .credit(
-                    Account::WorkInProgress,
-                    book.balance(Account::WorkInProgress),
-                    "cip sale",
-                ),
+        let mut sale = Txn::new().debit(Account::Cash, proceeds, "liquidation proceeds");
+        for account in asset_accounts {
+            let balance = book.balance(account);
+            if balance != 0 {
+                sale = sale.signed(account, -balance, "liquidation sale");
+            }
+        }
+        sale = sale.signed(
+            Account::OtherIncome,
+            carrying - proceeds,
+            "liquidation loss",
         );
-        let _ = entity.book.commit(
-            world.tick,
-            Txn::new()
-                .credit(
-                    Account::Cash,
-                    secured_paid + admin_paid + unsecured_paid,
-                    "creditor payment",
-                )
-                .debit(Account::Loans, secured_paid, "secured")
-                .debit(Account::OverduePayables, admin_paid, "administrative")
-                .debit(Account::Loans, unsecured_paid, "unsecured"),
-        );
+        let _ = entity.book.commit(world.tick, sale);
+        let restricted = entity.book.balance(Account::RestrictedCash);
+        if restricted > 0 {
+            let _ = entity.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, restricted, "escrow released to estate")
+                    .credit(
+                        Account::RestrictedCash,
+                        restricted,
+                        "escrow released to estate",
+                    ),
+            );
+        }
         entity.status = FirmStatus::Liquidating;
     }
+    pay_creditors(world, firm);
+
     // Explicit guarantees: a guarantor covers the failed firm's unpaid claims up to its
     // contracted cap, paid from its own cash or carried as its own past-due liability. There is
     // no implied guarantee for siblings.
@@ -320,7 +320,7 @@ fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
                     let _ = entity.book.commit(
                         world.tick,
                         Txn::new()
-                            .debit(Account::OverduePayables, paid, "guarantee received")
+                            .debit(Account::Cash, paid, "guarantee received")
                             .credit(Account::OtherIncome, paid, "guarantee received"),
                     );
                 }
@@ -329,30 +329,92 @@ fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
         }
     }
 
-    // Investor loses the holding; career losses are recorded, other assets are untouched.
-    let held = world
-        .firms
-        .get(firm)
-        .map(|f| f.shares.qty(HolderId::Investor))
-        .unwrap_or(0);
-    if held > 0 {
-        let lost = held
-            * world
-                .firms
-                .get(firm)
-                .map(|f| f.shares.mark_cents)
-                .unwrap_or(0);
-        world.investor.career_losses_cents += lost;
-        if let Some(entity) = world.firms.get_mut(firm) {
-            entity.shares.holders.remove(&HolderId::Investor);
+    // Guarantee cash reaches the creditors through the same waterfall.
+    pay_creditors(world, firm);
+
+    // 5. Equity takes any residual, pro rata by eligible shares. The investor's lost holding
+    //    is recorded as a career loss at its cost basis less any residual received.
+    let residual = world.firm(firm).map(|f| f.book.cash().max(0)).unwrap_or(0);
+    let holders: Vec<(HolderId, i64, i64)> = world
+        .firm(firm)
+        .map(|entity| {
+            entity
+                .shares
+                .holders
+                .iter()
+                .filter(|(holder, lot)| !holder.is_treasury() && lot.qty > 0)
+                .map(|(holder, lot)| (*holder, lot.qty, lot.cost_cents))
+                .collect()
+        })
+        .unwrap_or_default();
+    let eligible: i64 = holders.iter().map(|(_, qty, _)| *qty).sum();
+    let mut paid_out = 0i64;
+    for (holder, qty, basis) in &holders {
+        let part = if eligible > 0 {
+            (residual as i128 * *qty as i128 / eligible as i128) as i64
+        } else {
+            0
+        };
+        pay_equity(world, *holder, part, *basis);
+        paid_out += part;
+        if *holder == HolderId::Investor {
+            world.investor.career_losses_cents += (*basis - part).max(0);
         }
-        if world.investor.primary_group == Some(firm) {
-            world.investor.primary_group = None;
+    }
+    if paid_out > 0
+        && let Some(entity) = world.firms.get_mut(firm)
+    {
+        let _ = entity.book.commit(
+            world.tick,
+            Txn::new()
+                .credit(Account::Cash, paid_out, "liquidation distribution")
+                .debit(
+                    Account::RetainedEarnings,
+                    paid_out,
+                    "liquidation distribution",
+                ),
+        );
+    }
+    if world.investor.primary_group == Some(firm) {
+        world.investor.primary_group = None;
+    }
+    // Contracts end with the firm: no dead company keeps buying or selling. A surviving
+    // buyer's escrow for the dead seller comes back; the dead buyer's escrow was pooled above.
+    let ended: Vec<Handle> = world
+        .contracts
+        .iter()
+        .filter(|(_, contract)| {
+            (contract.buyer == firm || contract.seller == firm)
+                && contract.status == crate::state::ContractStatus::Active
+        })
+        .map(|(handle, _)| handle)
+        .collect();
+    for handle in ended {
+        let Some(contract) = world.contracts.get_mut(handle) else {
+            continue;
+        };
+        contract.status = crate::state::ContractStatus::Cancelled;
+        let escrow = std::mem::take(&mut contract.escrow_cents);
+        let buyer = contract.buyer;
+        if buyer != firm
+            && escrow > 0
+            && let Some(entity) = world.firms.get_mut(buyer)
+        {
+            let _ = entity.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, escrow, "contract escrow refund")
+                    .credit(Account::RestrictedCash, escrow, "contract escrow refund"),
+            );
         }
     }
     if let Some(entity) = world.firms.get_mut(firm) {
         entity.status = FirmStatus::Dissolved;
         entity.facilities.clear();
+        entity
+            .shares
+            .holders
+            .retain(|holder, _| holder.is_treasury());
     }
     let facilities: Vec<Handle> = world
         .facilities
@@ -364,6 +426,243 @@ fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
         world.facilities.remove(handle);
     }
     let _ = dataset;
+}
+
+/// Pay the estate's cash to its creditors by seniority: secured loans, administrative arrears,
+/// then unsecured loans, bonds and deposits pro rata. Safe to run again after guarantee cash.
+fn pay_creditors(world: &mut World, firm: Handle) {
+    let mut pool = world.firm(firm).map(|f| f.book.cash().max(0)).unwrap_or(0);
+    let loans: Vec<(Handle, bool, i64)> = world
+        .firm(firm)
+        .map(|entity| {
+            entity
+                .loans
+                .iter()
+                .filter_map(|handle| {
+                    world
+                        .loans
+                        .get(*handle)
+                        .map(|loan| (*handle, loan.secured, loan.principal_remaining_cents))
+                })
+                .filter(|(_, _, principal)| *principal > 0)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // 2. Secured loans, each to its own lender.
+    for (loan, secured, principal) in &loans {
+        if *secured && pool > 0 {
+            let paid = (*principal).min(pool);
+            crate::economy::credit::repay(world, *loan, paid);
+            pool -= paid;
+        }
+    }
+
+    // 3. Administrative and payroll arrears, paid to the outside parties that are owed.
+    let arrears = (-world
+        .firm(firm)
+        .map(|f| f.book.balance(Account::OverduePayables))
+        .unwrap_or(0))
+    .max(0);
+    let admin = arrears.min(pool);
+    if admin > 0 {
+        if let Some(entity) = world.firms.get_mut(firm) {
+            let _ = entity.book.commit(
+                world.tick,
+                Txn::new()
+                    .credit(Account::Cash, admin, "administrative claims")
+                    .debit(Account::OverduePayables, admin, "administrative claims"),
+            );
+        }
+        let _ = world.outside.gateway_book.commit(
+            world.tick,
+            Txn::new()
+                .debit(Account::Cash, admin, "estate arrears received")
+                .credit(Account::Revenue, admin, "estate arrears received"),
+        );
+        pool -= admin;
+    }
+
+    // 4. Unsecured loans, bonds and deposits share what is left pro rata.
+    let unsecured_loans: Vec<(Handle, i64)> = loans
+        .iter()
+        .filter(|(loan, secured, _)| {
+            !secured
+                && world
+                    .loans
+                    .get(*loan)
+                    .map(|l| l.principal_remaining_cents > 0)
+                    .unwrap_or(false)
+        })
+        .map(|(loan, _, _)| {
+            (
+                *loan,
+                world.loans.get(*loan).unwrap().principal_remaining_cents,
+            )
+        })
+        .collect();
+    let bonds: Vec<(Handle, i64)> = world
+        .bonds
+        .iter()
+        .filter(|(_, bond)| bond.issuer == firm && bond.principal_cents > 0)
+        .map(|(handle, bond)| (handle, bond.principal_cents))
+        .collect();
+    let depositors: Vec<(HolderId, i64)> = world
+        .firm(firm)
+        .and_then(|entity| entity.bank.as_ref())
+        .map(|model| {
+            model
+                .depositors
+                .iter()
+                .filter(|(_, balance)| **balance > 0)
+                .map(|(holder, balance)| (*holder, *balance))
+                .collect()
+        })
+        .unwrap_or_default();
+    let unsecured: i64 = unsecured_loans.iter().map(|(_, a)| *a).sum::<i64>()
+        + bonds.iter().map(|(_, a)| *a).sum::<i64>()
+        + depositors.iter().map(|(_, a)| *a).sum::<i64>();
+    if unsecured > 0 && pool > 0 {
+        let available = pool.min(unsecured);
+        let share = |claim: i64| (claim as i128 * available as i128 / unsecured as i128) as i64;
+        for (loan, claim) in &unsecured_loans {
+            let paid = share(*claim);
+            crate::economy::credit::repay(world, *loan, paid);
+            pool -= paid;
+        }
+        for (bond, claim) in &bonds {
+            let paid = share(*claim);
+            let holders: Vec<(HolderId, i64)> = world
+                .bonds
+                .get(*bond)
+                .map(|b| b.holders.iter().map(|(h, q)| (*h, *q)).collect())
+                .unwrap_or_default();
+            let total: i64 = holders.iter().map(|(_, q)| *q).sum();
+            let mut distributed = 0i64;
+            for (holder, qty) in &holders {
+                let part = if total > 0 {
+                    (paid as i128 * *qty as i128 / total as i128) as i64
+                } else {
+                    0
+                };
+                pay_claimant(world, *holder, part, Account::Investments, "bond recovery");
+                distributed += part;
+            }
+            if let Some(entity) = world.firms.get_mut(firm) {
+                let _ = entity.book.commit(
+                    world.tick,
+                    Txn::new()
+                        .credit(Account::Cash, distributed, "bond recovery")
+                        .debit(Account::Bonds, distributed, "bond recovery"),
+                );
+            }
+            if let Some(stored) = world.bonds.get_mut(*bond) {
+                stored.principal_cents -= distributed;
+            }
+            pool -= distributed;
+        }
+        for (holder, claim) in &depositors {
+            let paid = share(*claim);
+            pay_claimant(
+                world,
+                *holder,
+                paid,
+                Account::Receivables,
+                "deposit recovery",
+            );
+            if let Some(entity) = world.firms.get_mut(firm) {
+                let _ = entity.book.commit(
+                    world.tick,
+                    Txn::new()
+                        .credit(Account::Cash, paid, "deposit recovery")
+                        .debit(Account::Deposits, paid, "deposit recovery"),
+                );
+                if let Some(model) = entity.bank.as_mut()
+                    && let Some(balance) = model.depositors.get_mut(holder)
+                {
+                    *balance -= paid;
+                }
+            }
+            pool -= paid;
+        }
+    }
+    let _ = pool;
+}
+
+/// Pay a creditor of a failed firm: the holder's claim asset is realised for cash.
+fn pay_claimant(world: &mut World, holder: HolderId, amount: i64, claim: Account, memo: &str) {
+    if amount <= 0 {
+        return;
+    }
+    match holder {
+        HolderId::Investor => {
+            world.investor.cash_cents += amount;
+            let _ = world.investor.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, amount, memo)
+                    .credit(claim, amount, memo),
+            );
+        }
+        HolderId::Firm(handle) => {
+            if let Some(entity) = world.firms.get_mut(handle) {
+                let _ = entity.book.commit(
+                    world.tick,
+                    Txn::new()
+                        .debit(Account::Cash, amount, memo)
+                        .credit(claim, amount, memo),
+                );
+            }
+        }
+        HolderId::Outside(index) => {
+            if let Some(entity) = world.outside.investors.get_mut(index as usize) {
+                entity.capital_cents += amount;
+            }
+        }
+        HolderId::Treasury => {}
+    }
+}
+
+/// Pay a shareholder its liquidation residual; the holding is written off at cost basis.
+fn pay_equity(world: &mut World, holder: HolderId, amount: i64, basis: i64) {
+    match holder {
+        HolderId::Investor => {
+            world.investor.cash_cents += amount;
+            world.investor.realised_gains_cents += amount - basis;
+            let _ = world.investor.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, amount, "liquidation distribution")
+                    .credit(Account::Investments, basis, "holding written off")
+                    .credit(
+                        Account::OtherIncome,
+                        amount - basis,
+                        "liquidation gain or loss",
+                    ),
+            );
+        }
+        HolderId::Firm(handle) => {
+            if let Some(entity) = world.firms.get_mut(handle) {
+                let _ = entity.book.commit(
+                    world.tick,
+                    Txn::new()
+                        .debit(Account::Cash, amount, "liquidation distribution")
+                        .credit(Account::Investments, basis, "holding written off")
+                        .credit(
+                            Account::OtherIncome,
+                            amount - basis,
+                            "liquidation gain or loss",
+                        ),
+                );
+            }
+        }
+        HolderId::Outside(index) => {
+            if let Some(entity) = world.outside.investors.get_mut(index as usize) {
+                entity.capital_cents += amount;
+            }
+        }
+        HolderId::Treasury => {}
+    }
 }
 
 /// Move an unpaid tax balance into past-due liabilities.

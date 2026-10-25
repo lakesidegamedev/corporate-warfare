@@ -65,6 +65,13 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
                 firm.board.next_meeting = Tick(firm.board.next_meeting.0 + 13);
             }
         }
+        // Resolved votes are kept while they can still authorise an action, then dropped.
+        if let Some(firm) = world.firms.get_mut(handle) {
+            let now = world.tick.0;
+            firm.board
+                .pending_votes
+                .retain(|vote| !vote.resolved || now < vote.deadline.0 + 26);
+        }
         // Resolve votes whose deadline has arrived.
         let pending: Vec<BoardVote> = world
             .firms
@@ -138,10 +145,19 @@ pub fn large_action_authorised(world: &World, firm: Handle) -> bool {
     let Some(entity) = world.firms.get(firm) else {
         return false;
     };
-    match entity.shares.controller() {
-        Some(controller) => entity.board.seats_held(controller) >= 3,
-        None => true,
-    }
+    // A board vote the directors passed in the last thirteen weeks also authorises it: the
+    // rules let a holder without a seat majority win the other directors' support.
+    let supported = entity.board.pending_votes.iter().any(|vote| {
+        vote.resolved
+            && vote.passed
+            && vote.subject != "conflict_transfer"
+            && world.tick.0 < vote.deadline.0 + 13
+    });
+    supported
+        || match entity.shares.controller() {
+            Some(controller) => entity.board.seats_held(controller) >= 3,
+            None => true,
+        }
 }
 
 /// Whether an actor may issue operating commands for a firm.
@@ -171,7 +187,14 @@ pub fn approval_required(world: &World, firm: Handle, debt_after: i64, capex: i6
 }
 
 pub fn queue_vote(firm: &mut Firm, subject: &str, deadline: Tick) -> u32 {
-    let id = firm.board.pending_votes.len() as u32 + 1;
+    let id = firm
+        .board
+        .pending_votes
+        .iter()
+        .map(|vote| vote.id)
+        .max()
+        .unwrap_or(0)
+        + 1;
     firm.board.pending_votes.push(BoardVote {
         id,
         subject: subject.to_owned(),

@@ -42,6 +42,16 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
         } else {
             organisation = (organisation - 5).max(500);
         }
+        // Union drive card: organisation crosses half the workforce this week.
+        if entry < 5_000 && organisation >= 5_000 {
+            crate::economy::events_engine::open(
+                world,
+                "union_drive",
+                Some(handle),
+                Some(region),
+                false,
+            );
+        }
         if let Some(firm) = world.firms.get_mut(handle) {
             firm.organisation
                 .insert(region, organisation.clamp(0, 10_000));
@@ -214,7 +224,10 @@ fn binding_settlement(world: &mut World, firm: Handle) {
     let contractual_floor = entity.policies.wage_offer[0];
     if affordable < contractual_floor {
         // No impossible automatic payment: record the failed settlement and let solvency run.
-        world.failed_worker_settlements += 1;
+        // Only the player's companies count toward the player's conduct score.
+        if crate::economy::events_engine::player_side(world, firm) {
+            world.failed_worker_settlements += 1;
+        }
         if let Some(entity) = world.firms.get_mut(firm) {
             entity.union.state = BargainState::Idle;
             entity.union.last_demand_week = world.tick.0;
@@ -222,7 +235,7 @@ fn binding_settlement(world: &mut World, firm: Handle) {
         return;
     }
     let settlement = median.min(affordable).max(contractual_floor);
-    if settlement < demand {
+    if settlement < demand && crate::economy::events_engine::player_side(world, firm) {
         world.failed_worker_settlements += 1;
     }
     if let Some(entity) = world.firms.get_mut(firm) {

@@ -1,8 +1,14 @@
 {
-  "requirement": "R25", "result": "pass",
-  "commit": "14379018365170da6aa1aba250a13c58c7c83b56",
-  "procedure": "cargo test --locked --workspace; corporate_lifecycle::liquidation_pays_creditors_before_equity_and_keeps_siblings and a_parent_guarantee_backs_a_failed_subsidiary_only_up_to_its_cap, plus bank-run and missed-payment/default fixtures.",
-  "artifacts": ["crates/cw-sim/src/economy/insolvency.rs","crates/cw-sim/tests/corporate_lifecycle.rs","crates/cw-sim/src/economy/credit.rs"],
-  "limitations": "Liquidation uses a finite outside asset buyer and a simplified secured/admin/unsecured waterfall; no cross-border insolvency procedure.",
+  "requirement": "R25",
+  "result": "pass",
+  "commit": "3fa5a327af92b62415627d3a344c18bb774cf811",
+  "procedure": "cargo test --locked --workspace; crates/cw-sim/tests/liquidation.rs (world money conserved through liquidation, secured paid before unsecured to the real lenders, no zombie cash, solvent estate pays equity and ends contracts, thin buyer market never mints) plus corporate_lifecycle guarantee and sibling fixtures.",
+  "artifacts": [
+    "crates/cw-sim/src/economy/insolvency.rs",
+    "crates/cw-sim/tests/liquidation.rs",
+    "crates/cw-sim/tests/corporate_lifecycle.rs",
+    "crates/cw-sim/src/economy/credit.rs"
+  ],
+  "limitations": "Asset buyers are the finite outside investor pool at 40 percent of carrying value; administrative arrears are paid to the outside sector as one class. No cross-border insolvency procedure.",
   "verified_at": "2026-10-25"
 }

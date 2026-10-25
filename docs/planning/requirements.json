@@ -279,8 +279,10 @@
       ],
       "gate": "automated",
       "acceptance": "Funded offers, escrow, diligence, tender/control transfer, minority payout and debt/contract transfer succeed or roll back correctly.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R21-takeovers.json"
+      ]
     },
     {
       "id": "R22",
@@ -291,8 +293,10 @@
       ],
       "gate": "automated",
       "acceptance": "Group-aware regional/product concentration triggers review, delay, remedies or rejection; cannot bypass by subsidiary shell.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R22-antitrust.json"
+      ]
     },
     {
       "id": "R23",
@@ -317,8 +321,10 @@
       ],
       "gate": "automated",
       "acceptance": "Funded disclosed requests have bounded uncertain outcomes, cooldown and reputational cost; no universal exemption from law/default.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R24-lobbying.json"
+      ]
     },
     {
       "id": "R25",
@@ -376,8 +382,10 @@
       ],
       "gate": "automated",
       "acceptance": "At least 30 rivals/five archetypes use common command permissions and observation fog; bounded deterministic work, urgent response and saved scheduler state.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R28-rival-ai.json"
+      ]
     },
     {
       "id": "R29",
@@ -388,8 +396,10 @@
       ],
       "gate": "automated",
       "acceptance": "At least 24 meaningful event definitions validate prerequisites, choices, postings, cooldowns and narrative traces; founder and struggling-company starts work.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R29-events.json"
+      ]
     },
     {
       "id": "R30",
@@ -457,8 +467,10 @@
       ],
       "gate": "automated",
       "acceptance": "Score at week 260 explains metrics without intra-group inflation; continue sandbox to 30 years; career loss/recovery persists.",
-      "status": "pending",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R34-score.json"
+      ]
     },
     {
       "id": "R35",
@@ -482,8 +494,10 @@
       ],
       "gate": "automated",
       "acceptance": "Publish multi-policy/difficulty distributions over 100 five-year seeds and 20 thirty-year careers; investigate outliers and exploit scenarios.",
-      "status": "pending",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R36-balance.json"
+      ]
     },
     {
       "id": "R37",

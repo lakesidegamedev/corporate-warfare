@@ -34,6 +34,39 @@ fn session(seed: u64, scenario: ScenarioKind) -> Session {
     Session::create(config(seed, scenario)).expect("session creation")
 }
 
+/// Answer every waiting mandatory player card with its first choice through `RespondEvent`.
+fn answer_mandatory(session: &mut Session) {
+    let waiting: Vec<(u64, String)> = session
+        .world
+        .events
+        .pending
+        .iter()
+        .filter(|event| {
+            !event.resolved
+                && event.mandatory
+                && event
+                    .subject_firm
+                    .map(|firm| cw_sim::economy::events_engine::player_side(&session.world, firm))
+                    .unwrap_or(true)
+        })
+        .filter_map(|event| {
+            let card = session.dataset.event(&event.card)?;
+            Some((event.id, card.choices.first()?.id.clone()))
+        })
+        .collect();
+    for (event, choice) in waiting {
+        let command = 0xE7E0_0000_0000_0000_0000_0000_0000_0000u128 | event as u128;
+        let answer = envelope(
+            session,
+            command,
+            CommandIntent::RespondEvent { event, choice },
+        );
+        session
+            .submit(answer)
+            .expect("a player card can be answered");
+    }
+}
+
 fn envelope(session: &Session, command: u128, intent: CommandIntent) -> CommandEnvelope {
     CommandEnvelope {
         command_id_high: (command >> 64) as u64,
@@ -522,10 +555,13 @@ fn a_mixed_valid_and_invalid_sequence_keeps_every_invariant() {
         }
 
         if (index + 1) % BATCH == 0 {
+            answer_mandatory(&mut session);
             let mut result = session.advance(1);
             if result.weeks_advanced == 0 {
-                // Advisory pauses (grace, strike, board, deal) are cleared; mandatory events stay.
+                // Advisory pauses (grace, strike, board, deal) are cleared; mandatory cards are
+                // answered through the command path, as the app does.
                 session.dismiss_pause();
+                answer_mandatory(&mut session);
                 result = session.advance(1);
             }
             assert_eq!(

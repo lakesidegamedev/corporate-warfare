@@ -6,7 +6,7 @@ final class EngineBridgeTests: XCTestCase {
     func testGeneratedBindingsLoadTheRustLibrary() {
         let info = engineInfo()
         XCTAssertEqual(info.interfaceVersion, 1)
-        XCTAssertEqual(info.version, "0.1.0")
+        XCTAssertEqual(info.version, "1.0.0")
         XCTAssertEqual(info.datasetHash.count, 64)
     }
 
@@ -30,7 +30,7 @@ final class EngineBridgeTests: XCTestCase {
         // when rival command ids began using the persisted sequence counter, and again when
         // ordinary facilities stopped consuming a nonexistent ore deposit. This constant needs
         // a fresh simulator run on the Mac runner before R05 is claimed again.
-        XCTAssertEqual(session.canonicalHash(), "3cef19c75778b8ac956c65b010a2eeda2a3ecae4a4f981a8b90a054aca8c1dab")
+        XCTAssertEqual(session.canonicalHash(), "1d5209e2b975ca2a603cb50e3f83a5ca8935cfdd62f43f9534d2fef723e7f66c")
 
         let data = try session.exportSave()
         XCTAssertGreaterThan(data.count, 1_000)
