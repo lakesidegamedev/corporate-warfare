@@ -989,6 +989,9 @@ pub struct World {
     /// Group membership cache, invalidated on ownership transitions.
     pub group_cache: BTreeMap<Handle, Vec<Handle>>,
     pub pending_pause: Option<String>,
+    /// Construction lots already committed to build orders this week, by contractor.
+    #[serde(default)]
+    pub construction_orders: BTreeMap<Handle, i64>,
 }
 
 impl World {
@@ -1055,6 +1058,33 @@ impl World {
             ratio = ratio * (10_000 + *bps as i64) / 10_000;
         }
         ratio.clamp(1_000, 20_000)
+    }
+
+    /// Weekly construction capacity of one contractor, in whole lots.
+    pub fn construction_capacity(&self, dataset: &cw_data::Dataset, firm: Handle) -> i64 {
+        let Some(entity) = self.firms.get(firm) else {
+            return 0;
+        };
+        entity
+            .facilities
+            .iter()
+            .filter_map(|handle| self.facilities.get(*handle))
+            .filter(|facility| facility.status == crate::state::FacilityStatus::Operating)
+            .map(|facility| {
+                let recipe = &dataset.recipes[facility.recipe as usize];
+                if recipe.output == "construction" {
+                    recipe.weekly_output_lots * facility.blocks as i64 * facility.target_bps as i64
+                        / 10_000
+                } else {
+                    0
+                }
+            })
+            .sum()
+    }
+
+    /// Clear the week's construction commitments after public works have been served.
+    pub fn clear_construction_orders(&mut self) {
+        self.construction_orders.clear();
     }
 
     /// Drop modifiers whose window has closed.

@@ -71,6 +71,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::economy::events_engine::quarter_check(world, dataset);
     crate::economy::events_engine::auto_resolve(world, dataset);
     crate::economy::events_engine::expire_optional(world, dataset);
+    world.clear_construction_orders();
     refresh_household_income(world, dataset);
     apply_macro_price_drift(world, dataset);
 

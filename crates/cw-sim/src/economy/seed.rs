@@ -145,6 +145,7 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
         failed_worker_settlements: 0,
         group_cache: BTreeMap::new(),
         pending_pause: None,
+        construction_orders: BTreeMap::new(),
     };
 
     // Outside gateway capital is finite but real: exports are paid from it, imports add to it.
