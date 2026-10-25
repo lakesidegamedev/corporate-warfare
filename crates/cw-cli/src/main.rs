@@ -128,10 +128,16 @@ fn drive(session: &mut Session, weeks: u32, runner: &mut PolicyRunner) -> (u32, 
     while advanced < weeks {
         let result = session.advance(1);
         advanced += result.weeks_advanced;
-        if result.pause.is_some() {
-            paused = result.pause.clone();
+        if let Some(reason) = result.pause.clone() {
+            // Mandatory events and the scored horizon need a human; advisory pauses are cleared
+            // so a scripted policy can keep running.
+            if reason.starts_with("event:") || reason == "five_year_score" {
+                paused = Some(reason);
+                break;
+            }
+            session.dismiss_pause();
         }
-        if result.weeks_advanced == 0 || paused.is_some() {
+        if result.weeks_advanced == 0 {
             break;
         }
         runner.act(session);

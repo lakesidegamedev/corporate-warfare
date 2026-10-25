@@ -94,6 +94,11 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         world.weeks_with_past_due += 1;
     }
 
+    // Pause on decisions that cannot safely pass unattended. Event and score pauses were set
+    // earlier; these cover grace, the first strike and imminent deal or board deadlines.
+    if world.pending_pause.is_none() {
+        world.pending_pause = pause_reason(world);
+    }
     crate::economy::score::update(world);
     if let Some(reason) = world.pending_pause.clone() {
         return WeekOutcome {
@@ -126,6 +131,46 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
             .map(|(handle, _)| *handle)
             .collect(),
     }
+}
+
+/// Reasons the clock must stop for the investor before the next week.
+pub fn pause_reason(world: &World) -> Option<String> {
+    let controlled: Vec<Handle> = world
+        .firms
+        .iter()
+        .filter(|(_, firm)| firm.shares.qty(crate::state::HolderId::Investor) > 0)
+        .map(|(handle, _)| handle)
+        .collect();
+    for handle in &controlled {
+        let Some(firm) = world.firm(*handle) else {
+            continue;
+        };
+        if matches!(firm.status, FirmStatus::PastDue { .. }) && firm.past_due_weeks >= 3 {
+            return Some(format!("default_grace:{}", handle.0));
+        }
+        if let crate::state::BargainState::Striking { started, .. } = firm.union.state
+            && started.0 == world.tick.0
+        {
+            return Some(format!("strike:{}", handle.0));
+        }
+        for vote in &firm.board.pending_votes {
+            if !vote.resolved && vote.deadline.0 <= world.tick.0 + 1 {
+                return Some(format!("board_vote:{}:{}", handle.0, vote.id));
+            }
+        }
+    }
+    for (_, deal) in world.deals.iter() {
+        if controlled.contains(&deal.buyer)
+            && matches!(
+                deal.state,
+                crate::state::DealState::OfferOpen | crate::state::DealState::Review
+            )
+            && deal.offer_deadline.0 <= world.tick.0 + 1
+        {
+            return Some(format!("deal_deadline:{}", deal.buyer.0));
+        }
+    }
+    None
 }
 
 fn complete_construction(world: &mut World, dataset: &Dataset) {
@@ -380,6 +425,65 @@ mod tests {
         for region in &world.regions {
             assert!(region.households.savings_cents >= 0);
         }
+    }
+
+    #[test]
+    fn the_clock_pauses_before_default_grace_expires() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 811, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        world.events.pending.clear();
+        let firm = world.investor.primary_group.unwrap();
+        crate::economy::insolvency::defer_expense(
+            &mut world,
+            firm,
+            1_000_000,
+            cw_core::ledger::Account::Wages,
+            "unpaid",
+        );
+        world.firms.get_mut(firm).unwrap().past_due_weeks = 2;
+        let outcome = advance(&mut world, &dataset);
+        assert!(
+            outcome
+                .pause
+                .as_deref()
+                .unwrap_or("")
+                .starts_with("default_grace"),
+            "pause before the four-week grace ends: {:?}",
+            outcome.pause
+        );
+    }
+
+    #[test]
+    fn the_clock_pauses_on_an_imminent_board_vote() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 812, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        world.events.pending.clear();
+        let firm = world.investor.primary_group.unwrap();
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .board
+            .pending_votes
+            .push(crate::state::BoardVote {
+                id: 1,
+                subject: "approve large capex".to_owned(),
+                deadline: Tick(2),
+                yes: 0,
+                no: 0,
+                resolved: false,
+                passed: false,
+            });
+        let outcome = advance(&mut world, &dataset);
+        assert!(
+            outcome
+                .pause
+                .as_deref()
+                .unwrap_or("")
+                .starts_with("board_vote"),
+            "pause for the vote: {:?}",
+            outcome.pause
+        );
     }
 
     #[test]
