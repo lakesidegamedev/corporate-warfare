@@ -39,7 +39,7 @@ Until those exist, run the workflow anyway: it fails closed with
 
 Use **Actions -> Release -> Run workflow** on a tested commit with:
 
-- `version`: marketing version, for example `0.1.0`
+- `version`: marketing version, for example `1.0.0`
 - `build`: unique increasing build number
 - `confirm`: exactly `UPLOAD`
 

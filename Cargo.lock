@@ -252,7 +252,7 @@ checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
 
 [[package]]
 name = "cw-ai"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cw-core",
  "cw-data",
@@ -263,14 +263,14 @@ dependencies = [
 
 [[package]]
 name = "cw-bindgen"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "uniffi",
 ]
 
 [[package]]
 name = "cw-cli"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cw-core",
  "cw-data",
@@ -282,7 +282,7 @@ dependencies = [
 
 [[package]]
 name = "cw-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "serde",
@@ -290,7 +290,7 @@ dependencies = [
 
 [[package]]
 name = "cw-data"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cw-core",
  "serde",
@@ -299,7 +299,7 @@ dependencies = [
 
 [[package]]
 name = "cw-ffi"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cw-core",
  "cw-data",
@@ -311,7 +311,7 @@ dependencies = [
 
 [[package]]
 name = "cw-session"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cw-ai",
  "cw-core",
@@ -324,7 +324,7 @@ dependencies = [
 
 [[package]]
 name = "cw-sim"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cw-core",
  "cw-data",
