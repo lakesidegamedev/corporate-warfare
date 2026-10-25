@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `30a545c`.
-Kanban: 254781. Merged PRs: #8 through #32.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `16ff90a`.
+Kanban: 254781. Merged PRs: #8 through #34.
 
 ## What exists now
 
@@ -20,15 +20,18 @@ Kanban: 254781. Merged PRs: #8 through #32.
 - Evidence: ledger/units, commands, cross-platform session hash, industry scenarios, adversarial
   saves, balance distributions, corporate lifecycles, brand demand, workflows, persistent-investor
   recovery, and a Linux engine baseline for representative/grown/stress fixtures.
-- Release aids: static accessibility audit, portable privacy audit, owner-action runbook.
+- Release aids: static accessibility audit, portable privacy audit, owner-action runbook, and a
+  single recommended next action with its reason on the portfolio.
+- Macro: demand and supply modifiers now apply, macro recessions/booms come from the macro
+  stream, optional cards expire, and the technology frontier advances yearly.
 
 ## Verified
 
 - Local: 171 tests pass; shared scheduler job `20261025T073049Z-a5f67a3f` passed on main `16dcaf7`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
   warnings` clean; design and plan validators pass; shared scheduler jobs passed
   (`20261025T070655Z-5df8bceb` latest).
-- Corridor at seed 3: 0 rival failures at 52 weeks, 4-6 at 260 across seeds, 11 over thirty
-  years; guided firm solvent at every horizon; score 62 at week 260.
+- Corridor at seed 3: 0 rival failures at 52 weeks, 4-5 at 260 across seeds, 10 over thirty
+  years; guided firm solvent and in control at every horizon; score 61 at week 260.
 - Engine baseline on this host: representative (31 firms, 290 facilities) p50 0.55 ms; grown
   (217/2,030) p50 6.46 ms; stress (992/9,280) p50 82.98 ms. Device timing still required.
 - Hosted Verify and Apple smoke last ran green at PR #11. Since PR #12 GitHub Actions fails in
