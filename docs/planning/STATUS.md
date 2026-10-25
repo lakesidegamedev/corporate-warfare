@@ -51,8 +51,10 @@ Kanban: 254781. Merged PRs: #8 through #60.
   and a wage-shortfall week may draw at most one percent of savings into demand. Transfer
   support uses each unemployed tier's baseline wage and reports any unfunded need. The hostile
   session sequence now covers 540 commands over twenty weeks.
-- Corridor at seed 3: 0 rival failures at 52 weeks, 4-5 at 260 across seeds, 10 median over
-  thirty years; guided firm solvent and in control at every horizon; score 61 at week 260.
+- Corridor at seed 3: 0 rival failures at 52 weeks, 4-5 at 260; score 61 at week 260. Widened
+  runs: 1,000 five-year seeds score 56/62/62 with dissolved median 5 (3-10); 100 thirty-year
+  seeds have dissolved median 10 (6-15) and the conservative policy loses control in the
+  median seed without founding a replacement.
 - Engine baseline on this host: representative (31 firms, 290 facilities) p50 0.55 ms; grown
   (217/2,030) p50 6.46 ms; stress (992/9,280) p50 82.98 ms. Device timing still required.
 - Hosted Verify and Apple smoke last ran green at PR #11. Since PR #12 GitHub Actions fails in

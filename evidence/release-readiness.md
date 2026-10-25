@@ -41,7 +41,7 @@ its ledger entry names reviewed evidence that satisfies the gate.
 | R33 | human | pending | Every corporate family has a phone flow and a session-level workflow test; the phone route has not been compiled or run since PR #11. |
 | R34 | automated | pending | Score components, bounded weights, pause and continue are implemented and tested; R29 and the blocked chain prevent ledger sign-off. |
 | R35 | human | pending | Seven-step onboarding implemented; accessibility audit and final assets pending. |
-| R36 | automated | active | 100 five-year and 20 thirty-year conservative runs are in `evidence/balance-report.md`; score variance remains narrow for passive policies and no human has judged difficulty. |
+| R36 | automated | active | 1,000 five-year and 100 thirty-year conservative runs are in `evidence/balance-report.md`; no errors or rare crash cliff, but the passive policy loses control in the median thirty-year seed and no human has judged difficulty. |
 | R37 | device | blocked | Representative/grown/stress fixtures and a Linux engine baseline exist (evidence/performance-baseline.md); A15-class device measurement needs a signed build. |
 | R38 | human | blocked | Needs three independent testers; none recruited. |
 | R39 | human | active | Icon, privacy manifest and release notes exist; owner review of metadata/rating/attribution pending. |
