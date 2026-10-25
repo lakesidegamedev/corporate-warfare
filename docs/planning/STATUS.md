@@ -34,10 +34,49 @@ Kanban: 254781. Milestone issues: 1-6.
   simulator (engine info, real session command/advance, save/load with matching canonical hash,
   rejected command, corrupt save) and unsigned device archive:
   https://github.com/lakesidegamedev/corporate-warfare/actions/runs/40163354065
-- Cross-platform fixture hash `8d66f183804d61890005deb819cbc1b4587f51967fe69fe0eaf7d9c83d2bcef9`
-  matches on Linux and iOS.
+- Cross-platform fixture hash `7b781159830184e8928f54e79949e343a1fd762ada357c235e42bd6f1b5fff4c`
+  is now pinned in the Rust test and the Swift XCTest constant. It replaces
+  `8d66f183804d61890005deb819cbc1b4587f51967fe69fe0eaf7d9c83d2bcef9`, which was the value
+  verified on an iPhone simulator at commit `753730f`. The move is intentional: rival command
+  ids now use the persisted sequence counter instead of a session-local counter that restarted
+  after import. The iOS value for the new pin is **not re-verified yet**; see P32 below.
 - Host scheduler job `20261025T043307Z-5ac62d48` passed.
-- Requirements R03, R04, R05, R31 done with evidence under `evidence/`.
+- Requirements R03, R04, R31 done with evidence under `evidence/`. R05 is active again until the
+  Mac runner reproduces the new pinned hash; its previous evidence describes the old pin.
+
+## P32 adversarial reliability (in progress)
+
+`crates/cw-session/tests/adversarial.rs` adds seven tests over the real session:
+
+- 216 mixed valid/invalid commands across eight weeks; every rejection must keep the canonical
+  hash, revision and accepted-command log unchanged, every acceptance must move all three, and
+  ledgers stay balanced with non-negative stock.
+- Duplicate ids return the first outcome (sequence 0, original acceptance tick) with no hash
+  change, including across export/import, and are refused after the 52-week window.
+- Stale revisions are refused before and after a real acceptance.
+- Save corruption: 64 tail truncations, 22 interior cuts, payload/checksum/magic bit flips,
+  four false declared lengths, future and unreleased schemas, and an over-cap buffer; each fails
+  with a typed error and the untouched save still imports.
+- Export/import/advance is idempotent: a resumed handle reaches the same hash as the
+  uninterrupted run.
+- A 110-week founder career keeps the journal inside its thirteen-week window, reconciles
+  lifetime revenue and net income against the weekly closes, and round-trips its save.
+
+Still open for P32: suspend/background/termination and interrupted write at the file-system layer
+(Swift save manager, needs a real app run), per-schema migration fixtures, and the Linux/macOS/iOS
+replay hash match for the new pin. No fuzz crate was added; command parsing bounds are covered by
+typed-rejection cases.
+
+## Defects found and fixed by P32
+
+1. Rival command ids restarted at 1 after import, duplicating ids already in the accepted log and
+   making a resumed career hash differently from an uninterrupted one. They now use the persisted
+   `world.next_sequence`.
+2. Command intents that carried an out-of-range product, recipe or region indexed arrays directly
+   and panicked (`index out of bounds`) instead of rejecting. They now return `InvalidEntity`.
+3. `Ledger::prune` skipped the first real prune at week 13, retaining fourteen weeks of postings.
+4. Save schema 0 (never released) was parsed as schema 1; only `MIN_SCHEMA_VERSION..=SCHEMA_VERSION`
+   is accepted now, and anything else is `UnsupportedVersion`.
 
 ## Blockers (honest)
 
@@ -62,7 +101,8 @@ Kanban: 254781. Milestone issues: 1-6.
 3. P10/P30/P31: extend phone flows to every command family (subsidiaries, boards, takeover,
    banking, insurance, labour, policy, recovery) and add the seven-step guided onboarding.
 4. P25: one worked scenario per industry; P26 research/brand fixtures.
-5. P32/P33: adversarial sequences, save migration and interrupted write, then balance sweeps.
+5. P32 remaining: interrupted-write and lifecycle fault injection in the Swift save manager, the
+   per-schema migration fixture set, and the Mac/iOS replay hash for the new pin; then P33 sweeps.
 6. Apple: owner resolves blocker 2; then release workflow, signed upload, processing, install.
 
 Resume with:

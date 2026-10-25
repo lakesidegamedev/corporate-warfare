@@ -88,13 +88,15 @@ pub enum Detail {
     Market(MarketLine),
 }
 
+/// Namespace marker for rival proposals. The low half is the persisted command sequence.
+pub const AI_COMMAND_HIGH: u64 = 0x00C0_FFEE_0000_0000;
+
 pub struct Session {
     pub dataset: Dataset,
     pub world: World,
     pub career_id: u64,
     pub config: ScenarioConfig,
     log: ReplayLog,
-    ai_commands: u64,
 }
 
 impl Session {
@@ -119,7 +121,6 @@ impl Session {
             career_id,
             config,
             log,
-            ai_commands: 0,
         })
     }
 
@@ -238,10 +239,13 @@ impl Session {
     fn run_ai(&mut self) {
         let proposals = cw_ai::propose(&self.world, &self.dataset);
         for proposal in proposals {
-            self.ai_commands += 1;
+            // The command identity derives from the persisted sequence counter, never a
+            // session-local counter: a resumed save must issue the same ids, and the same
+            // revision, as an uninterrupted run. A rejected proposal consumes no sequence,
+            // and it is never recorded, so reusing that id is harmless.
             let envelope = CommandEnvelope {
-                command_id_high: 0x00C0_FFEE_0000_0000,
-                command_id_low: self.ai_commands,
+                command_id_high: AI_COMMAND_HIGH,
+                command_id_low: self.world.next_sequence,
                 actor: proposal.actor,
                 expected_revision: self.world.revision,
                 submitted_tick: self.world.tick.0,
@@ -433,7 +437,6 @@ impl Session {
             career_id,
             config,
             log,
-            ai_commands: 0,
         })
     }
 
@@ -592,6 +595,14 @@ mod tests {
     fn the_cross_platform_fixture_hash_is_pinned() {
         // This exact sequence runs in the iOS XCTest bridge. Equal hashes on Linux and iOS are
         // the cross-platform determinism evidence for this scenario.
+        //
+        // 2026-10-25: the value moved from 8d66f18... when rival command ids stopped using a
+        // session-local counter and started using the persisted `world.next_sequence`. The old
+        // scheme restarted at 1 after a save/import, so a resumed career issued ids that were
+        // already in the accepted-command log (see `save_import_and_advance_is_idempotent` in
+        // tests/adversarial.rs). The economy is unchanged; only the recorded command identity
+        // is. The Swift constant must be updated in the same change and re-verified on the Mac
+        // runner before R05 claims cross-platform equality again.
         let mut session = Session::create(config(42)).unwrap();
         let primary = session.world.investor.primary_group.unwrap();
         let price = session.dataset.reference_price(0);
@@ -613,7 +624,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "8d66f183804d61890005deb819cbc1b4587f51967fe69fe0eaf7d9c83d2bcef9"
+            "7b781159830184e8928f54e79949e343a1fd762ada357c235e42bd6f1b5fff4c"
         );
     }
 

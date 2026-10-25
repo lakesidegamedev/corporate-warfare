@@ -13,6 +13,9 @@ use cw_sim::state::World;
 
 pub const MAGIC: &[u8; 4] = b"CWSV";
 pub const SCHEMA_VERSION: u32 = 1;
+/// Oldest schema this engine can read. Schema 0 was never released, so there is no migration
+/// path: a payload claiming it is rejected instead of being parsed as if it were schema 1.
+pub const MIN_SCHEMA_VERSION: u32 = 1;
 pub const MAX_BYTES: usize = 64 * 1024 * 1024;
 
 pub fn encode(world: &World, career_id: u64) -> Result<Vec<u8>, DomainError> {
@@ -54,7 +57,7 @@ pub fn decode(bytes: &[u8]) -> Result<(World, u64), DomainError> {
     }
     cursor += 4;
     let schema = read_u32(bytes, &mut cursor)?;
-    if schema > SCHEMA_VERSION {
+    if schema > SCHEMA_VERSION || schema < MIN_SCHEMA_VERSION {
         return Err(DomainError::UnsupportedVersion {
             found: schema,
             supported: SCHEMA_VERSION,

@@ -963,7 +963,7 @@
       "checklist": [
         {
           "text": "Generate valid/invalid command sequences and save corruption/truncation/oversize/migration cases.",
-          "done": false
+          "done": true
         },
         {
           "text": "Exercise suspend/background/termination during advance/save and last-good recovery with real app files.",
