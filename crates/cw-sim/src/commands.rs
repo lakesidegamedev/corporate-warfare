@@ -1889,20 +1889,142 @@ fn apply_intent(
                     reason: SolvencyReason::CoverageTooLow,
                 });
             }
-            // Legal merger: absorb the target's ledger and contracts, retire its shares.
+            // Legal merger: move every target balance into the buyer, retire the target shares,
+            // and reattach facilities, debt, contracts and policies to the surviving entity.
             let target = entity.target;
-            let book_value = firm_ref(world, target)?.book.total_assets();
-            if let Some(bidder) = world.firms.get_mut(entity.buyer) {
-                let _ = bidder.book.commit(
-                    world.tick,
-                    Txn::new()
-                        .debit(Account::OtherAssets, book_value, "merger")
-                        .credit(Account::Investments, book_value, "merger"),
-                );
+            let buyer = entity.buyer;
+            if target == buyer {
+                return Err(DomainError::OwnershipCycle {
+                    buyer: buyer.0,
+                    target: target.0,
+                });
+            }
+            let target_book = firm_ref(world, target)?.book.clone();
+            let investment_cost = world
+                .firm(target)
+                .and_then(|firm| firm.shares.holders.get(&HolderId::Firm(buyer)).copied())
+                .map(|lot| lot.cost_cents)
+                .unwrap_or(0);
+            // Buyer takes every account, drops its investment in the target and books the
+            // difference to retained earnings. The two postings each sum to zero.
+            let mut buyer_txn = Txn::new();
+            for account in Account::ALL {
+                let balance = target_book.balance(account);
+                if balance != 0 {
+                    buyer_txn = buyer_txn.signed(account, balance, "merger");
+                }
+            }
+            buyer_txn = buyer_txn
+                .signed(Account::Investments, -investment_cost, "merger stake")
+                .signed(Account::RetainedEarnings, investment_cost, "merger stake");
+            let _ = world
+                .firms
+                .get_mut(buyer)
+                .unwrap()
+                .book
+                .commit(world.tick, buyer_txn);
+            let mut target_txn = Txn::new();
+            for account in Account::ALL {
+                let balance = target_book.balance(account);
+                if balance != 0 {
+                    target_txn = target_txn.signed(account, -balance, "merger");
+                }
+            }
+            let _ = world
+                .firms
+                .get_mut(target)
+                .unwrap()
+                .book
+                .commit(world.tick, target_txn);
+
+            let facilities: Vec<Handle> = world
+                .firm(target)
+                .map(|firm| firm.facilities.clone())
+                .unwrap_or_default();
+            for facility in &facilities {
+                if let Some(stored) = world.facilities.get_mut(*facility) {
+                    stored.firm = buyer;
+                }
+                let bidder = world.firms.get_mut(buyer).unwrap();
+                if !bidder.facilities.contains(facility) {
+                    bidder.facilities.push(*facility);
+                }
+            }
+            let contract_handles: Vec<Handle> = world
+                .contracts
+                .iter()
+                .filter(|(_, contract)| contract.buyer == target || contract.seller == target)
+                .map(|(handle, _)| handle)
+                .collect();
+            for handle in contract_handles {
+                if let Some(contract) = world.contracts.get_mut(handle) {
+                    if contract.buyer == target {
+                        contract.buyer = buyer;
+                    }
+                    if contract.seller == target {
+                        contract.seller = buyer;
+                    }
+                }
+                let bidder = world.firms.get_mut(buyer).unwrap();
+                if !bidder.contracts_buy.contains(&handle)
+                    && !bidder.contracts_sell.contains(&handle)
+                {
+                    bidder.contracts_buy.push(handle);
+                }
+            }
+            let loan_handles = world
+                .firm(target)
+                .map(|firm| firm.loans.clone())
+                .unwrap_or_default();
+            for handle in loan_handles {
+                if let Some(loan) = world.loans.get_mut(handle) {
+                    loan.borrower = buyer;
+                }
+                let bidder = world.firms.get_mut(buyer).unwrap();
+                if !bidder.loans.contains(&handle) {
+                    bidder.loans.push(handle);
+                }
+            }
+            let bond_handles = world
+                .firm(target)
+                .map(|firm| firm.bonds.clone())
+                .unwrap_or_default();
+            for handle in bond_handles {
+                if let Some(bond) = world.bonds.get_mut(handle) {
+                    bond.issuer = buyer;
+                }
+                let bidder = world.firms.get_mut(buyer).unwrap();
+                if !bidder.bonds.contains(&handle) {
+                    bidder.bonds.push(handle);
+                }
+            }
+            let policy_handles = world
+                .firm(target)
+                .map(|firm| firm.insurance.clone())
+                .unwrap_or_default();
+            for handle in policy_handles {
+                if let Some(policy) = world.insurance.get_mut(handle) {
+                    if policy.insured == target {
+                        policy.insured = buyer;
+                    }
+                    if policy.insurer == target {
+                        policy.insurer = buyer;
+                    }
+                }
+                let bidder = world.firms.get_mut(buyer).unwrap();
+                if !bidder.insurance.contains(&handle) {
+                    bidder.insurance.push(handle);
+                }
             }
             if let Some(target) = world.firms.get_mut(target) {
-                target.status = FirmStatus::Merged { into: entity.buyer };
-                target.merged_into = Some(entity.buyer);
+                target.facilities.clear();
+                target.loans.clear();
+                target.bonds.clear();
+                target.insurance.clear();
+                target.contracts_buy.clear();
+                target.contracts_sell.clear();
+                target.status = FirmStatus::Merged { into: buyer };
+                target.merged_into = Some(buyer);
                 target.shares.holders.clear();
                 target.shares.issued = 0;
             }
