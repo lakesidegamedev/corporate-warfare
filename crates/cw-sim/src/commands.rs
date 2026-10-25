@@ -50,7 +50,7 @@ pub struct Preview {
     pub blocked: Option<DomainError>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum CommandIntent {
     // Career
     FoundFirm {
@@ -319,7 +319,7 @@ pub enum CommandIntent {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum BargainingChoice {
     Accept,
     Counter,

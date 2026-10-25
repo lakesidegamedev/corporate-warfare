@@ -272,6 +272,10 @@ name = "cw-cli"
 version = "0.1.0"
 dependencies = [
  "cw-core",
+ "cw-data",
+ "cw-session",
+ "cw-sim",
+ "serde_json",
 ]
 
 [[package]]
@@ -296,6 +300,10 @@ name = "cw-ffi"
 version = "0.1.0"
 dependencies = [
  "cw-core",
+ "cw-data",
+ "cw-session",
+ "cw-sim",
+ "serde_json",
  "uniffi",
 ]
 
