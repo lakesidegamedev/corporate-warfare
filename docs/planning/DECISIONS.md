@@ -219,3 +219,12 @@ to other income/loss. Shares, cash, debt and contracts stay with the target, whi
 distinction from a share purchase or merger. v0.1 assumes no liabilities are attached to the
 asset bundle; the deal preview must say so. Unused escrow (including the two percent cushion) is
 refunded. Test: `deals::tests::an_asset_purchase_moves_assets_but_keeps_shares_and_debt`.
+
+### Board limits are enforced, 2026-10-25
+
+The existing thresholds (debt above 60 percent of tangible assets, a single capex above 25 percent
+of total assets) are now checked on build, expansion, loan request and loan acceptance, in addition
+to large issuance and mergers. A controlled firm needs three controller-held board seats; a widely
+held firm with no controller is run by its management in v0.1, because no holder can seat a
+majority. The board is still reapportioned every thirteen weeks. 260-week seed 3 is unchanged at
+four rival failures and score 61.

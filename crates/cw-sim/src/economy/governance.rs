@@ -131,6 +131,19 @@ pub fn controller_has_board(world: &World, firm: Handle) -> bool {
     entity.board.seats_held(controller) >= 3
 }
 
+/// Large actions (big capex, debt above the leverage limit, large issuance, merger) need board
+/// authority. A widely held firm has no controller to seat a majority, so v0.1 lets its
+/// management act; a controlled firm needs three seats held by its controller.
+pub fn large_action_authorised(world: &World, firm: Handle) -> bool {
+    let Some(entity) = world.firms.get(firm) else {
+        return false;
+    };
+    match entity.shares.controller() {
+        Some(controller) => entity.board.seats_held(controller) >= 3,
+        None => true,
+    }
+}
+
 /// Whether an actor may issue operating commands for a firm.
 pub fn can_operate(world: &World, firm: Handle, actor: HolderId) -> bool {
     let Some(entity) = world.firms.get(firm) else {
