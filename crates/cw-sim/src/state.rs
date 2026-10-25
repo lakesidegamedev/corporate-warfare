@@ -507,6 +507,16 @@ pub struct Firm {
     /// Thirteen most recent weeks of unit sales by (region, product), oldest first.
     pub sales_history: Vec<BTreeMap<(u8, u16), i64>>,
     pub quality_bps: BTreeMap<u16, i32>,
+    /// Intercompany inventory layers by (seller, product, region). The margin is the unrealised
+    /// profit still carried in the buyer's inventory and is eliminated from consolidated assets.
+    #[serde(default)]
+    pub intercompany_inventory: BTreeMap<(Handle, u16, u8), IntercompanyLayer>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct IntercompanyLayer {
+    pub qty: MilliLots,
+    pub margin_cents: i64,
 }
 
 impl Firm {
@@ -523,6 +533,63 @@ impl Firm {
 
     pub fn stock_lot_mut(&mut self, product: u16, region: u8) -> &mut StockLot {
         self.inventory.entry((product, region)).or_default()
+    }
+
+    /// Record goods received from another group member, including the unrealised margin.
+    pub fn record_intercompany_receipt(
+        &mut self,
+        seller: Handle,
+        product: u16,
+        region: u8,
+        qty: MilliLots,
+        margin_cents: i64,
+    ) {
+        if qty.0 <= 0 {
+            return;
+        }
+        let layer = self
+            .intercompany_inventory
+            .entry((seller, product, region))
+            .or_default();
+        layer.qty = MilliLots(layer.qty.0 + qty.0);
+        layer.margin_cents += margin_cents.max(0);
+    }
+
+    /// Issue stock and release the proportional unrealised margin from intercompany layers.
+    pub fn issue_stock(&mut self, product: u16, region: u8, qty: MilliLots) -> Cents {
+        let available = self.stock(product, region);
+        if qty.0 <= 0 || available.0 <= 0 {
+            return Cents::ZERO;
+        }
+        let take = qty.min(available);
+        let ratio_take = take.0;
+        let ratio_total = available.0;
+        let keys: Vec<(Handle, u16, u8)> = self
+            .intercompany_inventory
+            .keys()
+            .filter(|(_, p, r)| *p == product && *r == region)
+            .copied()
+            .collect();
+        for key in keys {
+            let Some(layer) = self.intercompany_inventory.get_mut(&key) else {
+                continue;
+            };
+            if take.0 == available.0 {
+                self.intercompany_inventory.remove(&key);
+                continue;
+            }
+            let removed_qty = (layer.qty.0 * ratio_take / ratio_total).min(layer.qty.0);
+            let removed_margin = (layer.margin_cents * ratio_take / ratio_total)
+                .min(layer.margin_cents)
+                .max(0);
+            layer.qty = MilliLots(layer.qty.0 - removed_qty);
+            layer.margin_cents -= removed_margin;
+            if layer.qty.0 <= 0 {
+                self.intercompany_inventory.remove(&key);
+            }
+        }
+        let mut carry = 0i64;
+        self.stock_lot_mut(product, region).issue(take, &mut carry)
     }
 
     /// Trailing thirteen-week unit sales in one regional product market.
@@ -733,6 +800,9 @@ pub struct Shipment {
     /// Goods value actually paid by the buyer, carried into inventory at receipt.
     pub goods_value_cents: i64,
     pub freight_cents: i64,
+    /// Seller margin on the delivered goods, eliminated if the buyer is in the same group.
+    #[serde(default)]
+    pub margin_cents: i64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

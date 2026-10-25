@@ -326,6 +326,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
             last_week_units_sold: BTreeMap::new(),
             sales_history: Vec::new(),
             quality_bps: BTreeMap::new(),
+            intercompany_inventory: BTreeMap::new(),
         };
 
         if is_financial {
@@ -506,6 +507,7 @@ fn placeholder_firm() -> Firm {
         last_week_units_sold: BTreeMap::new(),
         sales_history: Vec::new(),
         quality_bps: BTreeMap::new(),
+        intercompany_inventory: BTreeMap::new(),
     }
 }
 

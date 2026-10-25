@@ -622,6 +622,7 @@ fn apply_intent(
                 last_week_units_sold: Default::default(),
                 sales_history: Vec::new(),
                 quality_bps: Default::default(),
+                intercompany_inventory: Default::default(),
             };
             firm.policies.wage_offer = [
                 dataset.baseline_weekly_wage_cents[0]
@@ -1266,6 +1267,7 @@ fn apply_intent(
                         unit_price_cents: *max_price_cents,
                         goods_value_cents: goods_value,
                         freight_cents: freight,
+                        margin_cents: 0,
                     });
                     return Ok(());
                 }

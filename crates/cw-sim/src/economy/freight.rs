@@ -55,6 +55,7 @@ pub fn settle(world: &mut World, dataset: &Dataset) {
 
 fn receive_shipment(world: &mut World, shipment: &Shipment, dataset: &Dataset) {
     let _ = dataset;
+    let same_group = crate::economy::ownership::same_group(world, shipment.seller, shipment.buyer);
     if let Some(buyer) = world.firms.get_mut(shipment.buyer) {
         buyer
             .stock_lot_mut(shipment.product, shipment.to_region)
@@ -62,6 +63,15 @@ fn receive_shipment(world: &mut World, shipment: &Shipment, dataset: &Dataset) {
                 shipment.quantity,
                 Cents(shipment.unit_price_cents * shipment.quantity.lots()),
             );
+        if same_group {
+            buyer.record_intercompany_receipt(
+                shipment.seller,
+                shipment.product,
+                shipment.to_region,
+                shipment.quantity,
+                shipment.margin_cents,
+            );
+        }
     }
 }
 
@@ -128,14 +138,15 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
 
         // Remove seller stock and charge the buyer.
         let carrying = if let Some(seller) = world.firms.get_mut(contract.seller) {
-            let lot = seller.stock_lot_mut(contract.product, contract.from_region);
-            let mut carry = 0i64;
-            lot.issue(deliverable, &mut carry).0
+            seller
+                .issue_stock(contract.product, contract.from_region, deliverable)
+                .0
         } else {
             continue;
         };
         let price = contract.price_cents;
         let goods_value = deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0;
+        let margin = goods_value.saturating_sub(carrying).max(0);
         let freight = freight_cost(
             dataset,
             contract.from_region,
@@ -187,10 +198,21 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
         }
 
         if contract.from_region == contract.to_region {
+            let same_group =
+                crate::economy::ownership::same_group(world, contract.seller, contract.buyer);
             if let Some(buyer) = world.firms.get_mut(contract.buyer) {
                 buyer
                     .stock_lot_mut(contract.product, contract.to_region)
                     .receive(deliverable, Cents(paid_goods));
+                if same_group {
+                    buyer.record_intercompany_receipt(
+                        contract.seller,
+                        contract.product,
+                        contract.to_region,
+                        deliverable,
+                        margin,
+                    );
+                }
             }
         } else {
             let km = dataset
@@ -210,6 +232,7 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
                 unit_price_cents: price,
                 goods_value_cents: paid_goods,
                 freight_cents: paid_freight,
+                margin_cents: margin,
             });
         }
 
