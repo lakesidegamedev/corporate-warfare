@@ -110,3 +110,11 @@ cards stay open for an explicit answer. This removes the inert event deck and gi
 rival-outcome variance: guided seeds 1-5 at week 260 dissolve 6/4/4/4/4 rivals instead of a single
 identical outcome, while the guided investor and score stay stable because the investor makes no
 choices. Mandatory player decisions still pause the clock.
+
+### First insurance policy concentration, 2026-10-25
+
+The prescribed 40 percent single-region concentration limit made the first policy impossible: with
+no existing book, one region is necessarily 100 percent of coverage, so every non-specialist
+insurer refused all business. The check now allows the policy that opens the book and enforces
+the 40 percent limit on every later policy. Specialist mode still doubles the capital requirement.
+Scenario: `corporate_lifecycle.rs::insurer_binds_and_pays_a_claim_from_reserves`.

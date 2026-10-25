@@ -80,8 +80,11 @@ pub fn quote(world: &World, insurer: Handle, region: u8, limit_cents: i64) -> Do
         .map(|(_, policy)| policy.limit_cents)
         .sum();
     if !model.specialist_concentration {
+        // The first policy necessarily concentrates the book in one region. Allow it to open
+        // the business, then require diversification: later policies must keep any one region
+        // at or below forty percent of total coverage.
         let total = coverage + limit_cents;
-        if total > 0 && (region_coverage + limit_cents) * 100 > total * 40 {
+        if coverage > 0 && total > 0 && (region_coverage + limit_cents) * 100 > total * 40 {
             return Err(DomainError::SolvencyRestriction {
                 entity: insurer.0,
                 reason: cw_core::error::SolvencyReason::CoverageTooLow,
