@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `319fe31`.
-Kanban: 254781. Merged PRs: #8 through #62.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `247736a` (code `1437901`).
+Kanban: 254781. Merged PRs: #8 through #67.
 
 ## What exists now
 
@@ -55,6 +55,11 @@ Kanban: 254781. Merged PRs: #8 through #62.
   runs: 1,000 five-year seeds score 56/62/62 with dissolved median 5 (3-10); 100 thirty-year
   seeds have dissolved median 10 (6-15) and the conservative policy loses control in the
   median seed without founding a replacement.
+- Geography is now an owner-approved authored corridor. The eleven region IDs/names are frozen,
+  the fixture says authored estimates and no county membership, and R01/R02 plus P01/P05 are
+  closed with that limitation.
+- Requirements closed with reviewed automated evidence: R01-R14 except R05/R12 counts, R18-R20,
+  R23, R25-R27; 23 requirements done, 19 active/pending, zero blocked.
 - Engine baseline on this host: representative (31 firms, 290 facilities) p50 0.55 ms; grown
   (217/2,030) p50 6.46 ms; stress (992/9,280) p50 82.98 ms. Device timing still required.
 - Hosted Verify and Apple smoke are green on `main` `319fe31`: the SwiftUI app compiles for the
@@ -71,10 +76,12 @@ Kanban: 254781. Merged PRs: #8 through #62.
    APPLE_API_KEY_CONTENT APPLE_DEVELOPMENT_TEAM`. Owner/Muse must add those four secrets to the
    `appstore` environment for `net.lakesidegames.corporatewarfare` and confirm the internal tester
    group.
-2. **Geography/data gate.** The official crosswalk is still missing; R01/R02 and dependent
-   packets remain blocked pending an owner-supplied file or an approved custom corridor.
-3. **Device and human gates.** No physical iPhone measurements (R37), no three independent
-   testers (R38) and no TestFlight installation (R42).
+2. **Device and human gates.** No physical iPhone measurements (R37), no three independent
+   testers (R38), no TestFlight installation (R42), and no human completion of the phone
+   acceptance route (R32/R33/R35).
+3. **UI test target.** An XCUITest flow exists but hung the simulator runner on its first run and
+   is intentionally outside the default test scheme. Unit, bridge, save and device-archive CI
+   remain green.
 
 
 ## Next moves, in order
