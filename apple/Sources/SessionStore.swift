@@ -147,6 +147,10 @@ actor Engine {
         return Data(bytes)
     }
 
+    func score() -> ScoreDto? {
+        session?.score()
+    }
+
     func dismissPause() {
         session?.dismissPause()
     }

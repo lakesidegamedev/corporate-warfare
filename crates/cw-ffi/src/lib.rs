@@ -275,6 +275,18 @@ pub struct OverviewDto {
 }
 
 #[derive(uniffi::Record)]
+pub struct ScoreDto {
+    pub week: u32,
+    pub total: i32,
+    pub return_component: i32,
+    pub resilience_component: i32,
+    pub control_component: i32,
+    pub conduct_component: i32,
+    pub assisted: bool,
+    pub personal_net_worth_cents: i64,
+}
+
+#[derive(uniffi::Record)]
 pub struct ProductDto {
     pub index: u32,
     pub name: String,
@@ -769,6 +781,21 @@ impl SessionHandle {
 
     pub fn revision(&self) -> u64 {
         self.lock().revision()
+    }
+
+    /// The recorded five-year score, if the career has reached week 260.
+    pub fn score(&self) -> Option<ScoreDto> {
+        let session = self.lock();
+        session.world.score.as_ref().map(|score| ScoreDto {
+            week: score.week.0,
+            total: score.total,
+            return_component: score.return_component,
+            resilience_component: score.resilience_component,
+            control_component: score.control_component,
+            conduct_component: score.conduct_component,
+            assisted: score.assisted,
+            personal_net_worth_cents: score.personal_net_worth_cents,
+        })
     }
 
     pub fn canonical_hash(&self) -> String {
@@ -1440,6 +1467,32 @@ mod tests {
         let bytes = session.export_save().unwrap();
         let imported = import_save(bytes).unwrap();
         assert_eq!(session.canonical_hash(), imported.canonical_hash());
+    }
+
+    #[test]
+    fn the_score_is_exposed_after_week_260() {
+        let session = SessionHandle::new(203, true, true).unwrap();
+        assert!(session.score().is_none(), "no score before the horizon");
+        let mut week = 0;
+        while week < 260 {
+            let advance = session.advance(16);
+            week = advance.final_week;
+            if advance.pause.is_some() {
+                break;
+            }
+        }
+        let score = session.score().expect("score at week 260");
+        assert_eq!(score.week, 260);
+        assert!((0..=100).contains(&score.total));
+        let weighted = (score.return_component as f64 * 0.6
+            + score.resilience_component as f64 * 0.2
+            + score.control_component as f64 * 0.1
+            + score.conduct_component as f64 * 0.1)
+            .round() as i32;
+        assert!(
+            (weighted - score.total).abs() <= 2,
+            "total follows the published weights"
+        );
     }
 
     #[test]
