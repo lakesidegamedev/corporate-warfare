@@ -1146,12 +1146,23 @@ mod tests {
             brand_sensitive: true,
         }];
         let fills = allocate(1_000, &offers, &requests);
-        let branded_qty: i64 = fills.iter().filter(|(_, seller, _)| *seller == 1).map(|(_, _, q)| q).sum();
-        let generic_qty: i64 = fills.iter().filter(|(_, seller, _)| *seller == 2).map(|(_, _, q)| q).sum();
+        let branded_qty: i64 = fills
+            .iter()
+            .filter(|(_, seller, _)| *seller == 1)
+            .map(|(_, _, q)| q)
+            .sum();
+        let generic_qty: i64 = fills
+            .iter()
+            .filter(|(_, seller, _)| *seller == 2)
+            .map(|(_, _, q)| q)
+            .sum();
         assert_eq!(branded_qty + generic_qty, 100_000, "demand is conserved");
         assert!(branded_qty > generic_qty, "the stronger brand wins share");
         let revenue: i64 = fills.iter().map(|(_, _, q)| q).sum::<i64>() * 1_000 / 1_000;
-        assert_eq!(revenue, 100_000, "revenue is exact fulfilled quantity times price");
+        assert_eq!(
+            revenue, 100_000,
+            "revenue is exact fulfilled quantity times price"
+        );
     }
 
     #[test]
@@ -1167,9 +1178,20 @@ mod tests {
             brand_sensitive: false,
         }];
         let fills = allocate(1_000, &[branded, generic], &requests);
-        let first: i64 = fills.iter().filter(|(_, seller, _)| *seller == 1).map(|(_, _, q)| q).sum();
-        let second: i64 = fills.iter().filter(|(_, seller, _)| *seller == 2).map(|(_, _, q)| q).sum();
-        assert_eq!(first, second, "industrial buyers value delivered cost and quality, not brand");
+        let first: i64 = fills
+            .iter()
+            .filter(|(_, seller, _)| *seller == 1)
+            .map(|(_, _, q)| q)
+            .sum();
+        let second: i64 = fills
+            .iter()
+            .filter(|(_, seller, _)| *seller == 2)
+            .map(|(_, _, q)| q)
+            .sum();
+        assert_eq!(
+            first, second,
+            "industrial buyers value delivered cost and quality, not brand"
+        );
     }
 
     #[test]
