@@ -103,6 +103,44 @@ fn eligible_quiet(world: &World, trigger: &str, region: u8) -> bool {
     }
 }
 
+/// Resolve optional cards addressed to firms the investor does not control. The rival uses the
+/// same handler catalogue and the same postings; only the choice is automatic. Player cards stay
+/// open for an explicit answer.
+pub fn auto_resolve(world: &mut World, dataset: &Dataset) {
+    let mut pending: Vec<(u64, String, bool)> = Vec::new();
+    let candidates: Vec<(u64, String, Option<Handle>)> = world
+        .events
+        .pending
+        .iter()
+        .filter(|event| !event.resolved && !event.mandatory)
+        .map(|event| (event.id, event.card.clone(), event.subject_firm))
+        .collect();
+    for (id, card_id, subject) in candidates {
+        let Some(firm) = subject else { continue };
+        let controlled = world
+            .firms
+            .get(firm)
+            .map(|firm| firm.shares.qty(crate::state::HolderId::Investor) > 0)
+            .unwrap_or(false);
+        if controlled {
+            continue;
+        }
+        let Some(card) = dataset.event(&card_id) else {
+            continue;
+        };
+        let index = world
+            .events
+            .rng
+            .uniform_below(card.choices.len().max(1) as u64) as usize;
+        if let Some(choice) = card.choices.get(index) {
+            pending.push((id, choice.id.clone(), true));
+        }
+    }
+    for (id, choice, _) in pending {
+        let _ = respond(world, dataset, id, &choice);
+    }
+}
+
 pub fn open(
     world: &mut World,
     card: &str,
@@ -668,6 +706,41 @@ mod tests {
             let result = respond(&mut world, &dataset, event_id, &choice.id);
             assert!(result.is_ok(), "{} {}: {:?}", card.id, choice.id, result);
         }
+    }
+
+    #[test]
+    fn rival_cards_resolve_automatically_but_player_cards_do_not() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            196,
+            crate::state::ScenarioKind::Guided,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let player_firm = world.investor.primary_group.unwrap();
+        let rival = world
+            .firms
+            .iter()
+            .find(|(handle, _)| *handle != player_firm)
+            .map(|(handle, _)| handle)
+            .unwrap();
+        let rival_event = open(&mut world, "crop_loss", Some(rival), None, false);
+        let player_event = open(&mut world, "quality_recall", Some(player_firm), None, false);
+        auto_resolve(&mut world, &dataset);
+        let rival_state = world
+            .events
+            .pending
+            .iter()
+            .find(|e| e.id == rival_event)
+            .unwrap();
+        let player_state = world
+            .events
+            .pending
+            .iter()
+            .find(|e| e.id == player_event)
+            .unwrap();
+        assert!(rival_state.resolved, "rival cards answer themselves");
+        assert!(!player_state.resolved, "player cards wait for the player");
     }
 
     #[test]

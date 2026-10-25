@@ -101,3 +101,12 @@ Policy iteration is recorded in the report: the first draft throttled output to 
 and lost about $8.7k a week against a demand-limited plant; the published policies hold full
 capacity and cut discretionary marketing/research instead. This is a harness correction, not a
 content tune.
+
+### Rival event responses, 2026-10-25
+
+Optional event cards addressed to a rival now resolve themselves through the same handlers and
+ledger postings as player choices, using the event stream to pick among the legal options. Player
+cards stay open for an explicit answer. This removes the inert event deck and gives seeds genuine
+rival-outcome variance: guided seeds 1-5 at week 260 dissolve 6/4/4/4/4 rivals instead of a single
+identical outcome, while the guided investor and score stay stable because the investor makes no
+choices. Mandatory player decisions still pause the clock.
