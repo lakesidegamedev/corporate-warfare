@@ -5,6 +5,7 @@ pub mod credit;
 pub mod deals;
 pub mod equity;
 pub mod events_engine;
+pub mod fiscal;
 pub mod freight;
 pub mod governance;
 pub mod insolvency;

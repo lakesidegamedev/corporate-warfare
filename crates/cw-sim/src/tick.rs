@@ -75,6 +75,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::economy::events_engine::expire_optional(world, dataset);
     world.clear_construction_orders();
     refresh_household_income(world, dataset);
+    crate::economy::fiscal::close_week(world);
     apply_macro_price_drift(world, dataset);
 
     // Close books and sales history, then track resilience.
@@ -336,7 +337,7 @@ fn accrue_tax(world: &mut World, firm: Handle) {
                         "tax receipt",
                     ),
                 );
-                world.government.last_tax_receipts_cents = paid;
+                crate::economy::fiscal::record(world, paid);
             }
             if paid < due {
                 crate::economy::insolvency::record_missed_tax(world, firm, due - paid);
@@ -365,6 +366,20 @@ fn refresh_household_income(world: &mut World, dataset: &Dataset) {
                 }
             }
         }
+        // Taxable labour income pays twenty percent to the government. Households spend
+        // from what remains; transfer support is not taxable wage income.
+        let earned = income;
+        let labour_tax = earned * crate::economy::fiscal::LABOUR_TAX_BPS / 10_000;
+        if labour_tax > 0 {
+            let _ = world.government.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, labour_tax, "labour income tax")
+                    .credit(Account::Revenue, labour_tax, "labour income tax"),
+            );
+            crate::economy::fiscal::record(world, labour_tax);
+        }
+        let mut income = earned - labour_tax;
         // Background transfer support for the unemployed, paid only from the treasury.
         let unemployed: i64 = world.regions[region_index]
             .labour
@@ -402,6 +417,42 @@ mod tests {
     use super::*;
     use crate::economy::seed;
     use crate::state::{ScenarioKind, ScenarioMode};
+
+    #[test]
+    fn labour_income_tax_is_withheld_and_budgeted() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 41, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        advance(&mut world, &dataset);
+        let mut gross = 0i64;
+        for region in &world.regions {
+            for tier in 0..3 {
+                gross += region.background_employed[tier] * region.background_wage_cents[tier];
+            }
+        }
+        for (_, facility) in world.facilities.iter() {
+            if let Some(firm) = world.firm(facility.firm)
+                && firm.operative()
+            {
+                for tier in 0..3 {
+                    gross += facility.workers[tier] * firm.policies.wage_offer[tier];
+                }
+            }
+        }
+        let expected = gross * 2_000 / 10_000;
+        assert_eq!(
+            *world
+                .government
+                .tax_receipts_history
+                .last()
+                .expect("a closed fiscal week"),
+            expected,
+            "twenty percent of labour income reaches the treasury"
+        );
+        assert!(world.government.procurement_budget_cents > 0);
+        assert!(world.government.healthcare_budget_cents > 0);
+        assert!(world.government.training_budget_cents > 0);
+        assert!(world.government.book.is_balanced());
+    }
 
     #[test]
     fn a_week_runs_with_balanced_books_and_finite_stock() {

@@ -93,6 +93,8 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
             healthcare_budget_cents: 0,
             training_budget_cents: 0,
             last_tax_receipts_cents: 0,
+            tax_receipts_history: Vec::new(),
+            week_tax_receipts_cents: 0,
             bonds_outstanding_cents: 0,
             pending_procurement: BTreeMap::new(),
         },
@@ -232,6 +234,7 @@ fn build_regions(world: &mut World, dataset: &Dataset) {
 fn build_government(world: &mut World, dataset: &Dataset) {
     let receipts = government_weekly_receipts(world, dataset);
     world.government.last_tax_receipts_cents = receipts;
+    world.government.tax_receipts_history = vec![receipts; 13];
     let opening = receipts * 13;
     // Fiscal counterparty: the treasury holds real cash issued against a matching bond.
     let _ = world.government.book.commit(

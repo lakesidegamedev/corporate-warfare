@@ -355,3 +355,17 @@ delivery settlement:
 Seed 3 (guided, conservative, 260 weeks) is back to four dissolved rivals, controlled firm in
 control, score 61. The contract renewal path keeps defense demand open after the first 52 weeks
 and is available to new producers.
+
+## Labour tax and trailing budgets, 2026-10-25
+
+After withholding twenty percent of earned labour income and recomputing the three fiscal
+budgets from the trailing thirteen-week receipt window:
+
+| Horizon | Runs | Score min/median/max | Dissolved median (min-max) | Controlled median (min) | Net worth min/median |
+|---|---|---:|---:|---:|---:|
+| 260 weeks | 100 | 56 / 62 / 62 | 5 (3-10) | 1 (0) | $3.49M / $4.34M |
+| 1,560 weeks | 20 | n/a | 10 (6-14) | 1 (0) | $3.49M / $4.83M |
+
+The five-year distribution is unchanged. Over thirty years the median conservative career now
+keeps control of the guided firm and median net worth rises from $4.15M to $4.83M, with fewer
+rival exits (ten rather than twelve). Seed 3 is still four dissolved rivals and score 61.

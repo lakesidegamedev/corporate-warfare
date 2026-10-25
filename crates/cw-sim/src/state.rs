@@ -615,6 +615,10 @@ pub struct Government {
     pub healthcare_budget_cents: i64,
     pub training_budget_cents: i64,
     pub last_tax_receipts_cents: i64,
+    #[serde(default)]
+    pub tax_receipts_history: Vec<i64>,
+    #[serde(default)]
+    pub week_tax_receipts_cents: i64,
     pub bonds_outstanding_cents: i64,
     pub pending_procurement: BTreeMap<u16, MilliLots>,
 }
