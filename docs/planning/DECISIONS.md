@@ -154,3 +154,13 @@ investor regardless of the requested actor. Bonds now trade dirty: principal plu
 since issue (or the last coupon) at the 52-week rule, paid to the seller; the buyer's investment
 basis includes the accrued share. Non-investor orders are refused rather than silently rerouted.
 Test: `commands::tests::bond_trades_pay_accrued_interest_on_top_of_principal`.
+
+### Union ballots and explicit guarantees, 2026-10-25
+
+- A successful ballot (organisation at or above 5,000) now forms the bargaining unit and opens a
+  demand at the rule's wage floor; a failed ballot returns to idle organisation drift. Before
+  this, a ballot card left the firm in a permanent no-op state and bargaining never began.
+- Parent guarantees are now called when a liquidated subsidiary still has unpaid claims: the
+  guarantor pays from its own cash up to min(claim, cap), never more, and an unrelated sibling is
+  never charged. Tests: `unions::tests::a_successful_ballot_forms_the_bargaining_unit` and
+  `corporate_lifecycle.rs::a_parent_guarantee_backs_a_failed_subsidiary_only_up_to_its_cap`.

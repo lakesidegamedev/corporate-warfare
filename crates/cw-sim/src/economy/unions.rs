@@ -104,7 +104,15 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
                     binding_settlement(world, handle);
                 }
             }
-            BargainState::Ballot => {}
+            BargainState::Ballot => {
+                // A successful ballot forms the bargaining unit; a failed one returns to the
+                // ordinary organisation drift and waits for the next window.
+                if organisation >= ORGANISATION_BALLOT_BPS {
+                    begin_bargaining(world, handle, prevailing);
+                } else if let Some(firm) = world.firms.get_mut(handle) {
+                    firm.union.state = BargainState::Idle;
+                }
+            }
         }
         let _ = dataset;
     }
@@ -269,5 +277,60 @@ pub fn settle_payment(world: &mut World, firm: Handle, amount: i64) {
             Account::Wages,
             "unpaid settlement",
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::economy::seed;
+    use crate::state::{ScenarioKind, ScenarioMode};
+
+    #[test]
+    fn a_successful_ballot_forms_the_bargaining_unit() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 731, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world.investor.primary_group.unwrap();
+        let region = world.firm(firm).unwrap().region;
+        let prevailing = world.regions[region as usize].labour[0].prevailing_wage_cents;
+        {
+            let entity = world.firms.get_mut(firm).unwrap();
+            entity.union.organisation_bps = 5_500;
+            entity.union.ballot_support_bps = 5_500;
+            entity.organisation.insert(region, 5_500);
+            entity.union.state = BargainState::Ballot;
+            entity.union.last_demand_week = 1;
+            entity.policies.wage_offer[0] = prevailing * 90 / 100;
+        }
+        world.tick = Tick(60);
+        weekly(&mut world, &dataset);
+        assert!(matches!(
+            world.firm(firm).unwrap().union.state,
+            BargainState::Demanding { .. }
+        ));
+        let demand = world.firm(firm).unwrap().union.demand_cents;
+        assert!(
+            demand >= prevailing * 102 / 100,
+            "the demand follows the wage rule"
+        );
+    }
+
+    #[test]
+    fn a_failed_ballot_returns_to_idle() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 732, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world.investor.primary_group.unwrap();
+        {
+            let entity = world.firms.get_mut(firm).unwrap();
+            entity.organisation.insert(entity.region, 4_000);
+            entity.union.organisation_bps = 4_000;
+            entity.union.ballot_support_bps = 4_000;
+            entity.union.state = BargainState::Ballot;
+        }
+        weekly(&mut world, &dataset);
+        assert!(matches!(
+            world.firm(firm).unwrap().union.state,
+            BargainState::Idle
+        ));
     }
 }
