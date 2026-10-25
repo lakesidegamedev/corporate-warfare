@@ -18,7 +18,7 @@ its ledger entry names reviewed evidence that satisfies the gate.
 | R10 | automated | active | Contracts, shipments, freight, carrier priority and spot-import tests exist. |
 | R11 | automated | active | Construction escrow, lead time and capacity tests exist. |
 | R12 | automated | done | `evidence/R12-career.json`; control-loss continuity and one management contract with cooldown pass. |
-| R13 | automated | pending | Ownership, cycle rejection, consolidation implemented; needs deep/wide group fixtures at scale. |
+| R13 | automated | active | Ownership, cycle rejection, consolidation and new 100-level/100-child fixtures pass; internal unrealised-profit elimination still needs a dedicated fixture. |
 | R14 | automated | pending | Intercompany loans and transfer contracts implemented; internal profit elimination needs a fixture. |
 | R15 | automated | pending | Exchange, finite float, impact, valuation implemented; needs a holder-transfer/look-through fixture. |
 | R16 | automated | pending | Issuance, dividend, buyback, IPO implemented with treasury exclusion; needs share/vote conservation at scale. |
