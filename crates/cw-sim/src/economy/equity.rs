@@ -63,7 +63,8 @@ pub fn refresh_valuation(world: &mut World, dataset: &Dataset) {
         firm.valuation = base;
         firm.valuation.equity_cents = equity;
         firm.shares.statement_weeks += 1;
-        firm.last_week_units_sold.clear();
+        // Sales for the week are closed by `Firm::close_sales_week` at the end of settlement.
+        // Clearing them here discarded the unit-sales history before it was ever recorded.
     }
     let _ = dataset;
 }

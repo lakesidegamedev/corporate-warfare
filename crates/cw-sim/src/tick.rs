@@ -288,11 +288,12 @@ fn refresh_household_income(world: &mut World, dataset: &Dataset) {
             let background = world.regions[region_index].background_employed[tier];
             income += background * world.regions[region_index].background_wage_cents[tier];
         }
-        for (handle, facility) in world.facilities.iter() {
+        for (_, facility) in world.facilities.iter() {
             if facility.region as usize != region_index {
                 continue;
             }
-            if let Some(firm) = world.firms.get(handle)
+            // Facility and firm handles are separate slabs; this must read the owning firm.
+            if let Some(firm) = world.firms.get(facility.firm)
                 && firm.operative()
             {
                 for tier in 0..3 {

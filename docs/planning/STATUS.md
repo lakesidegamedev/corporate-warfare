@@ -108,3 +108,15 @@ typed-rejection cases.
 Resume with:
 `cd /root/projects/corporate-warfare/worktrees/foundation && cargo test --locked --workspace`
 and read `docs/planning/STATUS.md`, `execution.json`, `requirements.json`.
+
+## Corridor solvency (found by the P25 industry pass, 2026-10-25)
+
+Production and sales units were corrected by the industry fixtures; several further defects were
+fixed (facility ownership, service inputs, opening-stock snapshot, inventory double capitalisation,
+electricity units, facility/firm handle mix-ups, weekly sales clear ordering, national government
+budget ceiling, freight receipts). After those fixes the corridor still cannot pay every producer:
+spot books are same-region, gateways quote a finite buy side that clearing does not yet use, and
+seeded capacity exceeds local household demand in several regions. Media advertising demand from
+marketer budgets and construction contractor service consumption are also still unimplemented.
+This is a known balance/implementation blocker, not a hidden pass: the industry tests use targeted
+fixtures and do not claim corridor solvency.

@@ -656,7 +656,13 @@ fn apply_intent(
                 let facility = start_facility(
                     world, dataset, handle, *region, *recipe, 1, world.tick, cost,
                 );
-                world.facilities.insert(facility);
+                let facility_handle = world.facilities.insert(facility);
+                world
+                    .firms
+                    .get_mut(handle)
+                    .unwrap()
+                    .facilities
+                    .push(facility_handle);
             }
             Ok(())
         }
@@ -1095,8 +1101,6 @@ fn apply_intent(
             }
             require_region(world, *region)?;
             let qty = MilliLots::from_lots(*quantity_lots);
-            let cost = qty.value_at(Cents(*max_price_cents)).unwrap_or_default().0;
-            spend_firm_cash(world, *firm, cost, "spot reserve")?;
             // Cross-region spot buys dispatch a shipment; local buys settle next week.
             let source = world
                 .firms
@@ -1116,16 +1120,10 @@ fn apply_intent(
                     .unwrap_or_default();
                 let deliver = qty.min(available);
                 if deliver.0 > 0 {
-                    let mut carry = 0i64;
-                    let carrying = world
-                        .firms
-                        .get_mut(seller)
-                        .map(|f| {
-                            f.stock_lot_mut(*product, seller_region)
-                                .issue(deliver, &mut carry)
-                                .0
-                        })
-                        .unwrap_or(0);
+                    let goods_value = deliver
+                        .value_at(Cents(*max_price_cents))
+                        .unwrap_or_default()
+                        .0;
                     let freight = crate::economy::freight::freight_cost(
                         dataset,
                         seller_region,
@@ -1138,17 +1136,42 @@ fn apply_intent(
                             &dataset.regions[*region as usize].code,
                         )
                         .unwrap_or(500);
+                    // Reserve the goods and the freight bill, so the buyer cannot overdraw.
+                    spend_firm_cash(world, *firm, goods_value + freight, "spot reserve")?;
+                    let mut carry = 0i64;
+                    let carrying = world
+                        .firms
+                        .get_mut(seller)
+                        .map(|f| {
+                            f.stock_lot_mut(*product, seller_region)
+                                .issue(deliver, &mut carry)
+                                .0
+                        })
+                        .unwrap_or(0);
+                    // The seller is paid the goods value; freight is the buyer's own cost.
                     if let Some(entity) = world.firms.get_mut(seller) {
                         let _ = entity.book.commit(
                             world.tick,
                             Txn::new()
-                                .debit(Account::Cash, cost, "spot sale")
-                                .credit(Account::Revenue, cost, "spot sale")
+                                .debit(Account::Cash, goods_value, "spot sale")
+                                .credit(Account::Revenue, goods_value, "spot sale")
                                 .credit(Account::Inventory, carrying, "spot cogs")
                                 .debit(Account::CostOfGoods, carrying, "spot cogs"),
                         );
                     }
-                    crate::economy::freight::pay_freight(world, freight, "spot freight");
+                    // The buyer pays the reserved goods value out of restricted cash.
+                    if let Some(entity) = world.firms.get_mut(*firm) {
+                        let _ = entity.book.commit(
+                            world.tick,
+                            Txn::new()
+                                .credit(Account::RestrictedCash, goods_value, "spot purchase")
+                                .debit(Account::Inventory, goods_value, "spot purchase"),
+                        );
+                    }
+                    if freight > 0 {
+                        release_firm_cash(world, *firm, freight, "spot freight release");
+                        crate::economy::freight::pay_freight(world, *firm, freight, "spot freight");
+                    }
                     world.shipments.push(crate::state::Shipment {
                         seller,
                         buyer: *firm,
@@ -1160,11 +1183,9 @@ fn apply_intent(
                         unit_price_cents: *max_price_cents,
                         freight_cents: freight,
                     });
-                    release_firm_cash(world, *firm, cost - freight, "spot change");
                     return Ok(());
                 }
             }
-            release_firm_cash(world, *firm, cost, "spot unfilled");
             Ok(())
         }
         CommandIntent::MakeIntercompanyLoan {

@@ -406,13 +406,19 @@ fn source_id(source: OfferSource) -> u64 {
 }
 
 fn clear_government(world: &mut World, dataset: &Dataset) {
-    // Defence procurement and 70 percent of care episodes are funded from the fiscal budget.
+    // Defence procurement and care episodes are funded from fiscal budgets. Each budget is a
+    // weekly national ceiling, not a per-region allowance, so spending is consumed as the
+    // regions are served.
     let defence = dataset.product_index["defense"];
     let care = dataset.product_index["care"];
     let procurement = world.government.procurement_budget_cents.max(0);
     let healthcare = world.government.healthcare_budget_cents.max(0);
     for (product, budget) in [(defence, procurement), (care, healthcare)] {
+        let mut remaining = budget;
         for region in 0..world.regions.len() {
+            if remaining <= 0 {
+                break;
+            }
             let mut offers = Vec::new();
             let mut sources = Vec::new();
             for (handle, firm) in world.firms.iter() {
@@ -438,20 +444,24 @@ fn clear_government(world: &mut World, dataset: &Dataset) {
                 });
                 sources.push(OfferSource::Firm(handle));
             }
-            if offers.is_empty() || budget <= 0 {
+            if offers.is_empty() || remaining <= 0 {
                 continue;
             }
             let reference = dataset.reference_price(product);
-            let affordable = budget / reference.max(1);
+            let affordable = remaining / reference.max(1);
+            if affordable <= 0 {
+                continue;
+            }
             let requests = vec![Request {
                 buyer: u64::MAX - 1,
                 qty: affordable * 1_000,
-                budget_cents: budget,
+                budget_cents: remaining,
                 brand_sensitive: false,
             }];
             let fills = allocate(reference, &offers, &requests);
-            let _spent =
+            let spent =
                 settle_government_fills(world, product, region as u8, &fills, &sources, dataset);
+            remaining = (remaining - spent).max(0);
         }
     }
 }
@@ -654,6 +664,8 @@ fn settle_government_fills(
                         .credit(Account::Inventory, carrying, "cogs")
                         .debit(Account::CostOfGoods, carrying, "cogs"),
                 );
+                // Procurement is a real sale and belongs in the unit-sales record.
+                firm.last_week_units_sold.insert((region, product), qty);
             }
             spent += paid;
         }

@@ -43,7 +43,8 @@ fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: u
         if facility.region as usize != region_index {
             continue;
         }
-        let firm = match world.firms.get(handle) {
+        // Facility handles are not firm handles: the wage offer comes from the owner.
+        let firm = match world.firms.get(facility.firm) {
             Some(firm) if firm.operative() => firm,
             _ => continue,
         };

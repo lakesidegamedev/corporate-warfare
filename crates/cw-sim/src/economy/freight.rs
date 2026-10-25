@@ -179,7 +179,7 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
             );
         }
         if paid_freight > 0 {
-            pay_freight(world, paid_freight, "contract freight");
+            pay_freight(world, contract.buyer, paid_freight, "contract freight");
         }
 
         if contract.from_region == contract.to_region {
@@ -218,12 +218,29 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
     }
 }
 
-/// Pay a freight bill to a named carrier when one exists, otherwise to the finite outside
-/// carrier sector. Either way the money leaves the payer exactly once.
-pub fn pay_freight(world: &mut World, amount: i64, memo: &str) {
+/// Charge one freight bill to the payer and pay it to a named carrier when one exists,
+/// otherwise to the finite outside carrier sector. The payer is debited exactly once so the
+/// transport service has a real counterparty instead of minting carrier revenue.
+pub fn pay_freight(world: &mut World, payer: Handle, amount: i64, memo: &str) {
     if amount <= 0 {
         return;
     }
+    let cash = world
+        .firms
+        .get(payer)
+        .map(|firm| firm.book.cash())
+        .unwrap_or(0)
+        .max(0);
+    let paid = amount.min(cash);
+    if paid <= 0 {
+        return;
+    }
+    let _ = world.firms.get_mut(payer).unwrap().book.commit(
+        world.tick,
+        Txn::new()
+            .credit(Account::Cash, paid, memo)
+            .debit(Account::CostOfGoods, paid, memo),
+    );
     // Industry index 6 is logistics in INDUSTRY_NAMES.
     let carriers: Vec<Handle> = world
         .firms
@@ -234,23 +251,23 @@ pub fn pay_freight(world: &mut World, amount: i64, memo: &str) {
     let share = if carriers.is_empty() {
         0
     } else {
-        amount / carriers.len() as i64
+        paid / carriers.len() as i64
     };
-    let mut remaining = amount;
+    let mut remaining = paid;
     for carrier in carriers {
-        let paid = share.min(remaining);
-        if paid > 0 {
+        let portion = share.min(remaining);
+        if portion > 0 {
             if let Some(firm) = world.firms.get_mut(carrier) {
                 let _ = firm.book.commit(
                     world.tick,
-                    Txn::new().debit(Account::Cash, paid, memo).credit(
+                    Txn::new().debit(Account::Cash, portion, memo).credit(
                         Account::Revenue,
-                        paid,
+                        portion,
                         memo,
                     ),
                 );
             }
-            remaining -= paid;
+            remaining -= portion;
         }
     }
     if remaining > 0 {

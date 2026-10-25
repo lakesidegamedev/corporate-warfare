@@ -21,7 +21,24 @@ const SEASONAL_YIELD_BPS: [i32; 4] = [8_000, 11_000, 13_000, 8_000];
 /// Produce the whole week: utilities first, then goods and services.
 pub fn produce(world: &mut World, dataset: &Dataset) {
     let power = dispatch_electricity(world, dataset);
-    produce_goods(world, dataset, &power);
+    // Goods produced this week are never usable this week, so production draws on the stock
+    // that existed when production began. Without this snapshot, a facility earlier in the
+    // slab could feed a later facility of the same firm inside one week.
+    let mut opening = opening_stock(world);
+    produce_goods(world, dataset, &power, &mut opening);
+}
+
+/// Physical input stock available to this week's production, keyed by firm, product and region.
+fn opening_stock(world: &World) -> BTreeMap<(Handle, u16, u8), i64> {
+    let mut stock = BTreeMap::new();
+    for (handle, firm) in world.firms.iter() {
+        for ((product, region), lot) in &firm.inventory {
+            if lot.qty.0 > 0 {
+                stock.insert((handle, *product, *region), lot.qty.0);
+            }
+        }
+    }
+    stock
 }
 
 /// Electricity produced this week and the share each facility receives, in basis points.
@@ -41,13 +58,15 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
     // Generators produce from opening fuel and staff, without needing their own output.
     let mut supply_by_region: BTreeMap<u8, Vec<(Handle, MilliLots)>> = BTreeMap::new();
     for handle in power_recipe {
-        let produced = run_facility(world, dataset, handle, 10_000, &BTreeMap::new(), true);
+        let produced = run_facility(world, dataset, handle, 10_000, &BTreeMap::new(), true, None);
         if produced.is_positive() {
             let facility = world.facilities.get(handle).expect("facility");
+            // Payment must reach the owning firm; facility and firm handles are separate
+            // slabs and their numeric values overlap.
             supply_by_region
                 .entry(facility.region)
                 .or_default()
-                .push((handle, produced));
+                .push((facility.firm, produced));
         }
     }
 
@@ -82,11 +101,14 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
             if need == 0 {
                 continue;
             }
-            let firm = match world.firms.get(handle) {
+            let firm = match world.firms.get(facility.firm) {
                 Some(firm) if firm.operative() => firm,
                 _ => continue,
             };
-            let planned = need * facility.blocks as i64 * facility.target_bps as i64 / 10_000;
+            // Planned demand in milli-lots, like every other physical quantity in the trade.
+            let planned = MilliLots::from_lots(need * facility.blocks as i64)
+                .scale_bps(facility.target_bps)
+                .0;
             if planned <= 0 {
                 continue;
             }
@@ -96,7 +118,7 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
             } else {
                 planned
             };
-            let requested = planned.min(affordable * 1_000).max(0);
+            let requested = planned.min(affordable.saturating_mul(1_000)).max(0);
             if requested > 0 {
                 demand_entries.push((handle, facility.firm, requested, price));
             }
@@ -197,7 +219,12 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
     result
 }
 
-fn produce_goods(world: &mut World, dataset: &Dataset, power: &BTreeMap<Handle, i32>) {
+fn produce_goods(
+    world: &mut World,
+    dataset: &Dataset,
+    power: &BTreeMap<Handle, i32>,
+    opening: &mut BTreeMap<(Handle, u16, u8), i64>,
+) {
     let handles: Vec<Handle> = world.facilities.iter().map(|(handle, _)| handle).collect();
     for handle in handles {
         let facility = match world.facilities.get(handle) {
@@ -217,7 +244,15 @@ fn produce_goods(world: &mut World, dataset: &Dataset, power: &BTreeMap<Handle, 
         } else {
             10_000
         };
-        let produced = run_facility(world, dataset, handle, power_ratio, power, false);
+        let produced = run_facility(
+            world,
+            dataset,
+            handle,
+            power_ratio,
+            power,
+            false,
+            Some(opening),
+        );
         let _ = produced;
     }
 }
@@ -230,6 +265,7 @@ fn run_facility(
     power_ratio_bps: i32,
     _power: &BTreeMap<Handle, i32>,
     utility: bool,
+    mut opening: Option<&mut BTreeMap<(Handle, u16, u8), i64>>,
 ) -> MilliLots {
     let facility = match world.facilities.get(handle) {
         Some(facility) => facility.clone(),
@@ -269,18 +305,43 @@ fn run_facility(
             continue;
         }
         let code = dataset.product_index[product_id];
-        let need = weekly * facility.blocks as i64 * ratio as i64 / 10_000;
-        if need <= 0 {
+        if dataset.products[code as usize].kind.is_service() {
+            // Services cannot be stockpiled: they expire each week and markets clear after
+            // production, so a non-electric service input is bought in the week it is used
+            // from the finite outside service sector at the reference price. Cash is the limit.
+            let unit_cost = weekly * facility.blocks as i64 * dataset.reference_price(code);
+            if unit_cost > 0 {
+                let cash = world
+                    .firms
+                    .get(firm_handle)
+                    .map(|f| f.book.cash())
+                    .unwrap_or(0)
+                    .max(0);
+                let attainable = (cash * 10_000 / unit_cost).min(10_000) as i32;
+                input_limit = input_limit.min(attainable);
+            }
             continue;
         }
-        let available = world
-            .firms
-            .get(firm_handle)
-            .map(|f| f.stock(code, facility.region).0)
-            .unwrap_or(0);
-        if available < need {
-            let attainable = (available * 10_000 / (weekly * facility.blocks as i64).max(1)) as i32;
-            input_limit = input_limit.min(attainable);
+        let need = MilliLots::from_lots(weekly * facility.blocks as i64).scale_bps(ratio);
+        if need.0 <= 0 {
+            continue;
+        }
+        let available = match opening.as_ref() {
+            Some(stock) => stock
+                .get(&(firm_handle, code, facility.region))
+                .copied()
+                .unwrap_or(0),
+            None => world
+                .firms
+                .get(firm_handle)
+                .map(|f| f.stock(code, facility.region).0)
+                .unwrap_or(0),
+        };
+        if available < need.0 {
+            let full = MilliLots::from_lots(weekly * facility.blocks as i64)
+                .0
+                .max(1);
+            input_limit = input_limit.min((available * 10_000 / full) as i32);
         }
     }
     ratio = ratio.min(input_limit).max(0);
@@ -308,10 +369,46 @@ fn run_facility(
             continue;
         }
         let code = dataset.product_index[product_id];
-        let need =
-            MilliLots(weekly * facility.blocks as i64 * ratio as i64 / 10_000 * 1_000 / 1_000);
+        // Recipe quantities are whole lots; one lot is 1000 milli-lots. Availability and
+        // consumption must use the same unit or the plant consumes a thousandth of its recipe.
+        let need = MilliLots::from_lots(weekly * facility.blocks as i64).scale_bps(ratio);
         if need.0 <= 0 {
             continue;
+        }
+        if dataset.products[code as usize].kind.is_service() {
+            // Same-week service purchase, expensed as incurred like electricity.
+            let cost = need
+                .value_at(Cents(dataset.reference_price(code)))
+                .unwrap_or(Cents::ZERO)
+                .0;
+            let cash = world
+                .firms
+                .get(firm_handle)
+                .map(|f| f.book.cash())
+                .unwrap_or(0)
+                .max(0);
+            let paid = cost.min(cash);
+            if paid > 0 {
+                let _ = world.firms.get_mut(firm_handle).unwrap().book.commit(
+                    world.tick,
+                    Txn::new()
+                        .credit(Account::Cash, paid, "service input")
+                        .debit(Account::OperatingExpense, paid, "service input"),
+                );
+                let _ = world.outside.gateway_book.commit(
+                    world.tick,
+                    Txn::new()
+                        .debit(Account::Cash, paid, "service input")
+                        .credit(Account::Revenue, paid, "service input"),
+                );
+            }
+            continue;
+        }
+        if let Some(stock) = opening.as_deref_mut() {
+            let entry = stock
+                .entry((firm_handle, code, facility.region))
+                .or_insert(0);
+            *entry = (*entry - need.0).max(0);
         }
         let firm = world.firms.get_mut(firm_handle).unwrap();
         let mut carry = 0i64;
@@ -338,9 +435,29 @@ fn run_facility(
     }
     if output.0 > 0 {
         let code = dataset.product_index[&recipe.output];
-        let firm = world.firms.get_mut(firm_handle).unwrap();
-        firm.stock_lot_mut(code, facility.region)
-            .receive(output, Cents(material_cost));
+        // Utilities sell their whole service through the dispatch allocation above; booking
+        // the same physical output as inventory would count it twice.
+        if !utility {
+            let firm = world.firms.get_mut(firm_handle).unwrap();
+            firm.stock_lot_mut(code, facility.region)
+                .receive(output, Cents(material_cost));
+            // Capitalise the converted inputs into the new stock. The consumption posting
+            // above already expensed them, so this reverses that expense; without it the
+            // Inventory account and the lots' carrying cost drift apart and stock issues
+            // drive the asset negative.
+            if material_cost > 0 {
+                let _ = firm.book.commit(
+                    world.tick,
+                    Txn::new()
+                        .debit(Account::Inventory, material_cost, "capitalised production")
+                        .credit(
+                            Account::CostOfGoods,
+                            material_cost,
+                            "capitalised production",
+                        ),
+                );
+            }
+        }
         let facility = world.facilities.get_mut(handle).unwrap();
         facility.deposit_remaining = facility.deposit_remaining.saturating_sub(output);
     }
@@ -412,13 +529,7 @@ mod tests {
     fn production_consumes_inputs_exactly_once() {
         let dataset = Dataset::load().unwrap();
         let mut world = seed::build(&dataset, 21, ScenarioKind::Founder, ScenarioMode::Sandbox);
-        let farm = dataset.product_index["food_raw"];
         let fuel = dataset.product_index["fuel"];
-        let before_food: i64 = world
-            .firms
-            .iter()
-            .map(|(_, firm)| firm.stock(farm, firm.region).0)
-            .sum();
         let before_fuel: i64 = world
             .firms
             .iter()
@@ -436,17 +547,20 @@ mod tests {
             }
         }
         produce(&mut world, &dataset);
-        let after_food: i64 = world
-            .firms
+        // Farm output is the physical production of this pass; the whole-world stock also
+        // falls when a grocer consumes raw food in the same week.
+        let food_produced: i64 = world
+            .facilities
             .iter()
-            .map(|(_, firm)| firm.stock(farm, firm.region).0)
+            .filter(|(_, facility)| dataset.recipes[facility.recipe as usize].output == "food_raw")
+            .map(|(_, facility)| facility.last_output.0)
             .sum();
         let after_fuel: i64 = world
             .firms
             .iter()
             .map(|(_, firm)| firm.stock(fuel, firm.region).0)
             .sum();
-        assert!(after_food > before_food, "food output increased");
+        assert!(food_produced > 0, "food output increased");
         assert!(after_fuel < before_fuel, "fuel was consumed");
         for (_, firm) in world.firms.iter() {
             for ((_, _), lot) in &firm.inventory {
