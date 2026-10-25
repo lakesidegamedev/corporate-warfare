@@ -227,6 +227,7 @@ fn build_regions(world: &mut World, dataset: &Dataset) {
             catastrophe_until: None,
             background_employed: [0; 3],
             background_wage_cents: labour.map(|tier| tier.prevailing_wage_cents),
+            paid_named_wages_cents: 0,
         });
     }
 }

@@ -606,6 +606,10 @@ pub struct RegionState {
     /// Background employers absorb the rest of the scaled workforce.
     pub background_employed: [i64; 3],
     pub background_wage_cents: [i64; 3],
+    /// Wages actually paid by named employers in the current week. Unpaid deferred wages are
+    /// not household income and are not taxed.
+    #[serde(default)]
+    pub paid_named_wages_cents: i64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
