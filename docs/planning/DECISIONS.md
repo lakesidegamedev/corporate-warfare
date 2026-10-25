@@ -118,3 +118,23 @@ no existing book, one region is necessarily 100 percent of coverage, so every no
 insurer refused all business. The check now allows the policy that opens the book and enforces
 the 40 percent limit on every later policy. Specialist mode still doubles the capital requirement.
 Scenario: `corporate_lifecycle.rs::insurer_binds_and_pays_a_claim_from_reserves`.
+
+### Demand, supply and macro regimes, 2026-10-25
+
+Event and macro modifiers were stored but never applied; crop loss was also implemented as a
+demand shock even though the rule is a yield loss. Now:
+
+- Demand modifiers compose once per active cause and scale household and industrial demand for
+  their product or, when unscoped, the whole region. Expired modifiers are pruned weekly.
+- Supply modifiers scale physical output only. Crop-loss choices use supply, not demand.
+- Recessions and booms are drawn from the macro stream at quarter boundaries (authored five
+  percent chance per quarter, one or two quarters long) instead of being handed to a regional
+  firm card, which let a single rival force a corridor-wide recession.
+- Optional cards expire at their deadline with an explicit no-action outcome instead of waiting
+  forever and blocking new cards.
+- The technology frontier advances one level per game year, capped at twenty.
+
+Measured after the change: guided seed 3 at 260 weeks has 4-5 rival failures and the investor
+survives with score 61; at 1,560 weeks 10 rivals fail and the guided firm is operating with 60
+percent control. The pinned canonical hash moved to `a3266a99...` and the iOS constant is updated
+pending a Mac-runner run.

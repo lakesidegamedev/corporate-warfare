@@ -33,6 +33,11 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     world.tick = world.tick.next();
     world.weeks_elapsed += 1;
     world.pending_pause = None;
+    world.prune_modifiers();
+    // The technology frontier advances one level per game year, capped at twenty.
+    if world.tick.is_year_boundary() {
+        world.macro_state.tech_frontier = (world.macro_state.tech_frontier + 1).min(20);
+    }
 
     // Phase 1: expiries, deliveries, construction and governance.
     crate::economy::freight::settle(world, dataset);
@@ -65,6 +70,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::economy::equity::clear_exchange(world, dataset);
     crate::economy::events_engine::quarter_check(world, dataset);
     crate::economy::events_engine::auto_resolve(world, dataset);
+    crate::economy::events_engine::expire_optional(world, dataset);
     refresh_household_income(world, dataset);
     apply_macro_price_drift(world, dataset);
 
@@ -366,6 +372,23 @@ mod tests {
         for region in &world.regions {
             assert!(region.households.savings_cents >= 0);
         }
+    }
+
+    #[test]
+    fn the_technology_frontier_advances_one_level_a_year() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 702, ScenarioKind::Founder, ScenarioMode::Sandbox);
+        world.tick = Tick(51);
+        world.macro_state.tech_frontier = 2;
+        advance(&mut world, &dataset);
+        assert_eq!(
+            world.macro_state.tech_frontier, 3,
+            "year boundary advances the frontier"
+        );
+        world.macro_state.tech_frontier = 20;
+        world.tick = Tick(103);
+        advance(&mut world, &dataset);
+        assert_eq!(world.macro_state.tech_frontier, 20, "frontier is capped");
     }
 
     #[test]

@@ -247,7 +247,8 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
             }
             let code = dataset.product_index[product_id];
             let cover = firm.policies.input_cover_weeks.max(1) as i64;
-            let target = weekly * facility.blocks as i64 * cover;
+            let demand = world.demand_ratio_bps(facility.region, Some(code));
+            let target = weekly * facility.blocks as i64 * cover * demand / 10_000;
             let have = firm.stock(code, facility.region).whole_lots_floor();
             let want = (target - have).max(0);
             if want <= 0 {
@@ -493,7 +494,8 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
                 .max(1);
             let ratio = (reference * 10_000 / last).clamp(5_000, 20_000);
             let base = baseline.get(&product).copied().unwrap_or(0);
-            let requested = (base * ratio / 10_000).max(0) * 1_000;
+            let demand = world.demand_ratio_bps(region_index as u8, Some(product));
+            let requested = (base * ratio / 10_000).max(0) * demand / 10_000 * 1_000;
             if requested <= 0 {
                 continue;
             }

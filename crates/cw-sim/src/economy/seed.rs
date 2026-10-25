@@ -217,6 +217,7 @@ fn build_regions(world: &mut World, dataset: &Dataset) {
             },
             policy: RegionPolicy::default(),
             demand_modifiers: Vec::new(),
+            supply_modifiers: Vec::new(),
             organisation_bps: region.opening_organisation_bps,
             catastrophe_until: None,
             background_employed: [0; 3],
