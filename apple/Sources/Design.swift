@@ -97,6 +97,8 @@ struct MetricTile: View {
         .padding(12)
         .background(Theme.surface(for: scheme))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Activate the related row to open the ledger-backed explanation.")
     }
 
     private var toneColor: Color {

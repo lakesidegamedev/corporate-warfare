@@ -67,6 +67,8 @@ struct ContextChip: View {
             Text(store.selectedFirmDto?.name ?? "No company selected")
                 .font(.caption.weight(.medium))
                 .lineLimit(1)
+                // The chip truncates visually, so VoiceOver reads the full legal name.
+                .accessibilityLabel(store.selectedFirmDto?.name ?? "No company selected")
             Spacer()
             if let week = store.overview?.weekLabel {
                 Text(week)
