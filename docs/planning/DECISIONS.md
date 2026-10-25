@@ -209,3 +209,13 @@ thirteen-week meeting. A large issuance (more than ten percent of the issue) and
 now require the controller to hold at least three of the five seats; small operating issuance stays
 with management. Tests: `commands::tests::large_issuance_needs_three_board_seats`, the merger
 lifecycle test, and the session workflow test. Canonical hash re-pinned to `c14127ee...`.
+
+### Asset purchase settlement, 2026-10-25
+
+`DealKind::AssetPurchase` previously fell through the share-purchase path and transferred shares.
+It now has its own settlement: the buyer pays the agreed price from escrow, receives the target's
+facilities, inventory, fixed assets and work in progress at book value, and books the difference
+to other income/loss. Shares, cash, debt and contracts stay with the target, which is the
+distinction from a share purchase or merger. v0.1 assumes no liabilities are attached to the
+asset bundle; the deal preview must say so. Unused escrow (including the two percent cushion) is
+refunded. Test: `deals::tests::an_asset_purchase_moves_assets_but_keeps_shares_and_debt`.
