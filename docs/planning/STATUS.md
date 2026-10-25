@@ -1,101 +1,63 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Viability branch based on `9d7339b`.
-Kanban: 254781. Milestone issues: 1-6. Merged PRs: #8 foundation, #9 release track,
-#10 onboarding, #11 adversarial reliability, #12 industry scenarios.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `0383ead`.
+Kanban: 254781. Merged PRs: #8 through #27.
 
-## What now exists
+## What exists now
 
-- `cw-core`: cents/milli-lots/BPS, checked arithmetic and half-even rounding, largest-remainder
-  allocation, balanced double-entry ledger with a 13-week journal and chained compaction, stable
-  generation-checked handles, SplitMix64 streams, canonical BLAKE3 hashing, 52-week calendar.
-- `cw-data`: validated pinned dataset (25 products, 17 operating templates, 11 corridor regions,
-  24 event cards, 30 named firms exactly two per industry), region fixture with recorded source
-  attempts, farm worked example.
-- `cw-sim`: weekly settlement order, labour clearing, utilities and production, one-pass market
-  allocation with the four worked examples, freight/contracts/shipments, credit, banking,
-  insurance, governance, ownership/consolidation/cycles, valuation and exchange,
-  issuance/dividends/buybacks/IPO, insolvency, deals with antitrust, unions, policy, research,
-  brand, events and the five-year score. Full command catalogue with authority/solvency/rollback
-  checks. Eleven production-accounting defects were found and fixed by the industry pass.
-- `cw-ai`: bounded rival proposals (urgent weekly checks, four stable strategic cohorts).
-- `cw-session`: scenario creation, submit/preview/advance/overview/query, versioned save envelope
-  with checksum and bounds, replay log.
-- `cw-ffi` + SwiftUI app: serial engine actor, owned DTOs and typed rejection keys; Start,
-  Portfolio, Company, Regions, Markets, Inbox; cash bridge; seven-step guided onboarding;
-  original app icon and privacy manifest.
-- Swift save layer: flush-then-replace writes, a rolling `<slot>.lastgood` pair per slot, three
-  autosave slots rotated by week, ten bounded manual slots, a slot that failed an import can never
-  promote its damaged file over a good last-good, `recover(slot:)` validates the last-good bytes
-  with a fresh engine import before offering them, a named recovery screen, a local-only
-  diagnostics bundle reviewed before sharing, and a bounded stop-and-save on background.
-  `SaveLifecycleTests` covers all of it; the suite has **not run on the Mac runner yet**.
-- `cw-cli`: doctor, run, sweep, replay. Release workflow: archive, verify, sign/export, upload,
-  bounded App Store Connect processing check, fail-closed when secrets are absent.
-- `cw-cli`: doctor, run, sweep, replay. `sweep` now runs explainable reference
-  policies (conservative, growth, acquirer) through `Session::submit`, emits
-  per-seed JSON and min/median/max distributions, and checks ledger/cash/stock
-  invariants every run. First P33 report: `evidence/balance-report.md` (640
-  release-build runs). Release workflow: archive, verify, sign/export, upload,
-  bounded App Store Connect processing check, fail-closed when secrets are absent.
+- Rust engine: checked units and ledger, deterministic session/replay/saves, weekly economy
+  (labour with layoffs, production, utilities, one-pass markets, freight, contracts, gateways),
+  corporate systems (ownership, boards, exchange, issuance/dividends/buybacks/IPO, credit,
+  banking, insurance, deals and antitrust, unions, lobbying, insolvency), R&D/brand, rival AI,
+  events (rivals answer their own cards), five-year score with continue.
+- CLI: `doctor`, `run`, `diagnose`, `report`, `sweep` (three reference policies, JSON, invariant
+  checks), `replay`.
+- SwiftUI app: portfolio, group tree, company hub for every corporate family, regions, markets,
+  inbox, cash bridge, onboarding, score breakdown, save recovery with rolling last-good and a
+  reviewed diagnostic bundle, lifecycle stop-and-save.
+- Release track: app icon, privacy manifest and portable audit, metadata drafts, fail-closed
+  signed release workflow with bounded App Store Connect processing check.
+- Evidence: ledger/units, commands, cross-platform session hash, industry scenarios, adversarial
+  saves, balance distributions, corporate lifecycles, brand demand, workflows.
 
 ## Verified
 
-- 126 workspace tests pass locally, with `cargo fmt --check` and
-  `cargo clippy --workspace --all-targets -D warnings` clean.
-- Hosted Verify and Apple smoke passed on PRs #8 (40163354063 / 40163354065), #9, #10 and #11.
-- iPhone simulator XCTest verified the canonical hash `7b781159...` at PR #11.
-- After the P33 deposit fix the fixture hash is `3ef82f5bc26de9d2c1c88cf8c2eca42c5d4866226ed5d22a8dbe731e8f5f7e7b`,
-  computed on Linux. The matching iOS run is **not yet verified**; R05 is therefore `active`,
-  not done.
-- P33 first distributions published (2026-10-25): guided and founder 100 × 260 weeks for all
-  three reference policies, 20 × 1,560 weeks conservative, 20-seed no-policy control. No early
-  stops, no invariant violations, deterministic hashes on repeat. Seed variance is near zero
-  because macro price drift and optional event resolution are not implemented (recorded in
-  DECISIONS D22); R36 stays open.
-- Requirements done: R03, R04, R31. R05 is active pending a Mac-runner pass on the new pin.
+- Local: 170+ tests pass; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
+  warnings` clean; design and plan validators pass; shared scheduler jobs passed
+  (`20261025T070655Z-5df8bceb` latest).
+- Corridor at seed 3: 0 rival failures at 52 weeks, 4-6 at 260 across seeds, 11 over thirty
+  years; guided firm solvent at every horizon; score 62 at week 260.
+- Hosted Verify and Apple smoke last ran green at PR #11. Since PR #12 GitHub Actions fails in
+  seconds for billing, so every Swift change after the onboarding PR is syntax-checked only and
+  has **not** been compiled by Xcode or run in a simulator.
 
-## Blockers (honest, newest first)
+## Blockers
 
-1. **GitHub Actions billing blocked.** From PR #12 onward every workflow fails in ~2 seconds
-   before starting: "recent account payments have failed or your spending limit needs to be
-   increased". Local checks still run; hosted gates and the iOS hash verification cannot. Owner
-   action: restore Actions billing/spending limit. Do not merge check-dependent work silently;
-   this checkpoint records the exception for the locally verified #12 squash.
-2. **P01/R01 corridor crosswalk blocked.** BEA econlist now redirects to a generic data-tools
-   page, the www URL is 404, BEAREA.zip is not an archive, archive.org returned 429. Region codes
-   and names are the verified official roster; county membership is absent, not invented. P05/R02
-   stay blocked behind this.
-3. **Apple signing/TestFlight blocked on owner action.** No repository or organisation secrets;
-   no App Store Connect key provisioned for this app. Needed: confirm team and the app record for
-   `net.lakesidegames.corporatewarfare`, then set `APPLE_API_ISSUER`, `APPLE_API_KEY`,
-   `APPLE_API_KEY_CONTENT`, `APPLE_DEVELOPMENT_TEAM` (repository or `appstore` environment), or
-   name an approved existing studio key. Keys on this host belong to other products and were not
-   read, copied or used. `apple/RELEASE.md` holds the runbook and state table.
-4. **Corridor solvency is not solved.** Spot books are same-region, gateways quote a finite buy
-   side that clearing does not use, seeded capacity exceeds local household demand in several
-   regions, media advertising demand from marketer budgets is unused, and construction projects do
-   not consume contractor service/equipment. Producers without a local buyer earn nothing. This is
-   the next product-quality blocker, not a test artefact.
-5. **Device, human playtest and balance gates not started** (P34-P35, R37-R38). P33 now has a
-   harness and a first report, but R36 stays open until nominal price drift and event resolution
-   make seeds economically distinct and the distribution is re-run.
+1. **GitHub Actions billing.** Every workflow fails before starting. This blocks Apple compile,
+   simulator XCTest, the current canonical-hash verification and all hosted gates. Owner must
+   restore billing or raise the spending limit.
+2. **Apple signing and TestFlight.** No repository/org secrets and no App Store Connect key for
+   `net.lakesidegames.corporatewarfare`. Exact secrets and owner actions are in
+   `apple/RELEASE.md`. Without this there is no signed archive, upload, processed build or
+   TestFlight installation.
+3. **Geography/data gate.** The official 2004 BEA county crosswalk is unrecoverable from
+   official sources. R01/R02 stay blocked, and every economy packet/requirement that depends on
+   them is transitively blocked in the ledger even though the systems are implemented against
+   labelled fixtures. A custom region scheme or an owner-supplied crosswalk is a product
+   decision, not something to invent.
+4. **Device and human gates.** No physical iPhone measurements (R37), no three independent
+   testers (R38), no TestFlight installation (R42).
 
-## Exact next moves
+## Next moves, in order
 
-1. Restore GitHub Actions billing, then rerun PR checks on the new hash and re-record R05 with the
-   iOS XCTest evidence.
-2. Fix corridor solvency: use the gateway buy side for finite exports, allow cross-region spot
-   offers with freight and lead time, and wire marketing budgets to media demand; add a corridor
-   run that reaches 260 weeks with explainable firm failures rather than silent starvation.
-3. Extend phone flows to every command family (subsidiaries, boards, takeover, banking, insurance,
-   labour, policy, recovery) and complete the P31 accessibility audit at 320pt and AX text.
-4. P32 remaining: run the new `SaveLifecycleTests` on the Mac runner and record
-   the evidence; then the migration fixtures.
-5. Implement nominal price drift and optional-event resolution, then re-run the
-   P33 sweeps (DECISIONS D22); P34 device profiling, P35 three independent playtests.
-6. Apple: resolve blocker 3, dispatch the release workflow, poll processing, install on a real
-   iPhone and run the acceptance route. Only then can the goal close.
+1. Restore GitHub Actions, then run Apple smoke on `main`: this is the first real compile and
+   simulator run of the corporate flows, recovery layer and score sheet.
+2. Owner supplies Apple team/app record/secrets or names an approved studio key; dispatch the
+   release workflow; poll processing; install on an iPhone and run the acceptance route.
+3. Owner decides the geography: supply the official crosswalk or approve a named custom corridor.
+   Until then R01/R02 and their dependants cannot be signed off.
+4. With a signed build: device profiling (R37), three playtests (R38), then R41/R42.
 
 Resume with:
-`cd /root/projects/corporate-warfare && git pull && cargo test --locked --workspace`.
+`cd /root/projects/corporate-warfare && git pull && cargo test --locked --workspace`
+then read this file and `evidence/release-readiness.md`.

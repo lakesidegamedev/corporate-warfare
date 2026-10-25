@@ -1,6 +1,6 @@
 # Release readiness map
 
-Updated 2026-10-25 against main `30d1b0c`. This maps every release requirement to its real
+Updated 2026-10-25 against main `0383ead`. This maps every release requirement to its real
 evidence or its concrete blocker. It is not a completion claim: a requirement is only done when
 its ledger entry names reviewed evidence that satisfies the gate.
 
@@ -35,13 +35,13 @@ its ledger entry names reviewed evidence that satisfies the gate.
 | R27 | automated | active | R&D/brand/quality rules and tests exist; marketing demand now funds media. |
 | R28 | automated | pending | Bounded rival proposals, cohorts and wage/build guards implemented; needs archetype win/lose fixtures. |
 | R29 | automated | pending | 24 cards and seeded firms exist; every choice is resolved in tests. |
-| R30 | automated | active | Checksum, bounds, future/corrupt rejection done; interrupted-write recovery and migration fixtures in progress. |
+| R30 | automated | active | Checksum, bounds, adversarial rejection and Swift recovery code exist; the Swift lifecycle suite has not run on the Mac runner. |
 | R31 | cross-platform | done | `evidence/R31-integration.json`; simulator XCTest command/save/load/error. |
-| R32 | human | pending | Core phone screens exist; smallest-phone offline route not yet run. |
-| R33 | human | pending | Corporate command flows are being added; not yet reachable end to end. |
+| R32 | human | pending | Core screens exist; the smallest-phone offline route has not run because the app is uncompiled since PR #11 (Actions billing). |
+| R33 | human | pending | Every corporate family has a phone flow and a session-level workflow test; the phone route has not been compiled or run since PR #11. |
 | R34 | automated | pending | Score at week 260 works (seed 3 total 62); needs explainability and continue fixtures. |
 | R35 | human | pending | Seven-step onboarding implemented; accessibility audit and final assets pending. |
-| R36 | automated | active | Baseline viable (0/3/11 failures at 52/260/1,560 weeks); distribution sweep in progress. |
+| R36 | automated | active | 640-run sweep and distributions in `evidence/balance-report.md`; rival outcome variance is now non-zero but score variance is still flat for a passive investor. |
 | R37 | device | blocked | No device measurement; needs A15-class hardware and a signed build. |
 | R38 | human | blocked | Needs three independent testers; none recruited. |
 | R39 | human | active | Icon, privacy manifest and release notes exist; owner review of metadata/rating/attribution pending. |
