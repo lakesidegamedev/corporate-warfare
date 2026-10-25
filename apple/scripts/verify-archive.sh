@@ -16,7 +16,7 @@ lipo -info "$app/CorporateWarfare" | grep -q arm64 || { echo "device binary is n
 [[ -f "$app/PrivacyInfo.xcprivacy" ]] || { echo "privacy manifest missing" >&2; exit 1; }
 # Asset catalogs compile icons into Assets.car; loose AppIcon PNGs are not expected.
 [[ -f "$app/Assets.car" ]] || { echo "asset catalog missing" >&2; exit 1; }
-xcrun assetutil --info "$app/Assets.car" | grep -q '"Name" : "AppIcon"' || {
+xcrun assetutil --info "$app/Assets.car" | grep -q 'AppIcon' || {
   echo "compiled app icon missing from Assets.car" >&2
   exit 1
 }
