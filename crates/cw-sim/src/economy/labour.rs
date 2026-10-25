@@ -132,7 +132,7 @@ pub fn train(world: &mut World) {
 }
 
 fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: usize) {
-    let mut severance: Vec<(Handle, i64)> = Vec::new();
+    let mut severance: Vec<(Handle, i64, i64)> = Vec::new();
     let region = &world.regions[region_index];
     let prevailing = region.labour[tier].prevailing_wage_cents.max(1);
     let reservation = region.labour[tier].reservation_wage_cents.max(1);
@@ -187,7 +187,7 @@ fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: u
             if let Some(facility) = world.facilities.get_mut(*facility_handle) {
                 facility.workers[tier] = desired;
             }
-            severance.push((*facility_handle, released * *wage));
+            severance.push((*facility_handle, released * *wage, released));
             continue;
         }
         let open = (desired - workers).max(0);
@@ -256,9 +256,12 @@ fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: u
     let high_clamp = prevailing * 102 / 100;
     new_prevailing = new_prevailing.clamp(low_clamp, high_clamp).max(1);
 
-    for (facility, amount) in severance {
+    for (facility, amount, released) in severance {
         let firm = world.facilities.get(facility).map(|facility| facility.firm);
         if let Some(firm) = firm {
+            if let Some(entity) = world.firms.get_mut(firm) {
+                entity.layoffs.push((world.tick.0, released));
+            }
             crate::economy::insolvency::pay_or_defer(
                 world,
                 firm,

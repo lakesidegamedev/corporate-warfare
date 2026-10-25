@@ -554,20 +554,22 @@ fn apply(
             }
         }
         "submit_remedy" => {
+            // Only the recipient's own open deal; an event never acts on another group's bid.
             let deal = world
                 .deals
                 .iter()
-                .find(|(_, deal)| !deal.state.terminal())
+                .find(|(_, deal)| !deal.state.terminal() && Some(deal.buyer) == firm)
                 .map(|(handle, _)| handle);
             if let Some(deal) = deal {
                 let _ = crate::economy::deals::submit_remedy(world, deal, 500);
             }
         }
         "withdraw_bid" => {
+            // Only the recipient's own open deal; an event never acts on another group's bid.
             let deal = world
                 .deals
                 .iter()
-                .find(|(_, deal)| !deal.state.terminal())
+                .find(|(_, deal)| !deal.state.terminal() && Some(deal.buyer) == firm)
                 .map(|(handle, _)| handle);
             if let Some(deal) = deal {
                 let _ = crate::economy::deals::withdraw(world, deal);

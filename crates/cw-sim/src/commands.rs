@@ -610,6 +610,7 @@ fn apply_intent(
                 tech_progress_cents: 0,
                 brand_bps: Default::default(),
                 reputation_bps: 0,
+                layoffs: Vec::new(),
                 policy_requests: Vec::new(),
                 guarantees: Vec::new(),
                 last_strategic_week: 0,

@@ -493,6 +493,9 @@ pub struct Firm {
     pub tech_progress_cents: i64,
     pub brand_bps: BTreeMap<(u8, u16), i32>,
     pub reputation_bps: i32,
+    /// Workers released by week, kept for four weeks so a failed lobbying campaign can be
+    /// judged against concurrent mass layoffs.
+    pub layoffs: Vec<(u32, i64)>,
     pub policy_requests: Vec<PolicyRequest>,
     pub guarantees: Vec<Guarantee>,
     pub last_strategic_week: u32,
