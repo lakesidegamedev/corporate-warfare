@@ -215,6 +215,7 @@ fn build_regions(world: &mut World, dataset: &Dataset) {
             households: Household {
                 savings_cents: 0,
                 last_income_cents: 0,
+                baseline_income_cents: 0,
                 weights: BTreeMap::new(),
                 baseline_lots: BTreeMap::new(),
                 last_sale_price_cents: BTreeMap::new(),
@@ -814,7 +815,11 @@ fn compute_household_baselines(world: &mut World, dataset: &Dataset) {
         .map(|id| dataset.product_index[*id])
         .collect();
     for region in &mut world.regions {
-        let budget = region.households.last_income_cents * 90 / 100;
+        // The opening baseline is disposable income: labour income pays twenty percent tax.
+        let disposable = region.households.last_income_cents * 80 / 100;
+        region.households.baseline_income_cents = disposable;
+        region.households.savings_cents = disposable * 90 / 100 * 13;
+        let budget = disposable * 90 / 100;
         let mut weights = BTreeMap::new();
         let mut baseline = BTreeMap::new();
         for (index, code) in codes.iter().enumerate() {

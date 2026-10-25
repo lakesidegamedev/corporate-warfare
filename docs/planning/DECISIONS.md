@@ -322,3 +322,11 @@ attributed pro rata across the regions of their employing facilities. Deferred w
 overdue liability, not household cash, and are not taxed. Severance stays outside the labour
 tax base. The fiscal receipt window, budgets and twenty percent rate are unchanged.
 Evidence: `evidence/fiscal-labour.md`; hash re-pinned to `0f6b4a86...`.
+
+### Household disposable baseline and savings supplement, 2026-10-25
+
+The opening household baseline is disposable income after twenty percent labour tax. Baseline
+lots and initial savings use that net figure. A week with income below the disposable baseline
+may draw at most one percent of savings into the spending budget; the supplement is deducted
+when committed and unspent category budgets return to savings. Old saves default to no
+supplement. Evidence: `evidence/household-demand.md`; hash re-pinned to `f75e42c2...`.

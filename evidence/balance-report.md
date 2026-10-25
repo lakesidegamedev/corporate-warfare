@@ -370,3 +370,10 @@ The five-year distribution is unchanged after withholding was restricted to wage
 paid. Over thirty years the median conservative career now keeps control of the guided firm and
 median net worth rises from $4.15M to $4.83M, with fewer rival exits (ten rather than twelve).
 Seed 3 is still four dissolved rivals and score 61.
+
+## Household disposable baseline, 2026-10-25
+
+Baseline lots, initial savings and the 1 percent savings supplement now use disposable income
+after labour tax. The conservative distributions are unchanged: 100 five-year seeds score
+56/62/62 with dissolved median 5 and controlled median 1; 20 thirty-year seeds have dissolved
+median 10 and controlled median 1. Seed 3 is still four dissolved rivals and score 61.

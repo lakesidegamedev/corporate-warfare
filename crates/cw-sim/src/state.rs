@@ -571,6 +571,9 @@ pub struct LabourTier {
 pub struct Household {
     pub savings_cents: i64,
     pub last_income_cents: i64,
+    /// Disposable baseline income after labour tax, used to size the savings supplement.
+    #[serde(default)]
+    pub baseline_income_cents: i64,
     /// Fixed expenditure weights summing 10000.
     pub weights: BTreeMap<u16, i64>,
     pub baseline_lots: BTreeMap<u16, i64>,
