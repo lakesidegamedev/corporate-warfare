@@ -722,6 +722,9 @@ pub struct InsurancePolicy {
     pub term_weeks: u32,
     pub earned_premium_cents: i64,
     pub claim_reserve_cents: i64,
+    /// Week in which a recognised claim becomes payable.
+    #[serde(default)]
+    pub claim_payable_week: u32,
     pub status: PolicyStatus,
     pub specialist: bool,
 }

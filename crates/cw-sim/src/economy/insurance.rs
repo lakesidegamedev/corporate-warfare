@@ -130,6 +130,7 @@ pub fn bind(
         term_weeks: 52,
         earned_premium_cents: 0,
         claim_reserve_cents: 0,
+        claim_payable_week: 0,
         status: PolicyStatus::Active,
         specialist,
     };
@@ -140,8 +141,50 @@ pub fn bind(
     Ok(handle)
 }
 
+/// Pay recognised claims whose payable week has arrived, from actual insurer cash.
+pub fn settle_claims(world: &mut World) {
+    let handles: Vec<Handle> = world.insurance.iter().map(|(handle, _)| handle).collect();
+    for handle in handles {
+        let Some(policy) = world.insurance.get(handle).cloned() else {
+            continue;
+        };
+        if policy.status != PolicyStatus::Active
+            || policy.claim_reserve_cents <= 0
+            || policy.claim_payable_week > world.tick.0
+        {
+            continue;
+        }
+        let cash = world
+            .firms
+            .get(policy.insurer)
+            .map(|firm| firm.book.cash())
+            .unwrap_or(0)
+            .max(0);
+        let paid = policy.claim_reserve_cents.min(cash);
+        if paid <= 0 {
+            continue;
+        }
+        let _ = world.firms.get_mut(policy.insurer).unwrap().book.commit(
+            world.tick,
+            Txn::new()
+                .credit(Account::Cash, paid, "claim payment")
+                .debit(Account::ClaimLiabilities, paid, "claim payment"),
+        );
+        let _ = world.firms.get_mut(policy.insured).unwrap().book.commit(
+            world.tick,
+            Txn::new()
+                .debit(Account::Cash, paid, "claim received")
+                .credit(Account::OtherIncome, paid, "claim received"),
+        );
+        if let Some(stored) = world.insurance.get_mut(handle) {
+            stored.claim_reserve_cents = stored.claim_reserve_cents.saturating_sub(paid);
+        }
+    }
+}
+
 /// Weekly premiums, earned premium recognition, idiosyncratic losses and claims payment.
 pub fn weekly(world: &mut World) {
+    settle_claims(world);
     let handles: Vec<Handle> = world.insurance.iter().map(|(handle, _)| handle).collect();
     for handle in handles {
         let Some(policy) = world.insurance.get(handle).cloned() else {
@@ -227,39 +270,16 @@ fn apply_loss(world: &mut World, handle: Handle, policy: &InsurancePolicy, loss_
     let claim = (loss_cents - policy.deductible_cents).clamp(0, policy.limit_cents);
     if let Some(stored) = world.insurance.get_mut(handle) {
         stored.claim_reserve_cents += claim;
+        stored.claim_payable_week = world.tick.0 + 1;
     }
     if claim > 0 {
-        // Reserve at the incident; payout next week from actual insurer cash.
+        // Recognise the expense and reserve now; the payout settles next week from actual cash.
         let _ = world.firms.get_mut(policy.insurer).unwrap().book.commit(
             world.tick,
             Txn::new()
                 .debit(Account::OperatingExpense, claim, "claim reserve")
                 .credit(Account::ClaimLiabilities, claim, "claim reserve"),
         );
-        let cash = world
-            .firms
-            .get(policy.insurer)
-            .map(|f| f.book.cash())
-            .unwrap_or(0)
-            .max(0);
-        let paid = claim.min(cash);
-        if paid > 0 {
-            let _ = world.firms.get_mut(policy.insurer).unwrap().book.commit(
-                world.tick,
-                Txn::new()
-                    .credit(Account::Cash, paid, "claim payment")
-                    .debit(Account::ClaimLiabilities, paid, "claim payment"),
-            );
-            let _ = world.firms.get_mut(policy.insured).unwrap().book.commit(
-                world.tick,
-                Txn::new()
-                    .debit(Account::Cash, paid, "claim received")
-                    .credit(Account::OtherIncome, paid, "claim received"),
-            );
-            if let Some(stored) = world.insurance.get_mut(handle) {
-                stored.claim_reserve_cents = stored.claim_reserve_cents.saturating_sub(paid);
-            }
-        }
     }
 }
 
@@ -295,6 +315,7 @@ pub fn catastrophe(world: &mut World, region: u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cw_data::Dataset;
 
     #[test]
     fn annual_premium_uses_the_prescribed_formula() {
@@ -302,6 +323,56 @@ mod tests {
         assert_eq!(weekly_premium(100_000_000), 48_077);
         let annual = weekly_premium(100_000_000) * 52;
         assert!((2_499_000..=2_501_000).contains(&annual));
+    }
+
+    #[test]
+    fn a_claim_is_reserved_now_and_paid_next_week() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            801,
+            crate::state::ScenarioKind::Founder,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let insurer = world
+            .firms
+            .iter()
+            .find(|(_, firm)| firm.insurer.is_some())
+            .map(|(handle, _)| handle)
+            .unwrap();
+        let insured = world
+            .firms
+            .iter()
+            .find(|(_, firm)| firm.insurer.is_none() && !firm.facilities.is_empty())
+            .map(|(handle, _)| handle)
+            .unwrap();
+        let facility = world.firm(insured).unwrap().facilities[0];
+        let limit = world.facilities.get(facility).unwrap().capex_cents / 2;
+        let policy = bind(&mut world, insurer, insured, facility, limit, 0).unwrap();
+        // Isolate the claim from the premium cash flow.
+        world
+            .insurance
+            .get_mut(policy)
+            .unwrap()
+            .weekly_premium_cents = 0;
+        let cash_before = world.firm(insured).unwrap().book.cash();
+        let region = world.facilities.get(facility).unwrap().region;
+        catastrophe(&mut world, region);
+        let reserved = world.insurance.get(policy).unwrap().claim_reserve_cents;
+        assert!(reserved > 0, "the incident is reserved");
+        assert_eq!(
+            world.firm(insured).unwrap().book.cash(),
+            cash_before,
+            "no payout yet"
+        );
+        world.tick = Tick(2);
+        weekly(&mut world);
+        assert!(
+            world.firm(insured).unwrap().book.cash() > cash_before,
+            "paid next week"
+        );
+        assert!(world.insurance.get(policy).unwrap().claim_reserve_cents < reserved);
+        assert!(world.firm(insurer).unwrap().book.is_balanced());
     }
 
     #[test]

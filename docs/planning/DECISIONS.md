@@ -264,3 +264,12 @@ claims, losing money without a counterparty. Banks now track per-depositor claim
 model; deposits and withdrawals maintain them, and a run pays available cash pro rata, credits
 each depositor and reduces their claim. Unpaid claims remain liabilities. Test:
 `banking::tests::a_run_pays_depositors_pro_rata_and_reduces_their_claims`.
+
+### Insurance claims settle the following week, 2026-10-25
+
+An incident recognised its reserve and paid immediately from insurer cash, contrary to the rule
+that reserves are recognised at the incident and paid next week. Claims now carry a payable week;
+`settle_claims` runs at the start of the insurance pass, pays from actual cash, credits the insured
+and reduces the reserve. Unpaid reserves stay as liabilities. Tests:
+`insurance::tests::a_claim_is_reserved_now_and_paid_next_week` and the updated industry insurer
+scenario.
