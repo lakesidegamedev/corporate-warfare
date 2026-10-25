@@ -8,7 +8,7 @@ Milestone GitHub issues:1-6; corresponding kanban cards:254773-254778.
 
 Owner answers and the clarification that DeepSeek should execute architect-made decisions
 are incorporated. Original PLAN is preserved as superseded input. Audit, official-source
-research, economic/architecture/UI/data/testing/release plans, six prescriptive rule
+research, economic/architecture/UI/data/testing/release plans, prescriptive rule
 specifications, authored initial parameters and restart instructions are committed.
 
 Execution ledger:39 packets,117 checklist steps. P00 bootstrap is done with evidence;

@@ -49,7 +49,9 @@ Defense demand is funded procurement with milestones, 10 percent deposit and pay
 accepted delivery. Contract failure penalty 5 percent undelivered value after two-week
 grace. Government expenditure must have cash/fiscal issuance counterparty and a ceiling;
 not an unlimited offer. Office leases bill occupied blocks; vacant capacity earns zero.
-Software licences amortise buyer expense over 52 weeks and pay seller cash once; telecom
+Software licences prepay52 weeks: buyer records prepaid asset and expenses1/52 weekly;
+seller receives cash once, records unearned revenue and recognises1/52 weekly. Expiry
+ends access without another automatic cash transfer. Telecom
 subscriptions renew weekly with cancellation and service failure. Advertising demand
 comes from actual firm marketing budgets; do not add independent infinite media revenue.
 Research/training/maintenance are outside-service offers at start, finite by regional

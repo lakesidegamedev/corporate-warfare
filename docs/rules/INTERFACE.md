@@ -125,3 +125,16 @@ canonical fields, not compression bytes. Pin introduced dependencies in Cargo.lo
 Envelope checksum also uses BLAKE3 over the encoded payload; validate declared compressed
 and decompressed lengths <=64MB, reject decompression beyond that bound. Never allow a
 small malicious compressed save to allocate an unbounded world.
+
+## Bounded financial history
+
+Keep authoritative current account balances, construction/cost bases, receivables/payables,
+loan/policy schedules, tax loss buckets and all other future-affecting state permanently.
+Detailed posting journal retains13 weeks; weekly account summaries104 weeks; quarterly
+financial statements52 quarters. Older closed history compacts into opening balances,
+aggregate lifetime/career statistics and a chained journal hash. Compaction never changes
+cash, retained earnings, inventory cost, claims, future obligations or canonical future
+outcomes. Retain enough tax buckets for the prescribed four-year loss carry. Optional
+full audit/command history exports separately and cannot make saves grow without bound.
+Test compaction against an unpruned reference at week104,260,1560. A visible historic
+chart labels its retained interval; it never invents missing old transaction detail.

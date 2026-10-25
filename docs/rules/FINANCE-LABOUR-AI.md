@@ -178,3 +178,10 @@ tangible assets are zero. Interest coverage is unlimited only when interest due 
 and EBITDA positive; zero when EBITDA<=0. Negative equity is always gradeD, regardless
 of cash balance. Forecast debt service zero makes coverage test pass only if forecast
 operating cash is nonnegative. All thresholds use cross-multiplied integer comparisons.
+
+The thirteen-week bargaining fallback wage is midpoint(demand,last_offer), rounded to
+cents, capped at the forecast affordable payroll per affected worker using last13-week
+realised receipts minus non-labour mandatory outflows. Never lower existing contractual
+wages by this cap. If capped affordable wage is below an existing contractual floor,
+record failed settlement and enter normal payment-grace/restructuring instead of pretending
+to fund it. It is possible for the company to fail; there is no free arbitrator bailout.
