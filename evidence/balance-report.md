@@ -383,3 +383,25 @@ median 10 and controlled median 1. Seed 3 is still four dissolved rivals and sco
 Tier-aware transfer need and unpaid-need reporting do not change the distributions: seed 3 is
 still four dissolved rivals and score 61, and the 100 five-year conservative runs score
 56/62/62 with dissolved median 5.
+
+## Widened distributions, 2026-10-25
+
+To remove small-sample noise before further tuning:
+
+```
+./target/release/cw-cli sweep --seeds 1000 --weeks 260 --guided --five-year --policy conservative
+./target/release/cw-cli sweep --seeds 100 --weeks 1560 --from 1 --guided --sandbox --policy conservative
+```
+
+| Horizon | Runs | Score min/median/max | Dissolved median (min-max) | Controlled median (min) | Net worth min/median |
+|---|---|---:|---:|---:|---:|
+| 260 weeks | 1,000 | 56 / 62 / 62 | 5 (3-10) | 1 (0) | $3.49M / $4.34M |
+| 1,560 weeks | 100 | n/a | 10 (6-15) | 0 (0) | $3.49M / $3.49M |
+
+The 1,000-seed five-year distribution is stable: no errors, no rare crash or insolvency
+cliff, and the same score band. The wider thirty-year sample corrects the earlier 20-seed
+impression: the conservative reference policy loses control of the guided firm in the
+median seed and does not found a replacement, so median net worth stays at the personal
+cash floor. That is the designed failure-and-recovery path, but the reference policy does
+not exercise recovery. R36 remains open for a human difficulty judgement; the automated
+runs show no new root defect.
