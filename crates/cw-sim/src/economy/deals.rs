@@ -12,7 +12,7 @@
 //! Review lasts four weeks. A feasible divestiture can clear it; an infeasible remedy rejects
 //! the deal rather than inventing regulator discretion.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use cw_core::calendar::Tick;
 use cw_core::error::{DomainError, DomainResult, EntityKind};
@@ -172,6 +172,9 @@ pub fn weekly(world: &mut World) {
                     if remedy_ok
                         || (share < SHARE_REVIEW_BPS && !(hhi > HHI_REVIEW && delta > HHI_DELTA))
                     {
+                        if remedy_ok {
+                            let _ = divest_control(world, &deal);
+                        }
                         if let Some(stored) = world.deals.get_mut(handle) {
                             stored.state = DealState::Settled;
                         }
@@ -184,6 +187,62 @@ pub fn weekly(world: &mut World) {
             _ => {}
         }
     }
+}
+
+/// A remedy is a real divestiture: the buyer sells enough target shares to an outside holder to
+/// fall below control, so the target's sales stop counting inside the buyer's group.
+fn divest_control(world: &mut World, deal: &Deal) -> bool {
+    let Some(target) = world.firm(deal.target) else {
+        return false;
+    };
+    let eligible = target.shares.eligible_votes();
+    let held = target.shares.qty(HolderId::Firm(deal.buyer));
+    let keep = eligible * 49 / 100;
+    let sell = held.saturating_sub(keep);
+    if sell <= 0 {
+        return false;
+    }
+    let price = target.shares.fair_cents.max(1);
+    let proceeds = sell.saturating_mul(price);
+    let basis = target
+        .shares
+        .holders
+        .get(&HolderId::Firm(deal.buyer))
+        .map(|lot| {
+            if lot.qty > 0 {
+                lot.cost_cents * sell / lot.qty
+            } else {
+                0
+            }
+        })
+        .unwrap_or(0);
+    let outside = world
+        .outside
+        .investors
+        .iter_mut()
+        .find(|holder| holder.capital_cents >= proceeds);
+    let Some(outside) = outside else {
+        return false;
+    };
+    outside.capital_cents -= proceeds;
+    if let Some(bidder) = world.firms.get_mut(deal.buyer) {
+        let _ = bidder.book.commit(
+            world.tick,
+            Txn::new()
+                .debit(Account::Cash, proceeds, "divestiture")
+                .credit(Account::Investments, basis, "divestiture")
+                .credit(Account::OtherIncome, proceeds - basis, "divestiture"),
+        );
+    }
+    if let Some(target) = world.firms.get_mut(deal.target) {
+        target.shares.transfer(
+            HolderId::Firm(deal.buyer),
+            HolderId::Outside(0),
+            sell,
+            proceeds,
+        );
+    }
+    true
 }
 
 fn trigger_metrics(world: &World, buyer: Handle, target: Handle) -> (i64, i64, i64) {
@@ -224,7 +283,16 @@ pub fn concentration(
     target: Handle,
 ) -> (i64, i64, i64) {
     let buyer_group = crate::economy::ownership::controlled_group(world, buyer);
-    let target_group = crate::economy::ownership::controlled_group(world, target);
+    // Once a remedy has removed control, the target's sales no longer belong to the buyer group.
+    let target_group = if world
+        .firm(target)
+        .map(|firm| firm.shares.controller() == Some(HolderId::Firm(buyer)))
+        .unwrap_or(false)
+    {
+        crate::economy::ownership::controlled_group(world, target)
+    } else {
+        Vec::new()
+    };
     let mut volumes: BTreeMap<Handle, i64> = BTreeMap::new();
     for (handle, firm) in world.firms.iter() {
         let volume = firm.trailing_units(region, product);
@@ -236,9 +304,12 @@ pub fn concentration(
     if total <= 0 {
         return (0, 0, 0);
     }
-    let combined: i64 = buyer_group
+    // Union, not concatenation: a controlled target is already inside the buyer group.
+    let mut group: BTreeSet<Handle> = BTreeSet::new();
+    group.extend(buyer_group.iter().copied());
+    group.extend(target_group.iter().copied());
+    let combined: i64 = group
         .iter()
-        .chain(target_group.iter())
         .map(|handle| volumes.get(handle).copied().unwrap_or(0))
         .sum();
     let mut before_hhi = 0i64;
@@ -246,7 +317,7 @@ pub fn concentration(
     for (handle, volume) in &volumes {
         let share = volume * 10_000 / total;
         before_hhi += (share as i128 * share as i128 / 10_000) as i64;
-        if buyer_group.contains(handle) || target_group.contains(handle) {
+        if group.contains(handle) {
             continue;
         }
         after_hhi += (share as i128 * share as i128 / 10_000) as i64;
@@ -680,6 +751,17 @@ mod tests {
         let handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
         let buyer = handles[0];
         let target = handles[1];
+        // Concentration aggregates the buyer and its controlled target only.
+        {
+            let issued = world.firm(target).unwrap().shares.issued;
+            world
+                .firms
+                .get_mut(target)
+                .unwrap()
+                .shares
+                .add(HolderId::Firm(buyer), issued + 1, 0);
+            world.firms.get_mut(target).unwrap().shares.issued += issued + 1;
+        }
         let region = world.firm(target).unwrap().region;
         let mut week = BTreeMap::new();
         week.insert((region, 7u16), 600i64);
@@ -699,6 +781,81 @@ mod tests {
         }
         let (share, _hhi, _delta) = concentration(&world, region, 7, buyer, target);
         assert_eq!(share, 7_500);
+    }
+
+    #[test]
+    fn a_remedy_divests_enough_shares_to_remove_control() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            771,
+            crate::state::ScenarioKind::Founder,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let handles: Vec<Handle> = world
+            .firms
+            .iter()
+            .map(|(handle, _)| handle)
+            .take(2)
+            .collect();
+        let (buyer, target) = (handles[0], handles[1]);
+        // Buyer holds eighty percent; a remedy must take it below half.
+        {
+            let issued = world.firm(target).unwrap().shares.issued;
+            // More than the whole existing issue, so the buyer holds strictly over half.
+            let acquired = issued + 1;
+            world
+                .firms
+                .get_mut(target)
+                .unwrap()
+                .shares
+                .add(HolderId::Firm(buyer), acquired, 0);
+            world.firms.get_mut(target).unwrap().shares.issued += acquired;
+        }
+        assert_eq!(
+            world.firm(target).unwrap().shares.controller(),
+            Some(HolderId::Firm(buyer))
+        );
+        let cash_before = world.firm(buyer).unwrap().book.cash();
+        let issued_total = world.firm(target).unwrap().shares.issued;
+        let deal = Deal {
+            buyer,
+            target,
+            kind: DealKind::SharePurchase,
+            state: DealState::Review,
+            escrow_cents: 0,
+            offer_price_cents: 1,
+            max_shares: 0,
+            committed_shares: 0,
+            started: world.tick,
+            diligence_until: world.tick,
+            offer_deadline: world.tick,
+            review_deadline: Some(world.tick),
+            frozen_fair_cents: 1,
+            review_required: true,
+            remedy_share_bps: 2_000,
+            hostile: false,
+            diligence_paid: true,
+        };
+        assert!(divest_control(&mut world, &deal), "shares were divested");
+        assert!(
+            world.firm(target).unwrap().shares.controller() != Some(HolderId::Firm(buyer)),
+            "the buyer no longer controls the target"
+        );
+        assert!(
+            world.firm(buyer).unwrap().book.cash() > cash_before,
+            "the buyer is paid"
+        );
+        let total: i64 = world
+            .firm(target)
+            .unwrap()
+            .shares
+            .holders
+            .values()
+            .map(|lot| lot.qty)
+            .sum();
+        assert_eq!(total, issued_total, "shares are conserved");
+        assert!(world.firm(buyer).unwrap().book.is_balanced());
     }
 
     #[test]
