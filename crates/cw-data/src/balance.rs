@@ -74,6 +74,9 @@ pub struct Product {
 pub struct Recipe {
     pub industry: String,
     pub id: String,
+    /// Operating strategy shown to the player, after A House Divided's sector strategies.
+    #[serde(default)]
+    pub name: String,
     pub output: String,
     pub weekly_output_lots: i64,
     pub weekly_inputs_lots: BTreeMap<String, i64>,

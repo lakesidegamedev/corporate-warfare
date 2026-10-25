@@ -127,17 +127,24 @@ impl Dataset {
     /// Structural validation. Any error is a data defect, never a gameplay outcome.
     pub fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
-        if self.products.len() != 25 {
+        if self.products.len() != 34 {
             errors.push(format!(
-                "expected 25 products, found {}",
+                "expected 34 products, found {}",
                 self.products.len()
             ));
         }
-        if self.recipes.len() != 17 {
-            errors.push(format!(
-                "expected 17 operating recipes, found {}",
-                self.recipes.len()
-            ));
+        // Every operating sector offers a real choice of strategies, each named for the player.
+        let mut strategies: BTreeMap<&str, usize> = BTreeMap::new();
+        for recipe in &self.recipes {
+            *strategies.entry(recipe.industry.as_str()).or_default() += 1;
+            if recipe.name.trim().is_empty() {
+                errors.push(format!("strategy {} has no display name", recipe.id));
+            }
+        }
+        for (industry, count) in &strategies {
+            if *count < 3 {
+                errors.push(format!("sector {industry} offers {count} strategies, needs at least 3"));
+            }
         }
         if self.regions.len() < 8 {
             errors.push(format!(
@@ -406,8 +413,8 @@ mod tests {
     #[test]
     fn pinned_dataset_loads_and_validates() {
         let dataset = Dataset::load().expect("dataset must validate");
-        assert_eq!(dataset.products.len(), 25);
-        assert_eq!(dataset.recipes.len(), 17);
+        assert_eq!(dataset.products.len(), 34);
+        assert_eq!(dataset.recipes.len(), 53);
         assert_eq!(dataset.regions.len(), 8);
         assert_eq!(dataset.events.len(), 24);
         assert_eq!(dataset.seed_firms.len(), 30);

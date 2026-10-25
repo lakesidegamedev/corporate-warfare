@@ -9,7 +9,7 @@
       "industry": "agriculture",
       "archetype": "cost_leader",
       "region": "OH",
-      "recipe": "farm",
+      "recipe": "farm_industrial",
       "blocks": 3,
       "public": false
     },
@@ -18,9 +18,9 @@
       "name": "Prairie Line Farms",
       "industry": "agriculture",
       "archetype": "brand_builder",
-      "region": "IN",
+      "region": "IL",
       "recipe": "farm",
-      "blocks": 2,
+      "blocks": 3,
       "public": true
     },
     {
@@ -28,7 +28,7 @@
       "name": "Ironwood Ore Partners",
       "industry": "extraction",
       "archetype": "consolidator",
-      "region": "WV",
+      "region": "MI",
       "recipe": "mine",
       "blocks": 1,
       "public": true
@@ -38,8 +38,8 @@
       "name": "Black Shale Resources",
       "industry": "extraction",
       "archetype": "technologist",
-      "region": "PA",
-      "recipe": "mine",
+      "region": "WV",
+      "recipe": "coal_mine",
       "blocks": 2,
       "public": false
     },
@@ -49,7 +49,7 @@
       "industry": "energy",
       "archetype": "cost_leader",
       "region": "OH",
-      "recipe": "generator",
+      "recipe": "generator_coal",
       "blocks": 1,
       "public": true
     },
@@ -58,8 +58,8 @@
       "name": "Kettle Creek Generation",
       "industry": "energy",
       "archetype": "vulture",
-      "region": "OH",
-      "recipe": "generator",
+      "region": "PA",
+      "recipe": "generator_gas",
       "blocks": 1,
       "public": false
     },
@@ -79,7 +79,7 @@
       "industry": "chemical_industries",
       "archetype": "consolidator",
       "region": "PA",
-      "recipe": "chemical_plant",
+      "recipe": "plastics_plant",
       "blocks": 1,
       "public": false
     },
@@ -95,12 +95,12 @@
     },
     {
       "id": "miami_components",
-      "name": "Miami Valley Components",
+      "name": "Wolverine Motor Works",
       "industry": "manufacturing",
       "archetype": "technologist",
-      "region": "OH",
-      "recipe": "component_works",
-      "blocks": 3,
+      "region": "MI",
+      "recipe": "vehicle_assembly",
+      "blocks": 1,
       "public": false
     },
     {
@@ -108,7 +108,7 @@
       "name": "Stonebridge Contractors",
       "industry": "construction",
       "archetype": "consolidator",
-      "region": "OH",
+      "region": "IN",
       "recipe": "contractor",
       "blocks": 1,
       "public": false
@@ -119,7 +119,7 @@
       "industry": "construction",
       "archetype": "cost_leader",
       "region": "PA",
-      "recipe": "contractor",
+      "recipe": "infrastructure",
       "blocks": 1,
       "public": true
     },
@@ -138,8 +138,8 @@
       "name": "Crossroads Carriers",
       "industry": "logistics",
       "archetype": "brand_builder",
-      "region": "IN",
-      "recipe": "carrier",
+      "region": "IL",
+      "recipe": "freight_rail",
       "blocks": 1,
       "public": false
     },
@@ -158,7 +158,7 @@
       "name": "Union Square Goods",
       "industry": "retail",
       "archetype": "consolidator",
-      "region": "OH",
+      "region": "NY",
       "recipe": "goods_store",
       "blocks": 2,
       "public": false
@@ -175,11 +175,11 @@
     },
     {
       "id": "blue_heron_clinics",
-      "name": "Blue Heron Clinics",
+      "name": "Blue Heron Health System",
       "industry": "healthcare",
       "archetype": "technologist",
-      "region": "WV",
-      "recipe": "clinic",
+      "region": "PA",
+      "recipe": "hospital",
       "blocks": 1,
       "public": false
     },
@@ -188,7 +188,7 @@
       "name": "Harborline Bank",
       "industry": "financial",
       "archetype": "consolidator",
-      "region": "OH",
+      "region": "NY",
       "recipe": "bank",
       "blocks": 1,
       "public": true
@@ -198,7 +198,7 @@
       "name": "Northshore Property Assurance",
       "industry": "financial",
       "archetype": "cost_leader",
-      "region": "MI",
+      "region": "IL",
       "recipe": "property_insurer",
       "blocks": 1,
       "public": false
@@ -215,11 +215,11 @@
     },
     {
       "id": "lantern_systems",
-      "name": "Lantern Systems",
+      "name": "Lantern Systems Hardware",
       "industry": "technology",
       "archetype": "vulture",
       "region": "IN",
-      "recipe": "software_studio",
+      "recipe": "hardware_maker",
       "blocks": 1,
       "public": false
     },
@@ -228,18 +228,18 @@
       "name": "Skyline Media Group",
       "industry": "media",
       "archetype": "brand_builder",
-      "region": "OH",
+      "region": "NY",
       "recipe": "media_studio",
       "blocks": 1,
       "public": true
     },
     {
       "id": "beacon_broadcast",
-      "name": "Beacon Broadcast",
+      "name": "Beacon Press Group",
       "industry": "media",
       "archetype": "consolidator",
-      "region": "OH",
-      "recipe": "media_studio",
+      "region": "IL",
+      "recipe": "publishing",
       "blocks": 1,
       "public": false
     },
@@ -248,7 +248,7 @@
       "name": "Great Lakes Fiber",
       "industry": "telecommunications",
       "archetype": "technologist",
-      "region": "OH",
+      "region": "MI",
       "recipe": "network",
       "blocks": 1,
       "public": true
@@ -258,8 +258,8 @@
       "name": "Northstar Telecom",
       "industry": "telecommunications",
       "archetype": "cost_leader",
-      "region": "IN",
-      "recipe": "network",
+      "region": "NY",
+      "recipe": "wireless",
       "blocks": 1,
       "public": false
     },
@@ -268,7 +268,7 @@
       "name": "Iron Gate Properties",
       "industry": "real_estate",
       "archetype": "consolidator",
-      "region": "MI",
+      "region": "IL",
       "recipe": "rental_property",
       "blocks": 1,
       "public": true
@@ -278,8 +278,8 @@
       "name": "Rivermark Estates",
       "industry": "real_estate",
       "archetype": "brand_builder",
-      "region": "OH",
-      "recipe": "rental_property",
+      "region": "KY",
+      "recipe": "residential",
       "blocks": 1,
       "public": false
     },
@@ -299,7 +299,7 @@
       "industry": "defense",
       "archetype": "vulture",
       "region": "PA",
-      "recipe": "defense_plant",
+      "recipe": "munitions",
       "blocks": 1,
       "public": false
     }

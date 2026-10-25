@@ -10,25 +10,25 @@
   "products": [
     {
       "id": "food_raw",
-      "name": "Farm output",
+      "name": "Food (farm output)",
       "reference_price_cents": 10000,
       "kind": "goods"
     },
     {
       "id": "ore",
-      "name": "Mineral ore",
+      "name": "Iron ore",
       "reference_price_cents": 20000,
       "kind": "goods"
     },
     {
       "id": "fuel",
-      "name": "Fuel",
+      "name": "Oil & fuel",
       "reference_price_cents": 30000,
       "kind": "goods"
     },
     {
       "id": "electricity",
-      "name": "Electricity service",
+      "name": "Energy",
       "reference_price_cents": 120000,
       "kind": "local_service"
     },
@@ -40,105 +40,159 @@
     },
     {
       "id": "steel",
-      "name": "Processed metal",
+      "name": "Steel",
       "reference_price_cents": 40000,
       "kind": "goods"
     },
     {
       "id": "components",
-      "name": "Components",
+      "name": "Electronics & components",
       "reference_price_cents": 100000,
       "kind": "goods"
     },
     {
       "id": "goods",
-      "name": "Finished goods",
+      "name": "Consumer goods",
       "reference_price_cents": 200000,
       "kind": "goods"
     },
     {
       "id": "construction",
-      "name": "Construction work",
+      "name": "Construction services",
       "reference_price_cents": 1200000,
       "kind": "project_service"
     },
     {
       "id": "freight",
-      "name": "Freight work",
+      "name": "Freight",
       "reference_price_cents": 12000,
       "kind": "transport_service"
     },
     {
       "id": "food_retail",
-      "name": "Delivered consumer food",
+      "name": "Groceries",
       "reference_price_cents": 17000,
       "kind": "consumer_goods"
     },
     {
       "id": "goods_retail",
-      "name": "Delivered consumer goods",
+      "name": "Retail goods",
       "reference_price_cents": 300000,
       "kind": "consumer_goods"
     },
     {
       "id": "care",
-      "name": "Care episode",
+      "name": "Healthcare services",
       "reference_price_cents": 100000,
       "kind": "local_service"
     },
     {
       "id": "software",
-      "name": "Software licence",
+      "name": "Software",
       "reference_price_cents": 50000,
       "kind": "subscription"
     },
     {
       "id": "advertising",
-      "name": "Advertising reach",
+      "name": "Advertising",
       "reference_price_cents": 100000,
       "kind": "service"
     },
     {
       "id": "telecom",
-      "name": "Subscription block",
+      "name": "Network services",
       "reference_price_cents": 10000,
       "kind": "subscription"
     },
     {
       "id": "lease",
-      "name": "Occupied space block",
+      "name": "Real estate services",
       "reference_price_cents": 100000,
       "kind": "lease_service"
     },
     {
       "id": "defense",
-      "name": "Procurement delivery",
+      "name": "Defense systems",
       "reference_price_cents": 1100000,
       "kind": "contract_goods"
     },
     {
       "id": "research",
-      "name": "Research service",
+      "name": "Consulting & R&D",
       "reference_price_cents": 200000,
       "kind": "service"
     },
     {
       "id": "maintenance",
-      "name": "Maintenance service",
+      "name": "Maintenance services",
       "reference_price_cents": 100000,
       "kind": "service"
     },
     {
       "id": "training",
-      "name": "Training place",
+      "name": "Training",
       "reference_price_cents": 100000,
       "kind": "local_service"
     },
     {
       "id": "water",
-      "name": "Utility water block",
+      "name": "Water",
       "reference_price_cents": 10000,
       "kind": "local_service"
+    },
+    {
+      "id": "coal",
+      "name": "Coal",
+      "reference_price_cents": 14000,
+      "kind": "goods"
+    },
+    {
+      "id": "natural_gas",
+      "name": "Natural gas",
+      "reference_price_cents": 19000,
+      "kind": "goods"
+    },
+    {
+      "id": "timber",
+      "name": "Timber",
+      "reference_price_cents": 8200,
+      "kind": "goods"
+    },
+    {
+      "id": "rare_earth",
+      "name": "Rare earth minerals",
+      "reference_price_cents": 133000,
+      "kind": "goods"
+    },
+    {
+      "id": "plastics",
+      "name": "Plastics",
+      "reference_price_cents": 29000,
+      "kind": "goods"
+    },
+    {
+      "id": "fertilizers",
+      "name": "Fertilizers",
+      "reference_price_cents": 21000,
+      "kind": "goods"
+    },
+    {
+      "id": "pharmaceuticals",
+      "name": "Pharmaceuticals",
+      "reference_price_cents": 261000,
+      "kind": "goods"
+    },
+    {
+      "id": "building_materials",
+      "name": "Building materials",
+      "reference_price_cents": 19000,
+      "kind": "goods"
+    },
+    {
+      "id": "vehicles",
+      "name": "Vehicles",
+      "reference_price_cents": 424000,
+      "kind": "goods"
     },
     {
       "id": "deposit",
@@ -176,6 +230,67 @@
       ],
       "capex_cents": 200000000,
       "build_weeks": 13,
+      "life_years": 20,
+      "name": "Traditional"
+    },
+    {
+      "industry": "agriculture",
+      "id": "farm_industrial",
+      "name": "Industrial",
+      "output": "food_raw",
+      "weekly_output_lots": 786,
+      "weekly_inputs_lots": {
+        "electricity": 12,
+        "fertilizers": 24,
+        "fuel": 30
+      },
+      "workers_low_mid_high": [
+        62,
+        12,
+        3
+      ],
+      "capex_cents": 245000000,
+      "build_weeks": 13,
+      "life_years": 20
+    },
+    {
+      "industry": "agriculture",
+      "id": "farm_precision",
+      "name": "Precision Agriculture",
+      "output": "food_raw",
+      "weekly_output_lots": 768,
+      "weekly_inputs_lots": {
+        "electricity": 14,
+        "fertilizers": 12,
+        "fuel": 18,
+        "software": 8
+      },
+      "workers_low_mid_high": [
+        40,
+        16,
+        5
+      ],
+      "capex_cents": 298000000,
+      "build_weeks": 13,
+      "life_years": 20
+    },
+    {
+      "industry": "agriculture",
+      "id": "farm_sustainable",
+      "name": "Sustainable",
+      "output": "food_raw",
+      "weekly_output_lots": 483,
+      "weekly_inputs_lots": {
+        "electricity": 8,
+        "fuel": 8
+      },
+      "workers_low_mid_high": [
+        52,
+        9,
+        2
+      ],
+      "capex_cents": 86000000,
+      "build_weeks": 13,
       "life_years": 20
     },
     {
@@ -194,7 +309,104 @@
       ],
       "capex_cents": 300000000,
       "build_weeks": 26,
+      "life_years": 20,
+      "name": "Iron & Metals Mining"
+    },
+    {
+      "industry": "extraction",
+      "id": "coal_mine",
+      "name": "Coal Mining",
+      "output": "coal",
+      "weekly_output_lots": 600,
+      "weekly_inputs_lots": {
+        "electricity": 10,
+        "fuel": 18
+      },
+      "workers_low_mid_high": [
+        70,
+        18,
+        3
+      ],
+      "capex_cents": 262000000,
+      "build_weeks": 26,
+      "life_years": 25
+    },
+    {
+      "industry": "extraction",
+      "id": "gas_wells",
+      "name": "Oil & Gas",
+      "output": "natural_gas",
+      "weekly_output_lots": 300,
+      "weekly_inputs_lots": {
+        "electricity": 6,
+        "fuel": 10,
+        "steel": 10
+      },
+      "workers_low_mid_high": [
+        18,
+        14,
+        4
+      ],
+      "capex_cents": 235000000,
+      "build_weeks": 26,
       "life_years": 20
+    },
+    {
+      "industry": "extraction",
+      "id": "oil_wells",
+      "name": "Oil Production",
+      "output": "fuel",
+      "weekly_output_lots": 181,
+      "weekly_inputs_lots": {
+        "electricity": 8,
+        "steel": 8
+      },
+      "workers_low_mid_high": [
+        20,
+        14,
+        4
+      ],
+      "capex_cents": 223000000,
+      "build_weeks": 26,
+      "life_years": 20
+    },
+    {
+      "industry": "extraction",
+      "id": "rare_earth_mine",
+      "name": "Rare Earth Minerals Mining",
+      "output": "rare_earth",
+      "weekly_output_lots": 60,
+      "weekly_inputs_lots": {
+        "chemicals": 6,
+        "electricity": 12,
+        "fuel": 12
+      },
+      "workers_low_mid_high": [
+        30,
+        16,
+        4
+      ],
+      "capex_cents": 368000000,
+      "build_weeks": 39,
+      "life_years": 25
+    },
+    {
+      "industry": "extraction",
+      "id": "timber_forestry",
+      "name": "Timber & Forestry",
+      "output": "timber",
+      "weekly_output_lots": 500,
+      "weekly_inputs_lots": {
+        "fuel": 14
+      },
+      "workers_low_mid_high": [
+        45,
+        8,
+        2
+      ],
+      "capex_cents": 117000000,
+      "build_weeks": 13,
+      "life_years": 30
     },
     {
       "industry": "energy",
@@ -211,7 +423,81 @@
       ],
       "capex_cents": 500000000,
       "build_weeks": 39,
+      "life_years": 30,
+      "name": "Oil-fired Generation"
+    },
+    {
+      "industry": "energy",
+      "id": "generator_coal",
+      "name": "Coal-fired Generation",
+      "output": "electricity",
+      "weekly_output_lots": 63,
+      "weekly_inputs_lots": {
+        "coal": 55
+      },
+      "workers_low_mid_high": [
+        16,
+        12,
+        3
+      ],
+      "capex_cents": 358000000,
+      "build_weeks": 39,
       "life_years": 30
+    },
+    {
+      "industry": "energy",
+      "id": "generator_gas",
+      "name": "Gas Turbines",
+      "output": "electricity",
+      "weekly_output_lots": 41,
+      "weekly_inputs_lots": {
+        "natural_gas": 30
+      },
+      "workers_low_mid_high": [
+        8,
+        8,
+        3
+      ],
+      "capex_cents": 159000000,
+      "build_weeks": 26,
+      "life_years": 25
+    },
+    {
+      "industry": "energy",
+      "id": "generator_nuclear",
+      "name": "Nuclear",
+      "output": "electricity",
+      "weekly_output_lots": 173,
+      "weekly_inputs_lots": {
+        "chemicals": 6,
+        "maintenance": 10
+      },
+      "workers_low_mid_high": [
+        20,
+        30,
+        15
+      ],
+      "capex_cents": 1528000000,
+      "build_weeks": 104,
+      "life_years": 40
+    },
+    {
+      "industry": "energy",
+      "id": "generator_renewable",
+      "name": "Renewables Focus",
+      "output": "electricity",
+      "weekly_output_lots": 23,
+      "weekly_inputs_lots": {
+        "maintenance": 3
+      },
+      "workers_low_mid_high": [
+        3,
+        4,
+        2
+      ],
+      "capex_cents": 129000000,
+      "build_weeks": 26,
+      "life_years": 25
     },
     {
       "industry": "chemical_industries",
@@ -230,45 +516,67 @@
       ],
       "capex_cents": 400000000,
       "build_weeks": 26,
-      "life_years": 20
+      "life_years": 20,
+      "name": "Industrial Chemicals"
     },
     {
-      "industry": "manufacturing",
-      "id": "metal_works",
-      "output": "steel",
-      "weekly_output_lots": 200,
+      "industry": "chemical_industries",
+      "id": "fertilizer_plant",
+      "name": "Fertilizer Production",
+      "output": "fertilizers",
+      "weekly_output_lots": 300,
       "weekly_inputs_lots": {
-        "ore": 180,
-        "fuel": 10,
-        "electricity": 5
+        "electricity": 10,
+        "natural_gas": 40
+      },
+      "workers_low_mid_high": [
+        24,
+        16,
+        4
+      ],
+      "capex_cents": 137000000,
+      "build_weeks": 26,
+      "life_years": 25
+    },
+    {
+      "industry": "chemical_industries",
+      "id": "pharma_plant",
+      "name": "Pharmaceuticals",
+      "output": "pharmaceuticals",
+      "weekly_output_lots": 60,
+      "weekly_inputs_lots": {
+        "chemicals": 20,
+        "electricity": 8,
+        "research": 10
       },
       "workers_low_mid_high": [
         10,
-        8,
-        1
+        30,
+        22
       ],
-      "capex_cents": 100000000,
-      "build_weeks": 20,
-      "life_years": 20
+      "capex_cents": 554000000,
+      "build_weeks": 39,
+      "life_years": 25
     },
     {
-      "industry": "manufacturing",
-      "id": "component_works",
-      "output": "components",
-      "weekly_output_lots": 100,
+      "industry": "chemical_industries",
+      "id": "plastics_plant",
+      "name": "Plastics & Polymers",
+      "output": "plastics",
+      "weekly_output_lots": 240,
       "weekly_inputs_lots": {
-        "steel": 100,
-        "chemicals": 10,
-        "electricity": 5
+        "electricity": 10,
+        "fuel": 30,
+        "natural_gas": 20
       },
       "workers_low_mid_high": [
-        20,
-        20,
-        5
+        22,
+        16,
+        4
       ],
-      "capex_cents": 300000000,
-      "build_weeks": 20,
-      "life_years": 20
+      "capex_cents": 158000000,
+      "build_weeks": 26,
+      "life_years": 25
     },
     {
       "industry": "manufacturing",
@@ -287,7 +595,90 @@
       ],
       "capex_cents": 400000000,
       "build_weeks": 20,
-      "life_years": 20
+      "life_years": 20,
+      "name": "Consumer Goods Assembly"
+    },
+    {
+      "industry": "manufacturing",
+      "id": "component_works",
+      "output": "components",
+      "weekly_output_lots": 100,
+      "weekly_inputs_lots": {
+        "steel": 100,
+        "chemicals": 10,
+        "electricity": 5
+      },
+      "workers_low_mid_high": [
+        20,
+        20,
+        5
+      ],
+      "capex_cents": 300000000,
+      "build_weeks": 20,
+      "life_years": 20,
+      "name": "Electronics Manufacturing"
+    },
+    {
+      "industry": "manufacturing",
+      "id": "metal_works",
+      "output": "steel",
+      "weekly_output_lots": 200,
+      "weekly_inputs_lots": {
+        "ore": 180,
+        "fuel": 10,
+        "electricity": 5
+      },
+      "workers_low_mid_high": [
+        10,
+        8,
+        1
+      ],
+      "capex_cents": 100000000,
+      "build_weeks": 20,
+      "life_years": 20,
+      "name": "Heavy Metals"
+    },
+    {
+      "industry": "manufacturing",
+      "id": "building_products",
+      "name": "Building Products",
+      "output": "building_materials",
+      "weekly_output_lots": 400,
+      "weekly_inputs_lots": {
+        "electricity": 8,
+        "fuel": 10,
+        "ore": 40,
+        "timber": 120
+      },
+      "workers_low_mid_high": [
+        40,
+        12,
+        3
+      ],
+      "capex_cents": 87000000,
+      "build_weeks": 20,
+      "life_years": 25
+    },
+    {
+      "industry": "manufacturing",
+      "id": "vehicle_assembly",
+      "name": "Vehicle Assembly",
+      "output": "vehicles",
+      "weekly_output_lots": 40,
+      "weekly_inputs_lots": {
+        "components": 25,
+        "electricity": 12,
+        "plastics": 30,
+        "steel": 60
+      },
+      "workers_low_mid_high": [
+        70,
+        40,
+        10
+      ],
+      "capex_cents": 126000000,
+      "build_weeks": 39,
+      "life_years": 25
     },
     {
       "industry": "construction",
@@ -306,7 +697,48 @@
       ],
       "capex_cents": 100000000,
       "build_weeks": 8,
-      "life_years": 15
+      "life_years": 15,
+      "name": "General Contracting"
+    },
+    {
+      "industry": "construction",
+      "id": "infrastructure",
+      "name": "Infrastructure Buildout",
+      "output": "construction",
+      "weekly_output_lots": 15,
+      "weekly_inputs_lots": {
+        "building_materials": 60,
+        "fuel": 20,
+        "steel": 40
+      },
+      "workers_low_mid_high": [
+        90,
+        60,
+        12
+      ],
+      "capex_cents": 331000000,
+      "build_weeks": 8,
+      "life_years": 20
+    },
+    {
+      "industry": "construction",
+      "id": "modular",
+      "name": "Modular Construction",
+      "output": "construction",
+      "weekly_output_lots": 9,
+      "weekly_inputs_lots": {
+        "building_materials": 70,
+        "electricity": 6,
+        "timber": 40
+      },
+      "workers_low_mid_high": [
+        40,
+        40,
+        8
+      ],
+      "capex_cents": 132000000,
+      "build_weeks": 8,
+      "life_years": 20
     },
     {
       "industry": "logistics",
@@ -324,7 +756,67 @@
       ],
       "capex_cents": 200000000,
       "build_weeks": 8,
-      "life_years": 10
+      "life_years": 10,
+      "name": "Trucking"
+    },
+    {
+      "industry": "logistics",
+      "id": "freight_rail",
+      "name": "Freight Rail",
+      "output": "freight",
+      "weekly_output_lots": 643,
+      "weekly_inputs_lots": {
+        "electricity": 6,
+        "fuel": 40,
+        "steel": 6
+      },
+      "workers_low_mid_high": [
+        50,
+        20,
+        5
+      ],
+      "capex_cents": 337000000,
+      "build_weeks": 26,
+      "life_years": 30
+    },
+    {
+      "industry": "logistics",
+      "id": "full_service",
+      "name": "Full-Service Logistics",
+      "output": "freight",
+      "weekly_output_lots": 512,
+      "weekly_inputs_lots": {
+        "electricity": 6,
+        "fuel": 14,
+        "software": 8
+      },
+      "workers_low_mid_high": [
+        40,
+        18,
+        5
+      ],
+      "capex_cents": 159000000,
+      "build_weeks": 8,
+      "life_years": 20
+    },
+    {
+      "industry": "retail",
+      "id": "goods_store",
+      "output": "goods_retail",
+      "weekly_output_lots": 100,
+      "weekly_inputs_lots": {
+        "goods": 100,
+        "electricity": 5
+      },
+      "workers_low_mid_high": [
+        60,
+        20,
+        2
+      ],
+      "capex_cents": 150000000,
+      "build_weeks": 8,
+      "life_years": 15,
+      "name": "General Merchandise"
     },
     {
       "industry": "retail",
@@ -342,23 +834,47 @@
       ],
       "capex_cents": 100000000,
       "build_weeks": 8,
-      "life_years": 15
+      "life_years": 15,
+      "name": "Grocery"
     },
     {
       "industry": "retail",
-      "id": "goods_store",
+      "id": "auto_dealer",
+      "name": "Auto & Department Store",
       "output": "goods_retail",
-      "weekly_output_lots": 100,
+      "weekly_output_lots": 84,
       "weekly_inputs_lots": {
-        "goods": 100,
-        "electricity": 5
+        "electricity": 8,
+        "goods": 70,
+        "vehicles": 2
       },
       "workers_low_mid_high": [
-        60,
-        20,
-        2
+        55,
+        25,
+        4
       ],
-      "capex_cents": 150000000,
+      "capex_cents": 306000000,
+      "build_weeks": 8,
+      "life_years": 25
+    },
+    {
+      "industry": "retail",
+      "id": "ecommerce",
+      "name": "E-Commerce",
+      "output": "goods_retail",
+      "weekly_output_lots": 75,
+      "weekly_inputs_lots": {
+        "electricity": 4,
+        "freight": 60,
+        "goods": 70,
+        "software": 10
+      },
+      "workers_low_mid_high": [
+        25,
+        18,
+        6
+      ],
+      "capex_cents": 169000000,
       "build_weeks": 8,
       "life_years": 15
     },
@@ -378,7 +894,48 @@
       ],
       "capex_cents": 400000000,
       "build_weeks": 26,
-      "life_years": 25
+      "life_years": 25,
+      "name": "Outpatient & Preventive"
+    },
+    {
+      "industry": "healthcare",
+      "id": "hospital",
+      "name": "Hospital Networks",
+      "output": "care",
+      "weekly_output_lots": 264,
+      "weekly_inputs_lots": {
+        "electricity": 12,
+        "maintenance": 10,
+        "pharmaceuticals": 10
+      },
+      "workers_low_mid_high": [
+        40,
+        90,
+        45
+      ],
+      "capex_cents": 1520000000,
+      "build_weeks": 52,
+      "life_years": 40
+    },
+    {
+      "industry": "healthcare",
+      "id": "long_term_care",
+      "name": "Long-term Care",
+      "output": "care",
+      "weekly_output_lots": 110,
+      "weekly_inputs_lots": {
+        "electricity": 8,
+        "maintenance": 4,
+        "pharmaceuticals": 3
+      },
+      "workers_low_mid_high": [
+        60,
+        40,
+        8
+      ],
+      "capex_cents": 348000000,
+      "build_weeks": 26,
+      "life_years": 30
     },
     {
       "industry": "technology",
@@ -395,7 +952,48 @@
       ],
       "capex_cents": 100000000,
       "build_weeks": 8,
-      "life_years": 5
+      "life_years": 5,
+      "name": "Software Focus"
+    },
+    {
+      "industry": "technology",
+      "id": "hardware_maker",
+      "name": "Hardware Focus",
+      "output": "components",
+      "weekly_output_lots": 102,
+      "weekly_inputs_lots": {
+        "electricity": 10,
+        "plastics": 10,
+        "rare_earth": 8,
+        "steel": 6
+      },
+      "workers_low_mid_high": [
+        30,
+        25,
+        10
+      ],
+      "capex_cents": 178000000,
+      "build_weeks": 20,
+      "life_years": 15
+    },
+    {
+      "industry": "technology",
+      "id": "it_services",
+      "name": "IT Services",
+      "output": "research",
+      "weekly_output_lots": 39,
+      "weekly_inputs_lots": {
+        "electricity": 4,
+        "software": 10
+      },
+      "workers_low_mid_high": [
+        0,
+        18,
+        22
+      ],
+      "capex_cents": 109000000,
+      "build_weeks": 8,
+      "life_years": 15
     },
     {
       "industry": "media",
@@ -412,7 +1010,47 @@
       ],
       "capex_cents": 150000000,
       "build_weeks": 8,
-      "life_years": 10
+      "life_years": 10,
+      "name": "Legacy Broadcast"
+    },
+    {
+      "industry": "media",
+      "id": "digital_media",
+      "name": "Digital-First",
+      "output": "advertising",
+      "weekly_output_lots": 118,
+      "weekly_inputs_lots": {
+        "electricity": 4,
+        "software": 12,
+        "telecom": 80
+      },
+      "workers_low_mid_high": [
+        3,
+        12,
+        14
+      ],
+      "capex_cents": 337000000,
+      "build_weeks": 8,
+      "life_years": 15
+    },
+    {
+      "industry": "media",
+      "id": "publishing",
+      "name": "Print & Publishing",
+      "output": "advertising",
+      "weekly_output_lots": 97,
+      "weekly_inputs_lots": {
+        "electricity": 6,
+        "timber": 30
+      },
+      "workers_low_mid_high": [
+        20,
+        14,
+        6
+      ],
+      "capex_cents": 363000000,
+      "build_weeks": 13,
+      "life_years": 20
     },
     {
       "industry": "telecommunications",
@@ -429,6 +1067,46 @@
         10
       ],
       "capex_cents": 500000000,
+      "build_weeks": 39,
+      "life_years": 20,
+      "name": "Wireline Network"
+    },
+    {
+      "industry": "telecommunications",
+      "id": "broadband",
+      "name": "Broadband & Internet",
+      "output": "telecom",
+      "weekly_output_lots": 1545,
+      "weekly_inputs_lots": {
+        "components": 22,
+        "electricity": 12,
+        "software": 10
+      },
+      "workers_low_mid_high": [
+        8,
+        24,
+        16
+      ],
+      "capex_cents": 870000000,
+      "build_weeks": 39,
+      "life_years": 20
+    },
+    {
+      "industry": "telecommunications",
+      "id": "wireless",
+      "name": "Wireless Network",
+      "output": "telecom",
+      "weekly_output_lots": 1597,
+      "weekly_inputs_lots": {
+        "components": 30,
+        "electricity": 14
+      },
+      "workers_low_mid_high": [
+        8,
+        22,
+        14
+      ],
+      "capex_cents": 1005000000,
       "build_weeks": 39,
       "life_years": 20
     },
@@ -448,7 +1126,47 @@
       ],
       "capex_cents": 1000000000,
       "build_weeks": 52,
-      "life_years": 40
+      "life_years": 40,
+      "name": "Commercial Property"
+    },
+    {
+      "industry": "real_estate",
+      "id": "industrial_parks",
+      "name": "Industrial Parks",
+      "output": "lease",
+      "weekly_output_lots": 83,
+      "weekly_inputs_lots": {
+        "electricity": 6,
+        "maintenance": 5
+      },
+      "workers_low_mid_high": [
+        12,
+        8,
+        2
+      ],
+      "capex_cents": 818000000,
+      "build_weeks": 52,
+      "life_years": 50
+    },
+    {
+      "industry": "real_estate",
+      "id": "residential",
+      "name": "Residential Development",
+      "output": "lease",
+      "weekly_output_lots": 66,
+      "weekly_inputs_lots": {
+        "building_materials": 6,
+        "electricity": 4,
+        "maintenance": 4
+      },
+      "workers_low_mid_high": [
+        10,
+        8,
+        2
+      ],
+      "capex_cents": 554000000,
+      "build_weeks": 52,
+      "life_years": 50
     },
     {
       "industry": "defense",
@@ -468,7 +1186,70 @@
       ],
       "capex_cents": 500000000,
       "build_weeks": 39,
-      "life_years": 20
+      "life_years": 20,
+      "name": "Standard Defense"
+    },
+    {
+      "industry": "defense",
+      "id": "aerospace",
+      "name": "Aerospace Systems",
+      "output": "defense",
+      "weekly_output_lots": 21,
+      "weekly_inputs_lots": {
+        "chemicals": 20,
+        "components": 60,
+        "electricity": 12,
+        "rare_earth": 10
+      },
+      "workers_low_mid_high": [
+        30,
+        50,
+        30
+      ],
+      "capex_cents": 828000000,
+      "build_weeks": 52,
+      "life_years": 30
+    },
+    {
+      "industry": "defense",
+      "id": "heavy_armor",
+      "name": "Heavy Armor",
+      "output": "defense",
+      "weekly_output_lots": 18,
+      "weekly_inputs_lots": {
+        "components": 20,
+        "electricity": 12,
+        "steel": 120,
+        "vehicles": 2
+      },
+      "workers_low_mid_high": [
+        60,
+        45,
+        15
+      ],
+      "capex_cents": 481000000,
+      "build_weeks": 39,
+      "life_years": 25
+    },
+    {
+      "industry": "defense",
+      "id": "munitions",
+      "name": "Munitions",
+      "output": "defense",
+      "weekly_output_lots": 13,
+      "weekly_inputs_lots": {
+        "chemicals": 60,
+        "electricity": 10,
+        "steel": 40
+      },
+      "workers_low_mid_high": [
+        50,
+        35,
+        10
+      ],
+      "capex_cents": 250000000,
+      "build_weeks": 26,
+      "life_years": 25
     }
   ],
   "financial_businesses": [
