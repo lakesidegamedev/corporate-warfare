@@ -15,6 +15,24 @@ struct OverviewView: View {
                         if let pause = overview.pause {
                             DecisionBanner(text: "Paused: \(pause)")
                             if pause == "five_year_score" {
+                                if let score = store.score {
+                                    SectionCard(title: "Five-year score") {
+                                        Text("\(score.total) / 100")
+                                            .font(.largeTitle.monospacedDigit())
+                                        DetailRow(label: "Return (60%)", value: "\(score.returnComponent)")
+                                        DetailRow(label: "Resilience (20%)", value: "\(score.resilienceComponent)")
+                                        DetailRow(label: "Control (10%)", value: "\(score.controlComponent)")
+                                        DetailRow(label: "Conduct (10%)", value: "\(score.conductComponent)")
+                                        Text("Return compares personal net worth with the starting position. Resilience is the share of weeks without past-due liabilities. Control is the controlled productive group as a share of the portfolio. Conduct deducts unresolved regulatory breaches and failed worker settlements.")
+                                            .font(.footnote)
+                                            .foregroundStyle(Theme.secondaryText(for: scheme))
+                                        if score.assisted {
+                                            Text("Assisted recovery: this score is labelled.")
+                                                .font(.caption)
+                                                .foregroundStyle(Theme.warning)
+                                        }
+                                    }
+                                }
                                 Button {
                                     Task { await store.continueCareer() }
                                 } label: {

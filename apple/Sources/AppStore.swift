@@ -32,6 +32,7 @@ final class AppStore: ObservableObject {
     @Published var runSpeed: Double = 0
     @Published var saves: [StoredSave] = []
     @Published var marketRows: [MarketRow] = []
+    @Published var score: ScoreDto?
     @Published var showOnboarding = false
     /// Set when a slot failed to import. Drives the recovery screen.
     @Published var recoveryIssue: SaveRecoveryIssue?
@@ -222,6 +223,7 @@ final class AppStore: ObservableObject {
             policyState = nil
         }
         saves = SaveManager.shared.list()
+        score = await engine.score()
         await loadMarkets()
     }
 
