@@ -422,6 +422,32 @@ fn firm_ref(world: &World, handle: Handle) -> DomainResult<&Firm> {
     })
 }
 
+/// Command fields arrive from the wire, so an out-of-range region is a typed rejection rather
+/// than an index panic inside the settlement code that trusts stored region ids.
+fn require_region(world: &World, region: u8) -> DomainResult<()> {
+    if (region as usize) < world.regions.len() {
+        Ok(())
+    } else {
+        Err(DomainError::InvalidEntity {
+            handle: region as u64,
+            kind: EntityKind::Region,
+        })
+    }
+}
+
+/// `Dataset::reference_price` indexes unchecked, which is correct for trusted ids. A command
+/// carries an untrusted product id, so it is validated here before any lookup.
+fn reference_price(dataset: &Dataset, product: u16) -> DomainResult<i64> {
+    dataset
+        .products
+        .get(product as usize)
+        .map(|entry| entry.reference_price_cents)
+        .ok_or(DomainError::InvalidEntity {
+            handle: product as u64,
+            kind: EntityKind::Product,
+        })
+}
+
 fn spend_firm_cash(world: &mut World, firm: Handle, amount: i64, memo: &str) -> DomainResult<()> {
     let cash = firm_ref(world, firm)?.book.cash().max(0);
     if cash < amount {
@@ -524,15 +550,14 @@ fn apply_intent(
                     available: world.investor.cash_cents,
                 });
             }
-            if !dataset
-                .recipe_index
-                .contains_key(&dataset.recipes[*recipe as usize].id)
-            {
+            // A command carries an untrusted recipe id, so it is validated before any index.
+            if dataset.recipes.get(*recipe as usize).is_none() {
                 return Err(DomainError::InvalidEntity {
                     handle: *recipe as u64,
                     kind: EntityKind::Product,
                 });
             }
+            require_region(world, *region)?;
             world.investor.cash_cents -= capital_cents + fee;
             let _ = world.investor.book.commit(
                 world.tick,
@@ -719,6 +744,7 @@ fn apply_intent(
                         handle: *recipe as u64,
                         kind: EntityKind::Product,
                     })?;
+            require_region(world, *region)?;
             let cost = template.capex_cents * *blocks as i64;
             spend_firm_cash(world, *firm, cost, "construction escrow")?;
             if let Some(entity) = world.firms.get_mut(*firm) {
@@ -859,7 +885,7 @@ fn apply_intent(
                     detail: ArithmeticFault::OutOfRange,
                 });
             }
-            let reference = dataset.reference_price(*product);
+            let reference = reference_price(dataset, *product)?;
             if *price_cents < reference / 2 || *price_cents > reference * 2 {
                 return Err(DomainError::SolvencyRestriction {
                     entity: firm.0,
@@ -974,7 +1000,11 @@ fn apply_intent(
                     detail: ArithmeticFault::OutOfRange,
                 });
             }
-            let reference = dataset.reference_price(*product);
+            let reference = reference_price(dataset, *product)?;
+            // The stored contract regions are indexed during freight settlement, so they must
+            // be valid here or a later week would panic.
+            require_region(world, *from_region)?;
+            require_region(world, *to_region)?;
             if *price_cents * 100 < reference * 80 || *price_cents * 100 > reference * 120 {
                 return Err(DomainError::SolvencyRestriction {
                     entity: buyer.0,
@@ -1063,6 +1093,7 @@ fn apply_intent(
                     detail: ArithmeticFault::OutOfRange,
                 });
             }
+            require_region(world, *region)?;
             let qty = MilliLots::from_lots(*quantity_lots);
             let cost = qty.value_at(Cents(*max_price_cents)).unwrap_or_default().0;
             spend_firm_cash(world, *firm, cost, "spot reserve")?;
@@ -1203,7 +1234,7 @@ fn apply_intent(
         } => {
             require_control(world, actor, *buyer)?;
             require_control(world, actor, *seller)?;
-            let reference = dataset.reference_price(*product);
+            let reference = reference_price(dataset, *product)?;
             if *price_cents * 100 < reference * 80 || *price_cents * 100 > reference * 120 {
                 return Err(DomainError::SolvencyRestriction {
                     entity: buyer.0,

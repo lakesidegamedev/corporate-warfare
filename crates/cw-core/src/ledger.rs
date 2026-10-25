@@ -465,7 +465,9 @@ impl Ledger {
 
     fn prune(&mut self, week: Tick) {
         let cutoff = week.0.saturating_sub(Self::JOURNAL_WEEKS - 1);
-        if cutoff <= 1 {
+        // Nothing is older than a window that starts at week zero. Using `<= 1` here skipped the
+        // first real prune at week thirteen and retained fourteen weeks of postings.
+        if cutoff == 0 {
             return;
         }
         let mut keep = Vec::with_capacity(self.journal.len());
