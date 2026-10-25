@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `74dbe95`.
-Kanban: 254781. Merged PRs: #8 through #50.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `a8f8627`.
+Kanban: 254781. Merged PRs: #8 through #51.
 
 ## What exists now
 
@@ -32,7 +32,8 @@ Kanban: 254781. Merged PRs: #8 through #50.
   divestitures, bond maturity pays the final coupon, private firm data needs information rights,
   bank runs pay depositors pro rata, insurance claims settle the following week, and the
   release verifier checks the compiled asset catalog while export uses the App Store Connect
-  key, and the clock pauses before grace, strikes and imminent deadlines.
+  key, the clock pauses before grace, strikes and imminent deadlines, and quality investment is a
+  bounded funded lever.
 
 ## Verified
 
