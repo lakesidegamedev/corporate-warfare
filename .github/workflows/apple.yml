@@ -19,6 +19,8 @@ jobs:
       - uses: actions/checkout@v4
       - run: xcodebuild -version && xcrun --sdk iphoneos --show-sdk-version
       - run: rustup show
+      - name: Privacy audit
+        run: python3 apple/scripts/privacy_audit.py
       - run: brew install xcodegen
       - run: bash apple/scripts/build-engine.sh
       - run: xcodegen generate --spec apple/project.yml --project apple
