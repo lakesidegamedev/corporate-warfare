@@ -14,7 +14,12 @@ build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Info.plist")
 
 lipo -info "$app/CorporateWarfare" | grep -q arm64 || { echo "device binary is not arm64" >&2; exit 1; }
 [[ -f "$app/PrivacyInfo.xcprivacy" ]] || { echo "privacy manifest missing" >&2; exit 1; }
-[[ -f "$app/AppIcon60x60@2x.png" || -f "$app/AppIcon60x60@3x.png" ]] || { echo "app icon missing" >&2; exit 1; }
+# Asset catalogs compile icons into Assets.car; loose AppIcon PNGs are not expected.
+[[ -f "$app/Assets.car" ]] || { echo "asset catalog missing" >&2; exit 1; }
+xcrun assetutil --info "$app/Assets.car" | grep -q '"Name" : "AppIcon"' || {
+  echo "compiled app icon missing from Assets.car" >&2
+  exit 1
+}
 
 codesign --verify --deep --strict "$app"
 codesign -dv --verbose=4 "$app" 2>&1 | grep -q "Authority=Apple Distribution" || {
