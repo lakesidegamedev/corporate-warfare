@@ -233,6 +233,45 @@ mod tests {
     use crate::state::{ScenarioKind, ScenarioMode, ShareBook, ShareLot};
     use cw_data::Dataset;
 
+    fn synthetic_firm(world: &mut World, parent: Option<Handle>) -> Handle {
+        let template = world
+            .firms
+            .iter()
+            .next()
+            .map(|(_, firm)| firm.clone())
+            .expect("a template firm");
+        let mut firm = template;
+        firm.name = format!("Synthetic {}", world.firms.len());
+        firm.region = 0;
+        firm.status = crate::state::FirmStatus::Operating;
+        firm.facilities.clear();
+        firm.inventory.clear();
+        firm.loans.clear();
+        firm.bonds.clear();
+        firm.insurance.clear();
+        firm.contracts_buy.clear();
+        firm.contracts_sell.clear();
+        firm.guarantees.clear();
+        let holder = parent.map(HolderId::Firm).unwrap_or(HolderId::Investor);
+        firm.shares = ShareBook::new(std::collections::BTreeMap::from([
+            (
+                holder,
+                ShareLot {
+                    qty: 600_000,
+                    cost_cents: 0,
+                },
+            ),
+            (
+                HolderId::Outside(99),
+                ShareLot {
+                    qty: 400_000,
+                    cost_cents: 0,
+                },
+            ),
+        ]));
+        world.firms.insert(firm)
+    }
+
     #[test]
     fn exactly_half_is_not_control_but_above_half_is() {
         let dataset = Dataset::load().unwrap();
@@ -285,5 +324,40 @@ mod tests {
         }
         assert!(would_create_cycle(&world, first, second));
         assert!(!would_create_cycle(&world, second, handles[2]));
+    }
+
+    #[test]
+    fn a_hundred_level_group_is_walked_iteratively() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 53, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let root = world.investor.primary_group.unwrap();
+        let mut previous = root;
+        for _ in 0..100 {
+            previous = synthetic_firm(&mut world, Some(previous));
+        }
+        let group = controlled_group(&world, root);
+        assert_eq!(group.len(), 101, "root plus one hundred levels");
+        assert!(group.contains(&root));
+        assert!(group.contains(&previous));
+        let consolidated = consolidate(&world, root);
+        assert_eq!(consolidated.firms.len(), group.len());
+    }
+
+    #[test]
+    fn a_hundred_child_group_counts_each_member_once() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 54, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let root = world.investor.primary_group.unwrap();
+        let mut children = Vec::new();
+        for _ in 0..100 {
+            children.push(synthetic_firm(&mut world, Some(root)));
+        }
+        let group = controlled_group(&world, root);
+        assert_eq!(group.len(), 101);
+        for child in children {
+            assert!(group.contains(&child));
+        }
+        let consolidated = consolidate(&world, root);
+        assert_eq!(consolidated.firms.len(), group.len());
     }
 }
