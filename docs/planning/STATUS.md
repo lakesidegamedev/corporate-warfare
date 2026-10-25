@@ -1,122 +1,80 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Branch: `feat/foundation`.
-Last tested commit: `753730f26636840e5c7709758a13936532acff09` (PR #8).
-Kanban: 254781. Milestone issues: 1-6.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `8674b93`.
+Kanban: 254781. Milestone issues: 1-6. Merged PRs: #8 foundation, #9 release track,
+#10 onboarding, #11 adversarial reliability, #12 industry scenarios.
 
 ## What now exists
 
-- `cw-core`: cents/milli-lots/BPS with checked arithmetic and half-even rounding, largest-remainder
+- `cw-core`: cents/milli-lots/BPS, checked arithmetic and half-even rounding, largest-remainder
   allocation, balanced double-entry ledger with a 13-week journal and chained compaction, stable
   generation-checked handles, SplitMix64 streams, canonical BLAKE3 hashing, 52-week calendar.
 - `cw-data`: validated pinned dataset (25 products, 17 operating templates, 11 corridor regions,
   24 event cards, 30 named firms exactly two per industry), region fixture with recorded source
   attempts, farm worked example.
-- `cw-sim`: the weekly settlement order, labour clearing, utilities and production, one-pass
-  market allocation with the four worked examples, freight/contracts/shipments, credit grades and
-  debt service, banking, insurance, governance and boards, ownership/consolidation/cycles, equity
-  valuation and exchange, issuance/dividends/buybacks/IPO, insolvency/restructuring/liquidation,
-  deals with antitrust review, unions, policy, research/brand, events and the five-year score.
-  Full command catalogue with authority, solvency and rollback checks.
+- `cw-sim`: weekly settlement order, labour clearing, utilities and production, one-pass market
+  allocation with the four worked examples, freight/contracts/shipments, credit, banking,
+  insurance, governance, ownership/consolidation/cycles, valuation and exchange,
+  issuance/dividends/buybacks/IPO, insolvency, deals with antitrust, unions, policy, research,
+  brand, events and the five-year score. Full command catalogue with authority/solvency/rollback
+  checks. Eleven production-accounting defects were found and fixed by the industry pass.
 - `cw-ai`: bounded rival proposals (urgent weekly checks, four stable strategic cohorts).
 - `cw-session`: scenario creation, submit/preview/advance/overview/query, versioned save envelope
-  with checksum and size bounds, replay log.
-- `cw-ffi` + SwiftUI app: real session behind a serial engine actor, owned DTOs, typed rejection
-  keys, Start/Portfolio/Company/Regions/Markets/Inbox screens, cash bridge, saves list, atomic
-  save manager.
-- `cw-cli`: doctor, run, sweep, replay.
+  with checksum and bounds, replay log.
+- `cw-ffi` + SwiftUI app: serial engine actor, owned DTOs and typed rejection keys; Start,
+  Portfolio, Company, Regions, Markets, Inbox; cash bridge; saves list with atomic write and
+  last-good copy; seven-step guided onboarding; original app icon and privacy manifest.
+- `cw-cli`: doctor, run, sweep, replay. Release workflow: archive, verify, sign/export, upload,
+  bounded App Store Connect processing check, fail-closed when secrets are absent.
 
 ## Verified
 
-- Hosted Verify (fmt, clippy -D warnings, workspace tests, doctor, plan/design validators):
-  https://github.com/lakesidegamedev/corporate-warfare/actions/runs/40163354063
-- Hosted Apple smoke: generated bindings, SwiftUI compile, four XCTest cases in an iPhone
-  simulator (engine info, real session command/advance, save/load with matching canonical hash,
-  rejected command, corrupt save) and unsigned device archive:
-  https://github.com/lakesidegamedev/corporate-warfare/actions/runs/40163354065
-- Cross-platform fixture hash `7b781159830184e8928f54e79949e343a1fd762ada357c235e42bd6f1b5fff4c`
-  is now pinned in the Rust test and the Swift XCTest constant. It replaces
-  `8d66f183804d61890005deb819cbc1b4587f51967fe69fe0eaf7d9c83d2bcef9`, which was the value
-  verified on an iPhone simulator at commit `753730f`. The move is intentional: rival command
-  ids now use the persisted sequence counter instead of a session-local counter that restarted
-  after import. The iOS value for the new pin is **not re-verified yet**; see P32 below.
-- Host scheduler job `20261025T043307Z-5ac62d48` passed.
-- Requirements R03, R04, R31 done with evidence under `evidence/`. R05 is active again until the
-  Mac runner reproduces the new pinned hash; its previous evidence describes the old pin.
+- 126 workspace tests pass locally, with `cargo fmt --check` and
+  `cargo clippy --workspace --all-targets -D warnings` clean.
+- Hosted Verify and Apple smoke passed on PRs #8 (40163354063 / 40163354065), #9, #10 and #11.
+- iPhone simulator XCTest verified the canonical hash `7b781159...` at PR #11.
+- After the industry fix merge the fixture hash is `cb14891544da9a770548d832c8a54d787d7926614c840fbd309fba85312ff21d`,
+  computed on Linux. The matching iOS run is **not yet verified**; R05 is therefore `active`,
+  not done.
+- Requirements done: R03, R04, R31. R05 is active pending a Mac-runner pass on the new pin.
 
-## P32 adversarial reliability (in progress)
+## Blockers (honest, newest first)
 
-`crates/cw-session/tests/adversarial.rs` adds seven tests over the real session:
-
-- 216 mixed valid/invalid commands across eight weeks; every rejection must keep the canonical
-  hash, revision and accepted-command log unchanged, every acceptance must move all three, and
-  ledgers stay balanced with non-negative stock.
-- Duplicate ids return the first outcome (sequence 0, original acceptance tick) with no hash
-  change, including across export/import, and are refused after the 52-week window.
-- Stale revisions are refused before and after a real acceptance.
-- Save corruption: 64 tail truncations, 22 interior cuts, payload/checksum/magic bit flips,
-  four false declared lengths, future and unreleased schemas, and an over-cap buffer; each fails
-  with a typed error and the untouched save still imports.
-- Export/import/advance is idempotent: a resumed handle reaches the same hash as the
-  uninterrupted run.
-- A 110-week founder career keeps the journal inside its thirteen-week window, reconciles
-  lifetime revenue and net income against the weekly closes, and round-trips its save.
-
-Still open for P32: suspend/background/termination and interrupted write at the file-system layer
-(Swift save manager, needs a real app run), per-schema migration fixtures, and the Linux/macOS/iOS
-replay hash match for the new pin. No fuzz crate was added; command parsing bounds are covered by
-typed-rejection cases.
-
-## Defects found and fixed by P32
-
-1. Rival command ids restarted at 1 after import, duplicating ids already in the accepted log and
-   making a resumed career hash differently from an uninterrupted one. They now use the persisted
-   `world.next_sequence`.
-2. Command intents that carried an out-of-range product, recipe or region indexed arrays directly
-   and panicked (`index out of bounds`) instead of rejecting. They now return `InvalidEntity`.
-3. `Ledger::prune` skipped the first real prune at week 13, retaining fourteen weeks of postings.
-4. Save schema 0 (never released) was parsed as schema 1; only `MIN_SCHEMA_VERSION..=SCHEMA_VERSION`
-   is accepted now, and anything else is `UnsupportedVersion`.
-
-## Blockers (honest)
-
-1. **P01/R01 corridor crosswalk blocked.** BEA `econlist.cfm` now redirects to a generic data-tools
-   page, the www URL is 404, `BEAREA.zip` is not an archive, and archive.org returned 429. Region
-   codes/names are the verified official roster; county membership is absent, not invented. All
-   calibrated values are labelled. P05/R02 remain blocked behind this.
-2. **Apple signing and TestFlight blocked on owner action.** The repository has no secrets or
-   variables; no org secrets are visible; no App Store Connect key is provisioned for this app;
-   this Linux host has no Xcode and Mac work runs on GitHub macOS runners. Needed: confirm team
-   and app record for `net.lakesidegames.corporatewarfare`, then set `APPLE_API_ISSUER`,
-   `APPLE_API_KEY`, `APPLE_API_KEY_CONTENT`, `APPLE_DEVELOPMENT_TEAM` as repository or
-   environment secrets, or name an approved existing studio key to reuse. Existing `.p8` files on
-   this host belong to other products and were not read, copied or used.
-3. **Device, human playtest and balance gates not started** (P33-P35, R36-R38).
+1. **GitHub Actions billing blocked.** From PR #12 onward every workflow fails in ~2 seconds
+   before starting: "recent account payments have failed or your spending limit needs to be
+   increased". Local checks still run; hosted gates and the iOS hash verification cannot. Owner
+   action: restore Actions billing/spending limit. Do not merge check-dependent work silently;
+   this checkpoint records the exception for the locally verified #12 squash.
+2. **P01/R01 corridor crosswalk blocked.** BEA econlist now redirects to a generic data-tools
+   page, the www URL is 404, BEAREA.zip is not an archive, archive.org returned 429. Region codes
+   and names are the verified official roster; county membership is absent, not invented. P05/R02
+   stay blocked behind this.
+3. **Apple signing/TestFlight blocked on owner action.** No repository or organisation secrets;
+   no App Store Connect key provisioned for this app. Needed: confirm team and the app record for
+   `net.lakesidegames.corporatewarfare`, then set `APPLE_API_ISSUER`, `APPLE_API_KEY`,
+   `APPLE_API_KEY_CONTENT`, `APPLE_DEVELOPMENT_TEAM` (repository or `appstore` environment), or
+   name an approved existing studio key. Keys on this host belong to other products and were not
+   read, copied or used. `apple/RELEASE.md` holds the runbook and state table.
+4. **Corridor solvency is not solved.** Spot books are same-region, gateways quote a finite buy
+   side that clearing does not use, seeded capacity exceeds local household demand in several
+   regions, media advertising demand from marketer budgets is unused, and construction projects do
+   not consume contractor service/equipment. Producers without a local buyer earn nothing. This is
+   the next product-quality blocker, not a test artefact.
+5. **Device, human playtest and balance gates not started** (P33-P35, R36-R38).
 
 ## Exact next moves
 
-1. Merge PR #8 after the recorded green checks.
-2. P06-P09: deepen household/government/gateway accounting tests and the contract/freight fixtures;
-   they exist and run but need independent oracles per packet.
-3. P10/P30/P31: extend phone flows to every command family (subsidiaries, boards, takeover,
-   banking, insurance, labour, policy, recovery) and add the seven-step guided onboarding.
-4. P25: one worked scenario per industry; P26 research/brand fixtures.
-5. P32 remaining: interrupted-write and lifecycle fault injection in the Swift save manager, the
-   per-schema migration fixture set, and the Mac/iOS replay hash for the new pin; then P33 sweeps.
-6. Apple: owner resolves blocker 2; then release workflow, signed upload, processing, install.
+1. Restore GitHub Actions billing, then rerun PR checks on the new hash and re-record R05 with the
+   iOS XCTest evidence.
+2. Fix corridor solvency: use the gateway buy side for finite exports, allow cross-region spot
+   offers with freight and lead time, and wire marketing budgets to media demand; add a corridor
+   run that reaches 260 weeks with explainable firm failures rather than silent starvation.
+3. Extend phone flows to every command family (subsidiaries, boards, takeover, banking, insurance,
+   labour, policy, recovery) and complete the P31 accessibility audit at 320pt and AX text.
+4. P32 remaining: filesystem interrupted-write/suspend recovery in Swift and migration fixtures.
+5. P33 balance sweeps, P34 device profiling, P35 three independent playtests.
+6. Apple: resolve blocker 3, dispatch the release workflow, poll processing, install on a real
+   iPhone and run the acceptance route. Only then can the goal close.
 
 Resume with:
-`cd /root/projects/corporate-warfare/worktrees/foundation && cargo test --locked --workspace`
-and read `docs/planning/STATUS.md`, `execution.json`, `requirements.json`.
-
-## Corridor solvency (found by the P25 industry pass, 2026-10-25)
-
-Production and sales units were corrected by the industry fixtures; several further defects were
-fixed (facility ownership, service inputs, opening-stock snapshot, inventory double capitalisation,
-electricity units, facility/firm handle mix-ups, weekly sales clear ordering, national government
-budget ceiling, freight receipts). After those fixes the corridor still cannot pay every producer:
-spot books are same-region, gateways quote a finite buy side that clearing does not yet use, and
-seeded capacity exceeds local household demand in several regions. Media advertising demand from
-marketer budgets and construction contractor service consumption are also still unimplemented.
-This is a known balance/implementation blocker, not a hidden pass: the industry tests use targeted
-fixtures and do not claim corridor solvency.
+`cd /root/projects/corporate-warfare && git pull && cargo test --locked --workspace`.

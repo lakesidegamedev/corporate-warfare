@@ -1,0 +1,9 @@
+{
+  "packet": "P26",
+  "commit": "8674b93a38771dbce547a68251e8855711faf808",
+  "result": "partial-pass",
+  "artifacts": [
+    "crates/cw-sim/tests/research_brand.rs (7 tests: thresholds, saved draws, brand bounds, quality)"
+  ],
+  "limitations": "Brand influence on demand via allocation weights is implemented but not tested end to end; R27 remains active."
+}

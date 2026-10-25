@@ -744,22 +744,24 @@
       ],
       "spec": "docs/rules/CONTENT-PACING.md",
       "targets": "content/initial-balance.json, crates/cw-sim/industry/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Load17 operating templates plus bank/insurer models and25 typed products/contracts.",
-          "done": false
+          "done": true
         },
         {
           "text": "Implement service expiry/subscription/lease/procurement/seasonality/depletion semantics and actual payer budgets.",
-          "done": false
+          "done": true
         },
         {
           "text": "Run one worked scenario per15 industries; reject names-only reskins and financial products through factory solver.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/packets/P25.json"
+      ]
     },
     {
       "id": "P26",
@@ -773,22 +775,24 @@
       ],
       "spec": "docs/rules/CONTENT-PACING.md",
       "targets": "crates/cw-sim/{research,brand}.rs",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement funded squared-cost R&D thresholds, saved success/failure and frontier/efficiency caps.",
-          "done": false
+          "done": true
         },
         {
           "text": "Implement spend-funded brand stock/decay and bounded quality.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test reload fairness, no free innovation, no negative input costs and finite-budget demand redistribution.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/packets/P26.json"
+      ]
     },
     {
       "id": "P27",
@@ -932,7 +936,7 @@
       "checklist": [
         {
           "text": "Implement seven-step real-rule guided onboarding, skip/resume and contextual explanation links.",
-          "done": false
+          "done": true
         },
         {
           "text": "Audit small phone/large text/VoiceOver/contrast/reduced motion/keyboard and adaptive iPad layouts.",
