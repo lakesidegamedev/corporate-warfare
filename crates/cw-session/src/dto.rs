@@ -18,6 +18,9 @@ pub struct Overview {
     pub last_week_ebit_cents: i64,
     pub alerts: Vec<Alert>,
     pub pause: Option<String>,
+    /// One primary recommended next action and the reason for it.
+    pub next_action_key: String,
+    pub next_action_reason: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

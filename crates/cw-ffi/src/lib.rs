@@ -272,6 +272,8 @@ pub struct OverviewDto {
     pub last_week_ebit_cents: i64,
     pub alerts: Vec<String>,
     pub pause: Option<String>,
+    pub next_action_key: String,
+    pub next_action_reason: String,
 }
 
 #[derive(uniffi::Record)]
@@ -458,6 +460,8 @@ fn overview_dto(overview: Overview) -> OverviewDto {
         last_week_ebit_cents: overview.last_week_ebit_cents,
         alerts: overview.alerts.into_iter().map(|alert| alert.key).collect(),
         pause: overview.pause,
+        next_action_key: overview.next_action_key,
+        next_action_reason: overview.next_action_reason,
     }
 }
 
