@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `733cb2f`.
-Kanban: 254781. Merged PRs: #8 through #59.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `6f99b2e`.
+Kanban: 254781. Merged PRs: #8 through #60.
 
 ## What exists now
 
@@ -40,7 +40,7 @@ Kanban: 254781. Merged PRs: #8 through #59.
 
 ## Verified
 
-- Local: 213 tests pass; shared scheduler job `20261025T112259Z-f7936d4b` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
+- Local: 213 tests pass; shared scheduler job `20261025T113141Z-7b3791c9` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
   warnings` clean; design and plan validators pass; shared scheduler jobs passed
   (`20261025T070655Z-5df8bceb` latest). Defense procurement has six unit tests and its
   industry budget scenario; fiscal budgets now follow actual labour and corporate receipts.
@@ -49,7 +49,8 @@ Kanban: 254781. Merged PRs: #8 through #59.
   aggregate rather than per-worker, and transfer support still draws from the training budget;
   both are named refinements. Household baselines and opening savings use disposable income,
   and a wage-shortfall week may draw at most one percent of savings into demand. Transfer
-  support uses each unemployed tier's baseline wage and reports any unfunded need.
+  support uses each unemployed tier's baseline wage and reports any unfunded need. The hostile
+  session sequence now covers 540 commands over twenty weeks.
 - Corridor at seed 3: 0 rival failures at 52 weeks, 4-5 at 260 across seeds, 10 median over
   thirty years; guided firm solvent and in control at every horizon; score 61 at week 260.
 - Engine baseline on this host: representative (31 firms, 290 facilities) p50 0.55 ms; grown
