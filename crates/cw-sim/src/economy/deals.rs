@@ -912,7 +912,10 @@ fn reject(world: &mut World, handle: Handle, deal: &Deal) {
     if let Some(stored) = world.deals.get_mut(handle) {
         stored.state = DealState::Rejected;
     }
-    world.regulatory_breaches += 1;
+    // The score's conduct component is the player's record; a rival's rejected bid is not it.
+    if crate::economy::events_engine::player_side(world, deal.buyer) {
+        world.regulatory_breaches += 1;
+    }
 }
 
 /// Offer the divestiture remedy during review. The remedy sells the buyer down below control,

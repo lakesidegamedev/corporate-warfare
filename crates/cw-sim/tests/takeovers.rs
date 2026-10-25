@@ -445,7 +445,8 @@ fn review_happens_before_settlement_and_rejection_moves_nothing() {
     assert_eq!(qty(&f.world, f.target, HolderId::Outside(0)), 1_000);
     assert_eq!(cash(&f.world, f.buyer), before - 5_500);
     assert_eq!(restricted(&f.world, f.buyer), 0);
-    assert_eq!(f.world.regulatory_breaches, breaches + 1);
+    // The fixture buyer is a rival, so the player's conduct record is untouched.
+    assert_eq!(f.world.regulatory_breaches, breaches);
 }
 
 #[test]

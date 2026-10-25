@@ -224,7 +224,10 @@ fn binding_settlement(world: &mut World, firm: Handle) {
     let contractual_floor = entity.policies.wage_offer[0];
     if affordable < contractual_floor {
         // No impossible automatic payment: record the failed settlement and let solvency run.
-        world.failed_worker_settlements += 1;
+        // Only the player's companies count toward the player's conduct score.
+        if crate::economy::events_engine::player_side(world, firm) {
+            world.failed_worker_settlements += 1;
+        }
         if let Some(entity) = world.firms.get_mut(firm) {
             entity.union.state = BargainState::Idle;
             entity.union.last_demand_week = world.tick.0;
@@ -232,7 +235,7 @@ fn binding_settlement(world: &mut World, firm: Handle) {
         return;
     }
     let settlement = median.min(affordable).max(contractual_floor);
-    if settlement < demand {
+    if settlement < demand && crate::economy::events_engine::player_side(world, firm) {
         world.failed_worker_settlements += 1;
     }
     if let Some(entity) = world.firms.get_mut(firm) {
