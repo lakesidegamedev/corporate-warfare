@@ -22,8 +22,12 @@ xcrun assetutil --info "$app/Assets.car" | grep -q 'AppIcon' || {
 }
 
 codesign --verify --deep --strict "$app"
-codesign -dv --verbose=4 "$app" 2>&1 | grep -q "Authority=Apple Distribution" || {
-  echo "archive is not signed with an Apple Distribution identity" >&2
+# With automatic signing, xcodebuild archive signs with the team development
+# identity; the Apple Distribution identity is applied at export time. Accept
+# either team identity here and enforce Apple Distribution on the exported
+# IPA instead (apple/scripts/verify-ipa.sh, run after export, before upload).
+codesign -dv --verbose=4 "$app" 2>&1 | grep -Eq "Authority=Apple (Development|Distribution)" || {
+  echo "archive is not signed with a team Apple identity" >&2
   exit 1
 }
 echo "archive_ok bundle=$bundle version=$version build=$build"
