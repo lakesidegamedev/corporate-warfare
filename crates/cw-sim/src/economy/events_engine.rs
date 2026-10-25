@@ -721,18 +721,43 @@ mod tests {
     use crate::state::{ScenarioKind, ScenarioMode};
 
     #[test]
-    fn every_card_choice_has_a_known_handler() {
+    fn the_deck_has_distinct_cards_and_every_choice_has_a_known_handler() {
         let dataset = Dataset::load().unwrap();
+        assert!(dataset.events.len() >= 24, "at least twenty-four cards");
         let mut world = seed::build(&dataset, 111, ScenarioKind::Guided, ScenarioMode::Sandbox);
         let primary = world.investor.primary_group.unwrap();
+        let mut card_ids = std::collections::BTreeSet::new();
         for card in dataset.events.clone() {
-            let event_id = open(&mut world, &card.id, Some(primary), Some(3), false);
-            if event_id == 0 {
-                continue;
+            assert!(
+                card_ids.insert(card.id.clone()),
+                "duplicate card {}",
+                card.id
+            );
+            assert!(!card.trigger.is_empty(), "{} has no trigger", card.id);
+            assert!(!card.choices.is_empty(), "{} has no choices", card.id);
+            let mut choice_ids = std::collections::BTreeSet::new();
+            for choice in &card.choices {
+                assert!(
+                    choice_ids.insert(choice.id.clone()),
+                    "{} has duplicate choice {}",
+                    card.id,
+                    choice.id
+                );
+                assert!(
+                    !choice.handler.is_empty(),
+                    "{} has an empty handler",
+                    card.id
+                );
+                // Exercise each choice in isolation so the two-card cap and cooldown do not
+                // hide a handler.
+                world.events.pending.clear();
+                world.events.cooldowns.clear();
+                let event_id = open(&mut world, &card.id, Some(primary), Some(3), false);
+                assert!(event_id > 0, "{} did not open", card.id);
+                let result = respond(&mut world, &dataset, event_id, &choice.id);
+                assert!(result.is_ok(), "{} {}: {:?}", card.id, choice.id, result);
+                assert!(world.firm(primary).unwrap().book.is_balanced());
             }
-            let choice = card.choices[0].clone();
-            let result = respond(&mut world, &dataset, event_id, &choice.id);
-            assert!(result.is_ok(), "{} {}: {:?}", card.id, choice.id, result);
         }
     }
 
