@@ -762,6 +762,11 @@ impl SessionHandle {
         }
     }
 
+    /// Dismiss the week-260 score pause and keep playing the same career.
+    pub fn dismiss_pause(&self) {
+        self.lock().dismiss_pause();
+    }
+
     pub fn revision(&self) -> u64 {
         self.lock().revision()
     }

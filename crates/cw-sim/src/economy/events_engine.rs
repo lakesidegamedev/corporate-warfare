@@ -185,6 +185,9 @@ pub fn respond(
     if let Some(stored) = world.events.pending.get_mut(index) {
         stored.resolved = true;
     }
+    if world.pending_pause.as_deref() == Some(format!("event:{event_id}").as_str()) {
+        world.pending_pause = None;
+    }
     Ok(())
 }
 
