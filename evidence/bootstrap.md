@@ -1,6 +1,6 @@
 # Bootstrap verification
 
-Verified 2026-10-25 against commit `4742c1d` (full tested SHA available in the linked runs).
+Verified 2026-10-25 against commit `4742c1d0a74721296ea30be85ad01dba337343b3`.
 This records bootstrap evidence only. No gameplay acceptance requirement is marked done.
 
 - [Hosted Rust/clippy/format and planning checks](https://github.com/lakesidegamedev/corporate-warfare/actions/runs/40158080889): passed.
