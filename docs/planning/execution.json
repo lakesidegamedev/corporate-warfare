@@ -760,7 +760,8 @@
         }
       ],
       "evidence": [
-        "evidence/packets/P25.json"
+        "evidence/packets/P25.json",
+        "evidence/defense-procurement.md"
       ]
     },
     {
