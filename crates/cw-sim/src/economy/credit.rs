@@ -437,6 +437,72 @@ mod tests {
     }
 
     #[test]
+    fn secured_capacity_cannot_reuse_a_pledge() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 44, ScenarioKind::Founder, ScenarioMode::Sandbox);
+        let firm = world.firms.iter().next().unwrap().0;
+        let before = secured_capacity(&world, firm);
+        assert!(before > 0);
+        let loan = world.loans.insert(Loan {
+            borrower: firm,
+            lender: Lender::Outside(0),
+            principal_remaining_cents: 1_000_000,
+            rate_bps: 600,
+            weekly_principal_cents: 0,
+            remaining_weeks: 52,
+            collateral: None,
+            secured: true,
+            created: world.tick,
+            carry: 0,
+            defaulted: false,
+        });
+        world.firms.get_mut(firm).unwrap().loans.push(loan);
+        assert_eq!(secured_capacity(&world, firm), before - 1_000_000);
+    }
+
+    #[test]
+    fn a_missed_payment_marks_the_loan_defaulted() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 45, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world
+            .firms
+            .iter()
+            .find(|(_, firm)| firm.operative() && firm.loans.is_empty() && firm.book.cash() > 0)
+            .map(|(handle, _)| handle)
+            .expect("an unborrowed employer");
+        let cash = world.firm(firm).unwrap().book.cash();
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .book
+            .commit(
+                world.tick,
+                cw_core::ledger::Txn::new()
+                    .debit(cw_core::ledger::Account::RetainedEarnings, cash, "drain")
+                    .credit(cw_core::ledger::Account::Cash, cash, "drain"),
+            )
+            .unwrap();
+        let loan = world.loans.insert(Loan {
+            borrower: firm,
+            lender: Lender::Outside(0),
+            principal_remaining_cents: 10_000_000,
+            rate_bps: 800,
+            weekly_principal_cents: 1_000_000,
+            remaining_weeks: 10,
+            collateral: None,
+            secured: false,
+            created: world.tick,
+            carry: 0,
+            defaulted: false,
+        });
+        world.firms.get_mut(firm).unwrap().loans.push(loan);
+        service(&mut world, &dataset);
+        assert!(world.loans.get(loan).unwrap().defaulted);
+        assert!(world.firm(firm).unwrap().book.is_balanced());
+    }
+
+    #[test]
     fn weekly_interest_carry_posts_the_exact_term_amount() {
         let mut loan = Loan {
             borrower: Handle::INVALID,
