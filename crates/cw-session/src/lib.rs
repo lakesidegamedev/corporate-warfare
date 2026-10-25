@@ -140,6 +140,14 @@ impl Session {
         &self.dataset.hash
     }
 
+    /// Dismiss a score pause so the same career continues in sandbox. Event pauses are cleared
+    /// when the event is answered; this is only for the week-260 score sheet.
+    pub fn dismiss_pause(&mut self) {
+        if self.world.pending_pause.as_deref() == Some("five_year_score") {
+            self.world.pending_pause = None;
+        }
+    }
+
     pub fn revision(&self) -> u64 {
         self.world.revision
     }
@@ -961,6 +969,50 @@ mod tests {
         let log: ReplayLog = serde_json::from_str(&log_text).unwrap();
         let replayed = Session::replay(&log).unwrap();
         assert_eq!(replayed, session.canonical_hash());
+    }
+
+    #[test]
+    fn the_five_year_score_pauses_and_the_career_continues() {
+        let mut session = Session::create(config(201)).unwrap();
+        // The five-year mode pauses exactly at week 260 and records a score. Advance is capped
+        // at sixteen weeks per call, so a caller loops until the pause.
+        let mut result = session.advance(16);
+        while result.final_week < 260 && result.pause.is_none() {
+            result = session.advance(16);
+        }
+        assert_eq!(result.final_week, 260);
+        assert_eq!(result.pause.as_deref(), Some("five_year_score"));
+        let score = session.world.score.clone().expect("a score is recorded");
+        assert_eq!(score.week.0, 260);
+        assert!((0..=100).contains(&score.total));
+        // Continuing from the score sheet is an ordinary advance, not a new career.
+        session.dismiss_pause();
+        let continued = session.advance(4);
+        assert_eq!(continued.weeks_advanced, 4);
+        assert_eq!(session.world.tick.0, 264);
+        assert!(session.world.score.is_some(), "the recorded score is kept");
+    }
+
+    #[test]
+    fn score_net_worth_counts_direct_holdings_once_and_ignores_firm_cash() {
+        let session = Session::create(config(202)).unwrap();
+        let world = &session.world;
+        let mut expected = world.investor.cash_cents - world.investor.personal_loans_cents;
+        for (_, firm) in world.firms.iter() {
+            expected += firm.shares.qty(cw_sim::state::HolderId::Investor) * firm.shares.fair_cents;
+        }
+        assert_eq!(
+            cw_sim::economy::score::personal_net_worth(world),
+            expected.max(0)
+        );
+        // The guided company's cash is not the investor's cash.
+        let primary = world.investor.primary_group.unwrap();
+        let firm_cash = world.firm(primary).unwrap().book.cash();
+        assert!(firm_cash > 0);
+        assert!(
+            cw_sim::economy::score::personal_net_worth(world)
+                != world.investor.cash_cents + firm_cash
+        );
     }
 
     #[test]

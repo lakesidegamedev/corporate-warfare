@@ -147,6 +147,10 @@ actor Engine {
         return Data(bytes)
     }
 
+    func dismissPause() {
+        session?.dismissPause()
+    }
+
     func canonicalHash() -> String {
         session?.canonicalHash() ?? ""
     }

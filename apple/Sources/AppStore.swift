@@ -235,6 +235,14 @@ final class AppStore: ObservableObject {
         marketRows = rows
     }
 
+    /// Leave the week-260 score sheet and continue the same career in sandbox.
+    func continueCareer() async {
+        await perform {
+            await self.engine.dismissPause()
+            await self.reload()
+        }
+    }
+
     func selectFirm(_ handle: UInt64) async {
         selectedFirm = handle
         await reload()

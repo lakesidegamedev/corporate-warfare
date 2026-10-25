@@ -14,6 +14,16 @@ struct OverviewView: View {
                     if let overview = store.overview {
                         if let pause = overview.pause {
                             DecisionBanner(text: "Paused: \(pause)")
+                            if pause == "five_year_score" {
+                                Button {
+                                    Task { await store.continueCareer() }
+                                } label: {
+                                    Label("Continue this career in sandbox", systemImage: "arrow.right.circle")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.large)
+                            }
                         }
 
                         HStack(spacing: 12) {
