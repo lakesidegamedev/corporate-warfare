@@ -133,6 +133,7 @@ pub fn consolidate(world: &World, root: Handle) -> Consolidated {
         firms: group.clone(),
         ..Default::default()
     };
+    let mut internal_investment_cost = 0i64;
     for handle in &group {
         let Some(firm) = world.firms.get(*handle) else {
             continue;
@@ -147,9 +148,16 @@ pub fn consolidate(world: &World, root: Handle) -> Consolidated {
             .iter()
             .map(|week| week.ebitda())
             .sum::<i64>();
-        // Internal investment assets are eliminated for the group view.
-        result.intercompany_eliminated_cents +=
-            firm.book.balance(cw_core::ledger::Account::Investments);
+        // Internal investments are eliminated at their book cost. The cost is the parent's
+        // share lot in the member's book, so an external investment is not removed.
+        for (holder, lot) in firm.shares.holders.iter() {
+            if let HolderId::Firm(parent) = holder
+                && members.contains(parent)
+            {
+                internal_investment_cost += lot.cost_cents;
+                result.intercompany_eliminated_cents += lot.cost_cents;
+            }
+        }
     }
     // Intercompany loans between two group members are eliminated on both sides.
     for (_, loan) in world.loans.iter() {
@@ -161,9 +169,16 @@ pub fn consolidate(world: &World, root: Handle) -> Consolidated {
             && members.contains(&lender)
             && members.contains(&loan.borrower)
         {
-            result.intercompany_eliminated_cents += loan.principal_remaining_cents;
+            let principal = loan.principal_remaining_cents.max(0);
+            result.assets_cents -= principal;
+            result.liabilities_cents -= principal;
+            result.intercompany_eliminated_cents += principal;
         }
     }
+    // The eliminated internal investment cost is an asset on the parent's book and must not
+    // be counted alongside the subsidiary's own assets. Intercompany loans were already
+    // removed from both sides above.
+    result.assets_cents = result.assets_cents.saturating_sub(internal_investment_cost);
     // Minority interest: the share of group equity held outside the controlling chain.
     for handle in &group {
         if let Some(firm) = world.firms.get(*handle) {
@@ -324,6 +339,122 @@ mod tests {
         }
         assert!(would_create_cycle(&world, first, second));
         assert!(!would_create_cycle(&world, second, handles[2]));
+    }
+
+    #[test]
+    fn internal_investment_cost_is_eliminated_from_consolidated_assets() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 55, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let root = world.investor.primary_group.unwrap();
+        let child = synthetic_firm(&mut world, Some(root));
+        let cost = 5_000_000;
+        if let Some(firm) = world.firms.get_mut(child)
+            && let Some(lot) = firm.shares.holders.get_mut(&HolderId::Firm(root))
+        {
+            lot.cost_cents = cost;
+        }
+        world
+            .firms
+            .get_mut(root)
+            .unwrap()
+            .book
+            .commit(
+                world.tick,
+                cw_core::ledger::Txn::new()
+                    .debit(
+                        cw_core::ledger::Account::Investments,
+                        cost,
+                        "internal investment",
+                    )
+                    .credit(cw_core::ledger::Account::Cash, cost, "internal investment"),
+            )
+            .unwrap();
+        let group = controlled_group(&world, root);
+        let gross: i64 = group
+            .iter()
+            .map(|handle| world.firm(*handle).unwrap().book.total_assets())
+            .sum();
+        let consolidated = consolidate(&world, root);
+        assert_eq!(consolidated.intercompany_eliminated_cents, cost);
+        assert_eq!(consolidated.assets_cents, gross - cost, "assets count once");
+    }
+
+    #[test]
+    fn intercompany_loans_are_eliminated_from_both_sides() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 56, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let root = world.investor.primary_group.unwrap();
+        let child = synthetic_firm(&mut world, Some(root));
+        let principal = 3_000_000;
+        world
+            .firms
+            .get_mut(root)
+            .unwrap()
+            .book
+            .commit(
+                world.tick,
+                cw_core::ledger::Txn::new()
+                    .debit(
+                        cw_core::ledger::Account::Receivables,
+                        principal,
+                        "intercompany loan",
+                    )
+                    .credit(
+                        cw_core::ledger::Account::Cash,
+                        principal,
+                        "intercompany loan",
+                    ),
+            )
+            .unwrap();
+        world
+            .firms
+            .get_mut(child)
+            .unwrap()
+            .book
+            .commit(
+                world.tick,
+                cw_core::ledger::Txn::new()
+                    .debit(
+                        cw_core::ledger::Account::Cash,
+                        principal,
+                        "intercompany loan",
+                    )
+                    .credit(
+                        cw_core::ledger::Account::Loans,
+                        principal,
+                        "intercompany loan",
+                    ),
+            )
+            .unwrap();
+        world.loans.insert(crate::state::Loan {
+            borrower: child,
+            lender: crate::state::Lender::Firm(root),
+            principal_remaining_cents: principal,
+            rate_bps: 0,
+            weekly_principal_cents: 0,
+            remaining_weeks: 52,
+            collateral: None,
+            secured: false,
+            created: world.tick,
+            carry: 0,
+            defaulted: false,
+        });
+        let group = controlled_group(&world, root);
+        let gross_assets: i64 = group
+            .iter()
+            .map(|handle| world.firm(*handle).unwrap().book.total_assets())
+            .sum();
+        let gross_liabilities: i64 = group
+            .iter()
+            .map(|handle| world.firm(*handle).unwrap().book.total_liabilities())
+            .sum();
+        let consolidated = consolidate(&world, root);
+        assert_eq!(consolidated.assets_cents, gross_assets - principal);
+        assert_eq!(
+            consolidated.liabilities_cents,
+            gross_liabilities - principal
+        );
+        assert!(consolidated.intercompany_eliminated_cents >= principal);
     }
 
     #[test]
