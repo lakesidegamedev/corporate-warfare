@@ -167,8 +167,6 @@ pub fn weekly(world: &mut World) {
         for (index, request) in due {
             if request.success {
                 apply_success(world, handle, &request);
-            } else if mass_layoffs(world, handle) {
-                backlash(world, handle, false);
             }
             if let Some(entity) = world.firms.get_mut(handle)
                 && let Some(stored) = entity.policy_requests.get_mut(index)
@@ -205,7 +203,7 @@ fn apply_success(world: &mut World, firm: Handle, request: &PolicyRequest) {
 }
 
 /// Workers the group released in the layoff window, against its current workforce.
-fn mass_layoffs(world: &World, firm: Handle) -> bool {
+pub fn mass_layoffs(world: &World, firm: Handle) -> bool {
     let group = crate::economy::deals::competition_group(world, firm);
     let released: i64 = group
         .iter()
@@ -221,8 +219,9 @@ fn mass_layoffs(world: &World, firm: Handle) -> bool {
     released > 0 && released * 10_000 >= (employed + released) * MASS_LAYOFF_BPS
 }
 
-/// A failed campaign with concurrent mass layoffs, or a disclosed/cancelled campaign event,
-/// damages reputation. The penalty is recorded publicly in the news feed.
+/// The lobby backlash card's outcome: disclosing a campaign run during mass layoffs costs 250
+/// bps reputation, cancelling it costs 100 bps and forfeits the fee. Recorded publicly in the
+/// news feed. The card is the only path, so the penalty is never applied twice.
 pub fn backlash(world: &mut World, firm: Handle, cancel: bool) {
     let penalty = if cancel { 100 } else { BACKLASH_BPS };
     let Some(entity) = world.firms.get_mut(firm) else {
@@ -237,6 +236,16 @@ pub fn backlash(world: &mut World, firm: Handle, cancel: bool) {
         amount_cents: penalty as i64,
         quantity: Default::default(),
     });
+}
+
+/// Cancel the firm's open campaigns: they resolve unsuccessful and the fee is not refunded.
+pub fn cancel_open(world: &mut World, firm: Handle) {
+    if let Some(entity) = world.firms.get_mut(firm) {
+        for request in entity.policy_requests.iter_mut().filter(|r| !r.resolved) {
+            request.resolved = true;
+            request.success = false;
+        }
+    }
 }
 
 #[cfg(test)]

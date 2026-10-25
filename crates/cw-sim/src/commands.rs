@@ -611,6 +611,8 @@ fn apply_intent(
                 brand_bps: Default::default(),
                 reputation_bps: 0,
                 layoffs: Vec::new(),
+                staff_history: Vec::new(),
+                outside_peak_bps: 0,
                 policy_requests: Vec::new(),
                 guarantees: Vec::new(),
                 last_strategic_week: 0,
@@ -881,9 +883,10 @@ fn apply_intent(
             if let Some(stored) = world.facilities.get_mut(*facility) {
                 stored.recipe = *recipe;
                 stored.status = FacilityStatus::Retooling {
-                    until: Tick(world.tick.0 + template.build_weeks / 2),
+                    until: Tick(world.tick.0 + (template.build_weeks / 2).max(1)),
                 };
                 stored.capex_cents += cost;
+                stored.escrow_cents += cost;
             }
             Ok(())
         }
@@ -1686,44 +1689,7 @@ fn apply_intent(
                     available: cash,
                 });
             }
-            let borrower = entity.borrower;
-            let lender = entity.lender;
-            let _ = world.firms.get_mut(borrower).unwrap().book.commit(
-                world.tick,
-                Txn::new()
-                    .credit(Account::Cash, payment, "repayment")
-                    .debit(Account::Loans, payment, "repayment"),
-            );
-            match lender {
-                Lender::Outside(index) => {
-                    if let Some(holder) = world.outside.lenders.get_mut(index as usize) {
-                        holder.capital_cents += payment;
-                    }
-                }
-                Lender::Firm(handle) => {
-                    if let Some(firm) = world.firms.get_mut(handle) {
-                        let _ = firm.book.commit(
-                            world.tick,
-                            Txn::new()
-                                .debit(Account::Cash, payment, "repayment received")
-                                .credit(Account::Receivables, payment, "repayment received"),
-                        );
-                    }
-                }
-                Lender::Bank(handle) => {
-                    if let Some(firm) = world.firms.get_mut(handle) {
-                        let _ = firm.book.commit(
-                            world.tick,
-                            Txn::new()
-                                .debit(Account::Cash, payment, "repayment received")
-                                .credit(Account::Receivables, payment, "repayment received"),
-                        );
-                    }
-                }
-            }
-            if let Some(stored) = world.loans.get_mut(*loan) {
-                stored.principal_remaining_cents -= payment;
-            }
+            crate::economy::credit::repay(world, *loan, payment);
             Ok(())
         }
         CommandIntent::IssueBond {
@@ -2245,6 +2211,24 @@ fn apply_intent(
             Ok(())
         }
         CommandIntent::RespondEvent { event, choice } => {
+            // Only whoever runs the addressed company may answer its card; a card with no
+            // company subject belongs to the investor.
+            let subject = world
+                .events
+                .pending
+                .iter()
+                .find(|pending| pending.id == *event)
+                .and_then(|pending| pending.subject_firm);
+            match subject {
+                Some(firm) if world.firms.contains(firm) => require_control(world, actor, firm)?,
+                _ if actor != INVESTOR_ACTOR => {
+                    return Err(DomainError::NoAuthority {
+                        actor,
+                        reason: AuthorityReason::NotOwner,
+                    });
+                }
+                _ => {}
+            }
             crate::economy::events_engine::respond(world, dataset, *event, choice)?;
             Ok(())
         }
@@ -2372,6 +2356,7 @@ fn start_facility(
         last_inputs_short: false,
         last_staff_ratio_bps: 10_000,
         mothballed_since: None,
+        outage: None,
     }
 }
 

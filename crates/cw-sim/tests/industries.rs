@@ -213,6 +213,7 @@ fn add_facility(
         last_inputs_short: false,
         last_staff_ratio_bps: 10_000,
         mothballed_since: None,
+        outage: None,
     };
     let handle = world.facilities.insert(facility);
     world

@@ -42,6 +42,16 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
         } else {
             organisation = (organisation - 5).max(500);
         }
+        // Union drive card: organisation crosses half the workforce this week.
+        if entry < 5_000 && organisation >= 5_000 {
+            crate::economy::events_engine::open(
+                world,
+                "union_drive",
+                Some(handle),
+                Some(region),
+                false,
+            );
+        }
         if let Some(firm) = world.firms.get_mut(handle) {
             firm.organisation
                 .insert(region, organisation.clamp(0, 10_000));

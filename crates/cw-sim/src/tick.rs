@@ -74,6 +74,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::economy::equity::refresh_valuation(world, dataset);
     crate::economy::equity::clear_exchange(world, dataset);
     crate::economy::events_engine::quarter_check(world, dataset);
+    crate::economy::events_engine::state_triggers(world, dataset);
     crate::economy::events_engine::auto_resolve(world, dataset);
     crate::economy::events_engine::expire_optional(world, dataset);
     world.clear_construction_orders();
@@ -89,8 +90,8 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
             firm.close_sales_week();
         }
     }
-    let past_due = world.firms.iter().any(|(_, firm)| {
-        firm.shares.qty(crate::state::HolderId::Investor) > 0
+    let past_due = world.firms.iter().any(|(handle, firm)| {
+        crate::economy::events_engine::player_side(world, handle)
             && matches!(
                 firm.status,
                 FirmStatus::PastDue { .. } | FirmStatus::Restructuring { .. }
@@ -114,13 +115,16 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
             liquidated: Vec::new(),
         };
     }
-    // Mandatory player decisions pause the clock.
-    if let Some(event) = world
-        .events
-        .pending
-        .iter()
-        .find(|event| !event.resolved && event.mandatory)
-    {
+    // Mandatory player decisions pause the clock. A rival's mandatory card is answered by the
+    // rival and never stops the player's time.
+    if let Some(event) = world.events.pending.iter().find(|event| {
+        !event.resolved
+            && event.mandatory
+            && event
+                .subject_firm
+                .map(|firm| crate::economy::events_engine::player_side(world, firm))
+                .unwrap_or(true)
+    }) {
         world.pending_pause = Some(format!("event:{}", event.id));
     }
     WeekOutcome {
@@ -210,6 +214,35 @@ fn complete_construction(world: &mut World, dataset: &Dataset) {
             facility.status = crate::state::FacilityStatus::Operating;
             facility.escrow_cents = 0;
             facility.completes = world.tick;
+        }
+    }
+    // Retooling finishes on its date: the escrowed equipment lands as fixed assets.
+    let retooled: Vec<Handle> = world
+        .facilities
+        .iter()
+        .filter(|(_, facility)| {
+            matches!(facility.status, crate::state::FacilityStatus::Retooling { until } if until.0 <= world.tick.0)
+        })
+        .map(|(handle, _)| handle)
+        .collect();
+    for handle in retooled {
+        let (firm, escrow) = match world.facilities.get(handle) {
+            Some(facility) => (facility.firm, facility.escrow_cents),
+            None => continue,
+        };
+        if escrow > 0
+            && let Some(entity) = world.firms.get_mut(firm)
+        {
+            let _ = entity.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::FixedAssets, escrow, "retool complete")
+                    .credit(Account::RestrictedCash, escrow, "retool complete"),
+            );
+        }
+        if let Some(facility) = world.facilities.get_mut(handle) {
+            facility.status = crate::state::FacilityStatus::Operating;
+            facility.escrow_cents = 0;
         }
     }
     let _ = dataset;

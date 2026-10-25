@@ -4,15 +4,15 @@
 //! max($25,000, 0.1 percent group assets) paid to the advocacy sector, one request per group
 //! and region with a 26-week cooldown, a four-week decision, odds of
 //! clamp(2000 + reputation/4 - recent wins * 500, 1000, 5000) bps drawn once and saved, costs
-//! kept on failure, and a 250 bps public reputation loss for a failed campaign that coincides
-//! with mass layoffs. PolicyKind has no variant that buys antitrust approval.
+//! kept on failure, and the lobby backlash card for a campaign that coincides with mass
+//! layoffs (disclose: 250 bps, recorded publicly; cancel: 100 bps and the fee is forfeit). PolicyKind has no variant that buys antitrust approval.
 
 use std::collections::BTreeMap;
 
 use cw_core::ids::Handle;
 use cw_core::ledger::{Account, Txn};
 use cw_data::Dataset;
-use cw_sim::economy::{policy, seed};
+use cw_sim::economy::{events_engine, policy, seed};
 use cw_sim::state::{HolderId, PolicyKind, ScenarioKind, ScenarioMode, ShareBook, ShareLot, World};
 
 fn world(seed_value: u64) -> World {
@@ -211,13 +211,15 @@ fn a_training_grant_without_a_government_budget_is_declined_before_the_fee() {
     assert_eq!(world.firm(firm).unwrap().book.cash(), cash);
 }
 
-#[test]
-fn a_failed_campaign_during_mass_layoffs_costs_public_reputation() {
+/// An open campaign during mass layoffs opens the lobby backlash card; its answer is the only
+/// place the reputation penalty is applied.
+fn backlash_card(choice: &str) -> (World, Handle, i32) {
+    let dataset = Dataset::load().unwrap();
     let (mut world, firm, _) = filed_with(false, 0, PolicyKind::PermitAcceleration);
     let employed = world.firm(firm).unwrap().total_employees(&world.facilities);
-    // Release a fifth of the workforce in the decision window.
+    // A fifth of the workforce released this week, while the campaign is still open.
     let released = (employed / 4).max(1);
-    let week = world.tick.0 + 3;
+    let week = world.tick.0;
     world
         .firms
         .get_mut(firm)
@@ -225,7 +227,21 @@ fn a_failed_campaign_during_mass_layoffs_costs_public_reputation() {
         .layoffs
         .push((week, released));
     let reputation = world.firm(firm).unwrap().reputation_bps;
-    weeks(&mut world, 5);
+    events_engine::state_triggers(&mut world, &dataset);
+    let card = world
+        .events
+        .pending
+        .iter()
+        .find(|event| event.card == "lobbying_backlash" && event.subject_firm == Some(firm))
+        .map(|event| event.id)
+        .expect("the backlash card opens");
+    events_engine::respond(&mut world, &dataset, card, choice).unwrap();
+    (world, firm, reputation)
+}
+
+#[test]
+fn disclosing_a_campaign_during_mass_layoffs_costs_public_reputation() {
+    let (world, firm, reputation) = backlash_card("disclose");
     assert_eq!(world.firm(firm).unwrap().reputation_bps, reputation - 250);
     assert!(
         world
@@ -233,6 +249,26 @@ fn a_failed_campaign_during_mass_layoffs_costs_public_reputation() {
             .iter()
             .any(|item| item.key == "news.lobbying_backlash"),
         "the penalty is recorded publicly"
+    );
+    assert!(
+        !world.firm(firm).unwrap().policy_requests[0].resolved,
+        "the campaign continues"
+    );
+}
+
+#[test]
+fn cancelling_the_campaign_costs_less_and_forfeits_the_fee() {
+    let (mut world, firm, reputation) = backlash_card("cancel");
+    let cash = world.firm(firm).unwrap().book.cash();
+    assert_eq!(world.firm(firm).unwrap().reputation_bps, reputation - 100);
+    let request = world.firm(firm).unwrap().policy_requests[0].clone();
+    assert!(request.resolved && !request.success);
+    weeks(&mut world, 5);
+    assert_eq!(world.firm(firm).unwrap().book.cash(), cash, "no refund");
+    assert_eq!(
+        world.firm(firm).unwrap().reputation_bps,
+        reputation - 100,
+        "no second penalty when the decision date passes"
     );
 }
 

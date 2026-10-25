@@ -311,6 +311,8 @@ pub struct Facility {
     pub last_inputs_short: bool,
     pub last_staff_ratio_bps: i32,
     pub mothballed_since: Option<Tick>,
+    /// Temporary capacity cap from an outage card: (cap bps, last affected week exclusive).
+    pub outage: Option<(i32, Tick)>,
 }
 
 impl Facility {
@@ -496,6 +498,11 @@ pub struct Firm {
     /// Workers released by week, kept for four weeks so a failed lobbying campaign can be
     /// judged against concurrent mass layoffs.
     pub layoffs: Vec<(u32, i64)>,
+    /// Employees at each of the last five week closes, newest last, for churn detection.
+    pub staff_history: Vec<i64>,
+    /// Largest outside vote share at the last week close, so a hostile stake is reported when
+    /// it crosses a quarter, not every week it stays there.
+    pub outside_peak_bps: i32,
     pub policy_requests: Vec<PolicyRequest>,
     pub guarantees: Vec<Guarantee>,
     pub last_strategic_week: u32,
@@ -926,6 +933,7 @@ pub enum PolicyKind {
 pub enum RegimeKind {
     Recession,
     Boom,
+    FuelShock,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

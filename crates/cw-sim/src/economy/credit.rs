@@ -361,6 +361,48 @@ pub fn unsecured_capacity(world: &World, firm: Handle) -> i64 {
     (ebitda.max(0) / entity.book.recent_weeks().len().max(1) as i64 * 13).max(0)
 }
 
+/// Repay loan principal from the borrower's cash to the actual lender. The caller has checked
+/// authority and that the borrower holds the cash.
+pub fn repay(world: &mut World, loan: Handle, amount: i64) {
+    let Some(entity) = world.loans.get(loan) else {
+        return;
+    };
+    let payment = amount.min(entity.principal_remaining_cents).max(0);
+    if payment == 0 {
+        return;
+    }
+    let borrower = entity.borrower;
+    let lender = entity.lender;
+    if let Some(firm) = world.firms.get_mut(borrower) {
+        let _ = firm.book.commit(
+            world.tick,
+            Txn::new()
+                .credit(Account::Cash, payment, "repayment")
+                .debit(Account::Loans, payment, "repayment"),
+        );
+    }
+    match lender {
+        Lender::Outside(index) => {
+            if let Some(holder) = world.outside.lenders.get_mut(index as usize) {
+                holder.capital_cents += payment;
+            }
+        }
+        Lender::Firm(handle) | Lender::Bank(handle) => {
+            if let Some(firm) = world.firms.get_mut(handle) {
+                let _ = firm.book.commit(
+                    world.tick,
+                    Txn::new()
+                        .debit(Account::Cash, payment, "repayment received")
+                        .credit(Account::Receivables, payment, "repayment received"),
+                );
+            }
+        }
+    }
+    if let Some(stored) = world.loans.get_mut(loan) {
+        stored.principal_remaining_cents -= payment;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

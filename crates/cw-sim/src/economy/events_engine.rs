@@ -7,8 +7,6 @@
 //! subject within 26 weeks. Every choice has a persisted result and never bypasses solvency or
 //! authority rules.
 
-use std::collections::BTreeMap;
-
 use cw_core::calendar::Tick;
 use cw_core::error::{DomainError, DomainResult, EntityKind};
 use cw_core::ids::Handle;
@@ -52,16 +50,17 @@ pub fn quarter_check(world: &mut World, dataset: &Dataset) {
         let _ = kind;
     }
 
-    let mut region_cards: BTreeMap<u8, String> = BTreeMap::new();
-    for region in 0..world.regions.len() {
-        let mut candidates: Vec<&str> = dataset
+    macro_draw(world, dataset);
+
+    // At most one opportunity card per region: a ten percent chance, then a stable sorted list
+    // of cards with at least one eligible firm in the region, then one eligible subject.
+    for region in 0..world.regions.len() as u8 {
+        let mut candidates: Vec<(String, bool)> = dataset
             .events
             .iter()
-            .filter(|card| !card.mandatory)
-            // Macro regimes belong to the macro stream, not to a regional firm card.
-            .filter(|card| !card.trigger.starts_with("macro_"))
-            .filter(|card| eligible_quiet(world, card.trigger.as_str(), region as u8))
-            .map(|card| card.id.as_str())
+            .filter(|card| QUIET_TRIGGERS.contains(&card.trigger.as_str()))
+            .filter(|card| !eligible_subjects(world, dataset, &card.trigger, region).is_empty())
+            .map(|card| (card.id.clone(), card.mandatory))
             .collect();
         candidates.sort_unstable();
         if candidates.is_empty() {
@@ -72,66 +71,390 @@ pub fn quarter_check(world: &mut World, dataset: &Dataset) {
             continue;
         }
         let index = world.events.rng.uniform_below(candidates.len() as u64) as usize;
-        region_cards.insert(region as u8, candidates[index].to_owned());
-    }
-    for (region, card) in region_cards {
-        let subject = world
-            .firms
-            .iter()
-            .find(|(_, firm)| firm.region == region && firm.operative())
-            .map(|(handle, _)| handle);
-        open(world, &card, subject, Some(region), false);
-    }
-}
-
-/// Eligibility checks that do not depend on a specific firm, used for quiet quarter draws.
-fn eligible_quiet(world: &World, trigger: &str, region: u8) -> bool {
-    match trigger {
-        "random_energy_region" => world
-            .firms
-            .iter()
-            .any(|(_, firm)| firm.industry == 2 && firm.region == region && firm.operative()),
-        "quarter_crop_event" => world.firms.iter().any(|(_, firm)| firm.industry == 0),
-        "deposit_below_26_weeks" => world.firms.iter().any(|(_, firm)| firm.industry == 1),
-        "macro_no_active_fuel_shock" => world.macro_state.regime.is_none(),
-        "macro_selection_no_regime" => world.macro_state.regime.is_none(),
-        "random_active_freight_lane" => true,
-        "lane_utilisation_above_90" => true,
-        "government_budget_available" => world.government.training_budget_cents > 0,
-        "region_disaster_no_active" => world.regions[region as usize].catastrophe_until.is_none(),
-        "tech_level_below_frontier" => world
-            .firms
-            .iter()
-            .any(|(_, firm)| firm.tech_level < world.macro_state.tech_frontier),
-        _ => false,
+        let (card_id, mandatory) = candidates[index].clone();
+        let Some(card) = dataset.event(&card_id) else {
+            continue;
+        };
+        let subjects = eligible_subjects(world, dataset, &card.trigger, region);
+        let pick = world.events.rng.uniform_below(subjects.len() as u64) as usize;
+        let subject = subjects[pick];
+        let id = open(world, &card_id, Some(subject), Some(region), mandatory);
+        // A catastrophe is a physical loss that happens once when the card opens; the choice
+        // only decides what to do with the damaged plant.
+        if id > 0 && card.trigger == "region_disaster_no_active" {
+            crate::economy::insurance::catastrophe(world, region);
+        }
     }
 }
 
-/// Resolve optional cards addressed to firms the investor does not control. The rival uses the
-/// same handler catalogue and the same postings; only the choice is automatic. Player cards stay
-/// open for an explicit answer.
+/// Triggers drawn at random at the quarter boundary. Every other card opens only when its
+/// actual state transition happens (see `state_triggers`); macro cards come from the macro
+/// stream.
+const QUIET_TRIGGERS: [&str; 9] = [
+    "random_energy_region",
+    "quarter_crop_event",
+    "deposit_below_26_weeks",
+    "random_active_freight_lane",
+    "lane_utilisation_above_90",
+    "government_budget_available",
+    "region_disaster_no_active",
+    "tech_level_below_frontier",
+    "region_crisis_or_bank_shock",
+];
+
+/// The player investor ultimately controls this firm.
+pub fn player_side(world: &World, firm: Handle) -> bool {
+    crate::economy::ownership::ultimate_controller(world, firm)
+        == Some(crate::state::HolderId::Investor)
+}
+
+/// One macro regime per quarter at most, from the macro stream, only when none is active. The
+/// regime applies at once; the card tells the player and offers only their own response.
+fn macro_draw(world: &mut World, dataset: &Dataset) {
+    if world.macro_state.regime.is_some() {
+        return;
+    }
+    if world.macro_state.rng.uniform_below(10_000) >= 1_000 {
+        return;
+    }
+    let cards = ["demand_boom", "fuel_spike", "recession"];
+    let card = cards[world.macro_state.rng.uniform_below(cards.len() as u64) as usize];
+    match card {
+        "recession" => {
+            world.macro_state.regime = Some((RegimeKind::Recession, Tick(world.tick.0 + 26)));
+            apply_demand_regime(world, -1_000);
+        }
+        "demand_boom" => {
+            world.macro_state.regime = Some((RegimeKind::Boom, Tick(world.tick.0 + 26)));
+            apply_demand_regime(world, 1_000);
+        }
+        _ => {
+            // Fuel supply falls a fifth for thirteen weeks, which lifts the executable fuel
+            // price through the normal market rather than by decree.
+            world.macro_state.regime = Some((RegimeKind::FuelShock, Tick(world.tick.0 + 13)));
+            let fuel = dataset.product_index["fuel"];
+            for region in &mut world.regions {
+                region.supply_modifiers.push((
+                    "fuel_shock".to_owned(),
+                    Some(fuel),
+                    -2_000,
+                    Tick(world.tick.0 + 13),
+                ));
+            }
+        }
+    }
+    let subject = world
+        .investor
+        .primary_group
+        .filter(|handle| world.firms.contains(*handle));
+    open(world, card, subject, None, false);
+}
+
+fn uses_input(dataset: &Dataset, world: &World, firm: Handle, input: &str) -> bool {
+    world
+        .firms
+        .get(firm)
+        .map(|entity| {
+            entity
+                .facilities
+                .iter()
+                .filter_map(|handle| world.facilities.get(*handle))
+                .any(|facility| {
+                    facility.status == FacilityStatus::Operating
+                        && dataset.recipes[facility.recipe as usize]
+                            .weekly_inputs_lots
+                            .contains_key(input)
+                })
+        })
+        .unwrap_or(false)
+}
+
+fn has_facility_in(world: &World, firm: Handle, region: u8) -> bool {
+    world
+        .firms
+        .get(firm)
+        .map(|entity| {
+            entity
+                .facilities
+                .iter()
+                .filter_map(|handle| world.facilities.get(*handle))
+                .any(|facility| {
+                    facility.region == region && facility.status != FacilityStatus::Building
+                })
+        })
+        .unwrap_or(false)
+}
+
+fn in_transit(world: &World, firm: Handle) -> bool {
+    world
+        .shipments
+        .iter()
+        .any(|shipment| shipment.buyer == firm || shipment.seller == firm)
+}
+
+/// Operating firms in the region that the card's trigger actually applies to, in stable order.
+fn eligible_subjects(world: &World, dataset: &Dataset, trigger: &str, region: u8) -> Vec<Handle> {
+    let mut found: Vec<Handle> = world
+        .firms
+        .iter()
+        .filter(|(_, firm)| firm.operative() && firm.region == region)
+        .map(|(handle, _)| handle)
+        .filter(|handle| {
+            let Some(firm) = world.firms.get(*handle) else {
+                return false;
+            };
+            match trigger {
+                "random_energy_region" => uses_input(dataset, world, *handle, "electricity"),
+                "quarter_crop_event" => {
+                    firm.industry == 0 && has_facility_in(world, *handle, region)
+                }
+                "deposit_below_26_weeks" => firm
+                    .facilities
+                    .iter()
+                    .filter_map(|f| world.facilities.get(*f))
+                    .any(|facility| {
+                        let recipe = &dataset.recipes[facility.recipe as usize];
+                        let weekly = recipe.weekly_output_lots * facility.blocks as i64;
+                        recipe.industry == "extraction"
+                            && facility.status == FacilityStatus::Operating
+                            && facility.deposit_remaining.lots() < weekly * 26
+                    }),
+                "random_active_freight_lane" | "lane_utilisation_above_90" => {
+                    in_transit(world, *handle)
+                }
+                "government_budget_available" => {
+                    world.government.training_budget_cents > 0
+                        && has_facility_in(world, *handle, region)
+                }
+                "region_disaster_no_active" => {
+                    world.regions[region as usize].catastrophe_until.is_none()
+                        && has_facility_in(world, *handle, region)
+                }
+                "tech_level_below_frontier" => firm.tech_level < world.macro_state.tech_frontier,
+                "region_crisis_or_bank_shock" => firm.bank.is_some(),
+                _ => false,
+            }
+        })
+        .collect();
+    found.sort_unstable();
+    found
+}
+
+/// Weekly state-transition cards. Each opens only when its documented state actually holds;
+/// the 26-week subject cooldown in `open` keeps a persistent state from reopening the card.
+/// Cards whose answer is a rival's own command (bargaining, review, tenders, covenants) open
+/// only for the player's companies, because the rival AI answers through the command path.
+pub fn state_triggers(world: &mut World, dataset: &Dataset) {
+    let handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
+    // Staffing history for churn.
+    for handle in &handles {
+        let employed = world
+            .firms
+            .get(*handle)
+            .map(|firm| firm.total_employees(&world.facilities))
+            .unwrap_or(0);
+        if let Some(firm) = world.firms.get_mut(*handle) {
+            firm.staff_history.push(employed);
+            if firm.staff_history.len() > 5 {
+                firm.staff_history.remove(0);
+            }
+        }
+    }
+    let mut opens: Vec<(&'static str, Handle, Option<u8>, bool)> = Vec::new();
+    for handle in &handles {
+        let Some(firm) = world.firms.get(*handle) else {
+            continue;
+        };
+        if !firm.operative() {
+            continue;
+        }
+        let player = player_side(world, *handle);
+        let region = Some(firm.region);
+        // Supplier default: an actual supplier on an active contract is in distress.
+        let supplier_down = world.contracts.iter().any(|(_, contract)| {
+            contract.buyer == *handle
+                && contract.status == crate::state::ContractStatus::Active
+                && world
+                    .firms
+                    .get(contract.seller)
+                    .map(|seller| {
+                        matches!(
+                            seller.status,
+                            crate::state::FirmStatus::PastDue { .. }
+                                | crate::state::FirmStatus::Restructuring { .. }
+                        )
+                    })
+                    .unwrap_or(false)
+        });
+        if supplier_down {
+            opens.push(("supplier_default", *handle, region, false));
+        }
+        // Quality recall: a product below 8,000 quality bps with sales in the last four weeks.
+        if recall_products(world, *handle)
+            .iter()
+            .any(|(_, units)| *units > 0)
+        {
+            opens.push(("quality_recall", *handle, region, false));
+        }
+        // Talent poaching: more than a tenth of the workforce left in four weeks, not counting
+        // the firm's own layoffs.
+        if let (Some(then), Some(now)) = (firm.staff_history.first(), firm.staff_history.last())
+            && firm.staff_history.len() == 5
+            && *then > 0
+        {
+            let laid_off: i64 = firm.layoffs.iter().map(|(_, count)| *count).sum();
+            let lost = then - now - laid_off;
+            if lost * 10 > *then {
+                opens.push(("talent_poaching", *handle, region, false));
+            }
+        }
+        // Permit delay: a project started this week where no permit bonus is active.
+        let fresh_build = firm
+            .facilities
+            .iter()
+            .filter_map(|f| world.facilities.get(*f))
+            .find(|facility| {
+                // Commands run before the week advances, so a project ordered last week
+                // started one tick before this check.
+                facility.status == FacilityStatus::Building
+                    && facility.started.0 + 1 >= world.tick.0
+                    && world.regions[facility.region as usize]
+                        .policy
+                        .permit_bonus_until
+                        .map(|until| until.0 <= world.tick.0)
+                        .unwrap_or(true)
+            })
+            .map(|facility| facility.region);
+        if let Some(build_region) = fresh_build {
+            opens.push(("permit_delay", *handle, Some(build_region), false));
+        }
+        // Lobby backlash: an open campaign while the group is laying off a tenth of its staff.
+        if firm.policy_requests.iter().any(|request| !request.resolved)
+            && crate::economy::policy::mass_layoffs(world, *handle)
+        {
+            opens.push(("lobbying_backlash", *handle, region, false));
+        }
+        if player {
+            match firm.union.state {
+                BargainState::Demanding { .. } => {
+                    opens.push(("wage_negotiation", *handle, region, true))
+                }
+                BargainState::Striking { .. } => {
+                    opens.push(("strike_escalation", *handle, region, true))
+                }
+                _ => {}
+            }
+            // Hostile stake: an outside holder crosses a quarter of the votes this week. A
+            // long-standing co-investor above the line is not news.
+            let peak = outside_peak_bps(world, *handle);
+            if peak >= 2_500 && firm.outside_peak_bps < 2_500 {
+                opens.push(("hostile_stake", *handle, region, false));
+            }
+            // Covenant warning: debt above sixty percent of tangible assets.
+            let tangible = firm.book.net_tangible_assets();
+            if !firm.loans.is_empty() && firm.book.debt() * 100 > tangible.max(0) * 60 {
+                opens.push(("covenant_warning", *handle, region, true));
+            }
+        }
+    }
+    for (handle, deal) in world.deals.iter() {
+        if deal.state == crate::state::DealState::Review && player_side(world, deal.buyer) {
+            opens.push(("antitrust_review", deal.buyer, None, true));
+        }
+        if deal.state == crate::state::DealState::OfferOpen
+            && !deal.investor_tendered
+            && world.investor_holds(deal.target) > 0
+        {
+            opens.push(("tender_offer", deal.target, None, true));
+        }
+        let _ = handle;
+    }
+    for handle in &handles {
+        let peak = outside_peak_bps(world, *handle);
+        if let Some(firm) = world.firms.get_mut(*handle) {
+            firm.outside_peak_bps = peak;
+        }
+    }
+    for (card, subject, region, mandatory) in opens {
+        open(world, card, Some(subject), region, mandatory);
+    }
+    let _ = dataset;
+}
+
+/// Largest vote share held by a holder outside the player's group.
+pub(crate) fn outside_peak_bps(world: &World, firm: Handle) -> i32 {
+    let Some(entity) = world.firms.get(firm) else {
+        return 0;
+    };
+    entity
+        .shares
+        .holders
+        .keys()
+        .filter(|holder| match holder {
+            crate::state::HolderId::Firm(other) => !player_side(world, *other),
+            crate::state::HolderId::Outside(_) => true,
+            _ => false,
+        })
+        .map(|holder| entity.shares.vote_bps(*holder))
+        .max()
+        .unwrap_or(0)
+}
+
+/// Products below 8,000 quality bps with their units sold over the last four weeks.
+fn recall_products(world: &World, firm: Handle) -> Vec<(u16, i64)> {
+    let Some(entity) = world.firms.get(firm) else {
+        return Vec::new();
+    };
+    let recent = entity.sales_history.len().saturating_sub(4);
+    entity
+        .quality_bps
+        .iter()
+        .filter(|(_, quality)| **quality < 8_000)
+        .map(|(product, _)| {
+            let units: i64 = entity.sales_history[recent..]
+                .iter()
+                .flat_map(|week| week.iter())
+                .filter(|((_, sold), _)| sold == product)
+                .map(|(_, units)| *units)
+                .sum();
+            (*product, units)
+        })
+        .collect()
+}
+
+/// Resolve cards addressed to firms the investor does not ultimately control, optional and
+/// mandatory alike. The rival uses the same handler catalogue and the same postings; only the
+/// choice is automatic. Player cards stay open for an explicit answer. A card whose subject has
+/// left the world (merged or dissolved) resolves with its no-action choice.
 pub fn auto_resolve(world: &mut World, dataset: &Dataset) {
     let mut pending: Vec<(u64, String, bool)> = Vec::new();
     let candidates: Vec<(u64, String, Option<Handle>)> = world
         .events
         .pending
         .iter()
-        .filter(|event| !event.resolved && !event.mandatory)
+        .filter(|event| !event.resolved)
         .map(|event| (event.id, event.card.clone(), event.subject_firm))
         .collect();
     for (id, card_id, subject) in candidates {
         let Some(firm) = subject else { continue };
-        let controlled = world
-            .firms
-            .get(firm)
-            .map(|firm| firm.shares.qty(crate::state::HolderId::Investor) > 0)
-            .unwrap_or(false);
-        if controlled {
-            continue;
-        }
         let Some(card) = dataset.event(&card_id) else {
             continue;
         };
+        let gone = world.firm(firm).map(|f| !f.operative()).unwrap_or(true);
+        if gone {
+            if let Some(choice) = card
+                .choices
+                .iter()
+                .find(|choice| choice.handler == "no_action")
+                .or_else(|| card.choices.last())
+            {
+                pending.push((id, choice.id.clone(), true));
+            }
+            continue;
+        }
+        if player_side(world, firm) {
+            continue;
+        }
         let index = world
             .events
             .rng
@@ -273,10 +596,25 @@ fn apply(
     match handler {
         "terminate_supplier_contract" => {
             if let Some(buyer) = firm {
+                // Only contracts with the supplier that is actually in distress.
                 let contracts: Vec<Handle> = world
                     .contracts
                     .iter()
-                    .filter(|(_, contract)| contract.buyer == buyer)
+                    .filter(|(_, contract)| {
+                        contract.buyer == buyer
+                            && contract.status == crate::state::ContractStatus::Active
+                            && world
+                                .firms
+                                .get(contract.seller)
+                                .map(|seller| {
+                                    matches!(
+                                        seller.status,
+                                        crate::state::FirmStatus::PastDue { .. }
+                                            | crate::state::FirmStatus::Restructuring { .. }
+                                    )
+                                })
+                                .unwrap_or(false)
+                    })
                     .map(|(handle, _)| handle)
                     .collect();
                 for handle in contracts {
@@ -303,12 +641,12 @@ fn apply(
             if let Some(firm) = firm {
                 let cost = facility_power_cost(world, dataset, firm) * 2;
                 pay_operating(world, firm, cost, "backup power");
-                set_facility_target(world, firm, 7_500);
+                set_outage(world, firm, event.region, 7_500, 2);
             }
         }
         "accept_power_cut" => {
             if let Some(firm) = firm {
-                set_facility_target(world, firm, 5_000);
+                set_outage(world, firm, event.region, 5_000, 2);
             }
         }
         "buy_fuel_stock" => {
@@ -336,6 +674,14 @@ fn apply(
                             .credit(Account::Cash, paid, "fuel purchase")
                             .debit(Account::Inventory, paid, "fuel purchase"),
                     );
+                    let _ = world.outside.gateway_book.commit(
+                        world.tick,
+                        Txn::new().debit(Account::Cash, paid, "fuel sale").credit(
+                            Account::Revenue,
+                            paid,
+                            "fuel sale",
+                        ),
+                    );
                     world
                         .firms
                         .get_mut(firm)
@@ -347,14 +693,21 @@ fn apply(
         }
         "no_action" => {}
         "reroute_lane" => {
-            for shipment in &mut world.shipments {
-                shipment.arrive = Tick(shipment.arrive.0 + 1);
-                shipment.freight_cents += shipment.freight_cents * 20 / 100;
+            // Only the subject's own shipments: one week later, and the carrier's reroute quote
+            // of a fifth of their freight is paid now.
+            if let Some(firm) = firm {
+                let mut surcharge = 0i64;
+                for shipment in &mut world.shipments {
+                    if shipment.buyer == firm || shipment.seller == firm {
+                        shipment.arrive = Tick(shipment.arrive.0 + 1);
+                        surcharge += shipment.freight_cents * 20 / 100;
+                    }
+                }
+                pay_operating(world, firm, surcharge, "freight reroute");
             }
         }
-        "pause_lane" => {
-            world.shipments.clear();
-        }
+        // Pausing new lane orders never touches goods already in transit.
+        "pause_lane" => {}
         "reserve_carrier" => {
             if let Some(firm) = firm {
                 let fee = freight_reserve_fee(world, dataset, firm);
@@ -362,8 +715,12 @@ fn apply(
             }
         }
         "spot_delay" => {
-            for shipment in &mut world.shipments {
-                shipment.arrive = Tick(shipment.arrive.0 + 1);
+            if let Some(firm) = firm {
+                for shipment in &mut world.shipments {
+                    if shipment.buyer == firm || shipment.seller == firm {
+                        shipment.arrive = Tick(shipment.arrive.0 + 1);
+                    }
+                }
             }
         }
         "mitigate_crop" | "absorb_crop" => {
@@ -412,31 +769,34 @@ fn apply(
                         .unwrap_or(0);
                     let cost = capex * 50 / 100;
                     pay_operating(world, firm, cost, "deposit retool");
+                    // A new sourced deposit after a thirteen-week retool, not a free refill.
                     if let Some(stored) = world.facilities.get_mut(facility) {
                         stored.deposit_remaining =
                             cw_core::quantity::MilliLots::from_lots(52 * 20 * 100);
+                        stored.status = FacilityStatus::Retooling {
+                            until: Tick(world.tick.0 + 13),
+                        };
                     }
                 }
             }
         }
         "plan_depletion" => {}
         "full_recall" | "voluntary_refund" => {
+            // One four-week sales cohort of the products actually below 8,000 quality bps, at
+            // the firm's own price: ten percent for a recall, twenty-five for a voluntary refund.
             let rate = if handler == "full_recall" { 10 } else { 25 };
             let reputation = if handler == "full_recall" { 250 } else { 50 };
             if let Some(firm) = firm {
-                let sold: i64 = world
-                    .firms
-                    .get(firm)
-                    .map(|entity| {
-                        entity
-                            .sales_history
-                            .iter()
-                            .flat_map(|week| week.values().copied())
-                            .sum()
+                let cost: i64 = recall_products(world, firm)
+                    .into_iter()
+                    .map(|(product, units)| {
+                        let price = world
+                            .firm(firm)
+                            .and_then(|entity| entity.policies.prices.get(&product).copied())
+                            .unwrap_or_else(|| dataset.reference_price(product));
+                        units * price * rate / 100
                     })
-                    .unwrap_or(0);
-                let price = dataset.reference_price(0);
-                let cost = sold * price * rate / 100;
+                    .sum();
                 pay_operating(world, firm, cost, "quality recall");
                 if let Some(entity) = world.firms.get_mut(firm) {
                     entity.reputation_bps -= reputation;
@@ -507,50 +867,59 @@ fn apply(
         }
         "strike_continue" => {}
         "accept_training_grant" => {
+            // The firm commits its eighty percent match as a training budget for 26 weeks, and
+            // the region's grant window lets labour draw the twenty percent subsidy from the
+            // finite government budget as retraining actually happens. No cash is minted.
             if let Some(firm) = firm {
-                let cost = 10_000_000 * 80 / 100;
-                pay_operating(world, firm, cost, "training match");
-                let grant = (10_000_000 * 20 / 100).min(world.government.training_budget_cents);
-                if grant > 0 {
-                    world.government.training_budget_cents -= grant;
-                    let _ = world.government.book.commit(
-                        world.tick,
-                        Txn::new()
-                            .credit(Account::Cash, grant, "training grant")
-                            .debit(Account::OperatingExpense, grant, "training grant"),
-                    );
-                    if let Some(entity) = world.firms.get_mut(firm) {
-                        let _ = entity.book.commit(
-                            world.tick,
-                            Txn::new()
-                                .debit(Account::Cash, grant, "training grant")
-                                .credit(Account::OtherIncome, grant, "training grant"),
-                        );
+                if let Some(region) = event.region.and_then(|r| world.regions.get_mut(r as usize)) {
+                    region.policy.training_grant_until = Some(Tick(world.tick.0 + 26));
+                }
+                if let Some(entity) = world.firms.get_mut(firm) {
+                    let weekly_match = 10_000_000 * 80 / 100 / 26;
+                    entity.policies.training_budget_cents =
+                        entity.policies.training_budget_cents.max(weekly_match);
+                }
+            }
+        }
+        "expedite_permit" | "accept_permit_delay" => {
+            // The project that triggered the card: expedite for two percent of its capex to an
+            // explicit outside engineering service, or accept a four-week delay.
+            if let Some(firm) = firm {
+                let project = world.firm(firm).and_then(|entity| {
+                    entity.facilities.iter().copied().find(|handle| {
+                        world
+                            .facilities
+                            .get(*handle)
+                            .map(|facility| {
+                                facility.status == FacilityStatus::Building
+                                    && Some(facility.region) == event.region
+                            })
+                            .unwrap_or(false)
+                    })
+                });
+                if let Some(project) = project {
+                    if handler == "expedite_permit" {
+                        let capex = world
+                            .facilities
+                            .get(project)
+                            .map(|f| f.capex_cents)
+                            .unwrap_or(0);
+                        pay_service(world, firm, capex * 2 / 100, "permit expedite");
+                    } else if let Some(facility) = world.facilities.get_mut(project) {
+                        facility.completes = Tick(facility.completes.0 + 4);
                     }
                 }
             }
         }
-        "expedite_permit" => {
+        "disclose_lobbying" => {
             if let Some(firm) = firm {
-                let capex = world
-                    .firms
-                    .get(firm)
-                    .map(|entity| {
-                        entity
-                            .facilities
-                            .iter()
-                            .filter_map(|h| world.facilities.get(*h))
-                            .map(|f| f.capex_cents)
-                            .sum::<i64>()
-                    })
-                    .unwrap_or(0);
-                pay_operating(world, firm, capex * 2 / 100, "permit expedite");
+                crate::economy::policy::backlash(world, firm, false);
             }
         }
-        "accept_permit_delay" => {}
-        "disclose_lobbying" | "cancel_lobbying" => {
+        "cancel_lobbying" => {
             if let Some(firm) = firm {
-                crate::economy::policy::backlash(world, firm, handler == "cancel_lobbying");
+                crate::economy::policy::cancel_open(world, firm);
+                crate::economy::policy::backlash(world, firm, true);
             }
         }
         "submit_remedy" => {
@@ -582,40 +951,90 @@ fn apply(
                 entity.board.next_meeting = Tick(world.tick.0 + 4);
             }
         }
-        "tender_shares" => {
-            if let Some(firm) = firm {
-                let _ = firm;
+        "tender_shares" | "refuse_tender" => {
+            // The open bid on the subject company records the player's choice; shares move only
+            // at settlement, from the buyer's escrow.
+            if let Some(target) = firm {
+                let deal = world
+                    .deals
+                    .iter()
+                    .find(|(_, deal)| {
+                        deal.target == target && deal.state == crate::state::DealState::OfferOpen
+                    })
+                    .map(|(handle, _)| handle);
+                if let Some(deal) = deal {
+                    crate::economy::deals::respond_tender(world, deal, handler == "tender_shares")?;
+                }
             }
         }
-        "refuse_tender" => {}
-        "cure_covenant" | "renegotiate_covenant" => {}
+        "cure_covenant" => {
+            // Repay principal from cash above a four-week mandatory-outflow reserve.
+            if let Some(firm) = firm {
+                let reserve = crate::economy::insolvency::mandatory_weekly_outflow(world, firm) * 4;
+                let mut spare = world
+                    .firm(firm)
+                    .map(|entity| entity.book.cash() - reserve)
+                    .unwrap_or(0);
+                let loans: Vec<Handle> = world
+                    .firm(firm)
+                    .map(|e| e.loans.clone())
+                    .unwrap_or_default();
+                for loan in loans {
+                    if spare <= 0 {
+                        break;
+                    }
+                    let owed = world
+                        .loans
+                        .get(loan)
+                        .map(|l| l.principal_remaining_cents)
+                        .unwrap_or(0);
+                    let payment = owed.min(spare);
+                    crate::economy::credit::repay(world, loan, payment);
+                    spare -= payment;
+                }
+            }
+        }
+        "renegotiate_covenant" => {
+            // Lenders reprice the breach: one percentage point on every outstanding loan.
+            if let Some(firm) = firm {
+                let loans: Vec<Handle> = world
+                    .firm(firm)
+                    .map(|e| e.loans.clone())
+                    .unwrap_or_default();
+                for loan in loans {
+                    if let Some(stored) = world.loans.get_mut(loan) {
+                        stored.rate_bps += 100;
+                    }
+                }
+            }
+        }
         "bank_run" => {
-            let bank = world
-                .firms
-                .iter()
-                .find(|(_, firm)| firm.bank.is_some() && firm.operative())
-                .map(|(handle, _)| handle);
-            if let Some(bank) = bank {
+            if let Some(bank) = firm.filter(|handle| {
+                world
+                    .firm(*handle)
+                    .map(|f| f.bank.is_some())
+                    .unwrap_or(false)
+            }) {
                 crate::economy::banking::run(world, bank);
             }
         }
         "raise_liquidity" => {}
-        "catastrophe_rebuild" | "catastrophe_mothball" => {
-            if let Some(region) = event.region {
-                crate::economy::insurance::catastrophe(world, region);
-                if handler == "catastrophe_mothball"
-                    && let Some(firm) = firm
-                {
-                    let facilities: Vec<Handle> = world
-                        .firms
-                        .get(firm)
-                        .map(|entity| entity.facilities.clone())
-                        .unwrap_or_default();
-                    for handle in facilities {
-                        if let Some(facility) = world.facilities.get_mut(handle) {
-                            facility.status = FacilityStatus::Mothballed;
-                            facility.mothballed_since = Some(world.tick);
-                        }
+        // The loss happened when the card opened; insured claims settle through the insurer.
+        "catastrophe_rebuild" => {}
+        "catastrophe_mothball" => {
+            if let (Some(region), Some(firm)) = (event.region, firm) {
+                let facilities: Vec<Handle> = world
+                    .firms
+                    .get(firm)
+                    .map(|entity| entity.facilities.clone())
+                    .unwrap_or_default();
+                for handle in facilities {
+                    if let Some(facility) = world.facilities.get_mut(handle)
+                        && facility.region == region
+                        && facility.status == FacilityStatus::Operating
+                    {
+                        facility.status = FacilityStatus::Mothballed;
+                        facility.mothballed_since = Some(world.tick);
                     }
                 }
             }
@@ -625,7 +1044,7 @@ fn apply(
                 let level = world.firms.get(firm).map(|f| f.tech_level).unwrap_or(0);
                 let cost = crate::economy::research::threshold(level);
                 pay_operating(world, firm, cost, "technology opportunity");
-                let mut rng = Rng::entity_stream(world.seed, TAG_RESEARCH, firm);
+                let mut rng = Rng::entity_stream(world.seed ^ event.id, TAG_RESEARCH, firm);
                 if rng.chance_bps(9_000)
                     && let Some(entity) = world.firms.get_mut(firm)
                 {
@@ -634,14 +1053,9 @@ fn apply(
                 }
             }
         }
-        "accept_recession" => {
-            world.macro_state.regime = Some((RegimeKind::Recession, Tick(world.tick.0 + 26)));
-            apply_demand_regime(world, -1_000);
-        }
-        "accept_boom" => {
-            world.macro_state.regime = Some((RegimeKind::Boom, Tick(world.tick.0 + 26)));
-            apply_demand_regime(world, 1_000);
-        }
+        // The macro stream already applied the regime when the card opened; the player's
+        // answer is their own policy, not a vote on the economy.
+        "accept_recession" | "accept_boom" => {}
         "energy_outage" => {}
         other => {
             let _ = other;
@@ -668,18 +1082,37 @@ fn pay_operating(world: &mut World, firm: Handle, amount: i64, memo: &str) {
     crate::economy::insolvency::pay_or_defer(world, firm, amount, Account::OperatingExpense, memo);
 }
 
-fn set_facility_target(world: &mut World, firm: Handle, target_bps: i32) {
+/// Cap the firm's operating capacity in the region for a number of weeks. The player's own
+/// production target is untouched and applies again when the outage ends.
+fn set_outage(world: &mut World, firm: Handle, region: Option<u8>, cap_bps: i32, weeks: u32) {
     let facilities: Vec<Handle> = world
         .firms
         .get(firm)
         .map(|entity| entity.facilities.clone())
         .unwrap_or_default();
+    let until = Tick(world.tick.0 + weeks);
     for handle in facilities {
         if let Some(facility) = world.facilities.get_mut(handle)
             && facility.status == FacilityStatus::Operating
+            && region.map(|r| r == facility.region).unwrap_or(true)
         {
-            facility.target_bps = target_bps;
+            facility.outage = Some((cap_bps, until));
         }
+    }
+}
+
+/// Pay an explicit outside professional service; it is income to the outside services sector.
+fn pay_service(world: &mut World, firm: Handle, amount: i64, memo: &str) {
+    let cash = world.firm(firm).map(|f| f.book.cash().max(0)).unwrap_or(0);
+    pay_operating(world, firm, amount, memo);
+    let paid = amount.min(cash).max(0);
+    if paid > 0 {
+        let _ = world.outside.legal_services_book.commit(
+            world.tick,
+            Txn::new()
+                .debit(Account::Cash, paid, memo)
+                .credit(Account::Revenue, paid, memo),
+        );
     }
 }
 
@@ -807,16 +1240,27 @@ mod tests {
             crate::state::ScenarioKind::Founder,
             crate::state::ScenarioMode::Sandbox,
         );
+        let mut regimes = 0;
         for quarter in 1..=40u32 {
             world.tick = Tick(quarter * 13);
+            let before = world.macro_state.regime;
             quarter_check(&mut world, &dataset);
+            if before.is_none() && world.macro_state.regime.is_some() {
+                regimes += 1;
+            }
         }
+        let macro_cards: Vec<_> = world
+            .events
+            .pending
+            .iter()
+            .filter(|event| {
+                ["recession", "demand_boom", "fuel_spike"].contains(&event.card.as_str())
+            })
+            .collect();
+        assert!(regimes > 0, "the macro stream produces regimes");
+        assert_eq!(macro_cards.len(), regimes, "one notice per regime");
         assert!(
-            world
-                .events
-                .pending
-                .iter()
-                .all(|event| event.card != "recession" && event.card != "demand_boom"),
+            macro_cards.iter().all(|event| event.region.is_none()),
             "macro cards are drawn from the macro stream, never from regional firm draws"
         );
     }
