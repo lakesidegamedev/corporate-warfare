@@ -273,3 +273,13 @@ that reserves are recognised at the incident and paid next week. Claims now carr
 and reduces the reserve. Unpaid reserves stay as liabilities. Tests:
 `insurance::tests::a_claim_is_reserved_now_and_paid_next_week` and the updated industry insurer
 scenario.
+
+### Pause policy, 2026-10-25
+
+The clock now stops for the investor when a controlled firm is three weeks into default grace, a
+first strike starts, a board vote or tender/board deadline is within one week, a mandatory event
+opens, or the week-260 score arrives. Advisory pauses are dismissible; mandatory event pauses must
+be answered through `RespondEvent`. The CLI's scripted driver clears advisory pauses so balance
+sweeps still reach their horizon, and only stops for mandatory events and the score. Tests:
+`tick::tests::the_clock_pauses_before_default_grace_expires` and
+`the_clock_pauses_on_an_imminent_board_vote`.

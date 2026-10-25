@@ -143,10 +143,16 @@ impl Session {
         &self.dataset.hash
     }
 
-    /// Dismiss a score pause so the same career continues in sandbox. Event pauses are cleared
-    /// when the event is answered; this is only for the week-260 score sheet.
+    /// Dismiss an advisory pause (score sheet, default grace, strike, board or deal deadline).
+    /// Mandatory event pauses are answered through `RespondEvent`, never dismissed here.
     pub fn dismiss_pause(&mut self) {
-        if self.world.pending_pause.as_deref() == Some("five_year_score") {
+        let advisory = self
+            .world
+            .pending_pause
+            .as_deref()
+            .map(|reason| !reason.starts_with("event:"))
+            .unwrap_or(false);
+        if advisory {
             self.world.pending_pause = None;
         }
     }

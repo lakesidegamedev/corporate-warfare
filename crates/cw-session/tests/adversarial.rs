@@ -522,7 +522,12 @@ fn a_mixed_valid_and_invalid_sequence_keeps_every_invariant() {
         }
 
         if (index + 1) % BATCH == 0 {
-            let result = session.advance(1);
+            let mut result = session.advance(1);
+            if result.weeks_advanced == 0 {
+                // Advisory pauses (grace, strike, board, deal) are cleared; mandatory events stay.
+                session.dismiss_pause();
+                result = session.advance(1);
+            }
             assert_eq!(
                 result.weeks_advanced, 1,
                 "week {} did not advance; pause {:?}",
@@ -613,7 +618,10 @@ fn duplicate_command_ids_return_the_first_outcome_and_change_nothing() {
     let mut advanced = 0u32;
     while advanced < 53 {
         let result = restored.advance((53 - advanced).min(16));
-        assert!(result.weeks_advanced > 0, "advance stalled at {advanced}");
+        if result.weeks_advanced == 0 {
+            restored.dismiss_pause();
+            continue;
+        }
         advanced += result.weeks_advanced;
     }
     let stale_hash = restored.canonical_hash();
