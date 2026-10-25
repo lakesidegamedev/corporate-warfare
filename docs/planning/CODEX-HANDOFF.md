@@ -7,7 +7,7 @@ Paused 2026-10-25 at the owner's request. This file is the restart source of tru
 
 - Repository: `https://github.com/lakesidegamedev/corporate-warfare` (public; Actions runs normally).
 - Main code commit: `3814ecad7917542a17bf8fd4e92b91724529cec4` (`test(equity): cover treasury buybacks`).
-- Pause/docs head: `12cee4f`.
+- Pause/docs head: `ef8528f`.
 - Working tree: clean; no registered worktrees at pause.
 - Size: 209 tracked files, 67,141 text lines; Rust 29,381 lines, Swift 7,034 lines; 3.1 MB excluding
   `.git` and `target`.
