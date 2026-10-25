@@ -1401,9 +1401,34 @@ fn financial_insurer_reserves_claims_and_pays_from_real_cash() {
         damage, expected_loss,
         "physical damage is recorded once on the asset"
     );
-    let insurer_delta = world.firm(insurer).unwrap().book.cash() - insurer_cash_before;
+    assert_eq!(
+        world.firm(insurer).unwrap().book.cash(),
+        insurer_cash_before,
+        "the incident is reserved, not paid immediately"
+    );
+    assert_eq!(
+        world.firm(insured).unwrap().book.cash(),
+        insured_cash_before,
+        "the insured is not paid at the incident"
+    );
+    assert_eq!(
+        -world
+            .firm(insurer)
+            .unwrap()
+            .book
+            .balance(Account::ClaimLiabilities),
+        expected_claim,
+        "the whole claim is reserved"
+    );
+    // The payout settles on the following week from actual insurer cash.
+    world.tick = Tick(world.tick.0 + 1);
+    insurance::settle_claims(&mut world);
     let paid = expected_claim.min(insurer_cash_before);
-    assert_eq!(insurer_delta, -paid, "the insurer pays from real cash");
+    assert_eq!(
+        world.firm(insurer).unwrap().book.cash() - insurer_cash_before,
+        -paid,
+        "the insurer pays from real cash"
+    );
     assert_eq!(
         world.firm(insured).unwrap().book.cash() - insured_cash_before,
         paid,
