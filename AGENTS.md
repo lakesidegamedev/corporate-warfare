@@ -7,7 +7,9 @@ repo, not either old Corporate Warfare project. Preserve `/root/misc/corpgame` a
 ## Authority
 
 Read `docs/planning/README.md`, PRODUCT, DECISIONS, STATUS and the requirement ledger.
-The historical `docs/PLAN.md` is superseded. Owner answers take precedence. Distinguish
+Read `docs/rules/README.md` and the exact rules before implementation; use
+`docs/planning/execution.json` for work-item tracking. The historical `docs/PLAN.md`
+is superseded. Owner answers take precedence. Distinguish
 confirmed choices, proposed defaults and verified evidence. Never silently drop scope.
 
 This preparation task is owned by Codex. The later implementation is intended for the

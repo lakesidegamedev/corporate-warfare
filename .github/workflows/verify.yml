@@ -21,4 +21,5 @@ jobs:
       - run: cargo test --locked --workspace
       - run: cargo run --locked -p cw-cli -- doctor
       - run: python3 tools/plan_check.py
+      - run: python3 tools/design_check.py
       - run: python3 -m unittest discover -s tools -p 'test_*.py'

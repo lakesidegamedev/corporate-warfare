@@ -1,8 +1,10 @@
 name: Apple smoke
 on:
   pull_request:
+    paths: ["apple/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/apple.yml"]
   push:
     branches: [main]
+    paths: ["apple/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/apple.yml"]
   workflow_dispatch:
 permissions:
   contents: read

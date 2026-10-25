@@ -1,0 +1,1150 @@
+{
+  "schema": 1,
+  "owner": "owner-launched DeepSeek goal after preparation",
+  "tasks": [
+    {
+      "id": "P00",
+      "title": "Bootstrap linking",
+      "depends_on": [],
+      "requirements": [
+        "R31"
+      ],
+      "spec": "docs/rules/INTERFACE.md",
+      "targets": "apple/, crates/cw-ffi, tools/cw-bindgen",
+      "status": "done",
+      "checklist": [
+        {
+          "text": "Regenerate ARM64 device/simulator static libraries and Swift bindings with the pinned generator.",
+          "done": true
+        },
+        {
+          "text": "Run native engine-info XCTest on a real iPhone simulator, not merely a compiler invocation.",
+          "done": true
+        },
+        {
+          "text": "Archive unsigned device app, retain xcresult/archive, record hosted run; later real-session tests remain R31 acceptance.",
+          "done": true
+        }
+      ],
+      "evidence": [
+        "evidence/bootstrap.md"
+      ]
+    },
+    {
+      "id": "P01",
+      "title": "Real corridor",
+      "depends_on": [],
+      "requirements": [
+        "R01"
+      ],
+      "spec": "docs/rules/CONTENT-PACING.md",
+      "targets": "tools/data-gen/, content/geography/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Recover provenance-traceable official 2004 county/EA crosswalk; record publisher URL, archive date and checksum.",
+          "done": false
+        },
+        {
+          "text": "Select candidate EA IDs 029,033,034,035,040,044,047,060,078,129,166; verify county membership and contiguous playable coverage before freezing.",
+          "done": false
+        },
+        {
+          "text": "Print roster/count/county totals and a labelled geometry review; fail on duplicate/missing county assignment; do not infer Akron as separate.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P02",
+      "title": "Ledger oracle",
+      "depends_on": [],
+      "requirements": [
+        "R03"
+      ],
+      "spec": "docs/rules/MARKETS.md",
+      "targets": "crates/cw-core/{money,quantity,ledger}.rs",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement checked cents/milli-lots/BPS types with i128 intermediates, half-even posting and carried sub-cent remainders.",
+          "done": false
+        },
+        {
+          "text": "Implement balanced transaction builder, immutable posting records and legal-entity account totals.",
+          "done": false
+        },
+        {
+          "text": "Encode ECONOMY loan/capex/inventory and CONTENT farm worked examples, including zero/overflow/last-unit rounding.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P03",
+      "title": "Atomic commands",
+      "depends_on": [
+        "P02"
+      ],
+      "requirements": [
+        "R04"
+      ],
+      "spec": "docs/rules/INTERFACE.md",
+      "targets": "crates/cw-core/{ids,state}.rs, crates/cw-sim/commands/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Build typed logical handles plus dense-row indirection and generation validation.",
+          "done": false
+        },
+        {
+          "text": "Implement actor authority, previews, sequence/idempotency and atomic reserve/commit/reject.",
+          "done": false
+        },
+        {
+          "text": "Test swapped-row deletion references, invalid/stale IDs, duplicate nonce and rollback after a later validation failure.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P04",
+      "title": "Session identity",
+      "depends_on": [
+        "P03"
+      ],
+      "requirements": [
+        "R05",
+        "R30"
+      ],
+      "spec": "docs/rules/INTERFACE.md",
+      "targets": "crates/cw-session/{rng,replay,save}.rs",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Create deterministic scenario/session with pinned RNG streams, canonical hash and accepted-command log.",
+          "done": false
+        },
+        {
+          "text": "Implement envelope versions/checksum/length validation plus import into a new handle, preserving old session on failure.",
+          "done": false
+        },
+        {
+          "text": "Add same-seed/batch/save replay fixtures and corrupt/future/oversized payload rejection; wire real session into Swift test.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P05",
+      "title": "Historical baseline",
+      "depends_on": [
+        "P01"
+      ],
+      "requirements": [
+        "R02"
+      ],
+      "spec": "docs/rules/CONTENT-PACING.md",
+      "targets": "tools/data-gen/, content/datasets/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Acquire pinned circa-2000 sources with manifest, source terms and FIPS/classification reconciliation.",
+          "done": false
+        },
+        {
+          "text": "Generate published source totals separately from one-percent game-scale totals and imputation flags.",
+          "done": false
+        },
+        {
+          "text": "Reproduce binary/JSON artifact hashes; validate wages/units/industry totals; no modern observations labelled 2000.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P06",
+      "title": "Finite counterparties",
+      "depends_on": [
+        "P02",
+        "P05"
+      ],
+      "requirements": [
+        "R06"
+      ],
+      "spec": "docs/rules/MARKETS.md",
+      "targets": "crates/cw-sim/{households,background,government}.rs",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Create household savings/spend, background employers and finite government/gateway ledgers.",
+          "done": false
+        },
+        {
+          "text": "Subtract named firm employment/output from scaled background; enforce finite external trade/credit.",
+          "done": false
+        },
+        {
+          "text": "Test zero wage income, savings buffer exhaustion, payroll demand lag and no household producer/retailer double purchase.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P07",
+      "title": "Labour and production",
+      "depends_on": [
+        "P03",
+        "P06"
+      ],
+      "requirements": [
+        "R07",
+        "R08"
+      ],
+      "spec": "docs/rules/MARKETS.md",
+      "targets": "crates/cw-sim/{labour,production}.rs",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement retained workers, two-percent search accumulators, tier offers and simultaneous allocation.",
+          "done": false
+        },
+        {
+          "text": "Compute output from minimum staffing/input/capacity; consume opening usable inputs with quantity carry.",
+          "done": false
+        },
+        {
+          "text": "Test firm-order permutation, finite workers and the farm recipe at full/half staffing and missing electricity.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P08",
+      "title": "One-pass market",
+      "depends_on": [
+        "P07"
+      ],
+      "requirements": [
+        "R09"
+      ],
+      "spec": "docs/rules/MARKETS.md",
+      "targets": "crates/cw-sim/markets/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement destination books, buyer cash reservations and capped integer attractiveness.",
+          "done": false
+        },
+        {
+          "text": "Construct bids simultaneously, ration each scarce seller pro rata, settle once and release unused cash.",
+          "done": false
+        },
+        {
+          "text": "Pin four worked examples, deterministic reordering, affordable price cap, zero supply and no extra-share revenue.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P09",
+      "title": "Logistics and investment",
+      "depends_on": [
+        "P08"
+      ],
+      "requirements": [
+        "R10",
+        "R11"
+      ],
+      "spec": "docs/rules/MARKETS.md",
+      "targets": "crates/cw-sim/{freight,contracts,capital}.rs",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement finite carrier offers, minimum/road charges, integer transit and arrivals; contract before spot priority.",
+          "done": false
+        },
+        {
+          "text": "Implement capex escrow, equipment/construction shares, lead time, completion, retool/mothball/disposal.",
+          "done": false
+        },
+        {
+          "text": "Test delayed input use, defaulting supplier, partially funded build, cancellation and no duplicated capex expense.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P10",
+      "title": "Phone vertical slice",
+      "depends_on": [
+        "P00",
+        "P04",
+        "P08",
+        "P09"
+      ],
+      "requirements": [
+        "R31",
+        "R32"
+      ],
+      "spec": "docs/rules/INTERFACE.md",
+      "targets": "apple/Sources/{SessionActor,SaveManager,Overview,Facility,Region,Supply}/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Wrap real session/query/preview/submit/advance in serial actor; main actor receives small immutable models.",
+          "done": false
+        },
+        {
+          "text": "Implement Start/Overview/Facility/Region/Supply exact flows with real cash bridge and pause controls.",
+          "done": false
+        },
+        {
+          "text": "Run simulator new-career command/tick/save/load and no-authority/stale-preview UI paths in airplane-mode fixtures.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P11",
+      "title": "Persistent investor",
+      "depends_on": [
+        "P03"
+      ],
+      "requirements": [
+        "R12"
+      ],
+      "spec": "docs/rules/CORPORATE.md",
+      "targets": "crates/cw-sim/{career,formation}.rs",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement founder and guided opening ledgers with personal vs firm ownership and cash.",
+          "done": false
+        },
+        {
+          "text": "Add controlled firm selection and explicit management-contract recovery eligibility/cooldown.",
+          "done": false
+        },
+        {
+          "text": "Test losing primary firm without resetting other assets/history and assisted-score flag.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P12",
+      "title": "Group reporting",
+      "depends_on": [
+        "P11"
+      ],
+      "requirements": [
+        "R13"
+      ],
+      "spec": "docs/rules/CORPORATE.md",
+      "targets": "crates/cw-sim/{ownership,consolidation}.rs",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Model ordinary voting shares, treasury exclusion, >50 percent immediate parent and acyclic equity graph.",
+          "done": false
+        },
+        {
+          "text": "Implement iterative group traversal and consolidated minority/intercompany elimination.",
+          "done": false
+        },
+        {
+          "text": "Test exactly50 vs above50, minority cycles, deep100-level tree, wide100-child group and no duplicated parent investments.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P13",
+      "title": "Internal flows",
+      "depends_on": [
+        "P12",
+        "P09"
+      ],
+      "requirements": [
+        "R14"
+      ],
+      "spec": "docs/rules/CORPORATE.md",
+      "targets": "crates/cw-sim/intercompany/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement bilateral authority for intercompany loans/trade and capped explicit guarantees.",
+          "done": false
+        },
+        {
+          "text": "Enforce transfer-price range and standalone cash constraints; retain minority disclosures.",
+          "done": false
+        },
+        {
+          "text": "Test internal profit elimination with unsold marked-up inventory and guarantee contagion limited to cap.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P14",
+      "title": "Shares and marks",
+      "depends_on": [
+        "P12",
+        "P08"
+      ],
+      "requirements": [
+        "R15"
+      ],
+      "spec": "docs/rules/CORPORATE.md",
+      "targets": "crates/cw-sim/{exchange,valuation}.rs",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement finite free float, spread/impact, reservations, beneficial-owner wash rejection and cost basis.",
+          "done": false
+        },
+        {
+          "text": "Compute acyclic stake values and ordinary/bank/insurer valuation separately; smooth traded reference mark.",
+          "done": false
+        },
+        {
+          "text": "Test genuine holder transfers, stale quotes, double selling, no automatic cash on price change and look-through equity.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P15",
+      "title": "Capital actions",
+      "depends_on": [
+        "P14"
+      ],
+      "requirements": [
+        "R16"
+      ],
+      "spec": "docs/rules/CORPORATE.md",
+      "targets": "crates/cw-sim/equity_actions/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement funded issue, retained earnings/cash-buffer constrained dividend and treasury buyback/retirement.",
+          "done": false
+        },
+        {
+          "text": "Implement IPO minimum float/fee/history and exact dilution preview.",
+          "done": false
+        },
+        {
+          "text": "Test share/vote conservation, residual cents, treasury zero dividend and failed funding rollback.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P16",
+      "title": "Boards and CEO",
+      "depends_on": [
+        "P12",
+        "P15"
+      ],
+      "requirements": [
+        "R17"
+      ],
+      "spec": "docs/rules/CORPORATE.md",
+      "targets": "crates/cw-sim/governance/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Apportion five board seats at13-week meetings and schedule four-week extraordinary meetings.",
+          "done": false
+        },
+        {
+          "text": "Require three-seat approvals/CEO limits and conflict-sensitive minority votes.",
+          "done": false
+        },
+        {
+          "text": "Test meeting deadlines, 50-percent deadlock, removed CEO rejected command and authority changes after vote.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P17",
+      "title": "Credit and bonds",
+      "depends_on": [
+        "P02",
+        "P09"
+      ],
+      "requirements": [
+        "R18"
+      ],
+      "spec": "docs/rules/FINANCE-LABOUR-AI.md",
+      "targets": "crates/cw-sim/credit/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement grade thresholds, funded loan quotes/collateral/coverage, principal and interest carry.",
+          "done": false
+        },
+        {
+          "text": "Implement finite-holder bond issuance/coupons/maturity/trades with accrued interest and issue fee.",
+          "done": false
+        },
+        {
+          "text": "Test final principal cent, refinancing order, pledge reuse, D/unsecured restrictions and creditor identities.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P18",
+      "title": "Failure and continuity",
+      "depends_on": [
+        "P11",
+        "P12",
+        "P17"
+      ],
+      "requirements": [
+        "R25"
+      ],
+      "spec": "docs/rules/CORPORATE.md",
+      "targets": "crates/cw-sim/insolvency/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement missed-payment liabilities, payout freeze and four-week grace.",
+          "done": false
+        },
+        {
+          "text": "Implement restructuring test vs liquidation, collateral/priority distributions and finite outside asset buyers.",
+          "done": false
+        },
+        {
+          "text": "Test secured/unsecured/equity waterfall, parent guarantee ceiling and viable sibling/personal assets retained.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P19",
+      "title": "Funded banking",
+      "depends_on": [
+        "P06",
+        "P17",
+        "P18"
+      ],
+      "requirements": [
+        "R19"
+      ],
+      "spec": "docs/rules/FINANCE-LABOUR-AI.md",
+      "targets": "crates/cw-sim/banking/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Represent deposits as claims/liabilities and outside cash only once; transfer or redeem explicitly.",
+          "done": false
+        },
+        {
+          "text": "Enforce post-action20-percent liquidity and12-percent risk-weighted capital; provision defaults.",
+          "done": false
+        },
+        {
+          "text": "Test deposit->loan->withdrawal chain, run pro-rata shortfall, interest liability and insolvency without bailout.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P20",
+      "title": "Underwriting and claims",
+      "depends_on": [
+        "P06",
+        "P17",
+        "P18"
+      ],
+      "requirements": [
+        "R20"
+      ],
+      "spec": "docs/rules/FINANCE-LABOUR-AI.md",
+      "targets": "crates/cw-sim/insurance/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement bind/expiry/premium accrual, coverage/capital/liquidity/concentration limits.",
+          "done": false
+        },
+        {
+          "text": "Draw idiosyncratic frequency with severity-correct expected loss and correlated region event separately.",
+          "done": false
+        },
+        {
+          "text": "Test one physical loss plus one claim, deductible/limit, reserved unpaid claim and insurer restructuring.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P21",
+      "title": "Takeover state machine",
+      "depends_on": [
+        "P13",
+        "P16",
+        "P17",
+        "P18"
+      ],
+      "requirements": [
+        "R21"
+      ],
+      "spec": "docs/rules/CORPORATE.md",
+      "targets": "crates/cw-sim/deals/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement every bid state, funded escrow, two-week diligence/four-week offer and holder reservation factors.",
+          "done": false
+        },
+        {
+          "text": "Separate voting control from90-percent squeeze-out and asset/share/legal-merger settlements.",
+          "done": false
+        },
+        {
+          "text": "Test expired/withdrawn tenders, minority payout, attached debt/contracts, concurrent bids and atomic cash failure.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P22",
+      "title": "Competition review",
+      "depends_on": [
+        "P21",
+        "P08"
+      ],
+      "requirements": [
+        "R22"
+      ],
+      "spec": "docs/rules/CORPORATE.md",
+      "targets": "crates/cw-sim/antitrust/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Compute trailing13-week group-aware product/region HHI and both review triggers.",
+          "done": false
+        },
+        {
+          "text": "Add four-week review, explicit divestiture remedies, rejection/refund and no subsidiary-shell bypass.",
+          "done": false
+        },
+        {
+          "text": "Test neutral HHI, >35-percent share, delta>200/post>2500 and infeasible-remedy rejection.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P23",
+      "title": "Worker organisation",
+      "depends_on": [
+        "P07",
+        "P09"
+      ],
+      "requirements": [
+        "R23"
+      ],
+      "spec": "docs/rules/FINANCE-LABOUR-AI.md",
+      "targets": "crates/cw-sim/unions/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement organisation growth/decay, ballot, bargaining deadlines, counters and strike staffing.",
+          "done": false
+        },
+        {
+          "text": "Implement settlement/severance and thirteen-week binding fallback with no impossible automatic payment.",
+          "done": false
+        },
+        {
+          "text": "Test insufficient staff, two-week deadline, strike payroll, accept at95-percent bound and saved ballot outcomes.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P24",
+      "title": "Bounded influence",
+      "depends_on": [
+        "P22",
+        "P23"
+      ],
+      "requirements": [
+        "R24"
+      ],
+      "spec": "docs/rules/FINANCE-LABOUR-AI.md",
+      "targets": "crates/cw-sim/policy/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement three request types, fees, region/group cooldown, four-week saved success draw and reputation.",
+          "done": false
+        },
+        {
+          "text": "Fund training subsidy from finite government account and constrain tax floor/permit timing.",
+          "done": false
+        },
+        {
+          "text": "Test repeated request rejection, reload stable outcome, failure cost and no purchased antitrust exemption.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P25",
+      "title": "Full industry coverage",
+      "depends_on": [
+        "P09",
+        "P19",
+        "P20"
+      ],
+      "requirements": [
+        "R26"
+      ],
+      "spec": "docs/rules/CONTENT-PACING.md",
+      "targets": "content/initial-balance.json, crates/cw-sim/industry/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Load17 operating templates plus bank/insurer models and25 typed products/contracts.",
+          "done": false
+        },
+        {
+          "text": "Implement service expiry/subscription/lease/procurement/seasonality/depletion semantics and actual payer budgets.",
+          "done": false
+        },
+        {
+          "text": "Run one worked scenario per15 industries; reject names-only reskins and financial products through factory solver.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P26",
+      "title": "Technology and brand",
+      "depends_on": [
+        "P08",
+        "P25"
+      ],
+      "requirements": [
+        "R27"
+      ],
+      "spec": "docs/rules/CONTENT-PACING.md",
+      "targets": "crates/cw-sim/{research,brand}.rs",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement funded squared-cost R&D thresholds, saved success/failure and frontier/efficiency caps.",
+          "done": false
+        },
+        {
+          "text": "Implement spend-funded brand stock/decay and bounded quality.",
+          "done": false
+        },
+        {
+          "text": "Test reload fairness, no free innovation, no negative input costs and finite-budget demand redistribution.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P27",
+      "title": "Rival policy",
+      "depends_on": [
+        "P04",
+        "P18",
+        "P21",
+        "P26"
+      ],
+      "requirements": [
+        "R28"
+      ],
+      "spec": "docs/rules/FINANCE-LABOUR-AI.md",
+      "targets": "crates/cw-ai/, crates/cw-session/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement urgent weekly evaluation and stable four-cohort strategic slots with fixed candidate/action limits.",
+          "done": false
+        },
+        {
+          "text": "Use prescribed5 archetype weights, common command path, public observations and price/stock/credit policies.",
+          "done": false
+        },
+        {
+          "text": "Test saved scheduling, <=4-week strategic latency, prompt default/bid action and no hidden income/stock.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P28",
+      "title": "Content and stories",
+      "depends_on": [
+        "P24",
+        "P27"
+      ],
+      "requirements": [
+        "R29"
+      ],
+      "spec": "docs/rules/CONTENT-PACING.md",
+      "targets": "content/events/, content/scenarios/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Seed30 named firms, finite background and both starts without duplicated population/output.",
+          "done": false
+        },
+        {
+          "text": "Implement24 named event cards with prerequisites, cooldowns, choices and economic postings.",
+          "done": false
+        },
+        {
+          "text": "Test every choice, unavailable recipient, no duplicated mechanical penalty and persisted pending event.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P29",
+      "title": "Career horizon",
+      "depends_on": [
+        "P11",
+        "P28"
+      ],
+      "requirements": [
+        "R34"
+      ],
+      "spec": "docs/rules/CONTENT-PACING.md",
+      "targets": "crates/cw-sim/{score,macro}.rs",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement52-week calendar, bounded macro impulses/regimes and deterministic long-run frontier.",
+          "done": false
+        },
+        {
+          "text": "Calculate four score components/weights using investor net worth without internal double counts.",
+          "done": false
+        },
+        {
+          "text": "Pause at260, show score, continue30-year sandbox; preserve recovery assistance and loss history.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P30",
+      "title": "Complete phone controls",
+      "depends_on": [
+        "P10",
+        "P18",
+        "P19",
+        "P20",
+        "P21",
+        "P22",
+        "P23",
+        "P24",
+        "P25"
+      ],
+      "requirements": [
+        "R33"
+      ],
+      "spec": "docs/rules/INTERFACE.md",
+      "targets": "apple/Sources/{Portfolio,Finance,Ownership,Deals,Labour,Policy}/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Build every command family into reachable phone flow with legal actor/context and preview.",
+          "done": false
+        },
+        {
+          "text": "Implement group tree, statements, board/control, credit/bank/insurance, deal/review, worker/policy and recovery states.",
+          "done": false
+        },
+        {
+          "text": "End-to-end each family through actual Rust commands, including rejected actions with remedy and preserved form input.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P31",
+      "title": "Usable and polished",
+      "depends_on": [
+        "P29",
+        "P30"
+      ],
+      "requirements": [
+        "R35",
+        "R39"
+      ],
+      "spec": "docs/rules/INTERFACE.md",
+      "targets": "apple/Sources/{Onboarding,DesignSystem,About}/, content/assets/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Implement seven-step real-rule guided onboarding, skip/resume and contextual explanation links.",
+          "done": false
+        },
+        {
+          "text": "Audit small phone/large text/VoiceOver/contrast/reduced motion/keyboard and adaptive iPad layouts.",
+          "done": false
+        },
+        {
+          "text": "Supply final icon/copy/attribution/privacy screens and validate every asset source; no debug replacement UI.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P32",
+      "title": "Adversarial reliability",
+      "depends_on": [
+        "P04",
+        "P27",
+        "P30"
+      ],
+      "requirements": [
+        "R05",
+        "R30"
+      ],
+      "spec": "docs/rules/INTERFACE.md",
+      "targets": "crates/*/tests/, apple/Tests/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Generate valid/invalid command sequences and save corruption/truncation/oversize/migration cases.",
+          "done": false
+        },
+        {
+          "text": "Exercise suspend/background/termination during advance/save and last-good recovery with real app files.",
+          "done": false
+        },
+        {
+          "text": "Match Linux/macOS/iOS canonical replay hashes for complete scenarios, including queued AI/offers/claims.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P33",
+      "title": "Balance distributions",
+      "depends_on": [
+        "P18",
+        "P27",
+        "P29"
+      ],
+      "requirements": [
+        "R36"
+      ],
+      "spec": "docs/rules/CONTENT-PACING.md",
+      "targets": "tools/balance/, crates/cw-cli/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Create explainable conservative/operator/acquirer reference policies distinct from rival policies.",
+          "done": false
+        },
+        {
+          "text": "Queue100 five-year seeds and20 thirty-year careers across documented difficulty baselines.",
+          "done": false
+        },
+        {
+          "text": "Publish metrics/outliers/exploits and fix root economic defects before controlled parameter tuning.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P34",
+      "title": "Device proof",
+      "depends_on": [
+        "P30",
+        "P32"
+      ],
+      "requirements": [
+        "R37"
+      ],
+      "spec": "docs/rules/INTERFACE.md",
+      "targets": "tools/perf/, apple/Tests/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Generate declared representative/grown/stress fixtures with real transactions and100 controlled firms stress case.",
+          "done": false
+        },
+        {
+          "text": "Profile compute/AI/FFI/UI/save/start/memory/thermal and10-minute fast-forward on identified A15-class device.",
+          "done": false
+        },
+        {
+          "text": "Verify lifecycle recovery and compare provisional budgets; keep device evidence separate from runner timing.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P35",
+      "title": "Independent acceptance",
+      "depends_on": [
+        "P31",
+        "P33",
+        "P34"
+      ],
+      "requirements": [
+        "R38"
+      ],
+      "spec": "docs/rules/INTERFACE.md",
+      "targets": "evidence/playtests/, GitHub issues",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Obtain three independent testers through owner-directed route, never invent tester reports.",
+          "done": false
+        },
+        {
+          "text": "Run EXPERIENCE newcomer/operator/investor/acquirer/recovery/finance/long-run routes and collect evidence.",
+          "done": false
+        },
+        {
+          "text": "Fix release blockers, retest failures and record known non-blocking issues with user-visible impact.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P36",
+      "title": "Submission ready",
+      "depends_on": [
+        "P00",
+        "P31",
+        "P32"
+      ],
+      "requirements": [
+        "R39",
+        "R40"
+      ],
+      "spec": "docs/rules/INTERFACE.md",
+      "targets": "apple/scripts/, .github/workflows/release.yml",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Verify final bundle/team/app record, approved secret path, actual privacy API declarations and store/beta metadata.",
+          "done": false
+        },
+        {
+          "text": "Build clean tested commit, archive, inspect, sign/export and retain symbols/checksums/provenance.",
+          "done": false
+        },
+        {
+          "text": "Fail closed on missing identity/signing/upload setup; distinguish SOFTWARE_READY from actual TestFlight.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P37",
+      "title": "Apple availability",
+      "depends_on": [
+        "P35",
+        "P36"
+      ],
+      "requirements": [
+        "R41"
+      ],
+      "spec": "docs/rules/INTERFACE.md",
+      "targets": "apple/scripts/, evidence/releases/",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Manually dispatch release of tested commit using scoped secrets and temporary signing storage.",
+          "done": false
+        },
+        {
+          "text": "Upload and poll bounded processing with invalid/rejected/expired terminal states.",
+          "done": false
+        },
+        {
+          "text": "Record exact valid build and intended internal group visibility; no unsent/unprocessed-upload success claim.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P38",
+      "title": "Acceptance flight",
+      "depends_on": [
+        "P34",
+        "P37"
+      ],
+      "requirements": [
+        "R42"
+      ],
+      "spec": "docs/rules/INTERFACE.md",
+      "targets": "evidence/releases/, docs/planning/STATUS.md",
+      "status": "pending",
+      "checklist": [
+        {
+          "text": "Install actual processed build through TestFlight on identified real iPhone.",
+          "done": false
+        },
+        {
+          "text": "Run offline start/save/control/recovery/five-year/continue route and check crash/perf/lifecycle evidence.",
+          "done": false
+        },
+        {
+          "text": "Resolve release blockers, verify42 requirements, finish clean commits and report exact accepted build and remaining limitations.",
+          "done": false
+        }
+      ],
+      "evidence": []
+    }
+  ]
+}

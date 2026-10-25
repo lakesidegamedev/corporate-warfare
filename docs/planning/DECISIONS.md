@@ -18,3 +18,14 @@
 
 Do not use this register to invent owner approval. For changes, add date, evidence and
 consequences, update affected contracts/requirements, and retain the old decision history.
+
+## Architect-selected implementation baseline, 2026-10-25
+
+The owner clarified that DeepSeek should execute the thinking done here. The exact
+initial algorithms, economic constants, 52-week calendar, one-pass rationing, funded
+banking, one share class, five-seat boards,90-percent fictional squeeze-out, regulator
+thresholds, thirteen-week reporting, one-percent aggregate game scale, no first-release
+reinsurance and bounded policy model are now prescribed in docs/rules/. These are
+author-selected defaults, not newly claimed owner quotations. Implement first; change
+only with documented economic/test evidence and architect decision. Product choices
+D01-D05 remain owner authority. Source observations remain distinct from calibration.

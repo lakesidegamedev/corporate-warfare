@@ -1,0 +1,480 @@
+{
+  "schema": 1,
+  "classification": "authored engineering calibration; NOT real regional observations",
+  "currency_base": "nominal circa-2000 game USD",
+  "baseline_weekly_wage_cents": [
+    40000,
+    80000,
+    140000
+  ],
+  "products": [
+    {
+      "id": "food_raw",
+      "name": "Farm output",
+      "reference_price_cents": 10000,
+      "kind": "goods"
+    },
+    {
+      "id": "ore",
+      "name": "Mineral ore",
+      "reference_price_cents": 20000,
+      "kind": "goods"
+    },
+    {
+      "id": "fuel",
+      "name": "Fuel",
+      "reference_price_cents": 30000,
+      "kind": "goods"
+    },
+    {
+      "id": "electricity",
+      "name": "Electricity service",
+      "reference_price_cents": 100000,
+      "kind": "local_service"
+    },
+    {
+      "id": "chemicals",
+      "name": "Industrial chemicals",
+      "reference_price_cents": 50000,
+      "kind": "goods"
+    },
+    {
+      "id": "steel",
+      "name": "Processed metal",
+      "reference_price_cents": 40000,
+      "kind": "goods"
+    },
+    {
+      "id": "components",
+      "name": "Components",
+      "reference_price_cents": 100000,
+      "kind": "goods"
+    },
+    {
+      "id": "goods",
+      "name": "Finished goods",
+      "reference_price_cents": 200000,
+      "kind": "goods"
+    },
+    {
+      "id": "construction",
+      "name": "Construction work",
+      "reference_price_cents": 1000000,
+      "kind": "project_service"
+    },
+    {
+      "id": "freight",
+      "name": "Freight work",
+      "reference_price_cents": 10000,
+      "kind": "transport_service"
+    },
+    {
+      "id": "food_retail",
+      "name": "Delivered consumer food",
+      "reference_price_cents": 15000,
+      "kind": "consumer_goods"
+    },
+    {
+      "id": "goods_retail",
+      "name": "Delivered consumer goods",
+      "reference_price_cents": 250000,
+      "kind": "consumer_goods"
+    },
+    {
+      "id": "care",
+      "name": "Care episode",
+      "reference_price_cents": 100000,
+      "kind": "local_service"
+    },
+    {
+      "id": "software",
+      "name": "Software licence",
+      "reference_price_cents": 50000,
+      "kind": "subscription"
+    },
+    {
+      "id": "advertising",
+      "name": "Advertising reach",
+      "reference_price_cents": 100000,
+      "kind": "service"
+    },
+    {
+      "id": "telecom",
+      "name": "Subscription block",
+      "reference_price_cents": 10000,
+      "kind": "subscription"
+    },
+    {
+      "id": "lease",
+      "name": "Occupied space block",
+      "reference_price_cents": 100000,
+      "kind": "lease_service"
+    },
+    {
+      "id": "defense",
+      "name": "Procurement delivery",
+      "reference_price_cents": 1000000,
+      "kind": "contract_goods"
+    },
+    {
+      "id": "research",
+      "name": "Research service",
+      "reference_price_cents": 200000,
+      "kind": "service"
+    },
+    {
+      "id": "maintenance",
+      "name": "Maintenance service",
+      "reference_price_cents": 100000,
+      "kind": "service"
+    },
+    {
+      "id": "training",
+      "name": "Training place",
+      "reference_price_cents": 100000,
+      "kind": "local_service"
+    },
+    {
+      "id": "water",
+      "name": "Utility water block",
+      "reference_price_cents": 10000,
+      "kind": "local_service"
+    },
+    {
+      "id": "deposit",
+      "name": "Bank deposit claim",
+      "reference_price_cents": 0,
+      "kind": "financial_contract"
+    },
+    {
+      "id": "loan",
+      "name": "Loan principal claim",
+      "reference_price_cents": 0,
+      "kind": "financial_contract"
+    },
+    {
+      "id": "insurance",
+      "name": "Property cover",
+      "reference_price_cents": 0,
+      "kind": "financial_contract"
+    }
+  ],
+  "recipes": [
+    {
+      "industry": "agriculture",
+      "id": "farm",
+      "output": "food_raw",
+      "weekly_output_lots": 600,
+      "weekly_inputs_lots": {
+        "fuel": 20,
+        "electricity": 10
+      },
+      "workers_low_mid_high": [
+        60,
+        10,
+        2
+      ],
+      "capex_cents": 200000000,
+      "build_weeks": 13,
+      "life_years": 20
+    },
+    {
+      "industry": "extraction",
+      "id": "mine",
+      "output": "ore",
+      "weekly_output_lots": 400,
+      "weekly_inputs_lots": {
+        "fuel": 30,
+        "electricity": 10
+      },
+      "workers_low_mid_high": [
+        40,
+        20,
+        3
+      ],
+      "capex_cents": 300000000,
+      "build_weeks": 26,
+      "life_years": 20
+    },
+    {
+      "industry": "energy",
+      "id": "generator",
+      "output": "electricity",
+      "weekly_output_lots": 100,
+      "weekly_inputs_lots": {
+        "fuel": 150
+      },
+      "workers_low_mid_high": [
+        20,
+        20,
+        5
+      ],
+      "capex_cents": 500000000,
+      "build_weeks": 39,
+      "life_years": 30
+    },
+    {
+      "industry": "chemical_industries",
+      "id": "chemical_plant",
+      "output": "chemicals",
+      "weekly_output_lots": 200,
+      "weekly_inputs_lots": {
+        "fuel": 100,
+        "ore": 10,
+        "electricity": 10
+      },
+      "workers_low_mid_high": [
+        30,
+        20,
+        5
+      ],
+      "capex_cents": 400000000,
+      "build_weeks": 26,
+      "life_years": 20
+    },
+    {
+      "industry": "manufacturing",
+      "id": "metal_works",
+      "output": "steel",
+      "weekly_output_lots": 200,
+      "weekly_inputs_lots": {
+        "ore": 180,
+        "fuel": 10,
+        "electricity": 5
+      },
+      "workers_low_mid_high": [
+        10,
+        8,
+        1
+      ],
+      "capex_cents": 100000000,
+      "build_weeks": 20,
+      "life_years": 20
+    },
+    {
+      "industry": "manufacturing",
+      "id": "component_works",
+      "output": "components",
+      "weekly_output_lots": 100,
+      "weekly_inputs_lots": {
+        "steel": 100,
+        "chemicals": 10,
+        "electricity": 5
+      },
+      "workers_low_mid_high": [
+        20,
+        20,
+        5
+      ],
+      "capex_cents": 300000000,
+      "build_weeks": 20,
+      "life_years": 20
+    },
+    {
+      "industry": "manufacturing",
+      "id": "assembly",
+      "output": "goods",
+      "weekly_output_lots": 100,
+      "weekly_inputs_lots": {
+        "components": 100,
+        "chemicals": 40,
+        "electricity": 10
+      },
+      "workers_low_mid_high": [
+        40,
+        30,
+        10
+      ],
+      "capex_cents": 400000000,
+      "build_weeks": 20,
+      "life_years": 20
+    },
+    {
+      "industry": "construction",
+      "id": "contractor",
+      "output": "construction",
+      "weekly_output_lots": 20,
+      "weekly_inputs_lots": {
+        "steel": 100,
+        "components": 50,
+        "electricity": 2
+      },
+      "workers_low_mid_high": [
+        70,
+        60,
+        10
+      ],
+      "capex_cents": 100000000,
+      "build_weeks": 8,
+      "life_years": 15
+    },
+    {
+      "industry": "logistics",
+      "id": "carrier",
+      "output": "freight",
+      "weekly_output_lots": 1000,
+      "weekly_inputs_lots": {
+        "fuel": 100,
+        "electricity": 5
+      },
+      "workers_low_mid_high": [
+        80,
+        20,
+        5
+      ],
+      "capex_cents": 200000000,
+      "build_weeks": 8,
+      "life_years": 10
+    },
+    {
+      "industry": "retail",
+      "id": "grocer",
+      "output": "food_retail",
+      "weekly_output_lots": 1200,
+      "weekly_inputs_lots": {
+        "food_raw": 1200,
+        "electricity": 5
+      },
+      "workers_low_mid_high": [
+        60,
+        20,
+        2
+      ],
+      "capex_cents": 100000000,
+      "build_weeks": 8,
+      "life_years": 15
+    },
+    {
+      "industry": "retail",
+      "id": "goods_store",
+      "output": "goods_retail",
+      "weekly_output_lots": 100,
+      "weekly_inputs_lots": {
+        "goods": 100,
+        "electricity": 5
+      },
+      "workers_low_mid_high": [
+        60,
+        20,
+        2
+      ],
+      "capex_cents": 150000000,
+      "build_weeks": 8,
+      "life_years": 15
+    },
+    {
+      "industry": "healthcare",
+      "id": "clinic",
+      "output": "care",
+      "weekly_output_lots": 100,
+      "weekly_inputs_lots": {
+        "chemicals": 20,
+        "electricity": 5
+      },
+      "workers_low_mid_high": [
+        10,
+        35,
+        20
+      ],
+      "capex_cents": 400000000,
+      "build_weeks": 26,
+      "life_years": 25
+    },
+    {
+      "industry": "technology",
+      "id": "software_studio",
+      "output": "software",
+      "weekly_output_lots": 200,
+      "weekly_inputs_lots": {
+        "electricity": 5
+      },
+      "workers_low_mid_high": [
+        0,
+        20,
+        35
+      ],
+      "capex_cents": 100000000,
+      "build_weeks": 8,
+      "life_years": 5
+    },
+    {
+      "industry": "media",
+      "id": "media_studio",
+      "output": "advertising",
+      "weekly_output_lots": 100,
+      "weekly_inputs_lots": {
+        "electricity": 5
+      },
+      "workers_low_mid_high": [
+        10,
+        25,
+        25
+      ],
+      "capex_cents": 150000000,
+      "build_weeks": 8,
+      "life_years": 10
+    },
+    {
+      "industry": "telecommunications",
+      "id": "network",
+      "output": "telecom",
+      "weekly_output_lots": 1000,
+      "weekly_inputs_lots": {
+        "electricity": 10,
+        "components": 10
+      },
+      "workers_low_mid_high": [
+        10,
+        20,
+        10
+      ],
+      "capex_cents": 500000000,
+      "build_weeks": 39,
+      "life_years": 20
+    },
+    {
+      "industry": "real_estate",
+      "id": "rental_property",
+      "output": "lease",
+      "weekly_output_lots": 100,
+      "weekly_inputs_lots": {
+        "electricity": 5,
+        "maintenance": 5
+      },
+      "workers_low_mid_high": [
+        10,
+        10,
+        2
+      ],
+      "capex_cents": 1000000000,
+      "build_weeks": 52,
+      "life_years": 40
+    },
+    {
+      "industry": "defense",
+      "id": "defense_plant",
+      "output": "defense",
+      "weekly_output_lots": 20,
+      "weekly_inputs_lots": {
+        "steel": 100,
+        "components": 70,
+        "chemicals": 10,
+        "electricity": 5
+      },
+      "workers_low_mid_high": [
+        40,
+        40,
+        15
+      ],
+      "capex_cents": 500000000,
+      "build_weeks": 39,
+      "life_years": 20
+    }
+  ],
+  "financial_businesses": [
+    "bank",
+    "property_insurer"
+  ],
+  "maintenance_annual_bps": 200,
+  "fixture_land_rent_cents_weekly": 100000
+}

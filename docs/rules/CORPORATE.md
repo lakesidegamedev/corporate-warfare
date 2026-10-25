@@ -1,0 +1,131 @@
+# Corporate rules v0.1
+
+Author-selected initial rules. USD figures are game calibration, not historical claims.
+Every money flow has an opposing ledger posting. Implement tests before changing rules.
+
+## Investor and formation
+
+Standard founder investor starts with $5 million personal cash, no debt and no shares.
+Formation costs $25,000 paid to outside legal-services sector. The investor chooses
+firm name, region and paid-in capital, minimum $250,000; that capital becomes firm cash
+and investor equity investment. Issue 1,000,000 ordinary shares initially. One class,
+one vote/share, no fractional share lots. Other investors can subscribe in later rounds.
+Legal entity is a corporation; no fictional LLC tax special cases in v0.1. The founder
+start picks a template facility but shows full formation/build/funding transactions.
+
+The guided start grants the investor 60 percent of a seeded firm with $1 million cash,
+a $500,000 loan and an operating facility with a documented $2 million opening asset
+basis. Outside investors own 40 percent. Opening retained earnings/capital reconcile,
+not a plug added each week. Career scenario includes the opening transfer in seed state.
+
+At true destitution (personal unpledged cash < $25,000, no positive-value saleable holding,
+and no controlled viable firm), offer an explicit new management contract: one-time
+$100,000 signing bonus from an outside distressed investor plus management of its firm.
+Career assistance counter increments; assisted five-year scores are labelled. No automatic
+bonus, no repeated eligibility within 260 weeks, no deletion of prior losses.
+
+## Group/control and transactions
+
+Strictly >50 percent of eligible votes establishes corporate parent control. Exactly
+50 percent is not control. Reject any purchase/issuance creating direct or indirect equity
+cycles, including minority cycles. Firms can hold minority stakes in several independent
+groups, but at most one immediate controlling parent. Use iterative graph validation.
+No arbitrary subsidiary count/depth limit. Resource exhaustion rejects a command safely
+with diagnostics rather than silently pruning companies.
+
+Parent authority can appoint managers at the governance boundary, not spend subsidiary
+cash directly. Internal loans require lender and borrower authority, positive term/rate,
+and solvency previews. Transactions with minority-owned subsidiaries disclose terms;
+transfer prices must lie within +/-20 percent of the current regional reference price,
+except explicit approved restructuring. Same beneficial-owner wash trades cannot move
+exchange reference prices. Guarantees identify guarantor, covered claim and maximum sum.
+
+Board has five seats allocated at the 13-week meeting by largest-remainder voting share.
+An eligible holder of >50 percent can call an extraordinary meeting four weeks ahead.
+Three seats elect/remove CEO and approve merger or large issuance. CEO can operate and
+borrow inside board-authorised limits. Initial limits: debt <=60 percent of tangible
+assets and single capex <=25 percent of total assets; exceeding either queues a board
+vote. Player investor must actually control votes/seats or obtain other holders' support.
+NPC directors support positive solvency-preserving proposals with expected 26-week
+cash benefit; reject transfers below fair-value bound and insolvency-causing dividends.
+Tie means status quo. Public minority holders can vote against a controller's conflict deal.
+
+## Shares, payouts and values
+
+Weekly exchange uses external float plus explicit holder orders. Outstanding treasury
+shares have zero votes/dividends. Quotes: fair value/share +/-2 percent spread; external
+weekly executable float is 2 percent of freely held shares. Price impact = 10 percent
+of requested quantity / weekly float, capped at 25 percent. Quote reserves cash/shares,
+expires next boundary and revalidates solvency/ownership. Same beneficial owner cannot
+match itself. Selling below a prior cost is a realised investor loss, not company expense.
+
+Issue shares at >=90 percent of fair price with a funding buyer, board authority and
+100 percent paid cash at settlement. Show exact dilution before acceptance. IPO costs
+2 percent proceeds, minimum $100,000, requires positive equity and 13 weeks of statements,
+and sells at least 10 percent float. Secondary sale transfers cash between holders only.
+Buybacks cost firm cash, move bought shares to treasury, and cannot leave less than
+four weeks forecast obligations. Cancellation reduces issued/treasury shares together.
+Dividends require positive distributable retained earnings and the same cash buffer;
+allocate cents across eligible shares by largest remainder. No dividends to treasury.
+
+Weekly fair enterprise value = max(40 percent net tangible operating asset book value,
+6 * max(0, trailing_13_week_EBITDA * 4)). Before 13 observations, annualise available
+weeks explicitly. Equity fair value = max(0, enterprise + unrestricted_cash + stake_values
+- loans - bonds - deposits - insurance_claim_liabilities - overdue_payables). Exclude
+operating cash already capitalised elsewhere; ledger investment assets are replaced by
+look-through stake fair values for valuation only. Calculate share values in reverse
+acyclic ownership order. Do not add parent book investment and stake fair value twice.
+Bank/insurance enterprise uses 1.0 * adjusted tangible equity rather than EBITDA multiple;
+then value outside owned stakes separately, without subtracting the same debt twice.
+
+Reference exchange mark moves 1/8 toward fair value weekly; actual transactions affect
+mark only from genuine different-beneficial-owner fills, capped +/-10 percent/week.
+Pledged/escrow shares cannot be sold twice. UI distinguishes traded mark, fair estimate
+and liquidation value. No player wealth from changing a price slider without a sale.
+
+## M&A state machine
+
+DRAFT -> FUNDED -> DILIGENCE -> OFFER_OPEN -> REVIEW -> SETTLED; terminal alternatives
+are WITHDRAWN, EXPIRED, REJECTED. No path skips escrow or legal review. Buyer puts full
+maximum cash price plus 2 percent transaction fee in escrow. Diligence lasts two weeks,
+costs 0.5 percent bid value and reveals target statements/contracts; offer lasts four weeks.
+Hostile offer default premium is 25 percent above pre-bid mark; target holders tender if
+price >= fair value * their reservation factor (1.0 normal, 1.1 loyal, 0.9 distressed).
+Freeze valuation reference for bid fairness tests to avoid bidding against own mark push.
+
+Crossing >50 percent buys voting control; merger/squeeze-out requires >=90 percent plus
+review and full minority cash at max(offer price, fair value/share). The first release
+uses this explicit game threshold, not a claim of US statutory law. Acquired shares
+retain issuer entity until legal merger. A failed tender returns unused escrow minus
+incurred costs. Settlement is atomic and checks current share availability/funding.
+Asset purchase enumerates assets and attached assumed liabilities; share purchase leaves
+all target liabilities in the target. Merger transfers the complete ledger/contracts,
+resolves intra-group balances and retires target shares with a durable event trace.
+
+Antitrust computes HHI = sum((group regional product sales share *100)^2) in 0..10000.
+Use trailing 13-week unit sales and controlled group aggregation. Review if combined
+share >=35 percent OR post-HHI >2500 and delta-HHI >200. Four-week review; approval if
+neither trigger applies. If trigger applies, offer divestiture sufficient to put combined
+share <=35 percent and delta <=200; failing remedy rejects merger. If a feasible asset
+bundle cannot be found, reject rather than invent regulator discretion. Fees are spent,
+escrow otherwise returns. These are transparent fictional game rules, not legal advice.
+
+## Insolvency and tax
+
+Cash may not silently become an unbounded negative balance. Missed due payments become
+past-due liabilities. Freeze dividends/buybacks/new unsecured borrowing. Four-week grace
+permits asset sale, equity raise or approved rescheduling. After grace, enter restructuring:
+secured claims paid from collateral, administrative/payroll claims next, unsecured
+including deposits/bonds proportionately next, equity residual last. No assets distributed
+before claim resolution. Restructuring offers creditors 50 percent principal repayment
+with four-quarter schedule; accept only if estimated liquidation recovery is lower.
+Otherwise liquidate assets at 40 percent carrying value through finite outside buyer
+funds. Insufficient buyers delay sale, never mint cash. Parent guarantee shortfalls become
+claims against guarantor up to the contracted cap. No implied guarantee for siblings.
+
+Corporate tax is 25 percent positive taxable quarterly profit; region modifier initially
+0 until evidenced calibration, not fabricated state law. Carry losses forward for four
+years in game accounting. Quarterly tax reserve accrues weekly; payment at week multiple
+of 13. Dividends never reduce company taxable profit. Investor dividend/capital gains
+personal tax is 15 percent, collected at realised payment/sale. Display rules as simplified
+scenario policy, not a reconstruction of all 2000 tax codes.
