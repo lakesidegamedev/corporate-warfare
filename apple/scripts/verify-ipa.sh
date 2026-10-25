@@ -23,6 +23,12 @@ xcrun assetutil --info "$app/Assets.car" | grep -q 'AppIcon' || {
   echo "compiled app icon missing from Assets.car" >&2
   exit 1
 }
+# App Store validation rejects loose libraries in Frameworks/ (only Swift
+# runtime libraries and .framework bundles may live there).
+if [[ -d "$app/Frameworks" ]] && find "$app/Frameworks" -maxdepth 1 -name '*.a' | grep -q .; then
+  echo "loose static library found in Frameworks/" >&2
+  exit 1
+fi
 codesign --verify --deep --strict "$app"
 codesign -dv --verbose=4 "$app" 2>&1 | grep -q "Authority=Apple Distribution" || {
   echo "exported app is not signed with an Apple Distribution identity" >&2
