@@ -11,10 +11,9 @@ cargo build --locked -p cw-ffi --release --target aarch64-apple-ios
 cargo build --locked -p cw-ffi --release --target aarch64-apple-ios-sim
 mkdir -p apple/Generated
 cargo run --locked -p cw-bindgen -- generate target/aarch64-apple-ios/release/libcw_ffi.a --language swift --out-dir apple/Generated
-cp apple/Generated/cw_ffiFFI.modulemap apple/Generated/module.modulemap
 mkdir -p apple/Generated/Headers
 cp apple/Generated/cw_ffiFFI.h apple/Generated/Headers/
-cp apple/Generated/module.modulemap apple/Generated/Headers/
+cp apple/Generated/cw_ffiFFI.modulemap apple/Generated/Headers/module.modulemap
 # Regenerate the derived bundle so removed architectures cannot survive from a prior build.
 rm -rf apple/Generated/CwEngine.xcframework
 xcodebuild -create-xcframework \
