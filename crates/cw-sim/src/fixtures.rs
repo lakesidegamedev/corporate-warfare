@@ -52,7 +52,7 @@ pub fn scale(base: &World, firm_copies: u32, facilities_per_firm: u32) -> World 
                 },
             );
             holders.insert(
-                HolderId::Outside((copy as u32) % 8),
+                HolderId::Outside(copy % 8),
                 ShareLot {
                     qty: issued - issued * 60 / 100,
                     cost_cents: 0,
