@@ -287,6 +287,7 @@ final class AppStore: ObservableObject {
     func suspendAndSave(timeoutSeconds: Double = 3) async {
         guard sessionReady else { return }
         let engine = self.engine
+        let saveManager = self.saveManager
         let week = overview?.tick ?? 0
         let slot = SaveManager.autosaveSlot(week: week)
 
