@@ -896,6 +896,8 @@ pub struct Deal {
     pub remedy_share_bps: i32,
     pub hostile: bool,
     pub diligence_paid: bool,
+    /// The player investor has tendered its shares; they move only at settlement.
+    pub investor_tendered: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

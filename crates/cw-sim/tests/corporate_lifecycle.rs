@@ -341,6 +341,7 @@ fn a_legal_merger_moves_assets_debt_facilities_and_contracts() {
         remedy_share_bps: 0,
         hostile: false,
         diligence_paid: true,
+        investor_tendered: false,
     });
     let dataset = Dataset::load().unwrap();
     let revision = world.revision;

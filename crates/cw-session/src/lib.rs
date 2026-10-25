@@ -1199,6 +1199,7 @@ mod tests {
             remedy_share_bps: 0,
             hostile: false,
             diligence_paid: true,
+            investor_tendered: false,
         });
         assert!(
             session.can_inspect(target.0),

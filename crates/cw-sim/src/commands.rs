@@ -1889,58 +1889,7 @@ fn apply_intent(
                     reason: AuthorityReason::NotOwner,
                 });
             }
-            let entity = world.deals.get(*deal).ok_or(DomainError::InvalidEntity {
-                handle: deal.0,
-                kind: EntityKind::Deal,
-            })?;
-            if !matches!(
-                entity.state,
-                crate::state::DealState::OfferOpen | crate::state::DealState::Diligence
-            ) {
-                return Err(DomainError::WrongPhase {
-                    expected: "offer_open",
-                    actual: entity.state.key(),
-                });
-            }
-            if !accept {
-                return Ok(());
-            }
-            let qty = world.investor_holds(entity.target);
-            if qty <= 0 {
-                return Err(DomainError::InsufficientStock {
-                    product: 0,
-                    required: 1,
-                    available: 0,
-                });
-            }
-            let price = entity.offer_price_cents;
-            let cash = qty.saturating_mul(price);
-            world.investor.cash_cents += cash;
-            let _ = world.investor.book.commit(
-                world.tick,
-                Txn::new().debit(Account::Cash, cash, "tender").credit(
-                    Account::Investments,
-                    cash,
-                    "tender",
-                ),
-            );
-            let buyer = entity.buyer;
-            if let Some(target) = world.firms.get_mut(entity.target) {
-                target
-                    .shares
-                    .transfer(HolderId::Investor, HolderId::Firm(buyer), qty, cash);
-            }
-            if let Some(bidder) = world.firms.get_mut(buyer) {
-                let _ = bidder.book.commit(
-                    world.tick,
-                    Txn::new()
-                        .credit(Account::RestrictedCash, cash, "tender")
-                        .debit(Account::Investments, cash, "tender"),
-                );
-            }
-            if world.investor.primary_group == Some(entity.target) {
-                world.investor.primary_group = None;
-            }
+            deals::respond_tender(world, *deal, *accept)?;
             Ok(())
         }
         CommandIntent::WithdrawOffer { deal } => {
@@ -1991,6 +1940,9 @@ fn apply_intent(
                     target: target.0,
                 });
             }
+            // Remaining minority holders are paid in cash before their shares are retired.
+            let settled = entity.clone();
+            deals::buy_out_minorities(world, &settled)?;
             let target_book = firm_ref(world, target)?.book.clone();
             let investment_cost = world
                 .firm(target)
@@ -2126,6 +2078,11 @@ fn apply_intent(
             deal,
             divest_share_bps,
         } => {
+            let entity = world.deals.get(*deal).ok_or(DomainError::InvalidEntity {
+                handle: deal.0,
+                kind: EntityKind::Deal,
+            })?;
+            require_control(world, actor, entity.buyer)?;
             deals::submit_remedy(world, *deal, *divest_share_bps)?;
             Ok(())
         }
