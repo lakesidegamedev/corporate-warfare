@@ -9,7 +9,12 @@ Build Corporate Warfare to RELEASE_ACCEPTED as defined in PRODUCT.md: a polished
 offline iOS Great Lakes business simulation, Capitalism Lab/AHD depth, circa-2000 start,
 persistent investor, broad corporate mechanics, effectively unlimited subsidiary play,
 open-ended sandbox and a five-year scored scenario, installed and tested via TestFlight.
-Read AGENTS.md and the planning index before editing. Respect confirmed owner choices,
+Read AGENTS.md, the planning index and docs/rules/ before editing. The owner explicitly
+expects the architect to do the thinking: implement prescribed algorithms, parameters,
+state machines, command schema and content. Do not redesign or silently fill gaps.
+Use execution.json for the concrete packet checklist. If the specification conflicts
+or leaves a material economic decision missing, record the exact example and seek an
+architect decision while continuing independent work. Routine code structure is yours. Respect confirmed owner choices,
 explicit proposals, actual geography and the complete requirements ledger. Preserve old
 projects. Never connect this game to AHD production databases or services.
 

@@ -99,6 +99,59 @@ def validate(document, root):
     return errors
 
 
+def validate_execution(document, requirements, root):
+    errors = []
+    tasks = document.get('tasks', [])
+    if document.get('schema') != 1 or not tasks:
+        return ['invalid or empty execution ledger']
+    by_id = {}
+    for task in tasks:
+        ident = task.get('id', '')
+        if not re.fullmatch(r'P\d{2,}', ident) or ident in by_id:
+            errors.append(f'invalid or duplicate packet ID: {ident}')
+        by_id[ident] = task
+        if task.get('status') not in STATES:
+            errors.append(f'{ident}: unknown packet status')
+        for required in task.get('requirements', []):
+            if required not in requirements:
+                errors.append(f'{ident}: unknown requirement {required}')
+        spec = (root / task.get('spec', '')).resolve()
+        if not spec.is_relative_to(root.resolve()) or not spec.is_file():
+            errors.append(f'{ident}: missing/out-of-repo rule spec')
+        checklist = task.get('checklist', [])
+        if not checklist or any(not x.get('text') or type(x.get('done')) is not bool for x in checklist):
+            errors.append(f'{ident}: invalid checklist')
+        if task.get('status') == 'done':
+            if not all(x.get('done') for x in checklist) or not task.get('evidence'):
+                errors.append(f'{ident}: completion needs checklist and evidence')
+            for reference in task.get('evidence', []):
+                path = (root / reference).resolve()
+                if not path.is_relative_to(root.resolve()) or not path.is_file():
+                    errors.append(f'{ident}: missing/out-of-repo packet evidence')
+    visiting, visited = set(), set()
+
+    def walk(ident):
+        if ident in visiting:
+            errors.append(f'packet dependency cycle at {ident}')
+            return
+        if ident in visited:
+            return
+        visiting.add(ident)
+        for dep in by_id[ident].get('depends_on', []):
+            if dep not in by_id:
+                errors.append(f'{ident}: unknown packet dependency {dep}')
+            else:
+                if by_id[ident]['status'] == 'done' and by_id[dep]['status'] != 'done':
+                    errors.append(f'{ident}: packet dependency {dep} is not done')
+                walk(dep)
+        visiting.remove(ident)
+        visited.add(ident)
+
+    for ident in by_id:
+        walk(ident)
+    return errors
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--release', action='store_true', help='also require every release item done')
@@ -106,11 +159,14 @@ def main():
     try:
         document = json.loads(LEDGER.read_text())
         errors = validate(document, ROOT)
+        execution = json.loads((ROOT / "docs/planning/execution.json").read_text())
+        errors.extend(validate_execution(execution, {r["id"] for r in document["requirements"]}, ROOT))
     except (ValueError, OSError, TypeError, AttributeError) as exc:
         print(f'Invalid ledger: {exc}', file=sys.stderr)
         return 1
     rows = document['requirements']
     if args.release:
+        errors.extend(f'{t["id"]}: packet incomplete' for t in execution["tasks"] if t["status"] != "done")
         errors.extend(f'{r["id"]}: release incomplete ({r["status"]})' for r in rows if r['status'] != 'done')
     if errors:
         print('\n'.join(errors), file=sys.stderr)
@@ -119,7 +175,9 @@ def main():
     print(f'Ledger structure valid: {counts}. Evidence still requires review.')
     ready = [r['id'] for r in rows if r['status'] == 'pending' and all(
         next(x for x in rows if x['id'] == dep)['status'] == 'done' for dep in r['depends_on'])]
-    print('Dependency-ready: ' + ', '.join(ready))
+    print('Dependency-ready requirements: ' + ', '.join(ready))
+    tasks = execution['tasks']
+    print(f'Execution ledger valid: {len(tasks)} packets, {sum(len(t["checklist"]) for t in tasks)} checklist steps.')
     return 0
 
 

@@ -1,7 +1,8 @@
 # Economy and corporate mechanics contract
 
-Status: proposed implementation contract. Resolve worked examples before each system's
-code packet. Balance constants are data, identities and settlement rules are code.
+Status: architecture-level contract. Exact initial algorithms, timing, examples and
+constants are now prescribed in ../rules/. Those rules override broad proposals here.
+Balance constants are data; identities and settlement rules are code.
 
 ## Units and accounting
 
@@ -44,7 +45,7 @@ interests remain visible. Group cash is not automatically spendable by every sub
    governance actions at a declared boundary. Newly arrived input can be used this week.
 3. Calculate employment demand and wage offers from firm policies. Allocate finite
    skill pools simultaneously, including background employment. No firm-order advantage.
-4. Allocate existing inputs and production capacity. Production consumes inputs once,
+4. Dispatch/allocate current-week utilities as specified in MARKETS, then allocate existing physical inputs and production capacity. Production consumes inputs once,
    accrues wages/energy and creates output or perishable service availability.
 5. Clear intermediate and final markets using staged demand budgets. Reserve inventories,
    compute allocations and settle once. No same-week recursive production chain: purchases
@@ -63,12 +64,10 @@ silently expiring because the user backgrounded the app.
 
 ## Market allocation
 
-Before implementation, write fixtures for one buyer/two sellers, two buyers/one scarce
-supplier, imported supply, no demand, a tie and a zero-price offer. Initial proposal:
-allocate demand by capped attractiveness weights based on delivered price, quality and
-brand, redistribute unmet allocations until supply or budgets exhaust, and use stable
-IDs for residual integer units. Revenue is fulfilled quantity times paid unit price.
-Shares are measured from actual sales, never granted as an independent revenue source.
+Implement the one-pass simultaneous bid/rationing algorithm and worked examples in
+`../rules/MARKETS.md`. Do not substitute an iterative redistribution solver. Revenue is
+fulfilled quantity times paid unit price. Shares are measured from actual sales, never
+granted as an independent revenue source.
 
 Household budgets derive from income/employment and category preferences. Intermediate
 orders derive from production plans and stocks. Government procurement and service

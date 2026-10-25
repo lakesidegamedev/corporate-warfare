@@ -7,7 +7,9 @@ repo, not either old Corporate Warfare project. Preserve `/root/misc/corpgame` a
 ## Authority
 
 Read `docs/planning/README.md`, PRODUCT, DECISIONS, STATUS and the requirement ledger.
-The historical `docs/PLAN.md` is superseded. Owner answers take precedence. Distinguish
+Read `docs/rules/README.md` and the exact rules before implementation; use
+`docs/planning/execution.json` for work-item tracking. The historical `docs/PLAN.md`
+is superseded. Owner answers take precedence. Distinguish
 confirmed choices, proposed defaults and verified evidence. Never silently drop scope.
 
 This preparation task is owned by Codex. The later implementation is intended for the
@@ -33,10 +35,14 @@ current owner and next move. Never remove locked worktrees.
 
 ## Checks on this VPS
 
-Targeted lightweight checks are fine. Full build/test/clippy/sweeps normally go through:
+Targeted lightweight checks are fine. The scheduler requires a registered task worktree
+with a `.git` link file, not the main checkout. Create one after inspecting worktree
+ownership, then enqueue full build/test/clippy/sweeps:
 
 ```
-/root/bin/lakeside-check-queue enqueue --workdir /root/projects/corporate-warfare --label cw-verify --priority normal -- cargo test --locked --workspace
+git worktree list
+git worktree add worktrees/<task> -b <branch>
+/root/bin/lakeside-check-queue enqueue --workdir /root/projects/corporate-warfare/worktrees/<task> --label cw-verify --priority normal -- cargo test --locked --workspace
 ```
 
 Use the actual registered worktree path. Inspect `list` and `status <job-id>`, handle

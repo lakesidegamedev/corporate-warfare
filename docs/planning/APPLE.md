@@ -14,12 +14,12 @@ unimplemented. UniFFI runtime and generator share the exact pinned version in Ca
 
 `bash apple/scripts/build-engine.sh` on a supported Mac builds ARM64 device and simulator
 static libraries, generates Swift/header/modulemap files and assembles an XCFramework.
-XcodeGen creates the application project. `Apple smoke` CI compiles the simulator app
+XcodeGen creates the application project. `Apple smoke` CI compiles the simulator app, runs a native XCTest bridge probe,
 and archives an unsigned device app. Both must actually pass before claiming packaging
 works. Generated outputs are ignored; they must be regenerated from the tested commit.
 
-The packaging probe is deliberately small. Next packet adds simulator XCTest that calls
-Rust, creates a real session, submits a command and save/loads. Add iPhone UI tests and
+The packaging probe is deliberately small. The bootstrap XCTest calls Rust engine-info through generated bindings. The next
+packet extends it to create a real session, submit a command and save/load. Add iPhone UI tests and
 lifecycle tests as those features arrive. Compile success alone is not runtime proof.
 
 ## Project-specific resources to verify

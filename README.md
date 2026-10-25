@@ -14,7 +14,9 @@ preserved as historical input and is not the implementation authority.
 
 Rust is pinned in `rust-toolchain.toml`. No database, server or production service
 is required. `cargo run -p cw-cli -- doctor` reports the bootstrap versions.
-`python3 tools/plan_check.py` validates requirement dependencies and evidence records.
+`python3 tools/plan_check.py` validates both execution and acceptance ledgers.
+`python3 tools/design_check.py` validates authored parameters and worked arithmetic.
+Use [execution.json](docs/planning/execution.json) for the 39 packets/117 checklist steps.
 
 On this shared VPS, full builds/tests go through the host check scheduler. See
 [AGENTS.md](AGENTS.md). macOS is required for the Apple smoke build; see

@@ -71,7 +71,7 @@ budgets only after the first full representative pipeline is measured.
 
 Rust/plan checks run on Linux. Apple changes and core integration run on macOS with
 real generated bindings, simulator execution and unsigned device archive. Bootstrap
-compile-only Apple smoke is not the later gameplay gate. Add XCTest/XCUITest once
+version-probe Apple smoke is not the later gameplay gate. Add XCTest/XCUITest once
 sessions and fixtures exist. Require a single aggregate verification job once the
 required platform checks are reliable. Protect default branch where account plan allows;
 record unavailable enforcement honestly, never claim protection from a failed API call.

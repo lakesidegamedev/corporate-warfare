@@ -6,12 +6,11 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
+    "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     GENERATE_INFOPLIST_FILE: YES
     TARGETED_DEVICE_FAMILY: "1,2"
-    HEADER_SEARCH_PATHS: "$(SRCROOT)/Generated"
-    SWIFT_INCLUDE_PATHS: "$(SRCROOT)/Generated"
     OTHER_LDFLAGS: ["$(inherited)", "-lc++"]
 targets:
   CorporateWarfare:
@@ -25,8 +24,17 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: net.lakesidegames.corporatewarfare
     dependencies:
       - framework: Generated/CwEngine.xcframework
+  EngineBridgeTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: CorporateWarfare
 schemes:
   CorporateWarfare:
     build:
       targets:
         CorporateWarfare: all
+        EngineBridgeTests: [test]
+    test:
+      targets: [EngineBridgeTests]

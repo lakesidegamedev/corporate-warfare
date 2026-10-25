@@ -2,7 +2,7 @@
 import copy
 import unittest
 from pathlib import Path
-from plan_check import validate
+from plan_check import validate, validate_execution
 
 
 class LedgerValidation(unittest.TestCase):
@@ -43,6 +43,30 @@ class LedgerValidation(unittest.TestCase):
     def test_evidence_cannot_escape_repo(self):
         self.doc['requirements'][0].update(status='done', evidence=['/etc/hosts'])
         self.assertTrue(any('out-of-repo' in e for e in self.check(self.doc)))
+
+
+class PacketValidation(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(__file__).resolve().parents[1]
+        self.doc = {'schema': 1, 'tasks': [{
+            'id': 'P00', 'status': 'pending', 'requirements': ['R01'],
+            'depends_on': [], 'spec': 'docs/rules/INTERFACE.md',
+            'checklist': [{'text': 'Verify the outcome', 'done': False}], 'evidence': []
+        }]}
+
+    def test_packet_cannot_complete_from_status_alone(self):
+        self.doc['tasks'][0]['status'] = 'done'
+        errors = validate_execution(self.doc, {'R01'}, self.root)
+        self.assertTrue(any('completion needs' in e for e in errors))
+
+    def test_packet_cannot_reference_unknown_requirement(self):
+        errors = validate_execution(self.doc, set(), self.root)
+        self.assertTrue(any('unknown requirement' in e for e in errors))
+
+    def test_packet_cycle_fails(self):
+        self.doc['tasks'][0]['depends_on'] = ['P00']
+        errors = validate_execution(self.doc, {'R01'}, self.root)
+        self.assertTrue(any('cycle' in e for e in errors))
 
 
 if __name__ == '__main__':
