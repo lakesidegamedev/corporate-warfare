@@ -139,6 +139,12 @@ jobs:
           KEY_ID: ${{ secrets.APPLE_API_KEY }}
           ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
+          # altool takes no key-path flag: it searches ./private_keys,
+          # ~/private_keys, ~/.private_keys and ~/.appstoreconnect/private_keys
+          # for AuthKey_<key id>.p8. The key written for xcodebuild lives in
+          # $RUNNER_TEMP, so stage a copy where altool looks before uploading.
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          cp "$RUNNER_TEMP/private_keys/AuthKey_${KEY_ID}.p8" "$HOME/.appstoreconnect/private_keys/"
           xcrun altool --upload-app \
             --type ios \
             --file "$RUNNER_TEMP/export/CorporateWarfare.ipa" \
