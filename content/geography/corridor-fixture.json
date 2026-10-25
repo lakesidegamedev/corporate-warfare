@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "classification": "engineering region fixture; EA codes and official names are from the verified 2004 BEA release roster, county membership is unresolved and absent",
-  "vintage": "BEA economic areas, November 2004 definition",
+  "classification": "owner-approved authored corridor; EA codes and names are a best-effort roster, county membership is not asserted",
+  "vintage": "authored 2026 for a nominal 2000 start",
   "official_source": "https://bea.gov/news/2004/new-bea-economic-areas-2004",
   "attempts": [
     "https://apps.bea.gov/regional/docs/econlist.cfm -> HTTP 200 but redirects to generic BEA data tools page, no code files (checked 2026-10-25)",
@@ -9,13 +9,15 @@
     "https://apps.bea.gov/regional/zip/BEAREA.zip -> HTTP 200 generic data tools page, not an archive (checked 2026-10-25)",
     "http://web.archive.org/web/20070218175259/http://www.bea.gov:80/regional/docs/econlist.cfm -> HTTP 429 rate limited (checked 2026-10-25)"
   ],
-  "membership_status": "unresolved: no official county-to-EA crosswalk recovered; no county rows are asserted",
-  "notes": "Region IDs are the official EA codes. Display names are the official release names. Population, wage, demand and distance values are labelled engineering calibration for the one-percent game scale, not source observations. Do not present this table as a verified corridor dataset.",
+  "membership_status": "authored scheme: the eleven region areas are the playable units; no county rows are claimed",
+  "notes": "Owner approved authored regions on 2026-10-25. Region IDs and display names are the best-effort roster; population, wage, demand, distance and membership values are labelled engineering estimates, not BEA observations. Never present this as a verified county crosswalk.",
   "regions": [
     {
       "code": "029",
       "name": "Charleston, WV",
-      "states": ["WV"],
+      "states": [
+        "WV"
+      ],
       "principal_city": "Charleston, WV",
       "lat_milli": 38350,
       "lon_milli": -81633,
@@ -27,7 +29,11 @@
     {
       "code": "033",
       "name": "Cincinnati-Middletown-Wilmington, OH-KY-IN",
-      "states": ["OH", "KY", "IN"],
+      "states": [
+        "OH",
+        "KY",
+        "IN"
+      ],
       "principal_city": "Cincinnati, OH",
       "lat_milli": 39103,
       "lon_milli": -84512,
@@ -39,7 +45,9 @@
     {
       "code": "034",
       "name": "Clarksburg, WV + Morgantown, WV",
-      "states": ["WV"],
+      "states": [
+        "WV"
+      ],
       "principal_city": "Clarksburg, WV",
       "lat_milli": 39280,
       "lon_milli": -80340,
@@ -51,7 +59,9 @@
     {
       "code": "035",
       "name": "Cleveland-Akron-Elyria, OH",
-      "states": ["OH"],
+      "states": [
+        "OH"
+      ],
       "principal_city": "Cleveland, OH",
       "lat_milli": 41499,
       "lon_milli": -81694,
@@ -63,7 +73,9 @@
     {
       "code": "040",
       "name": "Columbus-Marion-Chillicothe, OH",
-      "states": ["OH"],
+      "states": [
+        "OH"
+      ],
       "principal_city": "Columbus, OH",
       "lat_milli": 39961,
       "lon_milli": -82999,
@@ -75,7 +87,9 @@
     {
       "code": "044",
       "name": "Dayton-Springfield-Greenville, OH",
-      "states": ["OH"],
+      "states": [
+        "OH"
+      ],
       "principal_city": "Dayton, OH",
       "lat_milli": 39759,
       "lon_milli": -84192,
@@ -87,7 +101,9 @@
     {
       "code": "047",
       "name": "Detroit-Warren-Flint, MI",
-      "states": ["MI"],
+      "states": [
+        "MI"
+      ],
       "principal_city": "Detroit, MI",
       "lat_milli": 42331,
       "lon_milli": -83046,
@@ -99,7 +115,9 @@
     {
       "code": "060",
       "name": "Fort Wayne-Huntington-Auburn, IN",
-      "states": ["IN"],
+      "states": [
+        "IN"
+      ],
       "principal_city": "Fort Wayne, IN",
       "lat_milli": 41080,
       "lon_milli": -85139,
@@ -111,7 +129,9 @@
     {
       "code": "078",
       "name": "Indianapolis-Anderson-Columbus, IN",
-      "states": ["IN"],
+      "states": [
+        "IN"
+      ],
       "principal_city": "Indianapolis, IN",
       "lat_milli": 39768,
       "lon_milli": -86158,
@@ -123,7 +143,9 @@
     {
       "code": "129",
       "name": "Pittsburgh-New Castle, PA",
-      "states": ["PA"],
+      "states": [
+        "PA"
+      ],
       "principal_city": "Pittsburgh, PA",
       "lat_milli": 40440,
       "lon_milli": -79996,
@@ -135,7 +157,9 @@
     {
       "code": "166",
       "name": "Toledo-Fremont, OH",
-      "states": ["OH"],
+      "states": [
+        "OH"
+      ],
       "principal_city": "Toledo, OH",
       "lat_milli": 41653,
       "lon_milli": -83538,
@@ -146,60 +170,280 @@
     }
   ],
   "lanes": [
-    { "a": "029", "b": "033", "km": 320 },
-    { "a": "029", "b": "034", "km": 190 },
-    { "a": "029", "b": "035", "km": 420 },
-    { "a": "029", "b": "040", "km": 260 },
-    { "a": "029", "b": "044", "km": 360 },
-    { "a": "029", "b": "047", "km": 560 },
-    { "a": "029", "b": "060", "km": 480 },
-    { "a": "029", "b": "078", "km": 470 },
-    { "a": "029", "b": "129", "km": 330 },
-    { "a": "029", "b": "166", "km": 480 },
-    { "a": "033", "b": "034", "km": 330 },
-    { "a": "033", "b": "035", "km": 400 },
-    { "a": "033", "b": "040", "km": 170 },
-    { "a": "033", "b": "044", "km": 90 },
-    { "a": "033", "b": "047", "km": 420 },
-    { "a": "033", "b": "060", "km": 260 },
-    { "a": "033", "b": "078", "km": 180 },
-    { "a": "033", "b": "129", "km": 460 },
-    { "a": "033", "b": "166", "km": 320 },
-    { "a": "034", "b": "035", "km": 340 },
-    { "a": "034", "b": "040", "km": 290 },
-    { "a": "034", "b": "044", "km": 400 },
-    { "a": "034", "b": "047", "km": 580 },
-    { "a": "034", "b": "060", "km": 520 },
-    { "a": "034", "b": "078", "km": 520 },
-    { "a": "034", "b": "129", "km": 180 },
-    { "a": "034", "b": "166", "km": 440 },
-    { "a": "035", "b": "040", "km": 230 },
-    { "a": "035", "b": "044", "km": 320 },
-    { "a": "035", "b": "047", "km": 270 },
-    { "a": "035", "b": "060", "km": 320 },
-    { "a": "035", "b": "078", "km": 480 },
-    { "a": "035", "b": "129", "km": 210 },
-    { "a": "035", "b": "166", "km": 190 },
-    { "a": "040", "b": "044", "km": 110 },
-    { "a": "040", "b": "047", "km": 320 },
-    { "a": "040", "b": "060", "km": 260 },
-    { "a": "040", "b": "078", "km": 280 },
-    { "a": "040", "b": "129", "km": 300 },
-    { "a": "040", "b": "166", "km": 220 },
-    { "a": "044", "b": "047", "km": 330 },
-    { "a": "044", "b": "060", "km": 200 },
-    { "a": "044", "b": "078", "km": 180 },
-    { "a": "044", "b": "129", "km": 400 },
-    { "a": "044", "b": "166", "km": 250 },
-    { "a": "047", "b": "060", "km": 260 },
-    { "a": "047", "b": "078", "km": 380 },
-    { "a": "047", "b": "129", "km": 460 },
-    { "a": "047", "b": "166", "km": 100 },
-    { "a": "060", "b": "078", "km": 230 },
-    { "a": "060", "b": "129", "km": 440 },
-    { "a": "060", "b": "166", "km": 190 },
-    { "a": "078", "b": "129", "km": 480 },
-    { "a": "078", "b": "166", "km": 340 },
-    { "a": "129", "b": "166", "km": 330 }
+    {
+      "a": "029",
+      "b": "033",
+      "km": 320
+    },
+    {
+      "a": "029",
+      "b": "034",
+      "km": 190
+    },
+    {
+      "a": "029",
+      "b": "035",
+      "km": 420
+    },
+    {
+      "a": "029",
+      "b": "040",
+      "km": 260
+    },
+    {
+      "a": "029",
+      "b": "044",
+      "km": 360
+    },
+    {
+      "a": "029",
+      "b": "047",
+      "km": 560
+    },
+    {
+      "a": "029",
+      "b": "060",
+      "km": 480
+    },
+    {
+      "a": "029",
+      "b": "078",
+      "km": 470
+    },
+    {
+      "a": "029",
+      "b": "129",
+      "km": 330
+    },
+    {
+      "a": "029",
+      "b": "166",
+      "km": 480
+    },
+    {
+      "a": "033",
+      "b": "034",
+      "km": 330
+    },
+    {
+      "a": "033",
+      "b": "035",
+      "km": 400
+    },
+    {
+      "a": "033",
+      "b": "040",
+      "km": 170
+    },
+    {
+      "a": "033",
+      "b": "044",
+      "km": 90
+    },
+    {
+      "a": "033",
+      "b": "047",
+      "km": 420
+    },
+    {
+      "a": "033",
+      "b": "060",
+      "km": 260
+    },
+    {
+      "a": "033",
+      "b": "078",
+      "km": 180
+    },
+    {
+      "a": "033",
+      "b": "129",
+      "km": 460
+    },
+    {
+      "a": "033",
+      "b": "166",
+      "km": 320
+    },
+    {
+      "a": "034",
+      "b": "035",
+      "km": 340
+    },
+    {
+      "a": "034",
+      "b": "040",
+      "km": 290
+    },
+    {
+      "a": "034",
+      "b": "044",
+      "km": 400
+    },
+    {
+      "a": "034",
+      "b": "047",
+      "km": 580
+    },
+    {
+      "a": "034",
+      "b": "060",
+      "km": 520
+    },
+    {
+      "a": "034",
+      "b": "078",
+      "km": 520
+    },
+    {
+      "a": "034",
+      "b": "129",
+      "km": 180
+    },
+    {
+      "a": "034",
+      "b": "166",
+      "km": 440
+    },
+    {
+      "a": "035",
+      "b": "040",
+      "km": 230
+    },
+    {
+      "a": "035",
+      "b": "044",
+      "km": 320
+    },
+    {
+      "a": "035",
+      "b": "047",
+      "km": 270
+    },
+    {
+      "a": "035",
+      "b": "060",
+      "km": 320
+    },
+    {
+      "a": "035",
+      "b": "078",
+      "km": 480
+    },
+    {
+      "a": "035",
+      "b": "129",
+      "km": 210
+    },
+    {
+      "a": "035",
+      "b": "166",
+      "km": 190
+    },
+    {
+      "a": "040",
+      "b": "044",
+      "km": 110
+    },
+    {
+      "a": "040",
+      "b": "047",
+      "km": 320
+    },
+    {
+      "a": "040",
+      "b": "060",
+      "km": 260
+    },
+    {
+      "a": "040",
+      "b": "078",
+      "km": 280
+    },
+    {
+      "a": "040",
+      "b": "129",
+      "km": 300
+    },
+    {
+      "a": "040",
+      "b": "166",
+      "km": 220
+    },
+    {
+      "a": "044",
+      "b": "047",
+      "km": 330
+    },
+    {
+      "a": "044",
+      "b": "060",
+      "km": 200
+    },
+    {
+      "a": "044",
+      "b": "078",
+      "km": 180
+    },
+    {
+      "a": "044",
+      "b": "129",
+      "km": 400
+    },
+    {
+      "a": "044",
+      "b": "166",
+      "km": 250
+    },
+    {
+      "a": "047",
+      "b": "060",
+      "km": 260
+    },
+    {
+      "a": "047",
+      "b": "078",
+      "km": 380
+    },
+    {
+      "a": "047",
+      "b": "129",
+      "km": 460
+    },
+    {
+      "a": "047",
+      "b": "166",
+      "km": 100
+    },
+    {
+      "a": "060",
+      "b": "078",
+      "km": 230
+    },
+    {
+      "a": "060",
+      "b": "129",
+      "km": 440
+    },
+    {
+      "a": "060",
+      "b": "166",
+      "km": 190
+    },
+    {
+      "a": "078",
+      "b": "129",
+      "km": 480
+    },
+    {
+      "a": "078",
+      "b": "166",
+      "km": 340
+    },
+    {
+      "a": "129",
+      "b": "166",
+      "km": 330
+    }
   ]
 }

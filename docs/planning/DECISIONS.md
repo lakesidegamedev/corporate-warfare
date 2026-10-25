@@ -338,3 +338,13 @@ unfunded remainder in `government.unpaid_transfer_need_cents`. The treasury and 
 training/welfare budget still cap payment. Background employers normally absorb the residual
 workforce, so support is usually zero; the mechanism is correct when unemployment exists.
 Evidence: `evidence/transfer-support.md`; hash `6731ed7c...`.
+
+### Owner-approved authored corridor, 2026-10-25
+
+The owner approved authored regions as the product geography: the best-effort roster is
+acceptable and exact historical membership is not required for this release. The eleven region
+areas are now frozen as an owner-approved authored corridor. Region codes and names remain the
+best-effort roster; population, wage, demand, distance and membership are labelled game
+estimates. No county rows, BEA crosswalk or historical observation is claimed. R01/R02 and P01/P05
+are evaluated against this approved authored scheme, with the limitation visible in the data,
+evidence and store copy.

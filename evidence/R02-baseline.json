@@ -1,0 +1,15 @@
+{
+  "requirement": "R02",
+  "result": "pass",
+  "commit": "95fdfccab48a27e8d41e3b0f854d9eda8eef1ab7",
+  "procedure": "cargo test -p cw-data: pinned_dataset_loads_and_validates (25 products, 17 recipes, 11 regions, 24 events, 30 firms), farm_worked_example_matches_the_contract, every_region_pair_has_a_lane, dataset_hash_is_stable, financial products excluded from goods recipes, and the authored-corridor uniqueness/label test. Values are read from the pinned in-repo calibration files and the dataset hash is reproducible.",
+  "artifacts": [
+    "content/initial-balance.json",
+    "content/geography/corridor-fixture.json",
+    "crates/cw-data/src/balance.rs",
+    "crates/cw-data/src/lib.rs",
+    "docs/planning/DECISIONS.md"
+  ],
+  "limitations": "The baseline is authored engineering calibration for a nominal 2000 start, not a reconstruction from historical source observations. External source reconciliation is explicitly waived by the owner's estimate decision; the game must label it as authored.",
+  "verified_at": "2026-10-25"
+}

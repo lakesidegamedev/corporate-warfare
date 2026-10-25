@@ -415,6 +415,34 @@ mod tests {
     }
 
     #[test]
+    fn the_authored_corridor_is_unique_and_labelled() {
+        let dataset = Dataset::load().unwrap();
+        assert_eq!(dataset.regions.len(), 11);
+        let mut codes = std::collections::BTreeSet::new();
+        let mut names = std::collections::BTreeSet::new();
+        for region in &dataset.regions {
+            assert!(codes.insert(region.code.clone()), "duplicate region code");
+            assert!(names.insert(region.name.clone()), "duplicate region name");
+            assert!(
+                !region.states.is_empty(),
+                "region {} has no states",
+                region.code
+            );
+            assert!(region.wage_index_bps > 0);
+            assert!(region.demand_index_bps > 0);
+        }
+        assert!(
+            dataset.geometry_note.contains("authored corridor"),
+            "the geometry note names the authored scheme: {}",
+            dataset.geometry_note
+        );
+        assert!(
+            !dataset.geometry_note.contains("verified corridor dataset"),
+            "the fixture must not claim a verified historical dataset"
+        );
+    }
+
+    #[test]
     fn every_region_pair_has_a_lane() {
         let dataset = Dataset::load().unwrap();
         for left in &dataset.regions {

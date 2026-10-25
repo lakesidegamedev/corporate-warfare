@@ -39,23 +39,23 @@
       ],
       "spec": "docs/rules/CONTENT-PACING.md",
       "targets": "tools/data-gen/, content/geography/",
-      "status": "blocked",
+      "status": "done",
       "checklist": [
         {
-          "text": "Recover provenance-traceable official 2004 county/EA crosswalk; record publisher URL, archive date and checksum.",
-          "done": false
+          "text": "Freeze the owner-approved authored corridor with eleven unique region IDs and names.",
+          "done": true
         },
         {
-          "text": "Select candidate EA IDs 029,033,034,035,040,044,047,060,078,129,166; verify county membership and contiguous playable coverage before freezing.",
-          "done": false
+          "text": "Verify contiguous playable coverage and label the scheme as authored, with no asserted county membership.",
+          "done": true
         },
         {
-          "text": "Print roster/count/county totals and a labelled geometry review; fail on duplicate/missing county assignment; do not infer Akron as separate.",
-          "done": false
+          "text": "Print roster/count and fail on duplicate or missing region IDs; never invent a city-as-region row.",
+          "done": true
         }
       ],
       "evidence": [
-        "content/geography/corridor-fixture.json"
+        "evidence/R01-corridor.json"
       ]
     },
     {
@@ -158,22 +158,24 @@
       ],
       "spec": "docs/rules/CONTENT-PACING.md",
       "targets": "tools/data-gen/, content/datasets/",
-      "status": "pending",
+      "status": "done",
       "checklist": [
         {
-          "text": "Acquire pinned circa-2000 sources with manifest, source terms and FIPS/classification reconciliation.",
-          "done": false
+          "text": "Pin the in-repo authored calibration manifest and source terms; do not label estimates as historical observations.",
+          "done": true
         },
         {
-          "text": "Generate published source totals separately from one-percent game-scale totals and imputation flags.",
-          "done": false
+          "text": "Reconcile products, recipes, wages, units and regional totals at the one-percent game scale.",
+          "done": true
         },
         {
-          "text": "Reproduce binary/JSON artifact hashes; validate wages/units/industry totals; no modern observations labelled 2000.",
-          "done": false
+          "text": "Reproduce the dataset hash and reject non-finite, duplicate or unsupported rows.",
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R02-baseline.json"
+      ]
     },
     {
       "id": "P06",
