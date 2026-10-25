@@ -41,6 +41,8 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
 
     // Phase 1: expiries, deliveries, construction and governance.
     crate::economy::freight::settle(world, dataset);
+    crate::economy::procurement::ensure_contracts(world, dataset);
+    crate::economy::procurement::settle(world, dataset);
     complete_construction(world, dataset);
     crate::economy::deals::weekly(world);
     crate::economy::governance::weekly(world, dataset);

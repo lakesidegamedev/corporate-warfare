@@ -691,6 +691,21 @@ pub struct Contract {
     pub auto_renew: bool,
 }
 
+/// Government procurement contract: a funded weekly delivery with a prepaid deposit.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Procurement {
+    pub supplier: Handle,
+    pub region: u8,
+    pub quantity_weekly: MilliLots,
+    pub price_cents: i64,
+    pub remaining_weeks: u32,
+    pub next_delivery: Tick,
+    /// Deposit still unearned by the supplier.
+    pub unearned_cents: i64,
+    pub shortfall_weeks: u8,
+    pub status: ContractStatus,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Shipment {
     pub seller: Handle,
@@ -974,6 +989,8 @@ pub struct World {
     pub firms: Slab<Firm>,
     pub facilities: Slab<Facility>,
     pub contracts: Slab<Contract>,
+    #[serde(default)]
+    pub procurements: Slab<Procurement>,
     pub shipments: Vec<Shipment>,
     pub loans: Slab<Loan>,
     pub bonds: Slab<Bond>,

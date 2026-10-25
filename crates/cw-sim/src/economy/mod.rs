@@ -13,6 +13,7 @@ pub mod labour;
 pub mod markets;
 pub mod ownership;
 pub mod policy;
+pub mod procurement;
 pub mod production;
 pub mod research;
 pub mod score;

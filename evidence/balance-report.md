@@ -342,3 +342,16 @@ and does not found a replacement. That is the designed failure-and-recovery path
 reference policy does not exercise recovery, so it understates what an active player can do. R36
 remains open: the score distribution is narrow for passive policies and no human has judged the
 difficulty.
+
+## Defense procurement re-run, 2026-10-25
+
+After replacing the defense spot book with funded 52-week contracts, deposits and accepted
+delivery settlement:
+
+| Horizon | Runs | Score min/median/max | Dissolved median (min-max) | Controlled median (min) | Net worth min/median |
+|---|---|---:|---:|---:|---:|
+| 260 weeks | 100 | 56 / 62 / 62 | 5 (3-10) | 1 (0) | $3.49M / $4.34M |
+
+Seed 3 (guided, conservative, 260 weeks) is back to four dissolved rivals, controlled firm in
+control, score 61. The contract renewal path keeps defense demand open after the first 52 weeks
+and is available to new producers.
