@@ -334,22 +334,24 @@
       ],
       "spec": "docs/rules/CORPORATE.md",
       "targets": "crates/cw-sim/{career,formation}.rs",
-      "status": "active",
+      "status": "done",
       "checklist": [
         {
           "text": "Implement founder and guided opening ledgers with personal vs firm ownership and cash.",
-          "done": false
+          "done": true
         },
         {
           "text": "Add controlled firm selection and explicit management-contract recovery eligibility/cooldown.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test losing primary firm without resetting other assets/history and assisted-score flag.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R12-career.json"
+      ]
     },
     {
       "id": "P12",
