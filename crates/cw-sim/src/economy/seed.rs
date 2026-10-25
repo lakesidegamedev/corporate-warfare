@@ -95,6 +95,7 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
             last_tax_receipts_cents: 0,
             tax_receipts_history: Vec::new(),
             week_tax_receipts_cents: 0,
+            unpaid_transfer_need_cents: 0,
             bonds_outstanding_cents: 0,
             pending_procurement: BTreeMap::new(),
         },
