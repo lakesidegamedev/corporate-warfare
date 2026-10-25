@@ -300,6 +300,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
                 Some(BankModel {
                     deposit_rate_bps: 400,
                     specialist_concentration: false,
+                    depositors: BTreeMap::new(),
                 })
             } else {
                 None

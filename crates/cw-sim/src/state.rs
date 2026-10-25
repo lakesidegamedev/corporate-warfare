@@ -450,6 +450,9 @@ pub struct Guarantee {
 pub struct BankModel {
     pub deposit_rate_bps: i32,
     pub specialist_concentration: bool,
+    /// Per-depositor claims. The aggregate must equal the bank's deposit liability.
+    #[serde(default)]
+    pub depositors: BTreeMap<HolderId, i64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

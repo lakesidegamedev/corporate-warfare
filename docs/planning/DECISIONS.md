@@ -256,3 +256,11 @@ summaries for private rivals are masked (cash and equity zero, grade hidden, fac
 private company is restricted instead of showing zeros. Tests:
 `private_firm_data_needs_management_public_disclosure_or_diligence` and
 `completed_diligence_grants_access_to_a_private_target`.
+
+### Bank runs pay actual depositors, 2026-10-25
+
+A run previously reduced the bank's deposit liability and cash without touching depositors'
+claims, losing money without a counterparty. Banks now track per-depositor claims in the bank
+model; deposits and withdrawals maintain them, and a run pays available cash pro rata, credits
+each depositor and reduces their claim. Unpaid claims remain liabilities. Test:
+`banking::tests::a_run_pays_depositors_pro_rata_and_reduces_their_claims`.
