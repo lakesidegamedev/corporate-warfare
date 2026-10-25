@@ -350,6 +350,7 @@ fn accrue_tax(world: &mut World, firm: Handle) {
 }
 
 fn refresh_household_income(world: &mut World, dataset: &Dataset) {
+    world.government.unpaid_transfer_need_cents = 0;
     for region_index in 0..world.regions.len() {
         let mut income = 0i64;
         for tier in 0..3 {
@@ -373,14 +374,17 @@ fn refresh_household_income(world: &mut World, dataset: &Dataset) {
             crate::economy::fiscal::record(world, labour_tax);
         }
         let mut income = earned - labour_tax;
-        // Background transfer support for the unemployed, paid only from the treasury.
-        let unemployed: i64 = world.regions[region_index]
-            .labour
-            .iter()
-            .map(|tier| (tier.population * 9_500 / 10_000 - tier.employed).max(0))
-            .sum();
-        let support = (unemployed * world.regions[region_index].background_wage_cents[0] * 30
-            / 100)
+        // Background transfer support for the unemployed, paid only from the treasury. The
+        // need uses each tier's baseline wage; anything the residual budget cannot fund is
+        // reported rather than invented.
+        let mut need = 0i64;
+        for tier in 0..3 {
+            let unemployed = (world.regions[region_index].labour[tier].population * 9_500 / 10_000)
+                .saturating_sub(world.regions[region_index].labour[tier].employed)
+                .max(0);
+            need += unemployed * world.regions[region_index].background_wage_cents[tier] * 30 / 100;
+        }
+        let support = need
             .min(world.government.book.cash().max(0))
             .min(world.government.training_budget_cents.max(0));
         if support > 0 {
@@ -393,6 +397,10 @@ fn refresh_household_income(world: &mut World, dataset: &Dataset) {
             income += support;
             world.government.training_budget_cents -= support;
         }
+        world.government.unpaid_transfer_need_cents = world
+            .government
+            .unpaid_transfer_need_cents
+            .saturating_add(need - support);
         world.regions[region_index].households.last_income_cents = income;
     }
     let _ = dataset;
@@ -436,6 +444,26 @@ mod tests {
         assert!(world.government.procurement_budget_cents > 0);
         assert!(world.government.healthcare_budget_cents > 0);
         assert!(world.government.training_budget_cents > 0);
+        assert!(world.government.book.is_balanced());
+    }
+
+    #[test]
+    fn unfunded_transfer_support_is_reported() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 43, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        world.government.training_budget_cents = 0;
+        for tier in 0..3 {
+            world.regions[0].labour[tier].employed = 0;
+        }
+        refresh_household_income(&mut world, &dataset);
+        assert!(
+            world.government.unpaid_transfer_need_cents > 0,
+            "unmet transfer need is recorded"
+        );
+        assert!(
+            world.government.book.balance(Account::OperatingExpense) >= 0,
+            "no unfunded support is paid"
+        );
         assert!(world.government.book.is_balanced());
     }
 

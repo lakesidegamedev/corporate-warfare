@@ -626,6 +626,9 @@ pub struct Government {
     pub tax_receipts_history: Vec<i64>,
     #[serde(default)]
     pub week_tax_receipts_cents: i64,
+    /// Transfer support that the fiscal budget or treasury could not fund this week.
+    #[serde(default)]
+    pub unpaid_transfer_need_cents: i64,
     pub bonds_outstanding_cents: i64,
     pub pending_procurement: BTreeMap<u16, MilliLots>,
 }

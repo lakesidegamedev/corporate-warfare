@@ -330,3 +330,11 @@ lots and initial savings use that net figure. A week with income below the dispo
 may draw at most one percent of savings into the spending budget; the supplement is deducted
 when committed and unspent category budgets return to savings. Old saves default to no
 supplement. Evidence: `evidence/household-demand.md`; hash re-pinned to `f75e42c2...`.
+
+### Transfer support by tier and unpaid need, 2026-10-25
+
+Background transfer support is now calculated from each tier's baseline wage and reports the
+unfunded remainder in `government.unpaid_transfer_need_cents`. The treasury and residual
+training/welfare budget still cap payment. Background employers normally absorb the residual
+workforce, so support is usually zero; the mechanism is correct when unemployment exists.
+Evidence: `evidence/transfer-support.md`; hash `6731ed7c...`.

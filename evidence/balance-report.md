@@ -377,3 +377,9 @@ Baseline lots, initial savings and the 1 percent savings supplement now use disp
 after labour tax. The conservative distributions are unchanged: 100 five-year seeds score
 56/62/62 with dissolved median 5 and controlled median 1; 20 thirty-year seeds have dissolved
 median 10 and controlled median 1. Seed 3 is still four dissolved rivals and score 61.
+
+## Transfer-support accounting, 2026-10-25
+
+Tier-aware transfer need and unpaid-need reporting do not change the distributions: seed 3 is
+still four dissolved rivals and score 61, and the 100 five-year conservative runs score
+56/62/62 with dissolved median 5.
