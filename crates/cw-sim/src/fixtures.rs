@@ -181,6 +181,7 @@ mod tests {
     use super::*;
     use crate::economy::seed;
     use crate::state::{ScenarioKind, ScenarioMode};
+    use cw_data::Dataset;
 
     #[test]
     fn scaling_multiplies_firms_and_keeps_ledgers_balanced() {
