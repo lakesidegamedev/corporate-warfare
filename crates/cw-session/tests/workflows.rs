@@ -178,9 +178,11 @@ fn equity_governance_and_credit_families_are_reachable() {
         firm,
         investor: true,
     });
+    // The opening board is seated from the seeded cap table, so the investor can appoint a CEO
+    // before the first scheduled meeting.
     assert!(
-        !accepted && key.as_deref() == Some("error.no_authority"),
-        "seats are required"
+        accepted,
+        "seeded board seats allow the appointment: {key:?}"
     );
     let (accepted, key) = driver.submit(CommandIntent::RequestLoan {
         firm,

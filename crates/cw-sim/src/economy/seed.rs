@@ -546,6 +546,7 @@ fn allocate_initial_shares(firm: &mut Firm, public: bool, controller: HolderId) 
     }
     firm.shares.issued = INITIAL_SHARES;
     firm.shares.holders = holders;
+    firm.board.seats = crate::economy::governance::apportion_seats(&firm.shares);
 }
 
 fn open_facility(
@@ -750,6 +751,7 @@ fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
     let firm = world.firms.get_mut(handle).unwrap();
     firm.shares.issued = INITIAL_SHARES;
     firm.shares.holders = holders;
+    firm.board.seats = crate::economy::governance::apportion_seats(&firm.shares);
     firm.shares.statement_weeks = 0;
     firm.board.ceo = Some(CeoRef::Investor);
     world.investor.primary_group = Some(handle);

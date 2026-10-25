@@ -119,6 +119,18 @@ fn resolve_vote(world: &World, firm: Handle, vote: &BoardVote) -> bool {
     yes > no && yes >= 3
 }
 
+/// True when the firm's controller holds at least three of the five seats. Board authority is
+/// required for large issuance and for mergers.
+pub fn controller_has_board(world: &World, firm: Handle) -> bool {
+    let Some(entity) = world.firms.get(firm) else {
+        return false;
+    };
+    let Some(controller) = entity.shares.controller() else {
+        return false;
+    };
+    entity.board.seats_held(controller) >= 3
+}
+
 /// Whether an actor may issue operating commands for a firm.
 pub fn can_operate(world: &World, firm: Handle, actor: HolderId) -> bool {
     let Some(entity) = world.firms.get(firm) else {

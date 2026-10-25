@@ -201,3 +201,11 @@ the world, and charges the remainder to the finite outside construction sector. 
 subtracts those commitments before buying stock, and commitments clear at the end of the week.
 Test: `commands::tests::construction_service_is_bounded_by_contractor_capacity`; canonical hash
 re-pinned to `8e0bf569...`.
+
+### Board authority for large issuance and mergers, 2026-10-25
+
+Boards are apportioned from the seeded cap table at opening, not left empty until the first
+thirteen-week meeting. A large issuance (more than ten percent of the issue) and a legal merger
+now require the controller to hold at least three of the five seats; small operating issuance stays
+with management. Tests: `commands::tests::large_issuance_needs_three_board_seats`, the merger
+lifecycle test, and the session workflow test. Canonical hash re-pinned to `c14127ee...`.
