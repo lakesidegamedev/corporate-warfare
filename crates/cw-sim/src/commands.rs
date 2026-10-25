@@ -1403,6 +1403,14 @@ fn apply_intent(
             buyer_outside,
         } => {
             require_control(world, actor, *firm)?;
+            // A large issuance (more than ten percent of the issue) needs three board seats.
+            let issued = firm_ref(world, *firm)?.shares.issued.max(1);
+            if *qty > issued / 10 && !governance::controller_has_board(world, *firm) {
+                return Err(DomainError::NoAuthority {
+                    actor,
+                    reason: AuthorityReason::BoardApprovalRequired,
+                });
+            }
             equity::issue_shares(
                 world,
                 *firm,
@@ -1901,6 +1909,12 @@ fn apply_intent(
                 return Err(DomainError::SolvencyRestriction {
                     entity: deal.0,
                     reason: SolvencyReason::CoverageTooLow,
+                });
+            }
+            if !governance::controller_has_board(world, entity.buyer) {
+                return Err(DomainError::NoAuthority {
+                    actor,
+                    reason: AuthorityReason::BoardApprovalRequired,
                 });
             }
             // Legal merger: move every target balance into the buyer, retire the target shares,
@@ -2505,6 +2519,69 @@ mod tests {
         let result = apply(&mut world, &dataset, &command);
         assert!(matches!(result, Err(DomainError::NoAuthority { .. })));
         assert!(world.firm(other).unwrap().policies.prices.is_empty());
+    }
+
+    #[test]
+    fn large_issuance_needs_three_board_seats() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 751, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world.investor.primary_group.unwrap();
+        crate::economy::equity::refresh_valuation(&mut world, &dataset);
+        let fair = world.firm(firm).unwrap().shares.fair_cents.max(1);
+        assert_eq!(
+            world
+                .firm(firm)
+                .unwrap()
+                .board
+                .seats_held(HolderId::Investor),
+            3,
+            "the opening board is seated"
+        );
+        let large = envelope(
+            &world,
+            CommandIntent::IssueShares {
+                firm,
+                qty: 300_000,
+                price_cents: fair,
+                buyer_outside: 0,
+            },
+        );
+        assert!(
+            apply(&mut world, &dataset, &large).is_ok(),
+            "seated board approves"
+        );
+        // Remove the board authority: a large issuance is refused, a small one is not.
+        world.firms.get_mut(firm).unwrap().board.seats = [None; 5];
+        let blocked = envelope(
+            &world,
+            CommandIntent::IssueShares {
+                firm,
+                qty: 300_000,
+                price_cents: fair,
+                buyer_outside: 1,
+            },
+        );
+        let result = apply(&mut world, &dataset, &blocked);
+        assert!(matches!(
+            result,
+            Err(DomainError::NoAuthority {
+                reason: AuthorityReason::BoardApprovalRequired,
+                ..
+            })
+        ));
+        let small = envelope(
+            &world,
+            CommandIntent::IssueShares {
+                firm,
+                qty: 10_000,
+                price_cents: fair,
+                buyer_outside: 1,
+            },
+        );
+        assert!(
+            apply(&mut world, &dataset, &small).is_ok(),
+            "small issuance is operational"
+        );
     }
 
     #[test]
