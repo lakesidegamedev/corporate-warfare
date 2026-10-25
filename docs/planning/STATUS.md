@@ -1,6 +1,6 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `8674b93`.
+Date: 2026-10-25. Owner: DeepSeek goal session. Viability branch based on `9d7339b`.
 Kanban: 254781. Milestone issues: 1-6. Merged PRs: #8 foundation, #9 release track,
 #10 onboarding, #11 adversarial reliability, #12 industry scenarios.
 

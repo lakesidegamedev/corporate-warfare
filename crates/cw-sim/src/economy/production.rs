@@ -148,6 +148,7 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
             .map(|(handle, _, qty, _)| (handle.0, *qty))
             .collect();
         let allocation = allocate_cents(Cents(supplied), &weights);
+        let total_granted: i64 = allocation.iter().map(|(_, qty)| qty.0).sum();
         // Local generators are paid in proportion to their share of local supply.
         let local_supply = supply_by_region
             .get(&(region_index as u8))
@@ -215,6 +216,26 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
             }
         }
         let _ = paid_local;
+        // Remove exactly the power consumers bought from producer stock. What is left is the
+        // week's surplus, which the gateway may export instead of expiring unsold.
+        if total_granted > 0 && !local_supply.is_empty() {
+            let weights: Vec<(u64, i64)> = local_supply
+                .iter()
+                .map(|(handle, qty)| (u64::from(handle.0), qty.0))
+                .collect();
+            let split = MilliLots::allocate(MilliLots(total_granted), &weights);
+            for (index, (seller, _)) in local_supply.iter().enumerate() {
+                let qty = split[index].1;
+                if qty.0 <= 0 {
+                    continue;
+                }
+                if let Some(firm) = world.firms.get_mut(*seller) {
+                    let mut carry = 0i64;
+                    firm.stock_lot_mut(electricity, region_index as u8)
+                        .issue(qty, &mut carry);
+                }
+            }
+        }
     }
     result
 }
@@ -435,9 +456,14 @@ fn run_facility(
     }
     if output.0 > 0 {
         let code = dataset.product_index[&recipe.output];
-        // Utilities sell their whole service through the dispatch allocation above; booking
-        // the same physical output as inventory would count it twice.
-        if !utility {
+        // Utilities book output too, at zero carrying cost because fuel was expensed as
+        // produced. Dispatch then removes exactly what consumers bought, leaving the surplus
+        // available for the finite gateway export.
+        if utility {
+            let firm = world.firms.get_mut(firm_handle).unwrap();
+            firm.stock_lot_mut(code, facility.region)
+                .receive(output, Cents(0));
+        } else {
             let firm = world.firms.get_mut(firm_handle).unwrap();
             firm.stock_lot_mut(code, facility.region)
                 .receive(output, Cents(material_cost));

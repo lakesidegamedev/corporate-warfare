@@ -147,6 +147,21 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
         pending_pause: None,
     };
 
+    // Outside gateway capital is finite but real: exports are paid from it, imports add to it.
+    let _ = world.outside.gateway_book.commit(
+        Tick::OPENING,
+        Txn::new()
+            .debit(
+                cw_core::ledger::Account::Cash,
+                5_000_000_000,
+                "gateway capital",
+            )
+            .credit(
+                cw_core::ledger::Account::ShareCapital,
+                5_000_000_000,
+                "gateway capital",
+            ),
+    );
     build_regions(&mut world, dataset);
     build_government(&mut world, dataset);
     seed_named_firms(&mut world, dataset);
@@ -155,6 +170,7 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
     }
     refresh_region_incomes(&mut world, dataset);
     build_gateways(&mut world, dataset);
+    seed_supply_contracts(&mut world, dataset);
     compute_household_baselines(&mut world, dataset);
     seed_share_marks(&mut world, dataset);
 
@@ -550,7 +566,11 @@ fn open_facility(
         escrow_cents: 0,
         capex_cents: recipe.capex_cents * blocks as i64,
         accumulated_depreciation: 0,
-        workers: [0; 3],
+        workers: [
+            recipe.workers_low_mid_high[0] * blocks as i64,
+            recipe.workers_low_mid_high[1] * blocks as i64,
+            recipe.workers_low_mid_high[2] * blocks as i64,
+        ],
         target_bps: 8_500,
         quality_bps: 10_000,
         deposit_remaining: MilliLots::ZERO,
@@ -640,7 +660,7 @@ fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
         Tick::OPENING,
     );
     facility.capex_cents = 200_000_000;
-    facility.target_bps = 8_500;
+    facility.target_bps = 10_000;
     let facility_handle = world
         .facilities
         .insert(facility_with_firm(facility, handle));
@@ -799,36 +819,166 @@ fn compute_household_baselines(world: &mut World, dataset: &Dataset) {
 }
 
 fn build_gateways(world: &mut World, dataset: &Dataset) {
-    let products = [
-        "food_raw",
-        "ore",
-        "fuel",
-        "chemicals",
-        "steel",
-        "components",
-        "goods",
-        "electricity",
-    ];
+    // Every physical good is tradable through the gateway, and electricity can be imported as
+    // a finite local service. Financial contracts and other services stay out of this market.
+    let mut products: Vec<&str> = dataset
+        .products
+        .iter()
+        .filter(|product| product.kind == cw_data::ProductKind::Goods)
+        .map(|product| product.id.as_str())
+        .collect();
+    products.push("electricity");
     let mut corridor_volume: BTreeMap<u16, i64> = BTreeMap::new();
     for (_, facility) in world.facilities.iter() {
         let recipe = &dataset.recipes[facility.recipe as usize];
         for (id, qty) in &recipe.weekly_inputs_lots {
-            let code = dataset.product_index[id];
+            let code = dataset.product_index[id.as_str()];
             *corridor_volume.entry(code).or_default() += qty * facility.blocks as i64;
         }
     }
     for region in 0..world.regions.len() {
-        for id in products {
-            let code = dataset.product_index[id];
+        for id in &products {
+            let code = dataset.product_index[*id];
             let volume = corridor_volume.get(&code).copied().unwrap_or(100).max(100);
             let reference = dataset.reference_price(code);
+            // Electricity is a bulk local service: the gateway's finite capacity must be able
+            // to absorb a generator block's weekly surplus, or unsold power expires and the
+            // utility cannot cover its fuel and payroll.
+            // The outside market is large relative to the one-percent corridor: size the finite
+            // gateway to the corridor's own weekly volume so a shortage is filled and a surplus
+            // has a buyer. The spread still makes the gateway a last resort, not free money.
+            let capacity = if id == &"electricity" {
+                volume.max(100)
+            } else {
+                volume.max(40)
+            };
             world.gateways.push(Gateway {
                 region: region as u8,
                 product: code,
-                capacity_lots: (volume * 20 / 100).max(20),
+                capacity_lots: capacity,
                 sell_price_cents: reference + reference * 15 / 100,
                 buy_price_cents: reference - reference * 15 / 100,
             });
+        }
+    }
+}
+
+/// Established inter-region supply relationships. Without these the corridor has no trade
+/// beyond its own region, so vertical chains never meet and every producer starves.
+fn seed_supply_contracts(world: &mut World, dataset: &Dataset) {
+    let mut suppliers: BTreeMap<u16, Vec<Handle>> = BTreeMap::new();
+    for (handle, firm) in world.firms.iter() {
+        if !firm.operative() {
+            continue;
+        }
+        for facility_handle in &firm.facilities {
+            let Some(facility) = world.facilities.get(*facility_handle) else {
+                continue;
+            };
+            let recipe = &dataset.recipes[facility.recipe as usize];
+            if let Some(code) = dataset.product_index.get(&recipe.output) {
+                suppliers.entry(*code).or_default().push(handle);
+            }
+        }
+    }
+    type BuyerNeeds = Vec<(Handle, u8, Vec<(u16, i64)>)>;
+    let buyers: BuyerNeeds = world
+        .firms
+        .iter()
+        .filter(|(_, firm)| firm.operative())
+        .map(|(handle, firm)| {
+            let mut needs: BTreeMap<u16, i64> = BTreeMap::new();
+            for facility_handle in &firm.facilities {
+                let Some(facility) = world.facilities.get(*facility_handle) else {
+                    continue;
+                };
+                let recipe = &dataset.recipes[facility.recipe as usize];
+                for (id, qty) in &recipe.weekly_inputs_lots {
+                    if id == "electricity" {
+                        continue;
+                    }
+                    if let Some(code) = dataset.product_index.get(id) {
+                        *needs.entry(*code).or_default() += qty * facility.blocks as i64;
+                    }
+                }
+            }
+            (handle, firm.region, needs.into_iter().collect())
+        })
+        .collect();
+    for (buyer, buyer_region, needs) in buyers {
+        for (product, qty) in needs {
+            let Some(candidates) = suppliers.get(&product) else {
+                continue;
+            };
+            // Split the buyer's weekly need across every eligible supplier, so no producer is
+            // left without a route to market just because another firm was listed first.
+            let eligible: Vec<Handle> = candidates
+                .iter()
+                .copied()
+                .filter(|handle| *handle != buyer)
+                .collect();
+            if eligible.is_empty() || qty <= 0 {
+                continue;
+            }
+            // Split by supplier capacity, not equally: a one-block farm cannot honour the same
+            // weekly volume as a three-block one, and over-committing it caused penalties.
+            let mut capacities: Vec<(Handle, i64)> = eligible
+                .iter()
+                .map(|seller| {
+                    let capacity: i64 = world
+                        .firms
+                        .get(*seller)
+                        .map(|firm| {
+                            firm.facilities
+                                .iter()
+                                .filter_map(|handle| world.facilities.get(*handle))
+                                .map(|facility| {
+                                    let recipe = &dataset.recipes[facility.recipe as usize];
+                                    if recipe.output == dataset.products[product as usize].id {
+                                        recipe.weekly_output_lots * facility.blocks as i64
+                                    } else {
+                                        0
+                                    }
+                                })
+                                .sum::<i64>()
+                        })
+                        .unwrap_or(0);
+                    (*seller, capacity.max(1))
+                })
+                .collect();
+            capacities.sort_by_key(|(handle, _)| *handle);
+            let total_capacity: i64 = capacities.iter().map(|(_, capacity)| *capacity).sum();
+            for (seller, capacity) in capacities {
+                let share = (qty * capacity / total_capacity.max(1)).max(1);
+                let seller_region = world
+                    .firms
+                    .get(seller)
+                    .map(|firm| firm.region)
+                    .unwrap_or(buyer_region);
+                let contract = crate::state::Contract {
+                    buyer,
+                    seller,
+                    product,
+                    from_region: seller_region,
+                    to_region: buyer_region,
+                    quantity_weekly: MilliLots::from_lots(share),
+                    price_cents: dataset.reference_price(product),
+                    penalty_bps: 500,
+                    escrow_cents: 0,
+                    remaining_weeks: 52,
+                    next_delivery: Tick(1),
+                    status: crate::state::ContractStatus::Active,
+                    shortfalls: MilliLots::ZERO,
+                    auto_renew: true,
+                };
+                let handle = world.contracts.insert(contract);
+                if let Some(entity) = world.firms.get_mut(buyer) {
+                    entity.contracts_buy.push(handle);
+                }
+                if let Some(entity) = world.firms.get_mut(seller) {
+                    entity.contracts_sell.push(handle);
+                }
+            }
         }
     }
 }
@@ -908,6 +1058,23 @@ mod tests {
                 // Every scaled worker is accounted for by named or background employment.
                 let population: i64 = region.labour.iter().map(|tier| tier.population).sum();
                 assert!(population > 0);
+            }
+        }
+    }
+
+    #[test]
+    fn seeded_operating_firms_start_fully_staffed() {
+        let dataset = Dataset::load().unwrap();
+        let world = build(&dataset, 12, ScenarioKind::Founder, ScenarioMode::Sandbox);
+        for (_, firm) in world.firms.iter() {
+            for handle in &firm.facilities {
+                let facility = world.facilities.get(*handle).unwrap();
+                assert_eq!(
+                    facility.workers,
+                    facility.full_workers(&dataset),
+                    "{} starts staffed",
+                    firm.name
+                );
             }
         }
     }

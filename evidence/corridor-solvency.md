@@ -26,3 +26,18 @@ Next investigation, in order:
 4. Rebalance seeded capacity against regional demand only after the flows exist; record every
    parameter change in DECISIONS with before/after distributions.
 5. Re-run 100 five-year seeds and 20 thirty-year careers (P33) and require explainable failures.
+
+## Second measurement, same day (after the viability pass)
+
+Seed 3, guided, 52 weeks: `firms=31 controlled=1 past_due=6 dissolved=2` (was 23 dissolved).
+Seed 3, guided, 260 weeks: 16 dissolved, 0 past due, the guided firm in restructuring with zero
+cash and a fair value of 63 cents per share.
+
+Weekly industry report at week 52 shows the remaining structural losses: retail -117k (imported
+goods at the gateway premium and full payroll at partial utilisation), media -30k (marketing
+demand is 1 percent of corridor revenue), carriers -14k, energy -37k, chemicals -27k, defense
+-22k. Profitable: agriculture +23k, manufacturing +27k, healthcare +42k, real estate +43k,
+technology +53k, telecommunications +52k.
+
+Next pass: solve output prices as cost-plus at realistic utilisation, and make media/carrier
+demand scale with corridor activity. Do not tune by loosening the pass condition.

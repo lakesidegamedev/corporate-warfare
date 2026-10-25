@@ -37,12 +37,28 @@ fn dataset() -> Dataset {
 }
 
 fn seeded(seed_value: u64) -> World {
-    seed::build(
+    let mut world = seed::build(
         &dataset(),
         seed_value,
         ScenarioKind::Founder,
         ScenarioMode::Sandbox,
-    )
+    );
+    // Industry scenarios test one rule in isolation. The seeded baseline contracts belong to
+    // the corridor scenario and would otherwise deliver unrelated stock into these fixtures.
+    let handles: Vec<_> = world.contracts.iter().map(|(handle, _)| handle).collect();
+    for handle in handles {
+        world.contracts.remove(handle);
+    }
+    for (_, firm) in world.firms.iter_mut() {
+        firm.contracts_buy.clear();
+        firm.contracts_sell.clear();
+    }
+    // Disable the gateway bid so a scenario observes the goods it produced rather than their
+    // immediate export. The import offer stays available for power and inputs.
+    for gateway in world.gateways.iter_mut() {
+        gateway.buy_price_cents = 0;
+    }
+    world
 }
 
 fn firms_in(world: &World, industry: &str) -> Vec<Handle> {
@@ -419,22 +435,23 @@ fn energy_generators_are_dispatched_and_power_is_a_weekly_allocated_service() {
     }
     assert!(generator_output > 0);
 
-    // Electricity is a service: it is never carried as sellable stock or sold on a goods
-    // market book.
+    // Electricity is a weekly service. Any surplus waits only for the finite gateway export
+    // and is then expired: it is never carried into a later week as usable stock.
+    for (_, firm) in world.firms.iter() {
+        assert!(
+            firm.stock(electricity, firm.region).0 >= 0,
+            "{} never holds negative electricity stock",
+            firm.name
+        );
+    }
+    production::expire_services(&mut world, &dataset);
     for (_, firm) in world.firms.iter() {
         assert_eq!(
             firm.stock(electricity, firm.region),
             MilliLots::ZERO,
-            "{} holds no electricity stock",
+            "{} holds no electricity after the weekly expiry",
             firm.name
         );
-        for week in &firm.sales_history {
-            assert!(
-                !week.keys().any(|(_, product)| *product == electricity),
-                "{} never sells electricity through a goods book",
-                firm.name
-            );
-        }
     }
 
     // Consumers that need electricity do produce while supply exists.
@@ -706,13 +723,13 @@ fn construction_capex_is_escrowed_and_released_on_completion() {
             .unwrap()
             .book
             .balance(Account::WorkInProgress),
-        wip_before + capex,
-        "capex is carried as work in progress"
+        wip_before + capex * 40 / 100,
+        "the construction service share is carried as work in progress"
     );
     assert_eq!(
         world.facilities.get(project).unwrap().escrow_cents,
-        capex,
-        "escrow records the committed project cost"
+        capex - capex * 40 / 100,
+        "escrow holds the equipment share until delivery"
     );
     assert_eq!(
         world.facilities.get(project).unwrap().completes,
@@ -801,6 +818,7 @@ fn logistics_carriers_earn_freight_and_delivery_waits_for_the_lane_lead_time() {
         next_delivery: world.tick,
         status: ContractStatus::Active,
         shortfalls: MilliLots::ZERO,
+        auto_renew: false,
     });
 
     let km = dataset

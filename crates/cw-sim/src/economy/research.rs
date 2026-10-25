@@ -26,7 +26,7 @@ pub fn threshold(level: u8) -> i64 {
 }
 
 /// Spend this week's research budget and advance progress.
-pub fn weekly(world: &mut World) {
+pub fn weekly(world: &mut World, dataset: &cw_data::Dataset) {
     let handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
     for handle in handles {
         let Some(firm) = world.firms.get(handle) else {
@@ -76,6 +76,7 @@ pub fn weekly(world: &mut World) {
                 }
             }
         }
+        spend_marketing(world, dataset, handle);
         // Brand decay toward the neutral 10000 baseline.
         let brand_keys: Vec<(u8, u16)> = world
             .firms
@@ -93,6 +94,84 @@ pub fn weekly(world: &mut World) {
                 }
             }
         }
+    }
+}
+
+/// Spend this week's marketing budget: half buys advertising from media firms in the corridor,
+/// half builds brand stock. Advertising demand comes only from these real budgets.
+fn spend_marketing(world: &mut World, dataset: &cw_data::Dataset, handle: Handle) {
+    let Some(firm) = world.firms.get(handle) else {
+        return;
+    };
+    let budget = firm.policies.marketing_budget_cents.max(0);
+    if budget <= 0 {
+        return;
+    }
+    let cash = firm.book.cash().max(0);
+    let spend = budget.min(cash);
+    if spend <= 0 {
+        return;
+    }
+    let media_share = spend / 2;
+    let brand_share = spend - media_share;
+    let region = firm.region;
+    let output_code = firm
+        .facilities
+        .iter()
+        .filter_map(|facility| world.facilities.get(*facility))
+        .find_map(|facility| {
+            dataset
+                .recipe(&dataset.recipes[facility.recipe as usize].id)
+                .and_then(|recipe| dataset.product_code(&recipe.output))
+        });
+    if media_share > 0 {
+        let media: Vec<Handle> = world
+            .firms
+            .iter()
+            .filter(|(_, candidate)| candidate.industry == 11 && candidate.operative())
+            .map(|(media_handle, _)| media_handle)
+            .collect();
+        if media.is_empty() {
+            let _ = world.outside.gateway_book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, media_share, "advertising")
+                    .credit(Account::Revenue, media_share, "advertising"),
+            );
+        } else {
+            let share = media_share / media.len() as i64;
+            let mut remaining = media_share;
+            for media_handle in media {
+                let paid = share.min(remaining);
+                if paid > 0 {
+                    if let Some(media_firm) = world.firms.get_mut(media_handle) {
+                        let _ = media_firm.book.commit(
+                            world.tick,
+                            Txn::new().debit(Account::Cash, paid, "advertising").credit(
+                                Account::Revenue,
+                                paid,
+                                "advertising",
+                            ),
+                        );
+                    }
+                    remaining -= paid;
+                }
+            }
+        }
+        if let Some(firm) = world.firms.get_mut(handle) {
+            let _ = firm.book.commit(
+                world.tick,
+                Txn::new()
+                    .credit(Account::Cash, media_share, "marketing media")
+                    .debit(Account::OperatingExpense, media_share, "marketing media"),
+            );
+        }
+    }
+    if brand_share > 0
+        && let Some(code) = output_code
+    {
+        let baseline = dataset.reference_price(code).max(1) * 100;
+        spend_brand(world, handle, region, code, brand_share, baseline);
     }
 }
 
@@ -166,6 +245,46 @@ mod tests {
         assert_eq!(threshold(1), 40_000_000);
         assert_eq!(threshold(2), 90_000_000);
         assert_eq!(threshold(4), 250_000_000);
+    }
+
+    #[test]
+    fn marketing_budget_buys_real_advertising_from_media_firms() {
+        let dataset = cw_data::Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            192,
+            crate::state::ScenarioKind::Guided,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let firm = world.investor.primary_group.unwrap();
+        let media_revenue_before: i64 = world
+            .firms
+            .iter()
+            .filter(|(_, candidate)| candidate.industry == 11)
+            .map(|(_, candidate)| -candidate.book.balance(cw_core::ledger::Account::Revenue))
+            .sum();
+        let cash_before = world.firm(firm).unwrap().book.cash();
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .policies
+            .marketing_budget_cents = 1_000_000;
+        weekly(&mut world, &dataset);
+        let media_revenue_after: i64 = world
+            .firms
+            .iter()
+            .filter(|(_, candidate)| candidate.industry == 11)
+            .map(|(_, candidate)| -candidate.book.balance(cw_core::ledger::Account::Revenue))
+            .sum();
+        assert!(
+            media_revenue_after > media_revenue_before,
+            "media firms earn advertising"
+        );
+        assert!(
+            world.firm(firm).unwrap().book.cash() < cash_before,
+            "the budget is spent"
+        );
     }
 
     #[test]

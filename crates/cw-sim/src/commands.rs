@@ -15,7 +15,7 @@ use cw_core::money::{Cents, round_even_div};
 use cw_core::quantity::MilliLots;
 use cw_data::Dataset;
 
-use crate::economy::{deals, equity, governance, insolvency, ownership, policy, research, unions};
+use crate::economy::{deals, equity, governance, insolvency, ownership, policy, unions};
 use crate::state::{
     BankModel, Bond, DealKind, Facility, FacilityStatus, Firm, FirmStatus, Grade, HolderId,
     INITIAL_SHARES, Lender, Loan, Policies, PolicyKind, ShareLot, World,
@@ -753,17 +753,23 @@ fn apply_intent(
             require_region(world, *region)?;
             let cost = template.capex_cents * *blocks as i64;
             spend_firm_cash(world, *firm, cost, "construction escrow")?;
+            // Forty percent is construction service bought as the work is commissioned; sixty
+            // percent is equipment held in escrow until completion.
+            let service = cost * 40 / 100;
+            let equipment = cost - service;
             if let Some(entity) = world.firms.get_mut(*firm) {
                 let _ = entity.book.commit(
                     world.tick,
                     Txn::new()
-                        .debit(Account::WorkInProgress, cost, "construction")
-                        .credit(Account::RestrictedCash, cost, "construction"),
+                        .debit(Account::WorkInProgress, service, "construction service")
+                        .credit(Account::RestrictedCash, service, "construction service"),
                 );
             }
-            let facility = start_facility(
+            pay_construction_service(world, *firm, *region, service, "construction service");
+            let mut facility = start_facility(
                 world, dataset, *firm, *region, *recipe, *blocks, world.tick, cost,
             );
+            facility.escrow_cents = equipment;
             let handle = world.facilities.insert(facility);
             world.firms.get_mut(*firm).unwrap().facilities.push(handle);
             Ok(())
@@ -952,25 +958,14 @@ fn apply_intent(
                     detail: ArithmeticFault::OutOfRange,
                 });
             }
+            // A budget is per-week policy spent by the weekly marketing step, not a one-off
+            // charge at submission.
             world
                 .firms
                 .get_mut(*firm)
                 .unwrap()
                 .policies
                 .marketing_budget_cents = *amount_cents;
-            for product in 0..dataset.products.len() as u16 {
-                let region = world.firms.get(*firm).map(|f| f.region).unwrap_or(0);
-                if *amount_cents > 0 {
-                    research::spend_brand(
-                        world,
-                        *firm,
-                        region,
-                        product,
-                        *amount_cents / dataset.products.len() as i64,
-                        dataset.reference_price(product) * 100,
-                    );
-                }
-            }
             Ok(())
         }
         CommandIntent::SetResearchBudget { firm, amount_cents } => {
@@ -1035,6 +1030,7 @@ fn apply_intent(
                 next_delivery: Tick(world.tick.0 + 1),
                 status: crate::state::ContractStatus::Active,
                 shortfalls: MilliLots::ZERO,
+                auto_renew: false,
             };
             let handle = world.contracts.insert(contract);
             world
@@ -1181,6 +1177,7 @@ fn apply_intent(
                         to_region: *region,
                         arrive: Tick(world.tick.0 + crate::economy::freight::lead_time_weeks(km)),
                         unit_price_cents: *max_price_cents,
+                        goods_value_cents: goods_value,
                         freight_cents: freight,
                     });
                     return Ok(());
@@ -1276,6 +1273,7 @@ fn apply_intent(
                 next_delivery: Tick(world.tick.0 + 1),
                 status: crate::state::ContractStatus::Active,
                 shortfalls: MilliLots::ZERO,
+                auto_renew: false,
             };
             let handle = world.contracts.insert(contract);
             world
@@ -2033,6 +2031,49 @@ fn apply_intent(
         CommandIntent::RespondEvent { event, choice } => {
             crate::economy::events_engine::respond(world, dataset, *event, choice)?;
             Ok(())
+        }
+    }
+}
+
+/// Pay a construction bill to named contractors in the region, or to the finite outside
+/// construction sector when none can supply.
+fn pay_construction_service(world: &mut World, payer: Handle, region: u8, amount: i64, memo: &str) {
+    if amount <= 0 {
+        return;
+    }
+    let contractors: Vec<Handle> = world
+        .firms
+        .iter()
+        .filter(|(handle, firm)| {
+            *handle != payer && firm.industry == 5 && firm.region == region && firm.operative()
+        })
+        .map(|(handle, _)| handle)
+        .collect();
+    if contractors.is_empty() {
+        let _ = world.outside.gateway_book.commit(
+            world.tick,
+            Txn::new()
+                .debit(Account::Cash, amount, memo)
+                .credit(Account::Revenue, amount, memo),
+        );
+        return;
+    }
+    let share = amount / contractors.len() as i64;
+    let mut remaining = amount;
+    for contractor in contractors {
+        let paid = share.min(remaining);
+        if paid > 0 {
+            if let Some(firm) = world.firms.get_mut(contractor) {
+                let _ = firm.book.commit(
+                    world.tick,
+                    Txn::new().debit(Account::Cash, paid, memo).credit(
+                        Account::Revenue,
+                        paid,
+                        memo,
+                    ),
+                );
+            }
+            remaining -= paid;
         }
     }
 }

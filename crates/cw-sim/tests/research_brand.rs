@@ -88,7 +88,7 @@ fn research_without_a_budget_never_innovates() {
     world.firms.get_mut(firm).unwrap().tech_progress_cents = research::threshold(level);
     let cash = world.firm(firm).unwrap().book.cash();
     for _ in 0..5 {
-        research::weekly(&mut world);
+        research::weekly(&mut world, &dataset);
     }
     assert_eq!(world.firm(firm).unwrap().tech_level, level, "no free level");
     assert_eq!(
@@ -120,7 +120,7 @@ fn research_progress_is_funded_and_the_draw_is_saved() {
         .book
         .balance(Account::OperatingExpense);
 
-    research::weekly(&mut world);
+    research::weekly(&mut world, &dataset);
 
     let after = world.firm(firm).unwrap();
     let level_after = after.tech_level;
@@ -166,7 +166,7 @@ fn research_progress_is_funded_and_the_draw_is_saved() {
         let row = entity.firms.get_mut(target).unwrap();
         row.policies.research_budget_cents = budget;
         row.tech_progress_cents = research::threshold(level) - budget;
-        research::weekly(entity);
+        research::weekly(entity, &dataset);
     }
     assert_eq!(
         first.firm(target).unwrap().tech_level,
@@ -196,7 +196,7 @@ fn research_stops_at_the_frontier_and_the_level_ceiling() {
         .research_budget_cents = 50_000_000;
     world.firms.get_mut(firm).unwrap().tech_progress_cents = 1_000_000_000;
     let cash_before = world.firm(firm).unwrap().book.cash();
-    research::weekly(&mut world);
+    research::weekly(&mut world, &dataset);
     assert_eq!(
         world.firm(firm).unwrap().tech_level,
         3,
@@ -217,7 +217,7 @@ fn research_stops_at_the_frontier_and_the_level_ceiling() {
     world.macro_state.tech_frontier = 200;
     world.firms.get_mut(firm).unwrap().tech_level = research::MAX_TECH_LEVEL;
     world.firms.get_mut(firm).unwrap().tech_progress_cents = 0;
-    research::weekly(&mut world);
+    research::weekly(&mut world, &dataset);
     assert_eq!(
         world.firm(firm).unwrap().tech_level,
         research::MAX_TECH_LEVEL
@@ -288,7 +288,7 @@ fn brand_decays_ten_a_week_toward_neutral_inside_bounds() {
         .brand_bps
         .insert((region, product), research::BRAND_CAP);
     for expected in [14_990, 14_980, 14_970] {
-        research::weekly(&mut world);
+        research::weekly(&mut world, &dataset);
         assert_eq!(
             world.firm(firm).unwrap().brand_bps[&(region, product)],
             expected,
@@ -303,7 +303,7 @@ fn brand_decays_ten_a_week_toward_neutral_inside_bounds() {
         .brand_bps
         .insert((region, product), research::BRAND_FLOOR);
     for _ in 0..10 {
-        research::weekly(&mut world);
+        research::weekly(&mut world, &dataset);
         let value = world.firm(firm).unwrap().brand_bps[&(region, product)];
         assert!((research::BRAND_FLOOR..=research::BRAND_CAP).contains(&value));
     }

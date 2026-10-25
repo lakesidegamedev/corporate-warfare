@@ -116,7 +116,11 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
                 stored.next_delivery = Tick(world.tick.0 + 1);
                 stored.remaining_weeks = stored.remaining_weeks.saturating_sub(1);
                 if stored.remaining_weeks == 0 {
-                    stored.status = ContractStatus::Defaulted;
+                    if stored.auto_renew {
+                        stored.remaining_weeks = 52;
+                    } else {
+                        stored.status = ContractStatus::Defaulted;
+                    }
                 }
             }
             continue;
@@ -204,6 +208,7 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
                 to_region: contract.to_region,
                 arrive: Tick(world.tick.0 + lead_time_weeks(km)),
                 unit_price_cents: price,
+                goods_value_cents: paid_goods,
                 freight_cents: paid_freight,
             });
         }
@@ -212,7 +217,13 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
             stored.next_delivery = Tick(world.tick.0 + 1);
             stored.remaining_weeks = stored.remaining_weeks.saturating_sub(1);
             if stored.remaining_weeks == 0 {
-                stored.status = ContractStatus::Completed;
+                if stored.auto_renew {
+                    // Baseline trade relationships renew for another year instead of leaving
+                    // every producer without a buyer after week 52.
+                    stored.remaining_weeks = 52;
+                } else {
+                    stored.status = ContractStatus::Completed;
+                }
             }
         }
     }

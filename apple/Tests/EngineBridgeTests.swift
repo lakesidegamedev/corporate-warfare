@@ -28,7 +28,7 @@ final class EngineBridgeTests: XCTestCase {
         // cross-platform determinism evidence for this fixture. The value moved on 2026-10-25
         // when rival command ids began using the persisted sequence counter; this constant
         // needs a fresh simulator run on the Mac runner before R05 is claimed again.
-        XCTAssertEqual(session.canonicalHash(), "cb14891544da9a770548d832c8a54d787d7926614c840fbd309fba85312ff21d")
+        XCTAssertEqual(session.canonicalHash(), "92bc2f873f4d60f9e9c5cc5d910683d3df45463eb8e9ae05a357605ab50c0bde")
 
         let data = try session.exportSave()
         XCTAssertGreaterThan(data.count, 1_000)
