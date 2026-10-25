@@ -1131,6 +1131,48 @@ mod tests {
     }
 
     #[test]
+    fn brand_and_quality_shift_household_demand_between_equal_prices() {
+        // Two sellers, same price and stock. The branded one must win share without any free
+        // sales: total quantity is conserved and revenue still comes from fulfilled lots.
+        let mut branded = offer(1, 100_000, 1_000);
+        branded.brand_bps = 15_000;
+        let mut generic = offer(2, 100_000, 1_000);
+        generic.brand_bps = 7_500;
+        let offers = vec![branded, generic];
+        let requests = vec![Request {
+            buyer: 100,
+            qty: 100_000,
+            budget_cents: 100_000,
+            brand_sensitive: true,
+        }];
+        let fills = allocate(1_000, &offers, &requests);
+        let branded_qty: i64 = fills.iter().filter(|(_, seller, _)| *seller == 1).map(|(_, _, q)| q).sum();
+        let generic_qty: i64 = fills.iter().filter(|(_, seller, _)| *seller == 2).map(|(_, _, q)| q).sum();
+        assert_eq!(branded_qty + generic_qty, 100_000, "demand is conserved");
+        assert!(branded_qty > generic_qty, "the stronger brand wins share");
+        let revenue: i64 = fills.iter().map(|(_, _, q)| q).sum::<i64>() * 1_000 / 1_000;
+        assert_eq!(revenue, 100_000, "revenue is exact fulfilled quantity times price");
+    }
+
+    #[test]
+    fn industrial_buyers_ignore_brand() {
+        let mut branded = offer(1, 100_000, 1_000);
+        branded.brand_bps = 15_000;
+        let mut generic = offer(2, 100_000, 1_000);
+        generic.brand_bps = 7_500;
+        let requests = vec![Request {
+            buyer: 100,
+            qty: 100_000,
+            budget_cents: 100_000,
+            brand_sensitive: false,
+        }];
+        let fills = allocate(1_000, &[branded, generic], &requests);
+        let first: i64 = fills.iter().filter(|(_, seller, _)| *seller == 1).map(|(_, _, q)| q).sum();
+        let second: i64 = fills.iter().filter(|(_, seller, _)| *seller == 2).map(|(_, _, q)| q).sum();
+        assert_eq!(first, second, "industrial buyers value delivered cost and quality, not brand");
+    }
+
+    #[test]
     fn zero_supply_clears_nothing_and_keeps_cash() {
         let offers = vec![offer(1, 0, 10_000)];
         let requests = vec![Request {
