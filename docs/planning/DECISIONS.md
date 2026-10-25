@@ -191,3 +191,13 @@ debt, facilities, contracts, loans, bonds and policies on a shell. A merger now:
 
 Test: `corporate_lifecycle.rs::a_legal_merger_moves_assets_debt_facilities_and_contracts`.
 Asset purchases remain a separate path and are not merged into this rule.
+
+### Construction service capacity, 2026-10-25
+
+Build orders paid local contractors without any capacity bound while public works also bought their
+weekly construction output, so the same capacity could be sold twice. Build service now pays named
+contractors only up to their remaining weekly construction capacity, records the committed lots on
+the world, and charges the remainder to the finite outside construction sector. Public works
+subtracts those commitments before buying stock, and commitments clear at the end of the week.
+Test: `commands::tests::construction_service_is_bounded_by_contractor_capacity`; canonical hash
+re-pinned to `8e0bf569...`.

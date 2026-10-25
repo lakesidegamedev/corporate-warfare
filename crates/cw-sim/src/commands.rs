@@ -665,7 +665,14 @@ fn apply_intent(
                             .credit(Account::RestrictedCash, service, "construction service"),
                     );
                 }
-                pay_construction_service(world, handle, *region, service, "construction service");
+                pay_construction_service(
+                    world,
+                    dataset,
+                    handle,
+                    *region,
+                    service,
+                    "construction service",
+                );
                 let mut facility = start_facility(
                     world, dataset, handle, *region, *recipe, 1, world.tick, cost,
                 );
@@ -779,7 +786,14 @@ fn apply_intent(
                         .credit(Account::RestrictedCash, service, "construction service"),
                 );
             }
-            pay_construction_service(world, *firm, *region, service, "construction service");
+            pay_construction_service(
+                world,
+                dataset,
+                *firm,
+                *region,
+                service,
+                "construction service",
+            );
             let mut facility = start_facility(
                 world, dataset, *firm, *region, *recipe, *blocks, world.tick, cost,
             );
@@ -2202,10 +2216,21 @@ fn apply_intent(
 
 /// Pay a construction bill to named contractors in the region, or to the finite outside
 /// construction sector when none can supply.
-fn pay_construction_service(world: &mut World, payer: Handle, region: u8, amount: i64, memo: &str) {
+fn pay_construction_service(
+    world: &mut World,
+    dataset: &Dataset,
+    payer: Handle,
+    region: u8,
+    amount: i64,
+    memo: &str,
+) {
     if amount <= 0 {
         return;
     }
+    let Some(product) = dataset.product_code("construction") else {
+        return;
+    };
+    let price = dataset.reference_price(product).max(1);
     let contractors: Vec<Handle> = world
         .firms
         .iter()
@@ -2214,32 +2239,48 @@ fn pay_construction_service(world: &mut World, payer: Handle, region: u8, amount
         })
         .map(|(handle, _)| handle)
         .collect();
-    if contractors.is_empty() {
-        let _ = world.outside.gateway_book.commit(
-            world.tick,
-            Txn::new()
-                .debit(Account::Cash, amount, memo)
-                .credit(Account::Revenue, amount, memo),
-        );
-        return;
-    }
-    let share = amount / contractors.len() as i64;
     let mut remaining = amount;
     for contractor in contractors {
-        let paid = share.min(remaining);
-        if paid > 0 {
-            if let Some(firm) = world.firms.get_mut(contractor) {
-                let _ = firm.book.commit(
-                    world.tick,
-                    Txn::new().debit(Account::Cash, paid, memo).credit(
-                        Account::Revenue,
-                        paid,
-                        memo,
-                    ),
-                );
-            }
-            remaining -= paid;
+        if remaining <= 0 {
+            break;
         }
+        let capacity = world.construction_capacity(dataset, contractor);
+        let committed = world
+            .construction_orders
+            .get(&contractor)
+            .copied()
+            .unwrap_or(0);
+        let free_lots = (capacity - committed).max(0);
+        if free_lots <= 0 {
+            continue;
+        }
+        let affordable_lots = remaining / price;
+        let lots = affordable_lots.min(free_lots);
+        if lots <= 0 {
+            continue;
+        }
+        let paid = lots * price;
+        if let Some(firm) = world.firms.get_mut(contractor) {
+            let _ = firm.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, paid, memo)
+                    .credit(Account::Revenue, paid, memo),
+            );
+        }
+        *world.construction_orders.entry(contractor).or_default() += lots;
+        remaining -= paid;
+    }
+    if remaining > 0 {
+        // The outside construction sector supplies what named contractors cannot take on.
+        let _ = world.outside.gateway_book.commit(
+            world.tick,
+            Txn::new().debit(Account::Cash, remaining, memo).credit(
+                Account::Revenue,
+                remaining,
+                memo,
+            ),
+        );
     }
 }
 
@@ -2464,6 +2505,67 @@ mod tests {
         let result = apply(&mut world, &dataset, &command);
         assert!(matches!(result, Err(DomainError::NoAuthority { .. })));
         assert!(world.firm(other).unwrap().policies.prices.is_empty());
+    }
+
+    #[test]
+    fn construction_service_is_bounded_by_contractor_capacity() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 741, ScenarioKind::Founder, ScenarioMode::Sandbox);
+        let contractor = world
+            .firms
+            .iter()
+            .find(|(_, firm)| firm.industry == 5 && firm.operative())
+            .map(|(handle, _)| handle)
+            .expect("a contractor");
+        let region = world.firm(contractor).unwrap().region;
+        let capacity = world.construction_capacity(&dataset, contractor);
+        assert!(capacity > 0);
+        let price = dataset.reference_price(dataset.product_code("construction").unwrap());
+        let revenue_before = -world
+            .firm(contractor)
+            .unwrap()
+            .book
+            .balance(Account::Revenue);
+        let outside_before = -world.outside.gateway_book.balance(Account::Revenue);
+        let payer = world
+            .firms
+            .iter()
+            .find(|(handle, _)| *handle != contractor)
+            .map(|(handle, _)| handle)
+            .unwrap();
+        pay_construction_service(
+            &mut world,
+            &dataset,
+            payer,
+            region,
+            (capacity + 10) * price,
+            "construction service",
+        );
+        let revenue_after = -world
+            .firm(contractor)
+            .unwrap()
+            .book
+            .balance(Account::Revenue);
+        assert_eq!(
+            revenue_after - revenue_before,
+            capacity * price,
+            "named capacity is capped"
+        );
+        assert_eq!(
+            world
+                .construction_orders
+                .get(&contractor)
+                .copied()
+                .unwrap_or(0),
+            capacity
+        );
+        let outside_after = -world.outside.gateway_book.balance(Account::Revenue);
+        assert_eq!(
+            outside_after - outside_before,
+            10 * price,
+            "the outside sector takes the rest"
+        );
+        assert!(world.firm(contractor).unwrap().book.is_balanced());
     }
 
     #[test]

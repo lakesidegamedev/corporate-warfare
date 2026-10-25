@@ -182,11 +182,19 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
             if remaining.0 <= 0 {
                 break;
             }
+            let capacity = world.construction_capacity(dataset, seller);
+            let committed = world.construction_orders.get(&seller).copied().unwrap_or(0);
+            let free_lots = (capacity - committed).max(0);
+            if free_lots <= 0 {
+                continue;
+            }
             let available = world
                 .firm(seller)
                 .map(|f| f.stock(service, region as u8))
                 .unwrap_or_default();
-            let qty = available.min(remaining);
+            let qty = available
+                .min(remaining)
+                .min(MilliLots::from_lots(free_lots));
             if qty.0 <= 0 {
                 continue;
             }
