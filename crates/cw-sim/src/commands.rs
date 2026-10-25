@@ -1629,9 +1629,28 @@ fn apply_intent(
             weeks,
         } => {
             require_control(world, actor, *firm)?;
-            if *amount_cents <= 0 || *rate_bps <= 0 || *weeks == 0 {
+            // A quote is the lender's price, not the borrower's: the rate must be at least the
+            // policy rate plus the borrower's grade spread, the term between a quarter and five
+            // years, and the amount inside secured plus unsecured capacity.
+            if *amount_cents <= 0 || *rate_bps <= 0 || !(13..=260).contains(weeks) {
                 return Err(DomainError::Arithmetic {
                     detail: ArithmeticFault::OutOfRange,
+                });
+            }
+            let quoted =
+                world.macro_state.policy_rate_bps + firm_ref(world, *firm)?.grade.spread_bps();
+            if *rate_bps < quoted {
+                return Err(DomainError::SolvencyRestriction {
+                    entity: firm.0,
+                    reason: SolvencyReason::CreditGradeTooLow,
+                });
+            }
+            let capacity = crate::economy::credit::secured_capacity(world, *firm)
+                + crate::economy::credit::unsecured_capacity(world, *firm);
+            if *amount_cents > capacity {
+                return Err(DomainError::SolvencyRestriction {
+                    entity: firm.0,
+                    reason: SolvencyReason::CoverageTooLow,
                 });
             }
             let debt_after = firm_ref(world, *firm)?.book.debt() + *amount_cents;
@@ -2501,6 +2520,39 @@ mod tests {
             entity.shares.fair_cents > 0,
             "a solvent founded firm must not be valued at zero"
         );
+    }
+
+    #[test]
+    fn a_loan_quote_cannot_name_its_own_rate_term_or_size() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 143, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world.investor.primary_group.unwrap();
+        let quoted =
+            world.macro_state.policy_rate_bps + world.firm(firm).unwrap().grade.spread_bps();
+        let capacity = crate::economy::credit::secured_capacity(&world, firm)
+            + crate::economy::credit::unsecured_capacity(&world, firm);
+        let attempt = |world: &World, amount: i64, rate: i32, weeks: u32| {
+            envelope(
+                world,
+                CommandIntent::AcceptLoanQuote {
+                    firm,
+                    amount_cents: amount,
+                    rate_bps: rate,
+                    weeks,
+                },
+            )
+        };
+        for (amount, rate, weeks) in [
+            (capacity.clamp(1, 1_000_000), 1, 52),
+            (capacity.clamp(1, 1_000_000), quoted, 10_000),
+            (capacity + 1, quoted, 52),
+        ] {
+            let command = attempt(&world, amount, rate, weeks);
+            assert!(
+                apply(&mut world, &dataset, &command).is_err(),
+                "{amount} at {rate} for {weeks}"
+            );
+        }
     }
 
     #[test]

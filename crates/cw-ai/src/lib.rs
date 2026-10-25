@@ -113,14 +113,38 @@ fn urgent(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Pr
         .iter()
         .map(|week| week.net_income)
         .sum();
-    if recent_income < 0 && entity.book.cash() < outflow * 12 {
-        proposals.push(Proposal {
-            actor: firm.0,
-            intent: CommandIntent::SetProductionTarget {
-                firm,
-                target_bps: 6_000,
-            },
-        });
+    // The rules' order: cut discretionary spend, then seek funded credit, then restructure.
+    // Production is cut only when the plant loses money on every unit at full capacity; a
+    // seasonal or start-up loss on a plant that covers its variable costs over a year is
+    // carried with credit, not by idling the plant before its profitable season.
+    // A cash squeeze needs an answer even while the books show a profit: principal repayments
+    // do not pass through income.
+    if entity.book.cash() < outflow * 12 && (recent_income < 0 || entity.book.cash() < outflow * 6)
+    {
+        if structural_contribution(world, dataset, firm) < 0 || demand_limited(world, dataset, firm)
+        {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::SetProductionTarget {
+                    firm,
+                    target_bps: 6_000,
+                },
+            });
+        } else {
+            let capacity = cw_sim::economy::credit::secured_capacity(world, firm)
+                + cw_sim::economy::credit::unsecured_capacity(world, firm);
+            let need = (outflow * 12 - entity.book.cash()).min(capacity);
+            let open_loans = entity.loans.len();
+            if need > 0 && open_loans < 3 {
+                proposals.push(Proposal {
+                    actor: firm.0,
+                    intent: CommandIntent::RequestLoan {
+                        firm,
+                        amount_cents: need,
+                    },
+                });
+            }
+        }
         proposals.push(Proposal {
             actor: firm.0,
             intent: CommandIntent::SetMarketingBudget {
@@ -197,7 +221,6 @@ fn urgent(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Pr
             });
         }
     }
-    let _ = dataset;
 }
 
 /// The strategic slot for one firm in isolation, for inspection and tests.
@@ -332,7 +355,10 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         .filter_map(|handle| world.facilities.get(*handle))
         .map(|facility| facility.blocks as i64)
         .sum();
+    // A quarter of results first: a few good opening weeks are not a case for a second plant.
     if weights[1] >= 3
+        && entity.book.recent_weeks().len() >= 13
+        && sells_out(world, dataset, firm)
         && entity.facilities.len() < 2
         && total_blocks < 3
         && fully_staffed
@@ -458,6 +484,183 @@ fn acquisition_bid(
             max_shares: wanted,
         },
     })
+}
+
+/// Observed unmet demand: the plant earns at least nine tenths of its full-capacity revenue and
+/// holds under a week of output in stock, so a new block would have buyers. This is the
+/// public-data stand-in for "planned capacity at most 1.25 times reachable unmet demand".
+fn sells_out(world: &World, dataset: &Dataset, firm: Handle) -> bool {
+    let Some(entity) = world.firms.get(firm) else {
+        return false;
+    };
+    let weeks = entity.book.recent_weeks().len().max(1) as i64;
+    let revenue = entity
+        .book
+        .recent_weeks()
+        .iter()
+        .map(|week| week.revenue)
+        .sum::<i64>()
+        / weeks;
+    let mut capacity = 0i64;
+    let mut stocked = false;
+    for facility in entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter(|facility| facility.status == FacilityStatus::Operating)
+    {
+        let recipe = &dataset.recipes[facility.recipe as usize];
+        let Some(output) = dataset.product_index.get(&recipe.output).copied() else {
+            continue;
+        };
+        let lots = recipe.weekly_output_lots * facility.blocks as i64;
+        let price = entity
+            .policies
+            .prices
+            .get(&output)
+            .copied()
+            .unwrap_or_else(|| dataset.reference_price(output));
+        capacity += lots * price;
+        let stock: i64 = entity
+            .inventory
+            .iter()
+            .filter(|((held, _), _)| *held == output)
+            .map(|(_, lot)| lot.qty.lots())
+            .sum();
+        stocked |= stock > lots;
+    }
+    // Project services are bought only when someone builds: full order books in the opening
+    // quarter are not lasting demand, so a contractor expands only when more projects are
+    // under way in its region than its existing blocks serve two to one.
+    let project_service = entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter_map(|facility| {
+            dataset
+                .product_index
+                .get(&dataset.recipes[facility.recipe as usize].output)
+        })
+        .any(|product| {
+            dataset.products[*product as usize].kind == cw_data::ProductKind::ProjectService
+        });
+    if project_service {
+        let blocks: i64 = entity
+            .facilities
+            .iter()
+            .filter_map(|handle| world.facilities.get(*handle))
+            .map(|facility| facility.blocks as i64)
+            .sum();
+        let projects = world
+            .facilities
+            .iter()
+            .filter(|(_, facility)| {
+                facility.region == entity.region && facility.status == FacilityStatus::Building
+            })
+            .count() as i64;
+        return capacity > 0 && projects > blocks * 2;
+    }
+    capacity > 0 && revenue * 10 >= capacity * 9 && !stocked
+}
+
+/// The plant is limited by demand: revenue is under half of full-capacity revenue, or more than
+/// four weeks of full production sits unsold in stock, so producing more only adds cost.
+fn demand_limited(world: &World, dataset: &Dataset, firm: Handle) -> bool {
+    let Some(entity) = world.firms.get(firm) else {
+        return false;
+    };
+    let mut weekly: std::collections::BTreeMap<u16, i64> = std::collections::BTreeMap::new();
+    for facility in entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter(|facility| facility.status == FacilityStatus::Operating)
+    {
+        let recipe = &dataset.recipes[facility.recipe as usize];
+        if let Some(output) = dataset.product_index.get(&recipe.output) {
+            *weekly.entry(*output).or_insert(0) +=
+                recipe.weekly_output_lots * facility.blocks as i64;
+        }
+    }
+    // Services keep no stock: there, demand shows as revenue under half of what the plant
+    // would earn at full capacity and the firm's own prices.
+    let weeks = entity.book.recent_weeks().len().max(1) as i64;
+    let revenue = entity
+        .book
+        .recent_weeks()
+        .iter()
+        .map(|week| week.revenue)
+        .sum::<i64>()
+        / weeks;
+    let capacity: i64 = weekly
+        .iter()
+        .map(|(product, lots)| {
+            let price = entity
+                .policies
+                .prices
+                .get(product)
+                .copied()
+                .unwrap_or_else(|| dataset.reference_price(*product));
+            lots * price
+        })
+        .sum();
+    if capacity > 0 && revenue * 2 < capacity {
+        return true;
+    }
+    weekly.iter().any(|(product, lots)| {
+        let stock: i64 = entity
+            .inventory
+            .iter()
+            .filter(|((held, _), _)| held == product)
+            .map(|(_, lot)| lot.qty.lots())
+            .sum();
+        *lots > 0 && stock > lots * 4
+    })
+}
+
+/// Weekly contribution of the firm's operating plant at full capacity and mean seasonal yield:
+/// output at the firm's own prices, less inputs at reference prices and full staffing at its
+/// own wage offers. Observable from the firm's own policies and the public recipe.
+fn structural_contribution(world: &World, dataset: &Dataset, firm: Handle) -> i64 {
+    let Some(entity) = world.firms.get(firm) else {
+        return 0;
+    };
+    entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter(|facility| facility.status == FacilityStatus::Operating)
+        .map(|facility| {
+            let recipe = &dataset.recipes[facility.recipe as usize];
+            let blocks = facility.blocks as i64;
+            let Some(output) = dataset.product_index.get(&recipe.output).copied() else {
+                return 0;
+            };
+            let price = entity
+                .policies
+                .prices
+                .get(&output)
+                .copied()
+                .unwrap_or_else(|| dataset.reference_price(output));
+            let revenue = recipe.weekly_output_lots * blocks * price;
+            let inputs: i64 = recipe
+                .weekly_inputs_lots
+                .iter()
+                .filter_map(|(id, qty)| {
+                    dataset
+                        .product_index
+                        .get(id)
+                        .map(|product| qty * blocks * dataset.reference_price(*product))
+                })
+                .sum();
+            let wages: i64 = (0..3)
+                .map(|tier| {
+                    recipe.workers_low_mid_high[tier] * blocks * entity.policies.wage_offer[tier]
+                })
+                .sum();
+            revenue - inputs - wages
+        })
+        .sum()
 }
 
 fn cheapest_expansion(world: &World, dataset: &Dataset, firm: Handle) -> Option<(u16, u8)> {
@@ -694,5 +897,135 @@ mod tests {
             matches!(proposal.intent, CommandIntent::RespondBargaining { firm, .. } if firm == rival)
         });
         assert!(answered);
+    }
+
+    /// A rival that lost money last week and holds under six weeks of mandatory outflow.
+    fn squeezed(seed_value: u64, industry: &str) -> (World, Dataset, Handle) {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(
+            &dataset,
+            seed_value,
+            ScenarioKind::Founder,
+            ScenarioMode::Sandbox,
+        );
+        let firm = world
+            .firms
+            .iter()
+            .find(|(handle, firm)| {
+                !player_controlled(&world, *handle)
+                    && firm.operative()
+                    && cw_sim::state::INDUSTRY_NAMES[firm.industry as usize] == industry
+            })
+            .map(|(handle, _)| handle)
+            .unwrap();
+        let outflow = cw_sim::economy::insolvency::mandatory_weekly_outflow(&world, firm);
+        let cash = world.firm(firm).unwrap().book.cash();
+        // A seasonal week: eight tenths of full-capacity revenue, with costs above it.
+        let capacity: i64 = world
+            .firm(firm)
+            .unwrap()
+            .facilities
+            .iter()
+            .filter_map(|h| world.facilities.get(*h))
+            .map(|f| {
+                let recipe = &dataset.recipes[f.recipe as usize];
+                recipe.weekly_output_lots
+                    * f.blocks as i64
+                    * dataset.reference_price(dataset.product_index[&recipe.output])
+            })
+            .sum();
+        let revenue = capacity * 8 / 10;
+        let tick = world.tick;
+        let entity = world.firms.get_mut(firm).unwrap();
+        let burn = (cash - outflow * 3).max(1) + revenue;
+        entity
+            .book
+            .commit(
+                tick,
+                cw_core::ledger::Txn::new()
+                    .debit(cw_core::ledger::Account::Cash, revenue, "fixture sales")
+                    .credit(cw_core::ledger::Account::Revenue, revenue, "fixture sales")
+                    .credit(cw_core::ledger::Account::Cash, burn, "fixture loss")
+                    .debit(
+                        cw_core::ledger::Account::OperatingExpense,
+                        burn,
+                        "fixture loss",
+                    ),
+            )
+            .unwrap();
+        let _ = entity.book.close_week(tick);
+        (world, dataset, firm)
+    }
+
+    fn proposals_for(world: &World, dataset: &Dataset, firm: Handle) -> Vec<CommandIntent> {
+        propose(world, dataset)
+            .into_iter()
+            .filter(|proposal| proposal.actor == firm.0)
+            .map(|proposal| proposal.intent)
+            .collect()
+    }
+
+    #[test]
+    fn a_seasonal_farm_short_of_cash_borrows_instead_of_idling_its_plant() {
+        let (world, dataset, farm) = squeezed(171, "agriculture");
+        assert!(structural_contribution(&world, &dataset, farm) > 0);
+        assert!(!demand_limited(&world, &dataset, farm));
+        let intents = proposals_for(&world, &dataset, farm);
+        assert!(
+            intents
+                .iter()
+                .any(|i| matches!(i, CommandIntent::RequestLoan { .. }))
+        );
+        assert!(
+            !intents
+                .iter()
+                .any(|i| matches!(i, CommandIntent::SetProductionTarget { .. }))
+        );
+    }
+
+    #[test]
+    fn a_demand_limited_firm_short_of_cash_cuts_production() {
+        let (mut world, dataset, farm) = squeezed(172, "agriculture");
+        // Eight weeks of unsold output in stock.
+        let region = world.firm(farm).unwrap().region;
+        let product = dataset.product_index["food_raw"];
+        let weekly: i64 = world
+            .firm(farm)
+            .unwrap()
+            .facilities
+            .iter()
+            .filter_map(|h| world.facilities.get(*h))
+            .map(|f| dataset.recipes[f.recipe as usize].weekly_output_lots * f.blocks as i64)
+            .sum();
+        world
+            .firms
+            .get_mut(farm)
+            .unwrap()
+            .stock_lot_mut(product, region)
+            .receive(
+                cw_core::quantity::MilliLots::from_lots(weekly * 8),
+                cw_core::money::Cents(0),
+            );
+        assert!(demand_limited(&world, &dataset, farm));
+        let intents = proposals_for(&world, &dataset, farm);
+        assert!(
+            intents
+                .iter()
+                .any(|i| matches!(i, CommandIntent::SetProductionTarget { .. }))
+        );
+    }
+
+    #[test]
+    fn a_contractor_does_not_expand_without_projects_waiting() {
+        let dataset = Dataset::load().unwrap();
+        let world = seed::build(&dataset, 173, ScenarioKind::Founder, ScenarioMode::Sandbox);
+        for (handle, firm) in world.firms.iter() {
+            if cw_sim::state::INDUSTRY_NAMES[firm.industry as usize] == "construction" {
+                assert!(
+                    !sells_out(&world, &dataset, handle),
+                    "no queued projects at the start"
+                );
+            }
+        }
     }
 }
