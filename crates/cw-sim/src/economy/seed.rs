@@ -321,9 +321,17 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
                 Tick::OPENING,
             );
             let handle = world.firms.insert(firm);
-            world
+            // The firm must own its facility: payroll, rent, maintenance and depreciation are
+            // all posted per owned facility, so an unowned facility would be free capacity.
+            let facility_handle = world
                 .facilities
                 .insert(facility_with_firm(facility, handle));
+            world
+                .firms
+                .get_mut(handle)
+                .unwrap()
+                .facilities
+                .push(facility_handle);
             let cash = opening_cash(
                 dataset,
                 dataset.recipe_index[&seed_firm.recipe],
@@ -557,6 +565,11 @@ fn open_facility(
     }
     for (product_id, weekly) in &recipe.weekly_inputs_lots {
         let product = dataset.product_index[product_id];
+        // Services expire weekly, so opening stock in a service is unusable value that would be
+        // written off in week one. Only physical inputs are carried into the opening balance.
+        if dataset.products[product as usize].kind.is_service() {
+            continue;
+        }
         let lot = firm.stock_lot_mut(product, region);
         lot.receive(
             MilliLots::from_lots(weekly * blocks as i64 * 2),
@@ -589,6 +602,10 @@ fn opening_input_cost(dataset: &Dataset, recipe_index: u16, blocks: u8) -> i64 {
     recipe
         .weekly_inputs_lots
         .iter()
+        .filter(|(id, _)| {
+            let code = dataset.product_index[*id];
+            !dataset.products[code as usize].kind.is_service()
+        })
         .map(|(id, qty)| {
             qty * blocks as i64 * 2 * dataset.reference_price(dataset.product_index[id])
         })
@@ -624,9 +641,15 @@ fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
     );
     facility.capex_cents = 200_000_000;
     facility.target_bps = 8_500;
-    world
+    let facility_handle = world
         .facilities
         .insert(facility_with_firm(facility, handle));
+    world
+        .firms
+        .get_mut(handle)
+        .unwrap()
+        .facilities
+        .push(facility_handle);
     let inventory_cost = opening_input_cost(dataset, recipe_index, 1);
     let cash = 100_000_000;
     let loan = 50_000_000;
@@ -716,8 +739,8 @@ fn refresh_region_incomes(world: &mut World, dataset: &Dataset) {
     let _ = dataset;
     let mut named_jobs = vec![[0i64; 3]; world.regions.len()];
     let mut named_payroll = vec![0i64; world.regions.len()];
-    for (handle, facility) in world.facilities.iter() {
-        let firm = match world.firms.get(handle) {
+    for (_, facility) in world.facilities.iter() {
+        let firm = match world.firms.get(facility.firm) {
             Some(firm) => firm,
             None => continue,
         };
