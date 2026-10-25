@@ -237,6 +237,10 @@ mod tests {
         for (_, firm) in world.firms.iter_mut() {
             firm.policies.wage_offer = [1, 1, 1];
         }
+        // Seeded firms start staffed; this test is about new hiring, so clear the workers first.
+        for (_, facility) in world.facilities.iter_mut() {
+            facility.workers = [0, 0, 0];
+        }
         for _ in 0..4 {
             clear(&mut world, &dataset);
         }

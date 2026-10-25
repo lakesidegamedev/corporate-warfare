@@ -37,12 +37,28 @@ fn dataset() -> Dataset {
 }
 
 fn seeded(seed_value: u64) -> World {
-    seed::build(
+    let mut world = seed::build(
         &dataset(),
         seed_value,
         ScenarioKind::Founder,
         ScenarioMode::Sandbox,
-    )
+    );
+    // Industry scenarios test one rule in isolation. The seeded baseline contracts belong to
+    // the corridor scenario and would otherwise deliver unrelated stock into these fixtures.
+    let handles: Vec<_> = world.contracts.iter().map(|(handle, _)| handle).collect();
+    for handle in handles {
+        world.contracts.remove(handle);
+    }
+    for (_, firm) in world.firms.iter_mut() {
+        firm.contracts_buy.clear();
+        firm.contracts_sell.clear();
+    }
+    // Disable the gateway bid so a scenario observes the goods it produced rather than their
+    // immediate export. The import offer stays available for power and inputs.
+    for gateway in world.gateways.iter_mut() {
+        gateway.buy_price_cents = 0;
+    }
+    world
 }
 
 fn firms_in(world: &World, industry: &str) -> Vec<Handle> {

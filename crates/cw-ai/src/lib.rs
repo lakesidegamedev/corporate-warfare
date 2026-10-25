@@ -71,24 +71,31 @@ fn urgent(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Pr
         });
         return;
     }
-    // Understaffed facilities: raise the offered wage five percent.
+    // Understaffed facilities: raise the offer modestly, bounded by the regional prevailing
+    // wage. A weekly five percent raise compounded into a wage spiral and bankrupted the
+    // corridor, so the AI may only close a real gap, never bid above 110 percent of prevailing.
     let understaffed = entity
         .facilities
         .iter()
         .filter_map(|handle| world.facilities.get(*handle))
         .any(|facility| {
-            facility.status == FacilityStatus::Operating && facility.last_staff_ratio_bps < 9_000
+            facility.status == FacilityStatus::Operating && facility.last_staff_ratio_bps < 8_000
         });
     if understaffed {
-        let wage = entity.policies.wage_offer[0] * 105 / 100;
-        proposals.push(Proposal {
-            actor: firm.0,
-            intent: CommandIntent::SetWageOffer {
-                firm,
-                tier: 0,
-                wage_cents: wage,
-            },
-        });
+        let prevailing = world.regions[entity.region as usize].labour[0].prevailing_wage_cents;
+        let ceiling = prevailing * 110 / 100;
+        let current = entity.policies.wage_offer[0];
+        if current < ceiling {
+            let wage = (current * 102 / 100).min(ceiling).max(current + 1);
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::SetWageOffer {
+                    firm,
+                    tier: 0,
+                    wage_cents: wage,
+                },
+            });
+        }
     }
     let _ = dataset;
 }
@@ -145,6 +152,21 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
                     firm,
                     product,
                     price_cents: target,
+                },
+            });
+        }
+    }
+
+    // Brand builders and retailers fund marketing, which is the only source of media revenue.
+    if weights[2] >= 3 || entity.industry == 7 {
+        let budget = (revenue * 100 / 10_000).max(10_000);
+        if entity.book.cash() > reserve + budget * 4 && entity.policies.marketing_budget_cents == 0
+        {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::SetMarketingBudget {
+                    firm,
+                    amount_cents: budget,
                 },
             });
         }
@@ -270,6 +292,36 @@ mod tests {
         let second = propose(&world, &dataset);
         assert_eq!(first.len(), second.len());
         assert!(first.len() <= 256);
+    }
+
+    #[test]
+    fn wage_offers_never_chase_above_the_regional_ceiling() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 194, ScenarioKind::Founder, ScenarioMode::Sandbox);
+        let handle = world
+            .firms
+            .iter()
+            .find(|(_, firm)| !firm.facilities.is_empty())
+            .map(|(handle, _)| handle)
+            .unwrap();
+        let region = world.firm(handle).unwrap().region;
+        let prevailing = world.regions[region as usize].labour[0].prevailing_wage_cents;
+        {
+            let firm = world.firms.get_mut(handle).unwrap();
+            firm.policies.wage_offer[0] = prevailing * 120 / 100;
+        }
+        let facility = world.firm(handle).unwrap().facilities[0];
+        world
+            .facilities
+            .get_mut(facility)
+            .unwrap()
+            .last_staff_ratio_bps = 7_000;
+        // Put the firm in this week's strategic cohort.
+        world.tick = cw_core::calendar::Tick(handle.slot() % 4);
+        let proposals = propose(&world, &dataset);
+        assert!(proposals.iter().all(|proposal| {
+            !matches!(proposal.intent, CommandIntent::SetWageOffer { firm, .. } if firm == handle)
+        }));
     }
 
     #[test]

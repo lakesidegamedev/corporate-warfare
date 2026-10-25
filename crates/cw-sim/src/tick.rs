@@ -59,7 +59,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     // Phase 8: organisation, policy, research, valuation, exchange and events.
     crate::economy::unions::weekly(world, dataset);
     crate::economy::policy::weekly(world);
-    crate::economy::research::weekly(world);
+    crate::economy::research::weekly(world, dataset);
     crate::economy::production::expire_services(world, dataset);
     crate::economy::equity::refresh_valuation(world, dataset);
     crate::economy::equity::clear_exchange(world, dataset);

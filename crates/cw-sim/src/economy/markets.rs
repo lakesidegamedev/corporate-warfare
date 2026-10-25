@@ -269,6 +269,117 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
         let fills = allocate(dataset.reference_price(product), &offers, &requests);
         settle_fills(world, dataset, product, region, &fills, &seller_handles);
     }
+    // Residual surplus can leave the corridor through the gateway bid even when no local buyer
+    // exists, but only above the seller's own input cover. This is the export channel.
+    let gateways: Vec<(u8, u16)> = world
+        .gateways
+        .iter()
+        .map(|gateway| (gateway.region, gateway.product))
+        .collect();
+    for (region, product) in gateways {
+        sell_surplus_to_gateway(world, dataset, region, product);
+    }
+}
+
+fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, product: u16) {
+    let Some(index) = world
+        .gateways
+        .iter()
+        .position(|gateway| gateway.region == region && gateway.product == product)
+    else {
+        return;
+    };
+    let gateway = world.gateways[index].clone();
+    if gateway.buy_price_cents <= 0 {
+        return;
+    }
+    let mut remaining = MilliLots::from_lots(gateway.capacity_lots);
+    if remaining.0 <= 0 {
+        return;
+    }
+    let sellers: Vec<Handle> = world
+        .firms
+        .iter()
+        .filter(|(_, firm)| firm.region == region && firm.operative())
+        .filter(|(_, firm)| firm.stock(product, region).0 > 0)
+        .map(|(handle, _)| handle)
+        .collect();
+    for seller in sellers {
+        if remaining.0 <= 0 {
+            break;
+        }
+        let Some(firm) = world.firms.get(seller) else {
+            continue;
+        };
+        let cover_weeks = firm.policies.input_cover_weeks.max(1) as i64;
+        let mut own_need = 0i64;
+        for facility_handle in &firm.facilities {
+            let Some(facility) = world.facilities.get(*facility_handle) else {
+                continue;
+            };
+            if facility.region != region {
+                continue;
+            }
+            let recipe = &dataset.recipes[facility.recipe as usize];
+            if let Some(weekly) = recipe
+                .weekly_inputs_lots
+                .iter()
+                .find(|(id, _)| dataset.product_index[*id] == product)
+                .map(|(_, qty)| *qty)
+            {
+                own_need += weekly * facility.blocks as i64 * cover_weeks;
+            }
+        }
+        // Stock promised to active sell contracts is not surplus and cannot be exported.
+        let committed: i64 = world
+            .contracts
+            .iter()
+            .filter(|(_, contract)| {
+                contract.seller == seller
+                    && contract.product == product
+                    && contract.from_region == region
+                    && contract.status == crate::state::ContractStatus::Active
+            })
+            .map(|(_, contract)| contract.quantity_weekly.lots())
+            .sum();
+        let available = firm.stock(product, region).lots();
+        let exportable = (available - own_need - committed).max(0);
+        if exportable <= 0 {
+            continue;
+        }
+        let qty = MilliLots::from_lots(exportable).min(remaining);
+        let cost = qty
+            .value_at(Cents(gateway.buy_price_cents.max(1)))
+            .unwrap_or(Cents::ZERO)
+            .0;
+        let gateway_cash = world.outside.gateway_book.cash().max(0);
+        let paid = cost.min(gateway_cash);
+        if paid <= 0 {
+            break;
+        }
+        let (removed, carrying) = remove_stock(world, seller, product, region, qty);
+        if !removed {
+            continue;
+        }
+        if let Some(firm) = world.firms.get_mut(seller) {
+            let _ = firm.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, paid, "export")
+                    .credit(Account::Revenue, paid, "export")
+                    .credit(Account::Inventory, carrying, "export cogs")
+                    .debit(Account::CostOfGoods, carrying, "export cogs"),
+            );
+            firm.last_week_units_sold.insert((region, product), qty);
+        }
+        let _ = world.outside.gateway_book.commit(
+            world.tick,
+            Txn::new()
+                .credit(Account::Cash, paid, "export purchase")
+                .debit(Account::Inventory, paid, "export purchase"),
+        );
+        remaining = MilliLots(remaining.0 - qty.0);
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -847,6 +958,55 @@ mod tests {
         }];
         let fills = allocate(1_000, &offers, &requests);
         assert!(fills.is_empty(), "no budget dust trade");
+    }
+
+    #[test]
+    fn gateway_export_never_sells_stock_promised_to_contracts() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            193,
+            crate::state::ScenarioKind::Founder,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let product = dataset.product_index["food_raw"];
+        let seller = world
+            .firms
+            .iter()
+            .find(|(_, firm)| firm.stock(product, firm.region).0 > 4_000)
+            .map(|(handle, _)| handle)
+            .expect("a producer with stock");
+        let region = world.firm(seller).unwrap().region;
+        let available = world.firm(seller).unwrap().stock(product, region);
+        // Commit half the stock to a real contract, then export the surplus.
+        let buyer = world
+            .firms
+            .iter()
+            .find(|(handle, _)| *handle != seller)
+            .map(|(handle, _)| handle)
+            .unwrap();
+        let committed = MilliLots(available.0 / 2);
+        let contract = crate::state::Contract {
+            buyer,
+            seller,
+            product,
+            from_region: region,
+            to_region: world.firm(buyer).unwrap().region,
+            quantity_weekly: committed,
+            price_cents: dataset.reference_price(product),
+            penalty_bps: 500,
+            escrow_cents: 0,
+            remaining_weeks: 4,
+            next_delivery: cw_core::calendar::Tick(world.tick.0 + 1),
+            status: crate::state::ContractStatus::Active,
+            shortfalls: MilliLots::ZERO,
+        };
+        world.contracts.insert(contract);
+        sell_surplus_to_gateway(&mut world, &dataset, region, product);
+        assert!(
+            world.firm(seller).unwrap().stock(product, region).0 >= committed.0,
+            "committed stock is protected from export"
+        );
     }
 
     #[test]

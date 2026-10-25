@@ -204,6 +204,7 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
                 to_region: contract.to_region,
                 arrive: Tick(world.tick.0 + lead_time_weeks(km)),
                 unit_price_cents: price,
+                goods_value_cents: paid_goods,
                 freight_cents: paid_freight,
             });
         }

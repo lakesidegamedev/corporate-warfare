@@ -15,7 +15,7 @@ use cw_core::money::{Cents, round_even_div};
 use cw_core::quantity::MilliLots;
 use cw_data::Dataset;
 
-use crate::economy::{deals, equity, governance, insolvency, ownership, policy, research, unions};
+use crate::economy::{deals, equity, governance, insolvency, ownership, policy, unions};
 use crate::state::{
     BankModel, Bond, DealKind, Facility, FacilityStatus, Firm, FirmStatus, Grade, HolderId,
     INITIAL_SHARES, Lender, Loan, Policies, PolicyKind, ShareLot, World,
@@ -952,25 +952,14 @@ fn apply_intent(
                     detail: ArithmeticFault::OutOfRange,
                 });
             }
+            // A budget is per-week policy spent by the weekly marketing step, not a one-off
+            // charge at submission.
             world
                 .firms
                 .get_mut(*firm)
                 .unwrap()
                 .policies
                 .marketing_budget_cents = *amount_cents;
-            for product in 0..dataset.products.len() as u16 {
-                let region = world.firms.get(*firm).map(|f| f.region).unwrap_or(0);
-                if *amount_cents > 0 {
-                    research::spend_brand(
-                        world,
-                        *firm,
-                        region,
-                        product,
-                        *amount_cents / dataset.products.len() as i64,
-                        dataset.reference_price(product) * 100,
-                    );
-                }
-            }
             Ok(())
         }
         CommandIntent::SetResearchBudget { firm, amount_cents } => {
@@ -1181,6 +1170,7 @@ fn apply_intent(
                         to_region: *region,
                         arrive: Tick(world.tick.0 + crate::economy::freight::lead_time_weeks(km)),
                         unit_price_cents: *max_price_cents,
+                        goods_value_cents: goods_value,
                         freight_cents: freight,
                     });
                     return Ok(());

@@ -684,6 +684,8 @@ pub struct Shipment {
     pub to_region: u8,
     pub arrive: Tick,
     pub unit_price_cents: i64,
+    /// Goods value actually paid by the buyer, carried into inventory at receipt.
+    pub goods_value_cents: i64,
     pub freight_cents: i64,
 }
 
