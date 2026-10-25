@@ -85,6 +85,8 @@ pub enum Query {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Detail {
+    /// The caller has no management right or completed diligence for this entity.
+    Restricted,
     Overview(Overview),
     Firms(Vec<FirmSummary>),
     Firm(FirmSummary),
@@ -739,6 +741,32 @@ impl Session {
         )
     }
 
+    /// Private firm data needs a management right, public disclosure, or completed diligence.
+    pub fn can_inspect(&self, handle: u64) -> bool {
+        let firm_handle = Handle(handle);
+        let Some(firm) = self.world.firm(firm_handle) else {
+            return false;
+        };
+        if firm.shares.qty(cw_sim::state::HolderId::Investor) > 0
+            || self.world.investor.managed_firms.contains(&firm_handle)
+        {
+            return true;
+        }
+        if firm.shares.ipo_done {
+            return true;
+        }
+        // A deal the investor's group funded and has already taken through diligence.
+        self.world.deals.iter().any(|(_, deal)| {
+            deal.target == firm_handle
+                && self.world.tick.0 >= deal.diligence_until.0
+                && self
+                    .world
+                    .firm(deal.buyer)
+                    .map(|buyer| buyer.shares.qty(cw_sim::state::HolderId::Investor) > 0)
+                    .unwrap_or(false)
+        })
+    }
+
     pub fn query(&self, query: Query) -> Detail {
         let world = &self.world;
         match query {
@@ -748,32 +776,56 @@ impl Session {
                     .firms
                     .handles_sorted()
                     .into_iter()
-                    .filter_map(|handle| dto::firm_summary(world, &self.dataset, handle.0))
+                    .filter_map(|handle| {
+                        dto::firm_summary(
+                            world,
+                            &self.dataset,
+                            handle.0,
+                            self.can_inspect(handle.0),
+                        )
+                    })
                     .collect(),
             ),
-            Query::Firm(handle) => Detail::Firm(
-                dto::firm_summary(world, &self.dataset, handle)
-                    .unwrap_or_else(|| empty_firm(handle)),
-            ),
-            Query::Facilities(firm) => Detail::Facilities(
-                world
-                    .firms
-                    .get(cw_core::ids::Handle(firm))
-                    .map(|entity| {
-                        entity
-                            .facilities
-                            .iter()
-                            .filter_map(|handle| {
-                                dto::facility_summary(world, &self.dataset, handle.0)
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-            ),
-            Query::Facility(handle) => Detail::Facility(
-                dto::facility_summary(world, &self.dataset, handle)
-                    .unwrap_or_else(|| empty_facility(handle)),
-            ),
+            Query::Firm(handle) => {
+                let summary =
+                    dto::firm_summary(world, &self.dataset, handle, self.can_inspect(handle))
+                        .unwrap_or_else(|| empty_firm(handle));
+                Detail::Firm(summary)
+            }
+            Query::Facilities(firm) => {
+                if !self.can_inspect(firm) {
+                    return Detail::Restricted;
+                }
+                Detail::Facilities(
+                    world
+                        .firms
+                        .get(cw_core::ids::Handle(firm))
+                        .map(|entity| {
+                            entity
+                                .facilities
+                                .iter()
+                                .filter_map(|handle| {
+                                    dto::facility_summary(world, &self.dataset, handle.0)
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                )
+            }
+            Query::Facility(handle) => {
+                let owner = world
+                    .facilities
+                    .get(cw_core::ids::Handle(handle))
+                    .map(|facility| facility.firm.0)
+                    .unwrap_or(0);
+                if !self.can_inspect(owner) {
+                    return Detail::Restricted;
+                }
+                Detail::Facility(
+                    dto::facility_summary(world, &self.dataset, handle)
+                        .unwrap_or_else(|| empty_facility(handle)),
+                )
+            }
             Query::Regions(selected) => {
                 let from = selected
                     .and_then(|code| world.region_index(&code))
@@ -784,15 +836,41 @@ impl Session {
                         .collect(),
                 )
             }
-            Query::Finance(handle) => Detail::Finance(
-                dto::finance_summary(world, handle).unwrap_or_else(|| empty_finance(handle)),
-            ),
-            Query::Ownership(handle) => Detail::Ownership(
-                dto::ownership_summary(world, handle).unwrap_or_else(|| empty_ownership(handle)),
-            ),
-            Query::Contracts(firm) => Detail::Contracts(dto::contracts(world, &self.dataset, firm)),
-            Query::Loans(firm) => Detail::Loans(dto::loans(world, firm)),
-            Query::Insurance(firm) => Detail::Insurance(dto::insurance(world, firm)),
+            Query::Finance(handle) => {
+                if !self.can_inspect(handle) {
+                    return Detail::Restricted;
+                }
+                Detail::Finance(
+                    dto::finance_summary(world, handle).unwrap_or_else(|| empty_finance(handle)),
+                )
+            }
+            Query::Ownership(handle) => {
+                if !self.can_inspect(handle) {
+                    return Detail::Restricted;
+                }
+                Detail::Ownership(
+                    dto::ownership_summary(world, handle)
+                        .unwrap_or_else(|| empty_ownership(handle)),
+                )
+            }
+            Query::Contracts(firm) => {
+                if !self.can_inspect(firm) {
+                    return Detail::Restricted;
+                }
+                Detail::Contracts(dto::contracts(world, &self.dataset, firm))
+            }
+            Query::Loans(firm) => {
+                if !self.can_inspect(firm) {
+                    return Detail::Restricted;
+                }
+                Detail::Loans(dto::loans(world, firm))
+            }
+            Query::Insurance(firm) => {
+                if !self.can_inspect(firm) {
+                    return Detail::Restricted;
+                }
+                Detail::Insurance(dto::insurance(world, firm))
+            }
             Query::Deals => Detail::Deals(dto::deals(world)),
             Query::Events => Detail::Events(dto::events(world, &self.dataset)),
             Query::Market(region, product) => {
@@ -889,6 +967,7 @@ fn empty_firm(handle: u64) -> FirmSummary {
         controlled: false,
         ceo_is_investor: false,
         facilities: 0,
+        restricted: true,
     }
 }
 
@@ -1030,6 +1109,95 @@ mod tests {
         let due = session.overview();
         assert_eq!(due.next_action_key, "advice.restore_solvency");
         assert!(due.next_action_reason.contains("grace"));
+    }
+
+    #[test]
+    fn private_firm_data_needs_management_public_disclosure_or_diligence() {
+        let session = Session::create(config(221)).unwrap();
+        let primary = session.world.investor.primary_group.unwrap();
+        assert!(
+            session.can_inspect(primary.0),
+            "management sees its own firm"
+        );
+        assert!(matches!(
+            session.query(Query::Finance(primary.0)),
+            Detail::Finance(_)
+        ));
+        let private = session
+            .world
+            .firms
+            .iter()
+            .find(|(handle, firm)| *handle != primary && !firm.shares.ipo_done)
+            .map(|(handle, _)| handle)
+            .expect("a private rival");
+        assert!(!session.can_inspect(private.0));
+        assert!(matches!(
+            session.query(Query::Finance(private.0)),
+            Detail::Restricted
+        ));
+        assert!(matches!(
+            session.query(Query::Ownership(private.0)),
+            Detail::Restricted
+        ));
+        assert!(matches!(
+            session.query(Query::Facilities(private.0)),
+            Detail::Restricted
+        ));
+        if let Detail::Firm(summary) = session.query(Query::Firm(private.0)) {
+            assert!(summary.restricted);
+            assert_eq!(summary.cash_cents, 0, "private cash is not disclosed");
+        } else {
+            panic!("firm summary");
+        }
+        let public = session
+            .world
+            .firms
+            .iter()
+            .find(|(handle, firm)| *handle != primary && firm.shares.ipo_done)
+            .map(|(handle, _)| handle);
+        if let Some(public) = public {
+            assert!(
+                session.can_inspect(public.0),
+                "public statements are disclosed"
+            );
+        }
+    }
+
+    #[test]
+    fn completed_diligence_grants_access_to_a_private_target() {
+        let mut session = Session::create(config(222)).unwrap();
+        let primary = session.world.investor.primary_group.unwrap();
+        let target = session
+            .world
+            .firms
+            .iter()
+            .find(|(handle, firm)| *handle != primary && !firm.shares.ipo_done)
+            .map(|(handle, _)| handle)
+            .unwrap();
+        assert!(!session.can_inspect(target.0));
+        session.world.deals.insert(cw_sim::state::Deal {
+            buyer: primary,
+            target,
+            kind: cw_sim::state::DealKind::SharePurchase,
+            state: cw_sim::state::DealState::Diligence,
+            escrow_cents: 0,
+            offer_price_cents: 1,
+            max_shares: 1,
+            committed_shares: 0,
+            started: cw_core::calendar::Tick(0),
+            diligence_until: cw_core::calendar::Tick(0),
+            offer_deadline: cw_core::calendar::Tick(4),
+            review_deadline: None,
+            frozen_fair_cents: 1,
+            review_required: false,
+            remedy_share_bps: 0,
+            hostile: false,
+            diligence_paid: true,
+        });
+        assert!(
+            session.can_inspect(target.0),
+            "diligence reveals the statements"
+        );
     }
 
     #[test]

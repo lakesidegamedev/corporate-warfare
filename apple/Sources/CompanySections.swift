@@ -107,6 +107,9 @@ struct FinanceView: View {
                             }
                         }
                     }
+                } else if store.selectedFirmDto?.restricted == true {
+                    EmptyNote(text: "This company is private. Management rights or a completed diligence give access to its statements, facilities and contracts.")
+                        .accessibilityLabel("Private company statements are restricted")
                 } else {
                     EmptyNote(text: "Select a company on the Portfolio tab.")
                 }
