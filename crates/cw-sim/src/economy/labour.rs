@@ -27,6 +27,108 @@ pub fn clear(world: &mut World, dataset: &Dataset) {
         }
     }
     pay_payroll(world);
+    train(world);
+}
+
+/// Paid skill training. At most 0.1 percent of a tier's workforce is upgraded each week, paid
+/// from the firm's explicit training budget, with the regional training grant covering the
+/// government share from its finite budget. Workers move between tiers; none are created.
+pub fn train(world: &mut World) {
+    const COST_PER_WORKER_CENTS: i64 = 50_000;
+    let handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
+    for firm_handle in handles {
+        let Some(firm) = world.firms.get(firm_handle) else {
+            continue;
+        };
+        if !firm.operative() {
+            continue;
+        }
+        let budget = firm.policies.training_budget_cents.max(0);
+        if budget <= 0 {
+            continue;
+        }
+        let facilities: Vec<Handle> = firm.facilities.clone();
+        let mut remaining = budget;
+        for facility_handle in facilities {
+            let Some(facility) = world.facilities.get(facility_handle) else {
+                continue;
+            };
+            if facility.status != crate::state::FacilityStatus::Operating {
+                continue;
+            }
+            let region = facility.region;
+            let grant = world
+                .regions
+                .get(region as usize)
+                .map(|state| {
+                    state
+                        .policy
+                        .training_grant_until
+                        .map(|until| until.0 > world.tick.0)
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false);
+            for tier in 0..2usize {
+                if remaining < COST_PER_WORKER_CENTS {
+                    break;
+                }
+                let Some(facility) = world.facilities.get(facility_handle) else {
+                    continue;
+                };
+                let eligible = facility.workers[tier];
+                if eligible <= 0 {
+                    continue;
+                }
+                let cap = (eligible * 10 / 10_000).max(1);
+                let affordable = (remaining / COST_PER_WORKER_CENTS).max(0);
+                let upgrade = cap.min(affordable);
+                if upgrade <= 0 {
+                    continue;
+                }
+                let full_cost = upgrade * COST_PER_WORKER_CENTS;
+                let subsidy = if grant {
+                    (full_cost * 20 / 100).min(world.government.training_budget_cents)
+                } else {
+                    0
+                };
+                let firm_cost = full_cost - subsidy;
+                let cash = world
+                    .firms
+                    .get(firm_handle)
+                    .map(|entity| entity.book.cash())
+                    .unwrap_or(0);
+                if cash < firm_cost {
+                    continue;
+                }
+                if let Some(entity) = world.firms.get_mut(firm_handle) {
+                    let _ = entity.book.commit(
+                        world.tick,
+                        cw_core::ledger::Txn::new()
+                            .credit(cw_core::ledger::Account::Cash, firm_cost, "training")
+                            .debit(cw_core::ledger::Account::Wages, firm_cost, "training"),
+                    );
+                }
+                if subsidy > 0 {
+                    world.government.training_budget_cents -= subsidy;
+                    let _ = world.government.book.commit(
+                        world.tick,
+                        cw_core::ledger::Txn::new()
+                            .credit(cw_core::ledger::Account::Cash, subsidy, "training grant")
+                            .debit(
+                                cw_core::ledger::Account::OperatingExpense,
+                                subsidy,
+                                "training grant",
+                            ),
+                    );
+                }
+                if let Some(facility) = world.facilities.get_mut(facility_handle) {
+                    facility.workers[tier] -= upgrade;
+                    facility.workers[tier + 1] += upgrade;
+                }
+                remaining -= full_cost;
+            }
+        }
+    }
 }
 
 fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: usize) {
@@ -251,6 +353,42 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn paid_training_moves_workers_between_tiers_without_creating_any() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 711, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world.investor.primary_group.unwrap();
+        let facility_handle = world.firm(firm).unwrap().facilities[0];
+        let before_workers = world.facilities.get(facility_handle).unwrap().workers;
+        let total_before: i64 = before_workers.iter().sum();
+        let cash_before = world.firm(firm).unwrap().book.cash();
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .policies
+            .training_budget_cents = 500_000;
+        train(&mut world);
+        let after_workers = world.facilities.get(facility_handle).unwrap().workers;
+        let total_after: i64 = after_workers.iter().sum();
+        assert_eq!(total_after, total_before, "training never creates workers");
+        assert!(
+            after_workers[2] > before_workers[2],
+            "a worker reaches the high tier"
+        );
+        assert!(
+            after_workers[0] < before_workers[0],
+            "a low-tier worker leaves the bottom"
+        );
+        assert!(
+            world.firm(firm).unwrap().book.cash() < cash_before,
+            "the firm pays"
+        );
+        assert!(world.firm(firm).unwrap().book.is_balanced());
+        // At most 0.1 percent of the tier per week.
+        assert!(before_workers[0] - after_workers[0] <= (before_workers[0] / 1000).max(1));
     }
 
     #[test]

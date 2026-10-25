@@ -307,6 +307,60 @@ struct LoanSheet: View {
     }
 }
 
+struct TrainingBudgetSheet: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var amountText = ""
+    @State private var preview: PreviewDto?
+    @State private var rejection: CommandRejection?
+
+    private var firm: FirmDto? { store.selectedFirmDto }
+    private var amount: Int64? { parseDollarsToCents(amountText) }
+
+    private func json() -> String? {
+        guard let firm, let amount else { return nil }
+        return CommandJSON.command("SetTrainingBudget", ["firm": firm.handle, "amount_cents": amount])
+    }
+
+    var body: some View {
+        CommandSheet(
+            title: "Fund skill training",
+            actorName: firm?.name ?? "No company",
+            actorDetail: "At most 0.1 percent of a tier trains each week. Workers move from low to mid and mid to high; no workers are created. A regional training grant covers twenty percent from the finite government budget.",
+            submitTitle: "Set budget",
+            preview: preview,
+            rejection: rejection,
+            isBusy: store.isBusy,
+            canSubmit: json() != nil,
+            onSubmit: {
+                guard let json = json() else { return false }
+                if let rejection = await store.submit(json) {
+                    self.rejection = rejection
+                    return false
+                }
+                return true
+            }
+        ) {
+            Section("Weekly budget") {
+                TextField("Training budget in dollars per week", text: $amountText)
+                    .keyboardType(.decimalPad)
+                    .accessibilityLabel("Weekly training budget in dollars")
+                Text("Training raises the wage bill as workers move to higher tiers. Set zero to stop.")
+                    .font(.caption)
+            }
+        }
+        .task { await refresh() }
+        .onChange(of: amountText) { _, _ in Task { await refresh() } }
+    }
+
+    private func refresh() async {
+        guard let json = json() else {
+            preview = nil
+            return
+        }
+        preview = await store.preview(json)
+    }
+}
+
 struct BondSheet: View {
     @EnvironmentObject private var store: AppStore
     @State private var principalText = ""

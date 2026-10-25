@@ -344,6 +344,10 @@ pub struct Policies {
     pub production_target_bps: i32,
     pub marketing_budget_cents: i64,
     pub research_budget_cents: i64,
+    /// Weekly budget for paid skill training. Training moves workers between tiers; it never
+    /// creates workers.
+    #[serde(default)]
+    pub training_budget_cents: i64,
     /// Desired weeks of input cover for automatic purchasing.
     pub input_cover_weeks: i32,
 }
@@ -356,6 +360,7 @@ impl Default for Policies {
             production_target_bps: 10_000,
             marketing_budget_cents: 0,
             research_budget_cents: 0,
+            training_budget_cents: 0,
             input_cover_weeks: 4,
         }
     }
