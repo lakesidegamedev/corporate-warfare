@@ -257,6 +257,7 @@ dependencies = [
  "cw-core",
  "cw-data",
  "cw-sim",
+ "postcard",
  "serde",
 ]
 

@@ -7,6 +7,8 @@
 pub mod dto;
 pub mod save;
 
+use std::collections::BTreeMap;
+
 use cw_core::error::DomainError;
 use cw_core::ids::Handle;
 use cw_core::money::round_even_div;
@@ -112,6 +114,23 @@ pub struct Session {
     pub career_id: u64,
     pub config: ScenarioConfig,
     log: ReplayLog,
+    /// Rival command outcomes for this process. Diagnostic only: never saved or hashed.
+    pub ai_log: AiLog,
+}
+
+/// Accepted and rejected rival commands by archetype, with rejection reasons. Rejected
+/// proposals are logged here and never mutate the world.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct AiLog {
+    pub by_archetype: BTreeMap<String, ArchetypeActions>,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct ArchetypeActions {
+    pub accepted: u64,
+    pub rejected: u64,
+    pub accepted_by_command: BTreeMap<String, u64>,
+    pub rejected_by_reason: BTreeMap<String, u64>,
 }
 
 impl Session {
@@ -136,6 +155,7 @@ impl Session {
             career_id,
             config,
             log,
+            ai_log: AiLog::default(),
         })
     }
 
@@ -567,7 +587,30 @@ impl Session {
                 submitted_tick: self.world.tick.0,
                 intent: proposal.intent,
             };
-            let _ = apply(&mut self.world, &self.dataset, &envelope);
+            let archetype = self
+                .world
+                .firms
+                .get(Handle(proposal.actor))
+                .and_then(|firm| firm.archetype)
+                .map(|archetype| archetype.key())
+                .unwrap_or("none")
+                .to_owned();
+            let command = envelope.intent.key();
+            let result = apply(&mut self.world, &self.dataset, &envelope);
+            let row = self.ai_log.by_archetype.entry(archetype).or_default();
+            match result {
+                Ok(_) => {
+                    row.accepted += 1;
+                    *row.accepted_by_command
+                        .entry(command.to_owned())
+                        .or_insert(0) += 1;
+                }
+                Err(error) => {
+                    row.rejected += 1;
+                    let reason = format!("{command}: {}", error.key());
+                    *row.rejected_by_reason.entry(reason).or_insert(0) += 1;
+                }
+            }
         }
     }
 
@@ -922,6 +965,7 @@ impl Session {
             career_id,
             config,
             log,
+            ai_log: AiLog::default(),
         })
     }
 

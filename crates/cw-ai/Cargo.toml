@@ -10,3 +10,6 @@ cw-core.workspace = true
 cw-data.workspace = true
 cw-sim.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+postcard.workspace = true
