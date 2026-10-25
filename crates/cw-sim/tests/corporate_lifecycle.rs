@@ -289,6 +289,109 @@ fn a_parent_guarantee_backs_a_failed_subsidiary_only_up_to_its_cap() {
 }
 
 #[test]
+fn a_legal_merger_moves_assets_debt_facilities_and_contracts() {
+    let mut world = world(407);
+    let handles: Vec<_> = world
+        .firms
+        .iter()
+        .filter(|(_, firm)| firm.operative())
+        .map(|(handle, _)| handle)
+        .take(2)
+        .collect();
+    let (buyer, target) = (handles[0], handles[1]);
+    // The buyer owns the whole target, so the ninety-percent squeeze-out is satisfied.
+    {
+        let entity = world.firms.get_mut(target).unwrap();
+        let issued = entity.shares.issued;
+        entity.shares.holders.clear();
+        entity.shares.add(HolderId::Firm(buyer), issued, 0);
+    }
+    let target_assets = world.firm(target).unwrap().book.total_assets();
+    let target_facilities = world.firm(target).unwrap().facilities.len();
+    let buyer_facilities = world.firm(buyer).unwrap().facilities.len();
+    let loan = world.loans.insert(cw_sim::state::Loan {
+        borrower: target,
+        lender: cw_sim::state::Lender::Outside(0),
+        principal_remaining_cents: 1_000_000,
+        rate_bps: 600,
+        weekly_principal_cents: 10_000,
+        remaining_weeks: 100,
+        collateral: None,
+        secured: false,
+        created: Tick(0),
+        carry: 0,
+        defaulted: false,
+    });
+    world.firms.get_mut(target).unwrap().loans.push(loan);
+    let deal = world.deals.insert(cw_sim::state::Deal {
+        buyer,
+        target,
+        kind: DealKind::Merger,
+        state: DealState::Settled,
+        escrow_cents: 0,
+        offer_price_cents: 1,
+        max_shares: 0,
+        committed_shares: 0,
+        started: Tick(0),
+        diligence_until: Tick(0),
+        offer_deadline: Tick(0),
+        review_deadline: None,
+        frozen_fair_cents: 1,
+        review_required: false,
+        remedy_share_bps: 0,
+        hostile: false,
+        diligence_paid: true,
+    });
+    let dataset = Dataset::load().unwrap();
+    let revision = world.revision;
+    let tick = world.tick.0;
+    cw_sim::commands::apply(
+        &mut world,
+        &dataset,
+        &cw_sim::commands::CommandEnvelope {
+            command_id_high: 1,
+            command_id_low: 1,
+            actor: buyer.0,
+            expected_revision: revision,
+            submitted_tick: tick,
+            intent: cw_sim::commands::CommandIntent::ProposeMerger { deal },
+        },
+    )
+    .expect("merger accepted");
+    assert!(matches!(
+        world.firm(target).unwrap().status,
+        FirmStatus::Merged { .. }
+    ));
+    assert_eq!(world.firm(target).unwrap().shares.issued, 0);
+    for account in cw_core::ledger::Account::ALL {
+        assert_eq!(
+            world.firm(target).unwrap().book.balance(account),
+            0,
+            "target is empty"
+        );
+    }
+    assert_eq!(
+        world.firm(buyer).unwrap().facilities.len(),
+        buyer_facilities + target_facilities,
+        "facilities move to the survivor"
+    );
+    assert_eq!(
+        world.loans.get(loan).unwrap().borrower,
+        buyer,
+        "debt follows the merger"
+    );
+    assert!(
+        world
+            .contracts
+            .iter()
+            .all(|(_, contract)| contract.buyer != target && contract.seller != target),
+        "contracts are reattached"
+    );
+    assert!(world.firm(buyer).unwrap().book.is_balanced());
+    assert!(target_assets > 0);
+}
+
+#[test]
 fn liquidation_pays_creditors_before_equity_and_keeps_siblings() {
     let mut world = world(405);
     let doomed = world

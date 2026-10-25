@@ -177,3 +177,17 @@ Test: `commands::tests::bond_trades_pay_accrued_interest_on_top_of_principal`.
 Tests: `credit::tests::weekly_interest_carry_posts_the_exact_term_amount` and
 `policy::tests::the_cooldown_survives_resolution_and_spans_the_group`. Canonical hash re-pinned to
 `893ccbe0...` because the persisted interest carry is part of state.
+
+### Legal merger settlement, 2026-10-25
+
+The merger path previously moved a book value to `OtherAssets` and stranded the target's cash,
+debt, facilities, contracts, loans, bonds and policies on a shell. A merger now:
+
+- transfers every target account balance into the buyer, removes the buyer's investment in the
+  target and books the difference to retained earnings, so both ledgers stay balanced and the
+  target winds down to zero;
+- reattaches facilities, supply contracts, loans, bonds and insurance policies to the survivor;
+- retires the target shares and marks it merged.
+
+Test: `corporate_lifecycle.rs::a_legal_merger_moves_assets_debt_facilities_and_contracts`.
+Asset purchases remain a separate path and are not merged into this rule.
