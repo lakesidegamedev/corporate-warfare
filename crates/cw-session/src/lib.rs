@@ -8,6 +8,7 @@ pub mod dto;
 pub mod save;
 
 use cw_core::error::DomainError;
+use cw_core::ids::Handle;
 use cw_core::money::round_even_div;
 use cw_data::{Dataset, Difficulty};
 use cw_sim::commands::{CommandEnvelope, CommandIntent, CommandReceipt, Preview, apply};
@@ -629,6 +630,7 @@ impl Session {
                 });
             }
         }
+        let advice = self.next_action();
         Overview {
             tick: world.tick.0,
             week_label: world.tick.label(),
@@ -642,7 +644,99 @@ impl Session {
             last_week_ebit_cents: ebit,
             alerts,
             pause: world.pending_pause.clone(),
+            next_action_key: advice.0,
+            next_action_reason: advice.1,
         }
+    }
+
+    /// One recommended next action with a reason. Deterministic, based only on visible state:
+    /// solvency before growth, staffing before price, stock before expansion.
+    fn next_action(&self) -> (String, String) {
+        let world = &self.world;
+        let controlled: Vec<Handle> = world
+            .firms
+            .iter()
+            .filter(|(_, firm)| firm.shares.qty(cw_sim::state::HolderId::Investor) > 0)
+            .map(|(handle, _)| handle)
+            .collect();
+        if controlled.is_empty() {
+            return (
+                "advice.find_a_firm".to_owned(),
+                "You do not control a company. Found one with personal capital, or take the management contract when eligible.".to_owned(),
+            );
+        }
+        for handle in &controlled {
+            let firm = world.firm(*handle).unwrap();
+            if matches!(
+                firm.status,
+                cw_sim::state::FirmStatus::PastDue { .. }
+                    | cw_sim::state::FirmStatus::Restructuring { .. }
+            ) {
+                return (
+                    "advice.restore_solvency".to_owned(),
+                    format!(
+                        "{} cannot meet a due payment. Sell unpledged stock, raise funded equity or negotiate before the four-week grace ends.",
+                        firm.name
+                    ),
+                );
+            }
+        }
+        let primary = world
+            .investor
+            .primary_group
+            .filter(|handle| world.firms.contains(*handle));
+        let Some(primary) = primary else {
+            return (
+                "advice.choose_company".to_owned(),
+                "Choose the company you want to operate from the portfolio.".to_owned(),
+            );
+        };
+        let firm = world.firm(primary).unwrap();
+        let outflow = cw_sim::economy::insolvency::mandatory_weekly_outflow(world, primary);
+        if outflow > 0 && firm.book.cash() < outflow * 8 {
+            return (
+                "advice.build_cash_buffer".to_owned(),
+                format!(
+                    "{} holds less than eight weeks of mandatory payroll and debt service. Raise a price that still clears, cut marketing, or seek legal credit.",
+                    firm.name
+                ),
+            );
+        }
+        let understaffed = firm
+            .facilities
+            .iter()
+            .filter_map(|handle| world.facilities.get(*handle))
+            .find(|facility| {
+                facility.status == cw_sim::state::FacilityStatus::Operating
+                    && facility.last_staff_ratio_bps < 8_500
+            });
+        if let Some(facility) = understaffed {
+            return (
+                "advice.raise_wage".to_owned(),
+                format!(
+                    "A facility is staffed at {} percent, so capacity is idle. Raise the wage offer toward the regional prevailing wage.",
+                    facility.last_staff_ratio_bps / 100
+                ),
+            );
+        }
+        for ((region, product), sold) in &firm.last_week_units_sold {
+            let sold = sold.lots();
+            let stock = firm.stock(*product, *region).lots();
+            if sold > 0 && stock > sold.saturating_mul(4) {
+                return (
+                    "advice.clear_stock".to_owned(),
+                    format!(
+                        "You hold {} lots of {} against {} sold last week. Lower the price within the allowed band or sell surplus through a contract.",
+                        stock, self.dataset.products[*product as usize].name, sold
+                    ),
+                );
+            }
+        }
+        (
+            "advice.operate".to_owned(),
+            "Step one week and compare the result with the forecast. Then inspect the facility bottleneck before expanding."
+                .to_owned(),
+        )
     }
 
     pub fn query(&self, query: Query) -> Detail {
@@ -896,6 +990,46 @@ mod tests {
         bytes[index] ^= 0xFF;
         assert!(Session::import_save(&bytes).is_err());
         assert_eq!(session.world.tick.0, 2);
+    }
+
+    #[test]
+    fn the_next_action_prioritises_solvency_then_cash_then_operation() {
+        let mut session = Session::create(config(211)).unwrap();
+        let initial = session.overview();
+        assert!(!initial.next_action_key.is_empty());
+        assert!(!initial.next_action_reason.is_empty());
+        let firm = session.world.investor.primary_group.unwrap();
+        // Low cash produces the cash-buffer advice.
+        session
+            .world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .book
+            .commit(
+                session.world.tick,
+                cw_core::ledger::Txn::new()
+                    .credit(cw_core::ledger::Account::Cash, 90_000_000, "drain")
+                    .debit(
+                        cw_core::ledger::Account::OperatingExpense,
+                        90_000_000,
+                        "drain",
+                    ),
+            )
+            .unwrap();
+        let low = session.overview();
+        assert_eq!(low.next_action_key, "advice.build_cash_buffer");
+        // A past-due firm outranks the cash advice.
+        cw_sim::economy::insolvency::defer_expense(
+            &mut session.world,
+            firm,
+            1_000_000,
+            cw_core::ledger::Account::Wages,
+            "unpaid",
+        );
+        let due = session.overview();
+        assert_eq!(due.next_action_key, "advice.restore_solvency");
+        assert!(due.next_action_reason.contains("grace"));
     }
 
     #[test]

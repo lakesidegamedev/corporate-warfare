@@ -69,6 +69,16 @@ struct OverviewView: View {
                             )
                         }
 
+                        if !overview.nextActionKey.isEmpty {
+                            SectionCard(title: "Next action") {
+                                Text(overview.nextActionReason)
+                                    .font(.body)
+                                Text("One recommendation, not an order. The engine picks it from solvency, staffing and stock, in that order.")
+                                    .font(.footnote)
+                                    .foregroundStyle(Theme.secondaryText(for: scheme))
+                            }
+                        }
+
                         RunControls()
 
                         SectionCard(title: "Four-week cash forecast") {
