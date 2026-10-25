@@ -304,3 +304,13 @@ undelivered value after a two-week grace. New and acquired defense plants can wi
 Weekly delivery plus grace is the milestone mechanism; no separate milestone object is invented.
 The fiscal budgets remain seeded baselines because weekly labour-income tax is not yet posted,
 so a trailing-receipt mean would be fabricated. Evidence: `evidence/defense-procurement.md`.
+
+### Labour income tax and trailing budgets, 2026-10-25
+
+Taxable earned labour income now pays twenty percent to the government each week. Corporate
+tax payments join the same receipt total, and the procurement, healthcare and training budgets
+are recomputed from the trailing thirteen-week mean at the close of every week. Transfer support
+is paid after tax and is not taxed. The seed starts with thirteen baseline receipt weeks. Labour
+tax is withheld on gross earned wages because the household model has no per-worker cash ledger;
+paid-wage-only withholding and the transfer-support budget remain named gaps. Evidence:
+`evidence/fiscal-labour.md`.

@@ -1161,10 +1161,15 @@ fn healthcare_care_is_bought_by_households_and_the_healthcare_budget() {
         government_expense <= healthcare_budget,
         "government care spending stays inside the healthcare budget"
     );
+    let labour_tax = *world
+        .government
+        .tax_receipts_history
+        .last()
+        .expect("closed fiscal week");
     assert_eq!(
-        government_cash_before - world.government.book.cash(),
+        government_cash_before + labour_tax - world.government.book.cash(),
         government_expense,
-        "government care spending has a cash counterparty"
+        "government care spending has a cash counterparty after labour tax"
     );
     assert!(
         lifetime_revenue(&world, clinic) > 0,
@@ -1770,6 +1775,10 @@ fn defense_procurement_is_capped_by_the_government_budget() {
     let price = dataset.reference_price(defense);
     let budget = price * 4;
     world.government.procurement_budget_cents = budget;
+    // The fiscal close at the end of the earlier week recomputed the other budgets; isolate the
+    // funded procurement leg again before this week settles.
+    world.government.healthcare_budget_cents = 0;
+    world.government.training_budget_cents = 0;
     // Isolate the funded cash leg: without a deposit, every accepted lot is paid from budget.
     for (_, procurement) in world.procurements.iter_mut() {
         procurement.unearned_cents = 0;
@@ -1805,10 +1814,15 @@ fn defense_procurement_is_capped_by_the_government_budget() {
         budget / price,
         "exactly the funded deliveries left the plants"
     );
+    let labour_tax = *world
+        .government
+        .tax_receipts_history
+        .last()
+        .expect("closed fiscal week");
     assert_eq!(
-        government_cash_before - world.government.book.cash(),
+        government_cash_before + labour_tax - world.government.book.cash(),
         budget,
-        "procurement spending is capped and has a cash counterparty"
+        "procurement spending is capped and has a cash counterparty after labour tax"
     );
     assert_invariants(&world);
 }
