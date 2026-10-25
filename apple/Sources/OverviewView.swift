@@ -66,7 +66,7 @@ struct OverviewView: View {
                             if store.controlledFirms.isEmpty {
                                 EmptyNote(text: "You do not control a company. Open Company to review the portfolio or start again from the management contract when eligible.")
                             } else {
-                                ForEach(store.controlledFirms) { firm in
+                                ForEach(store.controlledFirms, id: \.handle) { firm in
                                     Button {
                                         Task { await store.selectFirm(firm.handle) }
                                     } label: {

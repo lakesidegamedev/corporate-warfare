@@ -618,6 +618,42 @@ mod tests {
     }
 
     #[test]
+    fn batching_does_not_change_the_result() {
+        let mut single = Session::create(config(176)).unwrap();
+        let mut batched = Session::create(config(176)).unwrap();
+        single.advance(1);
+        single.advance(1);
+        batched.advance(2);
+        assert_eq!(single.canonical_hash(), batched.canonical_hash());
+    }
+
+    #[test]
+    fn a_recorded_log_replays_to_the_same_hash() {
+        let mut session = Session::create(config(177)).unwrap();
+        let primary = session.world.investor.primary_group.unwrap();
+        let price = session.dataset.reference_price(0);
+        session
+            .submit(cw_sim::commands::CommandEnvelope {
+                command_id_high: 177,
+                command_id_low: 1,
+                actor: 0,
+                expected_revision: session.revision(),
+                submitted_tick: 0,
+                intent: CommandIntent::SetPrice {
+                    firm: primary,
+                    product: 0,
+                    price_cents: price,
+                },
+            })
+            .unwrap();
+        session.advance(3);
+        let log_text = session.export_replay();
+        let log: ReplayLog = serde_json::from_str(&log_text).unwrap();
+        let replayed = Session::replay(&log).unwrap();
+        assert_eq!(replayed, session.canonical_hash());
+    }
+
+    #[test]
     fn duplicate_command_ids_are_idempotent() {
         let mut session = Session::create(config(175)).unwrap();
         let primary = session.world.investor.primary_group.unwrap();
