@@ -415,7 +415,7 @@ fn assert_invariants(session: &Session) {
 
 #[test]
 fn a_mixed_valid_and_invalid_sequence_keeps_every_invariant() {
-    const COMMANDS: usize = 216;
+    const COMMANDS: usize = 540;
     const BATCH: usize = 27;
 
     let mut session = session(0x0BAD_5EED, ScenarioKind::Guided);
@@ -538,8 +538,8 @@ fn a_mixed_valid_and_invalid_sequence_keeps_every_invariant() {
         }
     }
 
-    assert_eq!(weeks, 8, "the sequence must span eight weeks");
-    assert_eq!(session.world.tick.0, 8);
+    assert_eq!(weeks, 20, "the sequence must span twenty weeks");
+    assert_eq!(session.world.tick.0, 20);
     assert_eq!(accepted + rejected, COMMANDS);
     assert!(
         accepted >= 40,
