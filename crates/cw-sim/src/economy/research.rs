@@ -76,6 +76,7 @@ pub fn weekly(world: &mut World, dataset: &cw_data::Dataset) {
                 }
             }
         }
+        spend_quality(world, dataset, handle);
         spend_marketing(world, dataset, handle);
         // Brand decay toward the neutral 10000 baseline.
         let brand_keys: Vec<(u8, u16)> = world
@@ -95,6 +96,64 @@ pub fn weekly(world: &mut World, dataset: &cw_data::Dataset) {
             }
         }
     }
+}
+
+/// Spend this week's quality investment. Each $1,000 spent adds one quality basis point, at most
+/// twenty-five a week, and quality never exceeds technology quality plus the prescribed 1,000 bps
+/// investment ceiling.
+fn spend_quality(world: &mut World, dataset: &cw_data::Dataset, handle: Handle) {
+    let Some(firm) = world.firms.get(handle) else {
+        return;
+    };
+    let budgets: Vec<(u16, i64)> = firm
+        .policies
+        .quality_budgets_cents
+        .iter()
+        .filter(|(_, amount)| **amount > 0)
+        .map(|(product, amount)| (*product, *amount))
+        .collect();
+    if budgets.is_empty() {
+        return;
+    }
+    for (product, budget) in budgets {
+        let cash = world
+            .firm(handle)
+            .map(|f| f.book.cash())
+            .unwrap_or(0)
+            .max(0);
+        let spend = budget.min(cash);
+        if spend <= 0 {
+            continue;
+        }
+        let tech = world.firm(handle).map(|f| f.tech_level).unwrap_or(0);
+        let ceiling = quality(tech, 1_000);
+        let current = world
+            .firm(handle)
+            .and_then(|f| f.quality_bps.get(&product).copied())
+            .unwrap_or_else(|| quality(tech, 0));
+        if current >= ceiling {
+            continue;
+        }
+        let gain = (spend / 100_000).clamp(0, 25) as i32;
+        let next = (current + gain).min(ceiling);
+        if next == current {
+            continue;
+        }
+        if let Some(entity) = world.firms.get_mut(handle) {
+            let _ = entity.book.commit(
+                world.tick,
+                cw_core::ledger::Txn::new()
+                    .credit(cw_core::ledger::Account::Cash, spend, "quality investment")
+                    .debit(
+                        cw_core::ledger::Account::OperatingExpense,
+                        spend,
+                        "quality investment",
+                    ),
+            );
+            entity.quality_bps.insert(product, next);
+        }
+    }
+    let _ = dataset;
 }
 
 /// Spend this week's marketing budget: half buys advertising from media firms in the corridor,
@@ -245,6 +304,72 @@ mod tests {
         assert_eq!(threshold(1), 40_000_000);
         assert_eq!(threshold(2), 90_000_000);
         assert_eq!(threshold(4), 250_000_000);
+    }
+
+    #[test]
+    fn quality_investment_is_bounded_and_funded() {
+        let dataset = cw_data::Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            821,
+            crate::state::ScenarioKind::Guided,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let firm = world.investor.primary_group.unwrap();
+        let facility = world.firm(firm).unwrap().facilities[0];
+        let recipe = &dataset.recipes[world.facilities.get(facility).unwrap().recipe as usize];
+        let product = dataset.product_code(&recipe.output).unwrap();
+        let tech = world.firm(firm).unwrap().tech_level;
+        let baseline = quality(tech, 0);
+        if let Some(entity) = world.firms.get_mut(firm) {
+            entity
+                .book
+                .commit(
+                    world.tick,
+                    cw_core::ledger::Txn::new()
+                        .debit(cw_core::ledger::Account::Cash, 200_000_000, "funding")
+                        .credit(
+                            cw_core::ledger::Account::ShareCapital,
+                            200_000_000,
+                            "funding",
+                        ),
+                )
+                .unwrap();
+            entity
+                .policies
+                .quality_budgets_cents
+                .insert(product, 1_000_000);
+        }
+        let cash_before = world.firm(firm).unwrap().book.cash();
+        weekly(&mut world, &dataset);
+        let first = world
+            .firm(firm)
+            .unwrap()
+            .quality_bps
+            .get(&product)
+            .copied()
+            .unwrap();
+        assert!(first > baseline, "quality rises with investment");
+        assert!(first <= baseline + 25, "at most twenty-five bps a week");
+        assert!(
+            world.firm(firm).unwrap().book.cash() < cash_before,
+            "the budget is spent"
+        );
+        for _ in 0..80 {
+            weekly(&mut world, &dataset);
+        }
+        let final_quality = world
+            .firm(firm)
+            .unwrap()
+            .quality_bps
+            .get(&product)
+            .copied()
+            .unwrap();
+        assert!(
+            final_quality <= quality(tech, 1_000),
+            "quality is capped by technology plus the investment ceiling"
+        );
+        assert!(world.firm(firm).unwrap().book.is_balanced());
     }
 
     #[test]

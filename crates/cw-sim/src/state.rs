@@ -348,6 +348,9 @@ pub struct Policies {
     /// creates workers.
     #[serde(default)]
     pub training_budget_cents: i64,
+    /// Weekly quality investment by product, bounded by the prescribed quality ceiling.
+    #[serde(default)]
+    pub quality_budgets_cents: BTreeMap<u16, i64>,
     /// Desired weeks of input cover for automatic purchasing.
     pub input_cover_weeks: i32,
 }
@@ -361,6 +364,7 @@ impl Default for Policies {
             marketing_budget_cents: 0,
             research_budget_cents: 0,
             training_budget_cents: 0,
+            quality_budgets_cents: BTreeMap::new(),
             input_cover_weeks: 4,
         }
     }
