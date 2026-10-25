@@ -70,6 +70,7 @@ fn loan(world: &mut World, firm: Handle, lender: u32, principal: i64, secured: b
         created: world.tick,
         carry: 0,
         defaulted: false,
+        arrears_cents: 0,
     });
     world.firms.get_mut(firm).unwrap().loans.push(handle);
     handle

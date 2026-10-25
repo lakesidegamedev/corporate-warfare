@@ -97,11 +97,11 @@ pub fn service(world: &mut World, dataset: &Dataset) {
         }
         let borrower = loan.borrower;
         let (interest, carry_next) = accrued_interest(&loan);
+        // Arrears first, then this week's instalment; the final week clears everything.
         let principal = if loan.remaining_weeks <= 1 {
             loan.principal_remaining_cents
         } else {
-            loan.weekly_principal_cents
-                .min(loan.principal_remaining_cents)
+            (loan.arrears_cents + loan.weekly_principal_cents).min(loan.principal_remaining_cents)
         };
         let due = interest + principal;
         let cash = world
@@ -133,20 +133,17 @@ pub fn service(world: &mut World, dataset: &Dataset) {
                 Account::InterestExpense,
                 "unpaid interest",
             );
+            // Unpaid principal is not an expense and is already in the loan balance: it
+            // becomes arrears owed to the same lender, and the borrower is past due.
             if missed_principal > 0 {
-                crate::economy::insolvency::defer_expense(
-                    world,
-                    borrower,
-                    missed_principal,
-                    Account::OperatingExpense,
-                    "unpaid principal",
-                );
+                crate::economy::insolvency::mark_firm_past_due(world, borrower);
             }
             if let Some(stored) = world.loans.get_mut(handle) {
                 stored.defaulted = true;
             }
         }
         if let Some(stored) = world.loans.get_mut(handle) {
+            stored.arrears_cents = (principal - principal_paid).max(0);
             stored.carry = carry_next;
             stored.principal_remaining_cents =
                 (stored.principal_remaining_cents - principal_paid).max(0);
@@ -400,6 +397,7 @@ pub fn repay(world: &mut World, loan: Handle, amount: i64) {
     }
     if let Some(stored) = world.loans.get_mut(loan) {
         stored.principal_remaining_cents -= payment;
+        stored.arrears_cents = (stored.arrears_cents - payment).max(0);
     }
 }
 
@@ -497,6 +495,7 @@ mod tests {
             created: world.tick,
             carry: 0,
             defaulted: false,
+            arrears_cents: 0,
         });
         world.firms.get_mut(firm).unwrap().loans.push(loan);
         assert_eq!(secured_capacity(&world, firm), before - 1_000_000);
@@ -537,6 +536,7 @@ mod tests {
             created: world.tick,
             carry: 0,
             defaulted: false,
+            arrears_cents: 0,
         });
         world.firms.get_mut(firm).unwrap().loans.push(loan);
         service(&mut world, &dataset);
@@ -558,6 +558,7 @@ mod tests {
             created: Tick::OPENING,
             carry: 0,
             defaulted: false,
+            arrears_cents: 0,
         };
         let mut posted = 0i64;
         for _ in 0..13 {
@@ -584,6 +585,7 @@ mod tests {
             created: Tick::OPENING,
             carry: 0,
             defaulted: false,
+            arrears_cents: 0,
         };
         // 100,000,000 * 8% / 52 = 153,846.15 -> 153,846 cents.
         assert_eq!(weekly_interest(&loan), 153_846);

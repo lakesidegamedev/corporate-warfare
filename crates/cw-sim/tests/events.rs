@@ -316,6 +316,7 @@ fn a_covenant_breach_opens_and_the_cure_repays_from_spare_cash() {
         created: world.tick,
         carry: 0,
         defaulted: false,
+        arrears_cents: 0,
     });
     world
         .firms

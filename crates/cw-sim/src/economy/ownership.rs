@@ -536,6 +536,7 @@ mod tests {
             created: world.tick,
             carry: 0,
             defaulted: false,
+            arrears_cents: 0,
         });
         let group = controlled_group(&world, root);
         let gross_assets: i64 = group

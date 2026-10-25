@@ -741,6 +741,9 @@ pub struct Loan {
     pub created: Tick,
     pub carry: i64,
     pub defaulted: bool,
+    /// Principal that fell due and was not paid. It stays owed to this lender, is collected
+    /// first at the next service, and keeps the borrower past due until it clears.
+    pub arrears_cents: i64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -31,6 +31,29 @@ pub fn defer_expense(world: &mut World, firm: Handle, amount: i64, expense: Acco
     mark_past_due(entity, world.tick);
 }
 
+/// Put a firm into the payment-grace state for an unpaid amount already on its books.
+pub fn mark_firm_past_due(world: &mut World, firm: Handle) {
+    let now = world.tick;
+    if let Some(entity) = world.firms.get_mut(firm) {
+        mark_past_due(entity, now);
+    }
+}
+
+/// Loan principal that fell due and is still unpaid.
+fn loan_arrears(world: &World, firm: Handle) -> i64 {
+    world
+        .firm(firm)
+        .map(|entity| {
+            entity
+                .loans
+                .iter()
+                .filter_map(|handle| world.loans.get(*handle))
+                .map(|loan| loan.arrears_cents)
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
 fn mark_past_due(firm: &mut crate::state::Firm, now: Tick) {
     // A dissolved, liquidating or merged firm cannot re-enter the payment-grace state. Late
     // interest or contract postings used to resurrect it, which hid a liquidation from reports.
@@ -91,7 +114,7 @@ pub fn settle(world: &mut World, dataset: &Dataset) -> Vec<(Handle, &'static str
                     .unwrap()
                     .book
                     .balance(Account::OverduePayables);
-                if overdue <= 0 {
+                if overdue <= 0 && loan_arrears(world, handle) == 0 {
                     if let Some(firm) = world.firms.get_mut(handle) {
                         firm.status = FirmStatus::Operating;
                         firm.payout_freeze = false;

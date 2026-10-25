@@ -426,6 +426,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
                     created: Tick::OPENING,
                     carry: 0,
                     defaulted: false,
+                    arrears_cents: 0,
                 });
                 world.firms.get_mut(handle).unwrap().loans.push(loan_handle);
                 if let Some(lender) = world.outside.lenders.get_mut(0) {
@@ -738,6 +739,7 @@ fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
         created: Tick::OPENING,
         carry: 0,
         defaulted: false,
+        arrears_cents: 0,
     });
     world.firms.get_mut(handle).unwrap().loans.push(loan_handle);
 

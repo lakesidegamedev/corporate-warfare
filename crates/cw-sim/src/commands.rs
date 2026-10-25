@@ -1330,6 +1330,7 @@ fn apply_intent(
                 created: world.tick,
                 carry: 0,
                 defaulted: false,
+                arrears_cents: 0,
             };
             let handle = world.loans.insert(loan);
             world.firms.get_mut(*borrower).unwrap().loans.push(handle);
@@ -1617,6 +1618,7 @@ fn apply_intent(
                 created: world.tick,
                 carry: 0,
                 defaulted: false,
+                arrears_cents: 0,
             };
             let handle = world.loans.insert(loan);
             world.firms.get_mut(*firm).unwrap().loans.push(handle);
@@ -1688,6 +1690,7 @@ fn apply_intent(
                 created: world.tick,
                 carry: 0,
                 defaulted: false,
+                arrears_cents: 0,
             };
             let handle = world.loans.insert(loan);
             world.firms.get_mut(*firm).unwrap().loans.push(handle);
