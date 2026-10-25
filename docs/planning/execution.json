@@ -39,23 +39,23 @@
       ],
       "spec": "docs/rules/CONTENT-PACING.md",
       "targets": "tools/data-gen/, content/geography/",
-      "status": "active",
+      "status": "done",
       "checklist": [
         {
           "text": "Freeze the owner-approved authored corridor with eleven unique region IDs and names.",
-          "done": false
+          "done": true
         },
         {
           "text": "Verify contiguous playable coverage and label the scheme as authored, with no asserted county membership.",
-          "done": false
+          "done": true
         },
         {
           "text": "Print roster/count and fail on duplicate or missing region IDs; never invent a city-as-region row.",
-          "done": false
+          "done": true
         }
       ],
       "evidence": [
-        "content/geography/corridor-fixture.json"
+        "evidence/R01-corridor.json"
       ]
     },
     {
@@ -158,22 +158,24 @@
       ],
       "spec": "docs/rules/CONTENT-PACING.md",
       "targets": "tools/data-gen/, content/datasets/",
-      "status": "active",
+      "status": "done",
       "checklist": [
         {
           "text": "Pin the in-repo authored calibration manifest and source terms; do not label estimates as historical observations.",
-          "done": false
+          "done": true
         },
         {
           "text": "Reconcile products, recipes, wages, units and regional totals at the one-percent game scale.",
-          "done": false
+          "done": true
         },
         {
           "text": "Reproduce the dataset hash and reject non-finite, duplicate or unsupported rows.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R02-baseline.json"
+      ]
     },
     {
       "id": "P06",

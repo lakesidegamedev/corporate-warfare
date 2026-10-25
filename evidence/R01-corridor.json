@@ -1,0 +1,14 @@
+{
+  "requirement": "R01",
+  "result": "pass",
+  "commit": "95fdfccab48a27e8d41e3b0f854d9eda8eef1ab7",
+  "procedure": "Owner approved authored regions on 2026-10-25. Inspected content/geography/corridor-fixture.json and ran cargo test -p cw-data the_authored_corridor_is_unique_and_labelled. The fixture has eleven unique region codes and names, non-empty state rosters, finite index values, a labelled authored-corridor classification and no county rows or historical-source claim.",
+  "artifacts": [
+    "content/geography/corridor-fixture.json",
+    "crates/cw-data/src/geography.rs",
+    "crates/cw-data/src/lib.rs",
+    "docs/planning/DECISIONS.md"
+  ],
+  "limitations": "This is an owner-approved authored corridor, not an official 2004 BEA county crosswalk. County membership is deliberately absent and no historical accuracy is claimed.",
+  "verified_at": "2026-10-25"
+}

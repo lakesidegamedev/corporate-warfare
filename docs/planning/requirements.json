@@ -8,8 +8,10 @@
       "depends_on": [],
       "gate": "automated",
       "acceptance": "Freeze the owner-approved authored corridor: eleven unique region IDs and names, deduplicated roster and coverage, explicit estimate label and no asserted county membership or invented historical source.",
-      "status": "blocked",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R01-corridor.json"
+      ]
     },
     {
       "id": "R02",
@@ -19,8 +21,10 @@
       ],
       "gate": "automated",
       "acceptance": "Rebuild the checked-in dataset from pinned in-repo authored calibration files; reconcile totals, units, recipes, wages and estimates; distinguish the nominal 2000 start from authored values and make no false historical-source claim.",
-      "status": "blocked",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R02-baseline.json"
+      ]
     },
     {
       "id": "R03",
