@@ -53,7 +53,8 @@ its ledger entry names reviewed evidence that satisfies the gate.
 
 1. GitHub Actions is running on the now-public repository. Verify and Apple smoke are green on
    main `981bf91`; the remaining hosted work is the signed Release workflow.
-2. Apple signing/TestFlight credentials are absent. The app record and the four App Store Connect
-   secrets are still required; `apple/RELEASE.md` and `evidence/handoff-muse.md` list them.
+2. Apple signing/TestFlight credentials are absent. Release run 40209622603 failed closed with the
+   exact missing-secret list; `apple/RELEASE.md`, `evidence/handoff-muse.md` and
+   `evidence/releases/blocked-signing-40209622603.md` record it.
 3. No physical device and no independent human testers for R37, R38 and R42.
 4. The official corridor crosswalk is unavailable, so R01/R02 stay blocked behind real data.

@@ -66,9 +66,11 @@ Kanban: 254781. Merged PRs: #8 through #62.
 ## Blockers
 
 1. **Apple signing and TestFlight.** The repository is public and hosted Verify/Apple smoke are
-   green, but no App Store Connect app record or signing secrets exist. Owner/Muse must add
-   `APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_CONTENT` and `APPLE_DEVELOPMENT_TEAM` for
-   `net.lakesidegames.corporatewarfare` and confirm the internal tester group.
+   green, but no App Store Connect app record or signing secrets exist. Release run 40209622603
+   failed closed with `blocked: missing signing secrets: APPLE_API_ISSUER APPLE_API_KEY
+   APPLE_API_KEY_CONTENT APPLE_DEVELOPMENT_TEAM`. Owner/Muse must add those four secrets to the
+   `appstore` environment for `net.lakesidegames.corporatewarfare` and confirm the internal tester
+   group.
 2. **Geography/data gate.** The official crosswalk is still missing; R01/R02 and dependent
    packets remain blocked pending an owner-supplied file or an approved custom corridor.
 3. **Device and human gates.** No physical iPhone measurements (R37), no three independent
