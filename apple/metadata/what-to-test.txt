@@ -1,0 +1,13 @@
+Please test the offline acceptance route on a real iPhone:
+
+1. Fresh install, launch in airplane mode, complete or skip the guided walkthrough.
+2. Start a guided five-year career, read the portfolio, open the cash bridge and confirm why
+   cash differs from profit.
+3. Build or operate a facility, set a price and a wage offer, step one week and compare the
+   result with the forecast.
+4. Save manually, force-quit the app, relaunch and resume. Then corrupt nothing: use the saves
+   screen to confirm the last-good copy is listed.
+5. Trade shares, call a board meeting, respond to an event, and if offered a tender, respond.
+6. Reach the week-260 score, then continue in sandbox.
+7. Report crashes, confusing copy, unreadable text at large Dynamic Type, and anything that
+   looks like placeholder content.
