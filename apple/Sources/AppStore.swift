@@ -23,6 +23,7 @@ final class AppStore: ObservableObject {
     @Published var runSpeed: Double = 0
     @Published var saves: [StoredSave] = []
     @Published var marketRows: [MarketRow] = []
+    @Published var showOnboarding = false
 
     private let engine = Engine()
     private var runTask: Task<Void, Never>?

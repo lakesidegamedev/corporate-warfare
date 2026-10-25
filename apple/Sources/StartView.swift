@@ -3,6 +3,7 @@ import SwiftUI
 struct StartView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.colorScheme) private var scheme
+    @AppStorage(OnboardingKeys.completed) private var onboardingCompleted = false
     @State private var guided = true
     @State private var fiveYear = true
     @State private var seedText = ""
@@ -10,6 +11,9 @@ struct StartView: View {
     @State private var showingSaves = false
 
     private var info: EngineInfo { engineInfo() }
+    private var walkthroughTitle: String {
+        onboardingCompleted ? "Replay the guided walkthrough" : "Guided walkthrough"
+    }
 
     var body: some View {
         NavigationStack {
@@ -62,6 +66,10 @@ struct StartView: View {
                         Text("Premium offline game. No account, no ads, no network calls. Institutions are simplified game rules, not legal, tax or investment advice.")
                             .font(.footnote)
                             .foregroundStyle(Theme.secondary)
+                        Button(walkthroughTitle) {
+                            store.showOnboarding = true
+                        }
+                        .accessibilityHint("Explains the first seven steps and the real action behind each one.")
                         Button("Saves and recovery") { showingSaves = true }
                     }
 
