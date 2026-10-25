@@ -43,6 +43,41 @@ pub fn controlled_group(world: &World, root: Handle) -> Vec<Handle> {
     seen.into_iter().collect()
 }
 
+/// The ultimate controller above a firm, walking immediate firm controllers to the top.
+pub fn ultimate_controller(world: &World, firm: Handle) -> Option<HolderId> {
+    let mut current = firm;
+    let mut seen = BTreeSet::new();
+    loop {
+        if !seen.insert(current) {
+            return None;
+        }
+        let controller = world.firms.get(current)?.shares.controller()?;
+        match controller {
+            HolderId::Firm(parent) if parent != current => current = parent,
+            HolderId::Firm(_) => return None,
+            other => return Some(other),
+        }
+    }
+}
+
+/// True when two firms share the same ultimate controller. The investor's controlled firms are
+/// one group; two subsidiaries of the same parent are one group; outside holders are not merged
+/// unless they are literally the same holder id.
+pub fn same_group(world: &World, left: Handle, right: Handle) -> bool {
+    if left == right {
+        return true;
+    }
+    match (
+        ultimate_controller(world, left),
+        ultimate_controller(world, right),
+    ) {
+        (Some(HolderId::Investor), Some(HolderId::Investor)) => true,
+        (Some(HolderId::Outside(a)), Some(HolderId::Outside(b))) => a == b,
+        (Some(HolderId::Firm(a)), Some(HolderId::Firm(b))) => a == b,
+        _ => false,
+    }
+}
+
 /// True when buying shares in `target` from `buyer` would close an ownership cycle, including
 /// an indirect minority cycle.
 pub fn would_create_cycle(world: &World, buyer: Handle, target: Handle) -> bool {
@@ -134,6 +169,7 @@ pub fn consolidate(world: &World, root: Handle) -> Consolidated {
         ..Default::default()
     };
     let mut internal_investment_cost = 0i64;
+    let mut unrealised_profit_cents = 0i64;
     for handle in &group {
         let Some(firm) = world.firms.get(*handle) else {
             continue;
@@ -159,6 +195,16 @@ pub fn consolidate(world: &World, root: Handle) -> Consolidated {
             }
         }
     }
+    for handle in &group {
+        if let Some(firm) = world.firms.get(*handle) {
+            unrealised_profit_cents += firm
+                .intercompany_inventory
+                .values()
+                .filter(|layer| layer.qty.0 > 0)
+                .map(|layer| layer.margin_cents.max(0))
+                .sum::<i64>();
+        }
+    }
     // Intercompany loans between two group members are eliminated on both sides.
     for (_, loan) in world.loans.iter() {
         let lender = match loan.lender {
@@ -178,7 +224,10 @@ pub fn consolidate(world: &World, root: Handle) -> Consolidated {
     // The eliminated internal investment cost is an asset on the parent's book and must not
     // be counted alongside the subsidiary's own assets. Intercompany loans were already
     // removed from both sides above.
-    result.assets_cents = result.assets_cents.saturating_sub(internal_investment_cost);
+    result.assets_cents = result
+        .assets_cents
+        .saturating_sub(internal_investment_cost + unrealised_profit_cents);
+    result.intercompany_eliminated_cents += unrealised_profit_cents;
     // Minority interest: the share of group equity held outside the controlling chain.
     for handle in &group {
         if let Some(firm) = world.firms.get(*handle) {
@@ -246,6 +295,8 @@ mod tests {
     use super::*;
     use crate::economy::seed;
     use crate::state::{ScenarioKind, ScenarioMode, ShareBook, ShareLot};
+    use cw_core::money::Cents;
+    use cw_core::quantity::MilliLots;
     use cw_data::Dataset;
 
     fn synthetic_firm(world: &mut World, parent: Option<Handle>) -> Handle {
@@ -339,6 +390,56 @@ mod tests {
         }
         assert!(would_create_cycle(&world, first, second));
         assert!(!would_create_cycle(&world, second, handles[2]));
+    }
+
+    #[test]
+    fn firms_under_the_same_controller_are_one_group() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 58, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let root = world.investor.primary_group.unwrap();
+        let child = synthetic_firm(&mut world, Some(root));
+        let grandchild = synthetic_firm(&mut world, Some(child));
+        assert!(same_group(&world, root, child));
+        assert!(same_group(&world, root, grandchild));
+        let outside = world
+            .firms
+            .iter()
+            .find(|(handle, firm)| *handle != root && firm.shares.qty(HolderId::Investor) == 0)
+            .map(|(handle, _)| handle)
+            .unwrap();
+        assert!(!same_group(&world, root, outside));
+    }
+
+    #[test]
+    fn unrealised_intercompany_margin_leaves_consolidated_assets_only_when_sold() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 57, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let root = world.investor.primary_group.unwrap();
+        let child = synthetic_firm(&mut world, Some(root));
+        let qty = MilliLots(10_000);
+        let margin = 5_000_000;
+        {
+            let buyer = world.firms.get_mut(child).unwrap();
+            buyer.stock_lot_mut(0, 0).receive(qty, Cents(margin * 2));
+            buyer.record_intercompany_receipt(root, 0, 0, qty, margin);
+        }
+        let gross: i64 = controlled_group(&world, root)
+            .iter()
+            .map(|handle| world.firm(*handle).unwrap().book.total_assets())
+            .sum();
+        let consolidated = consolidate(&world, root);
+        assert_eq!(consolidated.assets_cents, gross - margin);
+        assert!(consolidated.intercompany_eliminated_cents >= margin);
+        let _ = world.firms.get_mut(child).unwrap().issue_stock(0, 0, qty);
+        let consolidated = consolidate(&world, root);
+        assert_eq!(
+            consolidated.assets_cents,
+            controlled_group(&world, root)
+                .iter()
+                .map(|handle| world.firm(*handle).unwrap().book.total_assets())
+                .sum::<i64>(),
+            "once the goods leave the group, no unrealised margin remains"
+        );
     }
 
     #[test]

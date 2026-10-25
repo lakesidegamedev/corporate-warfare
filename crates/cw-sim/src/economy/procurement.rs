@@ -143,12 +143,7 @@ pub fn settle(world: &mut World, dataset: &Dataset) {
             let carrying = world
                 .firms
                 .get_mut(procurement.supplier)
-                .map(|firm| {
-                    let mut carry = 0i64;
-                    firm.stock_lot_mut(product, procurement.region)
-                        .issue(delivered, &mut carry)
-                        .0
-                })
+                .map(|firm| firm.issue_stock(product, procurement.region, delivered).0)
                 .unwrap_or(0);
             if let Some(supplier) = world.firms.get_mut(procurement.supplier) {
                 supplier

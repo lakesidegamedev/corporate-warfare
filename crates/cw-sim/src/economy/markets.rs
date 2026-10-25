@@ -930,12 +930,10 @@ fn remove_stock(
     let Some(entity) = world.firms.get_mut(firm) else {
         return (false, 0);
     };
-    let lot = entity.stock_lot_mut(product, region);
-    if lot.qty.0 < qty.0 || qty.0 <= 0 {
+    if entity.stock(product, region).0 < qty.0 || qty.0 <= 0 {
         return (false, 0);
     }
-    let mut carry = 0i64;
-    let cost = lot.issue(qty, &mut carry);
+    let cost = entity.issue_stock(product, region, qty);
     (true, cost.0)
 }
 

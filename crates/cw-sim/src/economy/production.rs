@@ -230,9 +230,7 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
                     continue;
                 }
                 if let Some(firm) = world.firms.get_mut(*seller) {
-                    let mut carry = 0i64;
-                    firm.stock_lot_mut(electricity, region_index as u8)
-                        .issue(qty, &mut carry);
+                    firm.issue_stock(electricity, region_index as u8, qty);
                 }
             }
         }
@@ -432,10 +430,7 @@ fn run_facility(
             *entry = (*entry - need.0).max(0);
         }
         let firm = world.firms.get_mut(firm_handle).unwrap();
-        let mut carry = 0i64;
-        let cost = firm
-            .stock_lot_mut(code, facility.region)
-            .issue(need, &mut carry);
+        let cost = firm.issue_stock(code, facility.region, need);
         material_cost += cost.0;
     }
     if material_cost > 0 {
