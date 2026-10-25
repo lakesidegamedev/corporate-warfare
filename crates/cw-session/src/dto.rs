@@ -46,6 +46,8 @@ pub struct FirmSummary {
     pub controlled: bool,
     pub ceo_is_investor: bool,
     pub facilities: u32,
+    /// True when the investor has no management right and no completed diligence.
+    pub restricted: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -236,18 +238,27 @@ fn holder_name(world: &World, holder: HolderId) -> String {
     }
 }
 
-pub fn firm_summary(world: &World, _dataset: &Dataset, handle: u64) -> Option<FirmSummary> {
+pub fn firm_summary(
+    world: &World,
+    _dataset: &Dataset,
+    handle: u64,
+    inspect: bool,
+) -> Option<FirmSummary> {
     let firm = world.firms.get(cw_core::ids::Handle(handle))?;
     Some(FirmSummary {
         handle,
         name: firm.name.clone(),
         industry: cw_sim::state::INDUSTRY_NAMES[firm.industry as usize].to_owned(),
         region: world.regions[firm.region as usize].name.clone(),
-        cash_cents: firm.book.cash(),
-        equity_cents: firm.book.total_equity(),
+        cash_cents: if inspect { firm.book.cash() } else { 0 },
+        equity_cents: if inspect { firm.book.total_equity() } else { 0 },
         fair_value_cents: firm.shares.fair_cents * firm.shares.eligible_votes(),
         mark_cents: firm.shares.mark_cents,
-        grade: firm.grade.key().to_owned(),
+        grade: if inspect {
+            firm.grade.key().to_owned()
+        } else {
+            "?".to_owned()
+        },
         status: match firm.status {
             FirmStatus::Operating => "operating".to_owned(),
             FirmStatus::PastDue { .. } => "past_due".to_owned(),
@@ -259,7 +270,12 @@ pub fn firm_summary(world: &World, _dataset: &Dataset, handle: u64) -> Option<Fi
         investor_votes_bps: firm.shares.vote_bps(HolderId::Investor),
         controlled: firm.shares.controller() == Some(HolderId::Investor),
         ceo_is_investor: matches!(firm.board.ceo, Some(cw_sim::state::CeoRef::Investor)),
-        facilities: firm.facilities.len() as u32,
+        facilities: if inspect {
+            firm.facilities.len() as u32
+        } else {
+            0
+        },
+        restricted: !inspect,
     })
 }
 

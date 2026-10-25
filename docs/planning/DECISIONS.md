@@ -245,3 +245,14 @@ A bond reaching maturity dropped the coupon that fell due on the same date, and 
 rounded independently each quarter. Maturity now pays the final coupon before principal, and
 coupons use a persisted sub-cent carry. Test:
 `credit::tests::a_bond_pays_its_final_coupon_before_principal`.
+
+### Information rights, 2026-10-25
+
+The session exposed every private firm's cash, equity, facilities, cap table, loans and contracts
+to the UI. Private data now requires a management right, public disclosure (a completed IPO), or
+a diligence that has reached its reveal date for a deal funded by the investor's group. Firm
+summaries for private rivals are masked (cash and equity zero, grade hidden, facility count zero,
+`restricted` true) while public marks and fair estimates remain visible. The finance screen says a
+private company is restricted instead of showing zeros. Tests:
+`private_firm_data_needs_management_public_disclosure_or_diligence` and
+`completed_diligence_grants_access_to_a_private_target`.

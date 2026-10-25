@@ -88,6 +88,7 @@ pub struct FirmDto {
     pub controlled: bool,
     pub ceo_is_investor: bool,
     pub facilities: u32,
+    pub restricted: bool,
 }
 
 #[derive(uniffi::Record)]
@@ -481,6 +482,7 @@ fn firm_dto(summary: FirmSummary) -> FirmDto {
         controlled: summary.controlled,
         ceo_is_investor: summary.ceo_is_investor,
         facilities: summary.facilities,
+        restricted: summary.restricted,
     }
 }
 
