@@ -146,3 +146,11 @@ to mid and mid to high, paid from an explicit weekly firm budget at an authored 
 The regional training grant covers twenty percent from the finite government training budget when
 active. Training never creates workers: total headcount is conserved and the wage bill rises with
 the tier mix. Exposed as `SetTrainingBudget` with a Finance form showing the cost and the cap.
+
+### Bond trading price, 2026-10-25
+
+Bond orders previously transferred principal for one cent per unit and always credited the
+investor regardless of the requested actor. Bonds now trade dirty: principal plus coupon accrued
+since issue (or the last coupon) at the 52-week rule, paid to the seller; the buyer's investment
+basis includes the accrued share. Non-investor orders are refused rather than silently rerouted.
+Test: `commands::tests::bond_trades_pay_accrued_interest_on_top_of_principal`.
