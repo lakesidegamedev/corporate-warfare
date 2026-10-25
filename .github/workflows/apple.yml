@@ -22,11 +22,15 @@ jobs:
       - run: xcodegen generate --spec apple/project.yml --project apple
       - name: Simulator compile
         run: xcodebuild -project apple/CorporateWarfare.xcodeproj -scheme CorporateWarfare -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - name: Execute Rust bridge in simulator
+        run: bash apple/scripts/test-simulator.sh
       - name: Device archive
         run: xcodebuild -project apple/CorporateWarfare.xcodeproj -scheme CorporateWarfare -configuration Release -destination 'generic/platform=iOS' -archivePath apple/build/CorporateWarfare.xcarchive CODE_SIGNING_ALLOWED=NO archive
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: unsigned-apple-smoke
-          path: apple/build/CorporateWarfare.xcarchive
+          path: |
+            apple/build/CorporateWarfare.xcarchive
+            apple/build/EngineBridge.xcresult
           retention-days: 7

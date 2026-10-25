@@ -25,8 +25,17 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: net.lakesidegames.corporatewarfare
     dependencies:
       - framework: Generated/CwEngine.xcframework
+  EngineBridgeTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: CorporateWarfare
 schemes:
   CorporateWarfare:
     build:
       targets:
         CorporateWarfare: all
+        EngineBridgeTests: [test]
+    test:
+      targets: [EngineBridgeTests]
