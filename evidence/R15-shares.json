@@ -1,0 +1,8 @@
+{
+  "requirement": "R15", "result": "pass",
+  "commit": "3f235ed25bb521f05d713cf361f5c90e1c37c17e",
+  "procedure": "cargo test --locked --workspace; equity tests for valuation marks, dividend treasury exclusion, issuance dilution/rejection, exchange share/cash conservation, plus ownership exactly-half/minority-cycle tests.",
+  "artifacts": ["crates/cw-sim/src/economy/equity.rs","crates/cw-sim/src/economy/ownership.rs","crates/cw-session/tests/workflows.rs"],
+  "limitations": "Exchange liquidity is two percent of free float per week with integer price impact; no continuous order book. Private-company disclosure is gated by information rights.",
+  "verified_at": "2026-10-25"
+}

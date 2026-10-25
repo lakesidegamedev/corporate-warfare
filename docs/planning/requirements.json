@@ -195,8 +195,10 @@
       ],
       "gate": "automated",
       "acceptance": "Finite liquidity, pricing/impact, disclosure and cost basis; share totals reconcile; minority ownership grants no management cash access.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R15-shares.json"
+      ]
     },
     {
       "id": "R16",
