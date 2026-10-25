@@ -1010,6 +1010,90 @@ mod tests {
     }
 
     #[test]
+    fn an_exchange_trade_conserves_shares_and_cash() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 65, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let primary = world.investor.primary_group.unwrap();
+        refresh_valuation(&mut world, &dataset);
+        let mark = world.firm(primary).unwrap().shares.mark_cents.max(1);
+        let issued = world.firm(primary).unwrap().shares.issued;
+        let investor_before = world.firm(primary).unwrap().shares.qty(HolderId::Investor);
+        let outside_before = world
+            .firm(primary)
+            .unwrap()
+            .shares
+            .qty(HolderId::Outside(0));
+        world.outside.investors[0].capital_cents = 1_000_000_000;
+        let cash_before = world.investor.cash_cents;
+        place_order(
+            &mut world,
+            HolderId::Investor,
+            primary,
+            OrderSide::Sell,
+            1_000,
+            mark,
+        )
+        .unwrap();
+        place_order(
+            &mut world,
+            HolderId::Outside(0),
+            primary,
+            OrderSide::Buy,
+            1_000,
+            mark,
+        )
+        .unwrap();
+        clear_exchange(&mut world, &dataset);
+        let shares = &world.firm(primary).unwrap().shares;
+        assert_eq!(
+            shares.issued, issued,
+            "a trade never creates or retires shares"
+        );
+        assert_eq!(
+            shares.qty(HolderId::Investor) + shares.qty(HolderId::Outside(0)),
+            investor_before + outside_before,
+            "the two holders conserve the traded quantity"
+        );
+        assert!(world.investor.cash_cents > cash_before);
+        assert!(world.investor.book.is_balanced());
+    }
+
+    #[test]
+    fn an_ipo_sells_a_funded_float_and_pays_the_fee() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 66, ScenarioKind::Founder, ScenarioMode::Sandbox);
+        let firm = world.firms.iter().next().unwrap().0;
+        refresh_valuation(&mut world, &dataset);
+        {
+            let entity = world.firms.get_mut(firm).unwrap();
+            entity.shares.statement_weeks = 13;
+            entity
+                .book
+                .commit(
+                    world.tick,
+                    Txn::new()
+                        .debit(Account::Cash, 100_000_000, "funding")
+                        .credit(Account::ShareCapital, 100_000_000, "funding"),
+                )
+                .unwrap();
+        }
+        world.outside.investors[0].capital_cents = 1_000_000_000;
+        let fair = world.firm(firm).unwrap().shares.fair_cents.max(1);
+        let issued_before = world.firm(firm).unwrap().shares.issued;
+        let cash_before = world.firm(firm).unwrap().book.cash();
+        let proceeds = launch_ipo(&mut world, firm, 200_000, fair).unwrap();
+        assert!(proceeds > 0);
+        assert_eq!(
+            world.firm(firm).unwrap().shares.issued,
+            issued_before + 200_000
+        );
+        assert!(world.firm(firm).unwrap().shares.ipo_done);
+        assert!(world.firm(firm).unwrap().book.cash() > cash_before);
+        assert!(world.firm(firm).unwrap().book.is_balanced());
+        assert!(world.firm(firm).unwrap().shares.qty(HolderId::Outside(0)) >= 200_000);
+    }
+
+    #[test]
     fn issuance_below_ninety_percent_is_rejected() {
         let dataset = Dataset::load().unwrap();
         let mut world = seed::build(&dataset, 64, ScenarioKind::Guided, ScenarioMode::Sandbox);
