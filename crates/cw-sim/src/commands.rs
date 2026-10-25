@@ -107,6 +107,10 @@ pub enum CommandIntent {
         firm: Handle,
         amount_cents: i64,
     },
+    SetTrainingBudget {
+        firm: Handle,
+        amount_cents: i64,
+    },
     // Supply
     OfferContract {
         buyer: Handle,
@@ -342,6 +346,7 @@ impl CommandIntent {
             CommandIntent::SetProductionTarget { .. } => "set_production_target",
             CommandIntent::SetMarketingBudget { .. } => "set_marketing_budget",
             CommandIntent::SetResearchBudget { .. } => "set_research_budget",
+            CommandIntent::SetTrainingBudget { .. } => "set_training_budget",
             CommandIntent::OfferContract { .. } => "offer_contract",
             CommandIntent::AcceptContract { .. } => "accept_contract",
             CommandIntent::CancelContract { .. } => "cancel_contract",
@@ -975,6 +980,21 @@ fn apply_intent(
                 .unwrap()
                 .policies
                 .marketing_budget_cents = *amount_cents;
+            Ok(())
+        }
+        CommandIntent::SetTrainingBudget { firm, amount_cents } => {
+            require_control(world, actor, *firm)?;
+            if *amount_cents < 0 {
+                return Err(DomainError::Arithmetic {
+                    detail: ArithmeticFault::OutOfRange,
+                });
+            }
+            world
+                .firms
+                .get_mut(*firm)
+                .unwrap()
+                .policies
+                .training_budget_cents = *amount_cents;
             Ok(())
         }
         CommandIntent::SetResearchBudget { firm, amount_cents } => {

@@ -138,3 +138,11 @@ Measured after the change: guided seed 3 at 260 weeks has 4-5 rival failures and
 survives with score 61; at 1,560 weeks 10 rivals fail and the guided firm is operating with 60
 percent control. The pinned canonical hash moved to `a3266a99...` and the iOS constant is updated
 pending a Mac-runner run.
+
+### Paid skill training, 2026-10-25
+
+Labour now upgrades at most 0.1 percent of a tier's workforce each week, moving workers from low
+to mid and mid to high, paid from an explicit weekly firm budget at an authored $500 per worker.
+The regional training grant covers twenty percent from the finite government training budget when
+active. Training never creates workers: total headcount is conserved and the wage bill rises with
+the tier mix. Exposed as `SetTrainingBudget` with a Finance form showing the cost and the cap.
