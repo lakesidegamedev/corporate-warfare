@@ -58,8 +58,8 @@ Kanban: 254781. Merged PRs: #8 through #67.
 - Geography is now an owner-approved authored corridor. The eleven region IDs/names are frozen,
   the fixture says authored estimates and no county membership, and R01/R02 plus P01/P05 are
   closed with that limitation.
-- Requirements closed with reviewed automated evidence: R01-R14 except R05/R12 counts, R18-R20,
-  R23, R25-R27; 23 requirements done, 19 active/pending, zero blocked.
+- Requirements closed with reviewed automated evidence: R01-R14, R18-R20, R23, R25-R27, R30 and
+  R31 (23 done); 19 active/pending, zero blocked.
 - Engine baseline on this host: representative (31 firms, 290 facilities) p50 0.55 ms; grown
   (217/2,030) p50 6.46 ms; stress (992/9,280) p50 82.98 ms. Device timing still required.
 - Hosted Verify and Apple smoke are green on `main` `319fe31`: the SwiftUI app compiles for the
