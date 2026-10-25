@@ -239,6 +239,56 @@ fn a_funded_hostile_tender_transfers_control_and_pays_minorities() {
 }
 
 #[test]
+fn a_parent_guarantee_backs_a_failed_subsidiary_only_up_to_its_cap() {
+    let mut world = world(406);
+    let handles: Vec<_> = world
+        .firms
+        .iter()
+        .filter(|(_, firm)| firm.operative())
+        .map(|(handle, _)| handle)
+        .take(3)
+        .collect();
+    let (parent, child, sibling) = (handles[0], handles[1], handles[2]);
+    let parent_cash = world.firm(parent).unwrap().book.cash();
+    let sibling_cash = world.firm(sibling).unwrap().book.cash();
+    world
+        .firms
+        .get_mut(parent)
+        .unwrap()
+        .guarantees
+        .push(cw_sim::state::Guarantee {
+            beneficiary: child,
+            claim_cents: 10_000_000,
+            max_cents: 10_000_000,
+        });
+    insolvency::defer_expense(
+        &mut world,
+        child,
+        5_000_000_000,
+        Account::OperatingExpense,
+        "unpayable",
+    );
+    let dataset = Dataset::load().unwrap();
+    for _ in 0..8 {
+        world.tick = world.tick.next();
+        insolvency::settle(&mut world, &dataset);
+    }
+    let paid = parent_cash - world.firm(parent).unwrap().book.cash();
+    assert!(
+        paid > 0,
+        "the guarantee is called when unpaid claims remain"
+    );
+    assert!(paid >= 0, "the guarantor is never credited by the failure");
+    assert!(paid <= 10_000_000, "payment is capped by the guarantee");
+    assert_eq!(
+        world.firm(sibling).unwrap().book.cash(),
+        sibling_cash,
+        "siblings carry no implied guarantee"
+    );
+    assert!(world.firm(parent).unwrap().book.is_balanced());
+}
+
+#[test]
 fn liquidation_pays_creditors_before_equity_and_keeps_siblings() {
     let mut world = world(405);
     let doomed = world

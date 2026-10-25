@@ -267,6 +267,68 @@ fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
         );
         entity.status = FirmStatus::Liquidating;
     }
+    // Explicit guarantees: a guarantor covers the failed firm's unpaid claims up to its
+    // contracted cap, paid from its own cash or carried as its own past-due liability. There is
+    // no implied guarantee for siblings.
+    let unpaid = (-world
+        .firms
+        .get(firm)
+        .map(|entity| {
+            entity.book.balance(Account::Loans)
+                + entity.book.balance(Account::Bonds)
+                + entity.book.balance(Account::Deposits)
+                + entity.book.balance(Account::OverduePayables)
+        })
+        .unwrap_or(0))
+    .max(0);
+    if unpaid > 0 {
+        let mut guarantees: Vec<(Handle, i64, i64)> = Vec::new();
+        for (handle, candidate) in world.firms.iter() {
+            if handle == firm || !candidate.operative() {
+                continue;
+            }
+            for guarantee in &candidate.guarantees {
+                if guarantee.beneficiary == firm {
+                    guarantees.push((handle, guarantee.claim_cents, guarantee.max_cents));
+                }
+            }
+        }
+        let mut remaining = unpaid;
+        for (guarantor, claim, cap) in guarantees {
+            if remaining <= 0 {
+                break;
+            }
+            let cover = remaining.min(claim.max(0)).min(cap.max(0));
+            let cash = world
+                .firm(guarantor)
+                .map(|entity| entity.book.cash())
+                .unwrap_or(0)
+                .max(0);
+            let paid = cover.min(cash);
+            if paid > 0 {
+                if let Some(entity) = world.firms.get_mut(guarantor) {
+                    let _ = entity.book.commit(
+                        world.tick,
+                        Txn::new().credit(Account::Cash, paid, "guarantee").debit(
+                            Account::OperatingExpense,
+                            paid,
+                            "guarantee",
+                        ),
+                    );
+                }
+                if let Some(entity) = world.firms.get_mut(firm) {
+                    let _ = entity.book.commit(
+                        world.tick,
+                        Txn::new()
+                            .debit(Account::OverduePayables, paid, "guarantee received")
+                            .credit(Account::OtherIncome, paid, "guarantee received"),
+                    );
+                }
+                remaining -= paid;
+            }
+        }
+    }
+
     // Investor loses the holding; career losses are recorded, other assets are untouched.
     let held = world
         .firms
