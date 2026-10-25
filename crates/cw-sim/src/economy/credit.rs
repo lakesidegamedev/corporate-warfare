@@ -1,0 +1,364 @@
+//! Credit grades, loans, bonds and debt service.
+
+use cw_core::calendar::Tick;
+use cw_core::ids::Handle;
+use cw_core::ledger::{Account, Txn};
+use cw_core::money::round_even_div;
+use cw_data::Dataset;
+
+use crate::state::{Bond, Grade, HolderId, Lender, Loan, World};
+
+/// Assess the credit grade from trailing interest coverage and leverage.
+pub fn assess_grade(world: &World, firm: Handle) -> Grade {
+    let Some(entity) = world.firms.get(firm) else {
+        return Grade::D;
+    };
+    let ledger = &entity.book;
+    if ledger.total_equity() < 0 {
+        return Grade::D;
+    }
+    let debt = ledger.debt();
+    let tangible = ledger.net_tangible_assets();
+    // Cross-multiplied integer comparisons avoid floating point thresholds.
+    let leverage_bps = if debt == 0 {
+        0
+    } else if tangible <= 0 {
+        i32::MAX
+    } else {
+        (debt as i128 * 10_000 / tangible as i128).min(i32::MAX as i128) as i32
+    };
+    let ebitda: i64 = ledger.recent_weeks().iter().map(|week| week.ebitda()).sum();
+    let interest_due: i64 = entity
+        .loans
+        .iter()
+        .filter_map(|handle| world.loans.get(*handle))
+        .map(weekly_interest)
+        .sum();
+    let coverage_unlimited = interest_due == 0 && ebitda > 0;
+    let coverage_zero = ebitda <= 0;
+    let coverage_quarters = if interest_due == 0 {
+        i64::MAX
+    } else {
+        ebitda * 10_000 / interest_due
+    };
+    if coverage_zero {
+        if ledger.cash() >= 13 * crate::economy::insolvency::mandatory_weekly_outflow(world, firm) {
+            return Grade::B;
+        }
+        return Grade::C;
+    }
+    if (coverage_unlimited || coverage_quarters >= 40_000) && leverage_bps <= 3_000 {
+        Grade::A
+    } else if coverage_quarters >= 20_000 && leverage_bps <= 5_000 {
+        Grade::B
+    } else if coverage_quarters >= 10_000 && leverage_bps <= 7_000 {
+        Grade::C
+    } else {
+        Grade::D
+    }
+}
+
+pub fn weekly_interest(loan: &Loan) -> i64 {
+    round_even_div(
+        loan.principal_remaining_cents as i128 * loan.rate_bps as i128,
+        10_000 * 52,
+    ) as i64
+}
+
+/// Weekly grade refresh, then scheduled principal and interest on every loan.
+pub fn service(world: &mut World, dataset: &Dataset) {
+    let handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
+    for handle in handles {
+        let grade = assess_grade(world, handle);
+        if let Some(firm) = world.firms.get_mut(handle) {
+            firm.grade = grade;
+        }
+    }
+
+    let loan_handles: Vec<Handle> = world.loans.iter().map(|(handle, _)| handle).collect();
+    for handle in loan_handles {
+        let Some(loan) = world.loans.get(handle).cloned() else {
+            continue;
+        };
+        if loan.principal_remaining_cents <= 0 {
+            continue;
+        }
+        let borrower = loan.borrower;
+        let interest = weekly_interest(&loan);
+        let principal = if loan.remaining_weeks <= 1 {
+            loan.principal_remaining_cents
+        } else {
+            loan.weekly_principal_cents
+                .min(loan.principal_remaining_cents)
+        };
+        let due = interest + principal;
+        let cash = world
+            .firms
+            .get(borrower)
+            .map(|firm| firm.book.cash())
+            .unwrap_or(0)
+            .max(0);
+        let paid = due.min(cash);
+        let interest_paid = paid.min(interest);
+        let principal_paid = paid - interest_paid;
+        if paid > 0 {
+            let _ = world.firms.get_mut(borrower).unwrap().book.commit(
+                world.tick,
+                Txn::new()
+                    .credit(Account::Cash, paid, "debt service")
+                    .debit(Account::InterestExpense, interest_paid, "interest")
+                    .debit(Account::Loans, principal_paid, "principal"),
+            );
+            credit_lender(world, &loan, paid, interest_paid);
+        }
+        if paid < due {
+            let missed_interest = interest - interest_paid;
+            let missed_principal = principal - principal_paid;
+            crate::economy::insolvency::defer_expense(
+                world,
+                borrower,
+                missed_interest,
+                Account::InterestExpense,
+                "unpaid interest",
+            );
+            if missed_principal > 0 {
+                crate::economy::insolvency::defer_expense(
+                    world,
+                    borrower,
+                    missed_principal,
+                    Account::OperatingExpense,
+                    "unpaid principal",
+                );
+            }
+            if let Some(stored) = world.loans.get_mut(handle) {
+                stored.defaulted = true;
+            }
+        }
+        if let Some(stored) = world.loans.get_mut(handle) {
+            stored.principal_remaining_cents =
+                (stored.principal_remaining_cents - principal_paid).max(0);
+            stored.remaining_weeks = stored.remaining_weeks.saturating_sub(1);
+            if stored.remaining_weeks == 0 || stored.principal_remaining_cents == 0 {
+                stored.remaining_weeks = 0;
+            }
+        }
+    }
+    service_bonds(world, dataset);
+}
+
+fn credit_lender(world: &mut World, loan: &Loan, paid: i64, interest_paid: i64) {
+    match loan.lender {
+        Lender::Outside(index) => {
+            if let Some(lender) = world.outside.lenders.get_mut(index as usize) {
+                lender.capital_cents += paid;
+            }
+        }
+        Lender::Bank(handle) | Lender::Firm(handle) => {
+            if let Some(firm) = world.firms.get_mut(handle) {
+                let _ = firm.book.commit(
+                    world.tick,
+                    Txn::new()
+                        .debit(Account::Cash, paid, "loan receipt")
+                        .credit(Account::InterestIncome, interest_paid, "interest income")
+                        .credit(
+                            Account::Receivables,
+                            paid - interest_paid,
+                            "principal received",
+                        ),
+                );
+            }
+        }
+    }
+}
+
+fn service_bonds(world: &mut World, dataset: &Dataset) {
+    let _ = dataset;
+    let handles: Vec<Handle> = world.bonds.iter().map(|(handle, _)| handle).collect();
+    for handle in handles {
+        let Some(bond) = world.bonds.get(handle).cloned() else {
+            continue;
+        };
+        if world.tick.0 >= bond.maturity.0 {
+            // Principal at maturity, paid from issuer cash; insufficient cash defaults.
+            let cash = world
+                .firms
+                .get(bond.issuer)
+                .map(|f| f.book.cash())
+                .unwrap_or(0)
+                .max(0);
+            let paid = bond.principal_cents.min(cash);
+            if paid > 0 {
+                let _ = world.firms.get_mut(bond.issuer).unwrap().book.commit(
+                    world.tick,
+                    Txn::new()
+                        .credit(Account::Cash, paid, "bond maturity")
+                        .debit(Account::Bonds, paid, "bond maturity"),
+                );
+                distribute_to_holders(world, &bond, paid);
+            }
+            if paid < bond.principal_cents {
+                crate::economy::insolvency::defer_expense(
+                    world,
+                    bond.issuer,
+                    bond.principal_cents - paid,
+                    Account::OperatingExpense,
+                    "unpaid bond principal",
+                );
+            }
+            world.bonds.remove(handle);
+            continue;
+        }
+        if world.tick.0 >= bond.next_coupon.0 {
+            let coupon = round_even_div(
+                bond.principal_cents as i128 * bond.coupon_bps as i128,
+                10_000 * 4,
+            ) as i64;
+            let cash = world
+                .firms
+                .get(bond.issuer)
+                .map(|f| f.book.cash())
+                .unwrap_or(0)
+                .max(0);
+            let paid = coupon.min(cash);
+            if paid > 0 {
+                let _ = world.firms.get_mut(bond.issuer).unwrap().book.commit(
+                    world.tick,
+                    Txn::new().credit(Account::Cash, paid, "coupon").debit(
+                        Account::InterestExpense,
+                        paid,
+                        "coupon",
+                    ),
+                );
+                distribute_to_holders(world, &bond, paid);
+            }
+            if paid < coupon {
+                crate::economy::insolvency::defer_expense(
+                    world,
+                    bond.issuer,
+                    coupon - paid,
+                    Account::InterestExpense,
+                    "unpaid coupon",
+                );
+            }
+            if let Some(stored) = world.bonds.get_mut(handle) {
+                stored.next_coupon = Tick(stored.next_coupon.0 + 13);
+            }
+        }
+    }
+}
+
+fn distribute_to_holders(world: &mut World, bond: &Bond, amount: i64) {
+    let total: i64 = bond.holders.values().sum();
+    if total <= 0 {
+        return;
+    }
+    for (holder, qty) in &bond.holders {
+        let share = (amount as i128 * *qty as i128 / total as i128) as i64;
+        match holder {
+            HolderId::Investor => {
+                world.investor.cash_cents += share;
+                let _ = world.investor.book.commit(
+                    world.tick,
+                    Txn::new()
+                        .debit(Account::Cash, share, "bond coupon")
+                        .credit(Account::InterestIncome, share, "bond coupon"),
+                );
+            }
+            HolderId::Firm(handle) => {
+                if let Some(firm) = world.firms.get_mut(*handle) {
+                    let _ = firm.book.commit(
+                        world.tick,
+                        Txn::new()
+                            .debit(Account::Cash, share, "bond coupon")
+                            .credit(Account::InterestIncome, share, "bond coupon"),
+                    );
+                }
+            }
+            HolderId::Outside(index) => {
+                if let Some(holder) = world.outside.investors.get_mut(*index as usize) {
+                    holder.capital_cents += share;
+                }
+            }
+            HolderId::Treasury => {}
+        }
+    }
+}
+
+/// Maximum new secured loan: 50 percent of unpledged tangible assets.
+pub fn secured_capacity(world: &World, firm: Handle) -> i64 {
+    let Some(entity) = world.firms.get(firm) else {
+        return 0;
+    };
+    let pledged: i64 = entity
+        .loans
+        .iter()
+        .filter_map(|handle| world.loans.get(*handle))
+        .filter(|loan| loan.secured)
+        .map(|loan| loan.principal_remaining_cents)
+        .sum();
+    (entity.book.net_tangible_assets() * 50 / 100 - pledged).max(0)
+}
+
+/// Unsecured capacity: thirteen weeks of positive operating cash flow, A/B grade only.
+pub fn unsecured_capacity(world: &World, firm: Handle) -> i64 {
+    let Some(entity) = world.firms.get(firm) else {
+        return 0;
+    };
+    if !matches!(entity.grade, Grade::A | Grade::B) {
+        return 0;
+    }
+    let ebitda: i64 = entity
+        .book
+        .recent_weeks()
+        .iter()
+        .map(|week| week.ebitda())
+        .sum();
+    (ebitda.max(0) / entity.book.recent_weeks().len().max(1) as i64 * 13).max(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::economy::seed;
+    use crate::state::{ScenarioKind, ScenarioMode};
+
+    #[test]
+    fn negative_equity_is_grade_d() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 41, ScenarioKind::Founder, ScenarioMode::Sandbox);
+        let handle = world.firms.iter().next().unwrap().0;
+        crate::economy::insolvency::defer_expense(
+            &mut world,
+            handle,
+            500_000_000,
+            Account::OperatingExpense,
+            "loss",
+        );
+        world
+            .firms
+            .get_mut(handle)
+            .unwrap()
+            .book
+            .close_week(world.tick);
+        assert_eq!(assess_grade(&world, handle), Grade::D);
+    }
+
+    #[test]
+    fn interest_is_a_52_week_rule() {
+        let loan = Loan {
+            borrower: Handle::INVALID,
+            lender: Lender::Outside(0),
+            principal_remaining_cents: 100_000_000,
+            rate_bps: 800,
+            weekly_principal_cents: 0,
+            remaining_weeks: 104,
+            collateral: None,
+            secured: false,
+            created: Tick::OPENING,
+            carry: 0,
+            defaulted: false,
+        };
+        // 100,000,000 * 8% / 52 = 153,846.15 -> 153,846 cents.
+        assert_eq!(weekly_interest(&loan), 153_846);
+    }
+}

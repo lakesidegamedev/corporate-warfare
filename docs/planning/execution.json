@@ -39,7 +39,7 @@
       ],
       "spec": "docs/rules/CONTENT-PACING.md",
       "targets": "tools/data-gen/, content/geography/",
-      "status": "pending",
+      "status": "blocked",
       "checklist": [
         {
           "text": "Recover provenance-traceable official 2004 county/EA crosswalk; record publisher URL, archive date and checksum.",
@@ -54,7 +54,9 @@
           "done": false
         }
       ],
-      "evidence": []
+      "evidence": [
+        "content/geography/corridor-fixture.json"
+      ]
     },
     {
       "id": "P02",
@@ -65,22 +67,24 @@
       ],
       "spec": "docs/rules/MARKETS.md",
       "targets": "crates/cw-core/{money,quantity,ledger}.rs",
-      "status": "pending",
+      "status": "done",
       "checklist": [
         {
           "text": "Implement checked cents/milli-lots/BPS types with i128 intermediates, half-even posting and carried sub-cent remainders.",
-          "done": false
+          "done": true
         },
         {
           "text": "Implement balanced transaction builder, immutable posting records and legal-entity account totals.",
-          "done": false
+          "done": true
         },
         {
           "text": "Encode ECONOMY loan/capex/inventory and CONTENT farm worked examples, including zero/overflow/last-unit rounding.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/packets/P02.json"
+      ]
     },
     {
       "id": "P03",
@@ -93,22 +97,24 @@
       ],
       "spec": "docs/rules/INTERFACE.md",
       "targets": "crates/cw-core/{ids,state}.rs, crates/cw-sim/commands/",
-      "status": "pending",
+      "status": "done",
       "checklist": [
         {
           "text": "Build typed logical handles plus dense-row indirection and generation validation.",
-          "done": false
+          "done": true
         },
         {
           "text": "Implement actor authority, previews, sequence/idempotency and atomic reserve/commit/reject.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test swapped-row deletion references, invalid/stale IDs, duplicate nonce and rollback after a later validation failure.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/packets/P03.json"
+      ]
     },
     {
       "id": "P04",
@@ -122,22 +128,24 @@
       ],
       "spec": "docs/rules/INTERFACE.md",
       "targets": "crates/cw-session/{rng,replay,save}.rs",
-      "status": "pending",
+      "status": "done",
       "checklist": [
         {
           "text": "Create deterministic scenario/session with pinned RNG streams, canonical hash and accepted-command log.",
-          "done": false
+          "done": true
         },
         {
           "text": "Implement envelope versions/checksum/length validation plus import into a new handle, preserving old session on failure.",
-          "done": false
+          "done": true
         },
         {
           "text": "Add same-seed/batch/save replay fixtures and corrupt/future/oversized payload rejection; wire real session into Swift test.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/packets/P04.json"
+      ]
     },
     {
       "id": "P05",

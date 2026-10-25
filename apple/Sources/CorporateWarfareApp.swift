@@ -2,24 +2,23 @@ import SwiftUI
 
 @main
 struct CorporateWarfareApp: App {
+    @StateObject private var store = AppStore()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                if store.sessionReady {
+                    RootView()
+                        .environmentObject(store)
+                } else {
+                    StartView()
+                        .environmentObject(store)
+                }
+            }
+            .tint(Theme.navy)
+            .task {
+                await store.restoreLatestIfAvailable()
+            }
         }
-    }
-}
-
-private struct ContentView: View {
-    private let info = engineInfo()
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("Corporate Warfare")
-                .font(.largeTitle)
-            Text("Engine \(info.version), interface \(info.interfaceVersion)")
-            Text("Development build. Gameplay is not implemented.")
-                .foregroundStyle(.secondary)
-        }
-        .padding()
     }
 }

@@ -8,7 +8,7 @@
       "depends_on": [],
       "gate": "automated",
       "acceptance": "Pin official or provenance-traceable county-to-BEA crosswalk; print deduplicated corridor IDs, memberships, coverage and source hashes; no invented city-as-region rows.",
-      "status": "pending",
+      "status": "blocked",
       "evidence": []
     },
     {
@@ -19,7 +19,7 @@
       ],
       "gate": "automated",
       "acceptance": "Rebuild checked-in dataset from pinned sources; reconcile totals, units, suppression, estimates and source terms; distinguish data year from game start year.",
-      "status": "pending",
+      "status": "blocked",
       "evidence": []
     },
     {
@@ -28,8 +28,10 @@
       "depends_on": [],
       "gate": "automated",
       "acceptance": "Pass hand-computed borrowing, principal, capex, inventory and depreciation examples; checked overflow and rounding; every posting balances.",
-      "status": "pending",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R03-ledger.json"
+      ]
     },
     {
       "id": "R04",
@@ -39,8 +41,10 @@
       ],
       "gate": "automated",
       "acceptance": "Reject stale/generation-mismatched IDs, unauthorised and duplicate commands without partial mutation; deletion repairs references and reservations.",
-      "status": "pending",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R04-commands.json"
+      ]
     },
     {
       "id": "R05",
@@ -50,8 +54,10 @@
       ],
       "gate": "cross-platform",
       "acceptance": "Linux, macOS and iOS match canonical hashes for same seed/accepted log including AI/RNG/queue state; batching and save boundaries do not alter results.",
-      "status": "pending",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R05-session.json"
+      ]
     },
     {
       "id": "R06",
@@ -362,8 +368,10 @@
       ],
       "gate": "cross-platform",
       "acceptance": "Pinned bindings and fresh device/simulator XCFramework compile; Swift runtime session command/save/load/error tests pass without main-thread simulation.",
-      "status": "pending",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R31-integration.json"
+      ]
     },
     {
       "id": "R32",

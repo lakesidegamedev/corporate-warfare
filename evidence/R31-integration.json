@@ -1,0 +1,14 @@
+{
+  "requirement": "R31",
+  "commit": "753730f26636840e5c7709758a13936532acff09",
+  "verified_at": "2026-10-25",
+  "procedure": "Hosted Apple smoke regenerates the ARM64 device and simulator static libraries with the pinned generator, compiles the SwiftUI app, runs EngineBridgeTests in an iPhone simulator (engine info, real session command, advance, save, load, canonical hash, rejected command and corrupt save) and archives an unsigned device app.",
+  "result": "pass",
+  "artifacts": [
+    "crates/cw-ffi/src/lib.rs",
+    "apple/Tests/EngineBridgeTests.swift",
+    "https://github.com/lakesidegamedev/corporate-warfare/actions/runs/40163354065"
+  ],
+  "limitations": "Simulator and unsigned archive only. No signed archive, no TestFlight upload and no physical device run.",
+  "verifier": "DeepSeek agent, hosted CI reviewed 2026-10-25"
+}

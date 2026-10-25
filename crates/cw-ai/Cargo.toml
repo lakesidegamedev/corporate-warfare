@@ -1,0 +1,12 @@
+[package]
+name = "cw-ai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+cw-core.workspace = true
+cw-data.workspace = true
+cw-sim.workspace = true
+serde.workspace = true
