@@ -7,10 +7,12 @@ split fifty/forty/ten) and `docs/rules/CORPORATE.md` (quarterly corporate tax).
 
 ## Model
 
-- Each week the household income calculation computes gross earned labour income from
-  named payroll and background employment. Twenty percent is posted to the government as
-  cash and revenue (`labour income tax`); households receive the remaining eighty percent.
-  Transfer support is added after tax and is not itself taxed.
+- Each week payroll records the wages each firm actually paid, attributed to the regions that
+  supplied the labour. Household income is paid named wages plus background employment, not
+  gross contractual wages. Twenty percent is posted to the government as cash and revenue
+  (`labour income tax`); households receive the remaining eighty percent. Deferred wages are a
+  liability, not household cash, and are not taxed. Transfer support is added after tax and is
+  not itself taxed.
 - Corporate tax already accrues weekly and is paid at week multiples of thirteen. Each
   actual payment is added to the same weekly receipt total.
 - At the close of the week the total is appended to a bounded thirteen-week history. The
@@ -27,8 +29,10 @@ split fifty/forty/ten) and `docs/rules/CORPORATE.md` (quarterly corporate tax).
 - `fiscal::tests::receipts_outside_the_window_are_forgotten` checks that old receipts leave
   the window and budgets fall to zero when nothing is received.
 - `tick::tests::labour_income_tax_is_withheld_and_budgeted` runs a real week, recomputes
-  gross named plus background labour income, and checks the treasury receipt is exactly
+  paid named plus background labour income, and checks the treasury receipt is exactly
   twenty percent and all three budgets are positive.
+- `tick::tests::deferred_wages_are_not_household_income_or_tax` drains an employer's cash,
+  checks the firm defers payroll, and checks the treasury receives tax only on paid wages.
 - The healthcare and defense industry payer tests now reconcile government cash with the
   labour tax receipt as well as the spending leg.
 
@@ -41,13 +45,13 @@ Distributions after the change:
 
 Seed 3 remains at four dissolved rivals, controlled firm in control and score 61. The
 thirty-year conservative policy now keeps control in the median seed instead of losing it.
-The canonical fixture hash is `613e5b05586a334b575128e649b942840b508f3633f8be6c64bb64f579bedb80`.
+The canonical fixture hash is `0f6b4a862704ec11d546254abd69ef1421196633ce97c577a7623228cb07f840`.
 
 ## Known limits
 
-- Labour tax is computed on gross earned wages, including wages a distressed firm deferred
-  rather than paid. The household model has no per-worker cash ledger, so withholding is a
-  regional aggregate. A paid-wage-only base is the next refinement.
+- Withholding is a regional aggregate: paid wages are attributed pro rata to the regions of
+  the employing facilities, not to individual workers. Severance is not included in the
+  labour-tax base.
 - Background transfer support still draws from the training budget and is capped by it; the
   rule says remaining fiscal budget. This is a separate pre-existing fiscal gap.
 - The demand quantity uses fixed baseline lots with the category budget as a ceiling. When

@@ -316,6 +316,31 @@ pub fn pay_payroll(world: &mut World) {
                     .credit(cw_core::ledger::Account::Cash, paid, &memo)
                     .debit(cw_core::ledger::Account::Wages, paid, &memo),
             );
+            // Attribute paid wages to the regions that supplied the labour. A shortfall is
+            // spread in the same proportion, so no region receives cash the firm did not pay.
+            let mut weights: Vec<(u64, i64)> = Vec::new();
+            let mut regions: Vec<u8> = Vec::new();
+            if let Some(firm) = world.firms.get(handle) {
+                for facility_handle in &firm.facilities {
+                    if let Some(facility) = world.facilities.get(*facility_handle) {
+                        let wages: i64 = (0..3)
+                            .map(|tier| facility.workers[tier] * firm.policies.wage_offer[tier])
+                            .sum();
+                        if wages > 0 {
+                            weights.push((facility_handle.0, wages));
+                            regions.push(facility.region);
+                        }
+                    }
+                }
+            }
+            if !weights.is_empty() {
+                let split = allocate_cents(Cents(paid), &weights);
+                for (index, (_, amount)) in split.iter().enumerate() {
+                    if let Some(region) = world.regions.get_mut(regions[index] as usize) {
+                        region.paid_named_wages_cents += amount.0;
+                    }
+                }
+            }
         }
         if paid < total {
             crate::economy::insolvency::defer_expense(

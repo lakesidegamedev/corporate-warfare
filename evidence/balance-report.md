@@ -366,6 +366,7 @@ budgets from the trailing thirteen-week receipt window:
 | 260 weeks | 100 | 56 / 62 / 62 | 5 (3-10) | 1 (0) | $3.49M / $4.34M |
 | 1,560 weeks | 20 | n/a | 10 (6-14) | 1 (0) | $3.49M / $4.83M |
 
-The five-year distribution is unchanged. Over thirty years the median conservative career now
-keeps control of the guided firm and median net worth rises from $4.15M to $4.83M, with fewer
-rival exits (ten rather than twelve). Seed 3 is still four dissolved rivals and score 61.
+The five-year distribution is unchanged after withholding was restricted to wages actually
+paid. Over thirty years the median conservative career now keeps control of the guided firm and
+median net worth rises from $4.15M to $4.83M, with fewer rival exits (ten rather than twelve).
+Seed 3 is still four dissolved rivals and score 61.

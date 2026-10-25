@@ -48,6 +48,9 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::economy::governance::weekly(world, dataset);
 
     // Phase 3: labour and payroll.
+    for region in &mut world.regions {
+        region.paid_named_wages_cents = 0;
+    }
     crate::economy::labour::clear(world, dataset);
 
     // Phase 4: utilities and production.
@@ -353,19 +356,9 @@ fn refresh_household_income(world: &mut World, dataset: &Dataset) {
             let background = world.regions[region_index].background_employed[tier];
             income += background * world.regions[region_index].background_wage_cents[tier];
         }
-        for (_, facility) in world.facilities.iter() {
-            if facility.region as usize != region_index {
-                continue;
-            }
-            // Facility and firm handles are separate slabs; this must read the owning firm.
-            if let Some(firm) = world.firms.get(facility.firm)
-                && firm.operative()
-            {
-                for tier in 0..3 {
-                    income += facility.workers[tier] * firm.policies.wage_offer[tier];
-                }
-            }
-        }
+        // Named income is what employers actually paid this week. Deferred wages are a
+        // liability, not household cash.
+        income += world.regions[region_index].paid_named_wages_cents;
         // Taxable labour income pays twenty percent to the government. Households spend
         // from what remains; transfer support is not taxable wage income.
         let earned = income;
@@ -428,15 +421,7 @@ mod tests {
             for tier in 0..3 {
                 gross += region.background_employed[tier] * region.background_wage_cents[tier];
             }
-        }
-        for (_, facility) in world.facilities.iter() {
-            if let Some(firm) = world.firm(facility.firm)
-                && firm.operative()
-            {
-                for tier in 0..3 {
-                    gross += facility.workers[tier] * firm.policies.wage_offer[tier];
-                }
-            }
+            gross += region.paid_named_wages_cents;
         }
         let expected = gross * 2_000 / 10_000;
         assert_eq!(
@@ -452,6 +437,76 @@ mod tests {
         assert!(world.government.healthcare_budget_cents > 0);
         assert!(world.government.training_budget_cents > 0);
         assert!(world.government.book.is_balanced());
+    }
+
+    #[test]
+    fn deferred_wages_are_not_household_income_or_tax() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 42, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world
+            .firms
+            .iter()
+            .find(|(_, firm)| {
+                firm.operative() && !firm.facilities.is_empty() && firm.book.cash() > 0
+            })
+            .map(|(handle, _)| handle)
+            .expect("an operating employer");
+        let cash = world.firm(firm).unwrap().book.cash();
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .book
+            .commit(
+                world.tick,
+                cw_core::ledger::Txn::new()
+                    .debit(Account::RetainedEarnings, cash, "drain for deferral test")
+                    .credit(Account::Cash, cash, "drain for deferral test"),
+            )
+            .unwrap();
+        advance(&mut world, &dataset);
+        println!(
+            "cash={} overdue={} payables={} accrued={} status={:?}",
+            world.firm(firm).unwrap().book.cash(),
+            world
+                .firm(firm)
+                .unwrap()
+                .book
+                .balance(Account::OverduePayables),
+            world.firm(firm).unwrap().book.balance(Account::Payables),
+            world
+                .firm(firm)
+                .unwrap()
+                .book
+                .balance(Account::AccruedLiabilities),
+            world.firm(firm).unwrap().status
+        );
+        assert!(
+            world
+                .firm(firm)
+                .unwrap()
+                .book
+                .balance(Account::OverduePayables)
+                < 0,
+            "the firm deferred wages it could not pay"
+        );
+        let mut expected = 0i64;
+        for region in &world.regions {
+            for tier in 0..3 {
+                expected += region.background_employed[tier] * region.background_wage_cents[tier];
+            }
+            expected += region.paid_named_wages_cents;
+        }
+        assert_eq!(
+            *world
+                .government
+                .tax_receipts_history
+                .last()
+                .expect("a closed fiscal week"),
+            expected * 2_000 / 10_000,
+            "only paid wages are taxed"
+        );
+        assert!(world.firm(firm).unwrap().book.is_balanced());
     }
 
     #[test]

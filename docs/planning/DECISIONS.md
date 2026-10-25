@@ -314,3 +314,11 @@ is paid after tax and is not taxed. The seed starts with thirteen baseline recei
 tax is withheld on gross earned wages because the household model has no per-worker cash ledger;
 paid-wage-only withholding and the transfer-support budget remain named gaps. Evidence:
 `evidence/fiscal-labour.md`.
+
+### Paid-wage labour tax base, 2026-10-25
+
+Labour withholding and household income now use wages firms actually paid in the week,
+attributed pro rata across the regions of their employing facilities. Deferred wages are an
+overdue liability, not household cash, and are not taxed. Severance stays outside the labour
+tax base. The fiscal receipt window, budgets and twenty percent rate are unchanged.
+Evidence: `evidence/fiscal-labour.md`; hash re-pinned to `0f6b4a86...`.
