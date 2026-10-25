@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `89a6cb5`.
-Kanban: 254781. Merged PRs: #8 through #52.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `e3e525b`.
+Kanban: 254781. Merged PRs: #8 through #53.
 
 ## What exists now
 
@@ -33,18 +33,21 @@ Kanban: 254781. Merged PRs: #8 through #52.
   bank runs pay depositors pro rata, insurance claims settle the following week, and the
   release verifier checks the compiled asset catalog while export uses the App Store Connect
   key, the clock pauses before grace, strikes and imminent deadlines, quality investment is a
-  bounded funded lever, and defense demand runs through funded 52-week procurement contracts with
-  deposits, accepted delivery, deferred unmet demand and a two-week penalty grace.
+  bounded funded lever, defense demand runs through funded 52-week procurement contracts with
+  deposits, accepted delivery, deferred unmet demand and a two-week penalty grace, and labour
+  income pays twenty percent tax into a real receipt series that recomputes the three fiscal
+  budgets from the trailing thirteen-week mean.
 
 ## Verified
 
-- Local: 202 tests pass; shared scheduler job `20261025T101346Z-6ff42003` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
+- Local: 205 tests pass; shared scheduler job `20261025T102837Z-7fc36536` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
   warnings` clean; design and plan validators pass; shared scheduler jobs passed
   (`20261025T070655Z-5df8bceb` latest). Defense procurement has six unit tests and its
-  industry budget scenario; fiscal budgets still use the seeded baseline because weekly
-  labour-income tax is not posted, so a trailing-receipt mean would be invented.
-- Corridor at seed 3: 0 rival failures at 52 weeks, 4-5 at 260 across seeds, 10 over thirty
-  years; guided firm solvent and in control at every horizon; score 61 at week 260.
+  industry budget scenario; fiscal budgets now follow actual labour and corporate receipts.
+  Labour tax is withheld on gross earned wages because households have no per-worker cash ledger,
+  and transfer support still draws from the training budget; both are named refinements.
+- Corridor at seed 3: 0 rival failures at 52 weeks, 4-5 at 260 across seeds, 10 median over
+  thirty years; guided firm solvent and in control at every horizon; score 61 at week 260.
 - Engine baseline on this host: representative (31 firms, 290 facilities) p50 0.55 ms; grown
   (217/2,030) p50 6.46 ms; stress (992/9,280) p50 82.98 ms. Device timing still required.
 - Hosted Verify and Apple smoke last ran green at PR #11. Since PR #12 GitHub Actions fails in
