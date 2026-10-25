@@ -14,6 +14,8 @@ actor Engine {
     }
 
     func loadSave(_ data: Data) throws -> OverviewDto {
+        // The engine builds the new world before the old handle is released, so a failed import
+        // leaves the live session exactly as it was.
         let handle = try importSave(bytes: data)
         session = handle
         return handle.overview()
@@ -124,67 +126,335 @@ struct StoredSave: Identifiable, Hashable {
     let week: UInt32
     let savedAt: Date
     let slot: String
+    let hasLastGood: Bool
 }
 
-/// Atomic temp-write + replace with a last-good backup, per the save contract.
+/// Atomic temp-write + flush + replace with a rolling last-good copy per slot, three autosave
+/// slots rotated by week and a bounded manual slot list, per `docs/rules/INTERFACE.md`.
+///
+/// Write path: the payload is written to `<slot>.tmp`, flushed to disk, the current file is
+/// promoted to `<slot>.lastgood` (staged and swapped, so a failure keeps the older copy), then the
+/// temporary file replaces the current one. A crash anywhere before the final replace leaves the
+/// previous save readable.
 struct SaveManager {
     static let shared = SaveManager()
 
-    private var directory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        let url = base.appendingPathComponent("CorporateWarfare", isDirectory: true)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
+    /// Autosave every four weeks across three slots, so the last three checkpoints survive.
+    static let autosaveSlotCount = 3
+    /// Manual slots retained; the oldest is pruned after a new manual save.
+    static let manualSlotLimit = 10
+
+    private let root: URL?
+
+    /// One save is written at a time. The stop-save runs off the main actor, so two save paths
+    /// could otherwise share the same `<slot>.tmp` file.
+    private static let writeLock = NSLock()
+
+    /// `directory` is injectable so tests use real files in a temporary folder instead of the
+    /// app container.
+    init(directory: URL? = nil) {
+        root = directory
     }
 
-    func write(_ data: Data, slot: String, week: UInt32) throws -> URL {
-        let target = directory.appendingPathComponent("\(slot).cwsave")
-        let temporary = directory.appendingPathComponent("\(slot).tmp")
-        try data.write(to: temporary, options: .atomic)
-        if FileManager.default.fileExists(atPath: target.path) {
-            let backup = directory.appendingPathComponent("\(slot).lastgood")
-            try? FileManager.default.removeItem(at: backup)
-            try? FileManager.default.copyItem(at: target, to: backup)
+    var directory: URL {
+        if let root { return root }
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return base.appendingPathComponent("CorporateWarfare", isDirectory: true)
+    }
+
+    func url(forSlot slot: String) -> URL {
+        directory.appendingPathComponent("\(slot).cwsave")
+    }
+
+    func lastGoodURL(forSlot slot: String) -> URL {
+        directory.appendingPathComponent("\(slot).lastgood")
+    }
+
+    func metadataURL(forSlot slot: String) -> URL {
+        directory.appendingPathComponent("\(slot).json")
+    }
+
+    func lastGoodMetadataURL(forSlot slot: String) -> URL {
+        directory.appendingPathComponent("\(slot).lastgood.json")
+    }
+
+    func temporaryURL(forSlot slot: String) -> URL {
+        directory.appendingPathComponent("\(slot).tmp")
+    }
+
+    func markerURL(forSlot slot: String) -> URL {
+        directory.appendingPathComponent("\(slot).unreadable")
+    }
+
+    // MARK: Slot names
+
+    static func autosaveSlot(week: UInt32) -> String {
+        "autosave-\(Int(week / 4) % autosaveSlotCount)"
+    }
+
+    static func manualSlot(at date: Date = Date()) -> String {
+        "manual-\(SaveMetadata.stamp(date))"
+    }
+
+    // MARK: Write
+
+    @discardableResult
+    func write(
+        _ data: Data,
+        slot: String,
+        week: UInt32,
+        canonicalHash: String = "",
+        kind: SaveMetadata.Kind = .other
+    ) throws -> URL {
+        Self.writeLock.lock()
+        defer { Self.writeLock.unlock() }
+        try prepareDirectory()
+        let target = url(forSlot: slot)
+        let temporary = temporaryURL(forSlot: slot)
+        try? FileManager.default.removeItem(at: temporary)
+
+        do {
+            try flush(data, to: temporary)
+            if FileManager.default.fileExists(atPath: target.path) {
+                // A file that already failed an import must never become the last good copy.
+                if !FileManager.default.fileExists(atPath: markerURL(forSlot: slot).path) {
+                    promoteLastGood(target: target, slot: slot)
+                }
+                _ = try FileManager.default.replaceItemAt(target, withItemAt: temporary)
+            } else {
+                try FileManager.default.moveItem(at: temporary, to: target)
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: temporary)
+            throw SaveRecoveryError.writeFailed(slot: slot)
         }
-        _ = try FileManager.default.replaceItemAt(target, withItemAt: temporary)
-        let metadata = ["week": String(week), "savedAt": ISO8601DateFormatter().string(from: Date())]
-        if let json = try? JSONSerialization.data(withJSONObject: metadata) {
-            try? json.write(to: directory.appendingPathComponent("\(slot).json"), options: .atomic)
-        }
+
+        let info = engineInfo()
+        let metadata = SaveMetadata(
+            slot: slot,
+            week: week,
+            savedAt: Date(),
+            byteCount: data.count,
+            canonicalHash: canonicalHash,
+            engineVersion: info.version,
+            datasetHash: info.datasetHash,
+            kind: kind
+        )
+        writeMetadata(metadata, to: metadataURL(forSlot: slot))
+        try? FileManager.default.removeItem(at: markerURL(forSlot: slot))
         return target
     }
+
+    /// Write the payload to a fresh file and flush it before the rename can publish it.
+    private func flush(_ data: Data, to url: URL) throws {
+        guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
+            throw SaveRecoveryError.writeFailed(slot: url.deletingPathExtension().lastPathComponent)
+        }
+        let handle = try FileHandle(forWritingTo: url)
+        do {
+            try handle.write(contentsOf: data)
+            try handle.synchronize()
+            try handle.close()
+        } catch {
+            try? handle.close()
+            throw error
+        }
+    }
+
+    /// Stage the file that is about to be replaced, then swap it into the last-good pair.
+    private func promoteLastGood(target: URL, slot: String) {
+        let backup = lastGoodURL(forSlot: slot)
+        let staged = directory.appendingPathComponent("\(slot).lastgood.tmp")
+        try? FileManager.default.removeItem(at: staged)
+        do {
+            try FileManager.default.copyItem(at: target, to: staged)
+            if FileManager.default.fileExists(atPath: backup.path) {
+                _ = try FileManager.default.replaceItemAt(backup, withItemAt: staged)
+            } else {
+                try FileManager.default.moveItem(at: staged, to: backup)
+            }
+            if let sidecar = try? Data(contentsOf: metadataURL(forSlot: slot)) {
+                try? sidecar.write(to: lastGoodMetadataURL(forSlot: slot), options: .atomic)
+            }
+        } catch {
+            // Keep the older last-good rather than a half-written replacement.
+            try? FileManager.default.removeItem(at: staged)
+        }
+    }
+
+    private func writeMetadata(_ metadata: SaveMetadata, to url: URL) {
+        guard let data = try? JSONSerialization.data(withJSONObject: metadata.dictionary) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    private func prepareDirectory() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    // MARK: Read
 
     func list() -> [StoredSave] {
         let urls = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         var saves: [StoredSave] = []
         for url in urls where url.pathExtension == "cwsave" {
             let slot = url.deletingPathExtension().lastPathComponent
-            let metaURL = directory.appendingPathComponent("\(slot).json")
-            var week: UInt32 = 0
-            var date = Date.distantPast
-            if let data = try? Data(contentsOf: metaURL),
-               let object = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
-                week = UInt32(object["week"] ?? "0") ?? 0
-                if let text = object["savedAt"] {
-                    date = ISO8601DateFormatter().date(from: text) ?? Date.distantPast
-                }
-            }
-            saves.append(StoredSave(id: slot, url: url, week: week, savedAt: date, slot: slot))
+            let sidecar = metadata(forSlot: slot)
+            saves.append(
+                StoredSave(
+                    id: slot,
+                    url: url,
+                    week: sidecar?.week ?? 0,
+                    savedAt: sidecar?.savedAt ?? Date.distantPast,
+                    slot: slot,
+                    hasLastGood: hasLastGood(slot: slot)
+                )
+            )
         }
-        return saves.sorted { $0.savedAt > $1.savedAt }
+        return saves.sorted {
+            if $0.savedAt != $1.savedAt { return $0.savedAt > $1.savedAt }
+            return $0.slot > $1.slot
+        }
     }
 
     func latest() -> StoredSave? {
         list().first
     }
 
+    func autosaveSlots() -> [StoredSave] {
+        list().filter { $0.slot.hasPrefix("autosave-") }
+    }
+
+    func manualSlots() -> [StoredSave] {
+        list().filter { $0.slot.hasPrefix("manual-") }
+    }
+
+    func metadata(forSlot slot: String) -> SaveMetadata? {
+        SaveMetadata(dictionary: readSidecar(metadataURL(forSlot: slot)), slot: slot)
+    }
+
+    func lastGoodMetadata(forSlot slot: String) -> SaveMetadata? {
+        SaveMetadata(dictionary: readSidecar(lastGoodMetadataURL(forSlot: slot)), slot: slot)
+    }
+
+    private func readSidecar(_ url: URL) -> [String: String] {
+        guard let data = try? Data(contentsOf: url),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: String]
+        else { return [:] }
+        return object
+    }
+
     func load(_ save: StoredSave) throws -> Data {
         try Data(contentsOf: save.url)
     }
 
+    func loadBytes(slot: String) throws -> Data {
+        try Data(contentsOf: url(forSlot: slot))
+    }
+
+    func lastGoodBytes(slot: String) throws -> Data {
+        try Data(contentsOf: lastGoodURL(forSlot: slot))
+    }
+
+    func hasLastGood(slot: String) -> Bool {
+        FileManager.default.fileExists(atPath: lastGoodURL(forSlot: slot).path)
+    }
+
+    func isMarkedUnreadable(slot: String) -> Bool {
+        FileManager.default.fileExists(atPath: markerURL(forSlot: slot).path)
+    }
+
+    /// Remember that this slot's current file failed an import, so the next write does not
+    /// promote it over a good last-good copy. Survives termination.
+    func markUnreadable(slot: String) {
+        try? prepareDirectory()
+        _ = FileManager.default.createFile(
+            atPath: markerURL(forSlot: slot).path,
+            contents: Data(slot.utf8)
+        )
+    }
+
+    // MARK: Recover
+
+    /// Load `<slot>.lastgood` and offer it only after a fresh engine import accepts it. The failing
+    /// current file is never read, renamed or deleted here.
+    func recover(slot: String) throws -> SaveRecoveryCandidate {
+        let backup = lastGoodURL(forSlot: slot)
+        guard FileManager.default.fileExists(atPath: backup.path) else {
+            throw SaveRecoveryError.noLastGood(slot: slot)
+        }
+        guard let data = try? Data(contentsOf: backup) else {
+            throw SaveRecoveryError.unreadableLastGood(slot: slot)
+        }
+        let probe: SessionHandle
+        do {
+            probe = try importSave(bytes: data)
+        } catch {
+            throw SaveRecoveryError.invalidLastGood(
+                slot: slot,
+                key: ErrorKey.of(error) ?? "error.invalid_save"
+            )
+        }
+        let overview = probe.overview()
+        let metadata = lastGoodMetadata(forSlot: slot)
+        return SaveRecoveryCandidate(
+            slot: slot,
+            week: metadata?.week ?? overview.tick,
+            savedAt: metadata?.savedAt ?? Date.distantPast,
+            url: backup,
+            data: data,
+            canonicalHash: probe.canonicalHash()
+        )
+    }
+
+    /// Copy a file that failed to import into `Recovery/` for support. The original slot is left
+    /// untouched, so a failed import never destroys the only copy.
+    @discardableResult
+    func preserveFailingCopy(slot: String, at date: Date = Date()) -> URL? {
+        guard let data = try? Data(contentsOf: url(forSlot: slot)) else { return nil }
+        let folder = directory.appendingPathComponent("Recovery", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
+        let copy = folder.appendingPathComponent("\(slot)-\(SaveMetadata.stamp(date)).cwsave")
+        do {
+            try data.write(to: copy, options: .atomic)
+            return copy
+        } catch {
+            return nil
+        }
+    }
+
+    // MARK: Diagnostics
+
+    func writeDiagnosticBundle(_ data: Data, at date: Date = Date()) throws -> URL {
+        try prepareDirectory()
+        let folder = directory.appendingPathComponent("Diagnostics", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent("diagnostics-\(SaveMetadata.stamp(date)).json")
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    // MARK: Delete and prune
+
+    /// Explicit player deletion. Removes the slot, its metadata and its last-good copy. Quarantined
+    /// copies under `Recovery/` are kept.
     func delete(_ save: StoredSave) {
         try? FileManager.default.removeItem(at: save.url)
-        try? FileManager.default.removeItem(at: directory.appendingPathComponent("\(save.slot).json"))
+        try? FileManager.default.removeItem(at: metadataURL(forSlot: save.slot))
+        try? FileManager.default.removeItem(at: lastGoodURL(forSlot: save.slot))
+        try? FileManager.default.removeItem(at: lastGoodMetadataURL(forSlot: save.slot))
+        try? FileManager.default.removeItem(at: markerURL(forSlot: save.slot))
+    }
+
+    func pruneManualSlots(keeping limit: Int = SaveManager.manualSlotLimit) {
+        let manual = manualSlots()
+        guard manual.count > limit else { return }
+        for save in manual.dropFirst(limit) {
+            delete(save)
+        }
     }
 }

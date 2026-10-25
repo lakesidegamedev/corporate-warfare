@@ -22,8 +22,14 @@ Kanban: 254781. Milestone issues: 1-6. Merged PRs: #8 foundation, #9 release tra
 - `cw-session`: scenario creation, submit/preview/advance/overview/query, versioned save envelope
   with checksum and bounds, replay log.
 - `cw-ffi` + SwiftUI app: serial engine actor, owned DTOs and typed rejection keys; Start,
-  Portfolio, Company, Regions, Markets, Inbox; cash bridge; saves list with atomic write and
-  last-good copy; seven-step guided onboarding; original app icon and privacy manifest.
+  Portfolio, Company, Regions, Markets, Inbox; cash bridge; seven-step guided onboarding;
+  original app icon and privacy manifest.
+- Swift save layer: flush-then-replace writes, a rolling `<slot>.lastgood` pair per slot, three
+  autosave slots rotated by week, ten bounded manual slots, a slot that failed an import can never
+  promote its damaged file over a good last-good, `recover(slot:)` validates the last-good bytes
+  with a fresh engine import before offering them, a named recovery screen, a local-only
+  diagnostics bundle reviewed before sharing, and a bounded stop-and-save on background.
+  `SaveLifecycleTests` covers all of it; the suite has **not run on the Mac runner yet**.
 - `cw-cli`: doctor, run, sweep, replay. Release workflow: archive, verify, sign/export, upload,
   bounded App Store Connect processing check, fail-closed when secrets are absent.
 
@@ -71,7 +77,8 @@ Kanban: 254781. Milestone issues: 1-6. Merged PRs: #8 foundation, #9 release tra
    run that reaches 260 weeks with explainable firm failures rather than silent starvation.
 3. Extend phone flows to every command family (subsidiaries, boards, takeover, banking, insurance,
    labour, policy, recovery) and complete the P31 accessibility audit at 320pt and AX text.
-4. P32 remaining: filesystem interrupted-write/suspend recovery in Swift and migration fixtures.
+4. P32 remaining: run the new `SaveLifecycleTests` (interrupted write, last-good fallback, future
+   schema, poisoned slot) on the Mac runner and record the evidence; then the migration fixtures.
 5. P33 balance sweeps, P34 device profiling, P35 three independent playtests.
 6. Apple: resolve blocker 3, dispatch the release workflow, poll processing, install on a real
    iPhone and run the acceptance route. Only then can the goal close.
