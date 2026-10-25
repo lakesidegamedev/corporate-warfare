@@ -233,9 +233,16 @@ fn accrue_tax(world: &mut World, firm: Handle) {
     if taxable <= 0 {
         return;
     }
-    let modifier = world.regions[entity.region as usize]
-        .policy
-        .tax_modifier_bps;
+    let policy = &world.regions[entity.region as usize].policy;
+    let modifier = if policy
+        .tax_modifier_until
+        .map(|until| until.0 > world.tick.0)
+        .unwrap_or(false)
+    {
+        policy.tax_modifier_bps
+    } else {
+        0
+    };
     let rate = (2_500 + modifier).clamp(0, 10_000);
     let quarterly = round_even_div(taxable as i128 * rate as i128, 10_000) as i64;
     let weekly = quarterly / 13;
