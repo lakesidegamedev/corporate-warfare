@@ -13,7 +13,7 @@ actor Engine {
         return handle.overview()
     }
 
-    func importSave(_ data: Data) throws -> OverviewDto {
+    func loadSave(_ data: Data) throws -> OverviewDto {
         let handle = try importSave(bytes: data)
         session = handle
         return handle.overview()

@@ -50,19 +50,23 @@ final class AppStore: ObservableObject {
 
     func newCareer(guided: Bool, fiveYear: Bool, seed: UInt64) async {
         await perform {
-            let overview = try await self.engine.start(seed: seed, guided: guided, fiveYear: fiveYear)
-            self.overview = overview
-            self.selectedFirm = overview.primaryFirm
-            self.sessionReady = true
-            await self.reload()
-            await self.autosave(slot: "autosave-\(overview.tick)")
+            do {
+                let overview = try await self.engine.start(seed: seed, guided: guided, fiveYear: fiveYear)
+                self.overview = overview
+                self.selectedFirm = overview.primaryFirm
+                self.sessionReady = true
+                await self.reload()
+                await self.autosave(slot: "autosave-\(overview.tick)")
+            } catch {
+                self.errorMessage = error.localizedDescription
+            }
         }
     }
 
     func resume(_ save: StoredSave, silent: Bool = false) async {
         do {
             let data = try SaveManager.shared.load(save)
-            let overview = try await engine.importSave(data)
+            let overview = try await engine.loadSave(data)
             self.overview = overview
             self.selectedFirm = overview.primaryFirm
             self.sessionReady = true

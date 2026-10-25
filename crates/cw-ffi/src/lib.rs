@@ -143,6 +143,15 @@ pub struct FinanceDto {
     pub bridge_financing_cents: i64,
     pub bridge_tax_cents: i64,
     pub bridge_closing_cents: i64,
+    pub recent_weeks: Vec<WeekDto>,
+}
+
+#[derive(uniffi::Record)]
+pub struct WeekDto {
+    pub week: u32,
+    pub revenue_cents: i64,
+    pub ebit_cents: i64,
+    pub net_income_cents: i64,
 }
 
 #[derive(uniffi::Record)]
@@ -365,6 +374,16 @@ fn finance_dto(summary: FinanceSummary) -> FinanceDto {
         bridge_financing_cents: summary.cash_bridge.financing_cents,
         bridge_tax_cents: summary.cash_bridge.tax_cents,
         bridge_closing_cents: summary.cash_bridge.closing_cents,
+        recent_weeks: summary
+            .recent_weeks
+            .into_iter()
+            .map(|week| WeekDto {
+                week: week.week,
+                revenue_cents: week.revenue_cents,
+                ebit_cents: week.ebit_cents,
+                net_income_cents: week.net_income_cents,
+            })
+            .collect(),
     }
 }
 
