@@ -187,7 +187,7 @@
       ],
       "spec": "docs/rules/MARKETS.md",
       "targets": "crates/cw-sim/{households,background,government}.rs",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Create household savings/spend, background employers and finite government/gateway ledgers.",
@@ -217,7 +217,7 @@
       ],
       "spec": "docs/rules/MARKETS.md",
       "targets": "crates/cw-sim/{labour,production}.rs",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement retained workers, two-percent search accumulators, tier offers and simultaneous allocation.",
@@ -245,7 +245,7 @@
       ],
       "spec": "docs/rules/MARKETS.md",
       "targets": "crates/cw-sim/markets/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement destination books, buyer cash reservations and capped integer attractiveness.",
@@ -274,7 +274,7 @@
       ],
       "spec": "docs/rules/MARKETS.md",
       "targets": "crates/cw-sim/{freight,contracts,capital}.rs",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement finite carrier offers, minimum/road charges, integer transit and arrivals; contract before spot priority.",
@@ -306,7 +306,7 @@
       ],
       "spec": "docs/rules/INTERFACE.md",
       "targets": "apple/Sources/{SessionActor,SaveManager,Overview,Facility,Region,Supply}/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Wrap real session/query/preview/submit/advance in serial actor; main actor receives small immutable models.",
@@ -334,7 +334,7 @@
       ],
       "spec": "docs/rules/CORPORATE.md",
       "targets": "crates/cw-sim/{career,formation}.rs",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement founder and guided opening ledgers with personal vs firm ownership and cash.",
@@ -362,7 +362,7 @@
       ],
       "spec": "docs/rules/CORPORATE.md",
       "targets": "crates/cw-sim/{ownership,consolidation}.rs",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Model ordinary voting shares, treasury exclusion, >50 percent immediate parent and acyclic equity graph.",
@@ -391,7 +391,7 @@
       ],
       "spec": "docs/rules/CORPORATE.md",
       "targets": "crates/cw-sim/intercompany/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement bilateral authority for intercompany loans/trade and capped explicit guarantees.",
@@ -420,7 +420,7 @@
       ],
       "spec": "docs/rules/CORPORATE.md",
       "targets": "crates/cw-sim/{exchange,valuation}.rs",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement finite free float, spread/impact, reservations, beneficial-owner wash rejection and cost basis.",
@@ -448,7 +448,7 @@
       ],
       "spec": "docs/rules/CORPORATE.md",
       "targets": "crates/cw-sim/equity_actions/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement funded issue, retained earnings/cash-buffer constrained dividend and treasury buyback/retirement.",
@@ -477,7 +477,7 @@
       ],
       "spec": "docs/rules/CORPORATE.md",
       "targets": "crates/cw-sim/governance/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Apportion five board seats at13-week meetings and schedule four-week extraordinary meetings.",
@@ -506,7 +506,7 @@
       ],
       "spec": "docs/rules/FINANCE-LABOUR-AI.md",
       "targets": "crates/cw-sim/credit/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement grade thresholds, funded loan quotes/collateral/coverage, principal and interest carry.",
@@ -536,7 +536,7 @@
       ],
       "spec": "docs/rules/CORPORATE.md",
       "targets": "crates/cw-sim/insolvency/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement missed-payment liabilities, payout freeze and four-week grace.",
@@ -566,7 +566,7 @@
       ],
       "spec": "docs/rules/FINANCE-LABOUR-AI.md",
       "targets": "crates/cw-sim/banking/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Represent deposits as claims/liabilities and outside cash only once; transfer or redeem explicitly.",
@@ -596,7 +596,7 @@
       ],
       "spec": "docs/rules/FINANCE-LABOUR-AI.md",
       "targets": "crates/cw-sim/insurance/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement bind/expiry/premium accrual, coverage/capital/liquidity/concentration limits.",
@@ -627,7 +627,7 @@
       ],
       "spec": "docs/rules/CORPORATE.md",
       "targets": "crates/cw-sim/deals/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement every bid state, funded escrow, two-week diligence/four-week offer and holder reservation factors.",
@@ -656,7 +656,7 @@
       ],
       "spec": "docs/rules/CORPORATE.md",
       "targets": "crates/cw-sim/antitrust/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Compute trailing13-week group-aware product/region HHI and both review triggers.",
@@ -685,7 +685,7 @@
       ],
       "spec": "docs/rules/FINANCE-LABOUR-AI.md",
       "targets": "crates/cw-sim/unions/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement organisation growth/decay, ballot, bargaining deadlines, counters and strike staffing.",
@@ -714,7 +714,7 @@
       ],
       "spec": "docs/rules/FINANCE-LABOUR-AI.md",
       "targets": "crates/cw-sim/policy/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement three request types, fees, region/group cooldown, four-week saved success draw and reputation.",
@@ -808,7 +808,7 @@
       ],
       "spec": "docs/rules/FINANCE-LABOUR-AI.md",
       "targets": "crates/cw-ai/, crates/cw-session/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement urgent weekly evaluation and stable four-cohort strategic slots with fixed candidate/action limits.",
@@ -837,7 +837,7 @@
       ],
       "spec": "docs/rules/EVENTS.md",
       "targets": "content/events/, content/scenarios/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Seed30 named firms, finite background and both starts without duplicated population/output.",
@@ -866,7 +866,7 @@
       ],
       "spec": "docs/rules/CONTENT-PACING.md",
       "targets": "crates/cw-sim/{score,macro}.rs",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement52-week calendar, bounded macro impulses/regimes and deterministic long-run frontier.",
@@ -902,7 +902,7 @@
       ],
       "spec": "docs/rules/INTERFACE.md",
       "targets": "apple/Sources/{Portfolio,Finance,Ownership,Deals,Labour,Policy}/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Build every command family into reachable phone flow with legal actor/context and preview.",
@@ -932,7 +932,7 @@
       ],
       "spec": "docs/rules/VISUAL.md",
       "targets": "apple/Sources/{Onboarding,DesignSystem,About}/, content/assets/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Implement seven-step real-rule guided onboarding, skip/resume and contextual explanation links.",
@@ -963,7 +963,7 @@
       ],
       "spec": "docs/rules/INTERFACE.md",
       "targets": "crates/*/tests/, apple/Tests/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Generate valid/invalid command sequences and save corruption/truncation/oversize/migration cases.",
@@ -1028,7 +1028,7 @@
       ],
       "spec": "docs/rules/INTERFACE.md",
       "targets": "tools/perf/, apple/Tests/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Generate declared representative/grown/stress fixtures with real transactions and100 controlled firms stress case.",
@@ -1089,7 +1089,7 @@
       ],
       "spec": "docs/rules/INTERFACE.md",
       "targets": "apple/scripts/, .github/workflows/release.yml",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Verify final bundle/team/app record, approved secret path, actual privacy API declarations and store/beta metadata.",
