@@ -1,0 +1,15 @@
+{
+  "requirement": "R05",
+  "result": "pass",
+  "commit": "981bf915b7f21d4b3dcecd92ced5200f695ef084",
+  "procedure": "GitHub Actions Verify run 40206065817 and Apple smoke run 40206065805 on main 981bf91. Apple smoke regenerated the XCFramework, compiled the SwiftUI app for the iOS simulator, linked the Rust bridge, ran EngineBridgeTests and SaveLifecycleTests (12 tests, 0 failures), and matched canonical hash 6731ed7cf42d0a410e94b55f3aefad6fbe51453cbe3a6803548fa7edbfb633ad.",
+  "artifacts": [
+    "apple/Tests/EngineBridgeTests.swift",
+    "apple/Scripts/build-engine.sh",
+    ".github/workflows/apple.yml",
+    "crates/cw-session/src/lib.rs"
+  ],
+  "limitations": "Simulator and device-archive compile only. No physical-device install or acceptance run yet; that remains R42.",
+  "verified_at": "2026-10-25",
+  "verifier": "GitHub Actions macos-26 Apple smoke run 40206065805"
+}

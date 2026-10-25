@@ -3,25 +3,14 @@
 Nothing below can be done from this Linux host or by an agent without the named access. Each
 item lists the exact action and what becomes possible afterwards.
 
-## 1. Restore GitHub Actions billing
+## 1. Hosted CI is unblocked
 
-Symptom: every workflow fails in 2-4 seconds before any step runs, with
-"The job was not started because recent account payments have failed or your spending limit needs
-to be increased."
+The repository is public. Verify run 40206065817 and Apple smoke run 40206065805 passed on main
+`981bf91`. Apple smoke compiled the SwiftUI app, linked the Rust bridge, ran 12 simulator tests
+with 0 failures and archived the device app. Expected canonical hash:
+`6731ed7cf42d0a410e94b55f3aefad6fbe51453cbe3a6803548fa7edbfb633ad`.
 
-Action: restore the account payment method or raise the Actions spending limit in GitHub billing
-settings, or use the owner-approved public-repository path in `evidence/handoff-muse.md`.
-
-Then immediately possible:
-
-- `Verify` runs fmt, clippy, workspace tests, doctor and the plan/design validators on `main`.
-- `Apple smoke` regenerates the XCFramework, compiles the SwiftUI app (uncompiled since PR #11),
-  runs the eight save-lifecycle tests and the session hash test, and archives an unsigned device
-  app.
-- Expected canonical hash in `EngineBridgeTests` and the Rust pin:
-  `6731ed7cf42d0a410e94b55f3aefad6fbe51453cbe3a6803548fa7edbfb633ad`.
-  If the simulator disagrees, that is a real cross-platform finding, not a reason to change the
-  pin without investigating.
+The remaining release work is Apple signing, not CI.
 
 ## 2. Apple identity, signing and TestFlight
 

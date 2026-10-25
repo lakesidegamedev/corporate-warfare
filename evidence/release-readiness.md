@@ -1,6 +1,6 @@
 # Release readiness map
 
-Updated 2026-10-25 against main `75444f4`. This maps every release requirement to its real
+Updated 2026-10-25 against main `981bf91`. This maps every release requirement to its real
 evidence or its concrete blocker. It is not a completion claim: a requirement is only done when
 its ledger entry names reviewed evidence that satisfies the gate.
 
@@ -10,7 +10,7 @@ its ledger entry names reviewed evidence that satisfies the gate.
 | R02 | automated | blocked | Depends on R01; dataset is labelled engineering calibration. |
 | R03 | automated | done | `evidence/R03-ledger.json`; ledger/units/farm worked example. |
 | R04 | automated | done | `evidence/R04-commands.json`; handles, authority, rollback, duplicate IDs. |
-| R05 | cross-platform | active | Linux hash `6731ed7c...` is pinned and batching/replay tests pass. The iOS XCTest pin is updated but has not been run since PR #11 because Actions billing fails. |
+| R05 | cross-platform | done | `evidence/R05-cross-platform.json`; Apple smoke run 40206065805 compiled the app, ran 12 simulator tests and matched hash `6731ed7c...` on main `981bf91`. |
 | R06 | automated | active | Household disposable baseline, 1% savings supplement, paid-wage income and finite gateways are implemented with market tests. R02 still blocks release sign-off. |
 | R07 | automated | active | Labour allocation, 2% search, tier offers, wage clamp, training and paid/deferred payroll are tested. R06/R02 block the chain. |
 | R08 | automated | active | Production, inputs, capacity and service expiry are covered by the 18 industry scenarios. |
@@ -35,7 +35,7 @@ its ledger entry names reviewed evidence that satisfies the gate.
 | R27 | automated | active | R&D/brand/quality rules and tests exist; marketing demand now funds media. |
 | R28 | automated | pending | Bounded rival proposals, cohorts and wage/build guards implemented; needs archetype win/lose fixtures. |
 | R29 | automated | active | 24+ distinct cards are validated and every choice is opened and resolved in isolation with ledger checks; R24/R28 and the blocked chain still prevent ledger sign-off. |
-| R30 | automated | active | Checksum, bounds, adversarial rejection and Swift recovery code exist; the Swift lifecycle suite has not run on the Mac runner. |
+| R30 | automated | done | `evidence/R30-saves.json`; eight SaveLifecycleTests passed on the macOS runner, including atomic replace, interrupted write, last-good fallback and bounded slots. |
 | R31 | cross-platform | done | `evidence/R31-integration.json`; simulator XCTest command/save/load/error. |
 | R32 | human | pending | Core screens exist; the smallest-phone offline route has not run because the app is uncompiled since PR #11 (Actions billing). |
 | R33 | human | pending | Every corporate family has a phone flow and a session-level workflow test; the phone route has not been compiled or run since PR #11. |
@@ -51,9 +51,9 @@ its ledger entry names reviewed evidence that satisfies the gate.
 
 ## Global blockers
 
-1. GitHub Actions billing fails before job start, so hosted gates and the current iOS hash
-   verification cannot run.
-2. Apple signing/TestFlight credentials are absent. `apple/RELEASE.md` lists the exact secrets
-   and owner actions.
+1. GitHub Actions is running on the now-public repository. Verify and Apple smoke are green on
+   main `981bf91`; the remaining hosted work is the signed Release workflow.
+2. Apple signing/TestFlight credentials are absent. The app record and the four App Store Connect
+   secrets are still required; `apple/RELEASE.md` and `evidence/handoff-muse.md` list them.
 3. No physical device and no independent human testers for R37, R38 and R42.
 4. The official corridor crosswalk is unavailable, so R01/R02 stay blocked behind real data.

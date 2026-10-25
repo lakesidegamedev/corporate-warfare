@@ -1,0 +1,13 @@
+{
+  "requirement": "R30",
+  "result": "pass",
+  "commit": "981bf915b7f21d4b3dcecd92ced5200f695ef084",
+  "procedure": "GitHub Actions Apple smoke run 40206065805 on main 981bf91 ran SaveLifecycleTests: 8 tests, 0 failures, covering atomic replace, corrupt-current last-good fallback, interrupted write, bounded autosave rotation, typed failure without last-good, and damaged-slot handling. EngineBridgeTests also cover export/import hash and future-schema rejection.",
+  "artifacts": [
+    "apple/Tests/EngineBridgeTests.swift",
+    "apple/Sources/SaveRecovery.swift",
+    "crates/cw-session/src/save.rs"
+  ],
+  "limitations": "Simulator tests cover file-level interruption and last-good recovery, not an OS suspend/termination capture on a physical iPhone. That device-lifecycle evidence remains part of R37/R42.",
+  "verified_at": "2026-10-25"
+}

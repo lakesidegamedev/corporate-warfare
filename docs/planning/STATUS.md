@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `6f99b2e`.
-Kanban: 254781. Merged PRs: #8 through #60.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `981bf91`.
+Kanban: 254781. Merged PRs: #8 through #61.
 
 ## What exists now
 
@@ -57,33 +57,27 @@ Kanban: 254781. Merged PRs: #8 through #60.
   median seed without founding a replacement.
 - Engine baseline on this host: representative (31 firms, 290 facilities) p50 0.55 ms; grown
   (217/2,030) p50 6.46 ms; stress (992/9,280) p50 82.98 ms. Device timing still required.
-- Hosted Verify and Apple smoke last ran green at PR #11. Since PR #12 GitHub Actions fails in
-  seconds for billing, so every Swift change after the onboarding PR is syntax-checked only and
-  has **not** been compiled by Xcode or run in a simulator.
+- Hosted Verify and Apple smoke are green on `main` `981bf91`: the SwiftUI app compiles for the
+  simulator and device archive, the Rust bridge links, and 12 XCTests pass with hash
+  `6731ed7c...`. The repository is now public; Actions started normally after the change.
 
 ## Blockers
 
-1. **GitHub Actions billing.** Every workflow fails before starting. This blocks Apple compile,
-   simulator XCTest, the current canonical-hash verification and all hosted gates. Owner must
-   restore billing or raise the spending limit.
-2. **Apple signing and TestFlight.** No repository/org secrets and no App Store Connect key for
-   `net.lakesidegames.corporatewarfare`. Exact secrets and owner actions are in
-   `apple/RELEASE.md`. Without this there is no signed archive, upload, processed build or
-   TestFlight installation.
-3. **Geography/data gate.** The official 2004 BEA county crosswalk is unrecoverable from
-   official sources. R01/R02 stay blocked, and every economy packet/requirement that depends on
-   them is transitively blocked in the ledger even though the systems are implemented against
-   labelled fixtures. A custom region scheme or an owner-supplied crosswalk is a product
-   decision, not something to invent.
-4. **Device and human gates.** No physical iPhone measurements (R37), no three independent
-   testers (R38), no TestFlight installation (R42).
+1. **Apple signing and TestFlight.** The repository is public and hosted Verify/Apple smoke are
+   green, but no App Store Connect app record or signing secrets exist. Owner/Muse must add
+   `APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_CONTENT` and `APPLE_DEVELOPMENT_TEAM` for
+   `net.lakesidegames.corporatewarfare` and confirm the internal tester group.
+2. **Geography/data gate.** The official crosswalk is still missing; R01/R02 and dependent
+   packets remain blocked pending an owner-supplied file or an approved custom corridor.
+3. **Device and human gates.** No physical iPhone measurements (R37), no three independent
+   testers (R38) and no TestFlight installation (R42).
+
 
 ## Next moves, in order
 
-1. Restore GitHub Actions, then run Apple smoke on `main`: this is the first real compile and
-   simulator run of the corporate flows, recovery layer and score sheet.
-2. Owner supplies Apple team/app record/secrets or names an approved studio key; dispatch the
-   release workflow; poll processing; install on an iPhone and run the acceptance route.
+1. Owner/Muse supplies the App Store Connect app record and the four signing secrets named in
+   `evidence/handoff-muse.md`; dispatch `Release` and poll processing.
+2. Install the processed build on a real iPhone and run the offline acceptance route.
 3. Owner decides the geography: supply the official crosswalk or approve a named custom corridor.
    Until then R01/R02 and their dependants cannot be signed off.
 4. With a signed build: device profiling (R37), three playtests (R38), then R41/R42.

@@ -54,8 +54,10 @@
       ],
       "gate": "cross-platform",
       "acceptance": "Linux, macOS and iOS match canonical hashes for same seed/accepted log including AI/RNG/queue state; batching and save boundaries do not alter results.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R05-cross-platform.json"
+      ]
     },
     {
       "id": "R06",
@@ -357,8 +359,10 @@
       ],
       "gate": "automated",
       "acceptance": "Atomic save, checksum, last-good fallback, migration fixtures, future/corrupt/oversized rejection and export/import pass including interrupted write.",
-      "status": "pending",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R30-saves.json"
+      ]
     },
     {
       "id": "R31",
