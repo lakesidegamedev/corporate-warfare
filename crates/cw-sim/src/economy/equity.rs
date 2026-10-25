@@ -1059,6 +1059,57 @@ mod tests {
     }
 
     #[test]
+    fn a_treasury_buyback_pays_external_holders_and_conserves_issued_shares() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 67, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world.investor.primary_group.unwrap();
+        refresh_valuation(&mut world, &dataset);
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .book
+            .commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, 10_000_000_000, "funding")
+                    .credit(Account::ShareCapital, 10_000_000_000, "funding"),
+            )
+            .unwrap();
+        let issued = world.firm(firm).unwrap().shares.issued;
+        let cash_before = world.firm(firm).unwrap().book.cash();
+        let outside_before: i64 = world
+            .firm(firm)
+            .unwrap()
+            .shares
+            .holders
+            .iter()
+            .filter(|(holder, _)| matches!(holder, HolderId::Outside(_)))
+            .map(|(_, lot)| lot.qty)
+            .sum();
+        let treasury_before = world.firm(firm).unwrap().shares.treasury();
+        let cost = repurchase(&mut world, firm, 1_000).unwrap();
+        assert!(cost > 0);
+        assert_eq!(world.firm(firm).unwrap().shares.issued, issued);
+        let outside_after: i64 = world
+            .firm(firm)
+            .unwrap()
+            .shares
+            .holders
+            .iter()
+            .filter(|(holder, _)| matches!(holder, HolderId::Outside(_)))
+            .map(|(_, lot)| lot.qty)
+            .sum();
+        assert_eq!(outside_after + 1_000, outside_before);
+        assert_eq!(
+            world.firm(firm).unwrap().shares.treasury(),
+            treasury_before + 1_000
+        );
+        assert_eq!(world.firm(firm).unwrap().book.cash(), cash_before - cost);
+        assert!(world.firm(firm).unwrap().book.is_balanced());
+    }
+
+    #[test]
     fn an_ipo_sells_a_funded_float_and_pays_the_fee() {
         let dataset = Dataset::load().unwrap();
         let mut world = seed::build(&dataset, 66, ScenarioKind::Founder, ScenarioMode::Sandbox);
