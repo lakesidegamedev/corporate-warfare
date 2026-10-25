@@ -81,6 +81,13 @@ pub fn deposit(world: &mut World, bank: Handle, holder: HolderId, amount: i64) -
             "deposit",
         ),
     );
+    if let Some(model) = world
+        .firms
+        .get_mut(bank)
+        .and_then(|firm| firm.bank.as_mut())
+    {
+        *model.depositors.entry(holder).or_default() += amount;
+    }
     credit_holder(world, holder, amount, "deposit");
     Ok(())
 }
@@ -97,7 +104,12 @@ pub fn withdraw(
         .get(bank)
         .map(|firm| firm.book.cash())
         .unwrap_or(0);
-    let claim = holder_claim(world, holder);
+    let claim = world
+        .firms
+        .get(bank)
+        .and_then(|firm| firm.bank.as_ref())
+        .and_then(|model| model.depositors.get(&holder).copied())
+        .unwrap_or(0);
     let paid = amount.min(cash.max(0)).min(claim);
     if paid <= 0 {
         return Err(DomainError::InsufficientCash {
@@ -121,19 +133,15 @@ pub fn withdraw(
         ),
     );
     debit_holder(world, holder, paid, "withdrawal");
-    Ok(paid)
-}
-
-fn holder_claim(world: &World, holder: HolderId) -> i64 {
-    match holder {
-        HolderId::Firm(handle) => world
-            .firms
-            .get(handle)
-            .map(|firm| firm.book.balance(Account::Receivables).max(0))
-            .unwrap_or(0),
-        HolderId::Investor => world.investor.cash_cents,
-        _ => 0,
+    if let Some(model) = world
+        .firms
+        .get_mut(bank)
+        .and_then(|firm| firm.bank.as_mut())
+        && let Some(balance) = model.depositors.get_mut(&holder)
+    {
+        *balance = (*balance - paid).max(0);
     }
+    Ok(paid)
 }
 
 fn pay_holder(world: &mut World, holder: HolderId, amount: i64, memo: &str) -> DomainResult<()> {
@@ -373,6 +381,38 @@ pub fn run(world: &mut World, bank: Handle) -> i64 {
         .max(0);
     let paid = requested.min(cash);
     if paid > 0 {
+        let holders: Vec<(HolderId, i64)> = world
+            .firms
+            .get(bank)
+            .and_then(|firm| firm.bank.as_ref())
+            .map(|model| {
+                model
+                    .depositors
+                    .iter()
+                    .map(|(holder, balance)| (*holder, *balance))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let weights: Vec<(u64, i64)> = holders
+            .iter()
+            .enumerate()
+            .map(|(index, (_, balance))| (index as u64, *balance))
+            .collect();
+        let shares = cw_core::money::allocate_cents(cw_core::money::Cents(paid), &weights);
+        for (index, (holder, _)) in holders.iter().enumerate() {
+            let share = shares[index].1.0.max(0);
+            if share > 0 {
+                debit_holder(world, *holder, share, "bank run");
+                if let Some(model) = world
+                    .firms
+                    .get_mut(bank)
+                    .and_then(|firm| firm.bank.as_mut())
+                    && let Some(balance) = model.depositors.get_mut(holder)
+                {
+                    *balance = (*balance - share).max(0);
+                }
+            }
+        }
         let _ = world.firms.get_mut(bank).unwrap().book.commit(
             world.tick,
             Txn::new().credit(Account::Cash, paid, "bank run").debit(
@@ -428,6 +468,73 @@ mod tests {
         let total_cash_before =
             world.firm(bank).unwrap().book.cash() + world.firm(borrower).unwrap().book.cash();
         assert!(total_cash_before > 0);
+    }
+
+    #[test]
+    fn a_run_pays_depositors_pro_rata_and_reduces_their_claims() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            791,
+            crate::state::ScenarioKind::Founder,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let bank = world
+            .firms
+            .iter()
+            .find(|(_, firm)| firm.bank.is_some())
+            .map(|(handle, _)| handle)
+            .unwrap();
+        let holders: Vec<Handle> = world
+            .firms
+            .iter()
+            .filter(|(handle, firm)| *handle != bank && firm.operative())
+            .map(|(handle, _)| handle)
+            .take(2)
+            .collect();
+        for holder in &holders {
+            deposit(&mut world, bank, HolderId::Firm(*holder), 10_000_000).unwrap();
+        }
+        // Leave only five million of cash so the twenty-five percent request cannot be paid in full.
+        let cash = world.firm(bank).unwrap().book.cash();
+        let drain = cash - 5_000_000;
+        world
+            .firms
+            .get_mut(bank)
+            .unwrap()
+            .book
+            .commit(
+                world.tick,
+                Txn::new().credit(Account::Cash, drain, "drain").debit(
+                    Account::OtherAssets,
+                    drain,
+                    "drain",
+                ),
+            )
+            .unwrap();
+        let before: Vec<i64> = holders
+            .iter()
+            .map(|holder| world.firm(*holder).unwrap().book.cash())
+            .collect();
+        let deposits_before = deposits(&world, bank);
+        let paid = run(&mut world, bank);
+        assert_eq!(paid, 5_000_000, "only actual cash leaves");
+        for (index, holder) in holders.iter().enumerate() {
+            let gain = world.firm(*holder).unwrap().book.cash() - before[index];
+            assert_eq!(gain, 2_500_000, "depositors share pro rata");
+            assert!(world.firm(*holder).unwrap().book.is_balanced());
+        }
+        assert_eq!(deposits(&world, bank), deposits_before - paid);
+        let model = world.firm(bank).unwrap().bank.as_ref().unwrap();
+        assert_eq!(
+            model.depositors.get(&HolderId::Firm(holders[0])),
+            Some(&7_500_000)
+        );
+        assert_eq!(
+            model.depositors.get(&HolderId::Firm(holders[1])),
+            Some(&7_500_000)
+        );
+        assert!(world.firm(bank).unwrap().book.is_balanced());
     }
 
     #[test]

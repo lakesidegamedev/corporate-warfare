@@ -2113,6 +2113,7 @@ fn apply_intent(
                     entity.bank = Some(BankModel {
                         deposit_rate_bps: *rate_bps,
                         specialist_concentration: false,
+                        depositors: Default::default(),
                     });
                 } else if let Some(model) = entity.bank.as_mut() {
                     model.deposit_rate_bps = *rate_bps;
