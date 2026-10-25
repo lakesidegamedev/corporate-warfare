@@ -1,0 +1,271 @@
+{
+  "schema": 1,
+  "classification": "authored game content; fictional firms, no real brands or logos",
+  "events": [
+    {
+      "id": "supplier_default",
+      "title": "Supplier default",
+      "trigger": "supplier_restructuring",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "terminate", "label": "Terminate future deliveries and claim the escrow refund", "handler": "terminate_supplier_contract" },
+        { "id": "wait", "label": "Keep the claim and wait for the supplier's restructuring", "handler": "keep_supplier_claim" }
+      ]
+    },
+    {
+      "id": "energy_outage",
+      "title": "Energy outage",
+      "trigger": "random_energy_region",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "backup", "label": "Pay two weeks of normal power expense for backup supply", "handler": "buy_backup_power" },
+        { "id": "accept", "label": "Accept half capacity for two weeks with no extra fee", "handler": "accept_power_cut" }
+      ]
+    },
+    {
+      "id": "fuel_spike",
+      "title": "Fuel spike",
+      "trigger": "macro_no_active_fuel_shock",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "buy", "label": "Buy finite available fuel stock at the executable price", "handler": "buy_fuel_stock" },
+        { "id": "policy", "label": "Keep current purchasing policy", "handler": "no_action" }
+      ]
+    },
+    {
+      "id": "bridge_closure",
+      "title": "Bridge closure",
+      "trigger": "random_active_freight_lane",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "reroute", "label": "Reroute future shipments at 20 percent higher freight and one week longer", "handler": "reroute_lane" },
+        { "id": "pause", "label": "Pause new orders on the affected lane", "handler": "pause_lane" }
+      ]
+    },
+    {
+      "id": "freight_congestion",
+      "title": "Freight congestion",
+      "trigger": "lane_utilisation_above_90",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "contract", "label": "Reserve a 26-week carrier contract at 10 percent above quote", "handler": "reserve_carrier" },
+        { "id": "spot", "label": "Use spot capacity with a one-week delay for four weeks", "handler": "spot_delay" }
+      ]
+    },
+    {
+      "id": "crop_loss",
+      "title": "Crop loss",
+      "trigger": "quarter_crop_event",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "mitigate", "label": "Spend $10,000 per farm block on mitigation; yield down 10 percent", "handler": "mitigate_crop" },
+        { "id": "absorb", "label": "Accept a 25 percent yield reduction", "handler": "absorb_crop" }
+      ]
+    },
+    {
+      "id": "mine_warning",
+      "title": "Mine depletion warning",
+      "trigger": "deposit_below_26_weeks",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "retool", "label": "Fund a retool to another deposit at 50 percent of new mine capex", "handler": "retool_deposit" },
+        { "id": "deplete", "label": "Plan for depletion and mothball when exhausted", "handler": "plan_depletion" }
+      ]
+    },
+    {
+      "id": "quality_recall",
+      "title": "Quality recall",
+      "trigger": "quality_below_8000_consumer_sales",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "recall", "label": "Pay sold lots at 10 percent of unit price; reputation down 250 bps", "handler": "full_recall" },
+        { "id": "refund", "label": "Offer voluntary refunds at 25 percent of price; reputation down 50 bps", "handler": "voluntary_refund" }
+      ]
+    },
+    {
+      "id": "talent_poaching",
+      "title": "Talent poaching",
+      "trigger": "staffing_churn_above_10",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "raise", "label": "Raise offered wages 5 percent for the next hires", "handler": "raise_offer" },
+        { "id": "train", "label": "Fund training at the provider quote", "handler": "fund_training" }
+      ]
+    },
+    {
+      "id": "union_drive",
+      "title": "Union drive",
+      "trigger": "organisation_crosses_5000",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "ballot", "label": "Allow the ballot at no fee", "handler": "allow_ballot" },
+        { "id": "conditions", "label": "Fund conditions improvements at 1 percent of quarterly payroll", "handler": "improve_conditions" }
+      ]
+    },
+    {
+      "id": "wage_negotiation",
+      "title": "Wage negotiation",
+      "trigger": "scheduled_bargaining",
+      "mandatory": true,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "accept", "label": "Accept the union demand", "handler": "bargain_accept" },
+        { "id": "counter", "label": "Counter at or above the current wage", "handler": "bargain_counter" },
+        { "id": "reject", "label": "Reject the demand", "handler": "bargain_reject" }
+      ]
+    },
+    {
+      "id": "strike_escalation",
+      "title": "Strike escalation",
+      "trigger": "actual_unresolved_strike",
+      "mandatory": true,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "settle", "label": "Accept the current legal settlement", "handler": "strike_settle" },
+        { "id": "continue", "label": "Continue the prescribed strike and fallback", "handler": "strike_continue" }
+      ]
+    },
+    {
+      "id": "training_grant",
+      "title": "Training grant",
+      "trigger": "government_budget_available",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "match", "label": "Commit 80 percent firm match against a 20 percent government grant", "handler": "accept_training_grant" },
+        { "id": "decline", "label": "Decline the grant", "handler": "no_action" }
+      ]
+    },
+    {
+      "id": "permit_delay",
+      "title": "Permit delay",
+      "trigger": "new_project_without_permit_bonus",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "expedite", "label": "Pay 2 percent of capex for lawful expedited engineering", "handler": "expedite_permit" },
+        { "id": "wait", "label": "Accept a four week delay", "handler": "accept_permit_delay" }
+      ]
+    },
+    {
+      "id": "lobbying_backlash",
+      "title": "Lobbying backlash",
+      "trigger": "funded_campaign_with_layoffs",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "disclose", "label": "Publish the disclosure; reputation down 250 bps", "handler": "disclose_lobbying" },
+        { "id": "cancel", "label": "Cancel the request with no refund; reputation down 100 bps", "handler": "cancel_lobbying" }
+      ]
+    },
+    {
+      "id": "antitrust_review",
+      "title": "Antitrust review",
+      "trigger": "actual_review_threshold",
+      "mandatory": true,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "remedy", "label": "Submit a feasible divestiture", "handler": "submit_remedy" },
+        { "id": "withdraw", "label": "Withdraw the bid", "handler": "withdraw_bid" }
+      ]
+    },
+    {
+      "id": "hostile_stake",
+      "title": "Hostile stake",
+      "trigger": "other_holder_crosses_25_percent",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "diligence", "label": "Schedule a meeting and begin diligence", "handler": "schedule_defence" },
+        { "id": "none", "label": "Take no action", "handler": "no_action" }
+      ]
+    },
+    {
+      "id": "tender_offer",
+      "title": "Tender offer",
+      "trigger": "funded_or_open_bid",
+      "mandatory": true,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "tender", "label": "Tender held shares at the stated terms", "handler": "tender_shares" },
+        { "id": "refuse", "label": "Refuse the terms", "handler": "refuse_tender" }
+      ]
+    },
+    {
+      "id": "covenant_warning",
+      "title": "Covenant warning",
+      "trigger": "written_covenant_breach",
+      "mandatory": true,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "raise", "label": "Raise equity or repay debt", "handler": "cure_covenant" },
+        { "id": "renegotiate", "label": "Enter lender renegotiation", "handler": "renegotiate_covenant" }
+      ]
+    },
+    {
+      "id": "bank_surge",
+      "title": "Bank withdrawal surge",
+      "trigger": "region_crisis_or_bank_shock",
+      "mandatory": true,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "withdraw", "label": "Request 25 percent deposit withdrawals pro rata", "handler": "bank_run" },
+        { "id": "liquidity", "label": "Raise funded liquidity and suspend new loans", "handler": "raise_liquidity" }
+      ]
+    },
+    {
+      "id": "insurance_catastrophe",
+      "title": "Insurance catastrophe",
+      "trigger": "region_disaster_no_active",
+      "mandatory": true,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "rebuild", "label": "Rebuild at the quoted price", "handler": "catastrophe_rebuild" },
+        { "id": "mothball", "label": "Mothball the damaged facility", "handler": "catastrophe_mothball" }
+      ]
+    },
+    {
+      "id": "tech_opportunity",
+      "title": "Technology opportunity",
+      "trigger": "tech_level_below_frontier",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "fund", "label": "Pay the next-level threshold for a 90 percent success chance", "handler": "fund_tech_opportunity" },
+        { "id": "normal", "label": "Continue normal research at 75 percent", "handler": "no_action" }
+      ]
+    },
+    {
+      "id": "recession",
+      "title": "Recession",
+      "trigger": "macro_selection_no_regime",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "acknowledge", "label": "Review costs and credit; demand falls 10 percent for 26 weeks", "handler": "accept_recession" },
+        { "id": "hold", "label": "Hold current policies", "handler": "no_action" }
+      ]
+    },
+    {
+      "id": "demand_boom",
+      "title": "Demand boom",
+      "trigger": "macro_selection_no_regime",
+      "mandatory": false,
+      "cooldown_weeks": 26,
+      "choices": [
+        { "id": "expand", "label": "Plan expansion; demand rises 10 percent for 26 weeks", "handler": "accept_boom" },
+        { "id": "hold", "label": "Keep current policies", "handler": "no_action" }
+      ]
+    }
+  ]
+}
