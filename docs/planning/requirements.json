@@ -4,21 +4,21 @@
   "requirements": [
     {
       "id": "R01",
-      "title": "Verified corridor geography",
+      "title": "Owner-approved authored corridor geography",
       "depends_on": [],
       "gate": "automated",
-      "acceptance": "Pin official or provenance-traceable county-to-BEA crosswalk; print deduplicated corridor IDs, memberships, coverage and source hashes; no invented city-as-region rows.",
+      "acceptance": "Freeze the owner-approved authored corridor: eleven unique region IDs and names, deduplicated roster and coverage, explicit estimate label and no asserted county membership or invented historical source.",
       "status": "blocked",
       "evidence": []
     },
     {
       "id": "R02",
-      "title": "Circa-2000 baseline and provenance",
+      "title": "Authored circa-2000 baseline and provenance",
       "depends_on": [
         "R01"
       ],
       "gate": "automated",
-      "acceptance": "Rebuild checked-in dataset from pinned sources; reconcile totals, units, suppression, estimates and source terms; distinguish data year from game start year.",
+      "acceptance": "Rebuild the checked-in dataset from pinned in-repo authored calibration files; reconcile totals, units, recipes, wages and estimates; distinguish the nominal 2000 start from authored values and make no false historical-source claim.",
       "status": "blocked",
       "evidence": []
     },
