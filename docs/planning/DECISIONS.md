@@ -84,3 +84,20 @@ firm restores capacity and marketing.
 Remaining: eleven rivals fail across thirty years with no entry, and the score's control
 component is low because the investor keeps most wealth in personal cash. That is a playtest and
 balance question (P33, P35), not a code defect.
+
+## P33 balance harness and first distributions, 2026-10-25 (DeepSeek goal session)
+
+Engineering choices and defect fixes inside the approved design. No product decision changed.
+Evidence: `evidence/balance-report.md` and `evidence/balance/*.json`.
+
+| ID | State | Decision | Consequence / revisit condition |
+|---|---|---|---|
+| D19 | Implemented | Reference policies live in `crates/cw-cli/src/policy.rs`, decide every four weeks from read models, and submit ordinary commands through `Session::submit`; they never write world state. | Conservative/growth/acquirer are distinct from the rival `cw-ai` cohorts and use the same validator. Revisit constants after human playtests; keep the validator-only rule. |
+| D20 | Fixed | Ordinary facilities no longer subtract output from a zero ore deposit. `production` only consumes a deposit when one exists. | 27 negative facility deposits on seed 1 at week 260 became 0; the pinned fixture hash moved `5437029f…` to `3ef82f5b…`. Rust and Swift constants updated; iOS XCTest still pending on the Mac runner. |
+| D21 | Fixed | `FoundFirm` uses the same 40% construction-service / 60% equipment-escrow split as `BuildFacility`. | A founded firm no longer carries work in progress plus negative restricted cash. Seed 3 founder conservative at week 260 moved from fair value 0 and score 50 to fair value $117 and score 58. |
+| D22 | Open | The first distribution report publishes `apply_macro_price_drift` as a no-op and unresolved optional event cards as the root causes of near-zero seed variance. | 100/100 conservative and growth seeds are identical; do not claim a seed distribution until nominal price drift and event resolution are implemented and this report is re-run. |
+
+Policy iteration is recorded in the report: the first draft throttled output to 85/95 percent
+and lost about $8.7k a week against a demand-limited plant; the published policies hold full
+capacity and cut discretionary marketing/research instead. This is a harness correction, not a
+content tune.

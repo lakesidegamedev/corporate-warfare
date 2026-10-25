@@ -641,21 +641,30 @@ fn apply_intent(
             );
             entity.board.ceo = Some(crate::state::CeoRef::Investor);
             world.investor.primary_group = Some(handle);
-            // The founder start shows the build transaction: the template is escrowed.
+            // The founder start shows the same build transaction as `BuildFacility`: forty
+            // percent construction service is paid from escrow into work in progress and sixty
+            // percent equipment stays in escrow until completion. Releasing the whole capex
+            // immediately (the pre-P33 behaviour) left work in progress and restricted cash on
+            // the books forever, and drove a founded firm's fair value to zero even when it was
+            // solvent.
             let cost = template.capex_cents;
             if *capital_cents >= cost {
                 spend_firm_cash(world, handle, cost, "construction escrow")?;
+                let service = cost * 40 / 100;
+                let equipment = cost - service;
                 if let Some(entity) = world.firms.get_mut(handle) {
                     let _ = entity.book.commit(
                         world.tick,
                         Txn::new()
-                            .debit(Account::WorkInProgress, cost, "construction")
-                            .credit(Account::RestrictedCash, cost, "construction"),
+                            .debit(Account::WorkInProgress, service, "construction service")
+                            .credit(Account::RestrictedCash, service, "construction service"),
                     );
                 }
-                let facility = start_facility(
+                pay_construction_service(world, handle, *region, service, "construction service");
+                let mut facility = start_facility(
                     world, dataset, handle, *region, *recipe, 1, world.tick, cost,
                 );
+                facility.escrow_cents = equipment;
                 let facility_handle = world.facilities.insert(facility);
                 world
                     .firms
@@ -2215,6 +2224,49 @@ mod tests {
             submitted_tick: world.tick.0,
             intent,
         }
+    }
+
+    #[test]
+    fn a_founded_firm_capitalises_its_plant_once() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 142, ScenarioKind::Founder, ScenarioMode::Sandbox);
+        let recipe = dataset.recipe_index["farm"];
+        let capex = dataset.recipes[recipe as usize].capex_cents;
+        let build_weeks = dataset.recipes[recipe as usize].build_weeks;
+        let region = world.region_index("035").unwrap();
+        let capital = capex + 100_000_000;
+        let command = envelope(
+            &world,
+            CommandIntent::FoundFirm {
+                name: "Founder Test".to_owned(),
+                region,
+                capital_cents: capital,
+                recipe,
+            },
+        );
+        apply(&mut world, &dataset, &command).expect("founding accepted");
+        let firm = world.investor.primary_group.unwrap();
+        for _ in 0..build_weeks {
+            crate::tick::advance(&mut world, &dataset);
+        }
+        let entity = world.firms.get(firm).unwrap();
+        assert!(entity.book.is_balanced());
+        assert!(entity.book.cash() >= 0);
+        assert_eq!(
+            entity.book.restricted_cash(),
+            0,
+            "the equipment escrow is released once, not held forever"
+        );
+        assert_eq!(
+            entity.book.balance(Account::WorkInProgress),
+            0,
+            "completed work leaves construction in progress"
+        );
+        assert!(entity.book.balance(Account::FixedAssets) >= capex);
+        assert!(
+            entity.shares.fair_cents > 0,
+            "a solvent founded firm must not be valued at zero"
+        );
     }
 
     #[test]

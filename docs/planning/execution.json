@@ -993,22 +993,28 @@
       ],
       "spec": "docs/rules/CONTENT-PACING.md",
       "targets": "tools/balance/, crates/cw-cli/",
-      "status": "pending",
+      "status": "active",
       "checklist": [
         {
           "text": "Create explainable conservative/operator/acquirer reference policies distinct from rival policies.",
-          "done": false
+          "done": true
         },
         {
           "text": "Queue100 five-year seeds and20 thirty-year careers across documented difficulty baselines.",
-          "done": false
+          "done": true
         },
         {
           "text": "Publish metrics/outliers/exploits and fix root economic defects before controlled parameter tuning.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/balance-report.md",
+        "evidence/balance/guided-conservative-260.json",
+        "evidence/balance/guided-growth-260.json",
+        "evidence/balance/guided-acquirer-260.json",
+        "evidence/balance/guided-conservative-1560.json"
+      ]
     },
     {
       "id": "P34",

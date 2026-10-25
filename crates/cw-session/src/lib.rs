@@ -896,12 +896,12 @@ mod tests {
         // the cross-platform determinism evidence for this scenario.
         //
         // 2026-10-25: the value moved from 8d66f18... when rival command ids stopped using a
-        // session-local counter and started using the persisted `world.next_sequence`. The old
-        // scheme restarted at 1 after a save/import, so a resumed career issued ids that were
-        // already in the accepted-command log (see `save_import_and_advance_is_idempotent` in
-        // tests/adversarial.rs). The economy is unchanged; only the recorded command identity
-        // is. The Swift constant must be updated in the same change and re-verified on the Mac
-        // runner before R05 claims cross-platform equality again.
+        // session-local counter and started using the persisted `world.next_sequence`. It moved
+        // again to 3ef82f5... when `production` stopped subtracting weekly output from every
+        // facility's `deposit_remaining`, which is only stocked for ore mines; ordinary plants
+        // had been drifting to large negative deposits. The economy is unchanged otherwise; the
+        // Swift constant must be updated in the same change and re-verified on the Mac runner
+        // before R05 claims cross-platform equality again.
         let mut session = Session::create(config(42)).unwrap();
         let primary = session.world.investor.primary_group.unwrap();
         let price = session.dataset.reference_price(0);
@@ -923,7 +923,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "5437029ff5c6d98f3dc264c19ee98b7face66bd7949c80d1064715c3127199f2"
+            "3ef82f5bc26de9d2c1c88cf8c2eca42c5d4866226ed5d22a8dbe731e8f5f7e7b"
         );
     }
 
