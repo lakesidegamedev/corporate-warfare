@@ -228,3 +228,13 @@ to large issuance and mergers. A controlled firm needs three controller-held boa
 held firm with no controller is run by its management in v0.1, because no holder can seat a
 majority. The board is still reapportioned every thirteen weeks. 260-week seed 3 is unchanged at
 four rival failures and score 61.
+
+### Antitrust remedies are real divestitures, 2026-10-25
+
+An accepted remedy previously only changed a threshold and left the buyer in full control. Review
+approval now sells enough target shares to outside holders to take the buyer below half, pays the
+buyer fair value, keeps total shares conserved, and excludes the target's sales from the buyer's
+group aggregation once control is gone. Concentration also now uses the union of the buyer and
+target groups, so a controlled target is never counted twice. Tests:
+`deals::tests::a_remedy_divests_enough_shares_to_remove_control` and the corrected
+`concentration_is_group_aware`.
