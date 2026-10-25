@@ -2,9 +2,24 @@ import SwiftUI
 
 @main
 struct CorporateWarfareApp: App {
-    @StateObject private var store = AppStore()
+    @StateObject private var store: AppStore
     @AppStorage(OnboardingKeys.completed) private var onboardingCompleted = false
     @Environment(\.scenePhase) private var scenePhase
+
+    private static var isUITesting: Bool {
+        ProcessInfo.processInfo.arguments.contains("--ui-testing")
+    }
+
+    init() {
+        if Self.isUITesting {
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("CorporateWarfareUITests", isDirectory: true)
+            try? FileManager.default.removeItem(at: directory)
+            _store = StateObject(wrappedValue: AppStore(saveManager: SaveManager(directory: directory)))
+        } else {
+            _store = StateObject(wrappedValue: AppStore())
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -19,10 +34,12 @@ struct CorporateWarfareApp: App {
             }
             .tint(Theme.navy)
             .task {
-                await store.restoreLatestIfAvailable()
+                if !Self.isUITesting {
+                    await store.restoreLatestIfAvailable()
+                }
             }
             .onChange(of: store.sessionReady) { _, ready in
-                if ready && !onboardingCompleted {
+                if ready && !onboardingCompleted && !Self.isUITesting {
                     store.showOnboarding = true
                 }
             }
