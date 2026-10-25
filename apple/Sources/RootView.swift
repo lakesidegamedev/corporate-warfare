@@ -4,18 +4,55 @@ struct RootView: View {
     @EnvironmentObject private var store: AppStore
 
     var body: some View {
-        TabView {
-            OverviewView()
-                .tabItem { Label("Portfolio", systemImage: "building.columns") }
-            CompanyView()
-                .tabItem { Label("Company", systemImage: "building.2") }
-            RegionsView()
-                .tabItem { Label("Regions", systemImage: "map") }
-            MarketsView()
-                .tabItem { Label("Markets", systemImage: "chart.bar.xaxis") }
-            InboxView()
-                .tabItem { Label("Inbox", systemImage: "tray") }
+        VStack(spacing: 0) {
+            if let notice = store.recoveryNotice {
+                RecoveryNoticeBanner(text: notice)
+            }
+            TabView {
+                OverviewView()
+                    .tabItem { Label("Portfolio", systemImage: "building.columns") }
+                CompanyView()
+                    .tabItem { Label("Company", systemImage: "building.2") }
+                RegionsView()
+                    .tabItem { Label("Regions", systemImage: "map") }
+                MarketsView()
+                    .tabItem { Label("Markets", systemImage: "chart.bar.xaxis") }
+                InboxView()
+                    .tabItem { Label("Inbox", systemImage: "tray") }
+            }
         }
+    }
+}
+
+/// One-time notice after a career was restored from a last-good copy. The player is told which
+/// slot and week are now live, and can dismiss it.
+struct RecoveryNoticeBanner: View {
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.colorScheme) private var scheme
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.footnote)
+                .foregroundStyle(Theme.warning)
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(Theme.text(for: scheme))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button {
+                store.dismissRecoveryNotice()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption2)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss recovery notice")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Theme.warning.opacity(0.12))
     }
 }
 

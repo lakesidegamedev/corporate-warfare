@@ -24,9 +24,18 @@ final class AppStore: ObservableObject {
     @Published var saves: [StoredSave] = []
     @Published var marketRows: [MarketRow] = []
     @Published var showOnboarding = false
+    /// Set when a slot failed to import. Drives the recovery screen.
+    @Published var recoveryIssue: SaveRecoveryIssue?
+    /// Set after a last-good save was accepted, so the next screen can say so once.
+    @Published var recoveryNotice: String?
+    /// Last engine or save error key, recorded for the diagnostics bundle only.
+    @Published var lastErrorKey: String?
 
     private let engine = Engine()
     private var runTask: Task<Void, Never>?
+    /// Increments whenever the run loop starts or stops, so a cancelled loop cannot clear the
+    /// handle of a newer one.
+    private var runGeneration = 0
 
     struct MarketRow: Identifiable {
         let product: ProductDto
@@ -46,6 +55,8 @@ final class AppStore: ObservableObject {
     func restoreLatestIfAvailable() async {
         saves = SaveManager.shared.list()
         guard let latest = saves.first else { return }
+        // A failed launch import leaves the app on the Start screen with a named recovery issue
+        // instead of silently starting a new career over the top of the damaged slot.
         await resume(latest, silent: true)
     }
 
@@ -53,12 +64,11 @@ final class AppStore: ObservableObject {
         await perform {
             do {
                 let overview = try await self.engine.start(seed: seed, guided: guided, fiveYear: fiveYear)
-                self.overview = overview
-                self.selectedFirm = overview.primaryFirm
-                self.sessionReady = true
+                self.apply(overview)
                 await self.reload()
-                await self.autosave(slot: "autosave-\(overview.tick)")
+                await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
             } catch {
+                self.lastErrorKey = ErrorKey.of(error)
                 self.errorMessage = error.localizedDescription
             }
         }
@@ -68,16 +78,54 @@ final class AppStore: ObservableObject {
         do {
             let data = try SaveManager.shared.load(save)
             let overview = try await engine.loadSave(data)
-            self.overview = overview
-            self.selectedFirm = overview.primaryFirm
-            self.sessionReady = true
+            apply(overview)
+            recoveryIssue = nil
             await reload()
             statusLine = "Resumed \(save.slot) at week \(overview.tick)."
         } catch {
-            if !silent {
-                errorMessage = error.localizedDescription
-            }
+            // The issue names the slot from its own sidecar; a missing sidecar stays "unknown"
+            // rather than claiming week zero.
+            let metadata = SaveManager.shared.metadata(forSlot: save.slot)
+            noteImportFailure(
+                slot: save.slot,
+                week: metadata?.week,
+                savedAt: metadata?.savedAt,
+                error: error,
+                silent: silent
+            )
         }
+    }
+
+    /// Load the last-good copy of the named slot. The candidate was already imported successfully
+    /// by `SaveManager.recover`, and the live session is replaced only after that check passes.
+    func recover(slot: String) async {
+        do {
+            let candidate = try SaveManager.shared.recover(slot: slot)
+            let overview = try await engine.loadSave(candidate.data)
+            apply(overview)
+            recoveryIssue = nil
+            errorMessage = nil
+            await reload()
+            let when = candidate.savedAt == .distantPast
+                ? "an earlier session"
+                : candidate.savedAt.formatted(date: .abbreviated, time: .shortened)
+            let notice = "Recovered \(slot) from the last good save: week \(overview.tick), saved \(when)."
+            recoveryNotice = notice
+            statusLine = notice
+        } catch {
+            lastErrorKey = ErrorKey.of(error)
+            errorMessage = SaveCopy.message(forKey: lastErrorKey)
+            statusLine = error.localizedDescription
+        }
+    }
+
+    func recoverLastGood() async {
+        guard let issue = recoveryIssue else { return }
+        await recover(slot: issue.slot)
+    }
+
+    func dismissRecoveryNotice() {
+        recoveryNotice = nil
     }
 
     func advance(weeks: UInt32) async {
@@ -91,19 +139,20 @@ final class AppStore: ObservableObject {
                 }
             }
             await self.reload()
-            if let overview = self.overview {
-                await self.autosave(slot: "autosave-\(overview.tick / 4)")
+            // Autosave on the four-week boundary only; background and manual saves cover the rest.
+            if let overview = self.overview, overview.tick % 4 == 0 {
+                await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
             }
         }
     }
 
     func toggleRun() {
         if runTask != nil {
-            runTask?.cancel()
-            runTask = nil
-            runSpeed = 0
+            stopRunLoop()
             return
         }
+        runGeneration += 1
+        let generation = runGeneration
         runSpeed = 1
         runTask = Task { [weak self] in
             guard let self else { return }
@@ -113,10 +162,20 @@ final class AppStore: ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
             await MainActor.run {
+                guard self.runGeneration == generation else { return }
                 self.runTask = nil
                 self.runSpeed = 0
             }
         }
+    }
+
+    /// Stop the run loop without touching the session. Cancellation is checked between weeks only,
+    /// never inside settlement.
+    func stopRunLoop() {
+        runGeneration += 1
+        runTask?.cancel()
+        runTask = nil
+        runSpeed = 0
     }
 
     func reload() async {
@@ -164,22 +223,186 @@ final class AppStore: ObservableObject {
         regions = await engine.regions(selected: code)
     }
 
-    func manualSave() async {
-        guard let overview else { return }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd-HHmm"
-        let slot = "manual-\(formatter.string(from: Date()))"
-        await autosave(slot: slot)
-        statusLine = "Saved \(slot)."
+    // MARK: Lifecycle
+
+    /// Scene-phase handling. Background asks for one bounded stop-and-save; foreground only
+    /// re-reads the live session. No command is ever replayed on return: every accepted command
+    /// already has a committed tick, and the run loop stays stopped until the player restarts it.
+    func handleScenePhase(_ phase: ScenePhase) async {
+        switch phase {
+        case .background:
+            stopRunLoop()
+            await suspendAndSave()
+        case .active:
+            if sessionReady {
+                await reload()
+            }
+        case .inactive:
+            break
+        @unknown default:
+            break
+        }
     }
 
-    private func autosave(slot: String) async {
+    /// One bounded stop-and-save. The export and write run in an unstructured task; the caller
+    /// stops waiting at the deadline while the atomic write path still guarantees that the
+    /// previous save on disk stays complete and readable.
+    func suspendAndSave(timeoutSeconds: Double = 3) async {
         guard sessionReady else { return }
+        let engine = self.engine
+        let week = overview?.tick ?? 0
+        let slot = SaveManager.autosaveSlot(week: week)
+
+        let save = Task.detached(priority: .userInitiated) { () -> StopSaveOutcome in
+            do {
+                let data = try await engine.exportSave()
+                let hash = await engine.canonicalHash()
+                try SaveManager.shared.write(
+                    data,
+                    slot: slot,
+                    week: week,
+                    canonicalHash: hash,
+                    kind: .autosave
+                )
+                return .saved
+            } catch {
+                return .failed(ErrorKey.of(error) ?? "error.save_write_failed")
+            }
+        }
+
+        switch await firstOutcome(of: save, timeoutSeconds: timeoutSeconds) {
+        case .saved:
+            statusLine = "Saved at week \(week) when the app left the foreground."
+        case .failed(let key):
+            lastErrorKey = key
+            statusLine = "Stop save failed. The previous save is unchanged."
+        case .timedOut:
+            statusLine = "Stop save is still running. The previous save is unchanged."
+        }
+    }
+
+    enum StopSaveOutcome: Sendable {
+        case saved
+        case failed(String)
+        case timedOut
+    }
+
+    /// Resolves to whichever finishes first. A save that loses the race keeps running, so an
+    /// atomic write already in progress can still complete after the app leaves the foreground.
+    private func firstOutcome(
+        of save: Task<StopSaveOutcome, Never>,
+        timeoutSeconds: Double
+    ) async -> StopSaveOutcome {
+        await withCheckedContinuation { continuation in
+            let gate = OutcomeGate(continuation)
+            Task.detached(priority: .userInitiated) {
+                gate.finish(await save.value)
+            }
+            Task.detached(priority: .utility) {
+                try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+                gate.finish(.timedOut)
+            }
+        }
+    }
+
+    // MARK: Saves
+
+    func manualSave() async {
+        guard sessionReady else { return }
+        let slot = SaveManager.manualSlot()
+        let written = await save(slot: slot, kind: .manual)
+        SaveManager.shared.pruneManualSlots()
+        saves = SaveManager.shared.list()
+        if written {
+            statusLine = "Saved \(slot)."
+        }
+    }
+
+    @discardableResult
+    private func save(slot: String, kind: SaveMetadata.Kind) async -> Bool {
+        guard sessionReady else { return false }
         do {
             let data = try await engine.exportSave()
-            _ = try SaveManager.shared.write(data, slot: slot, week: overview?.tick ?? 0)
+            let hash = await engine.canonicalHash()
+            let week = overview?.tick ?? 0
+            _ = try SaveManager.shared.write(
+                data,
+                slot: slot,
+                week: week,
+                canonicalHash: hash,
+                kind: kind
+            )
+            return true
         } catch {
-            statusLine = "Save failed: \(error.localizedDescription)"
+            lastErrorKey = ErrorKey.of(error) ?? "error.save_write_failed"
+            statusLine = "Save failed. The previous save is unchanged."
+            errorMessage = SaveCopy.message(forKey: lastErrorKey)
+            return false
+        }
+    }
+
+    /// An import failed. The failing file is copied aside and left in place; the recovery screen
+    /// names the slot, week and timestamp and offers the last-good copy when one exists.
+    private func noteImportFailure(
+        slot: String,
+        week: UInt32?,
+        savedAt: Date?,
+        error: Error,
+        silent: Bool
+    ) {
+        let key = ErrorKey.of(error) ?? "error.invalid_save"
+        lastErrorKey = key
+        SaveManager.shared.markUnreadable(slot: slot)
+        let preserved = SaveManager.shared.preserveFailingCopy(slot: slot)
+        recoveryIssue = SaveRecoveryIssue(
+            slot: slot,
+            week: week,
+            savedAt: savedAt,
+            errorKey: key,
+            hasLastGood: SaveManager.shared.hasLastGood(slot: slot),
+            preservedCopy: preserved
+        )
+        if !silent {
+            errorMessage = SaveCopy.message(forKey: key)
+        }
+        statusLine = "Could not open \(slot)."
+    }
+
+    // MARK: Diagnostics
+
+    /// Build the local diagnostics file. Nothing leaves the device: the player reviews the summary
+    /// and chooses whether to share the file. Returning the value lets the presenting screen own
+    /// its own sheet instead of racing a single app-wide presentation.
+    func makeDiagnostics() -> DiagnosticExport? {
+        let info = engineInfo()
+        let saves = SaveManager.shared.list()
+        let bundle = DiagnosticBundle(
+            generatedAt: SaveMetadata.string(from: Date()),
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+            buildNumber: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
+            engineVersion: info.version,
+            interfaceVersion: info.interfaceVersion,
+            rulesVersion: info.rulesVersion,
+            datasetHash: info.datasetHash,
+            lastErrorKey: lastErrorKey,
+            recoverySlot: recoveryIssue?.slot,
+            recoveryWeek: recoveryIssue?.week,
+            saves: saves.map(DiagnosticBundle.entry),
+            notes: [
+                "Offline build: the app makes no network calls.",
+                "This file is written locally and shared only when the player chooses.",
+                "Damaged saves are copied to Recovery/ and never deleted automatically.",
+            ]
+        )
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(bundle)
+            let url = try SaveManager.shared.writeDiagnosticBundle(data)
+            return DiagnosticExport(url: url, summary: bundle.reviewSummary)
+        } catch {
+            errorMessage = "The diagnostics file could not be written."
+            return nil
         }
     }
 
@@ -248,12 +471,19 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func apply(_ overview: OverviewDto) {
+        self.overview = overview
+        self.selectedFirm = overview.primaryFirm
+        self.sessionReady = true
+    }
+
     private func handle(_ receipt: ReceiptDto?) {
         guard let receipt else { return }
         if receipt.accepted {
             statusLine = "Accepted at revision \(receipt.revision)."
             errorMessage = nil
         } else {
+            lastErrorKey = receipt.errorKey
             errorMessage = receipt.errorKey ?? "Rejected"
             statusLine = receipt.errorDetail ?? ""
         }
@@ -263,5 +493,28 @@ final class AppStore: ObservableObject {
         isBusy = true
         await block()
         isBusy = false
+    }
+}
+
+/// Resumes a continuation exactly once from whichever racing task finishes first. The losing task
+/// is not cancelled: a stop-save that outlives the deadline still finishes its atomic write.
+private final class OutcomeGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var finished = false
+    private let continuation: CheckedContinuation<AppStore.StopSaveOutcome, Never>
+
+    init(_ continuation: CheckedContinuation<AppStore.StopSaveOutcome, Never>) {
+        self.continuation = continuation
+    }
+
+    func finish(_ outcome: AppStore.StopSaveOutcome) {
+        lock.lock()
+        if finished {
+            lock.unlock()
+            return
+        }
+        finished = true
+        lock.unlock()
+        continuation.resume(returning: outcome)
     }
 }
