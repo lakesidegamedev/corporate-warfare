@@ -66,7 +66,7 @@
       ],
       "gate": "automated",
       "acceptance": "Finite household, government and external budgets and background employers reconcile; payroll affects demand; no infinite outside buyer.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -78,7 +78,7 @@
       ],
       "gate": "automated",
       "acceptance": "Finite skill pools allocate without firm iteration bias; no double-employed worker; hiring, layoffs and wages have explicit timing and costs.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -89,7 +89,7 @@
       ],
       "gate": "automated",
       "acceptance": "Inputs consumed once, output/capacity reconcile, shortages bind and perishable services expire; no negative inventories.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -100,7 +100,7 @@
       ],
       "gate": "automated",
       "acceptance": "Worked scarcity/oversupply/tie/import/no-demand fixtures conserve cash/stock and respect buyer budgets; revenue derives from actual fulfilled sales.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -111,7 +111,7 @@
       ],
       "gate": "automated",
       "acceptance": "Local/cross-region delivery timing, finite freight capacity, escrow, failed delivery and expired contracts settle once without teleporting stock.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -123,7 +123,7 @@
       ],
       "gate": "automated",
       "acceptance": "Build, expand, retool, mothball and sell post CIP/capex/maintenance correctly with lead times and cancellation treatment.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -135,7 +135,7 @@
       ],
       "gate": "automated",
       "acceptance": "Player is separate from firms, retains unpledged assets after control loss, and can found or manage another firm without resetting career losses.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -147,7 +147,7 @@
       ],
       "gate": "automated",
       "acceptance": "Deep/wide groups use correct voting control and minority interests; reject equity cycles; eliminate internal balances and unrealised profits without double-valuing assets.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -159,7 +159,7 @@
       ],
       "gate": "automated",
       "acceptance": "Internal trade, lending, dividends and guarantees respect legal cash/authority; consolidated totals reconcile; internal markup cannot create score wealth.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -171,7 +171,7 @@
       ],
       "gate": "automated",
       "acceptance": "Finite liquidity, pricing/impact, disclosure and cost basis; share totals reconcile; minority ownership grants no management cash access.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -182,7 +182,7 @@
       ],
       "gate": "automated",
       "acceptance": "Funding, dilution, solvency and treasury votes are correct; no double dividend or wash-trade profit; IPO changes governance/disclosure.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -194,7 +194,7 @@
       ],
       "gate": "automated",
       "acceptance": "Meetings, votes, CEO appointment/removal and bid responses enforce authority and deadlines; investor can lose management control.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -206,7 +206,7 @@
       ],
       "gate": "automated",
       "acceptance": "Loan/bond schedules, collateral, coupons, maturity and covenant defaults reconcile with lenders/holders and use explained ratings.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -218,7 +218,7 @@
       ],
       "gate": "automated",
       "acceptance": "Deposits are liabilities, loans are assets, reserve/liquidity/capital constrain business, and defaults/run scenarios preserve ledger identities.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -230,7 +230,7 @@
       ],
       "gate": "automated",
       "acceptance": "Policy underwriting, premiums, reserves, expiry and correlated claims settle; catastrophes cannot be avoided by omitted liabilities.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -243,7 +243,7 @@
       ],
       "gate": "automated",
       "acceptance": "Funded offers, escrow, diligence, tender/control transfer, minority payout and debt/contract transfer succeed or roll back correctly.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -255,7 +255,7 @@
       ],
       "gate": "automated",
       "acceptance": "Group-aware regional/product concentration triggers review, delay, remedies or rejection; cannot bypass by subsidiary shell.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -267,7 +267,7 @@
       ],
       "gate": "automated",
       "acceptance": "Organisation, bargaining, strikes and settlements affect wages/output and worker incentives with explainable outcomes.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -279,7 +279,7 @@
       ],
       "gate": "automated",
       "acceptance": "Funded disclosed requests have bounded uncertain outcomes, cooldown and reputational cost; no universal exemption from law/default.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -292,7 +292,7 @@
       ],
       "gate": "automated",
       "acceptance": "Grace periods, restricted payouts, seniority, collateral, liquidation and guarantees resolve; one failed subsidiary does not erase unrelated cash.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -332,7 +332,7 @@
       ],
       "gate": "automated",
       "acceptance": "At least 30 rivals/five archetypes use common command permissions and observation fog; bounded deterministic work, urgent response and saved scheduler state.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -344,7 +344,7 @@
       ],
       "gate": "automated",
       "acceptance": "At least 24 meaningful event definitions validate prerequisites, choices, postings, cooldowns and narrative traces; founder and struggling-company starts work.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -423,7 +423,7 @@
       ],
       "gate": "human",
       "acceptance": "Real-rule guided start can resume/skip; VoiceOver, Dynamic Type, contrast, reduced motion and keyboard/narrow screens are usable.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -472,7 +472,7 @@
       ],
       "gate": "human",
       "acceptance": "Final icon, source/asset attribution, actual archive privacy manifest, policy URL, beta metadata, rating and export answers reviewed.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
@@ -484,7 +484,7 @@
       ],
       "gate": "cross-platform",
       "acceptance": "Clean pinned build passes platform tests, fresh bindings and unsigned archive; signing/export path validated and symbols/provenance retained.",
-      "status": "pending",
+      "status": "active",
       "evidence": []
     },
     {
