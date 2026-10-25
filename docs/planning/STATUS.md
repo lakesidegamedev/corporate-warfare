@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `70efef5`.
-Kanban: 254781. Merged PRs: #8 through #58.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `733cb2f`.
+Kanban: 254781. Merged PRs: #8 through #59.
 
 ## What exists now
 
@@ -40,7 +40,7 @@ Kanban: 254781. Merged PRs: #8 through #58.
 
 ## Verified
 
-- Local: 211 tests pass; shared scheduler job `20261025T111355Z-57eba0eb` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
+- Local: 213 tests pass; shared scheduler job `20261025T112259Z-f7936d4b` passed on `main`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
   warnings` clean; design and plan validators pass; shared scheduler jobs passed
   (`20261025T070655Z-5df8bceb` latest). Defense procurement has six unit tests and its
   industry budget scenario; fiscal budgets now follow actual labour and corporate receipts.

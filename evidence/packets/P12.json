@@ -1,0 +1,12 @@
+{
+  "packet": "P12",
+  "result": "pass",
+  "commit": "733cb2f62d8c93c438efc065a41ac6655a3a453e",
+  "procedure": "cargo test --locked --workspace; ownership tests exactly_half_is_not_control_but_above_half_is, indirect_cycles_are_rejected, a_hundred_level_group_is_walked_iteratively, a_hundred_child_group_counts_each_member_once, internal_investment_cost_is_eliminated_from_consolidated_assets, intercompany_loans_are_eliminated_from_both_sides",
+  "artifacts": [
+    "crates/cw-sim/src/economy/ownership.rs",
+    "crates/cw-session/tests/workflows.rs"
+  ],
+  "limitations": "Group traversal and consolidation are engine-tested at one hundred levels and one hundred children. Intercompany loan principal and internal investment book cost are eliminated; unrealised profit in unsold intercompany inventory remains an R13 gap.",
+  "verified_at": "2026-10-25"
+}

@@ -364,22 +364,24 @@
       ],
       "spec": "docs/rules/CORPORATE.md",
       "targets": "crates/cw-sim/{ownership,consolidation}.rs",
-      "status": "active",
+      "status": "done",
       "checklist": [
         {
           "text": "Model ordinary voting shares, treasury exclusion, >50 percent immediate parent and acyclic equity graph.",
-          "done": false
+          "done": true
         },
         {
           "text": "Implement iterative group traversal and consolidated minority/intercompany elimination.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test exactly50 vs above50, minority cycles, deep100-level tree, wide100-child group and no duplicated parent investments.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/packets/P12.json"
+      ]
     },
     {
       "id": "P13",
