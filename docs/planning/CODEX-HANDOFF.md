@@ -7,6 +7,7 @@ Paused 2026-10-25 at the owner's request. This file is the restart source of tru
 
 - Repository: `https://github.com/lakesidegamedev/corporate-warfare` (public; Actions runs normally).
 - Main code commit: `3814ecad7917542a17bf8fd4e92b91724529cec4` (`test(equity): cover treasury buybacks`).
+- Pause/docs head: `12cee4f`.
 - Working tree: clean; no registered worktrees at pause.
 - Size: 209 tracked files, 67,141 text lines; Rust 29,381 lines, Swift 7,034 lines; 3.1 MB excluding
   `.git` and `target`.
@@ -24,8 +25,7 @@ Paused 2026-10-25 at the owner's request. This file is the restart source of tru
 | Checklist steps (117) | 35 | — | — | — |
 | Pull requests merged | #8 through #69 | | | |
 
-Requirements done: R01-R20 except none? Precisely: R01-R20 **except R16/R17 before this handoff are
-now done too** — the current done set is R01-R20, R23, R25-R27, R30, R31 (26). Remaining:
+Requirements done (26): R01-R20, R23, R25-R27, R30 and R31. Remaining:
 
 - Active: R21 mergers/takeovers, R22 antitrust, R24 lobbying, R28 rival AI, R29 events,
   R35 onboarding/accessibility, R39 release assets/privacy, R40 reproducible archive.
