@@ -12,7 +12,10 @@ Already done on 2026-10-25:
 - Verify run 40208873040 passed on main `319fe31`;
 - Apple smoke run 40208873034 passed: simulator compile, Rust bridge, 14 XCTests and device
   archive all succeeded;
-- the `appstore` environment exists (id 25281148110).
+- the `appstore` environment exists (id 25281148110);
+- Release run 40209622603 failed closed with
+  `blocked: missing signing secrets: APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_CONTENT
+  APPLE_DEVELOPMENT_TEAM`.
 
 ## 1. Repository and CI status
 

@@ -16,6 +16,10 @@ States are deliberately separate. A green job means only the state it printed, n
 
 ## Required owner actions (currently blocking)
 
+As of 2026-10-25 the repository is public, Verify and Apple smoke are green on main `319fe31`,
+and the `appstore` environment exists. Release run 40209622603 failed closed with the exact
+missing-secret list below. Only Apple signing remains before an upload attempt.
+
 1. Confirm the App Store Connect team, the app record for bundle ID
    `net.lakesidegames.corporatewarfare`, and the intended internal tester group.
 2. Provide the least-privileged App Store Connect API key to the repository or the `appstore`
