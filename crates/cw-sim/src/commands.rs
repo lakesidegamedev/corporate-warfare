@@ -1723,22 +1723,36 @@ fn apply_intent(
                     available,
                 });
             }
-            let price = *qty;
-            if *investor {
-                if actor != INVESTOR_ACTOR || world.investor.cash_cents < price {
-                    return Err(DomainError::InsufficientCash {
-                        entity: 0,
-                        required: price,
-                        available: world.investor.cash_cents,
-                    });
-                }
-                world.investor.cash_cents -= price;
-                let _ = world.investor.book.commit(
-                    world.tick,
-                    Txn::new()
-                        .credit(Account::Cash, price, "bond purchase")
-                        .debit(Account::Investments, price, "bond purchase"),
-                );
+            if !*investor {
+                return Err(DomainError::NoAuthority {
+                    actor,
+                    reason: AuthorityReason::NotOwner,
+                });
+            }
+            // Bonds trade dirty: principal plus coupon accrued since the last payment. The
+            // seller receives the accrued share; the buyer's investment basis includes it.
+            let weeks = world.tick.0.saturating_sub(entity.issued.0) % 13;
+            let accrued = round_even_div(
+                *qty as i128 * entity.coupon_bps as i128 * weeks as i128,
+                10_000 * 52,
+            ) as i64;
+            let dirty = qty.saturating_add(accrued);
+            if actor != INVESTOR_ACTOR || world.investor.cash_cents < dirty {
+                return Err(DomainError::InsufficientCash {
+                    entity: 0,
+                    required: dirty,
+                    available: world.investor.cash_cents,
+                });
+            }
+            world.investor.cash_cents -= dirty;
+            let _ = world.investor.book.commit(
+                world.tick,
+                Txn::new()
+                    .credit(Account::Cash, dirty, "bond purchase")
+                    .debit(Account::Investments, dirty, "bond purchase"),
+            );
+            if let Some(holder) = world.outside.investors.get_mut(seller) {
+                holder.capital_cents += dirty;
             }
             if let Some(bond) = world.bonds.get_mut(*bond) {
                 *bond.holders.get_mut(&seller_id).unwrap() -= qty;
@@ -2328,6 +2342,44 @@ mod tests {
         let result = apply(&mut world, &dataset, &command);
         assert!(matches!(result, Err(DomainError::NoAuthority { .. })));
         assert!(world.firm(other).unwrap().policies.prices.is_empty());
+    }
+
+    #[test]
+    fn bond_trades_pay_accrued_interest_on_top_of_principal() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 721, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let issuer = world.firms.iter().next().unwrap().0;
+        let mut holders = std::collections::BTreeMap::new();
+        holders.insert(HolderId::Outside(0), 1_000_000i64);
+        let bond = world.bonds.insert(Bond {
+            issuer,
+            principal_cents: 1_000_000,
+            coupon_bps: 600,
+            maturity: Tick(260),
+            issued: Tick(0),
+            holders,
+            carry: 0,
+            next_coupon: Tick(13),
+        });
+        world.tick = Tick(4);
+        let cash_before = world.investor.cash_cents;
+        let command = envelope(
+            &world,
+            CommandIntent::PlaceBondOrder {
+                bond,
+                investor: true,
+                qty: 100_000,
+            },
+        );
+        apply(&mut world, &dataset, &command).expect("bond purchase");
+        // 100,000 principal at 6 percent for 4 weeks = 461.5 cents, rounded half even to 462.
+        let expected = 100_000 + 462;
+        assert_eq!(world.investor.cash_cents, cash_before - expected);
+        let stored = world.bonds.get(bond).unwrap();
+        assert_eq!(*stored.holders.get(&HolderId::Investor).unwrap(), 100_000);
+        let total: i64 = stored.holders.values().sum();
+        assert_eq!(total, 1_000_000, "principal is conserved");
+        assert!(world.investor.book.is_balanced());
     }
 
     #[test]
