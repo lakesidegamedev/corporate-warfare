@@ -584,8 +584,11 @@ pub struct RegionState {
     pub labour: [LabourTier; 3],
     pub households: Household,
     pub policy: RegionPolicy,
-    /// Active one-shot modifiers: (cause tag, product, bps, until).
+    /// Active demand modifiers: (cause tag, product, bps, until).
     pub demand_modifiers: Vec<(String, Option<u16>, i32, Tick)>,
+    /// Active supply/yield modifiers, applied to physical output rather than demand.
+    #[serde(default)]
+    pub supply_modifiers: Vec<(String, Option<u16>, i32, Tick)>,
     pub organisation_bps: i32,
     pub catastrophe_until: Option<Tick>,
     /// Background employers absorb the rest of the scaled workforce.
@@ -1007,6 +1010,57 @@ impl World {
         &mut self.regions[index as usize]
     }
 
+    /// Combined demand modifier for one regional product market, in basis points.
+    ///
+    /// Each active cause composes once; expired modifiers are ignored and pruned by the tick.
+    pub fn demand_ratio_bps(&self, region: u8, product: Option<u16>) -> i64 {
+        let Some(state) = self.regions.get(region as usize) else {
+            return 10_000;
+        };
+        let mut ratio = 10_000i64;
+        for (_, subject, bps, until) in &state.demand_modifiers {
+            if until.0 <= self.tick.0 {
+                continue;
+            }
+            if let Some(subject) = subject
+                && Some(*subject) != product
+            {
+                continue;
+            }
+            ratio = ratio * (10_000 + *bps as i64) / 10_000;
+        }
+        ratio.clamp(3_000, 20_000)
+    }
+
+    /// Combined physical supply modifier for one regional product, in basis points.
+    pub fn supply_ratio_bps(&self, region: u8, product: u16) -> i64 {
+        let Some(state) = self.regions.get(region as usize) else {
+            return 10_000;
+        };
+        let mut ratio = 10_000i64;
+        for (_, subject, bps, until) in &state.supply_modifiers {
+            if until.0 <= self.tick.0 {
+                continue;
+            }
+            if let Some(subject) = subject
+                && *subject != product
+            {
+                continue;
+            }
+            ratio = ratio * (10_000 + *bps as i64) / 10_000;
+        }
+        ratio.clamp(1_000, 20_000)
+    }
+
+    /// Drop modifiers whose window has closed.
+    pub fn prune_modifiers(&mut self) {
+        for region in &mut self.regions {
+            region
+                .demand_modifiers
+                .retain(|(_, _, _, until)| until.0 > self.tick.0);
+        }
+    }
+
     pub fn investor_holds(&self, firm: Handle) -> i64 {
         self.firms
             .get(firm)
@@ -1090,6 +1144,41 @@ mod tests {
         assert_eq!(book.holders[&HolderId::Investor].cost_cents, 75_000);
         assert_eq!(book.holders[&HolderId::Outside(1)].cost_cents, 40_000);
         assert_eq!(book.issued, 1000);
+    }
+
+    #[test]
+    fn demand_modifiers_compose_once_and_expire() {
+        let dataset = cw_data::Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            701,
+            ScenarioKind::Founder,
+            ScenarioMode::Sandbox,
+        );
+        world.tick = Tick(10);
+        world.regions[0]
+            .demand_modifiers
+            .push(("recession".to_owned(), None, -1_000, Tick(20)));
+        world.regions[0]
+            .demand_modifiers
+            .push(("crop".to_owned(), Some(0), -500, Tick(20)));
+        world.regions[0]
+            .demand_modifiers
+            .push(("old".to_owned(), None, -2_000, Tick(9)));
+        let product = world.demand_ratio_bps(0, Some(0));
+        assert_eq!(
+            product, 8_550,
+            "10 percent and 5 percent compose, expired ignored"
+        );
+        assert_eq!(
+            world.demand_ratio_bps(0, Some(1)),
+            9_000,
+            "product-specific cause skipped"
+        );
+        world.tick = Tick(25);
+        world.prune_modifiers();
+        assert!(world.regions[0].demand_modifiers.is_empty());
+        assert_eq!(world.demand_ratio_bps(0, Some(0)), 10_000);
     }
 
     #[test]

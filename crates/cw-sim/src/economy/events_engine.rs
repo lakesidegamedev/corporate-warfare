@@ -56,6 +56,8 @@ pub fn quarter_check(world: &mut World, dataset: &Dataset) {
             .events
             .iter()
             .filter(|card| !card.mandatory)
+            // Macro regimes belong to the macro stream, not to a regional firm card.
+            .filter(|card| !card.trigger.starts_with("macro_"))
             .filter(|card| eligible_quiet(world, card.trigger.as_str(), region as u8))
             .map(|card| card.id.as_str())
             .collect();
@@ -137,6 +139,30 @@ pub fn auto_resolve(world: &mut World, dataset: &Dataset) {
         }
     }
     for (id, choice, _) in pending {
+        let _ = respond(world, dataset, id, &choice);
+    }
+}
+
+/// Optional cards expire at their deadline with an explicit no-action outcome. They otherwise
+/// accumulate, block new cards and wait forever for a player who never opens the inbox.
+pub fn expire_optional(world: &mut World, dataset: &Dataset) {
+    let due: Vec<(u64, String)> = world
+        .events
+        .pending
+        .iter()
+        .filter(|event| !event.resolved && !event.mandatory && event.deadline.0 <= world.tick.0)
+        .filter_map(|event| {
+            let card = dataset.event(&event.card)?;
+            let choice = card
+                .choices
+                .iter()
+                .find(|choice| choice.handler == "no_action")
+                .or_else(|| card.choices.last())
+                .map(|choice| choice.id.clone())?;
+            Some((event.id, choice))
+        })
+        .collect();
+    for (id, choice) in due {
         let _ = respond(world, dataset, id, &choice);
     }
 }
@@ -345,7 +371,7 @@ fn apply(
                 -2_500
             };
             if let Some(region) = event.region {
-                world.regions[region as usize].demand_modifiers.push((
+                world.regions[region as usize].supply_modifiers.push((
                     handler.to_owned(),
                     Some(dataset.product_index["food_raw"]),
                     reduction,
@@ -741,6 +767,62 @@ mod tests {
             .unwrap();
         assert!(rival_state.resolved, "rival cards answer themselves");
         assert!(!player_state.resolved, "player cards wait for the player");
+    }
+
+    #[test]
+    fn macro_regimes_are_not_firm_addressed_region_cards() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            198,
+            crate::state::ScenarioKind::Founder,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        for quarter in 1..=40u32 {
+            world.tick = Tick(quarter * 13);
+            quarter_check(&mut world, &dataset);
+        }
+        assert!(
+            world
+                .events
+                .pending
+                .iter()
+                .all(|event| event.card != "recession" && event.card != "demand_boom"),
+            "macro cards are drawn from the macro stream, never from regional firm draws"
+        );
+    }
+
+    #[test]
+    fn optional_cards_expire_at_their_deadline() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            197,
+            crate::state::ScenarioKind::Guided,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let firm = world.investor.primary_group.unwrap();
+        let id = open(&mut world, "crop_loss", Some(firm), None, false);
+        assert!(
+            !world
+                .events
+                .pending
+                .iter()
+                .find(|e| e.id == id)
+                .unwrap()
+                .resolved
+        );
+        world.tick = Tick(8);
+        expire_optional(&mut world, &dataset);
+        assert!(
+            world
+                .events
+                .pending
+                .iter()
+                .find(|e| e.id == id)
+                .unwrap()
+                .resolved
+        );
     }
 
     #[test]

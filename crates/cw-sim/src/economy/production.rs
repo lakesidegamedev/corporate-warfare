@@ -454,6 +454,10 @@ fn run_facility(
         let season = SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize];
         output = output.scale_bps(season);
     }
+    // Supply-side events (crop loss, outages) reduce physical output, not household demand.
+    if let Some(code) = dataset.product_index.get(&recipe.output) {
+        output = output.scale_bps(world.supply_ratio_bps(facility.region, *code) as i32);
+    }
     if output.0 > 0 {
         let code = dataset.product_index[&recipe.output];
         // Utilities book output too, at zero carrying cost because fuel was expensed as
