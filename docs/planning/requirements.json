@@ -208,8 +208,10 @@
       ],
       "gate": "automated",
       "acceptance": "Funding, dilution, solvency and treasury votes are correct; no double dividend or wash-trade profit; IPO changes governance/disclosure.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R16-capital.json"
+      ]
     },
     {
       "id": "R17",
@@ -220,8 +222,10 @@
       ],
       "gate": "automated",
       "acceptance": "Meetings, votes, CEO appointment/removal and bid responses enforce authority and deadlines; investor can lose management control.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R17-boards.json"
+      ]
     },
     {
       "id": "R18",

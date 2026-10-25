@@ -1,0 +1,8 @@
+{
+  "requirement": "R16", "result": "pass",
+  "commit": "3814ecad7917542a17bf8fd4e92b91724529cec4",
+  "procedure": "cargo test --locked --workspace; equity tests for 90-percent issuance and dilution, sub-90 rejection, treasury-excluded dividend conservation, funded IPO with float/fee/history, and treasury buyback paying external holders while conserving issued shares.",
+  "artifacts": ["crates/cw-sim/src/economy/equity.rs","crates/cw-session/tests/workflows.rs"],
+  "limitations": "Buybacks move shares to treasury rather than cancelling the issue; treasury shares carry no votes or dividends. IPO pricing uses the current fair mark, not a book-built range.",
+  "verified_at": "2026-10-25"
+}

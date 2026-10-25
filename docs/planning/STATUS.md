@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `94ce180` (code `1437901`).
-Kanban: 254781. Merged PRs: #8 through #67.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `3814eca` (code).
+Kanban: 254781. Merged PRs: #8 through #69.
 
 ## What exists now
 
@@ -96,3 +96,7 @@ Kanban: 254781. Merged PRs: #8 through #67.
 Resume with:
 `cd /root/projects/corporate-warfare && git pull && cargo test --locked --workspace`
 then read this file and `evidence/release-readiness.md`.
+
+## Pause
+
+Paused at the owner's request on 2026-10-25. Restart from `docs/planning/CODEX-HANDOFF.md`.

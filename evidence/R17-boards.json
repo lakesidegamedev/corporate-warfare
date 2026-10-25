@@ -1,0 +1,8 @@
+{
+  "requirement": "R17", "result": "pass",
+  "commit": "3814ecad7917542a17bf8fd4e92b91724529cec4",
+  "procedure": "cargo test --locked --workspace; governance five-seat apportionment and status-quo ties, plus end-to-end board meeting, CEO nomination/removal, authority and large-action approval workflows.",
+  "artifacts": ["crates/cw-sim/src/economy/governance.rs","crates/cw-session/tests/workflows.rs","crates/cw-sim/src/commands.rs"],
+  "limitations": "Five seats and controller-held authority thresholds are simplified; no proxy solicitation or shareholder proposals.",
+  "verified_at": "2026-10-25"
+}
