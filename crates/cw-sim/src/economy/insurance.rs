@@ -389,4 +389,42 @@ mod tests {
         let expected_loss = ANNUAL_INCIDENT_BPS as i64 * expected_severity / 10_000;
         assert!((195..=205).contains(&expected_loss));
     }
+
+    #[test]
+    fn a_policy_expires_at_the_term_boundary() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            404,
+            crate::state::ScenarioKind::Founder,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let insurer = world
+            .firms
+            .iter()
+            .find(|(_, firm)| firm.insurer.is_some())
+            .map(|(handle, _)| handle)
+            .unwrap();
+        let insured = world
+            .firms
+            .iter()
+            .find(|(_, firm)| firm.insurer.is_none() && !firm.facilities.is_empty())
+            .map(|(handle, _)| handle)
+            .unwrap();
+        let facility = world.firm(insured).unwrap().facilities[0];
+        let limit = world.facilities.get(facility).unwrap().capex_cents / 2;
+        let policy = bind(&mut world, insurer, insured, facility, limit, limit / 20).unwrap();
+        {
+            let stored = world.insurance.get_mut(policy).unwrap();
+            stored.start = Tick(0);
+            stored.term_weeks = 52;
+        }
+        world.tick = Tick(52);
+        weekly(&mut world);
+        assert_eq!(
+            world.insurance.get(policy).unwrap().status,
+            PolicyStatus::Expired
+        );
+        assert!(world.firm(insurer).unwrap().book.is_balanced());
+    }
 }
