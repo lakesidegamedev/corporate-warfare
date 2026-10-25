@@ -1,0 +1,14 @@
+{
+  "requirement": "R28",
+  "result": "pass",
+  "commit": "3fa5a327af92b62415627d3a344c18bb774cf811",
+  "procedure": "cargo test --locked --workspace (cw-ai: thirty rivals and five archetypes, one slot per four weeks, at most four strategic actions, token player stake does not freeze a rival, postcard reload proposes identical commands, strike answer outside the slot, seasonal farm borrows, demand-limited firm cuts, contractor needs queued projects); cw-cli sweep archetype telemetry in evidence/balance/*.json.",
+  "artifacts": [
+    "crates/cw-ai/src/lib.rs",
+    "crates/cw-session/src/lib.rs",
+    "crates/cw-cli/src/main.rs",
+    "evidence/balance-report.md"
+  ],
+  "limitations": "Scores are integer proxies of 52-week cash benefit, not forecasts. Rivals do not lobby, issue equity or bonds, or bid for player-controlled companies. Scheduler state derives from the saved tick and stable handles rather than a stored queue.",
+  "verified_at": "2026-10-25"
+}

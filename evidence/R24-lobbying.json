@@ -1,0 +1,13 @@
+{
+  "requirement": "R24",
+  "result": "pass",
+  "commit": "3fa5a327af92b62415627d3a344c18bb774cf811",
+  "procedure": "cargo test --locked --workspace; crates/cw-sim/tests/lobbying.rs (group cooldown, group fee, bounded odds, failure keeps fee, postcard reload keeps the saved draw, grant window without cash, declined grant, backlash card disclose/cancel with no second penalty).",
+  "artifacts": [
+    "crates/cw-sim/src/economy/policy.rs",
+    "crates/cw-sim/tests/lobbying.rs",
+    "crates/cw-sim/src/economy/events_engine.rs"
+  ],
+  "limitations": "Rival AI does not file lobbying requests. Recent wins look back 104 weeks; mass layoffs mean a tenth of the group workforce in four weeks. The news feed is the public record and is not yet shown in the app.",
+  "verified_at": "2026-10-25"
+}

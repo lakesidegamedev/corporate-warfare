@@ -251,18 +251,22 @@
       "checklist": [
         {
           "text": "Implement destination books, buyer cash reservations and capped integer attractiveness.",
-          "done": false
+          "done": true
         },
         {
           "text": "Construct bids simultaneously, ration each scarce seller pro rata, settle once and release unused cash.",
-          "done": false
+          "done": true
         },
         {
           "text": "Pin four worked examples, deterministic reordering, affordable price cap, zero supply and no extra-share revenue.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R09-markets.json",
+        "crates/cw-sim/src/economy/markets.rs"
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P09",
@@ -401,18 +405,21 @@
       "checklist": [
         {
           "text": "Implement bilateral authority for intercompany loans/trade and capped explicit guarantees.",
-          "done": false
+          "done": true
         },
         {
           "text": "Enforce transfer-price range and standalone cash constraints; retain minority disclosures.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test internal profit elimination with unsold marked-up inventory and guarantee contagion limited to cap.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R14-intercompany.json"
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P14",
@@ -487,18 +494,22 @@
       "checklist": [
         {
           "text": "Apportion five board seats at13-week meetings and schedule four-week extraordinary meetings.",
-          "done": false
+          "done": true
         },
         {
           "text": "Require three-seat approvals/CEO limits and conflict-sensitive minority votes.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test meeting deadlines, 50-percent deadlock, removed CEO rejected command and authority changes after vote.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R17-boards.json",
+        "crates/cw-sim/tests/governance.rs"
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P17",
@@ -516,18 +527,22 @@
       "checklist": [
         {
           "text": "Implement grade thresholds, funded loan quotes/collateral/coverage, principal and interest carry.",
-          "done": false
+          "done": true
         },
         {
           "text": "Implement finite-holder bond issuance/coupons/maturity/trades with accrued interest and issue fee.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test final principal cent, refinancing order, pledge reuse, D/unsecured restrictions and creditor identities.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R18-credit.json",
+        "crates/cw-sim/tests/credit.rs"
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P18",
@@ -546,18 +561,22 @@
       "checklist": [
         {
           "text": "Implement missed-payment liabilities, payout freeze and four-week grace.",
-          "done": false
+          "done": true
         },
         {
           "text": "Implement restructuring test vs liquidation, collateral/priority distributions and finite outside asset buyers.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test secured/unsecured/equity waterfall, parent guarantee ceiling and viable sibling/personal assets retained.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R25-insolvency.json",
+        "crates/cw-sim/tests/liquidation.rs"
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P19",
@@ -637,18 +656,22 @@
       "checklist": [
         {
           "text": "Implement every bid state, funded escrow, two-week diligence/four-week offer and holder reservation factors.",
-          "done": false
+          "done": true
         },
         {
           "text": "Separate voting control from90-percent squeeze-out and asset/share/legal-merger settlements.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test expired/withdrawn tenders, minority payout, attached debt/contracts, concurrent bids and atomic cash failure.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R21-takeovers.json",
+        "crates/cw-sim/tests/takeovers.rs"
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P22",
@@ -666,18 +689,22 @@
       "checklist": [
         {
           "text": "Compute trailing13-week group-aware product/region HHI and both review triggers.",
-          "done": false
+          "done": true
         },
         {
           "text": "Add four-week review, explicit divestiture remedies, rejection/refund and no subsidiary-shell bypass.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test neutral HHI, >35-percent share, delta>200/post>2500 and infeasible-remedy rejection.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R22-antitrust.json",
+        "crates/cw-sim/tests/takeovers.rs"
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P23",
@@ -695,18 +722,22 @@
       "checklist": [
         {
           "text": "Implement organisation growth/decay, ballot, bargaining deadlines, counters and strike staffing.",
-          "done": false
+          "done": true
         },
         {
           "text": "Implement settlement/severance and thirteen-week binding fallback with no impossible automatic payment.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test insufficient staff, two-week deadline, strike payroll, accept at95-percent bound and saved ballot outcomes.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R23-unions.json",
+        "crates/cw-sim/tests/unions.rs"
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P24",
@@ -724,18 +755,22 @@
       "checklist": [
         {
           "text": "Implement three request types, fees, region/group cooldown, four-week saved success draw and reputation.",
-          "done": false
+          "done": true
         },
         {
           "text": "Fund training subsidy from finite government account and constrain tax floor/permit timing.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test repeated request rejection, reload stable outcome, failure cost and no purchased antitrust exemption.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R24-lobbying.json",
+        "crates/cw-sim/tests/lobbying.rs"
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P25",
@@ -768,7 +803,8 @@
       "evidence": [
         "evidence/packets/P25.json",
         "evidence/defense-procurement.md"
-      ]
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P26",
@@ -799,7 +835,8 @@
       ],
       "evidence": [
         "evidence/packets/P26.json"
-      ]
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P27",
@@ -819,18 +856,22 @@
       "checklist": [
         {
           "text": "Implement urgent weekly evaluation and stable four-cohort strategic slots with fixed candidate/action limits.",
-          "done": false
+          "done": true
         },
         {
           "text": "Use prescribed5 archetype weights, common command path, public observations and price/stock/credit policies.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test saved scheduling, <=4-week strategic latency, prompt default/bid action and no hidden income/stock.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R28-rival-ai.json",
+        "crates/cw-ai/src/lib.rs"
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P28",
@@ -848,18 +889,22 @@
       "checklist": [
         {
           "text": "Seed30 named firms, finite background and both starts without duplicated population/output.",
-          "done": false
+          "done": true
         },
         {
           "text": "Implement24 named event cards with prerequisites, cooldowns, choices and economic postings.",
-          "done": false
+          "done": true
         },
         {
           "text": "Test every choice, unavailable recipient, no duplicated mechanical penalty and persisted pending event.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R29-events.json",
+        "crates/cw-sim/tests/events.rs"
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P29",
@@ -877,18 +922,22 @@
       "checklist": [
         {
           "text": "Implement52-week calendar, bounded macro impulses/regimes and deterministic long-run frontier.",
-          "done": false
+          "done": true
         },
         {
           "text": "Calculate four score components/weights using investor net worth without internal double counts.",
-          "done": false
+          "done": true
         },
         {
           "text": "Pause at260, show score, continue30-year sandbox; preserve recovery assistance and loss history.",
-          "done": false
+          "done": true
         }
       ],
-      "evidence": []
+      "evidence": [
+        "evidence/R34-score.json",
+        "crates/cw-sim/tests/score.rs"
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P30",
@@ -1016,12 +1065,14 @@
         }
       ],
       "evidence": [
+        "evidence/R36-balance.json",
         "evidence/balance-report.md",
         "evidence/balance/guided-conservative-260.json",
         "evidence/balance/guided-growth-260.json",
         "evidence/balance/guided-acquirer-260.json",
         "evidence/balance/guided-conservative-1560.json"
-      ]
+      ],
+      "note": "Checklist evidenced in the 1.0.0 pass; held active until upstream packets P06, P07, P09, P14, P15, P19 and P20 have their own checklists audited."
     },
     {
       "id": "P34",

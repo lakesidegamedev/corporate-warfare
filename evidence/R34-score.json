@@ -1,0 +1,14 @@
+{
+  "requirement": "R34",
+  "result": "pass",
+  "commit": "3fa5a327af92b62415627d3a344c18bb774cf811",
+  "procedure": "cargo test --locked --workspace; crates/cw-sim/tests/score.rs (control counts a controlled parent once and ignores passive stakes, published formulas, week-260 pause then continued sandbox with frozen score, career losses and assisted flag survive reload); thirty-year sweeps in evidence/balance/*-1560.json.",
+  "artifacts": [
+    "crates/cw-sim/src/economy/score.rs",
+    "crates/cw-sim/src/economy/ownership.rs",
+    "crates/cw-sim/tests/score.rs",
+    "evidence/balance/guided-conservative-1560.json"
+  ],
+  "limitations": "Standard difficulty only. Component values are reported floored to whole points; the total uses unrounded components.",
+  "verified_at": "2026-10-25"
+}
