@@ -1483,8 +1483,21 @@ mod tests {
         while week < 260 {
             let advance = session.advance(16);
             week = advance.final_week;
-            if advance.pause.is_some() {
+            if advance.pause.as_deref() == Some("five_year_score") {
                 break;
+            }
+            if advance.pause.is_some() {
+                // Answer waiting cards as the app's inbox would, then clear the pause.
+                for event in session.events().into_iter().filter(|event| event.mandatory) {
+                    if let Some(choice) = event.choices.first() {
+                        let json = format!(
+                            r#"{{"RespondEvent":{{"event":{},"choice":"{}"}}}}"#,
+                            event.id, choice.id
+                        );
+                        session.submit_json(json);
+                    }
+                }
+                session.dismiss_pause();
             }
         }
         let score = session.score().expect("score at week 260");

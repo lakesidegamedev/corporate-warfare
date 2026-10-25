@@ -1170,7 +1170,7 @@ fn facility_power_cost(world: &World, dataset: &Dataset, firm: Handle) -> i64 {
 fn freight_reserve_fee(world: &World, dataset: &Dataset, firm: Handle) -> i64 {
     let region = world.firms.get(firm).map(|f| f.region).unwrap_or(0);
     let km = dataset
-        .lane_km("035", &dataset.regions[region as usize].code)
+        .lane_km("OH", &dataset.regions[region as usize].code)
         .unwrap_or(300);
     (km as i64 * 100).max(100_000)
 }

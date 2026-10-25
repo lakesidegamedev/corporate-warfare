@@ -2479,7 +2479,7 @@ mod tests {
         let recipe = dataset.recipe_index["farm"];
         let capex = dataset.recipes[recipe as usize].capex_cents;
         let build_weeks = dataset.recipes[recipe as usize].build_weeks;
-        let region = world.region_index("035").unwrap();
+        let region = world.region_index("OH").unwrap();
         let capital = capex + 100_000_000;
         let command = envelope(
             &world,

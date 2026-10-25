@@ -664,7 +664,7 @@ fn opening_input_cost(dataset: &Dataset, recipe_index: u16, blocks: u8) -> i64 {
 }
 
 fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
-    let region = world.region_index("035").unwrap_or(0);
+    let region = world.region_index("OH").unwrap_or(0);
     let recipe_index = dataset.recipe_index["farm"];
     let mut firm = placeholder_firm();
     firm.name = "Lakeside Holdings".to_owned();
