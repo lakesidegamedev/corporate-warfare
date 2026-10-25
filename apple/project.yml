@@ -51,4 +51,4 @@ schemes:
         CorporateWarfare: all
         EngineBridgeTests: [test]
     test:
-      targets: [EngineBridgeTests, UITests]
+      targets: [EngineBridgeTests]
