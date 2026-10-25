@@ -142,9 +142,9 @@ mod tests {
             .map(|(id, qty)| qty * prices[id.as_str()])
             .sum();
         let payroll = farm.baseline_weekly_payroll(balance.baseline_weekly_wage_cents);
-        // 600 * $100 = $60,000; fuel 20 * $300 = $6,000; power 10 * $1,000 = $10,000.
+        // 600 * $100 = $60,000; fuel 20 * $300 = $6,000; power 10 * $1,200 = $12,000.
         assert_eq!(revenue, 6_000_000);
-        assert_eq!(inputs, 1_600_000);
+        assert_eq!(inputs, 1_800_000);
         assert_eq!(payroll, 3_480_000);
         let maintenance = farm.weekly_maintenance(balance.maintenance_annual_bps);
         let depreciation = farm.weekly_depreciation();
@@ -155,7 +155,7 @@ mod tests {
         let ebitda =
             revenue - inputs - payroll - maintenance - balance.fixture_land_rent_cents_weekly;
         let ebit = ebitda - depreciation;
-        assert_eq!(ebitda, 743_077);
-        assert_eq!(ebit, 550_769);
+        assert_eq!(ebitda, 543_077);
+        assert_eq!(ebit, 350_769);
     }
 }

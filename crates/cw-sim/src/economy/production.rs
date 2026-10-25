@@ -221,7 +221,7 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
         if total_granted > 0 && !local_supply.is_empty() {
             let weights: Vec<(u64, i64)> = local_supply
                 .iter()
-                .map(|(handle, qty)| (u64::from(handle.0), qty.0))
+                .map(|(handle, qty)| (handle.0, qty.0))
                 .collect();
             let split = MilliLots::allocate(MilliLots(total_granted), &weights);
             for (index, (seller, _)) in local_supply.iter().enumerate() {

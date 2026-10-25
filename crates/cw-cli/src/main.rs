@@ -434,29 +434,40 @@ fn report(arguments: &[String]) {
         }
     };
     session.advance(weeks);
-    let mut rows: std::collections::BTreeMap<String, (i64, i64, i64, i64, i64, i64, i64)> =
+    #[derive(Default)]
+    struct IndustryTotals {
+        firms: i64,
+        revenue: i64,
+        cogs: i64,
+        wages: i64,
+        opex: i64,
+        interest: i64,
+        ebit: i64,
+    }
+    let mut rows: std::collections::BTreeMap<String, IndustryTotals> =
         std::collections::BTreeMap::new();
     for (_, firm) in session.world.firms.iter() {
         let industry = cw_sim::state::INDUSTRY_NAMES[firm.industry as usize].to_owned();
         let last = firm.book.recent_weeks().last().copied().unwrap_or_default();
         let entry = rows.entry(industry).or_default();
-        entry.0 += 1;
-        entry.1 += last.revenue;
-        entry.2 += last.cost_of_goods;
-        entry.3 += last.wages;
-        entry.4 += last.operating_expense;
-        entry.5 += last.interest_expense;
-        entry.6 += last.ebit();
+        entry.firms += 1;
+        entry.revenue += last.revenue;
+        entry.cogs += last.cost_of_goods;
+        entry.wages += last.wages;
+        entry.opex += last.operating_expense;
+        entry.interest += last.interest_expense;
+        entry.ebit += last.ebit();
     }
     println!("industry           firms   revenue     cogs    wages     opex    ebit");
-    for (industry, (firms, revenue, cogs, wages, opex, interest, ebit)) in rows {
+    for (industry, totals) in rows {
         println!(
-            "{industry:16} {firms:5} {:>9} {:>8} {:>8} {:>8} {:>8}",
-            revenue / 100,
-            cogs / 100,
-            wages / 100,
-            (opex + interest) / 100,
-            ebit / 100
+            "{industry:16} {:5} {:>9} {:>8} {:>8} {:>8} {:>8}",
+            totals.firms,
+            totals.revenue / 100,
+            totals.cogs / 100,
+            totals.wages / 100,
+            (totals.opex + totals.interest) / 100,
+            totals.ebit / 100
         );
     }
 }

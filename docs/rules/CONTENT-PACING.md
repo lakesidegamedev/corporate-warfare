@@ -28,9 +28,9 @@ Recipe profitability is NOT guaranteed at reference prices. Competition, shortag
 staffing are core risks. Before adjusting a recipe, print revenue, every input, wages,
 maintenance, rent, depreciation and funding cost for the full week, and compare scenarios.
 One explicit accounting fixture: farm output 600 lots at $100 = $60,000 revenue; fuel
-20*$300 = $6,000; electricity 10*$1,000 = $10,000; wages 60*$400+10*$800+2*$1,400 =
+20*$300 = $6,000; electricity 10*$1,200 = $12,000; wages 60*$400+10*$800+2*$1,400 =
 $34,800; maintenance $2,000,000*2%/52 = $769.23; land $1,000; depreciation
-$2,000,000/(20*52) = $1,923.08. EBITDA $7,430.77, EBIT $5,507.69 before tax/interest.
+$2,000,000/(20*52) = $1,923.08. EBITDA $5,430.77, EBIT $3,507.69 before tax/interest.
 Accounting carries exact fractional cents, then uses documented rounding. No margin
 field grants additional cash beyond those transactions.
 

@@ -41,3 +41,17 @@ technology +53k, telecommunications +52k.
 
 Next pass: solve output prices as cost-plus at realistic utilisation, and make media/carrier
 demand scale with corridor activity. Do not tune by loosening the pass condition.
+
+## Third measurement, 2026-10-25 (viability achieved at baseline)
+
+After the calibration described in DECISIONS.md:
+
+- 52 weeks, seed 3: `dissolved=0 past_due=0`, guided firm operating with $783,775 cash and 60
+  percent of votes.
+- 260 weeks: `dissolved=3 past_due=2`, guided firm operating with $935,232 cash, fair value 154
+  cents, score 62 (return 50, resilience 100, control 20, conduct 100).
+- 1,560 weeks (sandbox): `dissolved=11 past_due=0`, guided firm operating with $3.53M cash and
+  fair value 353 cents (2.7x the opening mark).
+
+This retires the blocker. What remains is balance breadth (P33) and human playtesting, not a
+collapsing corridor. Eleven rival exits over thirty years with no entry is a known limitation.

@@ -367,7 +367,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
                 .get_mut(handle)
                 .unwrap()
                 .policies
-                .production_target_bps = 8_500;
+                .production_target_bps = 10_000;
             let _ = world.firms.get_mut(handle).unwrap().book.commit(
                 Tick::OPENING,
                 Txn::new()
@@ -571,7 +571,7 @@ fn open_facility(
             recipe.workers_low_mid_high[1] * blocks as i64,
             recipe.workers_low_mid_high[2] * blocks as i64,
         ],
-        target_bps: 8_500,
+        target_bps: 10_000,
         quality_bps: 10_000,
         deposit_remaining: MilliLots::ZERO,
         last_output: MilliLots::ZERO,
@@ -856,8 +856,8 @@ fn build_gateways(world: &mut World, dataset: &Dataset) {
                 region: region as u8,
                 product: code,
                 capacity_lots: capacity,
-                sell_price_cents: reference + reference * 15 / 100,
-                buy_price_cents: reference - reference * 15 / 100,
+                sell_price_cents: reference + reference * 5 / 100,
+                buy_price_cents: reference - reference * 5 / 100,
             });
         }
     }

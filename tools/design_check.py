@@ -42,8 +42,8 @@ def check():
     depreciation = Fraction(farm['capex_cents'], farm['life_years'] * 52)
     ebitda = revenue - inputs - payroll - maintenance - data['fixture_land_rent_cents_weekly']
     ebit = ebitda - depreciation
-    assert revenue == 6000000 and inputs == 1600000 and payroll == 3480000
-    assert round(ebitda) == 743077 and round(ebit) == 550769, 'farm worked example drift'
+    assert revenue == 6000000 and inputs == 1800000 and payroll == 3480000
+    assert round(ebitda) == 543077 and round(ebit) == 350769, 'farm worked example drift'
     # Independent dividends/claims/credit examples used by future game tests.
     assert Fraction(6, 8) * 100 == 75  # treasury excluded from eligible votes/dividend
     assert Fraction(5, 10) <= Fraction(1, 2) < Fraction(6, 10)
