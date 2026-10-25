@@ -238,3 +238,10 @@ group aggregation once control is gone. Concentration also now uses the union of
 target groups, so a controlled target is never counted twice. Tests:
 `deals::tests::a_remedy_divests_enough_shares_to_remove_control` and the corrected
 `concentration_is_group_aware`.
+
+### Bond maturity and coupon carry, 2026-10-25
+
+A bond reaching maturity dropped the coupon that fell due on the same date, and quarterly coupons
+rounded independently each quarter. Maturity now pays the final coupon before principal, and
+coupons use a persisted sub-cent carry. Test:
+`credit::tests::a_bond_pays_its_final_coupon_before_principal`.

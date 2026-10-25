@@ -184,6 +184,17 @@ fn credit_lender(world: &mut World, loan: &Loan, paid: i64, interest_paid: i64) 
     }
 }
 
+/// Quarterly coupon with a persisted sub-cent carry.
+fn coupon_due(bond: &Bond) -> (i64, i64) {
+    let mut carry = cw_core::money::SubCentCarry::new(10_000 * 4);
+    carry.numerator = bond.carry;
+    let coupon = carry.accrue(
+        bond.principal_cents as i128 * bond.coupon_bps as i128,
+        10_000 * 4,
+    );
+    (coupon.0, carry.numerator)
+}
+
 fn service_bonds(world: &mut World, dataset: &Dataset) {
     let _ = dataset;
     let handles: Vec<Handle> = world.bonds.iter().map(|(handle, _)| handle).collect();
@@ -192,13 +203,36 @@ fn service_bonds(world: &mut World, dataset: &Dataset) {
             continue;
         };
         if world.tick.0 >= bond.maturity.0 {
-            // Principal at maturity, paid from issuer cash; insufficient cash defaults.
-            let cash = world
+            // A coupon that falls on the maturity date is still owed before principal.
+            let mut cash = world
                 .firms
                 .get(bond.issuer)
                 .map(|f| f.book.cash())
                 .unwrap_or(0)
                 .max(0);
+            if world.tick.0 >= bond.next_coupon.0 {
+                let (coupon, _) = coupon_due(&bond);
+                let paid = coupon.min(cash);
+                if paid > 0 {
+                    let _ = world.firms.get_mut(bond.issuer).unwrap().book.commit(
+                        world.tick,
+                        Txn::new()
+                            .credit(Account::Cash, paid, "final coupon")
+                            .debit(Account::InterestExpense, paid, "final coupon"),
+                    );
+                    distribute_to_holders(world, &bond, paid);
+                    cash -= paid;
+                }
+                if paid < coupon {
+                    crate::economy::insolvency::defer_expense(
+                        world,
+                        bond.issuer,
+                        coupon - paid,
+                        Account::InterestExpense,
+                        "unpaid final coupon",
+                    );
+                }
+            }
             let paid = bond.principal_cents.min(cash);
             if paid > 0 {
                 let _ = world.firms.get_mut(bond.issuer).unwrap().book.commit(
@@ -222,10 +256,7 @@ fn service_bonds(world: &mut World, dataset: &Dataset) {
             continue;
         }
         if world.tick.0 >= bond.next_coupon.0 {
-            let coupon = round_even_div(
-                bond.principal_cents as i128 * bond.coupon_bps as i128,
-                10_000 * 4,
-            ) as i64;
+            let (coupon, carry_next) = coupon_due(&bond);
             let cash = world
                 .firms
                 .get(bond.issuer)
@@ -254,6 +285,7 @@ fn service_bonds(world: &mut World, dataset: &Dataset) {
                 );
             }
             if let Some(stored) = world.bonds.get_mut(handle) {
+                stored.carry = carry_next;
                 stored.next_coupon = Tick(stored.next_coupon.0 + 13);
             }
         }
@@ -354,6 +386,54 @@ mod tests {
             .book
             .close_week(world.tick);
         assert_eq!(assess_grade(&world, handle), Grade::D);
+    }
+
+    #[test]
+    fn a_bond_pays_its_final_coupon_before_principal() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            781,
+            crate::state::ScenarioKind::Founder,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let issuer = world.firms.iter().next().unwrap().0;
+        world
+            .firms
+            .get_mut(issuer)
+            .unwrap()
+            .book
+            .commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, 200_000_000, "funding")
+                    .credit(Account::ShareCapital, 200_000_000, "funding"),
+            )
+            .unwrap();
+        let mut holders = std::collections::BTreeMap::new();
+        holders.insert(crate::state::HolderId::Outside(0), 100_000_000i64);
+        let bond = world.bonds.insert(Bond {
+            issuer,
+            principal_cents: 100_000_000,
+            coupon_bps: 600,
+            maturity: Tick(52),
+            issued: Tick(0),
+            holders,
+            carry: 0,
+            next_coupon: Tick(52),
+        });
+        world.tick = Tick(52);
+        let outside_before = world.outside.investors[0].capital_cents;
+        let issuer_cash = world.firm(issuer).unwrap().book.cash();
+        service(&mut world, &dataset);
+        assert!(world.bonds.get(bond).is_none(), "the bond is retired");
+        let received = world.outside.investors[0].capital_cents - outside_before;
+        // Principal 100,000,000 plus one 6 percent annual coupon quarter (1,500,000).
+        assert_eq!(received, 101_500_000);
+        // Other debt service may also run in the same weekly pass, so the issuer pays at least
+        // the bond amount while the holder receives exactly it.
+        assert!(world.firm(issuer).unwrap().book.cash() <= issuer_cash - 101_500_000);
+        assert!(world.firm(issuer).unwrap().book.is_balanced());
     }
 
     #[test]
