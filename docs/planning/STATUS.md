@@ -24,7 +24,7 @@ Kanban: 254781. Merged PRs: #8 through #32.
 
 ## Verified
 
-- Local: 170+ tests pass; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
+- Local: 171 tests pass; shared scheduler job `20261025T073049Z-a5f67a3f` passed on main `16dcaf7`; `cargo fmt --check` and `cargo clippy --workspace --all-targets -D
   warnings` clean; design and plan validators pass; shared scheduler jobs passed
   (`20261025T070655Z-5df8bceb` latest).
 - Corridor at seed 3: 0 rival failures at 52 weeks, 4-6 at 260 across seeds, 11 over thirty
