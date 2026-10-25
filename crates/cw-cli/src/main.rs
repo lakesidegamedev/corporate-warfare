@@ -917,7 +917,9 @@ fn report(arguments: &[String]) {
 fn bench(arguments: &[String]) {
     use std::time::Instant;
     let envelope = flag(arguments, "--envelope").unwrap_or_else(|| "representative".to_owned());
-    let weeks: u32 = flag(arguments, "--weeks").and_then(|value| value.parse().ok()).unwrap_or(3);
+    let weeks: u32 = flag(arguments, "--weeks")
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(3);
     let dataset = cw_data::Dataset::load().expect("dataset");
     let base = cw_sim::economy::seed::build(
         &dataset,

@@ -9,9 +9,7 @@ use std::collections::BTreeMap;
 use cw_core::ids::Handle;
 use cw_data::Dataset;
 
-use crate::state::{
-    Facility, FacilityStatus, HolderId, OutsideHolder, ShareLot, ShareBook, World,
-};
+use crate::state::{Facility, FacilityStatus, HolderId, OutsideHolder, ShareBook, ShareLot, World};
 
 /// Scale a valid world by cloning firms, facilities and supply contracts.
 ///
@@ -49,11 +47,17 @@ pub fn scale(base: &World, firm_copies: u32, facilities_per_firm: u32) -> World 
             let mut holders = BTreeMap::new();
             holders.insert(
                 HolderId::Investor,
-                ShareLot { qty: issued * 60 / 100, cost_cents: 0 },
+                ShareLot {
+                    qty: issued * 60 / 100,
+                    cost_cents: 0,
+                },
             );
             holders.insert(
                 HolderId::Outside((copy as u32) % 8),
-                ShareLot { qty: issued - issued * 60 / 100, cost_cents: 0 },
+                ShareLot {
+                    qty: issued - issued * 60 / 100,
+                    cost_cents: 0,
+                },
             );
             firm.shares = ShareBook::new(holders);
             firm.board.seats = [None; 5];
@@ -77,13 +81,19 @@ pub fn scale(base: &World, firm_copies: u32, facilities_per_firm: u32) -> World 
                     facility.escrow_cents = 0;
                     facility.accumulated_depreciation = 0;
                     let handle = world.facilities.insert(facility);
-                    world.firms.get_mut(new_handle).unwrap().facilities.push(handle);
+                    world
+                        .firms
+                        .get_mut(new_handle)
+                        .unwrap()
+                        .facilities
+                        .push(handle);
                 }
             }
         }
         // Establish the same supply relationships inside the copied economy.
         for (_, contract) in base.contracts.iter() {
-            let (Some(buyer), Some(seller)) = (map.get(&contract.buyer), map.get(&contract.seller)) else {
+            let (Some(buyer), Some(seller)) = (map.get(&contract.buyer), map.get(&contract.seller))
+            else {
                 continue;
             };
             let mut cloned = contract.clone();
@@ -93,8 +103,18 @@ pub fn scale(base: &World, firm_copies: u32, facilities_per_firm: u32) -> World 
             cloned.escrow_cents = 0;
             cloned.shortfalls = cw_core::quantity::MilliLots::ZERO;
             let handle = world.contracts.insert(cloned);
-            world.firms.get_mut(*buyer).unwrap().contracts_buy.push(handle);
-            world.firms.get_mut(*seller).unwrap().contracts_sell.push(handle);
+            world
+                .firms
+                .get_mut(*buyer)
+                .unwrap()
+                .contracts_buy
+                .push(handle);
+            world
+                .firms
+                .get_mut(*seller)
+                .unwrap()
+                .contracts_sell
+                .push(handle);
         }
         maps.push(map);
     }
@@ -130,7 +150,11 @@ pub fn scale(base: &World, firm_copies: u32, facilities_per_firm: u32) -> World 
 
 /// A compact summary used by the benchmark and its tests.
 pub fn counts(world: &World) -> (usize, usize, usize) {
-    (world.firms.len(), world.facilities.len(), world.contracts.len())
+    (
+        world.firms.len(),
+        world.facilities.len(),
+        world.contracts.len(),
+    )
 }
 
 /// A named envelope from TESTING.md, scaled from the pinned corridor.
@@ -145,7 +169,12 @@ pub fn envelope(base: &World, name: &str) -> Option<World> {
 
 /// The outside investor list is public state; this keeps the fixture constructor honest about it.
 pub fn outside_capital(world: &World) -> i64 {
-    world.outside.investors.iter().map(|holder: &OutsideHolder| holder.capital_cents).sum()
+    world
+        .outside
+        .investors
+        .iter()
+        .map(|holder: &OutsideHolder| holder.capital_cents)
+        .sum()
 }
 
 #[cfg(test)]
@@ -175,7 +204,10 @@ mod tests {
         let stress = envelope(&base, "stress").unwrap();
         let (firms, facilities, _) = counts(&stress);
         assert!((900..=1_100).contains(&firms), "firms {firms}");
-        assert!((8_000..=11_000).contains(&facilities), "facilities {facilities}");
+        assert!(
+            (8_000..=11_000).contains(&facilities),
+            "facilities {facilities}"
+        );
         assert!(outside_capital(&stress) > 0);
     }
 }
