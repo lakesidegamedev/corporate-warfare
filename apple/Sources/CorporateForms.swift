@@ -361,6 +361,72 @@ struct TrainingBudgetSheet: View {
     }
 }
 
+struct QualityBudgetSheet: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var product: UInt32 = 0
+    @State private var amountText = ""
+    @State private var preview: PreviewDto?
+    @State private var rejection: CommandRejection?
+    private let catalogue = products()
+
+    private var firm: FirmDto? { store.selectedFirmDto }
+    private var amount: Int64? { parseDollarsToCents(amountText) }
+
+    private func json() -> String? {
+        guard let firm, let amount else { return nil }
+        return CommandJSON.command("SetQualityBudget", [
+            "firm": firm.handle,
+            "product": product,
+            "amount_cents": amount
+        ])
+    }
+
+    var body: some View {
+        CommandSheet(
+            title: "Fund product quality",
+            actorName: firm?.name ?? "No company",
+            actorDetail: "Quality starts from technology and can rise by at most twenty-five basis points a week, up to a thousand points above the technology baseline. Investment is a weekly expense.",
+            submitTitle: "Set budget",
+            preview: preview,
+            rejection: rejection,
+            isBusy: store.isBusy,
+            canSubmit: json() != nil,
+            onSubmit: {
+                guard let json = json() else { return false }
+                if let rejection = await store.submit(json) {
+                    self.rejection = rejection
+                    return false
+                }
+                return true
+            }
+        ) {
+            Section("Product and budget") {
+                Picker("Product", selection: $product) {
+                    ForEach(catalogue, id: \.index) { item in
+                        Text(item.name).tag(item.index)
+                    }
+                }
+                TextField("Weekly quality budget in dollars", text: $amountText)
+                    .keyboardType(.decimalPad)
+                    .accessibilityLabel("Weekly quality budget in dollars")
+                Text("Set zero to stop investing. Quality affects household demand, never a guaranteed sale.")
+                    .font(.caption)
+            }
+        }
+        .task { await refresh() }
+        .onChange(of: amountText) { _, _ in Task { await refresh() } }
+        .onChange(of: product) { _, _ in Task { await refresh() } }
+    }
+
+    private func refresh() async {
+        guard let json = json() else {
+            preview = nil
+            return
+        }
+        preview = await store.preview(json)
+    }
+}
+
 struct BondSheet: View {
     @EnvironmentObject private var store: AppStore
     @State private var principalText = ""

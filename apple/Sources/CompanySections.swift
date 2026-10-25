@@ -15,6 +15,7 @@ struct FinanceView: View {
     @State private var showingLoan = false
     @State private var showingBond = false
     @State private var showingTraining = false
+    @State private var showingQuality = false
 
     var body: some View {
         ScrollView {
@@ -93,6 +94,9 @@ struct FinanceView: View {
                         ActionButton(title: "Fund skill training", systemImage: "graduationcap") {
                             showingTraining = true
                         }
+                        ActionButton(title: "Fund product quality", systemImage: "sparkles") {
+                            showingQuality = true
+                        }
                         if store.loans.isEmpty {
                             EmptyNote(text: "No loans.")
                         } else {
@@ -127,6 +131,7 @@ struct FinanceView: View {
         .sheet(isPresented: $showingLoan) { LoanSheet().environmentObject(store) }
         .sheet(isPresented: $showingBond) { BondSheet().environmentObject(store) }
         .sheet(isPresented: $showingTraining) { TrainingBudgetSheet().environmentObject(store) }
+        .sheet(isPresented: $showingQuality) { QualityBudgetSheet().environmentObject(store) }
     }
 }
 

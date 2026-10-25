@@ -283,3 +283,12 @@ be answered through `RespondEvent`. The CLI's scripted driver clears advisory pa
 sweeps still reach their horizon, and only stops for mandatory events and the score. Tests:
 `tick::tests::the_clock_pauses_before_default_grace_expires` and
 `the_clock_pauses_on_an_imminent_board_vote`.
+
+### Product quality investment, 2026-10-25
+
+Quality came only from technology. `SetQualityBudget` now funds a weekly per-product quality
+investment: each $1,000 adds one basis point, at most twenty-five a week, capped at technology
+quality plus the prescribed 1,000 bps ceiling. It is an operating expense, never a guaranteed
+sale, and is exposed through a Finance form with a product picker. Test:
+`research::tests::quality_investment_is_bounded_and_funded`; canonical hash re-pinned to
+`2ee957c5...`.
