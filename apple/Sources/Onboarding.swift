@@ -302,9 +302,8 @@ struct OnboardingView: View {
         } else if canAct {
             EmptyNote(text: "No facility yet. The build form creates one from a region and a template.")
         }
-        // The dataset sorts recipes by id, so template 0 is assembly, not the guided farm.
-        // The FFI exposes no recipe list, so the walkthrough opens the real build form instead
-        // of hard-coding an index that could drift away from the dataset.
+        // The FFI publishes the recipe list, so the form shows every template with its capex and
+        // build time instead of a raw index that could drift away from the dataset.
         Button {
             showingBuild = true
         } label: {
@@ -313,8 +312,8 @@ struct OnboardingView: View {
         }
         .buttonStyle(.bordered)
         .disabled(!canAct)
-        .accessibilityHint("Opens the real facility build form. Choose the company's region and check the capex before you confirm.")
-        Text("Building spends the company's cash, not yours. The form opens at the corridor's first region and template, so change the region to \(store.selectedFirmDto?.region ?? "the company's region") before you confirm.")
+        .accessibilityHint("Opens the real facility build form. Choose a template and check the capex before you confirm.")
+        Text("Building spends the company's cash, not yours. The form opens on this company's region and previews the construction escrow before you confirm.")
             .font(.caption)
             .foregroundStyle(Theme.secondaryText(for: scheme))
             .fixedSize(horizontal: false, vertical: true)

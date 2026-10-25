@@ -63,26 +63,49 @@ struct OverviewView: View {
                         }
 
                         SectionCard(title: "Your group") {
-                            if store.controlledFirms.isEmpty {
-                                EmptyNote(text: "You do not control a company. Open Company to review the portfolio or start again from the management contract when eligible.")
+                            if store.groupTree.isEmpty {
+                                EmptyNote(text: "You do not control a company. Open Company to review the portfolio, or start again from the management contract when eligible.")
                             } else {
-                                ForEach(store.controlledFirms, id: \.handle) { firm in
+                                ForEach(store.groupTree, id: \.handle) { node in
                                     Button {
-                                        Task { await store.selectFirm(firm.handle) }
+                                        Task { await store.selectFirm(node.handle) }
                                     } label: {
-                                        HStack {
-                                            VStack(alignment: .leading) {
-                                                Text(firm.name).font(.body.weight(.medium))
-                                                Text("\(firm.industry) · \(firm.region) · grade \(firm.grade)")
+                                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                                    if node.depth > 0 {
+                                                        Image(systemName: "arrow.turn.down.right")
+                                                            .font(.caption2)
+                                                            .foregroundStyle(Theme.secondaryText(for: scheme))
+                                                            .accessibilityHidden(true)
+                                                    }
+                                                    Text(node.name).font(.body.weight(.medium))
+                                                        .fixedSize(horizontal: false, vertical: true)
+                                                    if store.selectedFirm == node.handle {
+                                                        Image(systemName: "checkmark.circle.fill")
+                                                            .font(.caption)
+                                                            .foregroundStyle(Theme.positive)
+                                                    }
+                                                }
+                                                Text("\(node.industry) · \(node.region) · \(node.directlyControlled ? "direct holding" : "subsidiary") · control \(Format.percentBps(node.controlBps))")
                                                     .font(.caption)
                                                     .foregroundStyle(Theme.secondaryText(for: scheme))
+                                                    .fixedSize(horizontal: false, vertical: true)
+                                                Text("Look-through \(Format.percentBps(node.lookThroughBps)) · cash \(Format.moneyCompact(node.cashCents))")
+                                                    .font(.caption2.monospacedDigit())
+                                                    .foregroundStyle(Theme.secondaryText(for: scheme))
                                             }
-                                            Spacer()
-                                            Text(Format.moneyCompact(firm.cashCents))
+                                            Spacer(minLength: 8)
+                                            Text(Format.moneyCompact(node.cashCents))
                                                 .font(.callout.monospacedDigit())
                                         }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .frame(minHeight: 44, alignment: .leading)
+                                        .padding(.leading, CGFloat(min(Int(node.depth), 4)) * 12)
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityLabel("\(node.name), \(node.directlyControlled ? "direct holding" : "subsidiary"), control \(Format.percentBps(node.controlBps)), look-through \(Format.percentBps(node.lookThroughBps))")
+                                    .accessibilityHint("Makes this company the selected operating context.")
                                 }
                             }
                         }

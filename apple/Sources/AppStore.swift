@@ -15,6 +15,15 @@ final class AppStore: ObservableObject {
     @Published var insurance: [InsuranceDto] = []
     @Published var deals: [DealDto] = []
     @Published var events: [EventDto] = []
+    @Published var groupTree: [GroupNodeDto] = []
+    @Published var boardVotes: [BoardVoteDto] = []
+    @Published var institutions: [InstitutionDto] = []
+    @Published var labour: LabourDto?
+    @Published var policyState: PolicyStateDto?
+    @Published var recovery: RecoveryDto?
+    @Published var fundingBuyers: [BuyerDto] = []
+    @Published var recipeOptions: [RecipeDto] = []
+    @Published var lastErrorDetail: String?
     @Published var selectedFirm: UInt64?
     @Published var selectedRegionCode: String?
     @Published var errorMessage: String?
@@ -184,6 +193,13 @@ final class AppStore: ObservableObject {
         regions = await engine.regions(selected: selectedRegionCode)
         events = await engine.events()
         deals = await engine.deals()
+        groupTree = await engine.groupTree()
+        institutions = await engine.institutions()
+        recovery = await engine.recovery()
+        fundingBuyers = await engine.fundingBuyers()
+        if recipeOptions.isEmpty {
+            recipeOptions = recipes()
+        }
         if let selectedFirm {
             facilities = await engine.facilities(firm: selectedFirm)
             finance = await engine.finance(firm: selectedFirm)
@@ -191,6 +207,9 @@ final class AppStore: ObservableObject {
             contracts = await engine.contracts(firm: selectedFirm)
             loans = await engine.loans(firm: selectedFirm)
             insurance = await engine.insurance(firm: selectedFirm)
+            boardVotes = await engine.boardVotes(firm: selectedFirm)
+            labour = await engine.labour(firm: selectedFirm)
+            policyState = await engine.policyState(firm: selectedFirm)
         } else {
             facilities = []
             finance = nil
@@ -198,6 +217,9 @@ final class AppStore: ObservableObject {
             contracts = []
             loans = []
             insurance = []
+            boardVotes = []
+            labour = nil
+            policyState = nil
         }
         saves = SaveManager.shared.list()
         await loadMarkets()
@@ -444,6 +466,18 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func buildFacility(region: UInt32, recipe: UInt32, blocks: UInt32) async -> CommandRejection? {
+        guard let selectedFirm else {
+            return CommandRejection(key: "error.invalid_entity", detail: "")
+        }
+        return await submit(CommandJSON.command("BuildFacility", [
+            "firm": selectedFirm,
+            "region": region,
+            "recipe": recipe,
+            "blocks": blocks
+        ]))
+    }
+
     func payDividend(amount: Int64) async {
         guard let selectedFirm else { return }
         await perform {
@@ -455,7 +489,7 @@ final class AppStore: ObservableObject {
 
     func respond(event: UInt64, choice: String) async {
         await perform {
-            let json = "{\"RespondEvent\":{\"event\":\(event),\"choice\":\"\(choice)\"}}"
+            let json = CommandJSON.command("RespondEvent", ["event": event, "choice": choice])
             let receipt = await self.engine.submit(json: json)
             self.handle(receipt)
             await self.reload()
@@ -464,7 +498,13 @@ final class AppStore: ObservableObject {
 
     func orderShares(firm: UInt64, buy: Bool, quantity: Int64, limit: Int64) async {
         await perform {
-            let json = "{\"PlaceShareOrder\":{\"investor\":true,\"firm\":\(firm),\"buy\":\(buy),\"qty\":\(quantity),\"limit_price_cents\":\(limit)}}"
+            let json = CommandJSON.command("PlaceShareOrder", [
+                "investor": true,
+                "firm": firm,
+                "buy": buy,
+                "qty": quantity,
+                "limit_price_cents": limit
+            ])
             let receipt = await self.engine.submit(json: json)
             self.handle(receipt)
             await self.reload()
@@ -477,15 +517,273 @@ final class AppStore: ObservableObject {
         self.sessionReady = true
     }
 
+    // MARK: Catalogue commands
+
+    /// The firm whose authority acts for the selected company.
+    ///
+    /// A directly held firm is operated by the investor (`0`). A subsidiary is operated by its
+    /// controlling parent firm, which is the same authority check the simulator applies.
+    var legalActor: UInt64 {
+        guard let selectedFirm,
+              let node = groupTree.first(where: { $0.handle == selectedFirm }) else {
+            return 0
+        }
+        if node.directlyControlled { return 0 }
+        return node.parent ?? 0
+    }
+
+    /// True when the selected firm is operated by a parent rather than the investor directly.
+    var actingThroughParent: FirmDto? {
+        guard legalActor != 0 else { return nil }
+        return firms.first { $0.handle == legalActor }
+    }
+
+    /// Submit one intent and return its typed rejection, or nil when accepted.
+    func submit(_ json: String, actor: UInt64? = nil) async -> CommandRejection? {
+        guard sessionReady else {
+            return CommandRejection(key: "error.internal_fault", detail: "")
+        }
+        isBusy = true
+        defer { isBusy = false }
+        guard let receipt = await engine.submit(json: json, actor: actor ?? legalActor) else {
+            return CommandRejection(key: "error.internal_fault", detail: "")
+        }
+        if receipt.accepted {
+            errorMessage = nil
+            lastErrorDetail = nil
+            statusLine = "Accepted at revision \(receipt.revision)."
+            await reload()
+            return nil
+        }
+        let key = receipt.errorKey ?? "error.internal_fault"
+        lastErrorDetail = receipt.errorDetail
+        statusLine = key
+        return CommandRejection(key: key, detail: receipt.errorDetail ?? "")
+    }
+
+    /// Investor-only commands always act as the investor, never through a subsidiary board.
+    func submitAsInvestor(_ json: String) async -> CommandRejection? {
+        await submit(json, actor: 0)
+    }
+
+    /// Ask the session for a labelled preview. Never reserves or mutates.
+    func preview(_ json: String) async -> PreviewDto? {
+        await engine.previewJson(json)
+    }
+
+    func previewIssue(firm: UInt64, quantity: Int64, priceCents: Int64) async -> PreviewDto? {
+        await engine.previewIssue(firm: firm, qty: quantity, priceCents: priceCents)
+    }
+
+    func previewBuild(firm: UInt64, recipe: UInt32, blocks: UInt32) async -> PreviewDto? {
+        await engine.previewBuild(firm: firm, recipe: recipe, blocks: blocks)
+    }
+
+    func setPrimaryGroup(_ firm: UInt64) async -> CommandRejection? {
+        await submitAsInvestor(CommandJSON.command("SetPrimaryGroup", ["firm": firm]))
+    }
+
+    func foundFirm(name: String, region: UInt32, capitalCents: Int64, recipe: UInt32) async -> CommandRejection? {
+        await submitAsInvestor(CommandJSON.command("FoundFirm", [
+            "name": name,
+            "region": region,
+            "capital_cents": capitalCents,
+            "recipe": recipe
+        ]))
+    }
+
+    func acceptManagementContract() async -> CommandRejection? {
+        await submitAsInvestor(CommandJSON.unit("AcceptManagementContract"))
+    }
+
+    func callMeeting(firm: UInt64) async -> CommandRejection? {
+        await submit(CommandJSON.command("CallMeeting", ["firm": firm]))
+    }
+
+    func nominateCEO(firm: UInt64, investor: Bool) async -> CommandRejection? {
+        await submit(CommandJSON.command("NominateCEO", ["firm": firm, "investor": investor]))
+    }
+
+    func castVote(firm: UInt64, voteId: UInt32, approve: Bool) async -> CommandRejection? {
+        await submit(CommandJSON.command("CastVote", [
+            "firm": firm,
+            "vote_id": voteId,
+            "approve": approve
+        ]))
+    }
+
+    func proposeBoardAction(firm: UInt64, subject: String) async -> CommandRejection? {
+        await submit(CommandJSON.command("ProposeBoardAction", ["firm": firm, "subject": subject]))
+    }
+
+    func respondTender(deal: UInt64, accept: Bool) async -> CommandRejection? {
+        await submitAsInvestor(CommandJSON.command("RespondTender", ["deal": deal, "accept": accept]))
+    }
+
+    func startDiligence(buyer: UInt64, target: UInt64, kind: String, priceCents: Int64, maxShares: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("StartDiligence", [
+            "buyer": buyer,
+            "target": target,
+            "kind": kind,
+            "price_cents": priceCents,
+            "max_shares": maxShares
+        ]))
+    }
+
+    func fundTender(deal: UInt64) async -> CommandRejection? {
+        await submit(CommandJSON.command("FundTender", ["deal": deal]))
+    }
+
+    func withdrawOffer(deal: UInt64) async -> CommandRejection? {
+        await submit(CommandJSON.command("WithdrawOffer", ["deal": deal]))
+    }
+
+    func proposeMerger(deal: UInt64) async -> CommandRejection? {
+        await submit(CommandJSON.command("ProposeMerger", ["deal": deal]))
+    }
+
+    func submitRemedy(deal: UInt64, divestShareBps: Int32) async -> CommandRejection? {
+        await submit(CommandJSON.command("SubmitRemedy", [
+            "deal": deal,
+            "divest_share_bps": divestShareBps
+        ]))
+    }
+
+    func issueShares(firm: UInt64, quantity: Int64, priceCents: Int64, buyerOutside: UInt32) async -> CommandRejection? {
+        await submit(CommandJSON.command("IssueShares", [
+            "firm": firm,
+            "qty": quantity,
+            "price_cents": priceCents,
+            "buyer_outside": buyerOutside
+        ]))
+    }
+
+    func repurchaseShares(firm: UInt64, quantity: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("RepurchaseShares", ["firm": firm, "qty": quantity]))
+    }
+
+    func retireTreasury(firm: UInt64, quantity: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("RetireTreasury", ["firm": firm, "qty": quantity]))
+    }
+
+    func launchIPO(firm: UInt64, newShares: Int64, priceCents: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("LaunchIPO", [
+            "firm": firm,
+            "new_shares": newShares,
+            "price_cents": priceCents
+        ]))
+    }
+
+    func requestLoan(firm: UInt64, amountCents: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("RequestLoan", ["firm": firm, "amount_cents": amountCents]))
+    }
+
+    func issueBond(firm: UInt64, principalCents: Int64, couponBps: Int32, weeks: UInt32) async -> CommandRejection? {
+        await submit(CommandJSON.command("IssueBond", [
+            "firm": firm,
+            "principal_cents": principalCents,
+            "coupon_bps": couponBps,
+            "weeks": weeks
+        ]))
+    }
+
+    func setDepositRate(bank: UInt64, rateBps: Int32) async -> CommandRejection? {
+        await submit(CommandJSON.command("SetDepositRate", ["bank": bank, "rate_bps": rateBps]))
+    }
+
+    func depositFunds(bank: UInt64, firm: UInt64, amountCents: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("DepositFunds", [
+            "bank": bank,
+            "firm": firm,
+            "amount_cents": amountCents
+        ]))
+    }
+
+    func withdrawFunds(bank: UInt64, firm: UInt64, amountCents: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("WithdrawFunds", [
+            "bank": bank,
+            "firm": firm,
+            "amount_cents": amountCents
+        ]))
+    }
+
+    func approveLoan(bank: UInt64, borrower: UInt64, amountCents: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("ApproveLoan", [
+            "bank": bank,
+            "borrower": borrower,
+            "amount_cents": amountCents
+        ]))
+    }
+
+    func quotePolicy(insurer: UInt64, facility: UInt64, limitCents: Int64, deductibleCents: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("QuotePolicy", [
+            "insurer": insurer,
+            "facility": facility,
+            "limit_cents": limitCents,
+            "deductible_cents": deductibleCents
+        ]))
+    }
+
+    func bindPolicy(insurer: UInt64, insured: UInt64, facility: UInt64, limitCents: Int64, deductibleCents: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("BindPolicy", [
+            "insurer": insurer,
+            "insured": insured,
+            "facility": facility,
+            "limit_cents": limitCents,
+            "deductible_cents": deductibleCents
+        ]))
+    }
+
+    func cancelPolicy(policy: UInt64) async -> CommandRejection? {
+        await submit(CommandJSON.command("CancelPolicy", ["policy": policy]))
+    }
+
+    func setUnderwritingSpecialist(insurer: UInt64, specialist: Bool) async -> CommandRejection? {
+        await submit(CommandJSON.command("SetUnderwritingLimit", [
+            "insurer": insurer,
+            "specialist": specialist
+        ]))
+    }
+
+    func respondBargaining(firm: UInt64, choice: String, offerCents: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("RespondBargaining", [
+            "firm": firm,
+            "choice": choice,
+            "offer_cents": offerCents
+        ]))
+    }
+
+    func proposeSettlement(firm: UInt64, amountCents: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("ProposeSettlement", [
+            "firm": firm,
+            "amount_cents": amountCents
+        ]))
+    }
+
+    func fileLobbyRequest(firm: UInt64, region: UInt32, kind: String) async -> CommandRejection? {
+        await submit(CommandJSON.command("FileLobbyRequest", [
+            "firm": firm,
+            "region": region,
+            "request": kind
+        ]))
+    }
+
+    func insuranceQuote(insurer: UInt64, facility: UInt64, limitCents: Int64) async -> QuoteDto? {
+        await engine.insuranceQuote(insurer: insurer, facility: facility, limit: limitCents)
+    }
+
     private func handle(_ receipt: ReceiptDto?) {
         guard let receipt else { return }
         if receipt.accepted {
             statusLine = "Accepted at revision \(receipt.revision)."
             errorMessage = nil
+            lastErrorDetail = nil
         } else {
             lastErrorKey = receipt.errorKey
-            errorMessage = receipt.errorKey ?? "Rejected"
-            statusLine = receipt.errorDetail ?? ""
+            let key = receipt.errorKey ?? "error.internal_fault"
+            errorMessage = Remedy.title(for: key)
+            lastErrorDetail = receipt.errorDetail
+            statusLine = receipt.errorDetail ?? key
         }
     }
 
