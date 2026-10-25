@@ -1,0 +1,509 @@
+{
+  "schema": 1,
+  "updated": "2026-10-25",
+  "requirements": [
+    {
+      "id": "R01",
+      "title": "Verified corridor geography",
+      "depends_on": [],
+      "gate": "automated",
+      "acceptance": "Pin official or provenance-traceable county-to-BEA crosswalk; print deduplicated corridor IDs, memberships, coverage and source hashes; no invented city-as-region rows.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R02",
+      "title": "Circa-2000 baseline and provenance",
+      "depends_on": [
+        "R01"
+      ],
+      "gate": "automated",
+      "acceptance": "Rebuild checked-in dataset from pinned sources; reconcile totals, units, suppression, estimates and source terms; distinguish data year from game start year.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R03",
+      "title": "Numeric units and balanced ledger",
+      "depends_on": [],
+      "gate": "automated",
+      "acceptance": "Pass hand-computed borrowing, principal, capex, inventory and depreciation examples; checked overflow and rounding; every posting balances.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R04",
+      "title": "Stable entities and atomic commands",
+      "depends_on": [
+        "R03"
+      ],
+      "gate": "automated",
+      "acceptance": "Reject stale/generation-mismatched IDs, unauthorised and duplicate commands without partial mutation; deletion repairs references and reservations.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R05",
+      "title": "Deterministic session and canonical replay",
+      "depends_on": [
+        "R04"
+      ],
+      "gate": "cross-platform",
+      "acceptance": "Linux, macOS and iOS match canonical hashes for same seed/accepted log including AI/RNG/queue state; batching and save boundaries do not alter results.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R06",
+      "title": "Households and background economy",
+      "depends_on": [
+        "R02",
+        "R03"
+      ],
+      "gate": "automated",
+      "acceptance": "Finite household, government and external budgets and background employers reconcile; payroll affects demand; no infinite outside buyer.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R07",
+      "title": "Regional labour and wage competition",
+      "depends_on": [
+        "R06",
+        "R04"
+      ],
+      "gate": "automated",
+      "acceptance": "Finite skill pools allocate without firm iteration bias; no double-employed worker; hiring, layoffs and wages have explicit timing and costs.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R08",
+      "title": "Production and inventory",
+      "depends_on": [
+        "R07"
+      ],
+      "gate": "automated",
+      "acceptance": "Inputs consumed once, output/capacity reconcile, shortages bind and perishable services expire; no negative inventories.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R09",
+      "title": "Market pricing and allocation",
+      "depends_on": [
+        "R08"
+      ],
+      "gate": "automated",
+      "acceptance": "Worked scarcity/oversupply/tie/import/no-demand fixtures conserve cash/stock and respect buyer budgets; revenue derives from actual fulfilled sales.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R10",
+      "title": "Freight and supply contracts",
+      "depends_on": [
+        "R09"
+      ],
+      "gate": "automated",
+      "acceptance": "Local/cross-region delivery timing, finite freight capacity, escrow, failed delivery and expired contracts settle once without teleporting stock.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R11",
+      "title": "Facilities and investment",
+      "depends_on": [
+        "R08",
+        "R03"
+      ],
+      "gate": "automated",
+      "acceptance": "Build, expand, retool, mothball and sell post CIP/capex/maintenance correctly with lead times and cancellation treatment.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R12",
+      "title": "Investor career and recovery",
+      "depends_on": [
+        "R04",
+        "R03"
+      ],
+      "gate": "automated",
+      "acceptance": "Player is separate from firms, retains unpledged assets after control loss, and can found or manage another firm without resetting career losses.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R13",
+      "title": "Subsidiaries and consolidation",
+      "depends_on": [
+        "R12",
+        "R04"
+      ],
+      "gate": "automated",
+      "acceptance": "Deep/wide groups use correct voting control and minority interests; reject equity cycles; eliminate internal balances and unrealised profits without double-valuing assets.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R14",
+      "title": "Intercompany transactions",
+      "depends_on": [
+        "R13",
+        "R10"
+      ],
+      "gate": "automated",
+      "acceptance": "Internal trade, lending, dividends and guarantees respect legal cash/authority; consolidated totals reconcile; internal markup cannot create score wealth.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R15",
+      "title": "Public/private shares and exchange",
+      "depends_on": [
+        "R13",
+        "R09"
+      ],
+      "gate": "automated",
+      "acceptance": "Finite liquidity, pricing/impact, disclosure and cost basis; share totals reconcile; minority ownership grants no management cash access.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R16",
+      "title": "Issuance dividends buybacks and IPO",
+      "depends_on": [
+        "R15"
+      ],
+      "gate": "automated",
+      "acceptance": "Funding, dilution, solvency and treasury votes are correct; no double dividend or wash-trade profit; IPO changes governance/disclosure.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R17",
+      "title": "Boards and management authority",
+      "depends_on": [
+        "R13",
+        "R16"
+      ],
+      "gate": "automated",
+      "acceptance": "Meetings, votes, CEO appointment/removal and bid responses enforce authority and deadlines; investor can lose management control.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R18",
+      "title": "Loans bonds and credit",
+      "depends_on": [
+        "R03",
+        "R11"
+      ],
+      "gate": "automated",
+      "acceptance": "Loan/bond schedules, collateral, coupons, maturity and covenant defaults reconcile with lenders/holders and use explained ratings.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R19",
+      "title": "Playable banking",
+      "depends_on": [
+        "R18",
+        "R06"
+      ],
+      "gate": "automated",
+      "acceptance": "Deposits are liabilities, loans are assets, reserve/liquidity/capital constrain business, and defaults/run scenarios preserve ledger identities.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R20",
+      "title": "Playable insurance",
+      "depends_on": [
+        "R18",
+        "R06"
+      ],
+      "gate": "automated",
+      "acceptance": "Policy underwriting, premiums, reserves, expiry and correlated claims settle; catastrophes cannot be avoided by omitted liabilities.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R21",
+      "title": "Mergers and hostile takeovers",
+      "depends_on": [
+        "R17",
+        "R18",
+        "R14"
+      ],
+      "gate": "automated",
+      "acceptance": "Funded offers, escrow, diligence, tender/control transfer, minority payout and debt/contract transfer succeed or roll back correctly.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R22",
+      "title": "Antitrust review",
+      "depends_on": [
+        "R21",
+        "R09"
+      ],
+      "gate": "automated",
+      "acceptance": "Group-aware regional/product concentration triggers review, delay, remedies or rejection; cannot bypass by subsidiary shell.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R23",
+      "title": "Labour unions and strikes",
+      "depends_on": [
+        "R07",
+        "R11"
+      ],
+      "gate": "automated",
+      "acceptance": "Organisation, bargaining, strikes and settlements affect wages/output and worker incentives with explainable outcomes.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R24",
+      "title": "Lobbying and policy consequences",
+      "depends_on": [
+        "R22",
+        "R23"
+      ],
+      "gate": "automated",
+      "acceptance": "Funded disclosed requests have bounded uncertain outcomes, cooldown and reputational cost; no universal exemption from law/default.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R25",
+      "title": "Bankruptcy and restructuring",
+      "depends_on": [
+        "R18",
+        "R13",
+        "R12"
+      ],
+      "gate": "automated",
+      "acceptance": "Grace periods, restricted payouts, seniority, collateral, liquidation and guarantees resolve; one failed subsidiary does not erase unrelated cash.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R26",
+      "title": "Fifteen differentiated industries",
+      "depends_on": [
+        "R10",
+        "R11",
+        "R19",
+        "R20"
+      ],
+      "gate": "automated",
+      "acceptance": "Every DATA-CONTENT industry row has recipe/service/demand/cost rules, decisions and a playable tested scenario; names in picker are insufficient.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R27",
+      "title": "R&D brands and competitive strategy",
+      "depends_on": [
+        "R09",
+        "R26"
+      ],
+      "gate": "automated",
+      "acceptance": "Funded bounded technology and brand/quality influence demand/cost over time; no guaranteed sales or negative unit costs.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R28",
+      "title": "Fair and bounded rival AI",
+      "depends_on": [
+        "R05",
+        "R21",
+        "R25",
+        "R27"
+      ],
+      "gate": "automated",
+      "acceptance": "At least 30 rivals/five archetypes use common command permissions and observation fog; bounded deterministic work, urgent response and saved scheduler state.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R29",
+      "title": "Events and scenario content",
+      "depends_on": [
+        "R24",
+        "R28"
+      ],
+      "gate": "automated",
+      "acceptance": "At least 24 meaningful event definitions validate prerequisites, choices, postings, cooldowns and narrative traces; founder and struggling-company starts work.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R30",
+      "title": "Versioned saves and recovery",
+      "depends_on": [
+        "R05"
+      ],
+      "gate": "automated",
+      "acceptance": "Atomic save, checksum, last-good fallback, migration fixtures, future/corrupt/oversized rejection and export/import pass including interrupted write.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R31",
+      "title": "Rust Swift integration",
+      "depends_on": [
+        "R04"
+      ],
+      "gate": "cross-platform",
+      "acceptance": "Pinned bindings and fresh device/simulator XCFramework compile; Swift runtime session command/save/load/error tests pass without main-thread simulation.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R32",
+      "title": "Core phone decision flows",
+      "depends_on": [
+        "R31",
+        "R09",
+        "R11",
+        "R30"
+      ],
+      "gate": "human",
+      "acceptance": "On smallest supported phone, complete start, operate, inspect cash/profit, compare region, build/supply, save/resume entirely offline.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R33",
+      "title": "Corporate and finance phone flows",
+      "depends_on": [
+        "R32",
+        "R21",
+        "R22",
+        "R23",
+        "R24",
+        "R25",
+        "R26"
+      ],
+      "gate": "human",
+      "acceptance": "Use phone UI to manage subsidiaries, shares/boards, takeover, bank/insurance, labour/policy and investor recovery with actor/cost/authority previews.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R34",
+      "title": "Sandbox and five-year score",
+      "depends_on": [
+        "R29",
+        "R12"
+      ],
+      "gate": "automated",
+      "acceptance": "Score at week 260 explains metrics without intra-group inflation; continue sandbox to 30 years; career loss/recovery persists.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R35",
+      "title": "Onboarding and accessibility",
+      "depends_on": [
+        "R33",
+        "R34"
+      ],
+      "gate": "human",
+      "acceptance": "Real-rule guided start can resume/skip; VoiceOver, Dynamic Type, contrast, reduced motion and keyboard/narrow screens are usable.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R36",
+      "title": "Balance and adversarial careers",
+      "depends_on": [
+        "R28",
+        "R34",
+        "R25"
+      ],
+      "gate": "automated",
+      "acceptance": "Publish multi-policy/difficulty distributions over 100 five-year seeds and 20 thirty-year careers; investigate outliers and exploit scenarios.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R37",
+      "title": "Device performance and lifecycle",
+      "depends_on": [
+        "R33",
+        "R30"
+      ],
+      "gate": "device",
+      "acceptance": "Measure A15-class engine/FFI/UI/memory/thermal/startup separately on representative/grown/stress worlds; background/termination/recovery pass.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R38",
+      "title": "Independent playtest acceptance",
+      "depends_on": [
+        "R35",
+        "R36",
+        "R37"
+      ],
+      "gate": "human",
+      "acceptance": "Three independent testers finish five-year route and explain outcome; record defects and resolve release blockers; no fabricated fun signoff.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R39",
+      "title": "Release assets privacy and compliance",
+      "depends_on": [
+        "R35"
+      ],
+      "gate": "human",
+      "acceptance": "Final icon, source/asset attribution, actual archive privacy manifest, policy URL, beta metadata, rating and export answers reviewed.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R40",
+      "title": "Reproducible Apple release archive",
+      "depends_on": [
+        "R31",
+        "R39"
+      ],
+      "gate": "cross-platform",
+      "acceptance": "Clean pinned build passes platform tests, fresh bindings and unsigned archive; signing/export path validated and symbols/provenance retained.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R41",
+      "title": "TestFlight processed and available",
+      "depends_on": [
+        "R40",
+        "R38"
+      ],
+      "gate": "apple",
+      "acceptance": "Signed tested commit uploaded, Apple processing valid, intended internal group has build; exact build number and status evidence recorded.",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "R42",
+      "title": "TestFlight installed acceptance flight",
+      "depends_on": [
+        "R41",
+        "R37"
+      ],
+      "gate": "device",
+      "acceptance": "Real iPhone installs via TestFlight and completes offline start/save/control/recovery/five-year/continue route without release-blocking failures.",
+      "status": "pending",
+      "evidence": []
+    }
+  ]
+}

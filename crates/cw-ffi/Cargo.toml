@@ -1,0 +1,13 @@
+[package]
+name = "cw-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+cw-core.workspace = true
+uniffi.workspace = true
