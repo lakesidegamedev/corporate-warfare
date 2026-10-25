@@ -21,6 +21,12 @@ xcrun assetutil --info "$app/Assets.car" | grep -q 'AppIcon' || {
   exit 1
 }
 
+# App Store validation rejects loose libraries in Frameworks/ (only Swift
+# runtime libraries and .framework bundles may live there).
+if [[ -d "$app/Frameworks" ]] && find "$app/Frameworks" -maxdepth 1 -name '*.a' | grep -q .; then
+  echo "loose static library found in Frameworks/" >&2
+  exit 1
+fi
 codesign --verify --deep --strict "$app"
 # With automatic signing, xcodebuild archive signs with the team development
 # identity; the Apple Distribution identity is applied at export time. Accept
