@@ -70,7 +70,7 @@ fn invariants(session: &Session) {
     for (_, firm) in session.world.firms.iter() {
         assert!(firm.book.is_balanced(), "{} ledger", firm.name);
         assert!(firm.book.cash() >= 0, "{} cash", firm.name);
-        for (_, lot) in &firm.inventory {
+        for lot in firm.inventory.values() {
             assert!(lot.qty.0 >= 0, "negative inventory");
         }
     }
