@@ -321,3 +321,24 @@ diversification or expansion decisions.
 
 Still open for R36: score dispersion is narrow for passive policies; the outlier flags are mostly
 acquisition-price variants; no human playtest has judged whether the difficulty reads as fair.
+
+## Post-finance re-run, 2026-10-25
+
+After the interest-carry, board, merger, asset-purchase, bank-run and claim-timing changes:
+
+```
+./target/release/cw-cli sweep --seeds 100 --weeks 260 --guided --five-year --policy conservative
+./target/release/cw-cli sweep --seeds 20 --weeks 1560 --from 1 --guided --sandbox --policy conservative
+```
+
+| Horizon | Runs | Score min/median/max | Dissolved median (min-max) | Controlled median (min) | Net worth min/median |
+|---|---|---:|---:|---:|---:|
+| 260 weeks | 100 | 56 / 62 / 62 | 5 (4-10) | 1 (0) | $3.49M / $4.34M |
+| 1,560 weeks | 20 | n/a | 12 (10-17) | 0 (0) | $3.49M / $4.15M |
+
+At five years the corridor is stable and most careers end solvent. Over thirty years the
+conservative reference policy loses control of the guided firm in most seeds, keeps personal cash,
+and does not found a replacement. That is the designed failure-and-recovery path, but the
+reference policy does not exercise recovery, so it understates what an active player can do. R36
+remains open: the score distribution is narrow for passive policies and no human has judged the
+difficulty.
