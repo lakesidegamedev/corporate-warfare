@@ -202,12 +202,12 @@
       "output": "electricity",
       "weekly_output_lots": 100,
       "weekly_inputs_lots": {
-        "fuel": 150
+        "fuel": 100
       },
       "workers_low_mid_high": [
-        20,
-        20,
-        5
+        12,
+        12,
+        3
       ],
       "capex_cents": 500000000,
       "build_weeks": 39,
@@ -312,15 +312,15 @@
       "industry": "logistics",
       "id": "carrier",
       "output": "freight",
-      "weekly_output_lots": 1000,
+      "weekly_output_lots": 400,
       "weekly_inputs_lots": {
-        "fuel": 100,
+        "fuel": 40,
         "electricity": 5
       },
       "workers_low_mid_high": [
-        80,
-        20,
-        5
+        40,
+        10,
+        2
       ],
       "capex_cents": 200000000,
       "build_weeks": 8,
@@ -406,9 +406,9 @@
         "electricity": 5
       },
       "workers_low_mid_high": [
+        5,
         10,
-        25,
-        25
+        10
       ],
       "capex_cents": 150000000,
       "build_weeks": 8,

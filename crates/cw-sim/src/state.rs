@@ -672,6 +672,8 @@ pub struct Contract {
     pub next_delivery: Tick,
     pub status: ContractStatus,
     pub shortfalls: MilliLots,
+    /// Baseline relationships renew at term instead of vanishing after a year.
+    pub auto_renew: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

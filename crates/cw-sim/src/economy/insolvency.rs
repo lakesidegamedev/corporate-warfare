@@ -32,6 +32,14 @@ pub fn defer_expense(world: &mut World, firm: Handle, amount: i64, expense: Acco
 }
 
 fn mark_past_due(firm: &mut crate::state::Firm, now: Tick) {
+    // A dissolved, liquidating or merged firm cannot re-enter the payment-grace state. Late
+    // interest or contract postings used to resurrect it, which hid a liquidation from reports.
+    if matches!(
+        firm.status,
+        FirmStatus::Dissolved | FirmStatus::Liquidating | FirmStatus::Merged { .. }
+    ) {
+        return;
+    }
     firm.payout_freeze = true;
     if !matches!(firm.status, FirmStatus::PastDue { .. }) {
         firm.status = FirmStatus::PastDue { since: now };

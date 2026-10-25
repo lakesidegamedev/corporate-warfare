@@ -71,6 +71,39 @@ fn urgent(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Pr
         });
         return;
     }
+    // Solvency first: a firm that cannot fund twelve weeks of mandatory outflow cuts its
+    // production target so payroll and inputs fall with revenue.
+    let outflow = cw_sim::economy::insolvency::mandatory_weekly_outflow(world, firm);
+    let recent_income: i64 = entity
+        .book
+        .recent_weeks()
+        .iter()
+        .map(|week| week.net_income)
+        .sum();
+    if recent_income < 0 && entity.book.cash() < outflow * 12 {
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::SetProductionTarget {
+                firm,
+                target_bps: 6_000,
+            },
+        });
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::SetMarketingBudget {
+                firm,
+                amount_cents: 0,
+            },
+        });
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::SetResearchBudget {
+                firm,
+                amount_cents: 0,
+            },
+        });
+    }
+
     // Understaffed facilities: raise the offer modestly, bounded by the regional prevailing
     // wage. A weekly five percent raise compounded into a wage spiral and bankrupted the
     // corridor, so the AI may only close a real gap, never bid above 110 percent of prevailing.
@@ -158,7 +191,10 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
     }
 
     // Brand builders and retailers fund marketing, which is the only source of media revenue.
-    if weights[2] >= 3 || entity.industry == 7 {
+    if weights[2] >= 3 || entity.industry == 7 || revenue > 0 {
+        // Marketing is a real revenue-funded demand channel for media. Five percent of trailing
+        // weekly revenue is enough to keep the corridor's two studios operating without turning
+        // into a hidden subsidy.
         let budget = (revenue * 100 / 10_000).max(10_000);
         if entity.book.cash() > reserve + budget * 4 && entity.policies.marketing_budget_cents == 0
         {
@@ -186,8 +222,26 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         }
     }
 
-    // Growth: build when the projected contribution is positive and cash clears the reserve.
+    // Growth: build only when the existing plant is fully staffed, the firm is profitable and
+    // cash clears twice the reserve. Building while understaffed split labour and added fixed
+    // cost faster than revenue, which is how the corridor failed.
+    let fully_staffed = entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter(|facility| facility.status == FacilityStatus::Operating)
+        .all(|facility| facility.last_staff_ratio_bps >= 9_000);
+    let recent_profit: i64 = entity
+        .book
+        .recent_weeks()
+        .iter()
+        .map(|week| week.net_income)
+        .sum();
     if weights[1] >= 3
+        && entity.facilities.len() < 2
+        && fully_staffed
+        && recent_profit > 0
+        && entity.book.cash() > reserve * 2
         && let Some((recipe, region)) = cheapest_expansion(world, dataset, firm)
     {
         let template = &dataset.recipes[recipe as usize];
@@ -199,7 +253,7 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
                 .iter()
                 .map(|(id, qty)| qty * dataset.reference_price(dataset.product_index[id]))
                 .sum::<i64>();
-        if contribution > 0 && entity.book.cash() > reserve + capex {
+        if contribution > 0 && entity.book.cash() > reserve * 2 + capex {
             proposals.push(Proposal {
                 actor: firm.0,
                 intent: CommandIntent::BuildFacility {
@@ -241,7 +295,9 @@ fn cheapest_expansion(world: &World, dataset: &Dataset, firm: Handle) -> Option<
     let entity = world.firms.get(firm)?;
     let mut best: Option<(i64, u16, u8)> = None;
     for (index, template) in dataset.recipes.iter().enumerate() {
-        if template.industry == "financial" {
+        if template.industry == "financial"
+            || template.industry != cw_sim::state::INDUSTRY_NAMES[entity.industry as usize]
+        {
             continue;
         }
         let region = entity.region;

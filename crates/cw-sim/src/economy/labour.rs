@@ -30,6 +30,7 @@ pub fn clear(world: &mut World, dataset: &Dataset) {
 }
 
 fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: usize) {
+    let mut severance: Vec<(Handle, i64)> = Vec::new();
     let region = &world.regions[region_index];
     let prevailing = region.labour[tier].prevailing_wage_cents.max(1);
     let reservation = region.labour[tier].reservation_wage_cents.max(1);
@@ -77,6 +78,16 @@ fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: u
         };
         let full = facility_full_workers(facility, dataset, tier);
         let desired = full * facility.target_bps as i64 / 10_000;
+        // A lower production target is a real layoff, not just a hiring freeze. Severance is
+        // one week's wage per released worker, paid through solvency rules.
+        if *workers > desired {
+            let released = *workers - desired;
+            if let Some(facility) = world.facilities.get_mut(*facility_handle) {
+                facility.workers[tier] = desired;
+            }
+            severance.push((*facility_handle, released * *wage));
+            continue;
+        }
         let open = (desired - workers).max(0);
         if open == 0 {
             continue;
@@ -143,6 +154,18 @@ fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: u
     let high_clamp = prevailing * 102 / 100;
     new_prevailing = new_prevailing.clamp(low_clamp, high_clamp).max(1);
 
+    for (facility, amount) in severance {
+        let firm = world.facilities.get(facility).map(|facility| facility.firm);
+        if let Some(firm) = firm {
+            crate::economy::insolvency::pay_or_defer(
+                world,
+                firm,
+                amount,
+                cw_core::ledger::Account::Wages,
+                "severance",
+            );
+        }
+    }
     let region = &mut world.regions[region_index];
     region.background_employed[tier] = background_after;
     region.labour[tier].employed = named_after + background_after;

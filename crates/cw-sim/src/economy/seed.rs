@@ -660,7 +660,7 @@ fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
         Tick::OPENING,
     );
     facility.capex_cents = 200_000_000;
-    facility.target_bps = 8_500;
+    facility.target_bps = 10_000;
     let facility_handle = world
         .facilities
         .insert(facility_with_firm(facility, handle));
@@ -841,10 +841,21 @@ fn build_gateways(world: &mut World, dataset: &Dataset) {
             let code = dataset.product_index[*id];
             let volume = corridor_volume.get(&code).copied().unwrap_or(100).max(100);
             let reference = dataset.reference_price(code);
+            // Electricity is a bulk local service: the gateway's finite capacity must be able
+            // to absorb a generator block's weekly surplus, or unsold power expires and the
+            // utility cannot cover its fuel and payroll.
+            // The outside market is large relative to the one-percent corridor: size the finite
+            // gateway to the corridor's own weekly volume so a shortage is filled and a surplus
+            // has a buyer. The spread still makes the gateway a last resort, not free money.
+            let capacity = if id == &"electricity" {
+                volume.max(100)
+            } else {
+                volume.max(40)
+            };
             world.gateways.push(Gateway {
                 region: region as u8,
                 product: code,
-                capacity_lots: (volume * 20 / 100).max(20),
+                capacity_lots: capacity,
                 sell_price_cents: reference + reference * 15 / 100,
                 buy_price_cents: reference - reference * 15 / 100,
             });
@@ -909,8 +920,36 @@ fn seed_supply_contracts(world: &mut World, dataset: &Dataset) {
             if eligible.is_empty() || qty <= 0 {
                 continue;
             }
-            let share = (qty / eligible.len() as i64).max(1);
-            for seller in eligible {
+            // Split by supplier capacity, not equally: a one-block farm cannot honour the same
+            // weekly volume as a three-block one, and over-committing it caused penalties.
+            let mut capacities: Vec<(Handle, i64)> = eligible
+                .iter()
+                .map(|seller| {
+                    let capacity: i64 = world
+                        .firms
+                        .get(*seller)
+                        .map(|firm| {
+                            firm.facilities
+                                .iter()
+                                .filter_map(|handle| world.facilities.get(*handle))
+                                .map(|facility| {
+                                    let recipe = &dataset.recipes[facility.recipe as usize];
+                                    if recipe.output == dataset.products[product as usize].id {
+                                        recipe.weekly_output_lots * facility.blocks as i64
+                                    } else {
+                                        0
+                                    }
+                                })
+                                .sum::<i64>()
+                        })
+                        .unwrap_or(0);
+                    (*seller, capacity.max(1))
+                })
+                .collect();
+            capacities.sort_by_key(|(handle, _)| *handle);
+            let total_capacity: i64 = capacities.iter().map(|(_, capacity)| *capacity).sum();
+            for (seller, capacity) in capacities {
+                let share = (qty * capacity / total_capacity.max(1)).max(1);
                 let seller_region = world
                     .firms
                     .get(seller)
@@ -930,6 +969,7 @@ fn seed_supply_contracts(world: &mut World, dataset: &Dataset) {
                     next_delivery: Tick(1),
                     status: crate::state::ContractStatus::Active,
                     shortfalls: MilliLots::ZERO,
+                    auto_renew: true,
                 };
                 let handle = world.contracts.insert(contract);
                 if let Some(entity) = world.firms.get_mut(buyer) {

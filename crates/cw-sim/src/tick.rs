@@ -135,12 +135,14 @@ fn complete_construction(world: &mut World, dataset: &Dataset) {
             Some(facility) => (facility.firm, facility.escrow_cents, facility.capex_cents),
             None => continue,
         };
-        // Escrowed capex becomes a fixed asset; capex was never expensed twice.
-        let _ = escrow;
+        // Equipment is released from escrow, then the whole asset moves out of CIP. Capex was
+        // never expensed twice: service was already capitalised, equipment lands now.
         if let Some(entity) = world.firms.get_mut(firm) {
             let _ = entity.book.commit(
                 world.tick,
                 Txn::new()
+                    .debit(Account::WorkInProgress, escrow, "equipment received")
+                    .credit(Account::RestrictedCash, escrow, "equipment received")
                     .debit(Account::FixedAssets, capex, "construction complete")
                     .credit(Account::WorkInProgress, capex, "construction complete"),
             );
