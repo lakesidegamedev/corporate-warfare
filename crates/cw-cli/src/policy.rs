@@ -311,7 +311,11 @@ impl PolicyRunner {
             if firm.controlled || firm.investor_votes_bps != 0 || firm.status != "operating" {
                 continue;
             }
-            let finance = finance(session, firm.handle);
+            // Private rivals keep their books to themselves; the policy sees only what the
+            // player could inspect.
+            let Some(finance) = inspect(session, firm.handle) else {
+                continue;
+            };
             let distressed =
                 finance.net_income_trailing_cents < 0 || firm.grade == "C" || firm.grade == "D";
             if distressed {
@@ -409,6 +413,14 @@ impl PolicyRunner {
     }
 }
 
+fn inspect(session: &Session, firm: u64) -> Option<FinanceSummary> {
+    match session.query(Query::Finance(firm)) {
+        Detail::Finance(finance) => Some(finance),
+        _ => None,
+    }
+}
+
+/// Finance for a company the investor controls, which is always inspectable.
 fn finance(session: &Session, firm: u64) -> FinanceSummary {
     match session.query(Query::Finance(firm)) {
         Detail::Finance(finance) => finance,
