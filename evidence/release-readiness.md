@@ -34,7 +34,7 @@ its ledger entry names reviewed evidence that satisfies the gate.
 | R26 | automated | active | 18 industry scenarios, funded defense procurement and 7 research fixtures exist; phone playability per industry is not yet evidenced. |
 | R27 | automated | active | R&D/brand/quality rules and tests exist; marketing demand now funds media. |
 | R28 | automated | pending | Bounded rival proposals, cohorts and wage/build guards implemented; needs archetype win/lose fixtures. |
-| R29 | automated | active | 24 cards and seeded firms exist; card definitions are present, but every-choice resolution is not yet covered by a dedicated test. |
+| R29 | automated | active | 24+ distinct cards are validated and every choice is opened and resolved in isolation with ledger checks; R24/R28 and the blocked chain still prevent ledger sign-off. |
 | R30 | automated | active | Checksum, bounds, adversarial rejection and Swift recovery code exist; the Swift lifecycle suite has not run on the Mac runner. |
 | R31 | cross-platform | done | `evidence/R31-integration.json`; simulator XCTest command/save/load/error. |
 | R32 | human | pending | Core screens exist; the smallest-phone offline route has not run because the app is uncompiled since PR #11 (Actions billing). |
