@@ -296,3 +296,28 @@ The eight commands in section 1 reproduce every number. To inspect a single seed
 Committed evidence: `evidence/balance/guided-*.json`, `founder-*.json` (640 run rows in total).
 Checks for this change: `cargo fmt --all -- --check`,
 `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`.
+
+## Post-calibration re-run, 2026-10-25 (after applied modifiers, macro regimes and training)
+
+Release build, 100 guided five-year seeds per policy, 260 weeks, seeds 1-100. Commands:
+
+```
+./target/release/cw-cli sweep --seeds 100 --weeks 260 --guided --five-year --policy <policy>
+```
+
+| Policy | Score min/median/max | Net worth min/median/max | Dissolved median (min-max) | Controlled median (min) | Outliers |
+|---|---|---|---|---|---|
+| conservative | 56 / 62 / 62 | $3,492,800 / $4,344,800 / $4,344,800 | 5 (4-10) | 1 (0) | 23 |
+| growth | 56 / 60 / 60 | $3,492,800 / $4,032,800 / $4,038,800 | 5 (4-10) | 1 (0) | 28 |
+| acquirer | 56 / 61 / 66 | $3,492,800 / $4,038,800 / $4,044,800 | 5 (4-10) | 2 (0) | 37 |
+
+Interpretation: the corridor stays populated (median five rival exits across five years) and most
+careers end solvent. A minority of seeds (roughly five per hundred under the conservative policy)
+lose the guided firm entirely: the starter farm's main buyers fail during a demand or supply
+shock, contracts stop paying and the farm's thin margin cannot cover the gap. That is a real
+failure mode, not a crash, and the investor keeps personal cash and the recovery route. The
+reference policies are deliberately simple and do not replace a human player's pricing, buyer
+diversification or expansion decisions.
+
+Still open for R36: score dispersion is narrow for passive policies; the outlier flags are mostly
+acquisition-price variants; no human playtest has judged whether the difficulty reads as fair.
