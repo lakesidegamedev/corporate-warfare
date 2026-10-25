@@ -773,6 +773,15 @@ fn apply_intent(
                     })?;
             require_region(world, *region)?;
             let cost = template.capex_cents * *blocks as i64;
+            let debt = firm_ref(world, *firm)?.book.debt();
+            if governance::approval_required(world, *firm, debt, cost)
+                && !governance::large_action_authorised(world, *firm)
+            {
+                return Err(DomainError::NoAuthority {
+                    actor,
+                    reason: AuthorityReason::BoardApprovalRequired,
+                });
+            }
             spend_firm_cash(world, *firm, cost, "construction escrow")?;
             // Forty percent is construction service bought as the work is commissioned; sixty
             // percent is equipment held in escrow until completion.
@@ -815,6 +824,15 @@ fn apply_intent(
             let recipe = &dataset.recipes[recipe_index as usize];
             let cost = recipe.capex_cents * *blocks as i64;
             let _ = facility_blocks;
+            let debt = firm_ref(world, owner)?.book.debt();
+            if governance::approval_required(world, owner, debt, cost)
+                && !governance::large_action_authorised(world, owner)
+            {
+                return Err(DomainError::NoAuthority {
+                    actor,
+                    reason: AuthorityReason::BoardApprovalRequired,
+                });
+            }
             spend_firm_cash(world, owner, cost, "expansion escrow")?;
             if let Some(entity) = world.firms.get_mut(owner) {
                 let _ = entity.book.commit(
@@ -1405,7 +1423,7 @@ fn apply_intent(
             require_control(world, actor, *firm)?;
             // A large issuance (more than ten percent of the issue) needs three board seats.
             let issued = firm_ref(world, *firm)?.shares.issued.max(1);
-            if *qty > issued / 10 && !governance::controller_has_board(world, *firm) {
+            if *qty > issued / 10 && !governance::large_action_authorised(world, *firm) {
                 return Err(DomainError::NoAuthority {
                     actor,
                     reason: AuthorityReason::BoardApprovalRequired,
@@ -1530,6 +1548,15 @@ fn apply_intent(
                     reason: SolvencyReason::CoverageTooLow,
                 });
             }
+            let debt_after = firm_ref(world, *firm)?.book.debt() + *amount_cents;
+            if governance::approval_required(world, *firm, debt_after, 0)
+                && !governance::large_action_authorised(world, *firm)
+            {
+                return Err(DomainError::NoAuthority {
+                    actor,
+                    reason: AuthorityReason::BoardApprovalRequired,
+                });
+            }
             let grade = firm_ref(world, *firm)?.grade;
             let rate = world.macro_state.policy_rate_bps + grade.spread_bps();
             let lender_index = (0..world.outside.lenders.len())
@@ -1573,6 +1600,15 @@ fn apply_intent(
             if *amount_cents <= 0 || *rate_bps <= 0 || *weeks == 0 {
                 return Err(DomainError::Arithmetic {
                     detail: ArithmeticFault::OutOfRange,
+                });
+            }
+            let debt_after = firm_ref(world, *firm)?.book.debt() + *amount_cents;
+            if governance::approval_required(world, *firm, debt_after, 0)
+                && !governance::large_action_authorised(world, *firm)
+            {
+                return Err(DomainError::NoAuthority {
+                    actor,
+                    reason: AuthorityReason::BoardApprovalRequired,
                 });
             }
             let lender_index = (0..world.outside.lenders.len())
@@ -1911,7 +1947,7 @@ fn apply_intent(
                     reason: SolvencyReason::CoverageTooLow,
                 });
             }
-            if !governance::controller_has_board(world, entity.buyer) {
+            if !governance::large_action_authorised(world, entity.buyer) {
                 return Err(DomainError::NoAuthority {
                     actor,
                     reason: AuthorityReason::BoardApprovalRequired,
@@ -2541,7 +2577,7 @@ mod tests {
             &world,
             CommandIntent::IssueShares {
                 firm,
-                qty: 300_000,
+                qty: 150_000,
                 price_cents: fair,
                 buyer_outside: 0,
             },
@@ -2556,7 +2592,7 @@ mod tests {
             &world,
             CommandIntent::IssueShares {
                 firm,
-                qty: 300_000,
+                qty: 150_000,
                 price_cents: fair,
                 buyer_outside: 1,
             },
