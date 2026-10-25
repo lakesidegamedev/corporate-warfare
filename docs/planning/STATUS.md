@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `16ff90a`.
-Kanban: 254781. Merged PRs: #8 through #34.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `3ad4ba0`.
+Kanban: 254781. Merged PRs: #8 through #39.
 
 ## What exists now
 
@@ -24,6 +24,9 @@ Kanban: 254781. Merged PRs: #8 through #34.
   single recommended next action with its reason on the portfolio.
 - Macro: demand and supply modifiers now apply, macro recessions/booms come from the macro
   stream, optional cards expire, and the technology frontier advances yearly.
+- Corporate correctness: union ballots form bargaining units, parent guarantees are called up to
+  their cap, bond trades price accrued interest, loan interest carries sub-cents, lobbying has a
+  post-decision group cooldown, tax modifiers expire, and legal mergers move the whole entity.
 
 ## Verified
 
