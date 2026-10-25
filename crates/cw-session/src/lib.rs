@@ -597,8 +597,8 @@ mod tests {
         let price = session.dataset.reference_price(0);
         session
             .submit(cw_sim::commands::CommandEnvelope {
-                command_id_high: 42,
-                command_id_low: 1,
+                command_id_high: 0x5357_4946_5400_0000,
+                command_id_low: 0,
                 actor: 0,
                 expected_revision: session.revision(),
                 submitted_tick: 0,

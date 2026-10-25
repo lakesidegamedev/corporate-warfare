@@ -26,7 +26,7 @@ final class EngineBridgeTests: XCTestCase {
         // The same sequence is pinned in the Rust test
         // `the_cross_platform_fixture_hash_is_pinned`. Equal hashes on Linux and iOS are the
         // cross-platform determinism evidence for this fixture.
-        XCTAssertEqual(session.canonicalHash(), "7f9584938e0b201905a1f577c0527f499475b923ef8debe048efd342e43fbb6a")
+        XCTAssertEqual(session.canonicalHash(), "8d66f183804d61890005deb819cbc1b4587f51967fe69fe0eaf7d9c83d2bcef9")
 
         let data = try session.exportSave()
         XCTAssertGreaterThan(data.count, 1_000)
