@@ -38,6 +38,12 @@ targets:
     sources: [Tests]
     dependencies:
       - target: CorporateWarfare
+  UITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: CorporateWarfare
 schemes:
   CorporateWarfare:
     build:
@@ -45,4 +51,4 @@ schemes:
         CorporateWarfare: all
         EngineBridgeTests: [test]
     test:
-      targets: [EngineBridgeTests]
+      targets: [EngineBridgeTests, UITests]
