@@ -1,0 +1,168 @@
+name: Release
+
+# Manual, explicit, restricted to a tested commit. PR runs never see signing secrets.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Marketing version, for example 0.1.0"
+        required: true
+      build:
+        description: "Build number, unique and increasing per upload"
+        required: true
+      confirm:
+        description: "Type UPLOAD to sign and upload"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  archive-and-upload:
+    runs-on: macos-26
+    timeout-minutes: 60
+    environment: appstore
+    steps:
+      - name: Refuse accidental releases
+        run: |
+          if [[ "${{ inputs.confirm }}" != "UPLOAD" ]]; then
+            echo "confirmation must be exactly UPLOAD" >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+
+      - name: Require signing configuration
+        env:
+          ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+          TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+        run: |
+          missing=()
+          [[ -n "$ISSUER" ]] || missing+=("APPLE_API_ISSUER")
+          [[ -n "$KEY_ID" ]] || missing+=("APPLE_API_KEY")
+          [[ -n "$KEY_CONTENT" ]] || missing+=("APPLE_API_KEY_CONTENT")
+          [[ -n "$TEAM" ]] || missing+=("APPLE_DEVELOPMENT_TEAM")
+          if (( ${#missing[@]} )); then
+            printf 'blocked: missing signing secrets: %s\n' "${missing[*]}" >&2
+            echo "This is an explicit blocked outcome, not a release." >&2
+            exit 1
+          fi
+
+      - name: Install tooling
+        run: |
+          brew install xcodegen
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          rustup show
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+
+      - name: Build the pinned engine and app project
+        run: |
+          bash apple/scripts/build-engine.sh
+          xcodegen generate --spec apple/project.yml --project apple
+
+      - name: Rust checks
+        run: |
+          cargo fmt --all --check
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          cargo test --locked --workspace
+
+      - name: Simulator tests
+        run: bash apple/scripts/test-simulator.sh
+
+      - name: Write the App Store Connect key
+        env:
+          KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/private_keys"
+          printf '%s' "$KEY_CONTENT" > "$RUNNER_TEMP/private_keys/AuthKey_${KEY_ID}.p8"
+          chmod 600 "$RUNNER_TEMP/private_keys/AuthKey_${KEY_ID}.p8"
+
+      - name: Archive (automatic signing)
+        env:
+          TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          xcodebuild \
+            -project apple/CorporateWarfare.xcodeproj \
+            -scheme CorporateWarfare \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath apple/build/CorporateWarfare.xcarchive \
+            MARKETING_VERSION="${{ inputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ inputs.build }}" \
+            DEVELOPMENT_TEAM="$TEAM" \
+            CODE_SIGN_STYLE=Automatic \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/private_keys/AuthKey_${KEY_ID}.p8" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER" \
+            archive
+
+      - name: Verify the signed archive
+        run: bash apple/scripts/verify-archive.sh apple/build/CorporateWarfare.xcarchive
+
+      - name: Export for App Store Connect
+        env:
+          TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+        run: |
+          sed "s/__TEAM_ID__/$TEAM/" apple/ExportOptions.plist.in > "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive \
+            -archivePath apple/build/CorporateWarfare.xcarchive \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates
+
+      - name: Record provenance
+        run: |
+          shasum -a 256 "$RUNNER_TEMP/export/CorporateWarfare.ipa" | tee ipa.sha256
+          ditto -c -k --sequesterRsrc --keepParent apple/build/CorporateWarfare.xcarchive/Products/Applications/CorporateWarfare.app.dSYM \
+            CorporateWarfare.dSYM.zip 2>/dev/null || true
+
+      - name: Upload to App Store Connect
+        env:
+          KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$RUNNER_TEMP/export/CorporateWarfare.ipa" \
+            --apiKey "$KEY_ID" \
+            --apiIssuer "$ISSUER" \
+            --verbose
+
+      - name: Bounded processing check
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ runner.temp }}/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
+          BUILD_NUMBER: ${{ inputs.build }}
+          BUNDLE_ID: net.lakesidegames.corporatewarfare
+          POLL_SECONDS: "900"
+        run: |
+          set -o pipefail
+          python3 apple/scripts/asc_status.py | tee processing.json
+          status=$?
+          if [[ $status -eq 3 ]]; then
+            echo "blocked: build still processing at the deadline; not reported as available" >&2
+          fi
+          exit $status
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            ipa.sha256
+            processing.json
+            CorporateWarfare.dSYM.zip
+            apple/build/CorporateWarfare.xcarchive
+          retention-days: 90
