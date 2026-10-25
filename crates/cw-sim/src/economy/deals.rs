@@ -297,6 +297,10 @@ fn collect_tenders(world: &mut World, handle: Handle, deal: &Deal) {
 }
 
 fn settle_offer(world: &mut World, handle: Handle, deal: &Deal) {
+    if deal.kind == DealKind::AssetPurchase {
+        settle_asset_purchase(world, handle, deal);
+        return;
+    }
     let eligible = world
         .firms
         .get(deal.target)
@@ -413,6 +417,134 @@ fn settle_offer(world: &mut World, handle: Handle, deal: &Deal) {
         } else {
             stored.state = DealState::Settled;
         }
+    }
+}
+
+/// Asset purchase: the buyer acquires the target's operating assets (facilities, inventory,
+/// fixed assets and work in progress) at the agreed price. Shares, cash, debt and contracts stay
+/// with the target, which is the distinction from a share purchase or merger. Assumed liabilities
+/// are none in v0.1; that limitation is visible in the deal preview.
+fn settle_asset_purchase(world: &mut World, handle: Handle, deal: &Deal) {
+    let cost = deal
+        .offer_price_cents
+        .saturating_mul(deal.max_shares.max(1));
+    if cost <= 0 || cost > deal.escrow_cents {
+        refund_escrow(world, handle, deal, "asset escrow shortfall");
+        if let Some(stored) = world.deals.get_mut(handle) {
+            stored.state = DealState::Rejected;
+        }
+        return;
+    }
+    let target_book = match world.firm(deal.target) {
+        Some(firm) => firm.book.clone(),
+        None => return,
+    };
+    let accounts = [
+        cw_core::ledger::Account::FixedAssets,
+        cw_core::ledger::Account::AccumulatedDepreciation,
+        cw_core::ledger::Account::Inventory,
+        cw_core::ledger::Account::WorkInProgress,
+    ];
+    let net_book: i64 = accounts
+        .iter()
+        .map(|account| target_book.balance(*account))
+        .sum();
+    // Buyer: releases escrow, receives the assets at book value and books the difference.
+    let mut buyer_txn = cw_core::ledger::Txn::new();
+    for account in accounts {
+        let balance = target_book.balance(account);
+        if balance != 0 {
+            buyer_txn = buyer_txn.signed(account, balance, "asset purchase");
+        }
+    }
+    buyer_txn = buyer_txn
+        .credit(
+            cw_core::ledger::Account::RestrictedCash,
+            cost,
+            "asset purchase",
+        )
+        .signed(
+            cw_core::ledger::Account::OtherIncome,
+            cost - net_book,
+            "asset purchase",
+        );
+    let _ = world
+        .firms
+        .get_mut(deal.buyer)
+        .unwrap()
+        .book
+        .commit(world.tick, buyer_txn);
+    // Target: gives up the assets, receives the cash and recognises the gain or loss.
+    let mut target_txn = cw_core::ledger::Txn::new();
+    for account in accounts {
+        let balance = target_book.balance(account);
+        if balance != 0 {
+            target_txn = target_txn.signed(account, -balance, "asset sale");
+        }
+    }
+    target_txn = target_txn
+        .debit(cw_core::ledger::Account::Cash, cost, "asset sale")
+        .signed(
+            cw_core::ledger::Account::OtherIncome,
+            net_book - cost,
+            "asset sale",
+        );
+    let _ = world
+        .firms
+        .get_mut(deal.target)
+        .unwrap()
+        .book
+        .commit(world.tick, target_txn);
+
+    let facilities: Vec<Handle> = world
+        .firm(deal.target)
+        .map(|firm| firm.facilities.clone())
+        .unwrap_or_default();
+    for facility in &facilities {
+        if let Some(stored) = world.facilities.get_mut(*facility) {
+            stored.firm = deal.buyer;
+        }
+        let bidder = world.firms.get_mut(deal.buyer).unwrap();
+        if !bidder.facilities.contains(facility) {
+            bidder.facilities.push(*facility);
+        }
+    }
+    let inventory = world
+        .firm(deal.target)
+        .map(|firm| firm.inventory.clone())
+        .unwrap_or_default();
+    for (key, lot) in inventory {
+        world
+            .firms
+            .get_mut(deal.buyer)
+            .unwrap()
+            .inventory
+            .insert(key, lot);
+    }
+    if let Some(target) = world.firms.get_mut(deal.target) {
+        target.facilities.clear();
+        target.inventory.clear();
+    }
+    let refund = deal.escrow_cents.saturating_sub(cost);
+    if refund > 0 {
+        let _ = world.firms.get_mut(deal.buyer).unwrap().book.commit(
+            world.tick,
+            cw_core::ledger::Txn::new()
+                .debit(
+                    cw_core::ledger::Account::Cash,
+                    refund,
+                    "asset escrow refund",
+                )
+                .credit(
+                    cw_core::ledger::Account::RestrictedCash,
+                    refund,
+                    "asset escrow refund",
+                ),
+        );
+    }
+    if let Some(stored) = world.deals.get_mut(handle) {
+        stored.state = DealState::Settled;
+        stored.escrow_cents = 0;
     }
 }
 
@@ -567,6 +699,87 @@ mod tests {
         }
         let (share, _hhi, _delta) = concentration(&world, region, 7, buyer, target);
         assert_eq!(share, 7_500);
+    }
+
+    #[test]
+    fn an_asset_purchase_moves_assets_but_keeps_shares_and_debt() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            761,
+            crate::state::ScenarioKind::Founder,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let handles: Vec<Handle> = world
+            .firms
+            .iter()
+            .filter(|(_, firm)| firm.operative() && !firm.facilities.is_empty())
+            .map(|(handle, _)| handle)
+            .take(2)
+            .collect();
+        let (buyer, target) = (handles[0], handles[1]);
+        let cost = 50_000_000;
+        // Fund the buyer's escrow directly; the command path does the same through StartDiligence.
+        world
+            .firms
+            .get_mut(buyer)
+            .unwrap()
+            .book
+            .commit(
+                world.tick,
+                cw_core::ledger::Txn::new()
+                    .debit(cw_core::ledger::Account::RestrictedCash, cost, "escrow")
+                    .credit(cw_core::ledger::Account::Cash, cost, "escrow"),
+            )
+            .unwrap();
+        let target_facilities = world.firm(target).unwrap().facilities.len();
+        let buyer_facilities = world.firm(buyer).unwrap().facilities.len();
+        let target_shares = world.firm(target).unwrap().shares.issued;
+        let target_cash = world.firm(target).unwrap().book.cash();
+        let deal = Deal {
+            buyer,
+            target,
+            kind: DealKind::AssetPurchase,
+            state: DealState::OfferOpen,
+            escrow_cents: cost,
+            offer_price_cents: cost,
+            max_shares: 1,
+            committed_shares: 0,
+            started: world.tick,
+            diligence_until: world.tick,
+            offer_deadline: world.tick,
+            review_deadline: None,
+            frozen_fair_cents: 0,
+            review_required: false,
+            remedy_share_bps: 0,
+            hostile: false,
+            diligence_paid: true,
+        };
+        let handle = world.deals.insert(deal.clone());
+        settle_asset_purchase(&mut world, handle, &deal);
+        assert_eq!(
+            world.firm(target).unwrap().facilities.len(),
+            0,
+            "assets left the target"
+        );
+        assert_eq!(
+            world.firm(buyer).unwrap().facilities.len(),
+            buyer_facilities + target_facilities,
+            "assets arrived at the buyer"
+        );
+        assert_eq!(
+            world.firm(target).unwrap().shares.issued,
+            target_shares,
+            "shares stay"
+        );
+        assert_eq!(
+            world.firm(target).unwrap().book.cash(),
+            target_cash + cost,
+            "the target is paid"
+        );
+        assert_eq!(world.deals.get(handle).unwrap().state, DealState::Settled);
+        assert!(world.firm(buyer).unwrap().book.is_balanced());
+        assert!(world.firm(target).unwrap().book.is_balanced());
     }
 
     #[test]
