@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `5b87b3b`.
-Kanban: 254781. Merged PRs: #8 through #43.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `d1f8c96`.
+Kanban: 254781. Merged PRs: #8 through #46.
 
 ## What exists now
 
@@ -28,7 +28,9 @@ Kanban: 254781. Merged PRs: #8 through #43.
   their cap, bond trades price accrued interest, loan interest carries sub-cents, lobbying has a
   post-decision group cooldown, tax modifiers expire, legal mergers move the whole entity,
   construction service is capacity-bounded once per week, asset purchases settle without shares,
-  and board limits gate large debt, capex, issuance and mergers.
+  board limits gate large debt, capex, issuance and mergers, antitrust remedies are real
+  divestitures, bond maturity pays the final coupon, and private firm data needs information
+  rights.
 
 ## Verified
 
