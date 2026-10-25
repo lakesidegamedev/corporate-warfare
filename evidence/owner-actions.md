@@ -5,8 +5,8 @@ item lists the exact action and what becomes possible afterwards.
 
 ## 1. Hosted CI is unblocked
 
-The repository is public. Verify run 40206065817 and Apple smoke run 40206065805 passed on main
-`981bf91`. Apple smoke compiled the SwiftUI app, linked the Rust bridge, ran 12 simulator tests
+The repository is public. Verify run 40208873040 and Apple smoke run 40208873034 passed on main
+`319fe31`. Apple smoke compiled the SwiftUI app, linked the Rust bridge, ran 14 simulator tests
 with 0 failures and archived the device app. Expected canonical hash:
 `6731ed7cf42d0a410e94b55f3aefad6fbe51453cbe3a6803548fa7edbfb633ad`.
 

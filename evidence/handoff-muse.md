@@ -2,15 +2,15 @@
 
 Repository: `https://github.com/lakesidegamedev/corporate-warfare` (now public after a clean
 working-tree and git-history secret scan).
-Current main: `981bf915b7f21d4b3dcecd92ced5200f695ef084`.
+Current main: `319fe31` (Verify 40208873040 and Apple smoke 40208873034 green; 14 simulator tests).
 Bundle: `net.lakesidegames.corporatewarfare`.
 Current engine hash pin: `6731ed7cf42d0a410e94b55f3aefad6fbe51453cbe3a6803548fa7edbfb633ad`.
 
 Already done on 2026-10-25:
 
 - repository made public; Actions started normally;
-- Verify run 40206065817 passed on main;
-- Apple smoke run 40206065805 passed: simulator compile, Rust bridge, 12 XCTests and device
+- Verify run 40208873040 passed on main `319fe31`;
+- Apple smoke run 40208873034 passed: simulator compile, Rust bridge, 14 XCTests and device
   archive all succeeded;
 - the `appstore` environment exists (id 25281148110).
 
@@ -36,7 +36,7 @@ workflows are green on main `981bf91`. Do not repeat the visibility change. Use
 
 ## 3. Compile and test before release
 
-Already green on main `981bf91`. Re-run only after a new code commit:
+Already green on main `319fe31`. Re-run only after a new code commit:
 
 ```
 gh workflow run Verify -R lakesidegamedev/corporate-warfare --ref main

@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-25. Owner: DeepSeek goal session. Main: `981bf91`.
-Kanban: 254781. Merged PRs: #8 through #61.
+Date: 2026-10-25. Owner: DeepSeek goal session. Main: `319fe31`.
+Kanban: 254781. Merged PRs: #8 through #62.
 
 ## What exists now
 
@@ -57,9 +57,11 @@ Kanban: 254781. Merged PRs: #8 through #61.
   median seed without founding a replacement.
 - Engine baseline on this host: representative (31 firms, 290 facilities) p50 0.55 ms; grown
   (217/2,030) p50 6.46 ms; stress (992/9,280) p50 82.98 ms. Device timing still required.
-- Hosted Verify and Apple smoke are green on `main` `981bf91`: the SwiftUI app compiles for the
-  simulator and device archive, the Rust bridge links, and 12 XCTests pass with hash
-  `6731ed7c...`. The repository is now public; Actions started normally after the change.
+- Hosted Verify and Apple smoke are green on `main` `319fe31`: the SwiftUI app compiles for the
+  simulator and device archive, the Rust bridge links, and 14 XCTests pass with hash
+  `6731ed7c...`. The newer suite includes real `AppStore` coverage for new career, selection,
+  advance, stop-save/restore and a rejected phone command. The repository is public and Actions
+  runs normally.
 
 ## Blockers
 

@@ -1,6 +1,6 @@
 # Release readiness map
 
-Updated 2026-10-25 against main `981bf91`. This maps every release requirement to its real
+Updated 2026-10-25 against main `319fe31`. This maps every release requirement to its real
 evidence or its concrete blocker. It is not a completion claim: a requirement is only done when
 its ledger entry names reviewed evidence that satisfies the gate.
 
@@ -10,7 +10,7 @@ its ledger entry names reviewed evidence that satisfies the gate.
 | R02 | automated | blocked | Depends on R01; dataset is labelled engineering calibration. |
 | R03 | automated | done | `evidence/R03-ledger.json`; ledger/units/farm worked example. |
 | R04 | automated | done | `evidence/R04-commands.json`; handles, authority, rollback, duplicate IDs. |
-| R05 | cross-platform | done | `evidence/R05-cross-platform.json`; Apple smoke run 40206065805 compiled the app, ran 12 simulator tests and matched hash `6731ed7c...` on main `981bf91`. |
+| R05 | cross-platform | done | `evidence/R05-cross-platform.json`; Apple smoke run 40208873034 compiled the app, ran 14 simulator tests including `AppStore` phone flows and matched hash `6731ed7c...` on main `319fe31`. |
 | R06 | automated | active | Household disposable baseline, 1% savings supplement, paid-wage income and finite gateways are implemented with market tests. R02 still blocks release sign-off. |
 | R07 | automated | active | Labour allocation, 2% search, tier offers, wage clamp, training and paid/deferred payroll are tested. R06/R02 block the chain. |
 | R08 | automated | active | Production, inputs, capacity and service expiry are covered by the 18 industry scenarios. |
