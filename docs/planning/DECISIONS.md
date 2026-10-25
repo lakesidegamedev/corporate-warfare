@@ -164,3 +164,16 @@ Test: `commands::tests::bond_trades_pay_accrued_interest_on_top_of_principal`.
   guarantor pays from its own cash up to min(claim, cap), never more, and an unrelated sibling is
   never charged. Tests: `unions::tests::a_successful_ballot_forms_the_bargaining_unit` and
   `corporate_lifecycle.rs::a_parent_guarantee_backs_a_failed_subsidiary_only_up_to_its_cap`.
+
+### Finance and policy correctness, 2026-10-25
+
+- The lobbying cooldown now applies after a request resolves and spans the controlled group and
+  region, not only unresolved requests on one firm.
+- A regional tax modifier applies only while its 52-week window is open.
+- The nominal price index uses the macro inflation rate instead of a hardcoded 200 bps.
+- Loan interest carries sub-cent remainders across weeks: 100,000,000 cents at 8 percent posts
+  exactly 2,000,000 cents over thirteen weeks instead of losing cents to weekly rounding.
+
+Tests: `credit::tests::weekly_interest_carry_posts_the_exact_term_amount` and
+`policy::tests::the_cooldown_survives_resolution_and_spans_the_group`. Canonical hash re-pinned to
+`893ccbe0...` because the persisted interest carry is part of state.

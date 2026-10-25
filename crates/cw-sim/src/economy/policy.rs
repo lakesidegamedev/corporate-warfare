@@ -41,13 +41,20 @@ pub fn file_request(
             kind: cw_core::error::EntityKind::Firm,
         });
     };
-    for request in &entity.policy_requests {
-        if request.region == region && !request.resolved && world.tick.0 < request.cooldown_until.0
-        {
-            return Err(DomainError::SolvencyRestriction {
-                entity: firm.0,
-                reason: cw_core::error::SolvencyReason::PastDue,
-            });
+    // One request per group and region, including the 26-week cooldown after a decision.
+    let mut group = crate::economy::ownership::controlled_group(world, firm);
+    group.push(firm);
+    for member in group {
+        let Some(candidate) = world.firm(member) else {
+            continue;
+        };
+        for request in &candidate.policy_requests {
+            if request.region == region && world.tick.0 < request.cooldown_until.0 {
+                return Err(DomainError::SolvencyRestriction {
+                    entity: firm.0,
+                    reason: cw_core::error::SolvencyReason::PastDue,
+                });
+            }
         }
     }
     let fee = request_fee(world, firm);
@@ -199,6 +206,33 @@ mod tests {
         let world = seed::build(&dataset, 91, ScenarioKind::Founder, ScenarioMode::Sandbox);
         let handle = world.firms.iter().next().unwrap().0;
         assert_eq!(request_fee(&world, handle), 2_500_000);
+    }
+
+    #[test]
+    fn the_cooldown_survives_resolution_and_spans_the_group() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            733,
+            crate::state::ScenarioKind::Guided,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let firm = world.investor.primary_group.unwrap();
+        file_request(&mut world, firm, 3, PolicyKind::PermitAcceleration).expect("first request");
+        // Five weeks pass the four-week decision, so the request is resolved but still cooling.
+        for _ in 0..5 {
+            world.tick = world.tick.next();
+            weekly(&mut world);
+        }
+        assert!(world.firm(firm).unwrap().policy_requests[0].resolved);
+        let repeat = file_request(&mut world, firm, 3, PolicyKind::TaxAdjustment);
+        assert!(repeat.is_err(), "cooldown applies after the decision");
+        // A different region has its own window.
+        let other = file_request(&mut world, firm, 4, PolicyKind::TaxAdjustment);
+        assert!(
+            other.is_ok(),
+            "another region is not cooling down: {other:?}"
+        );
     }
 
     #[test]

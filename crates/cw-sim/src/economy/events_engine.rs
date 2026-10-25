@@ -38,8 +38,10 @@ pub fn quarter_check(world: &mut World, dataset: &Dataset) {
     world.macro_state.policy_rate_bps =
         (world.macro_state.policy_rate_bps + impulse).clamp(100, 1_500);
     // Nominal reference price index grows at the annual inflation rate with a carried remainder.
-    let growth =
-        round_even_div(world.macro_state.price_index_bps as i128 * 200, 10_000 * 52) as i64;
+    let growth = round_even_div(
+        world.macro_state.price_index_bps as i128 * world.macro_state.inflation_bps as i128,
+        10_000 * 52,
+    ) as i64;
     world.macro_state.price_index_bps += growth.max(1);
 
     // Clear active regimes at expiry.

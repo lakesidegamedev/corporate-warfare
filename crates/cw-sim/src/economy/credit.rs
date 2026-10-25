@@ -65,6 +65,18 @@ pub fn weekly_interest(loan: &Loan) -> i64 {
     ) as i64
 }
 
+/// Interest for one week with a persisted sub-cent carry, so repeated rounding cannot create or
+/// destroy value across the term.
+pub fn accrued_interest(loan: &Loan) -> (i64, i64) {
+    let mut carry = cw_core::money::SubCentCarry::new(10_000 * 52);
+    carry.numerator = loan.carry;
+    let interest = carry.accrue(
+        loan.principal_remaining_cents as i128 * loan.rate_bps as i128,
+        10_000 * 52,
+    );
+    (interest.0, carry.numerator)
+}
+
 /// Weekly grade refresh, then scheduled principal and interest on every loan.
 pub fn service(world: &mut World, dataset: &Dataset) {
     let handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
@@ -84,7 +96,7 @@ pub fn service(world: &mut World, dataset: &Dataset) {
             continue;
         }
         let borrower = loan.borrower;
-        let interest = weekly_interest(&loan);
+        let (interest, carry_next) = accrued_interest(&loan);
         let principal = if loan.remaining_weeks <= 1 {
             loan.principal_remaining_cents
         } else {
@@ -135,6 +147,7 @@ pub fn service(world: &mut World, dataset: &Dataset) {
             }
         }
         if let Some(stored) = world.loans.get_mut(handle) {
+            stored.carry = carry_next;
             stored.principal_remaining_cents =
                 (stored.principal_remaining_cents - principal_paid).max(0);
             stored.remaining_weeks = stored.remaining_weeks.saturating_sub(1);
@@ -341,6 +354,32 @@ mod tests {
             .book
             .close_week(world.tick);
         assert_eq!(assess_grade(&world, handle), Grade::D);
+    }
+
+    #[test]
+    fn weekly_interest_carry_posts_the_exact_term_amount() {
+        let mut loan = Loan {
+            borrower: Handle::INVALID,
+            lender: Lender::Outside(0),
+            principal_remaining_cents: 100_000_000,
+            rate_bps: 800,
+            weekly_principal_cents: 0,
+            remaining_weeks: 104,
+            collateral: None,
+            secured: false,
+            created: Tick::OPENING,
+            carry: 0,
+            defaulted: false,
+        };
+        let mut posted = 0i64;
+        for _ in 0..13 {
+            let (interest, carry) = accrued_interest(&loan);
+            posted += interest;
+            loan.carry = carry;
+        }
+        // 100,000,000 at 8 percent for one quarter is exactly 2,000,000 cents.
+        assert_eq!(posted, 2_000_000);
+        assert_eq!(loan.carry, 0);
     }
 
     #[test]
