@@ -357,17 +357,22 @@ pub fn state_triggers(world: &mut World, dataset: &Dataset) {
             }
         }
     }
+    let mut tenders: Vec<Handle> = Vec::new();
     for (handle, deal) in world.deals.iter() {
         if deal.state == crate::state::DealState::Review && player_side(world, deal.buyer) {
             opens.push(("antitrust_review", deal.buyer, None, true));
         }
+        // The player's own bids do not ask the player to tender to themselves.
         if deal.state == crate::state::DealState::OfferOpen
             && !deal.investor_tendered
+            && !player_side(world, deal.buyer)
             && world.investor_holds(deal.target) > 0
         {
-            opens.push(("tender_offer", deal.target, None, true));
+            tenders.push(handle);
         }
-        let _ = handle;
+    }
+    for deal in tenders {
+        open_tender(world, deal);
     }
     for handle in &handles {
         let peak = outside_peak_bps(world, *handle);
@@ -530,6 +535,30 @@ pub fn open(
         opened: world.tick,
         mandatory,
         resolved: false,
+        deal: None,
+    });
+    id
+}
+
+/// A tender card for the investor about one specific deal, with a cooldown per deal.
+pub fn open_tender(world: &mut World, deal: Handle) -> u64 {
+    let key = ("tender_offer".to_owned(), deal.0 | (1 << 63));
+    if world.events.cooldowns.contains_key(&key) {
+        return 0;
+    }
+    let id = world.events.next_id;
+    world.events.next_id += 1;
+    world.events.cooldowns.insert(key, world.tick.0);
+    world.events.pending.push(PendingEvent {
+        id,
+        card: "tender_offer".to_owned(),
+        subject_firm: None,
+        region: None,
+        deadline: Tick(world.tick.0 + 4),
+        opened: world.tick,
+        mandatory: true,
+        resolved: false,
+        deal: Some(deal),
     });
     id
 }
@@ -952,19 +981,16 @@ fn apply(
             }
         }
         "tender_shares" | "refuse_tender" => {
-            // The open bid on the subject company records the player's choice; shares move only
-            // at settlement, from the buyer's escrow.
-            if let Some(target) = firm {
-                let deal = world
+            // The card's own deal records the player's choice; shares move only at settlement,
+            // from the buyer's escrow. A bid that has already closed needs no answer.
+            if let Some(deal) = event.deal
+                && world
                     .deals
-                    .iter()
-                    .find(|(_, deal)| {
-                        deal.target == target && deal.state == crate::state::DealState::OfferOpen
-                    })
-                    .map(|(handle, _)| handle);
-                if let Some(deal) = deal {
-                    crate::economy::deals::respond_tender(world, deal, handler == "tender_shares")?;
-                }
+                    .get(deal)
+                    .map(|stored| stored.state == crate::state::DealState::OfferOpen)
+                    .unwrap_or(false)
+            {
+                crate::economy::deals::respond_tender(world, deal, handler == "tender_shares")?;
             }
         }
         "cure_covenant" => {

@@ -746,6 +746,12 @@ fn construction_capex_is_escrowed_and_released_on_completion() {
         "an unfinished project is not yet a fixed asset"
     );
 
+    // This fixture isolates escrow timing; the permit card and its four-week delay are covered
+    // in tests/events.rs, so the card is held in its cooldown here.
+    world
+        .events
+        .cooldowns
+        .insert(("permit_delay".to_owned(), builder.0), world.tick.0);
     for week in 1..build_weeks {
         tick::advance(&mut world, &dataset);
         assert_eq!(

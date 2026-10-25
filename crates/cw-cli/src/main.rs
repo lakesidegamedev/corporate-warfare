@@ -126,16 +126,47 @@ fn drive(session: &mut Session, weeks: u32, runner: &mut PolicyRunner) -> (u32, 
     let mut advanced = 0;
     let mut paused = None;
     while advanced < weeks {
+        // Answer every waiting mandatory card before advancing, so a backlog cannot stall.
+        let waiting: Vec<u64> = session
+            .world
+            .events
+            .pending
+            .iter()
+            .filter(|event| {
+                !event.resolved
+                    && event.mandatory
+                    && event
+                        .subject_firm
+                        .map(|firm| {
+                            cw_sim::economy::events_engine::player_side(&session.world, firm)
+                        })
+                        .unwrap_or(true)
+            })
+            .map(|event| event.id)
+            .collect();
+        for event in waiting {
+            runner.answer_event(session, event);
+        }
         let result = session.advance(1);
         advanced += result.weeks_advanced;
         if let Some(reason) = result.pause.clone() {
-            // Mandatory events and the scored horizon need a human; advisory pauses are cleared
-            // so a scripted policy can keep running.
-            if reason.starts_with("event:") || reason == "five_year_score" {
+            // A mandatory card is answered by the policy through the command path; the scored
+            // horizon stops the run; advisory pauses are cleared so the policy keeps running.
+            if let Some(event) = reason
+                .strip_prefix("event:")
+                .and_then(|id| id.parse::<u64>().ok())
+            {
+                if !runner.answer_event(session, event) {
+                    paused = Some(reason);
+                    break;
+                }
+                session.dismiss_pause();
+            } else if reason == "five_year_score" {
                 paused = Some(reason);
                 break;
+            } else {
+                session.dismiss_pause();
             }
-            session.dismiss_pause();
         }
         if result.weeks_advanced == 0 {
             break;

@@ -2220,6 +2220,11 @@ fn apply_intent(
                 .find(|pending| pending.id == *event)
                 .and_then(|pending| pending.subject_firm);
             match subject {
+                // The investor answers for every company it ultimately controls, including a
+                // subsidiary it runs through a parent.
+                Some(firm)
+                    if actor == INVESTOR_ACTOR
+                        && crate::economy::events_engine::player_side(world, firm) => {}
                 Some(firm) if world.firms.contains(firm) => require_control(world, actor, firm)?,
                 _ if actor != INVESTOR_ACTOR => {
                     return Err(DomainError::NoAuthority {
@@ -2465,9 +2470,19 @@ mod tests {
         );
         apply(&mut world, &dataset, &command).expect("founding accepted");
         let firm = world.investor.primary_group.unwrap();
-        for _ in 0..build_weeks {
+        // No permit bonus is active, so the project draws the permit card; left unanswered it
+        // takes the four-week delay.
+        for _ in 0..build_weeks + 4 {
             crate::tick::advance(&mut world, &dataset);
+            world.pending_pause = None;
         }
+        assert!(
+            world
+                .events
+                .pending
+                .iter()
+                .any(|event| event.card == "permit_delay" && event.subject_firm == Some(firm))
+        );
         let entity = world.firms.get(firm).unwrap();
         assert!(entity.book.is_balanced());
         assert!(entity.book.cash() >= 0);

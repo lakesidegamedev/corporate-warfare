@@ -957,6 +957,9 @@ pub struct PendingEvent {
     pub opened: Tick,
     pub mandatory: bool,
     pub resolved: bool,
+    /// The deal a tender card is about. Tender cards are addressed to the investor as a
+    /// shareholder, not to the target company, so they carry the deal instead of a subject.
+    pub deal: Option<Handle>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

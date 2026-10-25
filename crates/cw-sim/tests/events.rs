@@ -391,7 +391,24 @@ fn review_and_tender_cards_follow_actual_deals_and_the_tender_choice_is_recorded
         .unwrap();
     let bid = deal(&mut world, third, other, DealState::OfferOpen);
     events_engine::state_triggers(&mut world, &dataset);
-    let id = card_for(&world, "tender_offer", other).expect("the player holds target shares");
+    let id = world
+        .events
+        .pending
+        .iter()
+        .find(|event| event.card == "tender_offer" && event.deal == Some(bid))
+        .map(|event| event.id)
+        .expect("the player holds target shares");
+    // Addressed to the investor: rivals never answer it for the player.
+    events_engine::auto_resolve(&mut world, &dataset);
+    assert!(
+        !world
+            .events
+            .pending
+            .iter()
+            .find(|e| e.id == id)
+            .unwrap()
+            .resolved
+    );
     events_engine::respond(&mut world, &dataset, id, "tender").unwrap();
     assert!(world.deals.get(bid).unwrap().investor_tendered);
     assert_eq!(
