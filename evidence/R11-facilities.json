@@ -1,0 +1,8 @@
+{
+  "requirement": "R11", "result": "pass",
+  "commit": "f04cd98bf372f8b279634a2441cfd17e6006fbc4",
+  "procedure": "cargo test --locked --workspace; construction escrow/completion, build funding, retool/mothball/disposal command paths, and capex/asset reconciliation in corporate lifecycle and industry fixtures.",
+  "artifacts": ["crates/cw-sim/src/commands.rs","crates/cw-sim/src/tick.rs","crates/cw-sim/tests/industries.rs"],
+  "limitations": "Construction is a weekly capacity service; no contractor scheduling beyond finite named capacity.",
+  "verified_at": "2026-10-25"
+}

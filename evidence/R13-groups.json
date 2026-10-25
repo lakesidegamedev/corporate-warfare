@@ -1,0 +1,8 @@
+{
+  "requirement": "R13", "result": "pass",
+  "commit": "14379018365170da6aa1aba250a13c58c7c83b56",
+  "procedure": "cargo test --locked --workspace; ownership tests for exactly-half control, indirect cycles, 100-level and 100-child traversal, internal-investment elimination, two-sided intercompany-loan elimination, same-group detection, and hold-then-sell unrealised-profit elimination; workflows group tree test.",
+  "artifacts": ["crates/cw-sim/src/economy/ownership.rs","crates/cw-sim/src/economy/freight.rs","crates/cw-sim/src/state.rs","crates/cw-session/tests/workflows.rs"],
+  "limitations": "Unrealised margin is released proportionally as mixed inventory is issued, not by physical lot identity. Intercompany revenue and cost of goods are still shown in legal-entity statements; only the consolidated asset elimination is modelled.",
+  "verified_at": "2026-10-25"
+}

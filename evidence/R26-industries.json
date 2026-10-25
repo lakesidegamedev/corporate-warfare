@@ -1,0 +1,8 @@
+{
+  "requirement": "R26", "result": "pass",
+  "commit": "14379018365170da6aa1aba250a13c58c7c83b56",
+  "procedure": "cargo test --locked --workspace; eighteen industry scenarios cover all fifteen industries plus differentiated financing models, and every_industry_has_a_distinct_operating_model rejects names-only reskins. Includes funded defense procurement.",
+  "artifacts": ["crates/cw-sim/tests/industries.rs","content/initial-balance.json","evidence/defense-procurement.md"],
+  "limitations": "Industry recipes and regional demand are authored calibration at one-percent game scale. The phone presents all industries, but no human has completed a full campaign in each.",
+  "verified_at": "2026-10-25"
+}

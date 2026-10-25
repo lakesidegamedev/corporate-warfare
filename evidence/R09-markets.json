@@ -1,0 +1,8 @@
+{
+  "requirement": "R09", "result": "pass",
+  "commit": "f04cd98bf372f8b279634a2441cfd17e6006fbc4",
+  "procedure": "cargo test --locked --workspace; four worked allocator examples (rationing, equal split, budget cap, no affordable offer), zero-supply cash retention, brand/quality redistribution and full-tick ledger/stock invariants.",
+  "artifacts": ["crates/cw-sim/src/economy/markets.rs","crates/cw-sim/tests/industries.rs"],
+  "limitations": "One-pass integer allocation with fixed regional books; no continuous double auction or hidden order book.",
+  "verified_at": "2026-10-25"
+}

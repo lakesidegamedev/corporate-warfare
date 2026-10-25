@@ -1,0 +1,8 @@
+{
+  "requirement": "R19", "result": "pass",
+  "commit": "e64890149018d798f1fe18cbbcda4e974bac5f17",
+  "procedure": "cargo test --locked --workspace; deposit-loan-withdrawal chain, bank-run pro-rata payment, liquidity/capital limits, and industries::financial_bank_deposits_are_liabilities_and_lending_obeys_limits.",
+  "artifacts": ["crates/cw-sim/src/economy/banking.rs","crates/cw-sim/tests/corporate_lifecycle.rs","crates/cw-sim/tests/industries.rs"],
+  "limitations": "Deposits and loans are game claims, not deposit-insured bank products; no central-bank facility or bailout.",
+  "verified_at": "2026-10-25"
+}

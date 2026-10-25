@@ -1,0 +1,8 @@
+{
+  "requirement": "R27", "result": "pass",
+  "commit": "14379018365170da6aa1aba250a13c58c7c83b56",
+  "procedure": "cargo test --locked --workspace; research_brand tests for squared monotone thresholds, no unfunded innovation, saved draws, frontier/level caps, spend-funded brand decay, bounded quality and efficiency, plus media marketing demand.",
+  "artifacts": ["crates/cw-sim/src/economy/research.rs","crates/cw-sim/tests/research_brand.rs"],
+  "limitations": "Technology is a single level per firm with product quality/efficiency effects; no patent litigation or external R&D partners.",
+  "verified_at": "2026-10-25"
+}

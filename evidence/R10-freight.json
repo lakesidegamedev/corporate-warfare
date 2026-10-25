@@ -1,0 +1,8 @@
+{
+  "requirement": "R10", "result": "pass",
+  "commit": "f04cd98bf372f8b279634a2441cfd17e6006fbc4",
+  "procedure": "cargo test --locked --workspace; lead-time/freight unit tests, carrier delivery and spot-import industry fixtures, contract-priority gateway test, and balanced freight/shipment ledgers.",
+  "artifacts": ["crates/cw-sim/src/economy/freight.rs","crates/cw-sim/src/economy/markets.rs","crates/cw-sim/tests/industries.rs"],
+  "limitations": "Lanes are precomputed pairwise distances; carrier capacity and transit are weekly integer approximations.",
+  "verified_at": "2026-10-25"
+}

@@ -1,0 +1,8 @@
+{
+  "requirement": "R07", "result": "pass",
+  "commit": "f04cd98bf372f8b279634a2441cfd17e6006fbc4",
+  "procedure": "cargo test --locked --workspace; labour finiteness/no-double-employment, paid training, zero-offer, paid-wage tax and deferred-payroll tests; weekly labour and payroll timing in tick phase 3.",
+  "artifacts": ["crates/cw-sim/src/economy/labour.rs","crates/cw-sim/src/tick.rs","crates/cw-sim/src/economy/fiscal.rs"],
+  "limitations": "Workers are tier aggregates, not individual agents. Hiring is voluntary search plus unemployment; severance and deferred wages follow solvency rules.",
+  "verified_at": "2026-10-25"
+}

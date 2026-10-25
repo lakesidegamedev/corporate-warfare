@@ -1,0 +1,8 @@
+{
+  "requirement": "R08", "result": "pass",
+  "commit": "f04cd98bf372f8b279634a2441cfd17e6006fbc4",
+  "procedure": "cargo test --locked --workspace; eighteen industry scenarios cover seasonal farm output, finite ore, input-proportional chemicals, multi-stage manufacturing, utilities, service expiry and non-negative stock; every-industry model test.",
+  "artifacts": ["crates/cw-sim/tests/industries.rs","crates/cw-sim/src/economy/production.rs","crates/cw-sim/src/economy/seed.rs"],
+  "limitations": "Recipes are authored calibration at one-percent game scale; physical units are lots and milli-lots, not source plant observations.",
+  "verified_at": "2026-10-25"
+}

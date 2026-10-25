@@ -1,0 +1,8 @@
+{
+  "requirement": "R18", "result": "pass",
+  "commit": "e64890149018d798f1fe18cbbcda4e974bac5f17",
+  "procedure": "cargo test --locked --workspace; credit tests for negative-equity grade D, secured-capacity pledge reuse, final bond coupon before principal, missed debt service default and exact 52-week interest carry; corporate lifecycle bank loan chain.",
+  "artifacts": ["crates/cw-sim/src/economy/credit.rs","crates/cw-sim/tests/corporate_lifecycle.rs"],
+  "limitations": "Ratings are explained in-game thresholds, not agency ratings. Secured capacity is a 50 percent tangible-asset rule; no external credit bureau.",
+  "verified_at": "2026-10-25"
+}

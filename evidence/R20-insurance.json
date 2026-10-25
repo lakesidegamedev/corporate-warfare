@@ -1,0 +1,8 @@
+{
+  "requirement": "R20", "result": "pass",
+  "commit": "e64890149018d798f1fe18cbbcda4e974bac5f17",
+  "procedure": "cargo test --locked --workspace; premium formula, reserve-then-pay claim timing, catastrophe correlation, term expiry, underwriting limits and industry insurer claim fixture.",
+  "artifacts": ["crates/cw-sim/src/economy/insurance.rs","crates/cw-sim/tests/corporate_lifecycle.rs","crates/cw-sim/tests/industries.rs"],
+  "limitations": "Property/business-interruption cover only; reinsurance is explicitly deferred.",
+  "verified_at": "2026-10-25"
+}

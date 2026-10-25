@@ -1,0 +1,8 @@
+{
+  "requirement": "R06", "result": "pass",
+  "commit": "f04cd98bf372f8b279634a2441cfd17e6006fbc4",
+  "procedure": "cargo test --locked --workspace; markets household-budget tests, full-clearing zero-income test, fiscal labour-tax tests, industry spot-import test and balanced government/household ledgers.",
+  "artifacts": ["crates/cw-sim/src/economy/markets.rs","crates/cw-sim/src/economy/fiscal.rs","crates/cw-sim/src/tick.rs","crates/cw-sim/tests/industries.rs"],
+  "limitations": "Households are regional aggregates. Gateways and background employers are finite but simplified. No historical household survey is claimed.",
+  "verified_at": "2026-10-25"
+}

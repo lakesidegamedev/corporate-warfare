@@ -1,0 +1,8 @@
+{
+  "requirement": "R14", "result": "pass",
+  "commit": "14379018365170da6aa1aba250a13c58c7c83b56",
+  "procedure": "cargo test --locked --workspace; workflows::group_tree_and_intercompany_loan_use_real_authority, lifecycle parent-guarantee cap and legal merger, consolidation loan/investment elimination and unrealised-margin tests.",
+  "artifacts": ["crates/cw-session/tests/workflows.rs","crates/cw-sim/tests/corporate_lifecycle.rs","crates/cw-sim/src/economy/ownership.rs"],
+  "limitations": "Transfer pricing is a declared contract price range; authority is checked by the common command validator. Internal revenue elimination is limited to consolidated assets, not a full tax consolidation.",
+  "verified_at": "2026-10-25"
+}

@@ -72,8 +72,10 @@
       ],
       "gate": "automated",
       "acceptance": "Finite household, government and external budgets and background employers reconcile; payroll affects demand; no infinite outside buyer.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R06-households.json"
+      ]
     },
     {
       "id": "R07",
@@ -84,8 +86,10 @@
       ],
       "gate": "automated",
       "acceptance": "Finite skill pools allocate without firm iteration bias; no double-employed worker; hiring, layoffs and wages have explicit timing and costs.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R07-labour.json"
+      ]
     },
     {
       "id": "R08",
@@ -95,8 +99,10 @@
       ],
       "gate": "automated",
       "acceptance": "Inputs consumed once, output/capacity reconcile, shortages bind and perishable services expire; no negative inventories.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R08-production.json"
+      ]
     },
     {
       "id": "R09",
@@ -106,8 +112,10 @@
       ],
       "gate": "automated",
       "acceptance": "Worked scarcity/oversupply/tie/import/no-demand fixtures conserve cash/stock and respect buyer budgets; revenue derives from actual fulfilled sales.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R09-markets.json"
+      ]
     },
     {
       "id": "R10",
@@ -117,8 +125,10 @@
       ],
       "gate": "automated",
       "acceptance": "Local/cross-region delivery timing, finite freight capacity, escrow, failed delivery and expired contracts settle once without teleporting stock.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R10-freight.json"
+      ]
     },
     {
       "id": "R11",
@@ -129,8 +139,10 @@
       ],
       "gate": "automated",
       "acceptance": "Build, expand, retool, mothball and sell post CIP/capex/maintenance correctly with lead times and cancellation treatment.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R11-facilities.json"
+      ]
     },
     {
       "id": "R12",
@@ -155,8 +167,10 @@
       ],
       "gate": "automated",
       "acceptance": "Deep/wide groups use correct voting control and minority interests; reject equity cycles; eliminate internal balances and unrealised profits without double-valuing assets.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R13-groups.json"
+      ]
     },
     {
       "id": "R14",
@@ -167,8 +181,10 @@
       ],
       "gate": "automated",
       "acceptance": "Internal trade, lending, dividends and guarantees respect legal cash/authority; consolidated totals reconcile; internal markup cannot create score wealth.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R14-intercompany.json"
+      ]
     },
     {
       "id": "R15",
@@ -214,8 +230,10 @@
       ],
       "gate": "automated",
       "acceptance": "Loan/bond schedules, collateral, coupons, maturity and covenant defaults reconcile with lenders/holders and use explained ratings.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R18-credit.json"
+      ]
     },
     {
       "id": "R19",
@@ -226,8 +244,10 @@
       ],
       "gate": "automated",
       "acceptance": "Deposits are liabilities, loans are assets, reserve/liquidity/capital constrain business, and defaults/run scenarios preserve ledger identities.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R19-banking.json"
+      ]
     },
     {
       "id": "R20",
@@ -238,8 +258,10 @@
       ],
       "gate": "automated",
       "acceptance": "Policy underwriting, premiums, reserves, expiry and correlated claims settle; catastrophes cannot be avoided by omitted liabilities.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R20-insurance.json"
+      ]
     },
     {
       "id": "R21",
@@ -275,8 +297,10 @@
       ],
       "gate": "automated",
       "acceptance": "Organisation, bargaining, strikes and settlements affect wages/output and worker incentives with explainable outcomes.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R23-unions.json"
+      ]
     },
     {
       "id": "R24",
@@ -300,8 +324,10 @@
       ],
       "gate": "automated",
       "acceptance": "Grace periods, restricted payouts, seniority, collateral, liquidation and guarantees resolve; one failed subsidiary does not erase unrelated cash.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R25-insolvency.json"
+      ]
     },
     {
       "id": "R26",
@@ -314,8 +340,10 @@
       ],
       "gate": "automated",
       "acceptance": "Every DATA-CONTENT industry row has recipe/service/demand/cost rules, decisions and a playable tested scenario; names in picker are insufficient.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R26-industries.json"
+      ]
     },
     {
       "id": "R27",
@@ -326,8 +354,10 @@
       ],
       "gate": "automated",
       "acceptance": "Funded bounded technology and brand/quality influence demand/cost over time; no guaranteed sales or negative unit costs.",
-      "status": "active",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "evidence/R27-research.json"
+      ]
     },
     {
       "id": "R28",

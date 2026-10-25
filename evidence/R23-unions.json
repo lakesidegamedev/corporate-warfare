@@ -1,0 +1,8 @@
+{
+  "requirement": "R23", "result": "pass",
+  "commit": "f04cd98bf372f8b279634a2441cfd17e6006fbc4",
+  "procedure": "cargo test --locked --workspace; corporate_lifecycle::union_organisation_strike_and_binding_settlement drives low pay to organisation growth, a ballot, a two-week bargaining deadline, strike state, and a binding thirteen-week settlement with balanced books.",
+  "artifacts": ["crates/cw-sim/src/economy/unions.rs","crates/cw-sim/tests/corporate_lifecycle.rs","crates/cw-sim/src/commands.rs"],
+  "limitations": "Union and worker behaviour is an aggregate weekly model; no individual worker identity or external labour board.",
+  "verified_at": "2026-10-25"
+}
