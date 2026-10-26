@@ -84,6 +84,13 @@ jobs:
           printf '%s' "$KEY_CONTENT" > "$RUNNER_TEMP/private_keys/AuthKey_${KEY_ID}.p8"
           chmod 600 "$RUNNER_TEMP/private_keys/AuthKey_${KEY_ID}.p8"
 
+      - name: Revoke development certificates left by earlier CI runs
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          APPLE_API_KEY_PATH="$RUNNER_TEMP/private_keys/AuthKey_${APPLE_API_KEY}.p8" python3 apple/scripts/asc_prune_dev_certs.py
+
       - name: Archive (automatic signing)
         env:
           TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
@@ -100,6 +107,7 @@ jobs:
             CURRENT_PROJECT_VERSION="${{ inputs.build }}" \
             DEVELOPMENT_TEAM="$TEAM" \
             CODE_SIGN_STYLE=Automatic \
+            SUPPORTS_MACCATALYST=NO \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$RUNNER_TEMP/private_keys/AuthKey_${KEY_ID}.p8" \
             -authenticationKeyID "$KEY_ID" \
