@@ -1,0 +1,77 @@
+# Changelog
+
+All notable changes to Corporate Warfare are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the policy in
+[docs/RELEASING.md](docs/RELEASING.md): patch for minor updates and fixes, minor for big
+features, major for wide feature releases or upgrades.
+
+Every pull request that changes the game, the app, content or tooling adds its entry under
+**Unreleased** in the same pull request. A release moves those entries under a new version
+heading.
+
+## [Unreleased]
+
+### Added
+
+- Release process: this changelog, the versioning and release procedure in
+  `docs/RELEASING.md`, a pull request template, and a CI check that requires a changelog entry
+  for code, content and tooling changes and keeps the workspace and iOS versions in step.
+
+## [1.0.0] - 2026-10-25
+
+First complete engine release: every automated rules requirement closed with evidence, and a
+second balance report over 860 careers.
+
+### Added
+
+- Takeover and antitrust fixtures with hand-computed escrow, fee, proration, squeeze-out and
+  HHI arithmetic; lobbying, rival AI, event deck, score, liquidation, credit, governance and
+  union fixtures.
+- Real triggers for all 24 event cards, macro recessions, booms and fuel shocks from the macro
+  stream, and tender cards addressed to the investor with their deal.
+- Rival AI telemetry by archetype in the balance sweep, and diagnostic examples
+  (`event_census`, `dissolution_census`, `firm_trace`).
+- Passed board votes authorise large actions for thirteen weeks.
+
+### Changed
+
+- Antitrust review runs before any share or asset moves, and competition groups are judged at
+  the ultimate controller.
+- Rival strategic slots are scored and capped at four actions, use only public information,
+  follow the rules' solvency order, and expand only into observed demand.
+- Missed loan principal is carried as arrears owed to the same lender.
+
+### Fixed
+
+- Tender payouts could exceed escrow, and a player's tender created money.
+- A shell subsidiary could bypass competition review; remedies lacked an authority check.
+- Fourteen event cards could never open; card handlers deleted goods in transit, touched other
+  firms' shipments, cancelled healthy contracts and capped capacity permanently.
+- A player choice could veto a recession; macro regimes never fired.
+- Rival takeovers never settled, a token player stake froze a rival's AI, and seasonal farms
+  idled into insolvency (every farm failed within five years).
+- Liquidation minted proceeds, never paid lenders and left dissolved firms with cash and live
+  contracts.
+- Missed principal was counted twice; board votes had no effect; retooled plants never returned
+  to service.
+- `AcceptLoanQuote` let a borrower name its own rate, term and size.
+- Score control counted passive stakes and double-counted subsidiaries; conduct charged the
+  player for rivals' breaches.
+
+## [0.1.0] - 2026-10-25
+
+Foundation, pull requests #8 to #69.
+
+### Added
+
+- Deterministic Rust engine: checked money and quantities, ledger, commands, session, replay
+  and versioned saves; weekly economy with labour, production, utilities, markets, freight,
+  contracts and gateways; ownership, boards, exchange, issuance, dividends, buybacks and IPOs;
+  credit, bonds, banking and insurance; unions, lobbying, insolvency; research and brand.
+- Rival AI, event deck, five-year score with continue, and the CLI (`doctor`, `run`,
+  `diagnose`, `report`, `sweep`, `replay`).
+- SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
+
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v0.1.0...v1.0.0
+[0.1.0]: https://github.com/lakesidegamedev/corporate-warfare/releases/tag/v0.1.0

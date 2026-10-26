@@ -27,3 +27,5 @@ On this shared VPS, full builds/tests go through the host check scheduler. See
 A polished Great Lakes game installed through TestFlight. National expansion and
 desktop ports follow separately. Apple console setup can be a named owner dependency;
 it cannot be reported as a successful TestFlight install.
+
+Changes by version: [CHANGELOG.md](CHANGELOG.md). Versioning and releases: [docs/RELEASING.md](docs/RELEASING.md).
