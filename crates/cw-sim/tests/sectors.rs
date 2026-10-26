@@ -178,3 +178,136 @@ fn a_division_runs_one_strategy_and_retools_together() {
     }
     assert_eq!(sectors::divisions_of(&world, &dataset, firm).len(), 2);
 }
+
+/// Cash across every firm's book plus the outside media and gateway accounts.
+fn firm_cash(world: &World) -> i64 {
+    world.firms.iter().map(|(_, f)| f.book.cash()).sum::<i64>() + world.outside.gateway_book.cash()
+}
+
+#[test]
+fn a_market_raid_prices_its_stake_and_conserves_blocks_and_money() {
+    let (mut world, dataset) = world();
+    let (attacker, plant) = world
+        .firms
+        .iter()
+        .find_map(|(handle, firm)| {
+            let plant = *firm.facilities.first()?;
+            let recipe = world.facilities.get(plant)?.recipe;
+            (dataset.recipes[recipe as usize].industry == "agriculture").then_some((handle, plant))
+        })
+        .expect("a seeded farm");
+    let region = world.facilities.get(plant).unwrap().region;
+    let recipe = world.facilities.get(plant).unwrap().recipe;
+    let industry = sectors::recipe_industry(&dataset, recipe);
+    // A rival with no farm here gets a five-block farm division in the same cell.
+    let defender = world
+        .firms
+        .iter()
+        .find(|(handle, firm)| {
+            *handle != attacker
+                && firm.operative()
+                && !cw_sim::economy::ownership::same_group(&world, *handle, attacker)
+        })
+        .map(|(handle, _)| handle)
+        .unwrap();
+    let mut rival_farm = world.facilities.get(plant).unwrap().clone();
+    rival_farm.firm = defender;
+    rival_farm.blocks = 5;
+    rival_farm.capex_cents = 10_000_000;
+    rival_farm.accumulated_depreciation = 0;
+    let rival_plant = world.facilities.insert(rival_farm);
+    world
+        .firms
+        .get_mut(defender)
+        .unwrap()
+        .facilities
+        .push(rival_plant);
+    let _ = world.firms.get_mut(defender).unwrap().book.commit(
+        world.tick,
+        Txn::new()
+            .debit(Account::FixedAssets, 10_000_000, "test plant")
+            .credit(Account::ShareCapital, 10_000_000, "test plant"),
+    );
+    for firm in [attacker, defender] {
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .policies
+            .marketing_budget_cents = 0;
+    }
+    fund(&mut world, attacker, 10_000_000_000);
+
+    // Defence floor: five percent of a quarter's output value of the five-block division.
+    let template = &dataset.recipes[recipe as usize];
+    let price = dataset.reference_price(dataset.product_index[template.output.as_str()]);
+    let defence = template.weekly_output_lots * 5 * price * 13 * 500 / 10_000;
+    let quote = sectors::raid_quote(
+        &world,
+        &dataset,
+        attacker,
+        defender,
+        region,
+        industry,
+        defence * 2,
+    );
+    assert_eq!(quote.defence_cents, defence);
+    // Two-to-one: 20 percent of five blocks is one block; chance 2/3; price half its book.
+    assert_eq!(quote.blocks_at_stake, 1);
+    assert_eq!(quote.chance_bps, 6_666);
+    assert_eq!(quote.price_cents, 10_000_000 / 5 / 2);
+
+    let blocks = |world: &World, firm: Handle| -> i64 {
+        sectors::division_plants(world, &dataset, firm, region, industry)
+            .iter()
+            .map(|h| world.facilities.get(*h).unwrap().blocks as i64)
+            .sum()
+    };
+    let total_blocks = blocks(&world, attacker) + blocks(&world, defender);
+    let mut successes = 0;
+    for attempt in 0..30 {
+        let money = firm_cash(&world);
+        let record = sectors::raid(
+            &mut world,
+            &dataset,
+            attacker,
+            defender,
+            region,
+            industry,
+            defence * 2,
+        )
+        .expect("raid resolves");
+        assert_eq!(
+            firm_cash(&world),
+            money,
+            "a raid moves money, never mints it"
+        );
+        assert_eq!(
+            blocks(&world, attacker) + blocks(&world, defender),
+            total_blocks
+        );
+        assert!(blocks(&world, defender) >= 1, "the defender keeps a block");
+        if record.success {
+            successes += 1;
+            assert_eq!(record.blocks, 1);
+        }
+        // The cell is locked for thirteen weeks after a raid.
+        let again = sectors::raid(
+            &mut world,
+            &dataset,
+            attacker,
+            defender,
+            region,
+            industry,
+            defence * 2,
+        );
+        assert!(format!("{again:?}").contains("raid_cooldown"));
+        world.tick.0 += 13;
+        if blocks(&world, defender) < 2 {
+            break;
+        }
+        let _ = attempt;
+    }
+    assert!(successes > 0, "a two-to-one raid lands within thirty tries");
+    assert!(world.raids.len() >= successes);
+}

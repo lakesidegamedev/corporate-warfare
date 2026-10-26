@@ -411,6 +411,23 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         }
     }
 
+    // Raid a rival's division in a cell the firm also operates in, when the captured capacity
+    // is worth more over three years than the campaign and the purchase price, weighted by
+    // the chance of success. Brand builders, consolidators and vultures raid most.
+    if let Some((target, region, industry, budget, value)) = best_raid(world, dataset, firm) {
+        candidates.push(Candidate {
+            score: weights[2].max(weights[4]) * value,
+            target: target.0,
+            intent: CommandIntent::RaidMarket {
+                firm,
+                target,
+                region,
+                industry,
+                budget_cents: budget,
+            },
+        });
+    }
+
     // Consolidators and vultures bid for a distressed peer: 25 percent over the public mark,
     // for just over half the votes, only if escrow and diligence leave the reserve intact and
     // the combined debt stays within 60 percent of combined assets.
@@ -734,6 +751,64 @@ fn best_expansion(world: &World, dataset: &Dataset, firm: Handle) -> Option<(u16
         }
     }
     best.map(|(npv, recipe, region)| (recipe, region, npv))
+}
+
+/// The best market raid for a firm: a rival division in a cell it shares, aiming for a
+/// two-to-one campaign, with a positive expected value after the campaign and purchase price.
+fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, u8, u8, i64, i64)> {
+    use cw_sim::economy::sectors;
+    let entity = world.firms.get(firm)?;
+    let reserve = reserve_target(world, firm);
+    let mut best: Option<(i64, Handle, u8, u8, i64)> = None;
+    for division in sectors::divisions_of(world, dataset, firm) {
+        let ready = entity
+            .raid_ready
+            .get(&(division.region, division.industry))
+            .copied()
+            .unwrap_or(0);
+        if world.tick.0 < ready {
+            continue;
+        }
+        let (firms, _) = sectors::cell(world, dataset, division.region, division.industry);
+        for (rival, _) in firms {
+            if rival == firm || cw_sim::economy::ownership::same_group(world, rival, firm) {
+                continue;
+            }
+            let probe = sectors::raid_quote(
+                world,
+                dataset,
+                firm,
+                rival,
+                division.region,
+                division.industry,
+                0,
+            );
+            let budget = probe.defence_cents * 2;
+            let quote = sectors::raid_quote(
+                world,
+                dataset,
+                firm,
+                rival,
+                division.region,
+                division.industry,
+                budget,
+            );
+            if quote.blocks_at_stake == 0
+                || entity.book.cash() < reserve + budget + quote.price_cents
+            {
+                continue;
+            }
+            let gain = block_contribution(world, dataset, firm, division.strategy, division.region)
+                * quote.blocks_at_stake as i64
+                * 156
+                - quote.price_cents;
+            let value = gain * quote.chance_bps as i64 / 10_000 - budget;
+            if value > 0 && best.map(|(b, ..)| value > b).unwrap_or(true) {
+                best = Some((value, rival, division.region, division.industry, budget));
+            }
+        }
+    }
+    best.map(|(value, rival, region, industry, budget)| (rival, region, industry, budget, value))
 }
 
 /// A plant in glut (four weeks of output unsold) switched to the same-sector strategy whose

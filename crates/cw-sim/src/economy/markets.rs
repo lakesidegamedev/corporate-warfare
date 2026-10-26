@@ -177,17 +177,34 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
     let Some(service) = dataset.product_code("construction") else {
         return;
     };
-    const LOTS_PER_REGION: i64 = 18;
+    // Eighteen lots a week per state, as in 1.1.0 when a region was a state, split across the
+    // state's regions by demand.
+    const LOTS_PER_STATE: i64 = 18;
+    let total_demand: i64 = world
+        .regions
+        .iter()
+        .map(|r| r.demand_index_bps as i64)
+        .sum::<i64>()
+        .max(1);
+    let states = dataset.states.len().max(1) as i64;
     for region in 0..world.regions.len() {
-        let sellers: Vec<Handle> = world
-            .firms
-            .iter()
-            .filter(|(_, firm)| firm.operative())
-            .filter(|(_, firm)| firm.stock(service, region as u8).0 > 0)
-            .map(|(handle, _)| handle)
+        let lots =
+            (LOTS_PER_STATE * states * world.regions[region].demand_index_bps as i64 * 1_000
+                / total_demand)
+                .max(1_000);
+        // Contractors anywhere in the state can take the region's public works.
+        let sellers: Vec<(Handle, u8)> = supply_regions(dataset, region as u8, service)
+            .into_iter()
+            .flat_map(|from| {
+                world
+                    .firms
+                    .iter()
+                    .filter(move |(_, firm)| firm.operative() && firm.stock(service, from).0 > 0)
+                    .map(move |(handle, _)| (handle, from))
+            })
             .collect();
-        let mut remaining = MilliLots::from_lots(LOTS_PER_REGION);
-        for seller in sellers {
+        let mut remaining = MilliLots(lots);
+        for (seller, from) in sellers {
             if remaining.0 <= 0 {
                 break;
             }
@@ -199,7 +216,7 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
             }
             let available = world
                 .firm(seller)
-                .map(|f| f.stock(service, region as u8))
+                .map(|f| f.stock(service, from))
                 .unwrap_or_default();
             let qty = available
                 .min(remaining)
@@ -218,7 +235,7 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
             if paid <= 0 {
                 break;
             }
-            let (removed, carrying) = remove_stock(world, seller, service, region as u8, qty);
+            let (removed, carrying) = remove_stock(world, seller, service, from, qty);
             if !removed {
                 continue;
             }
@@ -312,29 +329,32 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
 
         let mut offers: Vec<Offer> = Vec::new();
         let mut seller_handles: Vec<OfferSource> = Vec::new();
-        for (handle, firm) in world.firms.iter() {
-            if !firm.operative() {
-                continue;
+        for from in supply_regions(dataset, region, product) {
+            for (handle, firm) in world.firms.iter() {
+                if !firm.operative() {
+                    continue;
+                }
+                let cover = own_input_cover_lots(world, dataset, firm, from, product) * 1_000;
+                let qty = firm.stock(product, from).0 - cover;
+                if qty <= 0 {
+                    continue;
+                }
+                let price = firm
+                    .policies
+                    .prices
+                    .get(&product)
+                    .copied()
+                    .unwrap_or_else(|| dataset.reference_price(product));
+                let source = firm_source(handle, from, region);
+                offers.push(Offer {
+                    seller: source_id(source),
+                    qty,
+                    price_cents: price.max(1),
+                    quality_bps: 10_000,
+                    brand_bps: 10_000,
+                });
+                seller_handles.push(source);
             }
-            let cover = own_input_cover_lots(world, dataset, firm, region, product) * 1_000;
-            let qty = firm.stock(product, region).0 - cover;
-            if qty <= 0 {
-                continue;
-            }
-            let price = firm
-                .policies
-                .prices
-                .get(&product)
-                .copied()
-                .unwrap_or_else(|| dataset.reference_price(product));
-            offers.push(Offer {
-                seller: handle.0,
-                qty,
-                price_cents: price.max(1),
-                quality_bps: 10_000,
-                brand_bps: 10_000,
-            });
-            seller_handles.push(OfferSource::Firm(handle));
         }
         for (index, gateway) in world.gateways.iter().enumerate() {
             if gateway.region != region || gateway.product != product {
@@ -488,8 +508,55 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
 
 #[derive(Clone, Copy, Debug)]
 enum OfferSource {
-    Firm(Handle),
+    /// A firm's stock held in region `from`, offered under `id`.
+    Firm {
+        handle: Handle,
+        from: u8,
+        id: u64,
+    },
     Gateway(usize),
+}
+
+/// Services that reach customers across a state clear statewide: a plant anywhere in the state
+/// can serve any of its regions, and contractors build anywhere in their state. Goods, retail,
+/// leases and electricity clear in their own region (goods move between regions by freight).
+fn statewide(dataset: &Dataset, product: u16) -> bool {
+    let product = &dataset.products[product as usize];
+    matches!(
+        product.kind,
+        cw_data::ProductKind::Subscription
+            | cw_data::ProductKind::Service
+            | cw_data::ProductKind::LocalService
+            | cw_data::ProductKind::ProjectService
+    ) && product.id != "electricity"
+}
+
+/// Regions whose stock can be offered in `region`'s market, the market's own region first.
+fn supply_regions(dataset: &Dataset, region: u8, product: u16) -> Vec<u8> {
+    if !statewide(dataset, product) {
+        return vec![region];
+    }
+    let state = dataset.regions[region as usize].state();
+    let mut regions = vec![region];
+    regions.extend(
+        dataset
+            .regions_in_state(state)
+            .into_iter()
+            .filter(|other| *other != region),
+    );
+    regions
+}
+
+/// A firm's offer source. Stock offered in its own region keeps the firm's handle as its id;
+/// stock offered from another region of the state carries that region in bits 55 to 62, which
+/// a slot generation would need eight million reuses to reach.
+fn firm_source(handle: Handle, from: u8, market: u8) -> OfferSource {
+    let id = if from == market {
+        handle.0
+    } else {
+        handle.0 | ((from as u64 + 1) << 55)
+    };
+    OfferSource::Firm { handle, from, id }
 }
 
 /// One week's household spending budget. Disposable wage income supplies ninety percent;
@@ -553,37 +620,37 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
             }
             let mut offers: Vec<Offer> = Vec::new();
             let mut sources: Vec<OfferSource> = Vec::new();
-            for (handle, firm) in world.firms.iter() {
-                if !firm.operative() {
-                    continue;
-                }
-                let qty = firm.stock(product, region_index as u8).0;
-                if qty <= 0 {
-                    continue;
-                }
-                let price = firm
-                    .policies
-                    .prices
-                    .get(&product)
-                    .copied()
-                    .unwrap_or(reference);
-                offers.push(Offer {
-                    seller: handle.0,
-                    qty,
-                    price_cents: price.max(1),
-                    quality_bps: firm
-                        .quality_bps
+            for from in supply_regions(dataset, region_index as u8, product) {
+                for (handle, firm) in world.firms.iter() {
+                    if !firm.operative() {
+                        continue;
+                    }
+                    let qty = firm.stock(product, from).0;
+                    if qty <= 0 {
+                        continue;
+                    }
+                    let price = firm
+                        .policies
+                        .prices
                         .get(&product)
                         .copied()
-                        .unwrap_or_else(|| crate::economy::research::quality(firm.tech_level, 0))
-                        as i64,
-                    brand_bps: firm
-                        .brand_bps
-                        .get(&(region_index as u8, product))
-                        .copied()
-                        .unwrap_or(10_000) as i64,
-                });
-                sources.push(OfferSource::Firm(handle));
+                        .unwrap_or(reference);
+                    let source = firm_source(handle, from, region_index as u8);
+                    offers.push(Offer {
+                        seller: source_id(source),
+                        qty,
+                        price_cents: price.max(1),
+                        quality_bps: firm.quality_bps.get(&product).copied().unwrap_or_else(|| {
+                            crate::economy::research::quality(firm.tech_level, 0)
+                        }) as i64,
+                        brand_bps: firm
+                            .brand_bps
+                            .get(&(region_index as u8, product))
+                            .copied()
+                            .unwrap_or(10_000) as i64,
+                    });
+                    sources.push(source);
+                }
             }
             if offers.is_empty() {
                 // Unspent budget stays with the household, never with a phantom seller.
@@ -631,7 +698,7 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
 
 fn source_id(source: OfferSource) -> u64 {
     match source {
-        OfferSource::Firm(handle) => handle.0,
+        OfferSource::Firm { id, .. } => id,
         OfferSource::Gateway(index) => GATEWAY_ID_BASE + index as u64,
     }
 }
@@ -650,28 +717,31 @@ fn clear_government(world: &mut World, dataset: &Dataset) {
             }
             let mut offers = Vec::new();
             let mut sources = Vec::new();
-            for (handle, firm) in world.firms.iter() {
-                if !firm.operative() {
-                    continue;
+            for from in supply_regions(dataset, region as u8, product) {
+                for (handle, firm) in world.firms.iter() {
+                    if !firm.operative() {
+                        continue;
+                    }
+                    let qty = firm.stock(product, from).0;
+                    if qty <= 0 {
+                        continue;
+                    }
+                    let price = firm
+                        .policies
+                        .prices
+                        .get(&product)
+                        .copied()
+                        .unwrap_or_else(|| dataset.reference_price(product));
+                    let source = firm_source(handle, from, region as u8);
+                    offers.push(Offer {
+                        seller: source_id(source),
+                        qty,
+                        price_cents: price.max(1),
+                        quality_bps: 10_000,
+                        brand_bps: 10_000,
+                    });
+                    sources.push(source);
                 }
-                let qty = firm.stock(product, region as u8).0;
-                if qty <= 0 {
-                    continue;
-                }
-                let price = firm
-                    .policies
-                    .prices
-                    .get(&product)
-                    .copied()
-                    .unwrap_or_else(|| dataset.reference_price(product));
-                offers.push(Offer {
-                    seller: handle.0,
-                    qty,
-                    price_cents: price.max(1),
-                    quality_bps: 10_000,
-                    brand_bps: 10_000,
-                });
-                sources.push(OfferSource::Firm(handle));
             }
             if offers.is_empty() || remaining <= 0 {
                 continue;
@@ -707,11 +777,13 @@ fn settle_fills(
         let Some(buyer_handle) = handle_of(*buyer) else {
             continue;
         };
-        if let OfferSource::Firm(seller_handle) = sources
+        if let Some(OfferSource::Firm {
+            handle: seller_handle,
+            ..
+        }) = sources
             .iter()
             .find(|source| source_id(**source) == *seller)
             .copied()
-            .unwrap_or(OfferSource::Firm(Handle::INVALID))
             && seller_handle == buyer_handle
         {
             continue;
@@ -728,7 +800,11 @@ fn settle_fills(
             continue;
         }
         match source {
-            OfferSource::Firm(seller_handle) => {
+            OfferSource::Firm {
+                handle: seller_handle,
+                from,
+                ..
+            } => {
                 let price = world
                     .firms
                     .get(seller_handle)
@@ -740,6 +816,7 @@ fn settle_fills(
                     buyer_handle,
                     seller_handle,
                     product,
+                    from,
                     region,
                     qty,
                     cost,
@@ -809,7 +886,12 @@ fn settle_household_fills(
         if qty.0 <= 0 {
             continue;
         }
-        if let OfferSource::Firm(seller_handle) = source {
+        if let OfferSource::Firm {
+            handle: seller_handle,
+            from,
+            ..
+        } = source
+        {
             let price = world
                 .firms
                 .get(seller_handle)
@@ -817,7 +899,7 @@ fn settle_household_fills(
                 .unwrap_or_else(|| dataset.reference_price(product));
             let cost = qty.value_at(Cents(price.max(1))).unwrap_or(Cents::ZERO);
             // Household cash is outside cash; the sale posts revenue and removes stock.
-            let (removed, carrying) = remove_stock(world, seller_handle, product, region, qty);
+            let (removed, carrying) = remove_stock(world, seller_handle, product, from, qty);
             if !removed {
                 continue;
             }
@@ -859,14 +941,19 @@ fn settle_government_fills(
         if qty.0 <= 0 {
             continue;
         }
-        if let OfferSource::Firm(seller_handle) = source {
+        if let OfferSource::Firm {
+            handle: seller_handle,
+            from,
+            ..
+        } = source
+        {
             let price = world
                 .firms
                 .get(seller_handle)
                 .and_then(|firm| firm.policies.prices.get(&product).copied())
                 .unwrap_or_else(|| dataset.reference_price(product));
             let cost = qty.value_at(Cents(price.max(1))).unwrap_or(Cents::ZERO);
-            let (removed, carrying) = remove_stock(world, seller_handle, product, region, qty);
+            let (removed, carrying) = remove_stock(world, seller_handle, product, from, qty);
             if !removed {
                 continue;
             }
@@ -906,6 +993,7 @@ fn trade_between(
     buyer: Handle,
     seller: Handle,
     product: u16,
+    from: u8,
     region: u8,
     qty: MilliLots,
     cost: Cents,
@@ -919,7 +1007,7 @@ fn trade_between(
     if paid <= 0 {
         return false;
     }
-    let (removed, carrying) = remove_stock(world, seller, product, region, qty);
+    let (removed, carrying) = remove_stock(world, seller, product, from, qty);
     if !removed {
         return false;
     }

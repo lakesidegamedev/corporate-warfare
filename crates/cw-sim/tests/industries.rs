@@ -1738,23 +1738,34 @@ fn telecommunications_installed_capacity_is_finite_and_sells_subscriptions() {
         output <= installed_capacity,
         "a network cannot sell more subscription blocks than it installed"
     );
-    let sold = world
-        .firm(operator)
-        .unwrap()
-        .trailing_units(region, telecom);
+    // Subscriptions clear statewide: households in every region of the operator's state can
+    // subscribe to its network, so sales are counted across the state.
+    let state = dataset.regions[region as usize].state().to_owned();
+    let sold: i64 = dataset
+        .regions_in_state(&state)
+        .iter()
+        .map(|r| world.firm(operator).unwrap().trailing_units(*r, telecom))
+        .sum();
     assert!(sold > 0, "households subscribe");
     assert!(
         sold <= output.lots(),
         "sales are capped by installed weekly capacity"
     );
+    let state_spend: i64 = dataset
+        .regions_in_state(&state)
+        .iter()
+        .map(|r| {
+            world.regions[*r as usize]
+                .households
+                .spend_cents
+                .get(&telecom)
+                .copied()
+                .unwrap_or(0)
+        })
+        .sum();
     assert!(
-        world.regions[region as usize]
-            .households
-            .spend_cents
-            .get(&telecom)
-            .copied()
-            .unwrap_or(0)
-            > 0
+        state_spend > 0,
+        "households in the state pay for subscriptions"
     );
     assert_eq!(
         world.firm(operator).unwrap().stock(telecom, region),

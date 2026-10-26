@@ -512,6 +512,9 @@ pub struct Firm {
     /// Focus change transition and lock, as tick numbers.
     pub focus_transition_until: u32,
     pub focus_cooldown_until: u32,
+    /// Next tick this firm may raid each (region, sector type) cell again.
+    #[serde(default)]
+    pub raid_ready: BTreeMap<(u8, u8), u32>,
     /// Logistics and operations strength, 0..200, built by the logistics budget.
     pub logistics_strength: i32,
     pub policy_requests: Vec<PolicyRequest>,
@@ -1170,6 +1173,24 @@ pub struct World {
     /// Construction lots already committed to build orders this week, by contractor.
     #[serde(default)]
     pub construction_orders: BTreeMap<Handle, i64>,
+    /// The most recent market raids, newest last, bounded.
+    #[serde(default)]
+    pub raids: Vec<RaidRecord>,
+}
+
+/// One market raid and its outcome.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RaidRecord {
+    pub tick: u32,
+    pub attacker: Handle,
+    pub defender: Handle,
+    pub region: u8,
+    pub industry: u8,
+    pub budget_cents: i64,
+    pub chance_bps: i32,
+    pub success: bool,
+    pub blocks: u8,
+    pub price_cents: i64,
 }
 
 impl World {

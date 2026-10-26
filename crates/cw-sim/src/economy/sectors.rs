@@ -8,11 +8,13 @@
 //! dominates costs more: market share is the value of a firm's capacity against all capacity in
 //! the cell plus the imports local plants are not meeting.
 
+use cw_core::error::DomainError;
 use cw_core::ids::Handle;
+use cw_core::ledger::{Account, Txn};
 use cw_data::Dataset;
 
 use crate::economy::operations::industry_index;
-use crate::state::{FacilityStatus, World};
+use crate::state::{FacilityStatus, RaidRecord, World};
 
 /// Paid once to the outside legal-services sector when a firm opens a division.
 pub const ENTRY_FEE_CENTS: i64 = 10_000_000;
@@ -319,4 +321,265 @@ pub fn location_input_bps(world: &World, dataset: &Dataset, facility: Handle) ->
         plant.region,
         &dataset.recipes[plant.recipe as usize].industry,
     )
+}
+
+/// Weeks before a firm may raid the same cell again.
+pub const RAID_COOLDOWN_WEEKS: u32 = 13;
+/// Share of the defender's blocks at stake: 1 percent at even strength, rising to 20 percent at
+/// a two-to-one advantage.
+pub const RAID_STAKE_MIN_BPS: i64 = 100;
+pub const RAID_STAKE_MAX_BPS: i64 = 2_000;
+/// A defender's floor strength: five percent of its division's quarterly output value.
+pub const RAID_DEFENCE_FLOOR_BPS: i64 = 500;
+/// The attacker buys captured capacity at half its book value.
+pub const RAID_PRICE_BPS: i64 = 5_000;
+const RAID_LOG: usize = 64;
+
+/// What a raid would risk, for previews and the AI.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RaidQuote {
+    pub attack_cents: i64,
+    pub defence_cents: i64,
+    pub chance_bps: i32,
+    pub blocks_at_stake: u8,
+    pub price_cents: i64,
+}
+
+fn division_blocks_and_book(world: &World, plants: &[Handle]) -> (i64, i64) {
+    plants
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .fold((0, 0), |(blocks, book), plant| {
+            (
+                blocks + plant.blocks as i64,
+                book + (plant.capex_cents - plant.accumulated_depreciation).max(0),
+            )
+        })
+}
+
+/// Price a raid by `attacker` on `defender`'s division of `industry` in `region`.
+pub fn raid_quote(
+    world: &World,
+    dataset: &Dataset,
+    attacker: Handle,
+    defender: Handle,
+    region: u8,
+    industry: u8,
+    budget_cents: i64,
+) -> RaidQuote {
+    let quarter = |firm: Handle| {
+        world
+            .firms
+            .get(firm)
+            .map(|f| f.policies.marketing_budget_cents.max(0) * 13)
+            .unwrap_or(0)
+    };
+    let defending = division_plants(world, dataset, defender, region, industry);
+    let (blocks, book) = division_blocks_and_book(world, &defending);
+    let output_value: i64 = defending
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .map(|plant| capacity_value(dataset, plant.recipe, plant.blocks) * 13)
+        .sum();
+    let attack = budget_cents.max(0) + quarter(attacker);
+    let defence = (quarter(defender) + output_value * RAID_DEFENCE_FLOOR_BPS / 10_000).max(1);
+    let advantage_bps = attack as i128 * 10_000 / defence as i128;
+    let stake_bps = RAID_STAKE_MIN_BPS
+        + (RAID_STAKE_MAX_BPS - RAID_STAKE_MIN_BPS)
+            * (advantage_bps as i64 - 10_000).clamp(0, 10_000)
+            / 10_000;
+    // The defender always keeps at least one block.
+    let at_stake = (blocks * stake_bps / 10_000).max(1).min(blocks - 1).max(0);
+    let price = if blocks > 0 {
+        book * at_stake / blocks * RAID_PRICE_BPS / 10_000
+    } else {
+        0
+    };
+    let chance = (attack as i128 * 10_000 / (attack as i128 + defence as i128)) as i32;
+    RaidQuote {
+        attack_cents: attack,
+        defence_cents: defence,
+        chance_bps: chance.clamp(500, 9_500),
+        blocks_at_stake: at_stake.clamp(0, u8::MAX as i64) as u8,
+        price_cents: price,
+    }
+}
+
+/// Resolve a market raid: the budget buys advertising whatever happens; on success the
+/// attacker takes the blocks at stake into its own division, at its own strategy, and pays the
+/// defender half their book value.
+pub fn raid(
+    world: &mut World,
+    dataset: &Dataset,
+    attacker: Handle,
+    defender: Handle,
+    region: u8,
+    industry: u8,
+    budget_cents: i64,
+) -> Result<RaidRecord, DomainError> {
+    use cw_core::error::{ArithmeticFault, DomainError as E};
+    if budget_cents <= 0 {
+        return Err(E::Arithmetic {
+            detail: ArithmeticFault::OutOfRange,
+        });
+    }
+    if attacker == defender || crate::economy::ownership::same_group(world, attacker, defender) {
+        return Err(E::WrongPhase {
+            expected: "rival_firm",
+            actual: "own_group",
+        });
+    }
+    let own = division_plants(world, dataset, attacker, region, industry);
+    let Some(target_plant) = own.first().copied() else {
+        return Err(E::WrongPhase {
+            expected: "own_division",
+            actual: "no_division",
+        });
+    };
+    let ready = world
+        .firms
+        .get(attacker)
+        .and_then(|firm| firm.raid_ready.get(&(region, industry)).copied())
+        .unwrap_or(0);
+    if world.tick.0 < ready {
+        return Err(E::WrongPhase {
+            expected: "raid_cooldown",
+            actual: "cooling_down",
+        });
+    }
+    let defending = division_plants(world, dataset, defender, region, industry);
+    if division_blocks_and_book(world, &defending).0 < 2 {
+        return Err(E::WrongPhase {
+            expected: "rival_division",
+            actual: "too_small",
+        });
+    }
+    let quote = raid_quote(
+        world,
+        dataset,
+        attacker,
+        defender,
+        region,
+        industry,
+        budget_cents,
+    );
+    let cash = world
+        .firms
+        .get(attacker)
+        .map(|f| f.book.cash())
+        .unwrap_or(0);
+    let needed = budget_cents + quote.price_cents;
+    if cash < needed {
+        return Err(E::InsufficientCash {
+            entity: attacker.0,
+            required: needed,
+            available: cash,
+        });
+    }
+    crate::economy::research::buy_advertising(world, attacker, budget_cents, "market raid");
+    if let Some(firm) = world.firms.get_mut(attacker) {
+        firm.raid_ready
+            .insert((region, industry), world.tick.0 + RAID_COOLDOWN_WEEKS);
+    }
+    let mut rng = cw_core::rng::Rng::entity_stream(
+        world.seed ^ ((world.tick.0 as u64) << 32) ^ ((region as u64) << 8) ^ industry as u64,
+        cw_core::rng::TAG_RAID,
+        attacker,
+    );
+    let success = quote.blocks_at_stake > 0 && rng.chance_bps(quote.chance_bps);
+    let mut record = RaidRecord {
+        tick: world.tick.0,
+        attacker,
+        defender,
+        region,
+        industry,
+        budget_cents,
+        chance_bps: quote.chance_bps,
+        success,
+        blocks: 0,
+        price_cents: 0,
+    };
+    if success {
+        let (taken, capex, depreciation) =
+            take_blocks(world, defender, &defending, quote.blocks_at_stake);
+        let book = (capex - depreciation).max(0);
+        let price = quote.price_cents.min(book);
+        if let Some(entity) = world.firms.get_mut(defender) {
+            let _ = entity.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, price, "raid compensation")
+                    .debit(Account::AccumulatedDepreciation, depreciation, "raid loss")
+                    .debit(Account::OperatingExpense, book - price, "raid loss")
+                    .credit(Account::FixedAssets, capex, "raid loss"),
+            );
+        }
+        if let Some(entity) = world.firms.get_mut(attacker) {
+            let _ = entity.book.commit(
+                world.tick,
+                Txn::new()
+                    .credit(Account::Cash, price, "raid acquisition")
+                    .debit(Account::FixedAssets, price, "raid acquisition"),
+            );
+        }
+        if let Some(plant) = world.facilities.get_mut(target_plant) {
+            plant.blocks = plant.blocks.saturating_add(taken);
+            plant.capex_cents += price;
+        }
+        record.blocks = taken;
+        record.price_cents = price;
+    }
+    world.raids.push(record.clone());
+    if world.raids.len() > RAID_LOG {
+        world.raids.remove(0);
+    }
+    Ok(record)
+}
+
+/// Remove up to `wanted` blocks from a defender's plants, largest first, never its last block.
+/// Returns the blocks taken and their capex and accumulated depreciation.
+fn take_blocks(
+    world: &mut World,
+    defender: Handle,
+    plants: &[Handle],
+    wanted: u8,
+) -> (u8, i64, i64) {
+    let mut order: Vec<(u8, Handle)> = plants
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle).map(|p| (p.blocks, *handle)))
+        .collect();
+    order.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    let total: i64 = order.iter().map(|(blocks, _)| *blocks as i64).sum();
+    let mut remaining = (wanted as i64).min(total - 1).max(0);
+    let (mut taken, mut capex, mut depreciation) = (0u8, 0i64, 0i64);
+    for (_, handle) in order {
+        if remaining == 0 {
+            break;
+        }
+        let Some(plant) = world.facilities.get_mut(handle) else {
+            continue;
+        };
+        let take = (plant.blocks as i64).min(remaining);
+        let share_capex = plant.capex_cents * take / plant.blocks as i64;
+        let share_dep = plant.accumulated_depreciation * take / plant.blocks as i64;
+        let ratio = (plant.blocks as i64 - take, plant.blocks as i64);
+        for tier in 0..3 {
+            plant.workers[tier] = plant.workers[tier] * ratio.0 / ratio.1;
+        }
+        plant.blocks -= take as u8;
+        plant.capex_cents -= share_capex;
+        plant.accumulated_depreciation -= share_dep;
+        let emptied = plant.blocks == 0;
+        taken += take as u8;
+        capex += share_capex;
+        depreciation += share_dep;
+        remaining -= take;
+        if emptied {
+            world.facilities.remove(handle);
+            if let Some(firm) = world.firms.get_mut(defender) {
+                firm.facilities.retain(|h| *h != handle);
+            }
+        }
+    }
+    (taken, capex, depreciation)
 }

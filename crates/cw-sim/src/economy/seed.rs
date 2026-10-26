@@ -151,6 +151,7 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
         group_cache: BTreeMap::new(),
         pending_pause: None,
         construction_orders: BTreeMap::new(),
+        raids: Vec::new(),
     };
 
     // Outside gateway capital is finite but real: exports are paid from it, imports add to it.
@@ -317,6 +318,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
             secondary_industry: None,
             focus_transition_until: 0,
             focus_cooldown_until: 0,
+            raid_ready: BTreeMap::new(),
             logistics_strength: 0,
             policy_requests: Vec::new(),
             guarantees: Vec::new(),
@@ -521,6 +523,7 @@ fn placeholder_firm() -> Firm {
         secondary_industry: None,
         focus_transition_until: 0,
         focus_cooldown_until: 0,
+        raid_ready: BTreeMap::new(),
         logistics_strength: 0,
         policy_requests: Vec::new(),
         guarantees: Vec::new(),

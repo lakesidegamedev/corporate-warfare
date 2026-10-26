@@ -333,6 +333,15 @@ pub enum CommandIntent {
         firm: Handle,
         amount_cents: i64,
     },
+    /// Spend a marketing campaign against a rival's division in a cell both firms operate in,
+    /// to take a share of its plants (A House Divided's sector split).
+    RaidMarket {
+        firm: Handle,
+        target: Handle,
+        region: u8,
+        industry: u8,
+        budget_cents: i64,
+    },
     FileLobbyRequest {
         firm: Handle,
         region: u8,
@@ -410,6 +419,7 @@ impl CommandIntent {
             CommandIntent::ProposeSettlement { .. } => "propose_settlement",
             CommandIntent::SetSectorFocus { .. } => "set_sector_focus",
             CommandIntent::SetLogisticsBudget { .. } => "set_logistics_budget",
+            CommandIntent::RaidMarket { .. } => "raid_market",
             CommandIntent::FileLobbyRequest { .. } => "file_lobby_request",
             CommandIntent::RespondEvent { .. } => "respond_event",
         }
@@ -643,6 +653,7 @@ fn apply_intent(
                 secondary_industry: *secondary,
                 focus_transition_until: 0,
                 focus_cooldown_until: 0,
+                raid_ready: Default::default(),
                 logistics_strength: 0,
                 policy_requests: Vec::new(),
                 guarantees: Vec::new(),
@@ -2399,6 +2410,27 @@ fn apply_intent(
                 .unwrap()
                 .policies
                 .logistics_budget_cents = *amount_cents;
+            Ok(())
+        }
+        CommandIntent::RaidMarket {
+            firm,
+            target,
+            region,
+            industry,
+            budget_cents,
+        } => {
+            require_control(world, actor, *firm)?;
+            require_region(world, *region)?;
+            firm_ref(world, *target)?;
+            sectors::raid(
+                world,
+                dataset,
+                *firm,
+                *target,
+                *region,
+                *industry,
+                *budget_cents,
+            )?;
             Ok(())
         }
         CommandIntent::FileLobbyRequest {
