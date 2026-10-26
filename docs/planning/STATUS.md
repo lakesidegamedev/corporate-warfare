@@ -1,8 +1,40 @@
 # Current checkpoint
 
-Date: 2026-10-26. Released: **1.2.0**, economic regions, sector divisions and corporate
-warfare (feature PR #79, release branch `release/1.2.0`). Kanban: 254796.
-Saves from 1.1.0 do not load in 1.2.0; the changelog says so.
+Date: 2026-10-26. Released: **1.3.0**, active economy and interface overhaul (feature PR #82,
+release branch `release/1.3.0`). Kanban: 254801 (economy), 254803 (interface).
+Saves from 1.2.0 load in 1.3.0.
+
+## 1.3.0
+
+Owner direction (2026-10-26): the economy was not active enough for supply and demand to
+matter and the player always lost money; add anonymous market snapshots every five weeks
+(Lakeside ops endpoint, always on, anonymous); act on a design audit that scored the interface
+5.5/10. Built:
+
+- Corridor commodity exchange for goods, wider outside band, cheaper freight, sell-through
+  pricing and plant-by-plant production planning for rivals and (automatically) the player.
+- Defects fixed: unrecorded contract, power and construction sales; a catastrophe-mothballed
+  plant kept full payroll with no way back (now reopenable); contract buyers took goods they
+  could not pay for; the rival growth cap was never rescaled for 1.2.0's smaller plants.
+- Rivals enter plain gaps; the corridor now produces fuel.
+- Anonymous market snapshots every five weeks to the ops ingest, with a switch in the app.
+- Interface: compact headers, hard tab bar edge, grouped figures, quarterly profit with a cost
+  breakdown, scannable Markets with signals and filters, Inbox as a feed, Portfolio led by net
+  worth with a cash outlook.
+
+Verified at `fa1e915`: workspace tests through the check scheduler, hosted Verify and Apple
+smoke with UI snapshots. Player cash at week 104 averages $976K over eight seeds; rival
+dissolutions 4 in 600 firm-runs over five years.
+
+Open:
+
+1. The corridor's new fuel producer still exports part of its output while the corridor
+   imports, because freight puts its delivered price above imports.
+2. Farm seasonality is harsh for the guided player.
+3. Second-level company screens still use the older layout; visual identity (P2 of the audit).
+4. Human and device gates from 1.0.0 remain: R32/R33/R35, R37, R38, R39, R42.
+
+# 1.2.0 checkpoint (history)
 
 ## 1.2.0
 
