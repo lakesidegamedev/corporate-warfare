@@ -15,7 +15,7 @@ use cw_core::money::{Cents, round_even_div};
 use cw_core::quantity::MilliLots;
 use cw_data::Dataset;
 
-use crate::economy::{deals, equity, governance, insolvency, ownership, policy, unions};
+use crate::economy::{deals, equity, governance, insolvency, ownership, policy, sectors, unions};
 use crate::state::{
     BankModel, Bond, DealKind, Facility, FacilityStatus, Firm, FirmStatus, Grade, HolderId,
     INITIAL_SHARES, Lender, Loan, Policies, PolicyKind, ShareLot, World,
@@ -804,7 +804,7 @@ fn apply_intent(
                     detail: ArithmeticFault::OutOfRange,
                 });
             }
-            let template =
+            let _template =
                 dataset
                     .recipes
                     .get(*recipe as usize)
@@ -813,15 +813,59 @@ fn apply_intent(
                         kind: EntityKind::Product,
                     })?;
             require_region(world, *region)?;
-            let cost = template.capex_cents * *blocks as i64;
+            // Plants are built inside a division: the firm's sector of this type in this region.
+            // A new plant runs the division's strategy; a different one needs a retool first.
+            let industry = sectors::recipe_industry(dataset, *recipe);
+            if let Some(strategy) =
+                sectors::division_strategy(world, dataset, *firm, *region, industry)
+                && strategy != *recipe
+            {
+                return Err(DomainError::WrongPhase {
+                    expected: "division_strategy",
+                    actual: "other_strategy",
+                });
+            }
+            let quote = sectors::build_cost(world, dataset, *firm, *region, *recipe, *blocks);
+            let cost = quote.capex_cents;
+            let fee = quote.entry_fee_cents;
             let debt = firm_ref(world, *firm)?.book.debt();
-            if governance::approval_required(world, *firm, debt, cost)
+            if governance::approval_required(world, *firm, debt, cost + fee)
                 && !governance::large_action_authorised(world, *firm)
             {
                 return Err(DomainError::NoAuthority {
                     actor,
                     reason: AuthorityReason::BoardApprovalRequired,
                 });
+            }
+            let available = firm_ref(world, *firm)?.book.cash();
+            if available < cost + fee {
+                return Err(DomainError::InsufficientCash {
+                    entity: firm.0,
+                    required: cost + fee,
+                    available,
+                });
+            }
+            if fee > 0 {
+                // Opening a division: registration and licensing bought from the outside
+                // legal-services sector, expensed as incurred.
+                if let Some(entity) = world.firms.get_mut(*firm) {
+                    let _ = entity.book.commit(
+                        world.tick,
+                        Txn::new().credit(Account::Cash, fee, "sector entry").debit(
+                            Account::OperatingExpense,
+                            fee,
+                            "sector entry",
+                        ),
+                    );
+                }
+                let _ = world.outside.legal_services_book.commit(
+                    world.tick,
+                    Txn::new().debit(Account::Cash, fee, "sector entry").credit(
+                        Account::Revenue,
+                        fee,
+                        "sector entry",
+                    ),
+                );
             }
             spend_firm_cash(world, *firm, cost, "construction escrow")?;
             // Forty percent is construction service bought as the work is commissioned; sixty
@@ -863,8 +907,14 @@ fn apply_intent(
                 })?;
             require_control(world, actor, owner)?;
             let recipe = &dataset.recipes[recipe_index as usize];
-            let cost = recipe.capex_cents * *blocks as i64;
             let _ = facility_blocks;
+            let region = world
+                .facilities
+                .get(*facility)
+                .map(|f| f.region)
+                .unwrap_or(0);
+            let cost = sectors::build_cost(world, dataset, owner, region, recipe_index, *blocks)
+                .capex_cents;
             let debt = firm_ref(world, owner)?.book.debt();
             if governance::approval_required(world, owner, debt, cost)
                 && !governance::large_action_authorised(world, owner)
@@ -892,10 +942,10 @@ fn apply_intent(
             Ok(())
         }
         CommandIntent::RetoolFacility { facility, recipe } => {
-            let (owner, facility_blocks) = world
+            let (owner, region, current) = world
                 .facilities
                 .get(*facility)
-                .map(|entity| (entity.firm, entity.blocks))
+                .map(|entity| (entity.firm, entity.region, entity.recipe))
                 .ok_or(DomainError::InvalidEntity {
                     handle: facility.0,
                     kind: EntityKind::Facility,
@@ -909,23 +959,10 @@ fn apply_intent(
                         handle: *recipe as u64,
                         kind: EntityKind::Product,
                     })?;
-            // A retool switches the plant's operating strategy within its sector type, as in A
-            // House Divided: a quarter of the new strategy's capex per block and a third of its
-            // build time, at least four weeks. A plant cannot change sector type by retooling.
-            let (current, status) = world
-                .facilities
-                .get(*facility)
-                .map(|f| (f.recipe, f.status))
-                .unwrap();
-            if !matches!(
-                status,
-                FacilityStatus::Operating | FacilityStatus::Mothballed
-            ) {
-                return Err(DomainError::WrongPhase {
-                    expected: "operating",
-                    actual: "busy",
-                });
-            }
+            // A retool switches the operating strategy of the whole division, as in A House
+            // Divided: every plant of this sector type the firm runs in the region moves
+            // together, for a quarter of the new strategy's capex per block and a third of its
+            // build time, at least four weeks. A division cannot change sector type.
             if current == *recipe || dataset.recipes[current as usize].industry != template.industry
             {
                 return Err(DomainError::InvalidEntity {
@@ -933,22 +970,50 @@ fn apply_intent(
                     kind: EntityKind::Product,
                 });
             }
-            let cost = template.capex_cents * facility_blocks as i64 / 4;
+            let industry = sectors::recipe_industry(dataset, current);
+            let plants = sectors::division_plants(world, dataset, owner, region, industry);
+            let mut blocks = 0i64;
+            for handle in &plants {
+                let plant = world.facilities.get(*handle).unwrap();
+                if !matches!(
+                    plant.status,
+                    FacilityStatus::Operating | FacilityStatus::Mothballed
+                ) {
+                    return Err(DomainError::WrongPhase {
+                        expected: "operating",
+                        actual: "busy",
+                    });
+                }
+                blocks += plant.blocks as i64;
+            }
+            let cost = template.capex_cents * blocks / 4;
             let weeks = (template.build_weeks / 3).max(4);
-            let deposit = if template.depletes() {
-                MilliLots::from_lots(template.weekly_output_lots * facility_blocks as i64 * 52 * 20)
-            } else {
-                MilliLots::ZERO
-            };
             spend_firm_cash(world, owner, cost, "retool escrow")?;
-            if let Some(stored) = world.facilities.get_mut(*facility) {
+            // The cost is spread over the plants by blocks; the last plant takes the remainder.
+            let mut charged = 0i64;
+            for (index, handle) in plants.iter().enumerate() {
+                let Some(stored) = world.facilities.get_mut(*handle) else {
+                    continue;
+                };
+                let share = if index + 1 == plants.len() {
+                    cost - charged
+                } else {
+                    cost * stored.blocks as i64 / blocks.max(1)
+                };
+                charged += share;
                 stored.recipe = *recipe;
                 stored.status = FacilityStatus::Retooling {
                     until: Tick(world.tick.0 + weeks),
                 };
-                stored.capex_cents += cost;
-                stored.escrow_cents += cost;
-                stored.deposit_remaining = deposit;
+                stored.capex_cents += share;
+                stored.escrow_cents += share;
+                stored.deposit_remaining = if template.depletes() {
+                    MilliLots::from_lots(
+                        template.weekly_output_lots * stored.blocks as i64 * 52 * 20,
+                    )
+                } else {
+                    MilliLots::ZERO
+                };
             }
             Ok(())
         }

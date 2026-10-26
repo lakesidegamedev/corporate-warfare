@@ -11,49 +11,81 @@
       "code": "IL",
       "name": "Illinois",
       "capital_hub": "Chicago, IL",
-      "population_2000": 12419293
+      "population_2000": 12419293,
+      "specialization": [
+        "agriculture",
+        "logistics"
+      ]
     },
     {
       "code": "IN",
       "name": "Indiana",
       "capital_hub": "Indianapolis, IN",
-      "population_2000": 6080485
+      "population_2000": 6080485,
+      "specialization": [
+        "manufacturing",
+        "agriculture"
+      ]
     },
     {
       "code": "KY",
       "name": "Kentucky",
       "capital_hub": "Louisville, KY",
-      "population_2000": 4041769
+      "population_2000": 4041769,
+      "specialization": [
+        "manufacturing",
+        "extraction"
+      ]
     },
     {
       "code": "MI",
       "name": "Michigan",
       "capital_hub": "Detroit, MI",
-      "population_2000": 9938444
+      "population_2000": 9938444,
+      "specialization": [
+        "manufacturing",
+        "chemical_industries"
+      ]
     },
     {
       "code": "NY",
       "name": "New York",
       "capital_hub": "New York City, NY",
-      "population_2000": 18976457
+      "population_2000": 18976457,
+      "specialization": [
+        "financial",
+        "media"
+      ]
     },
     {
       "code": "OH",
       "name": "Ohio",
       "capital_hub": "Columbus, OH",
-      "population_2000": 11353140
+      "population_2000": 11353140,
+      "specialization": [
+        "manufacturing",
+        "healthcare"
+      ]
     },
     {
       "code": "PA",
       "name": "Pennsylvania",
       "capital_hub": "Harrisburg, PA",
-      "population_2000": 12281054
+      "population_2000": 12281054,
+      "specialization": [
+        "energy",
+        "healthcare"
+      ]
     },
     {
       "code": "WV",
       "name": "West Virginia",
       "capital_hub": "Charleston, WV",
-      "population_2000": 1808344
+      "population_2000": 1808344,
+      "specialization": [
+        "extraction",
+        "chemical_industries"
+      ]
     }
   ],
   "regions": [

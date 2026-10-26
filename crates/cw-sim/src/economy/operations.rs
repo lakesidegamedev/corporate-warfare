@@ -86,7 +86,8 @@ pub fn input_bps(world: &World, dataset: &Dataset, facility: Handle) -> i32 {
         Focus::Off => 10_000,
     };
     let (_, bonus) = condition_terms(world, dataset, facility, false);
-    (focus_bps as i64 * (10_000 - bonus) as i64 / 10_000) as i32
+    let location = crate::economy::sectors::location_input_bps(world, dataset, facility) as i64;
+    (focus_bps as i64 * (10_000 - bonus) as i64 / 10_000 * location / 10_000) as i32
 }
 
 /// Output multiplier from adverse state conditions, in basis points, never above 10000: a plant

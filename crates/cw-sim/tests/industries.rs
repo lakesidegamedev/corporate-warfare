@@ -722,9 +722,18 @@ fn construction_capex_is_escrowed_and_released_on_completion() {
 
     // A new project is paid from the builder's own cash into construction escrow.
     let farm_recipe = dataset.recipe_index["farm"];
-    let capex = dataset.recipes[farm_recipe as usize].capex_cents;
+    let list_capex = dataset.recipes[farm_recipe as usize].capex_cents;
     let build_weeks = dataset.recipes[farm_recipe as usize].build_weeks;
-    fund(&mut world, builder, capex);
+    // A builder has no farm here, so the build opens an agriculture division: a $100,000 entry
+    // fee to legal services and the founding plant at half its capex.
+    let quote =
+        cw_sim::economy::sectors::build_cost(&world, &dataset, builder, region, farm_recipe, 1);
+    assert!(quote.opens_division);
+    assert_eq!(quote.entry_fee_cents, 10_000_000);
+    assert_eq!(quote.capex_cents, list_capex / 2);
+    let capex = quote.capex_cents;
+    let fee = quote.entry_fee_cents;
+    fund(&mut world, builder, capex + fee);
     let cash_before = world.firm(builder).unwrap().book.cash();
     let wip_before = world
         .firm(builder)
@@ -769,8 +778,8 @@ fn construction_capex_is_escrowed_and_released_on_completion() {
         .expect("project under construction");
     assert_eq!(
         world.firm(builder).unwrap().book.cash(),
-        cash_before - capex,
-        "capex left cash exactly once"
+        cash_before - capex - fee,
+        "capex and the entry fee left cash exactly once"
     );
     assert_eq!(
         world

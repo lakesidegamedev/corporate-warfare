@@ -57,6 +57,19 @@ CONDITIONS = {
     "WV": (9300, 4800, 1000, 4000, 7500, 8000, 7000),
 }
 
+# Authored circa-2000 state specializations (primary, secondary), A House Divided style: plants of
+# a specialized sector in the state use fewer inputs.
+SPECIALIZATION = {
+    "IL": ("agriculture", "logistics"),
+    "IN": ("manufacturing", "agriculture"),
+    "KY": ("manufacturing", "extraction"),
+    "MI": ("manufacturing", "chemical_industries"),
+    "NY": ("financial", "media"),
+    "OH": ("manufacturing", "healthcare"),
+    "PA": ("energy", "healthcare"),
+    "WV": ("extraction", "chemical_industries"),
+}
+
 # Region code, name, anchor city, anchor lat, anchor lon. Codes are STATE-AREA.
 REGIONS = [
     ("IL-CHI", "Chicagoland", "Chicago", 41.878, -87.630),
@@ -171,7 +184,8 @@ def main():
             })
 
     states = [
-        {"code": code, "name": name, "capital_hub": f"{city}, {code}", "population_2000": population}
+        {"code": code, "name": name, "capital_hub": f"{city}, {code}", "population_2000": population,
+         "specialization": list(SPECIALIZATION[code])}
         for code, name, city, _lat, _lon, population, *_ in STATES
     ]
     lanes = []

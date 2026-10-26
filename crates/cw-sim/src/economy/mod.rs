@@ -19,6 +19,7 @@ pub mod procurement;
 pub mod production;
 pub mod research;
 pub mod score;
+pub mod sectors;
 pub mod seed;
 pub mod unions;
 pub mod valuation;

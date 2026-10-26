@@ -278,6 +278,17 @@ impl Dataset {
             errors.push("duplicate region code".to_owned());
         }
         for state in &self.states {
+            if state.specialization.len() != 2
+                || state
+                    .specialization
+                    .iter()
+                    .any(|industry| !INDUSTRIES.contains(&industry.as_str()))
+            {
+                errors.push(format!(
+                    "state {} needs two known specialized sectors",
+                    state.code
+                ));
+            }
             if self.regions_in_state(&state.code).len() < 2 {
                 errors.push(format!("state {} has fewer than two regions", state.code));
             }

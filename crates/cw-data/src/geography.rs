@@ -17,6 +17,9 @@ pub struct StateInfo {
     pub capital_hub: String,
     /// Census 2000 resident population.
     pub population_2000: i64,
+    /// Primary then secondary specialized sector type.
+    #[serde(default)]
+    pub specialization: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
