@@ -1,10 +1,10 @@
 # Current checkpoint
 
-Date: 2026-10-26. Released: 1.0.0. In progress: **1.1.0**, single-player A House Divided
-corporations on a real map (PR #76, branch `feat/states-and-map`). Kanban: 254781.
+Date: 2026-10-26. Released: **1.1.0**, single-player A House Divided corporations on a
+real map (feature PR #76, release branch `release/1.1.0`). Kanban: 254781.
 Saves from 1.0.0 do not load in 1.1.0; the changelog says so.
 
-## 1.1.0 (this branch)
+## 1.1.0
 
 Owner direction (DECISIONS.md, 2026-10-26): play AHD corporations single-player over a real
 map of eight states, keeping this engine. Built:
@@ -27,11 +27,12 @@ Verify and Apple smoke (Swift compiles, engine bridge and snapshot tests pass, t
 cross-platform hash `840de364...` matches on the simulator). Balance (R36) regenerated:
 `evidence/balance-report.md`, zero errors, 8 of 600 rival five-year firm-runs dissolve.
 
-Open before tagging 1.1.0:
+Next:
 
-1. Owner call on the scoring finding: a no-action career scores the same as active play.
-2. Merge PR #76, then the release PR (version bump, changelog section, tag, GitHub release).
-   TestFlight build via Muse or the `Release` workflow.
+1. 1.1.1: rescore against the opening position and add a map-aware reference policy
+   (owner decision in DECISIONS.md), then rerun R36.
+2. TestFlight build of 1.1.0 via Muse or the `Release` workflow (`apple/RELEASE.md`).
+3. Human and device gates from 1.0.0 remain: R32/R33/R35, R37, R38, R39, R42.
 
 # 1.0.0 checkpoint (history)
 
