@@ -12,7 +12,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import uniffi.cw_ffi.BuildQuoteDto
+import uniffi.cw_ffi.CommodityDto
 import uniffi.cw_ffi.DivisionDto
+import uniffi.cw_ffi.MapDivisionDto
+import uniffi.cw_ffi.StockDto
+import uniffi.cw_ffi.StrategyDto
+import uniffi.cw_ffi.strategies
 import uniffi.cw_ffi.EventDto
 import uniffi.cw_ffi.FacilityDto
 import uniffi.cw_ffi.FinanceDto
@@ -53,6 +59,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var divisions by mutableStateOf<List<DivisionDto>>(emptyList()); private set
     var events by mutableStateOf<List<EventDto>>(emptyList()); private set
     var boards by mutableStateOf<List<RegionBoardDto>>(emptyList()); private set
+    var stocks by mutableStateOf<List<StockDto>>(emptyList()); private set
+    var commodities by mutableStateOf<List<CommodityDto>>(emptyList()); private set
+    var mapDivisions by mutableStateOf<List<MapDivisionDto>>(emptyList()); private set
+    val strategyCatalogue: List<StrategyDto> by lazy { strategies() }
     var marketRegion by mutableStateOf<String?>(null)
     var marketRows by mutableStateOf<List<MarketRow>>(emptyList()); private set
 
@@ -125,6 +135,24 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         submit(CommandJson.command("SetPricePosture", "firm" to firm, "product" to product, "mode" to mode, "bps" to bps))
     }
 
+    /** What a build would cost, computed by the engine without changing anything. */
+    fun quote(region: UInt, recipe: UInt, blocks: UInt, onResult: (BuildQuoteDto?) -> Unit) {
+        val handle = session ?: return
+        val firm = selectedFirm ?: return
+        scope.launch {
+            onResult(withContext(engine) { handle.buildQuote(firm, region, recipe, blocks) })
+        }
+    }
+
+    fun build(region: UInt, recipe: UInt, blocks: UInt) {
+        val firm = selectedFirm ?: return
+        submit(CommandJson.command("BuildFacility", "firm" to firm, "region" to region, "recipe" to recipe, "blocks" to blocks))
+    }
+
+    /** A personal share order, filled at the weekly close. */
+    fun orderShares(firm: ULong, buy: Boolean, quantity: Long, limitCents: Long) =
+        submit(CommandJson.command("PlaceShareOrder", "investor" to true, "firm" to firm, "buy" to buy, "qty" to quantity, "limit_price_cents" to limitCents))
+
     fun submit(json: String) = perform {
         val handle = session ?: return@perform
         val receipt = withContext(engine) { handle.submitJson(json) }
@@ -172,7 +200,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
             val linesNow = firm?.let { handle.productLines(it) } ?: emptyList()
             val facilitiesNow = firm?.let { handle.facilities(it) } ?: emptyList()
             val divisionsNow = firm?.let { handle.divisions(it) } ?: emptyList()
-            listOf(overviewNow, firmsNow, eventsNow, boardsNow, financeNow, linesNow, facilitiesNow, divisionsNow)
+            listOf(
+                overviewNow, firmsNow, eventsNow, boardsNow, financeNow, linesNow, facilitiesNow, divisionsNow,
+                handle.stockBoard(), handle.commodityBoard(), handle.mapDivisions(),
+            )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
             run {
@@ -184,6 +215,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 productLines = parts[5] as List<ProductLineDto>
                 facilities = parts[6] as List<FacilityDto>
                 divisions = parts[7] as List<DivisionDto>
+                stocks = parts[8] as List<StockDto>
+                commodities = parts[9] as List<CommodityDto>
+                mapDivisions = parts[10] as List<MapDivisionDto>
             }
         }
         loadMarkets()

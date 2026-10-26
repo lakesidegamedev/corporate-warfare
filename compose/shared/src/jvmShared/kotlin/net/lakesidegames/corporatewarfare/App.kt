@@ -160,43 +160,13 @@ private fun MainScreen(store: GameStore) {
 }
 
 @Composable
-private fun TabList(content: LazyListScope.() -> Unit) {
+internal fun TabList(content: LazyListScope.() -> Unit) {
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         content = content,
     )
-}
-
-// MARK: Map (regions until the drawn map arrives)
-
-@Composable
-private fun MapScreen(store: GameStore) {
-    TabList {
-        item { ScreenHeader("Regions", store.overview?.weekLabel) }
-        item { RunControls(store) }
-        items(store.boards.size) { index ->
-            val board = store.boards[index]
-            Panel {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(board.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold)
-                        Text("${board.stateName} · hub ${board.hubCity}", color = Palette.secondary, fontSize = 12.sp)
-                    }
-                    Text("wages ${board.wageIndexBps / 100}%", color = Palette.secondary, fontSize = 12.sp)
-                }
-                val room = board.room.filter { it.importLots > 0 }.sortedByDescending { it.importLots * it.importPriceCents }.take(3)
-                if (room.isNotEmpty()) {
-                    Text(
-                        "Room to build: " + room.joinToString(" · ") { "${it.productName} ${it.importLots}/wk" },
-                        color = Palette.positive,
-                        fontSize = 12.sp,
-                    )
-                }
-            }
-        }
-    }
 }
 
 // MARK: CEO Office
@@ -380,76 +350,6 @@ private fun ChipRow(steps: List<Int>, prefix: String = "", onPick: (Int) -> Unit
                 modifier = Modifier.background(Palette.panelRaised).clickable { onPick(bps) }.padding(horizontal = 8.dp, vertical = 6.dp),
             )
         }
-    }
-}
-
-// MARK: Markets
-
-@Composable
-private fun MarketsScreen(store: GameStore) {
-    var pickingRegion by remember { mutableStateOf(false) }
-    val board = store.boards.firstOrNull { it.code == store.marketRegion }
-    TabList {
-        item {
-            ScreenHeader("Markets", board?.let { "${it.stateName} · prices per lot" }) {
-                OutlinedButton(onClick = { pickingRegion = true }) { Text(board?.name ?: "Region", color = Palette.primaryText) }
-            }
-        }
-        val rows = store.marketRows.filter { it.product.referencePriceCents > 0 }
-        item {
-            Panel {
-                rows.forEachIndexed { index, row ->
-                    if (index > 0) HorizontalDivider(color = Palette.stroke)
-                    val market = row.market
-                    val price = market?.lastPriceCents ?: row.product.referencePriceCents
-                    val sold = market?.lastWeekSalesLots ?: 0
-                    val stock = market?.regionalStockLots ?: 0
-                    val imported = board?.room?.firstOrNull { it.product == market?.productId }?.importLots ?: 0
-                    Column(Modifier.padding(vertical = 4.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(row.product.name, color = Palette.primaryText, modifier = Modifier.weight(1f), maxLines = 1)
-                            when {
-                                imported > 0 -> SignalPill("Imported", Palette.positive)
-                                (sold == 0L && stock > 0) || (sold > 0 && stock > sold * 4) -> SignalPill("Glut", Palette.negative)
-                                sold > 0 && stock < sold -> SignalPill("Tight", Palette.gold)
-                                else -> {}
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Text(Format.money(price), color = Palette.primaryText, fontWeight = FontWeight.SemiBold)
-                        }
-                        val parts = buildList {
-                            add(if (sold > 0) "${Format.count(sold)}/wk sold" else "nothing sold")
-                            if (sold > 0) add("%.1f wk of stock".format(stock.toDouble() / sold))
-                            if (imported > 0) add("${Format.count(imported)}/wk imported")
-                        }
-                        Text(parts.joinToString(" · "), color = Palette.secondary, fontSize = 12.sp)
-                    }
-                }
-            }
-        }
-    }
-    if (pickingRegion) {
-        AlertDialog(
-            onDismissRequest = { pickingRegion = false },
-            containerColor = Palette.panel,
-            title = { Text("Region") },
-            text = {
-                LazyColumn(Modifier.height(420.dp)) {
-                    items(store.boards.size) { index ->
-                        val item = store.boards[index]
-                        Text(
-                            "${item.name} · ${item.stateName}",
-                            color = Palette.primaryText,
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                store.selectRegion(item.code)
-                                pickingRegion = false
-                            }.padding(vertical = 10.dp),
-                        )
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { pickingRegion = false }) { Text("Close") } },
-        )
     }
 }
 

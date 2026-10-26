@@ -31,6 +31,14 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        # The same app runs on the Mac through Mac Catalyst, under the same bundle identifier
+        # so one App Store record covers iPhone, iPad and Mac.
+        SUPPORTS_MACCATALYST: YES
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": CorporateWarfare.entitlements
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.strategy-games
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
     dependencies:
       # Static library xcframework: link it, never embed it. Embedding copies

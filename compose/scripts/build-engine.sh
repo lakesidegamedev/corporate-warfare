@@ -9,7 +9,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 OUT=compose/build/engine
-mkdir -p "$OUT"
+mkdir -p "$OUT/resources" "$OUT/desktop"
+# The corridor map is the iPhone app's own file; both Compose targets read it as a resource.
+cp apple/Resources/corridor-map.json "$OUT/resources/"
+cp apple/Resources/corridor-map.json "$OUT/desktop/"
 
 android() {
   local ndk="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"
