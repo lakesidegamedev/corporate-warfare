@@ -11,11 +11,50 @@ heading.
 
 ## [Unreleased]
 
+Planned as **2.0.0**: single-player A House Divided corporations on a real map of the Great
+Lakes and Ohio Valley.
+
 ### Added
+
+- Eight playable states (Illinois, Indiana, Kentucky, Michigan, New York, Ohio, Pennsylvania,
+  West Virginia) with Census 2000 populations, rounded circa-2000 GDP, pay and union indices,
+  and authored state conditions: power grid, roads, broadband, workforce skill, crime and cost
+  of living. Freight distances come from real hub-to-hub distances.
+- A real vector map bundled with the app (`apple/Resources/corridor-map.json`): state and
+  county boundaries, the Great Lakes, rivers, interstates and cities, from public-domain US
+  Census and Natural Earth data, with reproducible build scripts in `tools/map/`.
+- A House Divided sector strategies: every sector type now offers three to five operating
+  strategies for a 2000 start (for example Coal-fired, Gas Turbines, Nuclear and Renewables in
+  energy, or Industrial, Precision and Sustainable farming), 53 in all, authored by
+  `tools/content/build_sectors.py` so each strategy is a trade-off rather than a strictly
+  better choice.
+- Nine new goods so supply chains read like AHD's: coal, natural gas, timber, rare earth
+  minerals, plastics, fertilizers, pharmaceuticals, building materials and vehicles.
+- Sector focus: a primary and optional secondary sector type. On-focus plants use fewer
+  inputs; off-focus plants pay a coordination overhead; changing focus has a four-week
+  transition and an eight-week lock (`SetSectorFocus`).
+- Logistics strength, built by a weekly logistics programme (`SetLogisticsBudget`), and a
+  sprawl overhead beyond fifteen plants that logistics strength relieves.
+- State conditions shape output (grid reliability, skill, broadband), freight cost (roads) and
+  retail and property shrinkage (crime).
+- Gateways record imports and exports, giving a public room-to-build signal.
 
 - Release process: this changelog, the versioning and release procedure in
   `docs/RELEASING.md`, a pull request template, and a CI check that requires a changelog entry
   for code, content and tooling changes and keeps the workspace and iOS versions in step.
+
+### Changed
+
+- Playable regions are whole states instead of eleven authored economic areas; the thirty
+  named rivals moved to states where their industries actually sit and run named strategies.
+- Retooling switches a plant to another strategy of the same sector for a quarter of the new
+  strategy's capex and a third of its build time (at least four weeks); a plant can no longer
+  retool into a different sector.
+- Every non-renewable extraction strategy now draws on a finite twenty-year deposit, as iron
+  mining already did.
+- Rival AI builds the best strategy of its sector in the state whose imports show room for it,
+  judged over three years at public prices net of capex and financing, and retools plants stuck
+  in glut toward strategies whose output is short.
 
 ## [1.0.0] - 2026-10-25
 

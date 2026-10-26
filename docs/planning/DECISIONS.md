@@ -348,3 +348,25 @@ best-effort roster; population, wage, demand, distance and membership are labell
 estimates. No county rows, BEA crosswalk or historical observation is claimed. R01/R02 and P01/P05
 are evaluated against this approved authored scheme, with the limitation visible in the data,
 evidence and store copy.
+
+### Owner direction for 2.0.0: single-player AHD corporations on a real map, 2026-10-26
+
+The owner judged 1.0.0 to read as an operations app rather than an economic strategy game, and
+directed a redesign: Corporate Warfare should play as single-player A House Divided
+corporations (sector types with operating strategies, plant building, corporation setup) with a
+rich, real map. Decisions, all owner-confirmed:
+
+1. Playable units are US states, a Great Lakes and Ohio Valley set: IL, IN, KY, MI, NY, OH, PA,
+   WV, drawn with county detail. This supersedes the eleven authored economic areas.
+2. Keep Corporate Warfare's deterministic physical engine and adopt AHD's player-facing model
+   on top of it.
+3. AHD's sector catalogue, strategies, commodities and formulas may be reused freely.
+4. A real map (geography, not satellite imagery), bundled and offline.
+5. Target iPhone and iPad with SwiftUI now; other platforms later.
+6. Versioning: patch for minor updates, minor for big features, major for wide releases. The
+   redesign ships as 2.0.0.
+
+The AHD margin modifiers become physical effects in this engine: sector focus changes input use
+and adds a coordination overhead, and state conditions change output, freight cost and
+shrinkage, each paid to a real counterparty.
+
