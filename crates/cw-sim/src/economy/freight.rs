@@ -14,7 +14,7 @@ use cw_data::Dataset;
 
 use crate::state::{ContractStatus, Shipment, World};
 
-pub const FREIGHT_CENTS_PER_LOT_KM: i64 = 10;
+pub const FREIGHT_CENTS_PER_LOT_KM: i64 = 3;
 pub const FREIGHT_MINIMUM_CENTS: i64 = 100;
 
 pub fn lead_time_weeks(km: u32) -> u32 {
@@ -196,6 +196,9 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
                     .credit(Account::Inventory, carrying, "contract cogs")
                     .debit(Account::CostOfGoods, carrying, "contract cogs"),
             );
+            // A contract delivery is a sale like any other: it belongs in the unit-sales record
+            // that pricing, the market board and the AI read.
+            seller.record_sale(contract.to_region, contract.product, deliverable);
         }
         if paid_freight > 0 {
             pay_freight(world, contract.buyer, paid_freight, "contract freight");

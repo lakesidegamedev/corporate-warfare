@@ -1088,6 +1088,18 @@ fn apply_intent(
             price_cents,
         } => {
             require_control(world, actor, *firm)?;
+            // A zero price hands the good back to automatic pricing.
+            if *price_cents == 0 {
+                reference_price(dataset, *product)?;
+                world
+                    .firms
+                    .get_mut(*firm)
+                    .unwrap()
+                    .policies
+                    .manual_prices
+                    .remove(product);
+                return Ok(());
+            }
             if *price_cents < 1 {
                 return Err(DomainError::Arithmetic {
                     detail: ArithmeticFault::OutOfRange,
@@ -1107,6 +1119,16 @@ fn apply_intent(
                 .policies
                 .prices
                 .insert(*product, *price_cents);
+            // The player's own price stays until the player hands it back.
+            if actor == INVESTOR_ACTOR {
+                world
+                    .firms
+                    .get_mut(*firm)
+                    .unwrap()
+                    .policies
+                    .manual_prices
+                    .insert(*product);
+            }
             Ok(())
         }
         CommandIntent::SetWageOffer {

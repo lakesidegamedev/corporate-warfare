@@ -1033,7 +1033,6 @@ fn spot_imports_charge_goods_and_freight_exactly_once() {
         .find(|(_, firm)| {
             firm.operative()
                 && firm.region != buyer_region
-                && firm.stock(product, firm.region).is_positive()
                 && firm.facilities.iter().any(|f| {
                     world
                         .facilities
@@ -1046,6 +1045,9 @@ fn spot_imports_charge_goods_and_freight_exactly_once() {
         .expect("one steel supplier in another region");
     let seller_region = world.firm(seller).unwrap().region;
     assert_ne!(seller_region, buyer_region);
+    // The corridor exchange may have sold the producer's opening stock this week; give it
+    // steel to sell on the spot order.
+    set_stock(&mut world, &dataset, seller, "steel", seller_region, 50);
 
     let quantity = MilliLots::from_lots(10);
     let goods_value = quantity.value_at(Cents(price)).expect("value fits").0;
@@ -1154,15 +1156,21 @@ fn spot_imports_charge_goods_and_freight_exactly_once() {
         tick::advance(&mut world, &dataset);
     }
     assert_eq!(world.tick, due, "the import arrives on its scheduled week");
-    // On arrival the buyer may resell to a local steel user the same week, so the import is
-    // accounted for exactly as stock still held plus units sold that week.
+    // On arrival the buyer may resell on the corridor exchange the same week, to a steel user
+    // in any region, so the import is accounted for exactly as stock still held plus units
+    // sold that week anywhere.
     let held = world.firm(buyer).unwrap().stock(product, buyer_region);
-    let sold = world
+    let sold: i64 = world
         .firm(buyer)
         .unwrap()
         .sales_history
         .last()
-        .and_then(|week| week.get(&(buyer_region, product)).copied())
+        .map(|week| {
+            week.iter()
+                .filter(|((_, p), _)| *p == product)
+                .map(|(_, qty)| *qty)
+                .sum()
+        })
         .unwrap_or(0);
     assert_eq!(
         held.0 + MilliLots::from_lots(sold).0,

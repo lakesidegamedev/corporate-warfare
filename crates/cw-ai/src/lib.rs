@@ -247,48 +247,19 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
     let reserve = reserve_target(world, firm);
     let mut candidates: Vec<Candidate> = Vec::new();
 
-    // Pricing: use actual trailing sell-through. Benefit proxy: a year of the price change on
-    // the volume actually sold. Rivals decide between ticks, when the open sales week is
-    // empty, so the markets come from the closed history: every market sold in during the
-    // trailing thirteen weeks, including one that has since stopped selling.
-    let markets: std::collections::BTreeSet<(u8, u16)> = entity
-        .sales_history
-        .iter()
-        .flat_map(|week| week.keys().copied())
-        .collect();
-    for (region, product) in markets {
-        let sold = entity.trailing_units(region, product);
-        let stock = entity.stock(product, region).lots();
+    // Pricing: the shared sell-through rule (cw_sim::economy::pricing), one price per good.
+    for product in cw_sim::economy::pricing::outputs(world, dataset, firm) {
         let price = entity
             .policies
             .prices
             .get(&product)
             .copied()
             .unwrap_or_else(|| dataset.reference_price(product));
-        let reference = dataset.reference_price(product).max(1);
-        let mut target = price;
-        if stock > sold.max(1) * 4 {
-            target = price * 95 / 100;
-        } else if sold >= stock.max(1) * 9 / 10 {
-            target = price * 102 / 100;
-        }
-        target = target.clamp(reference / 2, reference * 2).max(1);
-        // Import parity: above the gateway's import price local buyers switch to imports, so
-        // selling out to the gateway is no signal to keep raising the price. Services have no
-        // import quote; a fixed-price public buyer taking all of them is no signal either, so
-        // they stop at the same headroom over reference.
-        let ceiling = world
-            .gateways
-            .iter()
-            .find(|gateway| gateway.region == region && gateway.product == product)
-            .map(|gateway| gateway.sell_price_cents)
-            .filter(|price| *price > 0)
-            .unwrap_or(reference + reference * 15 / 100);
-        target = target.min(ceiling);
+        let target = cw_sim::economy::pricing::target_price(world, dataset, firm, product);
         if target != price {
-            let weekly_units = sold / 13;
+            let weekly_sold = cw_sim::economy::pricing::weekly_sold(world, firm, product);
             candidates.push(Candidate {
-                score: weights[0] * (52 * weekly_units.max(1) * (target - price).abs()),
+                score: weights[0] * (52 * weekly_sold.max(1) * (target - price).abs()),
                 target: product as u64,
                 intent: CommandIntent::SetPrice {
                     firm,

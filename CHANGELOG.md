@@ -11,6 +11,38 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- A corridor commodity exchange for goods. Every company's need for an input, in any region,
+  meets every seller's stock in any region and the import offer of the buyer's own region,
+  priced as delivered (asking price plus freight over the lane) and filled cheapest first, so
+  domestic producers supply domestic plants and the outside market is the last resort. Buyers
+  tied on one source share it in proportion. Exchange deliveries arrive within the week.
+- Automatic pricing for the player's companies: every good they make follows the same
+  sell-through rule as rivals each week unless the player sets its price by hand; a price of
+  zero hands it back.
+
+### Changed
+
+- The outside market quotes reference plus or minus 15 percent, up from 5, so domestic supply
+  and demand set prices inside a real band.
+- Freight costs $0.03 a lot per kilometre, down from $0.10, so goods can travel between
+  regions at a fraction of their value.
+- Pricing (rivals and automatic player pricing) sets one price per good from weekly
+  sell-through against all stock held: more than four weeks of stock cuts 5 percent, selling
+  out raises 2 percent, otherwise it holds, never above the cheapest import price.
+
+### Fixed
+
+- Business purchases only cleared inside one region, so producers exported everything and
+  buyers in other regions imported the same goods: the corridor barely traded with itself.
+- Imports took a share of every order by attractiveness even when cheaper local stock sat
+  unsold; goods now fill in merit order.
+- Rival pricing compared a quarter's sales with current stock, so anything that sold at all
+  ratcheted to its cap and anything that did not slid toward half price.
+- Contract deliveries were not recorded as sales, so pricing, the market board and the AI saw
+  contract sellers as selling nothing.
+
 ## [1.2.0] - 2026-10-26
 
 Economic regions, sector divisions and corporate warfare. Saves from 1.1.0 do not load in this
