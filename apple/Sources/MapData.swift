@@ -3,12 +3,19 @@ import SwiftUI
 
 /// The bundled corridor map: public-domain US Census and Natural Earth geometry, pre-projected
 /// (Albers conic) into a 10000-unit-wide view box with integer coordinates. Built by
-/// `tools/map/compact_map.py`.
+/// `tools/map/build_map.sh`. Regions are whole counties dissolved by the engine's region table.
 struct CorridorMapFile: Decodable {
     struct Area: Decodable {
         let code: String
         let name: String
         let play: Bool
+        let rings: [[Int]]
+    }
+
+    struct RegionArea: Decodable {
+        let code: String
+        let state: String
+        let name: String
         let rings: [[Int]]
     }
 
@@ -42,6 +49,7 @@ struct CorridorMapFile: Decodable {
     let attribution: String
     let viewbox: [Double]
     let states: [Area]
+    let regions: [RegionArea]
     let counties: [County]
     let lakes: [Water]
     let rivers: [Line]
@@ -57,6 +65,8 @@ final class CorridorMap {
     let size: CGSize
     let attribution: String
     let playStates: [(code: String, name: String, path: Path, bounds: CGRect)]
+    /// Economic regions inside the playable states.
+    let regions: [(code: String, state: String, name: String, path: Path, bounds: CGRect)]
     let contextLand: Path
     let counties: Path
     let lakes: Path
@@ -73,6 +83,7 @@ final class CorridorMap {
             size = CGSize(width: 10_000, height: 8_000)
             attribution = ""
             playStates = []
+            regions = []
             contextLand = Path()
             counties = Path()
             lakes = Path()
@@ -95,6 +106,10 @@ final class CorridorMap {
             }
         }
         playStates = states.map { (code: $0.0, name: $0.1, path: $0.2, bounds: $0.3) }
+        regions = file.regions.map { area in
+            let path = CorridorMap.polygons(area.rings)
+            return (code: area.code, state: area.state, name: area.name, path: path, bounds: path.boundingRect)
+        }
         contextLand = context
         var countyPath = Path()
         for county in file.counties {
@@ -142,6 +157,23 @@ final class CorridorMap {
     /// The playable state under a point in map units.
     func state(at point: CGPoint) -> String? {
         playStates.first { $0.bounds.contains(point) && $0.path.contains(point, eoFill: true) }?.code
+    }
+
+    /// The economic region under a point in map units.
+    func region(at point: CGPoint) -> String? {
+        regions.first { $0.bounds.contains(point) && $0.path.contains(point, eoFill: true) }?.code
+    }
+
+    /// A region's display name.
+    func regionName(_ code: String) -> String {
+        regions.first { $0.code == code }?.name ?? code
+    }
+
+    /// A label point for a region: its anchor hub, or the middle of its bounds.
+    func anchor(of code: String) -> CGPoint? {
+        if let hub = hubs[code] { return hub }
+        guard let bounds = regions.first(where: { $0.code == code })?.bounds else { return nil }
+        return CGPoint(x: bounds.midX, y: bounds.midY)
     }
 
     /// The bounding rectangle of the playable states, for the initial framing.

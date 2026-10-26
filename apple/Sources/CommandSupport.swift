@@ -35,13 +35,33 @@ struct CommandRejection: Identifiable, Equatable {
     let detail: String
     var id: String { key + detail }
 
-    var title: String { Remedy.title(for: key) }
-    var remedy: String { Remedy.text(for: key) }
+    var title: String { Remedy.phase(detail)?.title ?? Remedy.title(for: key) }
+    var remedy: String { Remedy.phase(detail)?.remedy ?? Remedy.text(for: key) }
     /// One line for inline display: the title and what to do about it.
     var message: String { "\(title). \(remedy)" }
 }
 
 enum Remedy {
+    /// Wrong-phase rejections that name a specific division or raid rule.
+    static func phase(_ detail: String) -> (title: String, remedy: String)? {
+        if detail.contains("division_strategy") {
+            return ("Your division runs another strategy", "Every plant in a division runs its strategy. Build that strategy here, or retool the division from the CEO Office first.")
+        }
+        if detail.contains("own_division") {
+            return ("No division in this market", "You can only raid a market you serve. Build a plant of this sector type in the region first.")
+        }
+        if detail.contains("rival_division") {
+            return ("Nothing to take", "The rival needs at least two blocks here: a raid never takes its last one.")
+        }
+        if detail.contains("raid_cooldown") {
+            return ("Campaign still running", "You can raid the same market once every thirteen weeks.")
+        }
+        if detail.contains("rival_firm") {
+            return ("That is your own group", "Raids target rivals outside the group you control.")
+        }
+        return nil
+    }
+
     static func title(for key: String) -> String {
         switch key {
         case "error.invalid_actor": return "Unknown actor"
@@ -439,4 +459,12 @@ struct DetailRow: View {
         default: return Theme.text(for: scheme)
         }
     }
+}
+
+extension RaidOptionDto: Identifiable {
+    public var id: String { "\(target)-\(region)-\(industry)" }
+}
+
+extension DivisionDto: Identifiable {
+    public var id: String { region + "/" + industry }
 }

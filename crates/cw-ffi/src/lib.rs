@@ -477,11 +477,16 @@ pub struct RoomDto {
 
 /// A playable state with its conditions and room to build.
 #[derive(uniffi::Record)]
-pub struct StateDto {
+pub struct RegionBoardDto {
     pub index: u32,
     pub code: String,
     pub name: String,
+    pub state_code: String,
+    pub state_name: String,
+    /// The state's specialized sector types, primary first.
+    pub specialization: Vec<String>,
     pub hub_city: String,
+    pub land_index_bps: i32,
     pub population_2000: i64,
     pub wage_index_bps: i32,
     pub demand_index_bps: i32,
@@ -493,6 +498,98 @@ pub struct StateDto {
     pub cost_of_living_bps: i32,
     pub organisation_bps: i32,
     pub room: Vec<RoomDto>,
+    /// Every sector type with operators or unmet imports here.
+    pub sectors: Vec<SectorCellDto>,
+}
+
+/// One sector type in one region: who operates and how the player's firm stands.
+#[derive(uniffi::Record)]
+pub struct SectorCellDto {
+    pub industry: String,
+    pub operators: u32,
+    pub leader: String,
+    pub leader_share_bps: i32,
+    /// The selected firm's blocks and share here; zero when it has no division.
+    pub own_blocks: u32,
+    pub own_share_bps: i32,
+    pub headroom_cents: i64,
+}
+
+/// One of a firm's divisions: its plants of one sector type in one region.
+#[derive(uniffi::Record)]
+pub struct DivisionDto {
+    pub region: String,
+    pub region_name: String,
+    pub industry: String,
+    pub strategy: u32,
+    pub strategy_name: String,
+    pub plants: Vec<u64>,
+    pub blocks: u32,
+    pub share_bps: i32,
+    pub retooling: bool,
+}
+
+/// A player division on the map: one circle per owned sector type in a region.
+#[derive(uniffi::Record)]
+pub struct MapDivisionDto {
+    pub firm: u64,
+    pub region: String,
+    pub industry: String,
+    pub plants: u32,
+    pub blocks: u32,
+}
+
+/// What a build costs: entry fee, founding discount, dominance and location.
+#[derive(uniffi::Record)]
+pub struct BuildQuoteDto {
+    pub capex_cents: i64,
+    pub entry_fee_cents: i64,
+    pub total_cents: i64,
+    pub opens_division: bool,
+    pub dominance_bps: i64,
+    pub share_after_bps: i64,
+    /// Input need where the plant would sit, in basis points of calibration.
+    pub location_input_bps: i32,
+    /// The existing division's strategy when the build must use it.
+    pub locked_strategy: Option<u32>,
+    pub locked_strategy_name: Option<String>,
+}
+
+/// A rival division the selected firm can raid.
+#[derive(uniffi::Record)]
+pub struct RaidOptionDto {
+    pub target: u64,
+    pub target_name: String,
+    pub region: String,
+    pub region_index: u32,
+    pub industry: String,
+    pub industry_index: u32,
+    pub rival_blocks: u32,
+    pub ready_week: u32,
+    pub suggested_budget_cents: i64,
+    pub quote: RaidQuoteDto,
+}
+
+#[derive(uniffi::Record)]
+pub struct RaidQuoteDto {
+    pub attack_cents: i64,
+    pub defence_cents: i64,
+    pub chance_bps: i32,
+    pub blocks_at_stake: u32,
+    pub price_cents: i64,
+}
+
+#[derive(uniffi::Record)]
+pub struct RaidRecordDto {
+    pub week: u32,
+    pub attacker: String,
+    pub defender: String,
+    pub region: String,
+    pub industry: String,
+    pub success: bool,
+    pub blocks: u32,
+    pub player_attacker: bool,
+    pub player_defender: bool,
 }
 
 /// Every plant in the world for the map. Rival plants show only public facts.
@@ -802,6 +899,16 @@ pub fn recipes() -> Vec<RecipeDto> {
 }
 
 /// The full strategy catalogue with inputs and reference margins.
+fn raid_quote_dto(quote: cw_sim::economy::sectors::RaidQuote) -> RaidQuoteDto {
+    RaidQuoteDto {
+        attack_cents: quote.attack_cents,
+        defence_cents: quote.defence_cents,
+        chance_bps: quote.chance_bps,
+        blocks_at_stake: quote.blocks_at_stake as u32,
+        price_cents: quote.price_cents,
+    }
+}
+
 #[uniffi::export]
 pub fn strategies() -> Vec<StrategyDto> {
     let Ok(dataset) = cw_data::Dataset::load() else {
@@ -1008,10 +1115,14 @@ impl SessionHandle {
     }
 
     /// The eight playable states with conditions and room to build.
-    pub fn states(&self) -> Vec<StateDto> {
+    /// Every region's board: conditions, room to build and the sector cells, with the
+    /// selected firm's position in each.
+    pub fn region_boards(&self, firm: Option<u64>) -> Vec<RegionBoardDto> {
+        use cw_sim::economy::sectors;
         let session = self.lock();
         let world = &session.world;
         let dataset = &session.dataset;
+        let own = firm.map(cw_core::ids::Handle);
         dataset
             .regions
             .iter()
@@ -1032,12 +1143,62 @@ impl SessionHandle {
                     (b.import_lots * b.import_price_cents)
                         .cmp(&(a.import_lots * a.import_price_cents))
                 });
+                let mut cells = Vec::new();
+                for (industry_index, industry) in cw_sim::state::INDUSTRY_NAMES.iter().enumerate() {
+                    let industry_index = industry_index as u8;
+                    let (firms, headroom) =
+                        sectors::cell(world, dataset, index as u8, industry_index);
+                    if firms.is_empty() && headroom <= 0 {
+                        continue;
+                    }
+                    let total: i64 = firms.iter().map(|(_, v)| *v).sum::<i64>() + headroom;
+                    let leader = firms
+                        .iter()
+                        .max_by_key(|(h, v)| (*v, std::cmp::Reverse(*h)));
+                    let own_value = own
+                        .and_then(|o| firms.iter().find(|(h, _)| *h == o))
+                        .map(|(_, v)| *v)
+                        .unwrap_or(0);
+                    let own_blocks = own
+                        .map(|o| {
+                            sectors::division_plants(world, dataset, o, index as u8, industry_index)
+                                .iter()
+                                .filter_map(|h| world.facilities.get(*h))
+                                .map(|p| p.blocks as u32)
+                                .sum()
+                        })
+                        .unwrap_or(0);
+                    let bps = |value: i64| {
+                        if total > 0 {
+                            (value as i128 * 10_000 / total as i128) as i32
+                        } else {
+                            0
+                        }
+                    };
+                    cells.push(SectorCellDto {
+                        industry: (*industry).to_owned(),
+                        operators: firms.len() as u32,
+                        leader: leader
+                            .and_then(|(h, _)| world.firms.get(*h))
+                            .map(|f| f.name.clone())
+                            .unwrap_or_default(),
+                        leader_share_bps: leader.map(|(_, v)| bps(*v)).unwrap_or(0),
+                        own_blocks,
+                        own_share_bps: bps(own_value),
+                        headroom_cents: headroom,
+                    });
+                }
+                let state = dataset.state_of(index as u8);
                 let c = region.conditions;
-                StateDto {
+                RegionBoardDto {
                     index: index as u32,
                     code: region.code.clone(),
                     name: region.name.clone(),
+                    state_code: region.state().to_owned(),
+                    state_name: state.map(|s| s.name.clone()).unwrap_or_default(),
+                    specialization: state.map(|s| s.specialization.clone()).unwrap_or_default(),
                     hub_city: region.principal_city.clone(),
+                    land_index_bps: region.land_index_bps,
                     population_2000: region.population_2000,
                     wage_index_bps: region.wage_index_bps,
                     demand_index_bps: region.demand_index_bps,
@@ -1053,7 +1214,220 @@ impl SessionHandle {
                         .map(|r| r.organisation_bps)
                         .unwrap_or(region.opening_organisation_bps),
                     room,
+                    sectors: cells,
                 }
+            })
+            .collect()
+    }
+
+    /// A firm's divisions, by region then sector type.
+    pub fn divisions(&self, firm: u64) -> Vec<DivisionDto> {
+        use cw_sim::economy::sectors;
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let handle = cw_core::ids::Handle(firm);
+        sectors::divisions_of(world, dataset, handle)
+            .into_iter()
+            .map(|d| {
+                let recipe = &dataset.recipes[d.strategy as usize];
+                DivisionDto {
+                    region: dataset.regions[d.region as usize].code.clone(),
+                    region_name: dataset.regions[d.region as usize].name.clone(),
+                    industry: cw_sim::state::INDUSTRY_NAMES[d.industry as usize].to_owned(),
+                    strategy: d.strategy as u32,
+                    strategy_name: if recipe.name.is_empty() {
+                        recipe.id.clone()
+                    } else {
+                        recipe.name.clone()
+                    },
+                    plants: d.plants.iter().map(|h| h.0).collect(),
+                    blocks: d.blocks,
+                    share_bps: sectors::share_bps(world, dataset, handle, d.region, d.industry, 0)
+                        as i32,
+                    retooling: d.plants.iter().any(|h| {
+                        world.facilities.get(*h).is_some_and(|p| {
+                            matches!(p.status, cw_sim::state::FacilityStatus::Retooling { .. })
+                        })
+                    }),
+                }
+            })
+            .collect()
+    }
+
+    /// The player's divisions for the map: one circle per owned sector type in a region.
+    pub fn map_divisions(&self) -> Vec<MapDivisionDto> {
+        use cw_sim::economy::sectors;
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let mut out = Vec::new();
+        for (handle, firm) in world.firms.iter() {
+            if !firm.operative() || !cw_sim::economy::events_engine::player_side(world, handle) {
+                continue;
+            }
+            for d in sectors::divisions_of(world, dataset, handle) {
+                out.push(MapDivisionDto {
+                    firm: handle.0,
+                    region: dataset.regions[d.region as usize].code.clone(),
+                    industry: cw_sim::state::INDUSTRY_NAMES[d.industry as usize].to_owned(),
+                    plants: d.plants.len() as u32,
+                    blocks: d.blocks,
+                });
+            }
+        }
+        out
+    }
+
+    /// What building `blocks` of `recipe` in `region` would cost the firm.
+    pub fn build_quote(&self, firm: u64, region: u32, recipe: u32, blocks: u32) -> BuildQuoteDto {
+        use cw_sim::economy::sectors;
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let handle = cw_core::ids::Handle(firm);
+        let (region, recipe) = (region as u8, recipe as u16);
+        let quote = sectors::build_cost(
+            world,
+            dataset,
+            handle,
+            region,
+            recipe,
+            blocks.clamp(1, 8) as u8,
+        );
+        let industry = sectors::recipe_industry(dataset, recipe);
+        let locked = sectors::division_strategy(world, dataset, handle, region, industry);
+        let home = world.firms.get(handle).map(|f| f.region).unwrap_or(region);
+        BuildQuoteDto {
+            capex_cents: quote.capex_cents,
+            entry_fee_cents: quote.entry_fee_cents,
+            total_cents: quote.total_cents(),
+            opens_division: quote.opens_division,
+            dominance_bps: quote.dominance_bps,
+            share_after_bps: quote.share_after_bps,
+            location_input_bps: sectors::location_factor_bps(
+                dataset,
+                home,
+                region,
+                &dataset.recipes[recipe as usize].industry,
+            ),
+            locked_strategy: locked.map(|r| r as u32),
+            locked_strategy_name: locked.map(|r| {
+                let template = &dataset.recipes[r as usize];
+                if template.name.is_empty() {
+                    template.id.clone()
+                } else {
+                    template.name.clone()
+                }
+            }),
+        }
+    }
+
+    /// Rival divisions the firm can raid: cells where both operate and the rival has at least
+    /// two blocks, with a two-to-one campaign suggested.
+    pub fn raid_targets(&self, firm: u64) -> Vec<RaidOptionDto> {
+        use cw_sim::economy::sectors;
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let handle = cw_core::ids::Handle(firm);
+        let Some(entity) = world.firms.get(handle) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for d in sectors::divisions_of(world, dataset, handle) {
+            let (firms, _) = sectors::cell(world, dataset, d.region, d.industry);
+            for (rival, _) in firms {
+                if rival == handle || cw_sim::economy::ownership::same_group(world, rival, handle) {
+                    continue;
+                }
+                let rival_blocks: u32 =
+                    sectors::division_plants(world, dataset, rival, d.region, d.industry)
+                        .iter()
+                        .filter_map(|h| world.facilities.get(*h))
+                        .map(|p| p.blocks as u32)
+                        .sum();
+                if rival_blocks < 2 {
+                    continue;
+                }
+                let probe =
+                    sectors::raid_quote(world, dataset, handle, rival, d.region, d.industry, 0);
+                let budget = probe.defence_cents * 2;
+                let quote = sectors::raid_quote(
+                    world, dataset, handle, rival, d.region, d.industry, budget,
+                );
+                out.push(RaidOptionDto {
+                    target: rival.0,
+                    target_name: world
+                        .firms
+                        .get(rival)
+                        .map(|f| f.name.clone())
+                        .unwrap_or_default(),
+                    region: dataset.regions[d.region as usize].code.clone(),
+                    region_index: d.region as u32,
+                    industry: cw_sim::state::INDUSTRY_NAMES[d.industry as usize].to_owned(),
+                    industry_index: d.industry as u32,
+                    rival_blocks,
+                    ready_week: entity
+                        .raid_ready
+                        .get(&(d.region, d.industry))
+                        .copied()
+                        .unwrap_or(0),
+                    suggested_budget_cents: budget,
+                    quote: raid_quote_dto(quote),
+                });
+            }
+        }
+        out
+    }
+
+    /// The odds and stake of a raid at a chosen budget.
+    pub fn raid_quote(
+        &self,
+        firm: u64,
+        target: u64,
+        region: u32,
+        industry: u32,
+        budget_cents: i64,
+    ) -> RaidQuoteDto {
+        let session = self.lock();
+        raid_quote_dto(cw_sim::economy::sectors::raid_quote(
+            &session.world,
+            &session.dataset,
+            cw_core::ids::Handle(firm),
+            cw_core::ids::Handle(target),
+            region as u8,
+            industry as u8,
+            budget_cents,
+        ))
+    }
+
+    /// The most recent market raids anywhere, newest first.
+    pub fn recent_raids(&self) -> Vec<RaidRecordDto> {
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let name = |h: cw_core::ids::Handle| {
+            world
+                .firms
+                .get(h)
+                .map(|f| f.name.clone())
+                .unwrap_or_default()
+        };
+        world
+            .raids
+            .iter()
+            .rev()
+            .map(|r| RaidRecordDto {
+                week: r.tick,
+                attacker: name(r.attacker),
+                defender: name(r.defender),
+                region: dataset.regions[r.region as usize].code.clone(),
+                industry: cw_sim::state::INDUSTRY_NAMES[r.industry as usize].to_owned(),
+                success: r.success,
+                blocks: r.blocks as u32,
+                player_attacker: cw_sim::economy::events_engine::player_side(world, r.attacker),
+                player_defender: cw_sim::economy::events_engine::player_side(world, r.defender),
             })
             .collect()
     }
@@ -1389,13 +1763,13 @@ impl SessionHandle {
     }
 
     /// Typed build preview used by the facility and founder sheets.
-    pub fn preview_build(&self, firm: u64, recipe: u32, blocks: u32) -> PreviewDto {
+    pub fn preview_build(&self, firm: u64, region: u32, recipe: u32, blocks: u32) -> PreviewDto {
         let session = self.lock();
         preview_dto(session.preview(
             cw_sim::commands::INVESTOR_ACTOR,
             &cw_sim::commands::CommandIntent::BuildFacility {
                 firm: cw_core::ids::Handle(firm),
-                region: 0,
+                region: region as u8,
                 recipe: recipe as u16,
                 blocks: blocks as u8,
             },
@@ -1977,13 +2351,43 @@ mod tests {
     #[test]
     fn the_map_and_strategy_surfaces_cover_the_world() {
         let session = SessionHandle::new(211, true, false).unwrap();
-        let states = session.states();
-        assert_eq!(states.len(), 8);
-        assert!(
-            states
-                .iter()
-                .all(|s| s.population_2000 > 1_000_000 && s.code.len() == 2)
-        );
+        let primary = session.overview().primary_firm;
+        let boards = session.region_boards(primary);
+        assert_eq!(boards.len(), 31);
+        assert!(boards.iter().all(|b| b.population_2000 > 200_000
+            && b.code.starts_with(&b.state_code)
+            && b.specialization.len() == 2
+            && !b.state_name.is_empty()));
+        // The player's farm shows as its own agriculture cell on its region's board.
+        let firm = primary.expect("a guided career has a company");
+        let divisions = session.divisions(firm);
+        assert_eq!(divisions.len(), 1);
+        let home = boards
+            .iter()
+            .find(|b| b.code == divisions[0].region)
+            .unwrap();
+        let cell = home
+            .sectors
+            .iter()
+            .find(|c| c.industry == divisions[0].industry)
+            .expect("the player's sector cell");
+        assert_eq!(cell.own_blocks, divisions[0].blocks);
+        assert!(cell.own_share_bps > 0);
+        let map = session.map_divisions();
+        assert_eq!(map.len(), 1, "one owned sector circle");
+        assert_eq!(map[0].plants, divisions[0].plants.len() as u32);
+        // A second plant of the same strategy joins the division: no entry fee, strategy locked.
+        let quote = session.build_quote(firm, home.index, divisions[0].strategy, 1);
+        assert!(!quote.opens_division);
+        assert_eq!(quote.entry_fee_cents, 0);
+        assert_eq!(quote.locked_strategy, Some(divisions[0].strategy));
+        // The same strategy elsewhere opens a division with the entry fee.
+        let away = boards.iter().find(|b| b.code != home.code).unwrap();
+        let quote = session.build_quote(firm, away.index, divisions[0].strategy, 1);
+        assert!(quote.opens_division);
+        assert_eq!(quote.entry_fee_cents, 10_000_000);
+        assert_eq!(quote.total_cents, quote.capex_cents + quote.entry_fee_cents);
+        assert!(session.recent_raids().is_empty());
         let plants = session.map_plants();
         // Thirty seeded rivals, of which the bank and the insurer run no plants, plus the
         // player's own plant.
@@ -2003,10 +2407,7 @@ mod tests {
                 .iter()
                 .all(|s| !s.name.is_empty() && s.weekly_output_lots > 0)
         );
-        let primary = session.overview().primary_firm;
-        if let Some(firm) = primary {
-            let ops = session.firm_ops(firm).expect("ops for the player's firm");
-            assert_eq!(ops.sprawl_threshold, 15);
-        }
+        let ops = session.firm_ops(firm).expect("ops for the player's firm");
+        assert_eq!(ops.sprawl_threshold, 15);
     }
 }

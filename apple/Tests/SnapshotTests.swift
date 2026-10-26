@@ -30,19 +30,21 @@ final class SnapshotTests: XCTestCase {
             await store.selectFirm(primary)
         }
         XCTAssertFalse(store.mapPlants.isEmpty, "the map has plants")
-        XCTAssertEqual(store.states.count, 8)
-        XCTAssertGreaterThan(CorridorMap.shared.playStates.count, 7, "the bundled map decodes")
+        XCTAssertEqual(store.boards.count, 31)
+        XCTAssertEqual(CorridorMap.shared.regions.count, 31, "the bundled map decodes its regions")
+        XCTAssertFalse(store.mapDivisions.isEmpty, "the player's division is on the map")
+        XCTAssertEqual(store.divisions.count, 1)
 
         let phone = CGSize(width: 393, height: 852)
         let pad = CGSize(width: 1180, height: 820)
-        let ohio = store.states.first { $0.code == "OH" }
+        let home = store.boards.first { $0.code == store.divisions.first?.region }
         render("map-phone", phone, compact: true, MapHomeView().environmentObject(store))
         render("map-pad", pad, compact: false, MapHomeView().environmentObject(store))
-        if let ohio {
-            render("state-phone", phone, compact: true,
-                   StateBoardView(state: ohio, onBuild: {}, onClose: {}).environmentObject(store))
+        if let home {
+            render("region-phone", phone, compact: true,
+                   RegionBoardView(board: home, onBuild: {}, onClose: {}).environmentObject(store))
             render("build-phone", phone, compact: true,
-                   BuildFlowView(stateCode: ohio.code).environmentObject(store))
+                   BuildFlowView(regionCode: home.code).environmentObject(store))
         }
         render("ceo-phone", phone, compact: true, CEOOfficeView().environmentObject(store))
         render("ceo-pad", pad, compact: false, CEOOfficeView().environmentObject(store))

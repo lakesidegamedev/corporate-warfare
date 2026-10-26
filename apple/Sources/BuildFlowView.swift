@@ -1,19 +1,27 @@
 import SwiftUI
 
 /// Build a plant, A House Divided style: choose the sector type, compare its operating
-/// strategies, choose the size, and confirm against the engine's own preview.
+/// strategies, choose the size, and confirm against the engine's own quote and preview. The
+/// first plant of a sector type in a region opens a division; later plants join it and run
+/// its strategy.
 struct BuildFlowView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
-    let stateCode: String
+    let regionCode: String
 
     @State private var sector: String?
     @State private var strategy: StrategyDto?
     @State private var blocks: UInt32 = 1
     @State private var preview: PreviewDto?
+    @State private var quote: BuildQuoteDto?
     @State private var rejection: CommandRejection?
 
-    private var state: StateDto? { store.states.first { $0.code == stateCode } }
+    private var board: RegionBoardDto? { store.boards.first { $0.code == regionCode } }
+
+    /// The selected firm's division strategy for a sector type in this region, if any.
+    private func locked(_ sector: String) -> UInt32? {
+        store.divisions.first { $0.region == regionCode && $0.industry == sector }?.strategy
+    }
 
     var body: some View {
         NavigationStack {
@@ -39,7 +47,7 @@ struct BuildFlowView: View {
                 if sector != nil {
                     ToolbarItem(placement: .navigation) {
                         Button {
-                            if strategy != nil { strategy = nil; preview = nil } else { sector = nil }
+                            if strategy != nil { strategy = nil; preview = nil; quote = nil } else { sector = nil }
                         } label: {
                             Label("Back", systemImage: "chevron.left")
                         }
@@ -55,7 +63,7 @@ struct BuildFlowView: View {
     }
 
     private var title: String {
-        let place = state?.name ?? stateCode
+        let place = board?.name ?? regionCode
         if let strategy { return "\(strategy.name) in \(place)" }
         if let sector { return "\(Sector.name(sector)) in \(place)" }
         return "Build in \(place)"
@@ -80,6 +88,13 @@ struct BuildFlowView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(Sector.name(id)).font(.callout.weight(.semibold)).foregroundStyle(Theme.primaryText)
                                 Text(focusLabel(id, ops)).font(.caption2).foregroundStyle(focusColor(id, ops))
+                                if let division = store.divisions.first(where: { $0.region == regionCode && $0.industry == id }) {
+                                    Text("Your division · \(division.plants.count) plant\(division.plants.count == 1 ? "" : "s")")
+                                        .font(.caption2.weight(.semibold)).foregroundStyle(Theme.gold)
+                                } else if board?.specialization.contains(id) == true {
+                                    Text("\(board?.stateName ?? "State") specialty")
+                                        .font(.caption2.weight(.semibold)).foregroundStyle(Theme.positive)
+                                }
                             }
                             Spacer(minLength: 0)
                         }
@@ -110,23 +125,34 @@ struct BuildFlowView: View {
 
     private func strategies(in sector: String) -> some View {
         let options = store.strategyCatalogue.filter { $0.industry == sector }
+        let division = locked(sector)
         return VStack(alignment: .leading, spacing: 12) {
             Eyebrow(text: "Operating strategy")
+            if division != nil {
+                Text("You run a \(Sector.name(sector)) division here. New plants join it and run its strategy; retool the division from the CEO Office to switch.")
+                    .font(.caption).foregroundStyle(Theme.secondary)
+            } else {
+                Text("Your first \(Sector.name(sector)) plant here opens a division: a $100,000 entry fee and the founding plant at half price.")
+                    .font(.caption).foregroundStyle(Theme.secondary)
+            }
             ForEach(options, id: \.index) { option in
+                let allowed = division == nil || division == option.index
                 Button {
                     strategy = option
                     blocks = 1
-                    Task { await refreshPreview() }
+                    Task { await refresh() }
                 } label: {
                     StrategyCard(strategy: option, room: roomFor(option))
+                        .opacity(allowed ? 1 : 0.45)
                 }
                 .buttonStyle(.plain)
+                .disabled(!allowed)
             }
         }
     }
 
     private func roomFor(_ strategy: StrategyDto) -> RoomDto? {
-        state?.room.first { $0.product == strategy.output }
+        board?.room.first { $0.product == strategy.output }
     }
 
     // MARK: confirm
@@ -143,8 +169,21 @@ struct BuildFlowView: View {
                             Text("\(blocks) block\(blocks == 1 ? "" : "s")").monospacedDigit().foregroundStyle(Theme.primaryText)
                         }
                     }
-                    .onChange(of: blocks) { _, _ in Task { await refreshPreview() } }
-                    figureRow("Capex", Format.money(strategy.capexCents * Int64(blocks)))
+                    .onChange(of: blocks) { _, _ in Task { await refresh() } }
+                    if let quote {
+                        if quote.opensDivision {
+                            figureRow("Entry fee", Format.money(quote.entryFeeCents))
+                        }
+                        figureRow(quote.opensDivision ? "Plants (founding plant at half price)" : "Plants", Format.money(quote.capexCents))
+                        if quote.dominanceBps > 10_000 {
+                            figureRow("Dominance surcharge", String(format: "x%.2f", Double(quote.dominanceBps) / 10_000), tone: Theme.warning)
+                        }
+                        figureRow("Total", Format.money(quote.totalCents))
+                        figureRow("Your share after", "\(quote.shareAfterBps / 100)%")
+                        figureRow("Inputs here", locationLabel(quote.locationInputBps), tone: quote.locationInputBps < 10_000 ? Theme.positive : quote.locationInputBps > 10_000 ? Theme.warning : Theme.primaryText)
+                    } else {
+                        figureRow("Capex", Format.money(strategy.capexCents * Int64(blocks)))
+                    }
                     figureRow("Online in", "\(strategy.buildWeeks) weeks")
                     figureRow("Output", "\((strategy.weeklyOutputLots * Int64(blocks)).formatted()) lots of \(strategy.outputName) a week")
                 }
@@ -180,22 +219,30 @@ struct BuildFlowView: View {
         }
     }
 
-    private func figureRow(_ label: String, _ value: String) -> some View {
+    private func figureRow(_ label: String, _ value: String, tone: Color = Theme.primaryText) -> some View {
         HStack {
             Text(label).font(.callout).foregroundStyle(Theme.secondary)
             Spacer()
-            Text(value).font(.callout.monospacedDigit()).foregroundStyle(Theme.primaryText).multilineTextAlignment(.trailing)
+            Text(value).font(.callout.monospacedDigit()).foregroundStyle(tone).multilineTextAlignment(.trailing)
         }
     }
 
-    private func refreshPreview() async {
-        guard let firm = store.selectedFirm ?? store.overview?.primaryFirm, let strategy else { return }
-        preview = await store.previewBuild(firm: firm, recipe: strategy.index, blocks: blocks)
+    /// Plain words for the location input factor.
+    private func locationLabel(_ bps: Int32) -> String {
+        let delta = Double(bps - 10_000) / 100
+        if bps == 10_000 { return "Home rate" }
+        return String(format: "%+.1f%%", delta)
+    }
+
+    private func refresh() async {
+        guard let firm = store.selectedFirm ?? store.overview?.primaryFirm, let strategy, let board else { return }
+        quote = await store.buildQuote(region: board.index, recipe: strategy.index, blocks: blocks)
+        preview = await store.previewBuild(firm: firm, region: board.index, recipe: strategy.index, blocks: blocks)
     }
 
     private func build(_ strategy: StrategyDto) async {
-        guard let state else { return }
-        rejection = await store.buildFacility(region: state.index, recipe: strategy.index, blocks: blocks)
+        guard let board else { return }
+        rejection = await store.buildFacility(region: board.index, recipe: strategy.index, blocks: blocks)
         if rejection == nil { dismiss() }
     }
 }

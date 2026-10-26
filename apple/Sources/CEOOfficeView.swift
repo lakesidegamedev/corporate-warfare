@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The CEO office of the selected company, after A House Divided: masthead, the figures that
-/// matter this week, sector focus and logistics, and every plant grouped by sector type with
+/// matter this week, sector focus and logistics, and every division (a sector type in a region) with
 /// its strategy, size and utilisation. Deeper corporate controls stay one tap away.
 struct CEOOfficeView: View {
     @EnvironmentObject private var store: AppStore
@@ -170,25 +170,49 @@ struct CEOOfficeView: View {
     }
 
     private var plantsPanel: some View {
-        let grouped = Dictionary(grouping: store.facilities) { plant in
-            strategy(for: plant)?.industry ?? "other"
-        }
-        return VStack(alignment: .leading, spacing: 12) {
-            Eyebrow(text: "Plants by sector")
-            if store.facilities.isEmpty {
-                Panel { Text("No plants yet. Open a state on the map to build one.").foregroundStyle(Theme.secondary) }
+        VStack(alignment: .leading, spacing: 12) {
+            Eyebrow(text: "Divisions")
+            if store.divisions.isEmpty {
+                Panel { Text("No divisions yet. Open a region on the map to enter a sector.").foregroundStyle(Theme.secondary) }
             }
-            ForEach(Sector.order.filter { grouped[$0] != nil }, id: \.self) { sector in
-                Panel {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 8) {
-                            SectorBadge(sector: sector, size: 26)
-                            Text(Sector.name(sector)).font(.headline).foregroundStyle(Theme.primaryText)
-                        }
-                        ForEach(grouped[sector] ?? [], id: \.handle) { plant in
-                            plantRow(plant)
-                        }
+            ForEach(store.divisions) { division in
+                divisionPanel(division)
+            }
+        }
+    }
+
+    private func divisionPanel(_ division: DivisionDto) -> some View {
+        let plants = store.facilities.filter { division.plants.contains($0.handle) }
+        return Panel {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    SectorBadge(sector: division.industry, size: 28)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("\(Sector.name(division.industry)) · \(division.regionName)").font(.headline).foregroundStyle(Theme.primaryText)
+                        Text("\(division.strategyName) · \(division.plants.count) plant\(division.plants.count == 1 ? "" : "s"), \(division.blocks) block\(division.blocks == 1 ? "" : "s")")
+                            .font(.caption).foregroundStyle(Theme.secondary)
                     }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("\(division.shareBps / 100)%").font(.callout.monospacedDigit().weight(.semibold)).foregroundStyle(Theme.gold)
+                        Eyebrow(text: "share")
+                    }
+                }
+                HStack {
+                    if division.retooling {
+                        Label("Retooling", systemImage: "gearshape.arrow.triangle.2.circlepath").font(.caption).foregroundStyle(Theme.warning)
+                    }
+                    Spacer()
+                    if let first = plants.first {
+                        Button("Retool division") { retooling = first }
+                            .font(.caption.weight(.semibold))
+                            .buttonStyle(.bordered)
+                            .tint(Theme.gold)
+                            .disabled(division.retooling || plants.contains { $0.status != "operating" && $0.status != "mothballed" })
+                    }
+                }
+                ForEach(plants, id: \.handle) { plant in
+                    plantRow(plant)
                 }
             }
         }
@@ -204,11 +228,6 @@ struct CEOOfficeView: View {
                         .font(.caption).foregroundStyle(Theme.secondary)
                 }
                 Spacer()
-                Button("Retool") { retooling = plant }
-                    .font(.caption.weight(.semibold))
-                    .buttonStyle(.bordered)
-                    .tint(Theme.gold)
-                    .disabled(plant.status != "operating" && plant.status != "mothballed")
             }
             ProgressView(value: min(max(utilisation, 0), 1)).tint(utilisation > 0.8 ? Theme.positive : Theme.warning)
             HStack {
@@ -252,8 +271,8 @@ struct BigFigure: View {
     }
 }
 
-/// Switch a plant to another strategy of its sector: a quarter of the new capex per block and a
-/// third of its build time, at least four weeks.
+/// Switch a division to another strategy of its sector: every plant moves together, for a
+/// quarter of the new capex per block and a third of its build time, at least four weeks.
 struct RetoolSheet: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -262,11 +281,16 @@ struct RetoolSheet: View {
 
     private var current: StrategyDto? { store.strategyCatalogue.first { $0.id == plant.recipe } }
 
+    /// Blocks across the division this plant belongs to.
+    private var divisionBlocks: Int64 {
+        Int64(store.divisions.first { $0.plants.contains(plant.handle) }?.blocks ?? plant.blocks)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Retooling costs a quarter of the new strategy's capex per block and a third of its build time, at least four weeks. The plant produces nothing meanwhile.")
+                    Text("A division runs one strategy, so every plant in it retools together: a quarter of the new strategy's capex per block and a third of its build time, at least four weeks. The division produces nothing meanwhile.")
                         .font(.caption).foregroundStyle(Theme.secondary)
                     ForEach(store.strategyCatalogue.filter { $0.industry == current?.industry && $0.id != plant.recipe }, id: \.index) { option in
                         Button {
@@ -278,7 +302,7 @@ struct RetoolSheet: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 StrategyCard(strategy: option, room: nil)
-                                Text("Retool cost \(Format.money(option.capexCents * Int64(plant.blocks) / 4)) · \(max(option.buildWeeks / 3, 4)) weeks")
+                                Text("Retool cost \(Format.money(option.capexCents * divisionBlocks / 4)) · \(max(option.buildWeeks / 3, 4)) weeks")
                                     .font(.caption.monospacedDigit()).foregroundStyle(Theme.gold)
                             }
                         }

@@ -337,7 +337,7 @@ struct BuildSheet: View {
             preview = nil
             return
         }
-        preview = await store.previewBuild(firm: firm.handle, recipe: recipe, blocks: blocks)
+        preview = await store.previewBuild(firm: firm.handle, region: region, recipe: recipe, blocks: blocks)
     }
 }
 

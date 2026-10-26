@@ -1550,8 +1550,8 @@ struct FoundFirmSheet: View {
                 TextField("Corporation name", text: $name)
                     .accessibilityLabel("New corporation name")
                 Picker("Headquarters", selection: $region) {
-                    ForEach(store.states, id: \.index) { item in
-                        Text(item.name).tag(item.index)
+                    ForEach(store.boards, id: \.index) { item in
+                        Text("\(item.name), \(item.stateCode)").tag(item.index)
                     }
                 }
                 TextField("Paid-in capital in dollars", text: $capitalText)

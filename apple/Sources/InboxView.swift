@@ -48,6 +48,16 @@ struct InboxView: View {
                         }
                     }
 
+                    SectionCard(title: "Market news") {
+                        if store.recentRaids.isEmpty {
+                            EmptyNote(text: "No market raids yet. Rivals that share a market with you can raid it; so can you, from a region's board.")
+                        } else {
+                            ForEach(Array(store.recentRaids.prefix(8).enumerated()), id: \.offset) { _, raid in
+                                RaidNewsRow(raid: raid)
+                            }
+                        }
+                    }
+
                     SectionCard(title: "Deals") {
                         if store.deals.isEmpty {
                             EmptyNote(text: "No bids. A tender escrows the full maximum price plus two percent, then diligence runs two weeks before the four-week offer.")
@@ -86,5 +96,36 @@ struct InboxView: View {
             .background(Theme.background(for: scheme))
             .navigationTitle("Inbox")
         }
+    }
+}
+
+/// One market raid in the news: who raided whom, where, and how it went.
+struct RaidNewsRow: View {
+    let raid: RaidRecordDto
+
+    private var tone: Color {
+        if raid.playerDefender && raid.success { return Theme.negative }
+        if raid.playerAttacker && raid.success { return Theme.positive }
+        return Theme.secondary
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            SectorBadge(sector: raid.industry, size: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(headline).font(.callout).foregroundStyle(Theme.primaryText)
+                Text("Week \(raid.week) · \(CorridorMap.shared.regionName(raid.region))")
+                    .font(.caption).foregroundStyle(tone)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var headline: String {
+        let market = Sector.name(raid.industry)
+        if raid.success {
+            return "\(raid.attacker) took \(raid.blocks) \(market) block\(raid.blocks == 1 ? "" : "s") from \(raid.defender)"
+        }
+        return "\(raid.attacker) raided \(raid.defender) in \(market) and failed"
     }
 }

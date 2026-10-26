@@ -33,8 +33,32 @@ actor Engine {
         session?.firms() ?? []
     }
 
-    func states() -> [StateDto] {
-        session?.states() ?? []
+    func regionBoards(firm: UInt64?) -> [RegionBoardDto] {
+        session?.regionBoards(firm: firm) ?? []
+    }
+
+    func divisions(firm: UInt64) -> [DivisionDto] {
+        session?.divisions(firm: firm) ?? []
+    }
+
+    func mapDivisions() -> [MapDivisionDto] {
+        session?.mapDivisions() ?? []
+    }
+
+    func buildQuote(firm: UInt64, region: UInt32, recipe: UInt32, blocks: UInt32) -> BuildQuoteDto? {
+        session?.buildQuote(firm: firm, region: region, recipe: recipe, blocks: blocks)
+    }
+
+    func raidTargets(firm: UInt64) -> [RaidOptionDto] {
+        session?.raidTargets(firm: firm) ?? []
+    }
+
+    func raidQuote(firm: UInt64, target: UInt64, region: UInt32, industry: UInt32, budgetCents: Int64) -> RaidQuoteDto? {
+        session?.raidQuote(firm: firm, target: target, region: region, industry: industry, budgetCents: budgetCents)
+    }
+
+    func recentRaids() -> [RaidRecordDto] {
+        session?.recentRaids() ?? []
     }
 
     func mapPlants() -> [MapPlantDto] {
@@ -121,8 +145,8 @@ actor Engine {
         session?.previewIssue(firm: firm, qty: qty, priceCents: priceCents)
     }
 
-    func previewBuild(firm: UInt64, recipe: UInt32, blocks: UInt32) -> PreviewDto? {
-        session?.previewBuild(firm: firm, recipe: recipe, blocks: blocks)
+    func previewBuild(firm: UInt64, region: UInt32, recipe: UInt32, blocks: UInt32) -> PreviewDto? {
+        session?.previewBuild(firm: firm, region: region, recipe: recipe, blocks: blocks)
     }
 
     func previewJson(_ json: String) -> PreviewDto? {

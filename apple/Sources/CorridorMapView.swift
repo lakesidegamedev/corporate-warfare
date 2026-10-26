@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// What the map shades the playable states by.
+/// What the map shades the regions by.
 enum MapLayer: String, CaseIterable, Identifiable {
-    case presence = "Your plants"
+    case presence = "Your divisions"
     case room = "Room to build"
     case wages = "Wages"
     case skill = "Workforce skill"
@@ -28,22 +28,22 @@ enum MapLayer: String, CaseIterable, Identifiable {
     }
 }
 
-/// One plant marker on the map.
-struct MapMarker: Identifiable {
-    let id: UInt64
-    let state: String
+/// One of the player's divisions on the map: a sector type the player runs in a region.
+struct DivisionMarker: Identifiable {
+    let region: String
     let sector: String
-    let player: Bool
-    let label: String
+    let plants: Int
+    var id: String { region + "/" + sector }
 }
 
 /// The real map of the Great Lakes and Ohio Valley, drawn from bundled public-domain geometry
-/// with pan, pinch zoom and tap-to-select. Shading, markers and selection come from the caller.
+/// with pan, pinch zoom and tap-to-select a region. Shading, division markers and selection
+/// come from the caller.
 struct CorridorMapView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let shading: [String: Double]
     let layer: MapLayer
-    let markers: [MapMarker]
+    let divisions: [DivisionMarker]
     @Binding var selected: String?
 
     @State private var zoom: CGFloat = 1
@@ -82,12 +82,12 @@ struct CorridorMapView: View {
             }
             .onTapGesture(coordinateSpace: .local) { location in
                 let point = frame.toMap(location)
-                let hit = map.state(at: point)
+                let hit = map.region(at: point)
                 selected = hit == selected ? nil : hit
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Map of the playable states")
-            .accessibilityValue(selected.flatMap { code in map.playStates.first { $0.code == code }?.name } ?? "No state selected")
+            .accessibilityLabel("Map of the playable regions")
+            .accessibilityValue(selected.map { map.regionName($0) } ?? "No region selected")
         }
     }
 
@@ -131,28 +131,82 @@ struct CorridorMapView: View {
 
     private func draw(in context: inout GraphicsContext, size: CGSize, frame: Framing) {
         let transform = frame.transform
-        let hairline = 1 / frame.scale
         context.fill(map.contextLand.applying(transform), with: .color(Theme.landDim))
-        for state in map.playStates {
-            let path = state.path.applying(transform)
+        for region in map.regions {
+            let path = region.path.applying(transform)
             context.fill(path, with: .color(Theme.land))
-            let value = shading[state.code] ?? 0
+            let value = shading[region.code] ?? 0
             if value > 0 {
                 context.fill(path, with: .color(layer.tint.opacity(0.12 + 0.55 * min(value, 1))))
             }
         }
-        context.stroke(map.counties.applying(transform), with: .color(Theme.stroke.opacity(0.9)), lineWidth: 0.6)
+        context.stroke(map.counties.applying(transform), with: .color(Theme.stroke.opacity(0.45)), lineWidth: 0.5)
         context.fill(map.lakes.applying(transform), with: .color(Theme.water))
         context.stroke(map.rivers.applying(transform), with: .color(Theme.water.opacity(0.9)), lineWidth: 1.4)
-        context.stroke(map.interstates.applying(transform), with: .color(Theme.road.opacity(0.45)), lineWidth: 1)
-        for state in map.playStates {
-            let path = state.path.applying(transform)
-            let isSelected = state.code == selected
-            context.stroke(path, with: .color(isSelected ? Theme.gold : Theme.secondary.opacity(0.7)), lineWidth: isSelected ? 3 : 1.2)
+        context.stroke(map.interstates.applying(transform), with: .color(Theme.road.opacity(0.4)), lineWidth: 1)
+        // Region borders, then state borders over them, then the selected region on top.
+        for region in map.regions {
+            context.stroke(region.path.applying(transform), with: .color(Theme.secondary.opacity(0.45)), lineWidth: 0.9)
         }
-        drawMarkers(in: &context, frame: frame)
+        for state in map.playStates {
+            context.stroke(state.path.applying(transform), with: .color(Theme.primaryText.opacity(0.7)), lineWidth: 1.8)
+        }
+        if let selected, let region = map.regions.first(where: { $0.code == selected }) {
+            context.stroke(region.path.applying(transform), with: .color(Theme.gold), lineWidth: 3)
+        }
+        if layer == .presence {
+            drawDivisions(in: &context, frame: frame)
+        }
         drawCities(in: &context, frame: frame)
-        _ = hairline
+        if zoom * pinch > 1.8 {
+            drawRegionNames(in: &context, frame: frame)
+        }
+    }
+
+    /// Region names once the player has zoomed in far enough to read them.
+    private func drawRegionNames(in context: inout GraphicsContext, frame: Framing) {
+        for region in map.regions {
+            let point = frame.toScreen(CGPoint(x: region.bounds.midX, y: region.bounds.midY))
+            context.draw(
+                Text(region.name.uppercased())
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(Theme.secondary.opacity(0.8)),
+                at: CGPoint(x: point.x, y: point.y + 14)
+            )
+        }
+    }
+
+    /// The player's divisions: one sector circle per owned sector type in each region, in a row
+    /// beside the region's anchor city, with a badge counting its plants.
+    private func drawDivisions(in context: inout GraphicsContext, frame: Framing) {
+        let radius: CGFloat = 11
+        let byRegion = Dictionary(grouping: divisions, by: \.region)
+        for (code, owned) in byRegion {
+            guard let anchor = map.anchor(of: code) else { continue }
+            let origin = frame.toScreen(anchor)
+            let sorted = owned.sorted { (Sector.order.firstIndex(of: $0.sector) ?? 99) < (Sector.order.firstIndex(of: $1.sector) ?? 99) }
+            let spacing = radius * 2 + 5
+            let width = CGFloat(sorted.count - 1) * spacing
+            for (index, division) in sorted.enumerated() {
+                // Below the anchor so the city label to its right stays clear.
+                let center = CGPoint(x: origin.x - width / 2 + CGFloat(index) * spacing, y: origin.y + radius + 8)
+                let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+                context.fill(Path(ellipseIn: rect.insetBy(dx: -2, dy: -2)), with: .color(Theme.ink))
+                context.fill(Path(ellipseIn: rect), with: .color(Sector.color(division.sector)))
+                context.stroke(Path(ellipseIn: rect.insetBy(dx: -1.5, dy: -1.5)), with: .color(Theme.gold), lineWidth: 2)
+                var symbol = context.resolve(Image(systemName: Sector.symbol(division.sector)))
+                symbol.shading = .color(Theme.ink)
+                context.draw(symbol, in: rect.insetBy(dx: 5, dy: 5))
+                // Plant count badge.
+                let badge = CGRect(x: rect.maxX - 7, y: rect.minY - 5, width: 14, height: 14)
+                context.fill(Path(ellipseIn: badge), with: .color(Theme.gold))
+                context.draw(
+                    Text("\(division.plants)").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.ink),
+                    at: CGPoint(x: badge.midX, y: badge.midY)
+                )
+            }
+        }
     }
 
     private func drawCities(in context: inout GraphicsContext, frame: Framing) {
@@ -175,51 +229,5 @@ struct CorridorMapView: View {
                 anchor: .leading
             )
         }
-    }
-
-    /// Plants sit around their state's cities, a few per city, so a busy state reads as busy.
-    private func drawMarkers(in context: inout GraphicsContext, frame: Framing) {
-        let byState = Dictionary(grouping: markers, by: \.state)
-        for (code, plants) in byState {
-            guard let name = map.playStates.first(where: { $0.code == code })?.name else { continue }
-            var anchors = map.cities(in: name).prefix(6).map { CGPoint(x: $0.x, y: $0.y) }
-            if anchors.isEmpty, let hub = map.hubs[code] { anchors = [hub] }
-            guard !anchors.isEmpty else { continue }
-            let radius: CGFloat = 9
-            // City labels run to the right of their dot, so plants fan out on the left half:
-            // three slots in the first ring, five in each wider ring.
-            let plantsByCity = Dictionary(grouping: plants.sorted(by: { $0.id < $1.id }).enumerated().map { $0 }) { $0.offset % anchors.count }
-            for (city, group) in plantsByCity {
-                for (slot, entry) in group.enumerated() {
-                    let anchor = frame.toScreen(anchors[city])
-                    let (ring, angle) = Self.slot(slot)
-                    let distance = radius * (2.2 + 2.1 * CGFloat(ring))
-                    let center = CGPoint(x: anchor.x + CGFloat(cos(angle)) * distance, y: anchor.y + CGFloat(sin(angle)) * distance)
-                    drawMarker(entry.element, at: center, radius: radius, in: &context)
-                }
-            }
-        }
-    }
-
-    /// Ring and angle for the n-th plant at one city, all on the side away from its label.
-    private static func slot(_ n: Int) -> (Int, Double) {
-        if n < 3 {
-            return (0, Double.pi * (2.0 / 3.0 + Double(n) / 3.0))
-        }
-        let k = n - 3
-        return (1 + k / 5, Double.pi * (0.5 + Double(k % 5) / 4.0))
-    }
-
-    private func drawMarker(_ plant: MapMarker, at center: CGPoint, radius: CGFloat, in context: inout GraphicsContext) {
-        let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
-        context.fill(Path(ellipseIn: rect), with: .color(Sector.color(plant.sector)))
-        context.stroke(
-            Path(ellipseIn: rect.insetBy(dx: -1.5, dy: -1.5)),
-            with: .color(plant.player ? Theme.gold : Theme.ink),
-            lineWidth: plant.player ? 3 : 1.5
-        )
-        var symbol = context.resolve(Image(systemName: Sector.symbol(plant.sector)))
-        symbol.shading = .color(Theme.ink)
-        context.draw(symbol, in: rect.insetBy(dx: 4.5, dy: 4.5))
     }
 }
