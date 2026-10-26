@@ -59,3 +59,14 @@ tracks execution. Update STATUS and requirements, commit, and keep the next move
 No agent delegation by default. Do not send external messages or invite testers without
 explicit instruction. Routine implementation within approved scope does not need another
 permission request.
+
+## Standing procedure
+
+- Versioning, changelog and release steps live in `docs/RELEASING.md`. Patch for minor updates
+  and fixes, minor for big features, major for wide feature releases or upgrades.
+- Every pull request that changes code, content, tooling or workflows adds a `CHANGELOG.md`
+  entry under Unreleased in the same pull request. CI enforces this and the version agreement
+  between `Cargo.toml`, `apple/project.yml` and the changelog.
+- Releases are tagged `vX.Y.Z` on `main` with the changelog section as the GitHub release
+  notes.
+
