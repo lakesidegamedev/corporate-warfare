@@ -121,6 +121,7 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
             advocacy_book: Ledger::default(),
             legal_services_book: Ledger::default(),
             gateway_book: Ledger::default(),
+            gateway_floor_cents: 0,
         },
         macro_state: MacroState {
             policy_rate_bps: BASE_POLICY_RATE_BPS,
@@ -153,17 +154,19 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
     };
 
     // Outside gateway capital is finite but real: exports are paid from it, imports add to it.
+    // The outside economy is large next to the corridor; weekly pacing in `clear_week` keeps
+    // a sustained surplus from emptying it at once.
     let _ = world.outside.gateway_book.commit(
         Tick::OPENING,
         Txn::new()
             .debit(
                 cw_core::ledger::Account::Cash,
-                5_000_000_000,
+                50_000_000_000,
                 "gateway capital",
             )
             .credit(
                 cw_core::ledger::Account::ShareCapital,
-                5_000_000_000,
+                50_000_000_000,
                 "gateway capital",
             ),
     );
@@ -311,6 +314,10 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
             layoffs: Vec::new(),
             staff_history: Vec::new(),
             outside_peak_bps: 0,
+            secondary_industry: None,
+            focus_transition_until: 0,
+            focus_cooldown_until: 0,
+            logistics_strength: 0,
             policy_requests: Vec::new(),
             guarantees: Vec::new(),
             last_strategic_week: 0,
@@ -511,6 +518,10 @@ fn placeholder_firm() -> Firm {
         layoffs: Vec::new(),
         staff_history: Vec::new(),
         outside_peak_bps: 0,
+        secondary_industry: None,
+        focus_transition_until: 0,
+        focus_cooldown_until: 0,
+        logistics_strength: 0,
         policy_requests: Vec::new(),
         guarantees: Vec::new(),
         last_strategic_week: 0,
@@ -610,7 +621,7 @@ fn open_facility(
         mothballed_since: None,
         outage: None,
     };
-    if recipe.output == "ore" {
+    if recipe.depletes() {
         facility.deposit_remaining =
             MilliLots::from_lots(recipe.weekly_output_lots * blocks as i64 * 52 * 20);
     }
@@ -664,7 +675,7 @@ fn opening_input_cost(dataset: &Dataset, recipe_index: u16, blocks: u8) -> i64 {
 }
 
 fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
-    let region = world.region_index("035").unwrap_or(0);
+    let region = world.region_index("OH").unwrap_or(0);
     let recipe_index = dataset.recipe_index["farm"];
     let mut firm = placeholder_firm();
     firm.name = "Lakeside Holdings".to_owned();
@@ -865,13 +876,26 @@ fn build_gateways(world: &mut World, dataset: &Dataset) {
         .map(|product| product.id.as_str())
         .collect();
     products.push("electricity");
+    // Size each gateway to the larger of what the corridor's plants consume and what they
+    // produce: raw commodities and goods trade nationally, so a state's mines and mills can
+    // always reach the outside market at the gateway's discount, and its plants can always
+    // import at its premium.
     let mut corridor_volume: BTreeMap<u16, i64> = BTreeMap::new();
+    let mut corridor_output: BTreeMap<u16, i64> = BTreeMap::new();
     for (_, facility) in world.facilities.iter() {
         let recipe = &dataset.recipes[facility.recipe as usize];
         for (id, qty) in &recipe.weekly_inputs_lots {
             let code = dataset.product_index[id.as_str()];
             *corridor_volume.entry(code).or_default() += qty * facility.blocks as i64;
         }
+        if let Some(code) = dataset.product_index.get(&recipe.output) {
+            *corridor_output.entry(*code).or_default() +=
+                recipe.weekly_output_lots * facility.blocks as i64;
+        }
+    }
+    for (code, output) in corridor_output {
+        let entry = corridor_volume.entry(code).or_default();
+        *entry = (*entry).max(output);
     }
     for region in 0..world.regions.len() {
         for id in &products {
@@ -895,6 +919,9 @@ fn build_gateways(world: &mut World, dataset: &Dataset) {
                 capacity_lots: capacity,
                 sell_price_cents: reference + reference * 5 / 100,
                 buy_price_cents: reference - reference * 5 / 100,
+                last_import_lots: 0,
+                last_export_lots: 0,
+                smoothed_import_lots: 0,
             });
         }
     }

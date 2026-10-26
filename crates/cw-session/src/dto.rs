@@ -212,6 +212,7 @@ pub struct ChoiceLine {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MarketLine {
     pub product: String,
+    pub product_id: String,
     pub reference_price_cents: i64,
     pub last_price_cents: i64,
     pub regional_stock_lots: i64,
@@ -501,36 +502,59 @@ pub fn events(world: &World, dataset: &Dataset) -> Vec<EventLine> {
 }
 
 pub fn market(world: &World, dataset: &Dataset, region: u8, product: u16) -> MarketLine {
+    // Stock and sales belong to the state where the goods sit and sell, whichever state the
+    // owning firm is headquartered in. Sales come from the last closed week: between ticks the
+    // open week is empty.
     let stock: i64 = world
         .firms
         .iter()
-        .filter(|(_, firm)| firm.region == region)
         .map(|(_, firm)| firm.stock(product, region).lots())
         .sum();
     let sales: i64 = world
         .firms
         .iter()
-        .filter(|(_, firm)| firm.region == region)
-        .map(|(_, firm)| {
-            firm.last_week_units_sold
-                .get(&(region, product))
-                .map(|q| q.lots())
-                .unwrap_or(0)
-        })
+        .filter_map(|(_, firm)| firm.last_closed_sales())
+        .filter_map(|week| week.get(&(region, product)).copied())
         .sum();
     let gateway = world
         .gateways
         .iter()
         .find(|gateway| gateway.region == region && gateway.product == product);
+    let reference = dataset.reference_price(product);
+    // Consumer goods clear against households and record a sale price. Producer goods trade
+    // between firms: quote the lowest local ask among sellers holding stock, never above what
+    // the gateway charges to import.
+    let household = world.regions[region as usize]
+        .households
+        .last_sale_price_cents
+        .get(&product)
+        .copied();
+    let lowest_ask = world
+        .firms
+        .iter()
+        .filter(|(_, firm)| firm.stock(product, region).lots() > 0)
+        .map(|(_, firm)| {
+            firm.policies
+                .prices
+                .get(&product)
+                .copied()
+                .unwrap_or(reference)
+        })
+        .min();
+    let import = gateway
+        .map(|g| g.sell_price_cents)
+        .filter(|price| *price > 0);
+    let last_price = household
+        .or(match (lowest_ask, import) {
+            (Some(ask), Some(import)) => Some(ask.min(import)),
+            (ask, import) => ask.or(import),
+        })
+        .unwrap_or(reference);
     MarketLine {
         product: dataset.products[product as usize].name.clone(),
-        reference_price_cents: dataset.reference_price(product),
-        last_price_cents: world.regions[region as usize]
-            .households
-            .last_sale_price_cents
-            .get(&product)
-            .copied()
-            .unwrap_or_else(|| dataset.reference_price(product)),
+        product_id: dataset.products[product as usize].id.clone(),
+        reference_price_cents: reference,
+        last_price_cents: last_price,
         regional_stock_lots: stock,
         last_week_sales_lots: sales,
         gateway_buy_cents: gateway.map(|g| g.buy_price_cents).unwrap_or(0),

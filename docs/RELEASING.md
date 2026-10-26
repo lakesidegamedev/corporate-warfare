@@ -10,8 +10,9 @@ Corporate Warfare uses `MAJOR.MINOR.PATCH`. The owner's rule decides which digit
 | A big feature: a new system, screen family or mechanic players will notice | **MINOR** | 1.0.1 to 1.1.0 |
 | A wide feature release or upgrade: a redesign, a new game model, an incompatible save | **MAJOR** | 1.1.0 to 2.0.0 |
 
-When one release mixes sizes, the largest change decides. A release that cannot read the
-previous release's saves is always MAJOR.
+When one release mixes sizes, the largest change decides. The owner has the final say on
+the digit. Breaking save compatibility is a strong signal for a larger bump, and the changelog
+must say so whenever a release cannot read the previous release's saves.
 
 One version number covers the workspace crates (`Cargo.toml`), the engine version reported by
 `cw-cli doctor`, and the iOS marketing version (`apple/project.yml`). CI checks that they agree

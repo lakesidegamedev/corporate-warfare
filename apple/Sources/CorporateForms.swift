@@ -1498,8 +1498,10 @@ struct FoundFirmSheet: View {
     @EnvironmentObject private var store: AppStore
     @State private var name = ""
     @State private var region: UInt32 = 0
-    @State private var capitalText = ""
+    @State private var capitalText = "3000000"
+    @State private var sector = "agriculture"
     @State private var recipe: UInt32 = 0
+    @State private var secondary = "none"
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
 
@@ -1507,72 +1509,97 @@ struct FoundFirmSheet: View {
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+    private var options: [StrategyDto] { store.strategyCatalogue.filter { $0.industry == sector } }
+    private var chosen: StrategyDto? { store.strategyCatalogue.first { $0.index == recipe } }
 
     private func json() -> String? {
         guard !trimmedName.isEmpty, let capital else { return nil }
-        return CommandJSON.command("FoundFirm", [
+        var fields: [String: Any] = [
             "name": trimmedName,
             "region": region,
             "capital_cents": capital,
             "recipe": recipe
-        ])
+        ]
+        if let index = Sector.engineIndex(secondary) { fields["secondary"] = index }
+        return CommandJSON.command("FoundFirm", fields)
     }
 
     var body: some View {
         CommandSheet(
-            title: "Found a firm",
+            title: "Found a corporation",
             actorName: "You, the investor",
-            actorDetail: "Pays the formation fee and paid-in capital from your personal cash. The capital becomes the firm's cash and your equity investment.",
-            submitTitle: "Found firm",
+            actorDetail: "Pays the formation fee and paid-in capital from your personal cash. The capital becomes the corporation's cash and your equity; the founding plant is built from it.",
+            submitTitle: "Found corporation",
             preview: preview,
             rejection: rejection,
             isBusy: store.isBusy,
             canSubmit: json() != nil,
             onSubmit: {
                 guard let capital else { return false }
-                if let rejection = await store.foundFirm(name: trimmedName, region: region, capitalCents: capital, recipe: recipe) {
+                if let rejection = await store.foundFirm(
+                    name: trimmedName, region: region, capitalCents: capital, recipe: recipe,
+                    secondary: Sector.engineIndex(secondary)
+                ) {
                     self.rejection = rejection
                     return false
                 }
                 return true
             }
         ) {
-            Section("Firm") {
-                TextField("Firm name", text: $name)
-                    .accessibilityLabel("New firm name")
-                Picker("Region", selection: $region) {
-                    ForEach(store.regions, id: \.index) { item in
+            Section("Corporation") {
+                TextField("Corporation name", text: $name)
+                    .accessibilityLabel("New corporation name")
+                Picker("Headquarters", selection: $region) {
+                    ForEach(store.states, id: \.index) { item in
                         Text(item.name).tag(item.index)
                     }
                 }
                 TextField("Paid-in capital in dollars", text: $capitalText)
                     .keyboardType(.decimalPad)
                     .accessibilityLabel("Paid-in capital in dollars")
-                Picker("Template", selection: $recipe) {
-                    ForEach(store.recipeOptions, id: \.index) { item in
-                        Text("\(item.id) · \(Format.money(item.capexCents)) · \(item.buildWeeks)w")
-                            .tag(item.index)
-                    }
-                }
                 if let recovery = store.recovery {
                     DetailRow(title: "Formation fee", value: Format.money(recovery.formationFeeCents))
                     DetailRow(title: "Minimum capital", value: Format.money(recovery.minimumCapitalCents))
                 }
-                if let template = store.recipeOptions.first(where: { $0.index == recipe }) {
-                    DetailRow(title: "Template capex", value: Format.money(template.capexCents))
+            }
+            Section("Sector focus") {
+                Picker("Primary sector", selection: $sector) {
+                    ForEach(Sector.order.filter { $0 != "financial" }, id: \.self) { Text(Sector.name($0)).tag($0) }
+                }
+                Picker("Founding strategy", selection: $recipe) {
+                    ForEach(options, id: \.index) { item in
+                        Text("\(item.name) · \(Format.moneyCompact(item.capexCents)) · \(item.referenceMarginBps / 100)%")
+                            .tag(item.index)
+                    }
+                }
+                Picker("Secondary sector", selection: $secondary) {
+                    Text("None").tag("none")
+                    ForEach(Sector.order.filter { $0 != "financial" && $0 != sector }, id: \.self) { Text(Sector.name($0)).tag($0) }
+                }
+                Text("Primary-sector plants use 5% fewer inputs and secondary 2.5% fewer; any other sector pays a 10% payroll overhead. A secondary doubles the sprawl penalty past fifteen plants.")
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondary)
+                if let chosen {
+                    DetailRow(title: "Founding plant capex", value: Format.money(chosen.capexCents))
+                    DetailRow(title: "Online in", value: "\(chosen.buildWeeks) weeks")
                 }
             }
         }
-        .onAppear {
-            if recipe == 0, let first = store.recipeOptions.first {
-                recipe = first.index
-            }
-        }
+        .onAppear { pickFirstStrategy() }
+        .onChange(of: sector) { _, _ in pickFirstStrategy() }
         .task { await refresh() }
         .onChange(of: name) { _, _ in Task { await refresh() } }
         .onChange(of: capitalText) { _, _ in Task { await refresh() } }
         .onChange(of: region) { _, _ in Task { await refresh() } }
         .onChange(of: recipe) { _, _ in Task { await refresh() } }
+        .onChange(of: secondary) { _, _ in Task { await refresh() } }
+    }
+
+    private func pickFirstStrategy() {
+        if !options.contains(where: { $0.index == recipe }), let first = options.first {
+            recipe = first.index
+        }
+        if secondary == sector { secondary = "none" }
     }
 
     private func refresh() async {

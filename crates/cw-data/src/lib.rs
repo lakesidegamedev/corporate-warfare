@@ -20,10 +20,10 @@ use serde::{Deserialize, Serialize};
 pub use balance::{Balance, Product, ProductKind, Recipe};
 pub use events::EventCard;
 pub use firms::{Archetype, SeedFirm};
-pub use geography::{Geography, Lane, Region};
+pub use geography::{Conditions, Geography, Lane, Region};
 
 pub const BALANCE_JSON: &str = include_str!("../../../content/initial-balance.json");
-pub const GEOGRAPHY_JSON: &str = include_str!("../../../content/geography/corridor-fixture.json");
+pub const GEOGRAPHY_JSON: &str = include_str!("../../../content/geography/states.json");
 pub const EVENTS_JSON: &str = include_str!("../../../content/events/events.json");
 pub const FIRMS_JSON: &str = include_str!("../../../content/firms.json");
 
@@ -70,7 +70,7 @@ impl Dataset {
         let balance: Balance = serde_json::from_str(BALANCE_JSON)
             .map_err(|error| vec![format!("initial-balance.json: {error}")])?;
         let geography: Geography = serde_json::from_str(GEOGRAPHY_JSON)
-            .map_err(|error| vec![format!("corridor-fixture.json: {error}")])?;
+            .map_err(|error| vec![format!("states.json: {error}")])?;
         let events: events::EventDeck = serde_json::from_str(EVENTS_JSON)
             .map_err(|error| vec![format!("events.json: {error}")])?;
         let firms: firms::SeedFirms = serde_json::from_str(FIRMS_JSON)
@@ -127,17 +127,26 @@ impl Dataset {
     /// Structural validation. Any error is a data defect, never a gameplay outcome.
     pub fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
-        if self.products.len() != 25 {
+        if self.products.len() != 34 {
             errors.push(format!(
-                "expected 25 products, found {}",
+                "expected 34 products, found {}",
                 self.products.len()
             ));
         }
-        if self.recipes.len() != 17 {
-            errors.push(format!(
-                "expected 17 operating recipes, found {}",
-                self.recipes.len()
-            ));
+        // Every operating sector offers a real choice of strategies, each named for the player.
+        let mut strategies: BTreeMap<&str, usize> = BTreeMap::new();
+        for recipe in &self.recipes {
+            *strategies.entry(recipe.industry.as_str()).or_default() += 1;
+            if recipe.name.trim().is_empty() {
+                errors.push(format!("strategy {} has no display name", recipe.id));
+            }
+        }
+        for (industry, count) in &strategies {
+            if *count < 3 {
+                errors.push(format!(
+                    "sector {industry} offers {count} strategies, needs at least 3"
+                ));
+            }
         }
         if self.regions.len() < 8 {
             errors.push(format!(
@@ -214,9 +223,9 @@ impl Dataset {
         }
 
         for region in &self.regions {
-            if region.code.len() != 3 || !region.code.chars().all(|c| c.is_ascii_digit()) {
+            if region.code.len() != 2 || !region.code.chars().all(|c| c.is_ascii_uppercase()) {
                 errors.push(format!(
-                    "region code {} is not a three digit EA code",
+                    "region code {} is not a two letter state code",
                     region.code
                 ));
             }
@@ -406,39 +415,45 @@ mod tests {
     #[test]
     fn pinned_dataset_loads_and_validates() {
         let dataset = Dataset::load().expect("dataset must validate");
-        assert_eq!(dataset.products.len(), 25);
-        assert_eq!(dataset.recipes.len(), 17);
-        assert_eq!(dataset.regions.len(), 11);
+        assert_eq!(dataset.products.len(), 34);
+        assert_eq!(dataset.recipes.len(), 53);
+        assert_eq!(dataset.regions.len(), 8);
         assert_eq!(dataset.events.len(), 24);
         assert_eq!(dataset.seed_firms.len(), 30);
         assert_eq!(dataset.hash.len(), 64);
     }
 
     #[test]
-    fn the_authored_corridor_is_unique_and_labelled() {
+    fn the_playable_states_are_unique_and_labelled() {
         let dataset = Dataset::load().unwrap();
-        assert_eq!(dataset.regions.len(), 11);
+        assert_eq!(dataset.regions.len(), 8);
         let mut codes = std::collections::BTreeSet::new();
-        let mut names = std::collections::BTreeSet::new();
         for region in &dataset.regions {
             assert!(codes.insert(region.code.clone()), "duplicate region code");
-            assert!(names.insert(region.name.clone()), "duplicate region name");
+            assert_eq!(
+                region.states,
+                vec![region.code.clone()],
+                "one region is one state"
+            );
             assert!(
-                !region.states.is_empty(),
-                "region {} has no states",
+                region.population_2000 > 1_000_000,
+                "{} population",
                 region.code
             );
             assert!(region.wage_index_bps > 0);
             assert!(region.demand_index_bps > 0);
+            let c = region.conditions;
+            for value in [c.power_grid_bps, c.road_bps, c.broadband_bps, c.skill_bps] {
+                assert!((0..=10_000).contains(&value));
+            }
         }
+        // Census 2000 resident counts, sum of the eight states.
+        let total: i64 = dataset.regions.iter().map(|r| r.population_2000).sum();
+        assert_eq!(total, 76_898_986);
         assert!(
-            dataset.geometry_note.contains("authored corridor"),
-            "the geometry note names the authored scheme: {}",
+            dataset.geometry_note.contains("authored condition indices"),
+            "the note labels the authored part: {}",
             dataset.geometry_note
-        );
-        assert!(
-            !dataset.geometry_note.contains("verified corridor dataset"),
-            "the fixture must not claim a verified historical dataset"
         );
     }
 
@@ -450,8 +465,8 @@ mod tests {
                 assert!(dataset.lane_km(&left.code, &right.code).is_some());
             }
         }
-        assert_eq!(dataset.lane_km("035", "035"), Some(0));
-        assert_eq!(dataset.lane_km("035", "047"), dataset.lane_km("047", "035"));
+        assert_eq!(dataset.lane_km("OH", "OH"), Some(0));
+        assert_eq!(dataset.lane_km("OH", "MI"), dataset.lane_km("MI", "OH"));
     }
 
     #[test]

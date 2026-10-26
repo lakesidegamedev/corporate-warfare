@@ -73,6 +73,7 @@ fn losing_control_keeps_personal_cash_and_allows_a_new_firm() {
             region: 3,
             capital_cents: capital,
             recipe: 7,
+            secondary: None,
         },
         1,
     );

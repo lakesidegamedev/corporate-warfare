@@ -317,11 +317,18 @@ fn run_facility(
     if !utility {
         ratio = ratio.min(power_ratio_bps);
     }
+    // Adverse state conditions (grid reliability, low skill or broadband) are a capacity limit,
+    // applied before inputs and deposits so the plant consumes and extracts only what it makes.
+    ratio = (ratio as i64
+        * crate::economy::operations::output_bps(world, dataset, handle, utility) as i64
+        / 10_000) as i32;
     if ratio <= 0 {
         update_facility_result(world, handle, MilliLots::ZERO, staff_ratio, true);
         return MilliLots::ZERO;
     }
 
+    // Sector focus: plants of the owner's primary or secondary type need fewer inputs.
+    let focus_bps = crate::economy::operations::input_bps(world, dataset, handle);
     // Input limits, excluding electricity which is a service allocated above.
     let mut input_limit = ratio;
     for (product_id, weekly) in &recipe.weekly_inputs_lots {
@@ -333,7 +340,9 @@ fn run_facility(
             // Services cannot be stockpiled: they expire each week and markets clear after
             // production, so a non-electric service input is bought in the week it is used
             // from the finite outside service sector at the reference price. Cash is the limit.
-            let unit_cost = weekly * facility.blocks as i64 * dataset.reference_price(code);
+            let unit_cost =
+                weekly * facility.blocks as i64 * dataset.reference_price(code) * focus_bps as i64
+                    / 10_000;
             if unit_cost > 0 {
                 let cash = world
                     .firms
@@ -346,7 +355,9 @@ fn run_facility(
             }
             continue;
         }
-        let need = MilliLots::from_lots(weekly * facility.blocks as i64).scale_bps(ratio);
+        let need = MilliLots::from_lots(weekly * facility.blocks as i64)
+            .scale_bps(focus_bps)
+            .scale_bps(ratio);
         if need.0 <= 0 {
             continue;
         }
@@ -363,6 +374,7 @@ fn run_facility(
         };
         if available < need.0 {
             let full = MilliLots::from_lots(weekly * facility.blocks as i64)
+                .scale_bps(focus_bps)
                 .0
                 .max(1);
             input_limit = input_limit.min((available * 10_000 / full) as i32);
@@ -377,7 +389,7 @@ fn run_facility(
         if facility.deposit_remaining.0 < wanted {
             ratio = (facility.deposit_remaining.0 * 10_000 / full.0.max(1)) as i32;
         }
-    } else if recipe.output == "ore" {
+    } else if recipe.depletes() {
         ratio = 0;
     }
 
@@ -395,7 +407,9 @@ fn run_facility(
         let code = dataset.product_index[product_id];
         // Recipe quantities are whole lots; one lot is 1000 milli-lots. Availability and
         // consumption must use the same unit or the plant consumes a thousandth of its recipe.
-        let need = MilliLots::from_lots(weekly * facility.blocks as i64).scale_bps(ratio);
+        let need = MilliLots::from_lots(weekly * facility.blocks as i64)
+            .scale_bps(focus_bps)
+            .scale_bps(ratio);
         if need.0 <= 0 {
             continue;
         }
@@ -621,8 +635,7 @@ mod tests {
         }
         produce(&mut world, &dataset);
         for (_, facility) in world.facilities.iter() {
-            let output = &dataset.recipes[facility.recipe as usize].output;
-            if output == "ore" {
+            if dataset.recipes[facility.recipe as usize].depletes() {
                 assert!(
                     facility.deposit_remaining.0 >= 0,
                     "a mine cannot extract more than its deposit"
@@ -631,7 +644,7 @@ mod tests {
                 assert_eq!(
                     facility.deposit_remaining,
                     MilliLots::ZERO,
-                    "only a mine has a deposit to consume"
+                    "only a depleting extraction plant has a deposit"
                 );
             }
         }
@@ -665,12 +678,21 @@ mod tests {
             }
         }
         produce(&mut world, &dataset);
+        // Every plant whose strategy draws electricity stops; strategies that use none (for
+        // example infrastructure buildout or timber) are unaffected.
+        let mut checked = 0;
         for (_, facility) in world.facilities.iter() {
-            assert_eq!(
-                facility.last_output,
-                MilliLots::ZERO,
-                "no power means no output"
-            );
+            let recipe = &dataset.recipes[facility.recipe as usize];
+            if recipe.weekly_inputs_lots.contains_key("electricity") {
+                checked += 1;
+                assert_eq!(
+                    facility.last_output,
+                    MilliLots::ZERO,
+                    "no power means no output for {}",
+                    recipe.id
+                );
+            }
         }
+        assert!(checked > 20, "most strategies draw power");
     }
 }

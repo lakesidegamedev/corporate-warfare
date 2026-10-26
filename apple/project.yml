@@ -21,6 +21,8 @@ targets:
       - Sources
       - path: Generated/cw_ffi.swift
       - path: Assets.xcassets
+      - path: Resources
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.lakesidegames.corporatewarfare

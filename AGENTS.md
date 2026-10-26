@@ -26,7 +26,8 @@ External coding providers must use the host's provider runner and provenance con
 - Tests need independent economic oracles; do not mirror code or bless unexplained goldens.
 - Do not claim feature completion without requirement evidence and platform/human checks.
 - Keep generated bindings/artifacts out of source. Pin matching generator/runtime.
-- Do not copy licensed source from AHD or reference games without an established grant.
+- The owner granted free reuse of A House Divided's sector catalogue, strategies, commodities
+  and formulas (2026-10-26, DECISIONS.md). Other reference games still need a grant.
 - Never commit credentials, signing keys, personal data or production database snapshots.
 
 Use feature worktrees at `worktrees/<branch>` for concurrent/long-lived work. Check

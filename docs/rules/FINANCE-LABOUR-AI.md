@@ -140,7 +140,8 @@ positive, price +2 percent. Clamp price 50..200 percent reference, except no low
 variable cost unless vulture liquidation. Inventory target four weeks forecast inputs,
 order deficit with available cash; household/firm forecast uses actual last 4 weeks.
 
-Build candidate NPV proxy = 52-week incremental contribution - capex - financing cost.
+Build candidate NPV proxy = 156-week incremental contribution at public prices - capex - three
+years' financing at the policy rate.
 Only build if positive, forecast post-action cash >= reserve target, local labour feasible,
 and planned capacity <=1.25*observed reachable unmet demand. No omniscient hidden figures.
 Acquisition candidate uses public fair estimate with 20 percent uncertainty haircut unless

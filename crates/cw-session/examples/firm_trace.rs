@@ -14,6 +14,10 @@ fn main() {
     for week in 0..=260u32 {
         if week % 13 == 0 {
             let world = &session.world;
+            println!(
+                "w{week} outside gateway cash=${}",
+                world.outside.gateway_book.cash() / 100
+            );
             for (handle, firm) in world.firms.iter() {
                 if cw_sim::state::INDUSTRY_NAMES[firm.industry as usize] != industry {
                     continue;

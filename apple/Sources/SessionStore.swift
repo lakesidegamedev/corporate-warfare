@@ -33,6 +33,18 @@ actor Engine {
         session?.firms() ?? []
     }
 
+    func states() -> [StateDto] {
+        session?.states() ?? []
+    }
+
+    func mapPlants() -> [MapPlantDto] {
+        session?.mapPlants() ?? []
+    }
+
+    func firmOps(firm: UInt64) -> FirmOpsDto? {
+        session?.firmOps(firm: firm)
+    }
+
     func facilities(firm: UInt64) -> [FacilityDto] {
         session?.facilities(firm: firm) ?? []
     }

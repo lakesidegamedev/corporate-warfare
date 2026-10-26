@@ -208,6 +208,17 @@ fn a_solvent_liquidation_pays_equity_the_residual_and_ends_contracts() {
         "a dissolved firm keeps no live contracts"
     );
     assert!(world.investor.book.is_balanced());
+    // The estate sold the stock with the inventory account; no carrying cost lingers in lots
+    // the ledger has already written off.
+    let entity = world.firms.get(firm).unwrap();
+    assert_eq!(entity.book.balance(Account::Inventory), 0);
+    assert!(
+        entity
+            .inventory
+            .values()
+            .all(|lot| lot.qty.0 == 0 && lot.cost_cents == 0),
+        "liquidated stock leaves with the sale"
+    );
 }
 
 #[test]

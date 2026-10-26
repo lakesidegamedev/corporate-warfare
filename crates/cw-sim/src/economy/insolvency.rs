@@ -250,6 +250,8 @@ pub fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
             "liquidation loss",
         );
         let _ = entity.book.commit(world.tick, sale);
+        // The sale wrote off the whole inventory account, so the physical stock leaves with it.
+        entity.inventory.clear();
         let restricted = entity.book.balance(Account::RestrictedCash);
         if restricted > 0 {
             let _ = entity.book.commit(

@@ -4,6 +4,10 @@ Status: draft for review · 2026-10-25 · owner: unassigned
 Precedes repo creation. Target: iOS first slice, then macOS/desktop.
 Supersedes: `corpgame` / `corporate-warfare-sandbox` (old Next.js + Mongo web game, being scrapped).
 
+> **1.1.0 update.** The spatial model is now the eight playable states (IL, IN, KY, MI, NY, OH,
+> PA, WV) with AHD sector types and strategies; see "Owner direction for 1.1.0" in
+> [planning/DECISIONS.md](planning/DECISIONS.md). The region sections below describe 1.0.0.
+
 ## Decisions locked
 
 | decision | choice |

@@ -175,6 +175,7 @@ fn forced_invalid(rng: &mut SplitMix64, session: &Session, turn: usize) -> Force
                 region: u8::MAX,
                 capital_cents: 30_000_000,
                 recipe: 0,
+                secondary: None,
             },
             key: "error.invalid_entity",
         },
@@ -976,10 +977,11 @@ fn long_careers_keep_history_bounded_and_lifetime_figures_consistent() {
     // 110 weeks crosses eight quarterly report boundaries and two full journal windows, so the
     // posting journal, sales history and weekly closes are all pruning by the end.
     const WEEKS: u32 = 110;
-    // Observed envelope: the busiest firm holds 720 postings here, which is thirteen weeks at
-    // roughly fifty-five postings a week. Without pruning the same firm reaches roughly six
-    // thousand at week 110, so this catches an accidental removal of compaction.
-    const JOURNAL_ENVELOPE: usize = 1_200;
+    // Observed envelope: the busiest firm holds about 1,211 postings here, thirteen weeks at
+    // roughly ninety-three postings a week now that operations overheads, shrinkage and the
+    // logistics programme post weekly. Without pruning the same firm would pass ten thousand by
+    // week 110, so this still catches an accidental removal of compaction.
+    const JOURNAL_ENVELOPE: usize = 1_600;
 
     let mut session = session(0x00C0_5A7E, ScenarioKind::Founder);
     let mut totals: BTreeMap<u64, (i64, i64)> = BTreeMap::new();

@@ -120,9 +120,20 @@ ratio. If no prior sale, use reference price. Existing budgets still limit purch
 Unspent category budgets return to household savings, not another automatic purchase loop.
 R&D/brand can redistribute seller demand; neither creates household cash.
 
-A gateway quotes finite buy and sell offers at reference index +/-15 percent plus
-freight. Initial weekly gateway capacity = 20 percent of corridor baseline volume per
-product. No local back-to-back transaction can profit from the bid/ask spread. Re-export
+A gateway quotes finite buy and sell offers at reference index +/-5 percent plus
+freight. Each state's weekly gateway capacity per product = the larger of the corridor's
+weekly input demand and weekly output for that product at seed, floor 100 lots, so a
+shortage can be filled and a producing region's surplus has a buyer. Gateways record the
+lots they import and export each week and keep a smoothed import average; that average is
+the "room to build" shown on a state's board and used by rival expansion. No local
+back-to-back transaction can profit from the bid/ask spread.
+
+The outside economy settles through one finite account opened with $500 million: imports
+pay into it, and exports and background public works are paid from it. Each week it may
+draw at most one percent of its opening cash, net of that week's import receipts, so a
+corridor running a sustained trade surplus sees exports taper toward balance rather than
+stop at once. It buys only what it can pay for in full; a seller never hands over goods
+for part of their price. Nothing is minted. Re-export
 still pays freight and transit, and cannot use a shipment before arrival.
 
 Goods use moving-average cost inventory, not free market-value write-ups. Each receipt

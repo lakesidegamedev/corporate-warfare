@@ -11,11 +11,118 @@ heading.
 
 ## [Unreleased]
 
+Planned as **1.1.0**: single-player A House Divided corporations on a real map of the Great
+Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
+
 ### Added
+
+- Eight playable states (Illinois, Indiana, Kentucky, Michigan, New York, Ohio, Pennsylvania,
+  West Virginia) with Census 2000 populations, rounded circa-2000 GDP, pay and union indices,
+  and authored state conditions: power grid, roads, broadband, workforce skill, crime and cost
+  of living. Freight distances come from real hub-to-hub distances.
+- A real vector map bundled with the app (`apple/Resources/corridor-map.json`): state and
+  county boundaries, the Great Lakes, rivers, interstates and cities, from public-domain US
+  Census and Natural Earth data, with reproducible build scripts in `tools/map/`.
+- A House Divided sector strategies: every sector type now offers three to five operating
+  strategies for a 2000 start (for example Coal-fired, Gas Turbines, Nuclear and Renewables in
+  energy, or Industrial, Precision and Sustainable farming), 53 in all, authored by
+  `tools/content/build_sectors.py` so each strategy is a trade-off rather than a strictly
+  better choice.
+- Nine new goods so supply chains read like AHD's: coal, natural gas, timber, rare earth
+  minerals, plastics, fertilizers, pharmaceuticals, building materials and vehicles.
+- Sector focus: a primary and optional secondary sector type. On-focus plants use fewer
+  inputs; off-focus plants pay a coordination overhead; changing focus has a four-week
+  transition and an eight-week lock (`SetSectorFocus`).
+- Logistics strength, built by a weekly logistics programme (`SetLogisticsBudget`), and a
+  sprawl overhead beyond fifteen plants that logistics strength relieves.
+- State conditions shape output (grid reliability, skill, broadband), freight cost (roads) and
+  retail and property shrinkage (crime).
+- Gateways record imports and exports, giving a public room-to-build signal.
+- A map-first app: the real corridor map is the home screen, with pan and zoom, plant markers
+  coloured by sector (your plants ringed in gold), and layers for your presence, room to build,
+  wages and workforce skill. Tapping a state opens its board: conditions, the plants operating
+  there and what it imports. On iPad the board docks beside the map.
+- A House Divided style building: pick a sector type, compare its strategies (inputs, margin,
+  capex, build time, staff, deposits, local imports) and confirm against the engine's preview.
+- A CEO office: masthead, the week's key figures, sector focus with the change flow, logistics
+  strength and programme, and every plant grouped by sector with utilisation, bottleneck and a
+  retool flow.
+- UI snapshots of the main screens on iPhone and iPad, rendered in CI for review.
+- On a portrait phone the map frames the middle of the corridor at a readable size instead
+  of fitting all eight states into a strip. City labels draw above plant markers with a
+  halo, and plants fan out on the side away from the label. The map header keeps the
+  company name on its own line when the figures do not fit beside it.
+- Markets is a commodity board for the selected state: goods grouped by sector, last price
+  against reference, weekly sales, local stock, gateway prices and import room.
+- Corporation setup at founding: headquarters state, primary sector, a named founding strategy
+  and an optional secondary sector, set at founding without the refocus transition.
 
 - Release process: this changelog, the versioning and release procedure in
   `docs/RELEASING.md`, a pull request template, and a CI check that requires a changelog entry
   for code, content and tooling changes and keeps the workspace and iOS versions in step.
+
+### Changed
+
+- The app uses a dark cartographic look with a sector colour and symbol system in place of the
+  light dashboard style; tabs are Map, CEO Office, Markets, Inbox and Portfolio.
+- Playable regions are whole states instead of eleven authored economic areas; the thirty
+  named rivals moved to states where their industries actually sit and run named strategies.
+- Retooling switches a plant to another strategy of the same sector for a quarter of the new
+  strategy's capex and a third of its build time (at least four weeks); a plant can no longer
+  retool into a different sector.
+- Every non-renewable extraction strategy now draws on a finite twenty-year deposit, as iron
+  mining already did.
+- Rival AI builds the best strategy of its sector in the state whose imports show room for it,
+  judged over three years at public prices net of capex and financing, and retools plants stuck
+  in glut toward strategies whose output is short.
+
+### Fixed
+
+- The outside economy settled through a $50 million account that a corridor export surplus
+  emptied in about two years, after which gateways stopped buying and public works stopped
+  paying, taking every exporter and construction firm with them. It now opens at $500
+  million and draws at most one percent a week, so exports taper toward balanced trade
+  instead of stopping. When short it buys only what it can pay for in full; before, a
+  seller handed over a whole shipment for part of its price.
+- Services, which have no import quote, stop at 15 percent over reference when rivals reprice.
+- Only firms headquartered in a state could sell there: business, household and public-works
+  sales and gateway exports all filtered on headquarters, so a plant built in another state
+  could not sell its output. Sellers now only need stock in the state. Spot orders search
+  every state where a producer holds the good.
+- Business offers included a firm's own input stock, so rivals sold and then discounted the
+  steel and plastics their plants needed. Offers now keep the plant's input cover back, as
+  gateway exports already did.
+- Liquidation wrote off the inventory account but left the physical stock in place.
+- A shipment that a short-of-cash buyer paid only in part arrived carrying its full list
+  value, more cost than the ledger recorded.
+- Vehicle Assembly was priced for a 12 percent margin, below every other new good, and lost
+  money on Michigan wages at gateway prices. Vehicles are now priced for 22 percent ($4,790).
+- Rivals raised prices toward twice reference whenever the gateway bought their whole output.
+  Prices now stop at the state's import price, above which local buyers import instead.
+- Rerunning the sector content script duplicated the new goods.
+- Every sale overwrote the week's unit sales for that good and state instead of adding to
+  them, so a firm selling to households and then exporting recorded only the last fill.
+- Rival pricing read the open sales week, which is empty between ticks, so rivals never
+  repriced. It now reads the trailing thirteen weeks of closed sales.
+- The market board counted only firms headquartered in a state, read the empty open week for
+  sales, and showed reference price for every producer good. It now counts every firm's
+  stock and sales where the goods sit, and quotes the lowest local ask, capped at the import
+  price, for goods households do not buy.
+- Negative compact amounts read "$-21K"; they now read "-$21K".
+- "Washington,  D.C." lost its double space on the map.
+- UI snapshots attach to the app's window scene; detached windows rendered blank, and the
+  snapshot test now fails on a blank image.
+- The map's zoom reset and board panel honour Reduce Motion.
+- Choosing a state on Markets now reloads its prices instead of keeping the previous state's.
+- Spot orders bought from the first out-of-state firm holding the good, which could strip a
+  carrier of its own steel input; they now buy from the nearest producer.
+- Favourable state conditions no longer push a plant beyond its rated capacity (they save
+  inputs), and adverse ones cap the run rate before inputs and deposits, so a mine extracts
+  exactly what it ships.
+- Outside gateways were sized only to the corridor's input demand, so a coal field producing
+  far more than local power plants burn could not reach the national market and failed in
+  every career. Gateways now also absorb what the corridor's plants produce, at their
+  discount.
 
 ## [1.0.0] - 2026-10-25
 

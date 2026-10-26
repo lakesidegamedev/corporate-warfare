@@ -7,6 +7,12 @@ final class AppStore: ObservableObject {
     @Published var overview: OverviewDto?
     @Published var firms: [FirmDto] = []
     @Published var regions: [RegionDto] = []
+    /// The playable states with conditions and room to build, every plant on the map, the
+    /// strategy catalogue and the selected firm's focus and logistics.
+    @Published var states: [StateDto] = []
+    @Published var mapPlants: [MapPlantDto] = []
+    @Published var strategyCatalogue: [StrategyDto] = []
+    @Published var firmOps: FirmOpsDto?
     @Published var facilities: [FacilityDto] = []
     @Published var finance: FinanceDto?
     @Published var ownership: OwnershipDto?
@@ -197,6 +203,11 @@ final class AppStore: ObservableObject {
         overview = await engine.overview()
         firms = await engine.firms()
         regions = await engine.regions(selected: selectedRegionCode)
+        states = await engine.states()
+        mapPlants = await engine.mapPlants()
+        if strategyCatalogue.isEmpty {
+            strategyCatalogue = strategies()
+        }
         events = await engine.events()
         deals = await engine.deals()
         groupTree = await engine.groupTree()
@@ -216,7 +227,9 @@ final class AppStore: ObservableObject {
             boardVotes = await engine.boardVotes(firm: selectedFirm)
             labour = await engine.labour(firm: selectedFirm)
             policyState = await engine.policyState(firm: selectedFirm)
+            firmOps = await engine.firmOps(firm: selectedFirm)
         } else {
+            firmOps = nil
             facilities = []
             finance = nil
             ownership = nil
@@ -258,6 +271,7 @@ final class AppStore: ObservableObject {
     func selectRegion(_ code: String?) async {
         selectedRegionCode = code
         regions = await engine.regions(selected: code)
+        await loadMarkets()
     }
 
     // MARK: Lifecycle
@@ -599,13 +613,15 @@ final class AppStore: ObservableObject {
         await submitAsInvestor(CommandJSON.command("SetPrimaryGroup", ["firm": firm]))
     }
 
-    func foundFirm(name: String, region: UInt32, capitalCents: Int64, recipe: UInt32) async -> CommandRejection? {
-        await submitAsInvestor(CommandJSON.command("FoundFirm", [
+    func foundFirm(name: String, region: UInt32, capitalCents: Int64, recipe: UInt32, secondary: Int? = nil) async -> CommandRejection? {
+        var fields: [String: Any] = [
             "name": name,
             "region": region,
             "capital_cents": capitalCents,
             "recipe": recipe
-        ]))
+        ]
+        if let secondary { fields["secondary"] = secondary }
+        return await submitAsInvestor(CommandJSON.command("FoundFirm", fields))
     }
 
     func acceptManagementContract() async -> CommandRejection? {

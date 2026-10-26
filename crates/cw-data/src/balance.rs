@@ -74,6 +74,9 @@ pub struct Product {
 pub struct Recipe {
     pub industry: String,
     pub id: String,
+    /// Operating strategy shown to the player, after A House Divided's sector strategies.
+    #[serde(default)]
+    pub name: String,
     pub output: String,
     pub weekly_output_lots: i64,
     pub weekly_inputs_lots: BTreeMap<String, i64>,
@@ -84,6 +87,11 @@ pub struct Recipe {
 }
 
 impl Recipe {
+    /// Extraction from a finite deposit: every extraction strategy except renewable timber.
+    pub fn depletes(&self) -> bool {
+        self.industry == "extraction" && self.output != "timber"
+    }
+
     /// Full-capacity weekly payroll at baseline fixture wages.
     pub fn baseline_weekly_payroll(&self, wages: [i64; 3]) -> i64 {
         self.workers_low_mid_high

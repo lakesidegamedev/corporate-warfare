@@ -215,7 +215,7 @@ fn eligible_subjects(world: &World, dataset: &Dataset, trigger: &str, region: u8
                     .any(|facility| {
                         let recipe = &dataset.recipes[facility.recipe as usize];
                         let weekly = recipe.weekly_output_lots * facility.blocks as i64;
-                        recipe.industry == "extraction"
+                        recipe.depletes()
                             && facility.status == FacilityStatus::Operating
                             && facility.deposit_remaining.lots() < weekly * 26
                     }),
@@ -1170,7 +1170,7 @@ fn facility_power_cost(world: &World, dataset: &Dataset, firm: Handle) -> i64 {
 fn freight_reserve_fee(world: &World, dataset: &Dataset, firm: Handle) -> i64 {
     let region = world.firms.get(firm).map(|f| f.region).unwrap_or(0);
     let km = dataset
-        .lane_km("035", &dataset.regions[region as usize].code)
+        .lane_km("OH", &dataset.regions[region as usize].code)
         .unwrap_or(300);
     (km as i64 * 100).max(100_000)
 }

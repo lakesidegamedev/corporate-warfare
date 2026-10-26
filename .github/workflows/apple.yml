@@ -28,6 +28,18 @@ jobs:
         run: xcodebuild -project apple/CorporateWarfare.xcodeproj -scheme CorporateWarfare -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
       - name: Execute Rust bridge in simulator
         run: bash apple/scripts/test-simulator.sh
+      - name: Collect UI snapshots
+        if: always()
+        run: |
+          mkdir -p apple/build/snapshots
+          find "$HOME/Library/Developer/CoreSimulator/Devices" -name 'cw-snapshot-*.png' -newer apple/project.yml -exec cp {} apple/build/snapshots/ \; 2>/dev/null || true
+          ls -la apple/build/snapshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-snapshots
+          path: apple/build/snapshots
+          retention-days: 14
       - name: Device archive
         run: xcodebuild -project apple/CorporateWarfare.xcodeproj -scheme CorporateWarfare -configuration Release -destination 'generic/platform=iOS' -archivePath apple/build/CorporateWarfare.xcarchive CODE_SIGNING_ALLOWED=NO archive
       - uses: actions/upload-artifact@v4

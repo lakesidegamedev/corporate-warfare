@@ -1,63 +1,61 @@
-# Phone visual specification v0.1
+# Visual specification v1.1
 
-Build a calm, legible business instrument with visible regional identity. Do not copy
-Capitalism Lab's desktop tables into a phone layout. Use native SwiftUI interaction and
-navigation. This is the selected design, not a request for the implementation agent to
-choose a style.
+Corporate Warfare reads as an economic strategy game played over a real map, in the
+manner of A House Divided's corporations: sector types, operating strategies, plants in
+states. It must not read as an operations dashboard or a SaaS settings form. Native
+SwiftUI on iPhone and iPad; iPad is a first-class layout, not a stretched phone.
 
 ## Tokens
 
-Light: background #F5F2EA, surface #FFFFFF, text #17202A, secondary #526070,
-navy #14253A, positive #1E755B, negative #A13434, warning #805800.
-Dark: background #0D1724, surface #172638, text #EDF0F4, secondary #AFBDCD,
-positive #61BC99, negative #FF8A89, warning #E0B86D. Theme follows system by default.
-Verify contrast after opacity/disabled styling; tokens alone do not certify every view.
-Positive/negative always have direction/word labels as well as colour.
+One dark cartographic palette in both system appearances (the app sets dark):
+ink #0B1622 (sea, canvas), panel #13212F, raised panel #1A2B3C, stroke #22364A,
+play-state land #2B3B4A, neighbouring land #1E2A36, water #163555, interstate #C68A3D,
+text #E8EEF5, secondary #93A4B8, gold #E2B04A (money and the primary action),
+positive #3FBF8A, negative #E5605E, warning #F2B748, copper #C9804A (inputs).
+Positive and negative always carry a sign or word as well as colour.
 
-System typography with Dynamic Type: largeTitle serif for portfolio/company names,
-headline for section names, body for explanatory text, caption for period/units.
-Monospaced digits for comparable monetary/quantity values, never shrink-to-fit a whole
-table. Abbreviate large values with accessible full-value label. Minimum body17pt at
-standard size, controls at least44x44pt, common spacing8/16/24pt. Content readable in
-320pt width, no essential horizontal scroll. Charts have text summaries and selectable
-points; no decorative dashboard chart without an actual decision purpose.
+Each AHD sector type has one colour and one SF Symbol, used identically on map markers,
+lists, the build flow and the CEO office (`Sector` in `Design.swift`). Section titles are
+uppercase tracked eyebrows; figures use monospaced digits; large values abbreviate with an
+accessible full value. Controls at least 44x44pt.
 
 ## Navigation and layout
 
-Five tabs: Portfolio (building.columns), Company (building.2), Regions (map), Markets
-(chart.bar.xaxis), Inbox (tray). Use SF Symbols with visible text. Selected firm is a
-persistent context chip below title, never a hidden filter. Company links to Finance,
-Ownership, Facilities and Subsidiaries. Portfolio is investor context, distinct from
-Company's legal-entity cash. A Finance action always shows whose balance it changes.
+Five tabs: Map (map), CEO Office (building.2), Markets (chart.bar.xaxis), Inbox
+(tray.full, badged with mandatory decisions), Portfolio (building.columns).
 
-Dashboard order: title/context; critical decision banner if present; cash/forecast row;
-profit/change explanation; most important bottleneck; upcoming obligation; recent trend.
-One primary recommended next action with a reason, not an omniscient instruction. Values
-show period. Tap a metric opens its ledger-backed explanation, not a bigger fake chart.
+Map is home. A flat vector map (not satellite imagery) of the eight playable states with
+counties, the Great Lakes, major rivers, interstates and hub cities, drawn from public
+Census, TIGER and Natural Earth data bundled at build time. Neighbouring states are drawn
+dimmer. Plants appear as sector markers around their state's cities, the player's ringed
+in gold. Layers: presence, room to build, wages, workforce skill, each with a legend.
+Pan, pinch zoom, double-tap reset, tap a state to open its board. On iPhone the board is
+a sheet with half and full detents; on iPad it is a fixed side panel beside the map.
 
-Region map uses actual simplified polygons if legible; else the selected fallback is a
-fixed labelled cartogram derived from real centroid adjacency, with explicit legend.
-Choosing cartogram never changes region membership or invents geographic connectivity.
-Region detail prioritises wage/input/freight tradeoffs and two comparator cards before
-secondary demographics. All map regions also appear in an accessible searchable list.
+A state's board leads with one Build action, then room to build (smoothed imports),
+conditions (grid, roads, skill, broadband, wages, cost of living, crime, union strength)
+and the plants operating there. Build is a flow: sector type (with focus labels) then
+strategy cards (output, inputs, capex, build time, staff, reference margin, local import
+room) then size against the engine's own preview.
 
-Action forms are sheets with visible actor, amount/quantity units, computed preview and
-sticky confirm. Financial/control-changing actions require one clear confirmation,
-routine recurring policy changes one submit. Destructive/investment preview includes
-estimated effects and authority. Error remains inline, retains fields and provides
-retry/remedy. No technical Rust/FFI/ID/version text in normal product screens.
+CEO Office is the corporation: headline figures, sector focus with its transition and
+cooldown, logistics budget and strength, and plants grouped by sector with retooling.
+Markets is a per-state commodity board grouped by sector: last price against reference,
+weekly sales, stock, gateway prices, import room. Corporation founding sets headquarters,
+primary sector, founding strategy and an optional secondary sector.
+
+Action forms are sheets with visible actor, units, computed preview and one confirm.
+Errors stay inline with the reason and a remedy. No Rust, FFI, ID or version text in
+normal product screens.
 
 ## Motion and assets
 
-Motion limited to short150-200ms value transitions and navigation. Reduce Motion removes
-chart interpolation and zoom. Haptics only for committed material action/urgent alert,
-respect settings. First release needs no soundtrack to meet completion; optional subtle
-sound defaults off. App icon concept: simple industrial skyline within a rising portfolio
-bar motif, navy/cream/copper, no small text or currency logo. Create original final vector
-or bitmap asset and include all required Apple sizes through asset catalog. Never ship
-the bootstrap debug view, generic framework icon or a watermarked placeholder.
+Short 150-200ms transitions only; Reduce Motion removes map zoom animation. Haptics only
+for a committed material action or urgent alert. App icon: original asset in every
+required Apple size; never a placeholder.
 
-Phone fixtures/screenshots required for every screen contract: empty/new career,
-healthy operator, low cash, strike, hostile tender, insufficient authority, bank liquidity
-warning, corrupted save recovery, year-five result and continued sandbox. Render with
-real read models from deterministic scenarios. Data and actions must agree.
+## Evidence
+
+The Apple workflow renders snapshots of Map, a state board, the build flow, CEO Office,
+Markets and Inbox on iPhone and iPad from a deterministic ten-week career and uploads
+them as the `ui-snapshots` artifact. Review them before release.

@@ -346,6 +346,9 @@ pub struct Policies {
     pub production_target_bps: i32,
     pub marketing_budget_cents: i64,
     pub research_budget_cents: i64,
+    /// Weekly logistics and operations programme that builds logistics strength.
+    #[serde(default)]
+    pub logistics_budget_cents: i64,
     /// Weekly budget for paid skill training. Training moves workers between tiers; it never
     /// creates workers.
     #[serde(default)]
@@ -365,6 +368,7 @@ impl Default for Policies {
             production_target_bps: 10_000,
             marketing_budget_cents: 0,
             research_budget_cents: 0,
+            logistics_budget_cents: 0,
             training_budget_cents: 0,
             quality_budgets_cents: BTreeMap::new(),
             input_cover_weeks: 4,
@@ -503,6 +507,13 @@ pub struct Firm {
     /// Largest outside vote share at the last week close, so a hostile stake is reported when
     /// it crosses a quarter, not every week it stays there.
     pub outside_peak_bps: i32,
+    /// Optional secondary sector type; `industry` is the primary.
+    pub secondary_industry: Option<u8>,
+    /// Focus change transition and lock, as tick numbers.
+    pub focus_transition_until: u32,
+    pub focus_cooldown_until: u32,
+    /// Logistics and operations strength, 0..200, built by the logistics budget.
+    pub logistics_strength: i32,
     pub policy_requests: Vec<PolicyRequest>,
     pub guarantees: Vec<Guarantee>,
     pub last_strategic_week: u32,
@@ -600,6 +611,22 @@ impl Firm {
         }
         let mut carry = 0i64;
         self.stock_lot_mut(product, region).issue(take, &mut carry)
+    }
+
+    /// Add one fill to this week's unit sales. A firm can sell the same good in one state to
+    /// households, businesses, government and the gateway in a single week; every fill counts.
+    pub fn record_sale(&mut self, region: u8, product: u16, qty: MilliLots) {
+        let entry = self
+            .last_week_units_sold
+            .entry((region, product))
+            .or_insert(MilliLots::ZERO);
+        *entry = entry.checked_add(qty).unwrap_or(*entry);
+    }
+
+    /// Unit sales of the last closed week. Outside a tick the open week is empty, so readers
+    /// between ticks (reports, rival AI) use this.
+    pub fn last_closed_sales(&self) -> Option<&BTreeMap<(u8, u16), i64>> {
+        self.sales_history.last()
     }
 
     /// Trailing thirteen-week unit sales in one regional product market.
@@ -719,6 +746,15 @@ pub struct Gateway {
     pub sell_price_cents: i64,
     /// Price at which the gateway buys out of the region.
     pub buy_price_cents: i64,
+    /// Lots imported into and exported out of the region last week, and a smoothed import
+    /// volume (a quarter weight on the latest week). Imports are demand local plants did not
+    /// meet: the public "room to build" signal.
+    #[serde(default)]
+    pub last_import_lots: i64,
+    #[serde(default)]
+    pub last_export_lots: i64,
+    #[serde(default)]
+    pub smoothed_import_lots: i64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1016,6 +1052,18 @@ pub struct OutsideSectors {
     pub legal_services_book: Ledger,
     /// Outside gateway settlement account. Imports and exports post here exactly once.
     pub gateway_book: Ledger,
+    /// Cash the outside account keeps this week. It may draw at most one percent of its
+    /// opening cash net of the week's import receipts, so a corridor running a trade surplus
+    /// sees exports taper toward balance instead of the account emptying in one step.
+    #[serde(default)]
+    pub gateway_floor_cents: i64,
+}
+
+impl OutsideSectors {
+    /// Cash the gateway may still spend this week on exports and public works.
+    pub fn gateway_spendable(&self) -> i64 {
+        (self.gateway_book.cash() - self.gateway_floor_cents).max(0)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

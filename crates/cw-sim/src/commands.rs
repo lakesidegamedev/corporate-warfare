@@ -58,6 +58,10 @@ pub enum CommandIntent {
         region: u8,
         capital_cents: i64,
         recipe: u16,
+        /// Optional secondary sector type chosen at founding; the founding strategy's sector
+        /// is the primary. Set here it carries no refocus transition.
+        #[serde(default)]
+        secondary: Option<u8>,
     },
     AcceptManagementContract,
     SetPrimaryGroup {
@@ -317,6 +321,18 @@ pub enum CommandIntent {
         firm: Handle,
         amount_cents: i64,
     },
+    /// Set the primary and optional secondary sector type (AHD sector focus).
+    SetSectorFocus {
+        firm: Handle,
+        primary: u8,
+        #[serde(default)]
+        secondary: Option<u8>,
+    },
+    /// Weekly logistics and operations programme that builds logistics strength.
+    SetLogisticsBudget {
+        firm: Handle,
+        amount_cents: i64,
+    },
     FileLobbyRequest {
         firm: Handle,
         region: u8,
@@ -392,6 +408,8 @@ impl CommandIntent {
             CommandIntent::SetUnderwritingLimit { .. } => "set_underwriting_limit",
             CommandIntent::RespondBargaining { .. } => "respond_bargaining",
             CommandIntent::ProposeSettlement { .. } => "propose_settlement",
+            CommandIntent::SetSectorFocus { .. } => "set_sector_focus",
+            CommandIntent::SetLogisticsBudget { .. } => "set_logistics_budget",
             CommandIntent::FileLobbyRequest { .. } => "file_lobby_request",
             CommandIntent::RespondEvent { .. } => "respond_event",
         }
@@ -539,6 +557,7 @@ fn apply_intent(
             region,
             capital_cents,
             recipe,
+            secondary,
         } => {
             if actor != INVESTOR_ACTOR {
                 return Err(DomainError::NoAuthority {
@@ -584,6 +603,14 @@ fn apply_intent(
                     .credit(Account::Revenue, fee, "formation fee"),
             );
             let template = &dataset.recipes[*recipe as usize];
+            let primary = industry_index(&template.industry);
+            if let Some(second) = secondary
+                && (*second as usize >= crate::state::INDUSTRY_NAMES.len() || *second == primary)
+            {
+                return Err(DomainError::Arithmetic {
+                    detail: ArithmeticFault::OutOfRange,
+                });
+            }
             let mut firm = Firm {
                 name: name.clone(),
                 industry: industry_index(&template.industry),
@@ -613,6 +640,10 @@ fn apply_intent(
                 layoffs: Vec::new(),
                 staff_history: Vec::new(),
                 outside_peak_bps: 0,
+                secondary_industry: *secondary,
+                focus_transition_until: 0,
+                focus_cooldown_until: 0,
+                logistics_strength: 0,
                 policy_requests: Vec::new(),
                 guarantees: Vec::new(),
                 last_strategic_week: 0,
@@ -878,15 +909,46 @@ fn apply_intent(
                         handle: *recipe as u64,
                         kind: EntityKind::Product,
                     })?;
-            let cost = template.capex_cents * facility_blocks as i64 / 2;
+            // A retool switches the plant's operating strategy within its sector type, as in A
+            // House Divided: a quarter of the new strategy's capex per block and a third of its
+            // build time, at least four weeks. A plant cannot change sector type by retooling.
+            let (current, status) = world
+                .facilities
+                .get(*facility)
+                .map(|f| (f.recipe, f.status))
+                .unwrap();
+            if !matches!(
+                status,
+                FacilityStatus::Operating | FacilityStatus::Mothballed
+            ) {
+                return Err(DomainError::WrongPhase {
+                    expected: "operating",
+                    actual: "busy",
+                });
+            }
+            if current == *recipe || dataset.recipes[current as usize].industry != template.industry
+            {
+                return Err(DomainError::InvalidEntity {
+                    handle: *recipe as u64,
+                    kind: EntityKind::Product,
+                });
+            }
+            let cost = template.capex_cents * facility_blocks as i64 / 4;
+            let weeks = (template.build_weeks / 3).max(4);
+            let deposit = if template.depletes() {
+                MilliLots::from_lots(template.weekly_output_lots * facility_blocks as i64 * 52 * 20)
+            } else {
+                MilliLots::ZERO
+            };
             spend_firm_cash(world, owner, cost, "retool escrow")?;
             if let Some(stored) = world.facilities.get_mut(*facility) {
                 stored.recipe = *recipe;
                 stored.status = FacilityStatus::Retooling {
-                    until: Tick(world.tick.0 + (template.build_weeks / 2).max(1)),
+                    until: Tick(world.tick.0 + weeks),
                 };
                 stored.capex_cents += cost;
                 stored.escrow_cents += cost;
+                stored.deposit_remaining = deposit;
             }
             Ok(())
         }
@@ -1189,18 +1251,45 @@ fn apply_intent(
             }
             require_region(world, *region)?;
             let qty = MilliLots::from_lots(*quantity_lots);
-            // Cross-region spot buys dispatch a shipment; local buys settle next week.
+            // Cross-region spot buys dispatch a shipment; local buys settle next week. The seller
+            // is a producer of the good, nearest by freight then lowest handle: a firm holding
+            // the good only as an input is never stripped of it.
+            let produces = |entity: &Firm| {
+                entity.facilities.iter().any(|facility| {
+                    world
+                        .facilities
+                        .get(*facility)
+                        .and_then(|f| {
+                            dataset
+                                .product_index
+                                .get(&dataset.recipes[f.recipe as usize].output)
+                        })
+                        .map(|code| code == product)
+                        .unwrap_or(false)
+                })
+            };
+            // Goods sit where they were made, which need not be the seller's headquarters.
             let source = world
                 .firms
                 .iter()
-                .find(|(_, entity)| {
-                    entity.operative()
-                        && entity.region != *region
-                        && entity.stock(*product, entity.region).0 > 0
+                .filter(|(_, entity)| entity.operative() && produces(entity))
+                .flat_map(|(handle, entity)| {
+                    entity
+                        .inventory
+                        .iter()
+                        .filter(|((good, from), lot)| {
+                            *good == *product && *from != *region && lot.qty.0 > 0
+                        })
+                        .map(move |((_, from), _)| (handle, *from))
                 })
-                .map(|(handle, _)| handle);
-            if let Some(seller) = source {
-                let seller_region = world.firms.get(seller).map(|f| f.region).unwrap_or(0);
+                .min_by_key(|(handle, from)| {
+                    (
+                        crate::economy::freight::freight_cost(dataset, *from, *region, qty),
+                        *handle,
+                        *from,
+                    )
+                });
+            if let Some((seller, seller_region)) = source {
                 let available = world
                     .firms
                     .get(seller)
@@ -2223,6 +2312,30 @@ fn apply_intent(
             }
             Ok(())
         }
+        CommandIntent::SetSectorFocus {
+            firm,
+            primary,
+            secondary,
+        } => {
+            require_control(world, actor, *firm)?;
+            crate::economy::operations::set_focus(world, *firm, *primary, *secondary)?;
+            Ok(())
+        }
+        CommandIntent::SetLogisticsBudget { firm, amount_cents } => {
+            require_control(world, actor, *firm)?;
+            if *amount_cents < 0 {
+                return Err(DomainError::Arithmetic {
+                    detail: ArithmeticFault::OutOfRange,
+                });
+            }
+            world
+                .firms
+                .get_mut(*firm)
+                .unwrap()
+                .policies
+                .logistics_budget_cents = *amount_cents;
+            Ok(())
+        }
         CommandIntent::FileLobbyRequest {
             firm,
             region,
@@ -2374,7 +2487,7 @@ fn start_facility(
         workers: [0; 3],
         target_bps: 10_000,
         quality_bps: 10_000,
-        deposit_remaining: if template.output == "ore" {
+        deposit_remaining: if template.depletes() {
             MilliLots::from_lots(template.weekly_output_lots * blocks as i64 * 52 * 20)
         } else {
             MilliLots::ZERO
@@ -2479,7 +2592,7 @@ mod tests {
         let recipe = dataset.recipe_index["farm"];
         let capex = dataset.recipes[recipe as usize].capex_cents;
         let build_weeks = dataset.recipes[recipe as usize].build_weeks;
-        let region = world.region_index("035").unwrap();
+        let region = world.region_index("OH").unwrap();
         let capital = capex + 100_000_000;
         let command = envelope(
             &world,
@@ -2488,9 +2601,17 @@ mod tests {
                 region,
                 capital_cents: capital,
                 recipe,
+                secondary: Some(crate::economy::operations::industry_index("retail").unwrap()),
             },
         );
         apply(&mut world, &dataset, &command).expect("founding accepted");
+        let founded = world.investor.primary_group.unwrap();
+        assert_eq!(
+            world.firm(founded).unwrap().secondary_industry,
+            crate::economy::operations::industry_index("retail"),
+            "a secondary focus chosen at founding carries no refocus transition"
+        );
+        assert_eq!(world.firm(founded).unwrap().focus_transition_until, 0);
         let firm = world.investor.primary_group.unwrap();
         // No permit bonus is active, so the project draws the permit card; left unanswered it
         // takes the four-week delay.

@@ -44,7 +44,7 @@ pub const CADENCE_WEEKS: u32 = 4;
 
 /// Founder bootstrap: region 035 is the corridor's first region; the farm is the documented
 /// starter recipe with the lowest capex (see `content/initial-balance.json`).
-const FOUNDER_REGION: &str = "035";
+const FOUNDER_REGION: &str = "OH";
 const FOUNDER_RECIPE: &str = "farm";
 const FOUNDER_NAME: &str = "Lakeside Holdings";
 /// Fund the farm's $200M capex plus $100M of working capital, matching the guided firm's
@@ -184,6 +184,7 @@ impl PolicyRunner {
                 region,
                 capital_cents: FOUNDER_CAPITAL_CENTS,
                 recipe,
+                secondary: None,
             },
         );
     }

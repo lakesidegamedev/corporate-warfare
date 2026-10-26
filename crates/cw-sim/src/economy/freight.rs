@@ -32,7 +32,11 @@ pub fn freight_cost(dataset: &Dataset, from: u8, to: u8, qty: MilliLots) -> i64 
         )
         .unwrap_or(500);
     let lots = qty.lots().max(1);
-    let cost = lots * km as i64 * FREIGHT_CENTS_PER_LOT_KM;
+    let cost = lots
+        * km as i64
+        * FREIGHT_CENTS_PER_LOT_KM
+        * crate::economy::operations::road_bps(dataset, from, to)
+        / 10_000;
     cost.max(FREIGHT_MINIMUM_CENTS)
 }
 
@@ -59,10 +63,10 @@ fn receive_shipment(world: &mut World, shipment: &Shipment, dataset: &Dataset) {
     if let Some(buyer) = world.firms.get_mut(shipment.buyer) {
         buyer
             .stock_lot_mut(shipment.product, shipment.to_region)
-            .receive(
-                shipment.quantity,
-                Cents(shipment.unit_price_cents * shipment.quantity.lots()),
-            );
+            // Carry what the buyer actually paid and posted to inventory at dispatch. A buyer
+            // short of cash pays part and the rest is deferred as an expense, so the list
+            // price would carry cost the ledger never recorded.
+            .receive(shipment.quantity, Cents(shipment.goods_value_cents));
         if same_group {
             buyer.record_intercompany_receipt(
                 shipment.seller,
@@ -332,13 +336,20 @@ mod tests {
     #[test]
     fn freight_cost_is_per_whole_lot_and_has_a_minimum() {
         let dataset = Dataset::load().unwrap();
-        let km = dataset.lane_km("035", "047").unwrap();
-        let cost = freight_cost(&dataset, 3, 6, MilliLots::from_lots(10));
-        assert_eq!(cost, 10 * km as i64 * FREIGHT_CENTS_PER_LOT_KM);
-        let tiny = freight_cost(&dataset, 3, 6, MilliLots::from_lots(1));
-        assert_eq!(tiny, km as i64 * FREIGHT_CENTS_PER_LOT_KM);
+        let km = dataset.lane_km("OH", "MI").unwrap();
+        let (oh, mi) = (dataset.region_index["OH"], dataset.region_index["MI"]);
+        // Ohio roads 6400 and Michigan 5200 average 5800: freight costs 1 percent more.
+        let road = crate::economy::operations::road_bps(&dataset, oh, mi);
+        assert_eq!(road, 10_100);
+        let cost = freight_cost(&dataset, oh, mi, MilliLots::from_lots(10));
+        assert_eq!(
+            cost,
+            10 * km as i64 * FREIGHT_CENTS_PER_LOT_KM * road / 10_000
+        );
+        let tiny = freight_cost(&dataset, oh, mi, MilliLots::from_lots(1));
+        assert_eq!(tiny, km as i64 * FREIGHT_CENTS_PER_LOT_KM * road / 10_000);
         // The minimum only binds on a lane shorter than twenty kilometres.
-        assert!(freight_cost(&dataset, 3, 6, MilliLots::from_lots(1)) >= FREIGHT_MINIMUM_CENTS);
+        assert!(freight_cost(&dataset, oh, mi, MilliLots::from_lots(1)) >= FREIGHT_MINIMUM_CENTS);
         assert_eq!(freight_cost(&dataset, 3, 3, MilliLots::from_lots(10)), 0);
     }
 }

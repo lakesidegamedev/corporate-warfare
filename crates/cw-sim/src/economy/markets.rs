@@ -155,6 +155,15 @@ fn ceil_cost(price_cents: i64, milli_lots: i64) -> i64 {
 
 /// Clear every spot book for the week: industrial inputs, household demand, procurement.
 pub fn clear_week(world: &mut World, dataset: &Dataset) {
+    // Roll the gateway volume signal: last week's imports feed the smoothed average.
+    for gateway in &mut world.gateways {
+        gateway.smoothed_import_lots =
+            (gateway.smoothed_import_lots * 3 + gateway.last_import_lots) / 4;
+        gateway.last_import_lots = 0;
+        gateway.last_export_lots = 0;
+    }
+    let opening = world.outside.gateway_book.cash().max(0);
+    world.outside.gateway_floor_cents = opening - opening / 100;
     clear_intermediate(world, dataset);
     clear_households(world, dataset);
     clear_government(world, dataset);
@@ -173,7 +182,7 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
         let sellers: Vec<Handle> = world
             .firms
             .iter()
-            .filter(|(_, firm)| firm.region == region as u8 && firm.operative())
+            .filter(|(_, firm)| firm.operative())
             .filter(|(_, firm)| firm.stock(service, region as u8).0 > 0)
             .map(|(handle, _)| handle)
             .collect();
@@ -198,12 +207,14 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
             if qty.0 <= 0 {
                 continue;
             }
-            let cost = qty
-                .value_at(Cents(dataset.reference_price(service)))
-                .unwrap_or(Cents::ZERO)
-                .0;
-            let cash = world.outside.gateway_book.cash().max(0);
-            let paid = cost.min(cash);
+            // Buy only what the paced outside account can pay for in full.
+            let price = dataset.reference_price(service).max(1);
+            let affordable = world.outside.gateway_spendable() / price * 1_000;
+            let qty = qty.min(MilliLots(affordable));
+            if qty.0 <= 0 {
+                break;
+            }
+            let paid = qty.value_at(Cents(price)).unwrap_or(Cents::ZERO).0;
             if paid <= 0 {
                 break;
             }
@@ -220,8 +231,7 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
                         .credit(Account::Inventory, carrying, "public works cogs")
                         .debit(Account::CostOfGoods, carrying, "public works cogs"),
                 );
-                firm.last_week_units_sold
-                    .insert((region as u8, service), qty);
+                firm.record_sale(region as u8, service, qty);
             }
             let _ = world.outside.gateway_book.commit(
                 world.tick,
@@ -303,10 +313,11 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
         let mut offers: Vec<Offer> = Vec::new();
         let mut seller_handles: Vec<OfferSource> = Vec::new();
         for (handle, firm) in world.firms.iter() {
-            if firm.region != region || !firm.operative() {
+            if !firm.operative() {
                 continue;
             }
-            let qty = firm.stock(product, region).0;
+            let cover = own_input_cover_lots(world, dataset, firm, region, product) * 1_000;
+            let qty = firm.stock(product, region).0 - cover;
             if qty <= 0 {
                 continue;
             }
@@ -356,6 +367,37 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
     }
 }
 
+/// Lots of a good a firm keeps in one state as input cover for its own plants there. Stock up
+/// to this level is not for sale: a plant's inputs are never offered to other buyers.
+fn own_input_cover_lots(
+    world: &World,
+    dataset: &Dataset,
+    firm: &crate::state::Firm,
+    region: u8,
+    product: u16,
+) -> i64 {
+    let cover_weeks = firm.policies.input_cover_weeks.max(1) as i64;
+    let mut need = 0i64;
+    for facility_handle in &firm.facilities {
+        let Some(facility) = world.facilities.get(*facility_handle) else {
+            continue;
+        };
+        if facility.region != region {
+            continue;
+        }
+        let recipe = &dataset.recipes[facility.recipe as usize];
+        if let Some(weekly) = recipe
+            .weekly_inputs_lots
+            .iter()
+            .find(|(id, _)| dataset.product_index[*id] == product)
+            .map(|(_, qty)| *qty)
+        {
+            need += weekly * facility.blocks as i64 * cover_weeks;
+        }
+    }
+    need
+}
+
 fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, product: u16) {
     let Some(index) = world
         .gateways
@@ -375,7 +417,7 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
     let sellers: Vec<Handle> = world
         .firms
         .iter()
-        .filter(|(_, firm)| firm.region == region && firm.operative())
+        .filter(|(_, firm)| firm.operative())
         .filter(|(_, firm)| firm.stock(product, region).0 > 0)
         .map(|(handle, _)| handle)
         .collect();
@@ -386,25 +428,7 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
         let Some(firm) = world.firms.get(seller) else {
             continue;
         };
-        let cover_weeks = firm.policies.input_cover_weeks.max(1) as i64;
-        let mut own_need = 0i64;
-        for facility_handle in &firm.facilities {
-            let Some(facility) = world.facilities.get(*facility_handle) else {
-                continue;
-            };
-            if facility.region != region {
-                continue;
-            }
-            let recipe = &dataset.recipes[facility.recipe as usize];
-            if let Some(weekly) = recipe
-                .weekly_inputs_lots
-                .iter()
-                .find(|(id, _)| dataset.product_index[*id] == product)
-                .map(|(_, qty)| *qty)
-            {
-                own_need += weekly * facility.blocks as i64 * cover_weeks;
-            }
-        }
+        let own_need = own_input_cover_lots(world, dataset, firm, region, product);
         // Stock promised to active sell contracts is not surplus and cannot be exported.
         let committed: i64 = world
             .contracts
@@ -422,13 +446,17 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
         if exportable <= 0 {
             continue;
         }
-        let qty = MilliLots::from_lots(exportable).min(remaining);
-        let cost = qty
-            .value_at(Cents(gateway.buy_price_cents.max(1)))
-            .unwrap_or(Cents::ZERO)
-            .0;
-        let gateway_cash = world.outside.gateway_book.cash().max(0);
-        let paid = cost.min(gateway_cash);
+        // The gateway buys only what its paced cash pays for in full; a seller never hands
+        // over goods for part of their price.
+        let price = gateway.buy_price_cents.max(1);
+        let affordable = world.outside.gateway_spendable() / price * 1_000;
+        let qty = MilliLots::from_lots(exportable)
+            .min(remaining)
+            .min(MilliLots(affordable));
+        if qty.0 <= 0 {
+            break;
+        }
+        let paid = qty.value_at(Cents(price)).unwrap_or(Cents::ZERO).0;
         if paid <= 0 {
             break;
         }
@@ -445,7 +473,7 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
                     .credit(Account::Inventory, carrying, "export cogs")
                     .debit(Account::CostOfGoods, carrying, "export cogs"),
             );
-            firm.last_week_units_sold.insert((region, product), qty);
+            firm.record_sale(region, product, qty);
         }
         let _ = world.outside.gateway_book.commit(
             world.tick,
@@ -453,6 +481,7 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
                 .credit(Account::Cash, paid, "export purchase")
                 .debit(Account::Inventory, paid, "export purchase"),
         );
+        world.gateways[index].last_export_lots += qty.lots();
         remaining = MilliLots(remaining.0 - qty.0);
     }
 }
@@ -525,7 +554,7 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
             let mut offers: Vec<Offer> = Vec::new();
             let mut sources: Vec<OfferSource> = Vec::new();
             for (handle, firm) in world.firms.iter() {
-                if firm.region != region_index as u8 || !firm.operative() {
+                if !firm.operative() {
                     continue;
                 }
                 let qty = firm.stock(product, region_index as u8).0;
@@ -622,7 +651,7 @@ fn clear_government(world: &mut World, dataset: &Dataset) {
             let mut offers = Vec::new();
             let mut sources = Vec::new();
             for (handle, firm) in world.firms.iter() {
-                if firm.region != region as u8 || !firm.operative() {
+                if !firm.operative() {
                     continue;
                 }
                 let qty = firm.stock(product, region as u8).0;
@@ -716,9 +745,7 @@ fn settle_fills(
                     cost,
                 ) && let Some(seller_firm) = world.firms.get_mut(seller_handle)
                 {
-                    seller_firm
-                        .last_week_units_sold
-                        .insert((region, product), qty);
+                    seller_firm.record_sale(region, product, qty);
                 }
             }
             OfferSource::Gateway(index) => {
@@ -749,6 +776,7 @@ fn settle_fills(
                     .unwrap()
                     .stock_lot_mut(product, region)
                     .receive(qty, Cents(paid));
+                world.gateways[index].last_import_lots += qty.lots();
                 let _ = world.outside.gateway_book.commit(
                     world.tick,
                     Txn::new()
@@ -802,7 +830,7 @@ fn settle_household_fills(
                         .credit(Account::Inventory, carrying, "cogs")
                         .debit(Account::CostOfGoods, carrying, "cogs"),
                 );
-                firm.last_week_units_sold.insert((region, product), qty);
+                firm.record_sale(region, product, qty);
             }
             spent += cost.0;
         }
@@ -865,7 +893,7 @@ fn settle_government_fills(
                         .debit(Account::CostOfGoods, carrying, "cogs"),
                 );
                 // Procurement is a real sale and belongs in the unit-sales record.
-                firm.last_week_units_sold.insert((region, product), qty);
+                firm.record_sale(region, product, qty);
             }
             spent += paid;
         }
