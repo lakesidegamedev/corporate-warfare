@@ -47,11 +47,6 @@ struct InboxView: View {
                     }
                 }
             }
-            if !store.statusLine.isEmpty {
-                Text(store.statusLine)
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondary)
-            }
         }
     }
 

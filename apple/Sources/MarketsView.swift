@@ -256,7 +256,9 @@ private struct BoardRow: View {
                             .foregroundStyle(Theme.primaryText)
                         Text(String(format: "%+.0f%%", Double(deltaBps) / 100))
                             .font(.caption2.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(deltaBps > 200 ? Theme.positive : deltaBps < -200 ? Theme.negative : Theme.secondary)
+                            // Against reference, for whoever sells: above is good news, below bad.
+                            // A price nobody trades at is neutral.
+                            .foregroundStyle(sold == 0 ? Theme.secondary : deltaBps > 200 ? Theme.positive : deltaBps < -200 ? Theme.negative : Theme.secondary)
                             .frame(width: 40, alignment: .trailing)
                     }
                     Text(balance)

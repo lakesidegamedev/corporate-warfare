@@ -192,7 +192,7 @@ struct HUDFigure: View {
     var tone: Color = Theme.primaryText
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 2) {
+        VStack(alignment: .leading, spacing: 2) {
             Eyebrow(text: label)
             Text(value).font(.subheadline.weight(.semibold).monospacedDigit()).foregroundStyle(tone)
         }

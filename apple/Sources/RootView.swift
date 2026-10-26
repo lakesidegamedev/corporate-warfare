@@ -35,6 +35,7 @@ struct RootView: View {
                     .tabItem { Label("Portfolio", systemImage: "building.columns.fill") }
                     .tag(AppTab.portfolio)
             }
+            .tint(Theme.gold)
         }
     }
 }
@@ -110,6 +111,8 @@ struct RunControls: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .tint(Theme.gold)
+            .foregroundStyle(Theme.ink)
 
             Button {
                 store.toggleRun()
@@ -118,6 +121,7 @@ struct RunControls: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
+            .tint(Theme.gold)
         }
         .controlSize(.large)
         .disabled(store.isBusy)
