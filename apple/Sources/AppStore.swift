@@ -22,6 +22,7 @@ final class AppStore: ObservableObject {
     @Published var firmOps: FirmOpsDto?
     @Published var facilities: [FacilityDto] = []
     @Published var finance: FinanceDto?
+    @Published var productLines: [ProductLineDto] = []
     @Published var ownership: OwnershipDto?
     @Published var contracts: [ContractDto] = []
     @Published var loans: [LoanDto] = []
@@ -235,6 +236,7 @@ final class AppStore: ObservableObject {
         if let selectedFirm {
             facilities = await engine.facilities(firm: selectedFirm)
             finance = await engine.finance(firm: selectedFirm)
+            productLines = await engine.productLines(firm: selectedFirm)
             ownership = await engine.ownership(firm: selectedFirm)
             contracts = await engine.contracts(firm: selectedFirm)
             loans = await engine.loans(firm: selectedFirm)
@@ -251,6 +253,7 @@ final class AppStore: ObservableObject {
             raidTargets = []
             facilities = []
             finance = nil
+            productLines = []
             ownership = nil
             contracts = []
             loans = []

@@ -93,6 +93,10 @@ actor Engine {
         session?.finance(firm: firm)
     }
 
+    func productLines(firm: UInt64) -> [ProductLineDto] {
+        session?.productLines(firm: firm) ?? []
+    }
+
     func ownership(firm: UInt64) -> OwnershipDto? {
         session?.ownership(firm: firm)
     }

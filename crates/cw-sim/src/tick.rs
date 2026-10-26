@@ -197,10 +197,41 @@ fn complete_construction(world: &mut World, dataset: &Dataset) {
         .map(|(handle, _)| handle)
         .collect();
     for handle in due {
-        let (firm, escrow, capex) = match world.facilities.get(handle) {
-            Some(facility) => (facility.firm, facility.escrow_cents, facility.capex_cents),
+        let (firm, escrow, capex, equipment_due) = match world.facilities.get(handle) {
+            Some(facility) => (
+                facility.firm,
+                facility.escrow_cents,
+                facility.capex_cents,
+                facility.equipment_due_cents,
+            ),
             None => continue,
         };
+        // Equipment is paid for on delivery. A firm without the cash leaves it at the depot for
+        // another week: the plant waits, the firm is not pushed into arrears.
+        if equipment_due > 0 {
+            let cash = world.firms.get(firm).map(|f| f.book.cash()).unwrap_or(0);
+            if cash < equipment_due {
+                if let Some(facility) = world.facilities.get_mut(handle) {
+                    facility.completes = Tick(world.tick.0 + 1);
+                }
+                continue;
+            }
+            if let Some(entity) = world.firms.get_mut(firm) {
+                let _ = entity.book.commit(
+                    world.tick,
+                    Txn::new()
+                        .debit(
+                            Account::WorkInProgress,
+                            equipment_due,
+                            "equipment delivered",
+                        )
+                        .credit(Account::Cash, equipment_due, "equipment delivered"),
+                );
+            }
+            if let Some(facility) = world.facilities.get_mut(handle) {
+                facility.equipment_due_cents = 0;
+            }
+        }
         // Equipment is released from escrow, then the whole asset moves out of CIP. Capex was
         // never expensed twice: service was already capitalised, equipment lands now.
         if let Some(entity) = world.firms.get_mut(firm) {

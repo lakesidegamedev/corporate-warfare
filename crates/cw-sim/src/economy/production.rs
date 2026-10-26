@@ -18,6 +18,18 @@ use crate::state::{FacilityStatus, World};
 
 const SEASONAL_YIELD_BPS: [i32; 4] = [8_000, 11_000, 13_000, 8_000];
 
+/// The crew a plant needs this week, in basis points of its full crew. Farms run seasonal crews:
+/// in the low-yield quarters they keep only the share of hands the yield needs, so wages follow
+/// the harvest instead of staying fixed while output falls. Every other plant needs its full crew.
+pub fn crew_need_bps(world: &World, recipe: &cw_data::Recipe) -> i64 {
+    if recipe.industry == "agriculture" {
+        let season = SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize];
+        season.min(10_000) as i64
+    } else {
+        10_000
+    }
+}
+
 /// Produce the whole week: utilities first, then goods and services.
 pub fn produce(world: &mut World, dataset: &Dataset) {
     let power = dispatch_electricity(world, dataset);
@@ -301,10 +313,12 @@ fn run_facility(
     }
     let recipe = &dataset.recipes[facility.recipe as usize];
 
-    // Staffing limit: the minimum tier ratio, capped at full capacity.
+    // Staffing limit: the minimum tier ratio, capped at full capacity. A seasonal farm crew is a
+    // full crew for its season.
+    let crew_bps = crew_need_bps(world, recipe);
     let mut staff_ratio = 10_000i32;
     for tier in 0..3 {
-        let need = recipe.workers_low_mid_high[tier] * facility.blocks as i64;
+        let need = recipe.workers_low_mid_high[tier] * facility.blocks as i64 * crew_bps / 10_000;
         if need > 0 {
             let ratio = (facility.workers[tier] * 10_000 / need).min(10_000);
             staff_ratio = staff_ratio.min(ratio as i32);

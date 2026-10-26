@@ -126,6 +126,23 @@ pub struct FacilityDto {
     pub reopen_cost_cents: i64,
 }
 
+/// One good the firm makes, for the pricing panel.
+#[derive(uniffi::Record)]
+pub struct ProductLineDto {
+    pub product: u32,
+    pub product_id: String,
+    pub name: String,
+    pub price_cents: i64,
+    pub reference_cents: i64,
+    pub market_cents: i64,
+    pub unit_cost_cents: i64,
+    pub made_last_week_lots: i64,
+    pub sold_last_week_lots: i64,
+    pub stock_lots: i64,
+    pub mode: String,
+    pub posture_bps: i32,
+}
+
 #[derive(uniffi::Record)]
 pub struct FinanceDto {
     pub firm: u64,
@@ -1525,6 +1542,28 @@ impl SessionHandle {
     }
 
     /// The market-balance snapshot as JSON, for anonymous gameplay analytics.
+    /// Every good the firm makes with its price, cost per lot, sales and posture.
+    pub fn product_lines(&self, firm: u64) -> Vec<ProductLineDto> {
+        let session = self.lock();
+        cw_session::dto::product_lines(&session.world, &session.dataset, firm)
+            .into_iter()
+            .map(|line| ProductLineDto {
+                product: line.product as u32,
+                product_id: line.product_id,
+                name: line.name,
+                price_cents: line.price_cents,
+                reference_cents: line.reference_cents,
+                market_cents: line.market_cents,
+                unit_cost_cents: line.unit_cost_cents,
+                made_last_week_lots: line.made_last_week_lots,
+                sold_last_week_lots: line.sold_last_week_lots,
+                stock_lots: line.stock_lots,
+                mode: line.mode,
+                posture_bps: line.posture_bps,
+            })
+            .collect()
+    }
+
     pub fn market_snapshot_json(&self) -> String {
         serde_json::to_string(&self.lock().market_snapshot()).unwrap_or_default()
     }

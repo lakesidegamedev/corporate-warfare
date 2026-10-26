@@ -264,10 +264,16 @@ fn random_intent(rng: &mut SplitMix64, session: &Session) -> CommandIntent {
     let weeks = rng.between(1, 52) as u32;
 
     match rng.below(26) {
-        0 => CommandIntent::SetPrice {
+        0 if rng.below(2) == 0 => CommandIntent::SetPrice {
             firm: primary,
             product,
             price_cents: price,
+        },
+        0 => CommandIntent::SetPricePosture {
+            firm: primary,
+            product,
+            mode: rng.below(4) as u8,
+            bps: rng.between(-3_000, 12_000) as i32,
         },
         1 => CommandIntent::SetProductionTarget {
             firm: primary,

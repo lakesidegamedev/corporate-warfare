@@ -169,7 +169,12 @@ plants; a service is judged by sold against capacity, and a plant whose good has
 holds. Rivals always plan this way;
 the player's companies do too until the player sets a price or target by hand, and either can be
 handed back to automatic. Contract deliveries, power dispatched to the grid and construction
-services all count as sales. A contract delivery is limited to what the buyer can pay for in
+services all count as sales. The player can instead give any good a pricing posture, after A House
+Divided: a step from 20 percent under to 20 percent over the market price (the median ask of
+the other firms that make it, or reference when none do), or a markup of 10 to 100 percent over
+the firm's own cost per lot (inputs at reference, its wage offers for this season's crew,
+maintenance, land and depreciation, over full output). A posture prices the good at once and
+every week after, within half and twice reference. A contract delivery is limited to what the buyer can pay for in
 full, goods and freight together, in whole lots; the rest stays with the seller.
 
 Services that reach customers across a state
