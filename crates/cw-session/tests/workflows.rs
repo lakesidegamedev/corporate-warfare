@@ -431,3 +431,67 @@ fn weekly_cost_lines_reconcile_to_ebit_and_the_quarter_sums_net_income() {
     assert_eq!(overview.quarter_weeks, 13);
     assert_eq!(overview.quarter_net_income_cents, ledger_net);
 }
+
+#[test]
+fn closing_prices_keep_a_year_and_the_boards_read_their_movement_from_them() {
+    let mut session = Session::create(ScenarioConfig {
+        seed: 12,
+        scenario: ScenarioKind::Guided,
+        mode: ScenarioMode::Sandbox,
+        dataset_hash: String::new(),
+        difficulty: cw_data::Difficulty::Standard,
+    })
+    .unwrap();
+    for _ in 0..60 {
+        if session.advance(1).pause.is_some() {
+            for event in session.world.events.pending.iter_mut() {
+                event.resolved = true;
+            }
+            session.dismiss_pause();
+        }
+    }
+    let history = &session.world.price_history;
+    assert_eq!(
+        history.len(),
+        cw_sim::state::PRICE_HISTORY_WEEKS,
+        "a year, no more"
+    );
+    assert_eq!(history.last().unwrap().week, session.world.tick.0);
+    assert!(
+        history
+            .windows(2)
+            .all(|pair| pair[1].week == pair[0].week + 1)
+    );
+
+    let commodities = cw_session::dto::commodity_board(&session.world, &session.dataset);
+    assert!(!commodities.is_empty());
+    for line in &commodities {
+        assert_eq!(line.history_cents.len(), 52);
+        let last = *line.history_cents.last().unwrap();
+        let before = line.history_cents[50];
+        assert_eq!(
+            line.price_cents, last,
+            "{} closes at today's price",
+            line.product_id
+        );
+        assert_eq!(
+            line.change_week_bps,
+            (last - before) * 10_000 / before.max(1)
+        );
+        let quarter = line.history_cents[51 - 13];
+        assert_eq!(
+            line.change_quarter_bps,
+            (last - quarter) * 10_000 / quarter.max(1)
+        );
+    }
+    let stocks = cw_session::dto::stock_board(&session.world);
+    assert!(stocks.len() >= 20, "the corridor's companies are listed");
+    for line in &stocks {
+        assert_eq!(*line.history_cents.last().unwrap(), line.price_cents);
+        assert_eq!(line.market_cap_cents, line.price_cents * line.shares_issued);
+    }
+    assert!(
+        stocks.iter().any(|line| line.controlled_by_you),
+        "the player's company trades too"
+    );
+}

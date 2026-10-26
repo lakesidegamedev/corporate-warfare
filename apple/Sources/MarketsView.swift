@@ -2,8 +2,9 @@ import SwiftUI
 
 /// The commodity board for one region, built for scanning: one line per good with its price and
 /// a signal for what the market is doing (imported shortage, tight, glut, yours), the supply and
-/// demand relation in plain terms underneath, and the detail one tap away.
-struct MarketsView: View {
+/// demand relation in plain terms underneath, and the detail one tap away. The Regions section
+/// of Markets.
+struct RegionMarketsSection: View {
     @EnvironmentObject private var store: AppStore
     @State private var filter: MarketFilter = .all
     @State private var expanded: UInt32?
@@ -61,9 +62,14 @@ struct MarketsView: View {
     }
 
     var body: some View {
-        TabScreen(title: "Markets", subtitle: state.map { "\($0.stateName) · prices per lot" }) {
-            regionMenu
-        } content: {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(state.map { "\($0.stateName) · prices per lot" } ?? "Prices per lot")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Theme.secondary)
+                Spacer()
+                regionMenu
+            }
             filterBar
             if groups.isEmpty {
                 CalloutRow(symbol: "line.3.horizontal.decrease.circle", text: "No goods match this filter in \(state?.name ?? "this region").", tint: Theme.secondary)

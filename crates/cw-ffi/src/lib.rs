@@ -126,6 +126,49 @@ pub struct FacilityDto {
     pub reopen_cost_cents: i64,
 }
 
+/// One good on the corridor commodity board.
+#[derive(uniffi::Record)]
+pub struct CommodityDto {
+    pub product: u32,
+    pub product_id: String,
+    pub name: String,
+    pub sector: String,
+    pub price_cents: i64,
+    pub reference_cents: i64,
+    pub change_week_bps: i64,
+    pub change_quarter_bps: i64,
+    pub history_cents: Vec<i64>,
+    pub made_lots: i64,
+    pub sold_lots: i64,
+    pub imported_lots: i64,
+    pub exported_lots: i64,
+    pub stock_lots: i64,
+    pub import_cents: i64,
+    pub export_cents: i64,
+    pub yours: bool,
+}
+
+/// One company on the corridor stock board.
+#[derive(uniffi::Record)]
+pub struct StockDto {
+    pub firm: u64,
+    pub name: String,
+    pub industry: String,
+    pub region: String,
+    pub price_cents: i64,
+    pub fair_cents: i64,
+    pub change_week_bps: i64,
+    pub change_quarter_bps: i64,
+    pub history_cents: Vec<i64>,
+    pub shares_issued: i64,
+    pub market_cap_cents: i64,
+    pub earnings_cents: i64,
+    pub earnings_weeks: u32,
+    pub your_shares: i64,
+    pub float_bps: i64,
+    pub controlled_by_you: bool,
+}
+
 /// One good the firm makes, for the pricing panel.
 #[derive(uniffi::Record)]
 pub struct ProductLineDto {
@@ -1542,6 +1585,59 @@ impl SessionHandle {
     }
 
     /// The market-balance snapshot as JSON, for anonymous gameplay analytics.
+    /// The corridor commodity board: every traded good with its price and movement.
+    pub fn commodity_board(&self) -> Vec<CommodityDto> {
+        let session = self.lock();
+        cw_session::dto::commodity_board(&session.world, &session.dataset)
+            .into_iter()
+            .map(|line| CommodityDto {
+                product: line.product as u32,
+                product_id: line.product_id,
+                name: line.name,
+                sector: line.sector,
+                price_cents: line.price_cents,
+                reference_cents: line.reference_cents,
+                change_week_bps: line.change_week_bps,
+                change_quarter_bps: line.change_quarter_bps,
+                history_cents: line.history_cents,
+                made_lots: line.made_lots,
+                sold_lots: line.sold_lots,
+                imported_lots: line.imported_lots,
+                exported_lots: line.exported_lots,
+                stock_lots: line.stock_lots,
+                import_cents: line.import_cents,
+                export_cents: line.export_cents,
+                yours: line.yours,
+            })
+            .collect()
+    }
+
+    /// The corridor stock board: every operating company's shares.
+    pub fn stock_board(&self) -> Vec<StockDto> {
+        let session = self.lock();
+        cw_session::dto::stock_board(&session.world)
+            .into_iter()
+            .map(|line| StockDto {
+                firm: line.firm,
+                name: line.name,
+                industry: line.industry,
+                region: line.region,
+                price_cents: line.price_cents,
+                fair_cents: line.fair_cents,
+                change_week_bps: line.change_week_bps,
+                change_quarter_bps: line.change_quarter_bps,
+                history_cents: line.history_cents,
+                shares_issued: line.shares_issued,
+                market_cap_cents: line.market_cap_cents,
+                earnings_cents: line.earnings_cents,
+                earnings_weeks: line.earnings_weeks,
+                your_shares: line.your_shares,
+                float_bps: line.float_bps,
+                controlled_by_you: line.controlled_by_you,
+            })
+            .collect()
+    }
+
     /// Every good the firm makes with its price, cost per lot, sales and posture.
     pub fn product_lines(&self, firm: u64) -> Vec<ProductLineDto> {
         let session = self.lock();

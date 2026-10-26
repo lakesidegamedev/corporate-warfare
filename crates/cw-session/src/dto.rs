@@ -757,3 +757,195 @@ pub fn product_lines(world: &World, dataset: &Dataset, firm: u64) -> Vec<Product
         })
         .collect()
 }
+
+/// Basis-point change from the closing price `weeks` back to `now`; 0 without history.
+fn change_bps(history: &[i64], weeks: usize, now: i64) -> i64 {
+    if history.len() <= weeks {
+        return history
+            .first()
+            .map(|then| (now - then) * 10_000 / (*then).max(1))
+            .unwrap_or(0);
+    }
+    let then = history[history.len() - 1 - weeks].max(1);
+    (now - then) * 10_000 / then
+}
+
+/// One good on the corridor commodity board.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CommodityLine {
+    pub product: u16,
+    pub product_id: String,
+    pub name: String,
+    /// The sector whose strategies make it, or "other".
+    pub sector: String,
+    pub price_cents: i64,
+    pub reference_cents: i64,
+    pub change_week_bps: i64,
+    pub change_quarter_bps: i64,
+    /// Closing prices, oldest first, up to a year.
+    pub history_cents: Vec<i64>,
+    pub made_lots: i64,
+    pub sold_lots: i64,
+    pub imported_lots: i64,
+    pub exported_lots: i64,
+    pub stock_lots: i64,
+    pub import_cents: i64,
+    pub export_cents: i64,
+    /// True when one of the player's companies makes it.
+    pub yours: bool,
+}
+
+pub fn commodity_board(world: &World, dataset: &Dataset) -> Vec<CommodityLine> {
+    use cw_sim::economy::pricing;
+    let player_outputs: std::collections::BTreeSet<u16> = world
+        .firms
+        .iter()
+        .filter(|(handle, _)| cw_sim::economy::events_engine::player_side(world, *handle))
+        .flat_map(|(handle, _)| pricing::outputs(world, dataset, handle))
+        .collect();
+    (0..dataset.products.len() as u16)
+        .filter(|code| {
+            let product = &dataset.products[*code as usize];
+            product.reference_price_cents > 0 && !product.kind.is_financial()
+        })
+        .map(|code| {
+            let product = &dataset.products[code as usize];
+            let sector = dataset
+                .recipes
+                .iter()
+                .find(|recipe| recipe.output == product.id)
+                .map(|recipe| recipe.industry.clone())
+                .unwrap_or_else(|| "other".to_owned());
+            let price = pricing::corridor_price(world, dataset, code);
+            let mut history: Vec<i64> = world
+                .price_history
+                .iter()
+                .filter_map(|point| point.goods.get(&code).copied())
+                .collect();
+            // Before the first close, the board still shows today's price as its one point.
+            if history.is_empty() {
+                history.push(price);
+            }
+            let made: i64 = world
+                .facilities
+                .iter()
+                .filter(|(_, f)| dataset.recipes[f.recipe as usize].output == product.id)
+                .map(|(_, f)| f.last_output.lots())
+                .sum();
+            let sold: i64 = world
+                .firms
+                .iter()
+                .filter_map(|(_, f)| f.last_closed_sales())
+                .flat_map(|week| week.iter())
+                .filter(|((_, p), _)| *p == code)
+                .map(|(_, q)| *q)
+                .sum();
+            let gateways = world.gateways.iter().filter(|g| g.product == code);
+            let (imported, exported, import, export) =
+                gateways.fold((0i64, 0i64, i64::MAX, 0i64), |(i, e, low, high), g| {
+                    (
+                        i + g.last_import_lots,
+                        e + g.last_export_lots,
+                        if g.sell_price_cents > 0 {
+                            low.min(g.sell_price_cents)
+                        } else {
+                            low
+                        },
+                        high.max(g.buy_price_cents),
+                    )
+                });
+            let stock: i64 = world
+                .firms
+                .iter()
+                .flat_map(|(_, f)| f.inventory.iter())
+                .filter(|((p, _), _)| *p == code)
+                .map(|(_, lot)| lot.qty.lots())
+                .sum();
+            CommodityLine {
+                product: code,
+                product_id: product.id.clone(),
+                name: product.name.clone(),
+                sector,
+                price_cents: price,
+                reference_cents: product.reference_price_cents,
+                change_week_bps: change_bps(&history, 1, price),
+                change_quarter_bps: change_bps(&history, 13, price),
+                history_cents: history,
+                made_lots: made,
+                sold_lots: sold,
+                imported_lots: imported,
+                exported_lots: exported,
+                stock_lots: stock,
+                import_cents: if import == i64::MAX { 0 } else { import },
+                export_cents: export,
+                yours: player_outputs.contains(&code),
+            }
+        })
+        .collect()
+}
+
+/// One company on the corridor stock board.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StockLine {
+    pub firm: u64,
+    pub name: String,
+    pub industry: String,
+    pub region: String,
+    pub price_cents: i64,
+    pub fair_cents: i64,
+    pub change_week_bps: i64,
+    pub change_quarter_bps: i64,
+    pub history_cents: Vec<i64>,
+    pub shares_issued: i64,
+    pub market_cap_cents: i64,
+    /// Net income over the last closed weeks (up to thirteen), and how many weeks.
+    pub earnings_cents: i64,
+    pub earnings_weeks: u32,
+    /// Shares the player holds personally.
+    pub your_shares: i64,
+    /// Share of the stock held outside the controlling holder, in basis points.
+    pub float_bps: i64,
+    pub controlled_by_you: bool,
+}
+
+pub fn stock_board(world: &World) -> Vec<StockLine> {
+    world
+        .firms
+        .iter()
+        .filter(|(_, firm)| firm.operative() && firm.shares.issued > 0)
+        .map(|(handle, firm)| {
+            let price = firm.shares.mark_cents.max(1);
+            let history: Vec<i64> = world
+                .price_history
+                .iter()
+                .filter_map(|point| point.shares.get(&handle).copied())
+                .collect();
+            let weeks = firm.book.recent_weeks();
+            let outside: i64 = firm
+                .shares
+                .holders
+                .iter()
+                .filter(|(holder, _)| matches!(holder, HolderId::Outside(_)))
+                .map(|(_, lot)| lot.qty)
+                .sum();
+            StockLine {
+                firm: handle.0,
+                name: firm.name.clone(),
+                industry: cw_sim::state::INDUSTRY_NAMES[firm.industry as usize].to_owned(),
+                region: world.regions[firm.region as usize].name.clone(),
+                price_cents: price,
+                fair_cents: firm.shares.fair_cents,
+                change_week_bps: change_bps(&history, 1, price),
+                change_quarter_bps: change_bps(&history, 13, price),
+                history_cents: history,
+                shares_issued: firm.shares.issued,
+                market_cap_cents: price.saturating_mul(firm.shares.issued),
+                earnings_cents: weeks.iter().map(|week| week.net_income).sum(),
+                earnings_weeks: weeks.len() as u32,
+                your_shares: firm.shares.qty(HolderId::Investor),
+                float_bps: outside * 10_000 / firm.shares.issued.max(1),
+                controlled_by_you: cw_sim::economy::events_engine::player_side(world, handle),
+            }
+        })
+        .collect()
+}
