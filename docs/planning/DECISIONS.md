@@ -377,3 +377,17 @@ as the scripted reference policies (median 64 against 62 to 64), as in 1.0.0. Th
 policies predate the map and never build plants. Decision: release 1.1.0 with the finding
 recorded. 1.1.1 rescoring measures change from the opening position (net worth, plants,
 share) and adds a map-aware reference policy that builds, then reruns the evidence.
+
+### Owner direction for 1.2.0: regions, divisions and the most ambitious update, 2026-10-26
+
+- Regions: split each state into economic regions built from real county groups (about 30).
+  The region is the economic unit; the state is the political layer. Delivered as 31.
+- Divisions, as in A House Divided: "you build in a sector and then you build plants within
+  it." The map shows a circle per owned sector type next to the region, only the player's,
+  with a badge counting owned plants, when that view is on.
+- "1.2.0 should be our most ambitious update yet": think of things along this line that make it
+  more of a game. Delivered: market share and dominance, market raids, state specializations,
+  board objectives, market news, and the score rework decided for 1.1.1.
+- "The costs are absurdly high to build plants (millions) when I start with one million": a
+  plant is now a fifth of its 1.1.0 size, keeping calibrated margins and seeded capacity.
+

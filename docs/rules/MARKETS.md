@@ -149,6 +149,17 @@ purchases final consumer goods; households buy retail delivery rather than both 
 and retailer for the same demand. Non-retail industries may sell direct only where the
 product metadata allows it. No double counting of household demand.
 
+## Regions and statewide services (1.2.0)
+
+Goods, retail, leases and electricity clear in each of the 31 economic regions; goods move
+between regions by freight over the region lanes. Services that reach customers across a state
+(software, telecom, advertising, research, maintenance, care, training, water and construction)
+clear statewide: an offer in a region may draw on the seller's stock in any region of the same
+state, and settlement removes it from where it sits. Background public works buy eighteen lots
+of construction a week per state, split across the state's regions by demand. A region's
+gateway carries one corridor volume per state split by the region's demand share, never below
+what its own plants trade. Corporate tax losses carry forward against later quarters' profit.
+
 ## Denominator and zero-state rules
 
 A zero workforce tier with positive recipe need yields zero output. A recipe with zero

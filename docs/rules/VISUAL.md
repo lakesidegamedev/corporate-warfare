@@ -24,12 +24,13 @@ accessible full value. Controls at least 44x44pt.
 Five tabs: Map (map), CEO Office (building.2), Markets (chart.bar.xaxis), Inbox
 (tray.full, badged with mandatory decisions), Portfolio (building.columns).
 
-Map is home. A flat vector map (not satellite imagery) of the eight playable states with
+Map is home (1.2.0: regions). A flat vector map (not satellite imagery) of the eight playable states with
 counties, the Great Lakes, major rivers, interstates and hub cities, drawn from public
 Census, TIGER and Natural Earth data bundled at build time. Neighbouring states are drawn
-dimmer. Plants appear as sector markers around their state's cities, the player's ringed
-in gold. Layers: presence, room to build, wages, workforce skill, each with a legend.
-Pan, pinch zoom, double-tap reset, tap a state to open its board. On iPhone the board is
+dimmer. Thin lines mark the 31 economic regions, thick lines the states. In the Your divisions layer
+the player's divisions appear as one gold-ringed sector circle per owned sector type beside
+each region's anchor city, with a badge counting its plants; rival plants are not drawn. Layers: presence, room to build, wages, workforce skill, each with a legend.
+Pan, pinch zoom, double-tap reset, tap a region to open its board. On iPhone the board is
 a sheet with half and full detents; on iPad it is a fixed side panel beside the map.
 
 A state's board leads with one Build action, then room to build (smoothed imports),
