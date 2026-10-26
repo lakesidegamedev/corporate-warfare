@@ -61,6 +61,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
 
     // Phase 7: expenses, debt service, claims and defaults.
     settle_expenses(world, dataset);
+    crate::economy::operations::weekly(world, dataset);
     crate::economy::credit::service(world, dataset);
     crate::economy::banking::weekly(world);
     crate::economy::insurance::weekly(world);

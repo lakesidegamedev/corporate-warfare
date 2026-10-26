@@ -346,6 +346,9 @@ pub struct Policies {
     pub production_target_bps: i32,
     pub marketing_budget_cents: i64,
     pub research_budget_cents: i64,
+    /// Weekly logistics and operations programme that builds logistics strength.
+    #[serde(default)]
+    pub logistics_budget_cents: i64,
     /// Weekly budget for paid skill training. Training moves workers between tiers; it never
     /// creates workers.
     #[serde(default)]
@@ -365,6 +368,7 @@ impl Default for Policies {
             production_target_bps: 10_000,
             marketing_budget_cents: 0,
             research_budget_cents: 0,
+            logistics_budget_cents: 0,
             training_budget_cents: 0,
             quality_budgets_cents: BTreeMap::new(),
             input_cover_weeks: 4,
@@ -503,6 +507,13 @@ pub struct Firm {
     /// Largest outside vote share at the last week close, so a hostile stake is reported when
     /// it crosses a quarter, not every week it stays there.
     pub outside_peak_bps: i32,
+    /// Optional secondary sector type; `industry` is the primary.
+    pub secondary_industry: Option<u8>,
+    /// Focus change transition and lock, as tick numbers.
+    pub focus_transition_until: u32,
+    pub focus_cooldown_until: u32,
+    /// Logistics and operations strength, 0..200, built by the logistics budget.
+    pub logistics_strength: i32,
     pub policy_requests: Vec<PolicyRequest>,
     pub guarantees: Vec<Guarantee>,
     pub last_strategic_week: u32,

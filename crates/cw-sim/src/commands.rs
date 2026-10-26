@@ -317,6 +317,18 @@ pub enum CommandIntent {
         firm: Handle,
         amount_cents: i64,
     },
+    /// Set the primary and optional secondary sector type (AHD sector focus).
+    SetSectorFocus {
+        firm: Handle,
+        primary: u8,
+        #[serde(default)]
+        secondary: Option<u8>,
+    },
+    /// Weekly logistics and operations programme that builds logistics strength.
+    SetLogisticsBudget {
+        firm: Handle,
+        amount_cents: i64,
+    },
     FileLobbyRequest {
         firm: Handle,
         region: u8,
@@ -392,6 +404,8 @@ impl CommandIntent {
             CommandIntent::SetUnderwritingLimit { .. } => "set_underwriting_limit",
             CommandIntent::RespondBargaining { .. } => "respond_bargaining",
             CommandIntent::ProposeSettlement { .. } => "propose_settlement",
+            CommandIntent::SetSectorFocus { .. } => "set_sector_focus",
+            CommandIntent::SetLogisticsBudget { .. } => "set_logistics_budget",
             CommandIntent::FileLobbyRequest { .. } => "file_lobby_request",
             CommandIntent::RespondEvent { .. } => "respond_event",
         }
@@ -613,6 +627,10 @@ fn apply_intent(
                 layoffs: Vec::new(),
                 staff_history: Vec::new(),
                 outside_peak_bps: 0,
+                secondary_industry: None,
+                focus_transition_until: 0,
+                focus_cooldown_until: 0,
+                logistics_strength: 0,
                 policy_requests: Vec::new(),
                 guarantees: Vec::new(),
                 last_strategic_week: 0,
@@ -878,15 +896,46 @@ fn apply_intent(
                         handle: *recipe as u64,
                         kind: EntityKind::Product,
                     })?;
-            let cost = template.capex_cents * facility_blocks as i64 / 2;
+            // A retool switches the plant's operating strategy within its sector type, as in A
+            // House Divided: a quarter of the new strategy's capex per block and a third of its
+            // build time, at least four weeks. A plant cannot change sector type by retooling.
+            let (current, status) = world
+                .facilities
+                .get(*facility)
+                .map(|f| (f.recipe, f.status))
+                .unwrap();
+            if !matches!(
+                status,
+                FacilityStatus::Operating | FacilityStatus::Mothballed
+            ) {
+                return Err(DomainError::WrongPhase {
+                    expected: "operating",
+                    actual: "busy",
+                });
+            }
+            if current == *recipe || dataset.recipes[current as usize].industry != template.industry
+            {
+                return Err(DomainError::InvalidEntity {
+                    handle: *recipe as u64,
+                    kind: EntityKind::Product,
+                });
+            }
+            let cost = template.capex_cents * facility_blocks as i64 / 4;
+            let weeks = (template.build_weeks / 3).max(4);
+            let deposit = if template.depletes() {
+                MilliLots::from_lots(template.weekly_output_lots * facility_blocks as i64 * 52 * 20)
+            } else {
+                MilliLots::ZERO
+            };
             spend_firm_cash(world, owner, cost, "retool escrow")?;
             if let Some(stored) = world.facilities.get_mut(*facility) {
                 stored.recipe = *recipe;
                 stored.status = FacilityStatus::Retooling {
-                    until: Tick(world.tick.0 + (template.build_weeks / 2).max(1)),
+                    until: Tick(world.tick.0 + weeks),
                 };
                 stored.capex_cents += cost;
                 stored.escrow_cents += cost;
+                stored.deposit_remaining = deposit;
             }
             Ok(())
         }
@@ -2223,6 +2272,30 @@ fn apply_intent(
             }
             Ok(())
         }
+        CommandIntent::SetSectorFocus {
+            firm,
+            primary,
+            secondary,
+        } => {
+            require_control(world, actor, *firm)?;
+            crate::economy::operations::set_focus(world, *firm, *primary, *secondary)?;
+            Ok(())
+        }
+        CommandIntent::SetLogisticsBudget { firm, amount_cents } => {
+            require_control(world, actor, *firm)?;
+            if *amount_cents < 0 {
+                return Err(DomainError::Arithmetic {
+                    detail: ArithmeticFault::OutOfRange,
+                });
+            }
+            world
+                .firms
+                .get_mut(*firm)
+                .unwrap()
+                .policies
+                .logistics_budget_cents = *amount_cents;
+            Ok(())
+        }
         CommandIntent::FileLobbyRequest {
             firm,
             region,
@@ -2374,7 +2447,7 @@ fn start_facility(
         workers: [0; 3],
         target_bps: 10_000,
         quality_bps: 10_000,
-        deposit_remaining: if template.output == "ore" {
+        deposit_remaining: if template.depletes() {
             MilliLots::from_lots(template.weekly_output_lots * blocks as i64 * 52 * 20)
         } else {
             MilliLots::ZERO

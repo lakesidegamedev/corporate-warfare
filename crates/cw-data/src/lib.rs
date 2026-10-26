@@ -143,7 +143,9 @@ impl Dataset {
         }
         for (industry, count) in &strategies {
             if *count < 3 {
-                errors.push(format!("sector {industry} offers {count} strategies, needs at least 3"));
+                errors.push(format!(
+                    "sector {industry} offers {count} strategies, needs at least 3"
+                ));
             }
         }
         if self.regions.len() < 8 {
@@ -428,8 +430,16 @@ mod tests {
         let mut codes = std::collections::BTreeSet::new();
         for region in &dataset.regions {
             assert!(codes.insert(region.code.clone()), "duplicate region code");
-            assert_eq!(region.states, vec![region.code.clone()], "one region is one state");
-            assert!(region.population_2000 > 1_000_000, "{} population", region.code);
+            assert_eq!(
+                region.states,
+                vec![region.code.clone()],
+                "one region is one state"
+            );
+            assert!(
+                region.population_2000 > 1_000_000,
+                "{} population",
+                region.code
+            );
             assert!(region.wage_index_bps > 0);
             assert!(region.demand_index_bps > 0);
             let c = region.conditions;

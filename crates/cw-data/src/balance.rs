@@ -87,6 +87,11 @@ pub struct Recipe {
 }
 
 impl Recipe {
+    /// Extraction from a finite deposit: every extraction strategy except renewable timber.
+    pub fn depletes(&self) -> bool {
+        self.industry == "extraction" && self.output != "timber"
+    }
+
     /// Full-capacity weekly payroll at baseline fixture wages.
     pub fn baseline_weekly_payroll(&self, wages: [i64; 3]) -> i64 {
         self.workers_low_mid_high

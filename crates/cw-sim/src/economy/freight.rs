@@ -32,7 +32,11 @@ pub fn freight_cost(dataset: &Dataset, from: u8, to: u8, qty: MilliLots) -> i64 
         )
         .unwrap_or(500);
     let lots = qty.lots().max(1);
-    let cost = lots * km as i64 * FREIGHT_CENTS_PER_LOT_KM;
+    let cost = lots
+        * km as i64
+        * FREIGHT_CENTS_PER_LOT_KM
+        * crate::economy::operations::road_bps(dataset, from, to)
+        / 10_000;
     cost.max(FREIGHT_MINIMUM_CENTS)
 }
 

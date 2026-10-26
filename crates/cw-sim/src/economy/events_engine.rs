@@ -215,7 +215,7 @@ fn eligible_subjects(world: &World, dataset: &Dataset, trigger: &str, region: u8
                     .any(|facility| {
                         let recipe = &dataset.recipes[facility.recipe as usize];
                         let weekly = recipe.weekly_output_lots * facility.blocks as i64;
-                        recipe.industry == "extraction"
+                        recipe.depletes()
                             && facility.status == FacilityStatus::Operating
                             && facility.deposit_remaining.lots() < weekly * 26
                     }),

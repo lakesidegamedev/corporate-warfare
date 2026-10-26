@@ -12,6 +12,7 @@ pub mod insolvency;
 pub mod insurance;
 pub mod labour;
 pub mod markets;
+pub mod operations;
 pub mod ownership;
 pub mod policy;
 pub mod procurement;

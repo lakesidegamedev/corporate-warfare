@@ -322,6 +322,8 @@ fn run_facility(
         return MilliLots::ZERO;
     }
 
+    // Sector focus: plants of the owner's primary or secondary type need fewer inputs.
+    let focus_bps = crate::economy::operations::input_bps(world, dataset, handle);
     // Input limits, excluding electricity which is a service allocated above.
     let mut input_limit = ratio;
     for (product_id, weekly) in &recipe.weekly_inputs_lots {
@@ -333,7 +335,9 @@ fn run_facility(
             // Services cannot be stockpiled: they expire each week and markets clear after
             // production, so a non-electric service input is bought in the week it is used
             // from the finite outside service sector at the reference price. Cash is the limit.
-            let unit_cost = weekly * facility.blocks as i64 * dataset.reference_price(code);
+            let unit_cost =
+                weekly * facility.blocks as i64 * dataset.reference_price(code) * focus_bps as i64
+                    / 10_000;
             if unit_cost > 0 {
                 let cash = world
                     .firms
@@ -346,7 +350,9 @@ fn run_facility(
             }
             continue;
         }
-        let need = MilliLots::from_lots(weekly * facility.blocks as i64).scale_bps(ratio);
+        let need = MilliLots::from_lots(weekly * facility.blocks as i64)
+            .scale_bps(focus_bps)
+            .scale_bps(ratio);
         if need.0 <= 0 {
             continue;
         }
@@ -363,6 +369,7 @@ fn run_facility(
         };
         if available < need.0 {
             let full = MilliLots::from_lots(weekly * facility.blocks as i64)
+                .scale_bps(focus_bps)
                 .0
                 .max(1);
             input_limit = input_limit.min((available * 10_000 / full) as i32);
@@ -377,7 +384,7 @@ fn run_facility(
         if facility.deposit_remaining.0 < wanted {
             ratio = (facility.deposit_remaining.0 * 10_000 / full.0.max(1)) as i32;
         }
-    } else if recipe.output == "ore" {
+    } else if recipe.depletes() {
         ratio = 0;
     }
 
@@ -395,7 +402,9 @@ fn run_facility(
         let code = dataset.product_index[product_id];
         // Recipe quantities are whole lots; one lot is 1000 milli-lots. Availability and
         // consumption must use the same unit or the plant consumes a thousandth of its recipe.
-        let need = MilliLots::from_lots(weekly * facility.blocks as i64).scale_bps(ratio);
+        let need = MilliLots::from_lots(weekly * facility.blocks as i64)
+            .scale_bps(focus_bps)
+            .scale_bps(ratio);
         if need.0 <= 0 {
             continue;
         }
@@ -454,6 +463,10 @@ fn run_facility(
         let season = SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize];
         output = output.scale_bps(season);
     }
+    // State conditions: grid reliability, workforce skill and broadband.
+    output = output.scale_bps(crate::economy::operations::output_bps(
+        world, dataset, handle, utility,
+    ));
     // Supply-side events (crop loss, outages) reduce physical output, not household demand.
     if let Some(code) = dataset.product_index.get(&recipe.output) {
         output = output.scale_bps(world.supply_ratio_bps(facility.region, *code) as i32);
@@ -621,8 +634,7 @@ mod tests {
         }
         produce(&mut world, &dataset);
         for (_, facility) in world.facilities.iter() {
-            let output = &dataset.recipes[facility.recipe as usize].output;
-            if output == "ore" {
+            if dataset.recipes[facility.recipe as usize].depletes() {
                 assert!(
                     facility.deposit_remaining.0 >= 0,
                     "a mine cannot extract more than its deposit"
@@ -631,7 +643,7 @@ mod tests {
                 assert_eq!(
                     facility.deposit_remaining,
                     MilliLots::ZERO,
-                    "only a mine has a deposit to consume"
+                    "only a depleting extraction plant has a deposit"
                 );
             }
         }

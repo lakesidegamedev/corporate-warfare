@@ -311,6 +311,10 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
             layoffs: Vec::new(),
             staff_history: Vec::new(),
             outside_peak_bps: 0,
+            secondary_industry: None,
+            focus_transition_until: 0,
+            focus_cooldown_until: 0,
+            logistics_strength: 0,
             policy_requests: Vec::new(),
             guarantees: Vec::new(),
             last_strategic_week: 0,
@@ -511,6 +515,10 @@ fn placeholder_firm() -> Firm {
         layoffs: Vec::new(),
         staff_history: Vec::new(),
         outside_peak_bps: 0,
+        secondary_industry: None,
+        focus_transition_until: 0,
+        focus_cooldown_until: 0,
+        logistics_strength: 0,
         policy_requests: Vec::new(),
         guarantees: Vec::new(),
         last_strategic_week: 0,
@@ -610,7 +618,7 @@ fn open_facility(
         mothballed_since: None,
         outage: None,
     };
-    if recipe.output == "ore" {
+    if recipe.depletes() {
         facility.deposit_remaining =
             MilliLots::from_lots(recipe.weekly_output_lots * blocks as i64 * 52 * 20);
     }
