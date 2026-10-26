@@ -88,7 +88,8 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg,
             )
             packageName = "Corporate Warfare"
-            packageVersion = "1.3.1"
+            packageVersion = rootProject.file("../Cargo.toml").readLines()
+                .first { it.startsWith("version = ") }.substringAfter('"').substringBefore('"')
             vendor = "Lakeside Games"
             linux { packageName = "corporate-warfare" }
             windows {
