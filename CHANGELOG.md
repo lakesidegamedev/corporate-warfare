@@ -11,8 +11,10 @@ heading.
 
 ## [Unreleased]
 
-Planned as **1.2.0**: economic regions, sector divisions and corporate warfare. Saves from
-1.1.0 do not load in this release.
+## [1.2.0] - 2026-10-26
+
+Economic regions, sector divisions and corporate warfare. Saves from 1.1.0 do not load in this
+release.
 
 ### Added
 
@@ -250,7 +252,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/lakesidegamedev/corporate-warfare/releases/tag/v0.1.0
