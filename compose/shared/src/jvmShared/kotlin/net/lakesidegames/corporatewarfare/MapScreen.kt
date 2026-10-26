@@ -176,9 +176,7 @@ private fun MapHud(store: GameStore) {
                 Eyebrow(overview?.weekLabel ?: "")
                 Text(overview?.primaryName ?: "No company yet", color = Palette.primaryText, fontWeight = FontWeight.SemiBold, maxLines = 1)
             }
-            GoldButton("Next", enabled = !store.busy && !store.running) { store.advance() }
-            Spacer(Modifier.width(6.dp))
-            SpeedControl(store)
+            TimeBar(store)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Column {
@@ -226,4 +224,24 @@ private fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () -> 
         confirmButton = { GoldButton("Build here", enabled = store.selectedFirm != null) { onBuild() } },
         dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
     )
+}
+
+/** Time controls folded into one pill; tap to open Next week and the speeds, tap again to fold. */
+@Composable
+fun TimeBar(store: GameStore) {
+    var open by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (open) {
+            GoldButton("Next", enabled = !store.busy && !store.running) { store.advance() }
+            SpeedControl(store)
+        }
+        Text(
+            (if (store.running) "▶ ${store.speed}x" else "II") + if (open) "  ›" else "  ‹",
+            color = Palette.primaryText,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            modifier = Modifier.clip(CircleShape).background(Palette.panelRaised).clickable { open = !open }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        )
+    }
 }

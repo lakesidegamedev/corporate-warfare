@@ -5,9 +5,20 @@ import SwiftUI
 struct OverviewView: View {
     @EnvironmentObject private var store: AppStore
     @State private var showingBridge = false
+    @State private var showingSettings = false
 
     var body: some View {
         TabScreen(title: "Portfolio", subtitle: store.overview?.weekLabel) {
+            Button {
+                showingSettings = true
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.title3)
+                    .foregroundStyle(Theme.secondary)
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Settings")
+        } content: {
             if let overview = store.overview {
                 if let pause = overview.pause {
                     DecisionBanner(text: "Paused: \(pause)")
@@ -27,10 +38,12 @@ struct OverviewView: View {
                     .font(.caption2)
                     .foregroundStyle(Theme.secondary)
                 groupPanel
-                GameSettingsPanel()
             } else {
                 ProgressView("Opening the corridor…")
             }
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView().environmentObject(store)
         }
         .sheet(isPresented: $showingBridge) {
             CashBridgeView()
@@ -250,6 +263,54 @@ struct CashBridgeView: View {
             Text(title).fontWeight(bold ? .semibold : .regular)
             Spacer()
             Text(Format.money(cents)).monospacedDigit().fontWeight(bold ? .semibold : .regular)
+        }
+    }
+}
+
+/// Game settings in one place: saving, analytics, the walkthrough and build details. Company
+/// business stays on the other tabs.
+struct SettingsView: View {
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var showingSaves = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    GameSettingsPanel()
+                    Panel(padding: 12) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Eyebrow(text: "Help")
+                            Button("Saves and recovery") { showingSaves = true }
+                                .tint(Theme.gold)
+                            Button("Replay the guided walkthrough") {
+                                dismiss()
+                                store.showOnboarding = true
+                            }
+                            .tint(Theme.gold)
+                        }
+                    }
+                    Panel(padding: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Eyebrow(text: "About")
+                            let info = engineInfo()
+                            Text("Corporate Warfare \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "") · engine \(info.version)")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(Theme.secondary)
+                            Text("Institutions are simplified game rules, not legal, tax or investment advice.")
+                                .font(.caption)
+                                .foregroundStyle(Theme.secondary)
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .background(Theme.ink)
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .sheet(isPresented: $showingSaves) { SavesView().environmentObject(store) }
         }
     }
 }

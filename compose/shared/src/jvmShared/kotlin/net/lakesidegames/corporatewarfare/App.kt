@@ -415,8 +415,13 @@ private fun DecisionCard(store: GameStore, event: EventDto) {
 @Composable
 private fun PortfolioScreen(store: GameStore) {
     val overview = store.overview ?: return
+    var settings by remember { mutableStateOf(false) }
     TabList {
-        item { ScreenHeader("Portfolio", overview.weekLabel) }
+        item {
+            ScreenHeader("Portfolio", overview.weekLabel) {
+                TextButton(onClick = { settings = true }) { Text("⚙ Settings", color = Palette.secondary) }
+            }
+        }
         overview.pause?.let { pause ->
             item {
                 Callout("Paused: $pause", Palette.warning)
@@ -463,20 +468,8 @@ private fun PortfolioScreen(store: GameStore) {
                 }
             }
         }
-        item {
-            Panel {
-                Eyebrow("Game")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Save", color = Palette.primaryText)
-                        Text("The game also saves itself every four weeks.", color = Palette.secondary, fontSize = 12.sp)
-                    }
-                    TextButton(onClick = { store.saveNow() }) { Text("Save now", color = Palette.gold) }
-                }
-                if (store.status.isNotEmpty()) Text(store.status, color = Palette.secondary, fontSize = 12.sp)
-            }
-        }
     }
+    if (settings) SettingsDialog(store) { settings = false }
 }
 
 @Composable
@@ -511,4 +504,28 @@ fun SpeedControl(store: GameStore) {
             )
         }
     }
+}
+
+/** Game settings: saving and the version. Company business stays on the other tabs. */
+@Composable
+private fun SettingsDialog(store: GameStore, onClose: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = Palette.panel,
+        title = { Text("Settings") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Save", color = Palette.primaryText)
+                        Text("The game also saves itself every four weeks.", color = Palette.secondary, fontSize = 12.sp)
+                    }
+                    TextButton(onClick = { store.saveNow() }) { Text("Save now", color = Palette.gold) }
+                }
+                if (store.status.isNotEmpty()) Text(store.status, color = Palette.secondary, fontSize = 12.sp)
+                Text("Institutions are simplified game rules, not legal, tax or investment advice.", color = Palette.secondary, fontSize = 11.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Done") } },
+    )
 }

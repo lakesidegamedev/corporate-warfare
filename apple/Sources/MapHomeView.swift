@@ -29,7 +29,6 @@ struct MapHomeView: View {
                 CompanyHUD()
                 LayerChips(layer: $layer)
                 Spacer()
-                MapLegend(layer: layer)
             }
             .padding(.horizontal, 12)
             .padding(.top, 6)
@@ -165,18 +164,48 @@ struct CompanyHUD: View {
     }
 
     private var controls: some View {
+        TimeBar()
+    }
+}
+
+/// Time controls folded into one pill: the speed it is running at, tap to open Next week and the
+/// speed buttons, tap again to fold.
+struct TimeBar: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var open = false
+
+    var body: some View {
         HStack(spacing: 6) {
-            Button {
-                Task { await store.advance(weeks: 1) }
-            } label: {
-                Image(systemName: "forward.frame.fill")
+            if open {
+                Button {
+                    Task { await store.advance(weeks: 1) }
+                } label: {
+                    Image(systemName: "forward.frame.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.gold)
+                .foregroundStyle(Theme.ink)
+                .disabled(store.isBusy || store.runSpeed > 0)
+                .accessibilityLabel("Next week")
+                SpeedControl(compact: true)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.gold)
-            .foregroundStyle(Theme.ink)
-            .disabled(store.isBusy || store.runSpeed > 0)
-            .accessibilityLabel("Next week")
-            SpeedControl(compact: true)
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { open.toggle() }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: store.runSpeed > 0 ? "play.fill" : "pause.fill")
+                    if store.runSpeed > 0 { Text("\(Int(store.runSpeed))x").monospacedDigit() }
+                    Image(systemName: open ? "chevron.right" : "chevron.left").font(.caption2.weight(.bold))
+                }
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Theme.primaryText)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Theme.panelRaised, in: Capsule())
+                .overlay(Capsule().stroke(Theme.stroke, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(open ? "Hide time controls" : "Show time controls")
         }
     }
 }
@@ -231,55 +260,6 @@ struct LayerChips: View {
             }
             .padding(.trailing, 28)
         }
-    }
-}
-
-struct MapLegend: View {
-    let layer: MapLayer
-    @State private var expanded = false
-
-    private var short: String {
-        switch layer {
-        case .presence: return "Circles are your divisions; the badge counts plants."
-        case .room: return "Brighter regions import more: demand to build into."
-        case .wages: return "Brighter regions pay higher wages."
-        case .skill: return "Brighter regions have more skilled workers."
-        }
-    }
-
-    private var long: String {
-        switch layer {
-        case .presence: return "Each circle is one of your sector divisions in a region; the badge counts its plants. Brighter regions hold more of your capacity."
-        case .room: return "Brighter regions import more than local plants make: demand you could build into."
-        case .wages: return "Brighter regions pay more, from 2000 county incomes. Thin lines are regions, thick lines states."
-        case .skill: return "Workforce skill. High skill saves inputs in skilled sectors; low skill cuts their output."
-        }
-    }
-
-    var body: some View {
-        Button {
-            expanded.toggle()
-        } label: {
-            HStack(alignment: .top, spacing: 8) {
-                Circle().fill(layer.tint).frame(width: 8, height: 8).padding(.top, 4)
-                Text(expanded ? long : short)
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondary)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-                Image(systemName: expanded ? "chevron.down" : "info.circle")
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(Theme.panel.opacity(0.92), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .frame(maxWidth: 520, alignment: .leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityHint(expanded ? "Shows less" : "Explains this map layer")
     }
 }
 
