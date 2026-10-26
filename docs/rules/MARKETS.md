@@ -166,7 +166,8 @@ reference plus 15 percent). The production target moves 15 points a week toward 
 floor 30 percent; a service is judged by sold against capacity. Rivals always plan this way;
 the player's companies do too until the player sets a price or target by hand, and either can be
 handed back to automatic. Contract deliveries, power dispatched to the grid and construction
-services all count as sales. Services that reach customers across a state
+services all count as sales. A contract delivery is limited to what the buyer can pay for in
+full, goods and freight together, in whole lots; the rest stays with the seller. Services that reach customers across a state
 (software, telecom, advertising, research, maintenance, care, training, water and construction)
 clear statewide: an offer in a region may draw on the seller's stock in any region of the same
 state, and settlement removes it from where it sits. Background public works buy eighteen lots

@@ -22,6 +22,10 @@ heading.
   the player's companies: more than four weeks of unsold stock cuts the target fifteen
   points down to thirty percent, under a week and a half of stock raises it back toward full;
   services follow sales against capacity. `SetAutoProduction` hands planning back.
+- Supply contracts deliver only what the buyer can pay for in full, goods and freight together.
+  Before, a buyer short of cash still received the whole week's goods and the unpaid part went
+  onto its overdue bills while the seller was never paid for it. The rest now stays with the
+  seller to sell on the exchange.
 - Mothballed plants can reopen. Mothballing now releases the whole workforce whether the player
   chooses it or an insurance catastrophe forces it; before, a catastrophe-mothballed plant kept
   paying full wages with no output and no way back, which bankrupted the corridor's only iron
