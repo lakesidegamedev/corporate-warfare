@@ -1,101 +1,147 @@
 import SwiftUI
 
+/// What needs the player and what happened: decisions first, then the corridor's news. Empty
+/// categories are not shown; a quiet week is one line.
 struct InboxView: View {
     @EnvironmentObject private var store: AppStore
-    @Environment(\.colorScheme) private var scheme
-    @State private var pendingEvent: EventDto?
+
+    private var subtitle: String {
+        [store.selectedFirmDto?.name, store.overview?.weekLabel].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    private var mandatory: Int { store.events.filter(\.mandatory).count }
+
+    /// Live deals first, closed ones after.
+    private var deals: [DealDto] {
+        store.deals.sorted { dealRank($0.state) < dealRank($1.state) }
+    }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    ContextChip()
-
-                    SectionCard(title: "Decisions") {
-                        if store.events.isEmpty {
-                            EmptyNote(text: "No open decisions. Routine news is summarised with the quarterly report.")
-                        } else {
-                            ForEach(store.events, id: \.id) { event in
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(event.title).font(.headline).foregroundStyle(Theme.primaryText)
-                                    Text(event.subject)
-                                        .font(.caption)
-                                        .foregroundStyle(Theme.secondaryText(for: scheme))
-                                    if event.mandatory {
-                                        Text("Required before time advances · deadline week \(event.deadline)")
-                                            .font(.caption2)
-                                            .foregroundStyle(Theme.warning)
-                                    }
-                                    ForEach(event.choices, id: \.id) { choice in
-                                        Button {
-                                            Task { await store.respond(event: event.id, choice: choice.id) }
-                                        } label: {
-                                            Text(choice.label)
-                                                .font(.callout.weight(.medium))
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 9)
-                                                .foregroundStyle(Theme.primaryText)
-                                                .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
-                                        }
-                                        .buttonStyle(.plain)
-                                        .disabled(store.isBusy)
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                    }
-
-                    SectionCard(title: "Market news") {
-                        if store.recentRaids.isEmpty {
-                            EmptyNote(text: "No market raids yet. Rivals that share a market with you can raid it; so can you, from a region's board.")
-                        } else {
-                            ForEach(Array(store.recentRaids.prefix(8).enumerated()), id: \.offset) { _, raid in
-                                RaidNewsRow(raid: raid)
-                            }
-                        }
-                    }
-
-                    SectionCard(title: "Deals") {
-                        if store.deals.isEmpty {
-                            EmptyNote(text: "No bids. A tender escrows the full maximum price plus two percent, then diligence runs two weeks before the four-week offer.")
-                        } else {
-                            ForEach(store.deals, id: \.handle) { deal in
-                                VStack(alignment: .leading) {
-                                    Text("\(deal.buyer) bids for \(deal.target)").font(.callout).foregroundStyle(Theme.primaryText)
-                                    Text("\(deal.state.replacingOccurrences(of: "_", with: " ")) · offer \(Format.money(deal.offerPriceCents))/share")
-                                        .font(.caption)
-                                        .foregroundStyle(Theme.secondary)
-                                    Text("Escrow \(Format.money(deal.escrowCents)) · committed \(deal.committedShares.formatted()) shares")
-                                        .font(.caption2)
-                                        .foregroundStyle(Theme.secondary)
-                                }
-                            }
-                        }
-                    }
-
-                    SectionCard(title: "Recent obligations") {
-                        Text("Loans, policies and contracts are listed on the Company tab under Debt and Supply.")
-                            .font(.footnote)
-                            .foregroundStyle(Theme.secondaryText(for: scheme))
-                        Button("Save now") {
-                            Task { await store.manualSave() }
-                        }
-                    }
-
-                    if !store.statusLine.isEmpty {
-                        Text(store.statusLine)
-                            .font(.caption)
-                            .foregroundStyle(Theme.secondaryText(for: scheme))
+        TabScreen(title: "Inbox", subtitle: subtitle) {
+            if mandatory > 0 {
+                CalloutRow(symbol: "hand.raised.fill",
+                           text: "\(mandatory) decision\(mandatory == 1 ? "" : "s") needed before time can advance.",
+                           tint: Theme.warning)
+            }
+            ForEach(store.events, id: \.id) { event in
+                DecisionCard(event: event)
+            }
+            if store.events.isEmpty && store.recentRaids.isEmpty && store.deals.isEmpty {
+                CalloutRow(symbol: "checkmark.circle",
+                           text: "Quiet week. Decisions, market raids and takeover bids show up here when they happen.",
+                           tint: Theme.secondary)
+            }
+            if !store.recentRaids.isEmpty {
+                feedSection("Market raids") {
+                    ForEach(Array(store.recentRaids.prefix(8).enumerated()), id: \.offset) { index, raid in
+                        if index > 0 { Divider().overlay(Theme.stroke) }
+                        RaidNewsRow(raid: raid).padding(.vertical, 6)
                     }
                 }
-                .padding(16)
             }
-            .background(Theme.background(for: scheme))
-            .navigationTitle("Inbox")
+            if !deals.isEmpty {
+                feedSection("Takeover bids") {
+                    ForEach(Array(deals.enumerated()), id: \.element.handle) { index, deal in
+                        if index > 0 { Divider().overlay(Theme.stroke) }
+                        DealRow(deal: deal).padding(.vertical, 6)
+                    }
+                }
+            }
+            if !store.statusLine.isEmpty {
+                Text(store.statusLine)
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondary)
+            }
         }
+    }
+
+    private func feedSection<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+        Panel(padding: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                Eyebrow(text: title).padding(.bottom, 4)
+                content()
+            }
+        }
+    }
+
+    private func dealRank(_ state: String) -> Int {
+        switch state {
+        case "draft", "funded", "diligence", "offer_open", "review": return 0
+        case "settled": return 1
+        default: return 2
+        }
+    }
+}
+
+/// One decision with its choices as buttons.
+private struct DecisionCard: View {
+    @EnvironmentObject private var store: AppStore
+    let event: EventDto
+
+    var body: some View {
+        Panel(padding: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(event.title).font(.headline).foregroundStyle(Theme.primaryText)
+                    Spacer(minLength: 6)
+                    if event.mandatory {
+                        SignalPill(text: "Due week \(event.deadline)", tint: Theme.warning)
+                    }
+                }
+                Text(event.subject)
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondary)
+                ForEach(event.choices, id: \.id) { choice in
+                    Button {
+                        Task { await store.respond(event: event.id, choice: choice.id) }
+                    } label: {
+                        Text(choice.label)
+                            .font(.callout.weight(.medium))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .foregroundStyle(Theme.primaryText)
+                            .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(store.isBusy)
+                }
+            }
+        }
+    }
+}
+
+/// A takeover bid on one line: bidder, target, stage and price.
+private struct DealRow: View {
+    let deal: DealDto
+
+    private var stage: String { deal.state.replacingOccurrences(of: "_", with: " ").capitalized }
+    private var tint: Color {
+        switch deal.state {
+        case "expired", "withdrawn", "rejected": return Theme.secondary
+        case "settled": return Theme.positive
+        default: return Theme.gold
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(deal.buyer) → \(deal.target)")
+                    .font(.callout)
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(2)
+                Spacer(minLength: 6)
+                SignalPill(text: stage, tint: tint)
+            }
+            Text("\(Format.money(deal.offerPriceCents))/share · escrow \(Format.moneyCompact(deal.escrowCents)) · \(deal.committedShares.formatted()) shares tendered")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(Theme.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

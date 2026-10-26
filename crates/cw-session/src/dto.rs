@@ -16,6 +16,10 @@ pub struct Overview {
     pub firm_cash_cents: i64,
     pub forecast_four_week_cents: i64,
     pub last_week_ebit_cents: i64,
+    /// Net income over the last closed weeks, up to thirteen: the quarter's profit.
+    pub quarter_net_income_cents: i64,
+    /// How many closed weeks that covers (fewer than thirteen early in a career).
+    pub quarter_weeks: u32,
     pub alerts: Vec<Alert>,
     pub pause: Option<String>,
     /// One primary recommended next action and the reason for it.
@@ -113,6 +117,15 @@ pub struct CashBridge {
 pub struct WeekLine {
     pub week: u32,
     pub revenue_cents: i64,
+    /// Goods and materials sold, at carrying cost.
+    pub cost_of_goods_cents: i64,
+    pub wages_cents: i64,
+    /// Overheads: maintenance, rent, marketing, freight, penalties and the like.
+    pub operating_expense_cents: i64,
+    pub depreciation_cents: i64,
+    /// Interest paid less interest earned.
+    pub net_interest_cents: i64,
+    pub tax_cents: i64,
     pub ebit_cents: i64,
     pub net_income_cents: i64,
 }
@@ -355,6 +368,12 @@ pub fn finance_summary(world: &World, handle: u64) -> Option<FinanceSummary> {
         .map(|week| WeekLine {
             week: week.week.0,
             revenue_cents: week.revenue,
+            cost_of_goods_cents: week.cost_of_goods,
+            wages_cents: week.wages,
+            operating_expense_cents: week.operating_expense - week.other,
+            depreciation_cents: week.depreciation,
+            net_interest_cents: week.interest_expense - week.interest_income,
+            tax_cents: week.tax,
             ebit_cents: week.ebit(),
             net_income_cents: week.net_income,
         })

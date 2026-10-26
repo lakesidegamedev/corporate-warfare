@@ -622,6 +622,16 @@ impl Session {
             .investor
             .primary_group
             .filter(|handle| world.firms.contains(*handle));
+        let (quarter_net, quarter_weeks) = primary
+            .and_then(|handle| world.firms.get(handle))
+            .map(|firm| {
+                let weeks = firm.book.recent_weeks();
+                (
+                    weeks.iter().map(|week| week.net_income).sum::<i64>(),
+                    weeks.len() as u32,
+                )
+            })
+            .unwrap_or((0, 0));
         let (name, cash, forecast, ebit) = match primary {
             Some(handle) => {
                 let firm = world.firms.get(handle).unwrap();
@@ -694,6 +704,8 @@ impl Session {
             firm_cash_cents: cash,
             forecast_four_week_cents: forecast,
             last_week_ebit_cents: ebit,
+            quarter_net_income_cents: quarter_net,
+            quarter_weeks,
             alerts,
             pause: world.pending_pause.clone(),
             next_action_key: advice.0,

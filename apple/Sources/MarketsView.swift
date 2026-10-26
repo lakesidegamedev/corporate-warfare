@@ -1,10 +1,13 @@
 import SwiftUI
 
-/// The commodity board for one region: every good grouped by the sector that makes it, with the
-/// last clearing price against reference, local stock, weekly sales and any import room.
+/// The commodity board for one region, built for scanning: one line per good with its price and
+/// a signal for what the market is doing (imported shortage, tight, glut, yours), the supply and
+/// demand relation in plain terms underneath, and the detail one tap away.
 struct MarketsView: View {
     @EnvironmentObject private var store: AppStore
-    @State private var showingPrice = false
+    @State private var filter: MarketFilter = .all
+    @State private var expanded: UInt32?
+    @State private var pricing: PriceTarget?
 
     private var regionCode: String? { store.marketRegionCode }
     private var state: RegionBoardDto? { store.boards.first { $0.code == regionCode } }
@@ -18,11 +21,36 @@ struct MarketsView: View {
         return map
     }
 
+    /// Goods the selected company's plants make.
+    private var yours: Set<String> {
+        let outputs = Dictionary(store.strategyCatalogue.map { ($0.id, $0.output) }, uniquingKeysWith: { first, _ in first })
+        return Set(store.facilities.compactMap { outputs[$0.recipe] })
+    }
+
+    private func signal(_ row: AppStore.MarketRow) -> MarketSignal {
+        let id = row.market?.productId ?? ""
+        let sold = row.market?.lastWeekSalesLots ?? 0
+        let stock = row.market?.regionalStockLots ?? 0
+        if let room = room(for: row), room.importLots > 0 { return .shortage }
+        if (sold == 0 && stock > 0) || (sold > 0 && stock > sold * 4) { return .glut }
+        if sold > 0 && stock < sold { return .tight }
+        return yours.contains(id) ? .steady : .none
+    }
+
     private var groups: [BoardGroup] {
         let sectors = sectorOfProduct
         var bySector: [String: [AppStore.MarketRow]] = [:]
         // Financial balances such as bank deposits carry no price and are not traded goods.
         for row in store.marketRows where row.product.referencePriceCents > 0 {
+            let id = row.market?.productId ?? ""
+            let keep: Bool
+            switch filter {
+            case .all: keep = true
+            case .opportunities: keep = signal(row) == .shortage || signal(row) == .tight
+            case .gluts: keep = signal(row) == .glut
+            case .yours: keep = yours.contains(id)
+            }
+            guard keep else { continue }
             let sector = row.market.flatMap { sectors[$0.productId] } ?? "other"
             bySector[sector, default: []].append(row)
         }
@@ -33,46 +61,45 @@ struct MarketsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    statePicker
-                    if let state {
-                        Text("\(state.name) clears goods and retail weekly; services clear across \(state.stateName). Prices are per lot.")
-                            .font(.caption).foregroundStyle(Theme.secondary)
-                    }
-                    ForEach(groups) { group in
-                        Panel {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(spacing: 8) {
-                                    if group.sector != "other" {
-                                        SectorBadge(sector: group.sector, size: 22)
-                                    }
-                                    Eyebrow(text: group.sector == "other" ? "Other goods" : Sector.name(group.sector))
-                                }
-                                header
-                                ForEach(group.rows) { row in
-                                    BoardRow(row: row, room: room(for: row))
-                                }
+        TabScreen(title: "Markets", subtitle: state.map { "\($0.stateName) · prices per lot" }) {
+            regionMenu
+        } content: {
+            filterBar
+            if groups.isEmpty {
+                CalloutRow(symbol: "line.3.horizontal.decrease.circle", text: "No goods match this filter in \(state?.name ?? "this region").", tint: Theme.secondary)
+            }
+            ForEach(groups) { group in
+                Panel(padding: 12) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 8) {
+                            if group.sector != "other" {
+                                SectorBadge(sector: group.sector, size: 20)
                             }
+                            Eyebrow(text: group.sector == "other" ? "Other goods" : Sector.name(group.sector))
+                        }
+                        .padding(.bottom, 6)
+                        ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
+                            if index > 0 { Divider().overlay(Theme.stroke) }
+                            BoardRow(
+                                row: row,
+                                room: room(for: row),
+                                signal: signal(row),
+                                yours: yours.contains(row.market?.productId ?? ""),
+                                expanded: expanded == row.id,
+                                onTap: { withAnimation(.easeOut(duration: 0.15)) { expanded = expanded == row.id ? nil : row.id } },
+                                onSetPrice: { pricing = PriceTarget(product: row.product.index) }
+                            )
                         }
                     }
                 }
-                .padding(16)
             }
-            .background(Theme.ink)
-            .navigationTitle("Markets")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Set a price") { showingPrice = true }
-                        .disabled(store.overview?.primaryFirm == nil)
-                }
-            }
-            .sheet(isPresented: $showingPrice) { PriceSheet().environmentObject(store) }
+        }
+        .sheet(item: $pricing) { target in
+            PriceSheet(initialProduct: target.product).environmentObject(store)
         }
     }
 
-    private var statePicker: some View {
+    private var regionMenu: some View {
         let states = Array(Set(store.boards.map(\.stateCode))).sorted()
         return Menu {
             ForEach(states, id: \.self) { code in
@@ -83,35 +110,88 @@ struct MarketsView: View {
                 }
             }
         } label: {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Eyebrow(text: state?.stateName ?? "Region")
-                    Text(state?.name ?? "Choose a region").font(.headline).foregroundStyle(Theme.primaryText)
-                }
-                Spacer()
-                Image(systemName: "chevron.up.chevron.down").foregroundStyle(Theme.secondary)
+            HStack(spacing: 6) {
+                Text(state?.name ?? "Region")
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down").font(.caption2.weight(.bold))
             }
-            .padding(12)
-            .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .foregroundStyle(Theme.primaryText)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Theme.panelRaised, in: Capsule())
+            .overlay(Capsule().stroke(Theme.stroke, lineWidth: 1))
         }
         .accessibilityLabel("Region: \(state?.name ?? "none")")
     }
 
-    private var header: some View {
-        HStack {
-            Text("Good").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Price").frame(width: 92, alignment: .trailing)
-            Text("vs ref").frame(width: 56, alignment: .trailing)
-            Text("Sold/wk").frame(width: 64, alignment: .trailing)
+    private var filterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(MarketFilter.allCases) { option in
+                    Button {
+                        filter = option
+                    } label: {
+                        Text(option.title)
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .foregroundStyle(filter == option ? Theme.ink : Theme.primaryText)
+                            .background(filter == option ? Theme.gold : Theme.panel, in: Capsule())
+                            .overlay(Capsule().stroke(Theme.stroke, lineWidth: filter == option ? 0 : 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(filter == option ? .isSelected : [])
+                }
+            }
         }
-        .font(.caption2.weight(.semibold))
-        .foregroundStyle(Theme.secondary)
     }
 
     private func room(for row: AppStore.MarketRow) -> RoomDto? {
         guard let id = row.market?.productId else { return nil }
         return state?.room.first { $0.product == id }
     }
+}
+
+private enum MarketFilter: String, CaseIterable, Identifiable {
+    case all, opportunities, gluts, yours
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .all: return "All goods"
+        case .opportunities: return "Short supply"
+        case .gluts: return "Gluts"
+        case .yours: return "You make"
+        }
+    }
+}
+
+enum MarketSignal: Equatable {
+    case shortage, tight, glut, steady, none
+
+    var label: String? {
+        switch self {
+        case .shortage: return "Imported"
+        case .tight: return "Tight"
+        case .glut: return "Glut"
+        case .steady: return "Steady"
+        case .none: return nil
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .shortage: return Theme.positive
+        case .tight: return Theme.gold
+        case .glut: return Theme.negative
+        case .steady, .none: return Theme.secondary
+        }
+    }
+}
+
+private struct PriceTarget: Identifiable {
+    let product: UInt32
+    var id: UInt32 { product }
 }
 
 private struct BoardGroup: Identifiable {
@@ -123,52 +203,122 @@ private struct BoardGroup: Identifiable {
 private struct BoardRow: View {
     let row: AppStore.MarketRow
     let room: RoomDto?
+    let signal: MarketSignal
+    let yours: Bool
+    let expanded: Bool
+    let onTap: () -> Void
+    let onSetPrice: () -> Void
 
     private var price: Int64 { row.market?.lastPriceCents ?? row.product.referencePriceCents }
+    private var sold: Int64 { row.market?.lastWeekSalesLots ?? 0 }
+    private var stock: Int64 { row.market?.regionalStockLots ?? 0 }
     private var deltaBps: Int64 {
         let reference = row.product.referencePriceCents
         guard reference > 0 else { return 0 }
         return (price - reference) * 10_000 / reference
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack {
-                Text(row.product.name)
-                    .font(.callout)
-                    .foregroundStyle(Theme.primaryText)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(Format.money(price))
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(Theme.primaryText)
-                    .frame(width: 92, alignment: .trailing)
-                Text(String(format: "%+.0f%%", Double(deltaBps) / 100))
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(deltaBps > 200 ? Theme.positive : deltaBps < -200 ? Theme.negative : Theme.secondary)
-                    .frame(width: 56, alignment: .trailing)
-                Text(Format.lots(row.market?.lastWeekSalesLots ?? 0))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(Theme.secondary)
-                    .frame(width: 64, alignment: .trailing)
-            }
-            HStack(spacing: 10) {
-                Text("Stock \(Format.lots(row.market?.regionalStockLots ?? 0))")
-                // Services cannot cross a state line, so they have no gateway quote.
-                if let market = row.market, market.gatewaySellCents > 0 {
-                    Text("Import \(Format.money(market.gatewaySellCents)) · export \(Format.money(market.gatewayBuyCents))")
-                }
-                if let room {
-                    Text("\(room.importLots.formatted()) lots/wk imported")
-                        .foregroundStyle(Theme.positive)
-                }
-            }
-            .font(.caption2.monospacedDigit())
-            .foregroundStyle(Theme.secondary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
+    /// Supply against demand in words: what sells, how long stock lasts, what is imported.
+    private var balance: String {
+        var parts: [String] = []
+        parts.append(sold > 0 ? "\(sold.formatted())/wk sold" : "nothing sold")
+        if sold > 0 {
+            let weeks = Double(stock) / Double(sold)
+            parts.append(weeks < 0.1 ? "no stock" : String(format: "%.1f wk of stock", weeks))
+        } else if stock > 0 {
+            parts.append("\(stock.formatted()) in stock")
         }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
+        if let room, room.importLots > 0 {
+            parts.append("\(room.importLots.formatted())/wk imported")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button(action: onTap) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(row.product.name)
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(Theme.primaryText)
+                            .lineLimit(1)
+                        if yours {
+                            Image(systemName: "star.fill").font(.caption2).foregroundStyle(Theme.gold)
+                                .accessibilityLabel("You make this")
+                        }
+                        if let label = signal.label, signal != .steady {
+                            SignalPill(text: label, tint: signal.tint)
+                        }
+                        Spacer(minLength: 6)
+                        Text(Format.money(price))
+                            .font(.callout.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(Theme.primaryText)
+                        Text(String(format: "%+.0f%%", Double(deltaBps) / 100))
+                            .font(.caption2.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(deltaBps > 200 ? Theme.positive : deltaBps < -200 ? Theme.negative : Theme.secondary)
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                    Text(balance)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(Theme.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if expanded {
+                detail
+            }
+        }
+        .padding(.vertical, 7)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var detail: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 14) {
+                figure("Reference", Format.money(row.product.referencePriceCents))
+                if let market = row.market, market.gatewaySellCents > 0 {
+                    figure("Import at", Format.money(market.gatewaySellCents))
+                    figure("Export at", Format.money(market.gatewayBuyCents))
+                }
+                figure("Stock", stock.formatted())
+            }
+            Text(advice)
+                .font(.caption)
+                .foregroundStyle(Theme.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if yours {
+                Button("Set your price", action: onSetPrice)
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.gold)
+                    .foregroundStyle(Theme.ink)
+            }
+        }
+        .padding(10)
+        .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var advice: String {
+        switch signal {
+        case .shortage:
+            return "The region buys from outside the corridor: local supply is short. A plant here would sell into that demand at up to the import price."
+        case .tight:
+            return "Selling faster than stock builds. Prices tend to rise; producers can raise output."
+        case .glut:
+            return "More than four weeks of stock against sales. Prices fall until it clears; producers cut output."
+        case .steady, .none:
+            return "Stock and sales are in balance."
+        }
+    }
+
+    private func figure(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label).font(.caption2).foregroundStyle(Theme.secondary)
+            Text(value).font(.caption.weight(.semibold).monospacedDigit()).foregroundStyle(Theme.primaryText)
+        }
     }
 }

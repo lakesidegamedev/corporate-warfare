@@ -273,3 +273,273 @@ struct EmptyNote: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+// MARK: - Screen frame and density system
+//
+// Three levels on every screen: a headline (the figure or decision that matters), compact
+// supporting data grouped in one panel, and explanation only on demand. Root tab screens share
+// one compact header instead of a large navigation title, and their content stops at the tab
+// bar instead of showing through it.
+
+/// A root tab screen: compact header, scrolling content, hidden navigation bar.
+struct TabScreen<Trailing: View, Content: View>: View {
+    let title: String
+    var subtitle: String?
+    @ViewBuilder var trailing: () -> Trailing
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    ScreenHeader(title: title, subtitle: subtitle, trailing: trailing)
+                    content()
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 24)
+                .frame(maxWidth: 900)
+                .frame(maxWidth: .infinity)
+            }
+            .background(Theme.ink)
+            .toolbar(.hidden, for: .navigationBar)
+            .modifier(HardBottomEdge())
+        }
+    }
+}
+
+extension TabScreen where Trailing == EmptyView {
+    init(title: String, subtitle: String? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.subtitle = subtitle
+        self.trailing = { EmptyView() }
+        self.content = content
+    }
+}
+
+/// Content scrolling under the floating tab bar ends at a hard edge instead of showing through
+/// the glass.
+struct HardBottomEdge: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectStyle(.hard, for: .bottom)
+        } else {
+            content
+        }
+    }
+}
+
+/// Title, one line of context and the screen's own action on a single row.
+struct ScreenHeader<Trailing: View>: View {
+    let title: String
+    var subtitle: String?
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(Theme.primaryText)
+                    .accessibilityAddTraits(.isHeader)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption.weight(.medium).monospacedDigit())
+                        .foregroundStyle(Theme.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            trailing()
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// One figure in a stat group.
+struct Stat: Identifiable {
+    let label: String
+    let value: String
+    var note: String?
+    var tone: Color = Theme.primaryText
+    var id: String { label }
+}
+
+/// Related figures in one panel: an optional headline figure, then compact figures three to a
+/// row. Replaces a card per number.
+struct StatGroup: View {
+    var title: String?
+    var headline: Stat?
+    let stats: [Stat]
+    var columns = 3
+
+    var body: some View {
+        Panel(padding: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                if let title { Eyebrow(text: title) }
+                if let headline {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(headline.value)
+                            .font(.title.weight(.bold).monospacedDigit())
+                            .foregroundStyle(headline.tone)
+                            .minimumScaleFactor(0.7)
+                            .lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text(headline.label).font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary)
+                            if let note = headline.note {
+                                Text(note).font(.caption).foregroundStyle(Theme.secondary)
+                            }
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10, alignment: .leading), count: columns),
+                          alignment: .leading, spacing: 10) {
+                    ForEach(stats) { stat in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(stat.label)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Theme.secondary)
+                                .lineLimit(1)
+                            Text(stat.value)
+                                .font(.callout.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(stat.tone)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                            if let note = stat.note {
+                                Text(note)
+                                    .font(.caption2)
+                                    .foregroundStyle(Theme.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A short status pill: what a row means at a glance.
+struct SignalPill: View {
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.14), in: Capsule())
+            .lineLimit(1)
+            .fixedSize()
+    }
+}
+
+/// A one-line callout with an icon: the next action, a warning, a quiet-week note.
+struct CalloutRow: View {
+    let symbol: String
+    let text: String
+    var tint: Color = Theme.gold
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: symbol).foregroundStyle(tint).font(.callout)
+            Text(text)
+                .font(.callout)
+                .foregroundStyle(Theme.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(tint.opacity(0.25), lineWidth: 1))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Where the quarter's money went: revenue against each cost line as bars on one scale, the
+/// profit that is left, and one sentence naming the biggest driver.
+struct ProfitDrivers: View {
+    let weeks: [WeekDto]
+
+    private struct Line: Identifiable {
+        let name: String
+        let cents: Int64
+        var id: String { name }
+    }
+
+    private var revenue: Int64 { weeks.reduce(0) { $0 + $1.revenueCents } }
+    private var net: Int64 { weeks.reduce(0) { $0 + $1.netIncomeCents } }
+    private var costs: [Line] {
+        [
+            Line(name: "Inputs and goods", cents: weeks.reduce(0) { $0 + $1.costOfGoodsCents }),
+            Line(name: "Wages", cents: weeks.reduce(0) { $0 + $1.wagesCents }),
+            Line(name: "Overheads", cents: weeks.reduce(0) { $0 + $1.operatingExpenseCents }),
+            Line(name: "Depreciation", cents: weeks.reduce(0) { $0 + $1.depreciationCents }),
+            Line(name: "Interest", cents: weeks.reduce(0) { $0 + $1.netInterestCents }),
+            Line(name: "Tax", cents: weeks.reduce(0) { $0 + $1.taxCents }),
+        ].filter { $0.cents != 0 }
+    }
+
+    private var diagnosis: String {
+        guard revenue > 0 else { return "No sales closed yet this quarter: every cost is a loss until the first sale settles." }
+        guard let biggest = costs.max(by: { $0.cents < $1.cents }) else { return "No costs booked." }
+        let share = Int((Double(biggest.cents) / Double(revenue) * 100).rounded())
+        if net < 0 {
+            return "\(biggest.name) alone take \(share)% of revenue. Sell more of what you make, raise prices if stock is selling out, or cut what is idle."
+        }
+        let margin = Int((Double(net) / Double(revenue) * 100).rounded())
+        return "\(margin)% net margin. The biggest cost is \(biggest.name.lowercased()) at \(share)% of revenue."
+    }
+
+    var body: some View {
+        let scale = Double(max(revenue, costs.map(\.cents).max() ?? 0, 1))
+        Panel(padding: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Eyebrow(text: weeks.count >= 13 ? "Last quarter" : "Last \(weeks.count) weeks")
+                    Spacer()
+                    Text(Format.signedMoney(net))
+                        .font(.headline.monospacedDigit())
+                        .foregroundStyle(net >= 0 ? Theme.positive : Theme.negative)
+                    Text("profit").font(.caption).foregroundStyle(Theme.secondary)
+                }
+                bar("Revenue", revenue, scale, Theme.positive)
+                ForEach(costs) { line in
+                    bar(line.name, line.cents, scale, Theme.negative.opacity(0.75))
+                }
+                Text(diagnosis)
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func bar(_ name: String, _ cents: Int64, _ scale: Double, _ tint: Color) -> some View {
+        HStack(spacing: 8) {
+            Text(name)
+                .font(.caption)
+                .foregroundStyle(Theme.primaryText)
+                .frame(width: 108, alignment: .leading)
+                .lineLimit(1)
+            GeometryReader { proxy in
+                Capsule()
+                    .fill(tint)
+                    .frame(width: max(2, proxy.size.width * min(abs(Double(cents)) / scale, 1)))
+                    .frame(maxHeight: .infinity, alignment: .center)
+            }
+            .frame(height: 8)
+            Text(Format.moneyCompact(cents))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(Theme.secondary)
+                .frame(width: 64, alignment: .trailing)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(name) \(Format.moneyCompact(cents))")
+    }
+}

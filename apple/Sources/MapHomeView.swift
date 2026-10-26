@@ -27,9 +27,6 @@ struct MapHomeView: View {
             }
             VStack(spacing: 10) {
                 CompanyHUD()
-                if let objective = store.objective {
-                    BoardGoalStrip(objective: objective)
-                }
                 LayerChips(layer: $layer)
                 Spacer()
                 MapLegend(layer: layer)
@@ -110,7 +107,22 @@ struct CompanyHUD: View {
     @EnvironmentObject private var store: AppStore
 
     var body: some View {
-        // One row where it fits; on a phone the name keeps its own line above the figures.
+        // One row where it fits; on a phone the name keeps its own line above the figures. The
+        // board's goal is the HUD's last line rather than a separate strip over the map.
+        VStack(alignment: .leading, spacing: 8) {
+            layout
+            if let objective = store.objective {
+                Divider().overlay(Theme.stroke)
+                GoalLine(objective: objective)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+    }
+
+    private var layout: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 14) {
                 title
@@ -130,10 +142,6 @@ struct CompanyHUD: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
     }
 
     private var title: some View {
@@ -150,9 +158,9 @@ struct CompanyHUD: View {
     @ViewBuilder private var figures: some View {
         HUDFigure(label: "Cash", value: Format.moneyCompact(store.overview?.firmCashCents ?? 0))
         HUDFigure(
-            label: "EBIT/wk",
-            value: Format.moneyCompact(store.overview?.lastWeekEbitCents ?? 0),
-            tone: (store.overview?.lastWeekEbitCents ?? 0) >= 0 ? Theme.positive : Theme.negative
+            label: (store.overview?.quarterWeeks ?? 0) >= 13 ? "Profit/qtr" : "Profit so far",
+            value: Format.moneyCompact(store.overview?.quarterNetIncomeCents ?? 0),
+            tone: (store.overview?.quarterNetIncomeCents ?? 0) >= 0 ? Theme.positive : Theme.negative
         )
     }
 
@@ -163,13 +171,13 @@ struct CompanyHUD: View {
             } label: {
                 Image(systemName: "forward.frame.fill")
             }
-            .accessibilityLabel("Step one week")
+            .accessibilityLabel("Next week")
             Button {
                 store.toggleRun()
             } label: {
                 Image(systemName: store.runSpeed > 0 ? "pause.fill" : "play.fill")
             }
-            .accessibilityLabel(store.runSpeed > 0 ? "Pause" : "Play")
+            .accessibilityLabel(store.runSpeed > 0 ? "Pause" : "Auto-advance")
         }
         .buttonStyle(.borderedProminent)
         .tint(Theme.gold)
@@ -196,6 +204,18 @@ struct LayerChips: View {
     @Binding var layer: MapLayer
 
     var body: some View {
+        chips
+            // The trailing fade says the row scrolls when the last chip is cut off.
+            .mask(
+                HStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: 28)
+                }
+            )
+    }
+
+    private var chips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(MapLayer.allCases) { option in
@@ -214,14 +234,25 @@ struct LayerChips: View {
                     .accessibilityAddTraits(layer == option ? .isSelected : [])
                 }
             }
+            .padding(.trailing, 28)
         }
     }
 }
 
 struct MapLegend: View {
     let layer: MapLayer
+    @State private var expanded = false
 
-    private var text: String {
+    private var short: String {
+        switch layer {
+        case .presence: return "Circles are your divisions; the badge counts plants."
+        case .room: return "Brighter regions import more: demand to build into."
+        case .wages: return "Brighter regions pay higher wages."
+        case .skill: return "Brighter regions have more skilled workers."
+        }
+    }
+
+    private var long: String {
         switch layer {
         case .presence: return "Each circle is one of your sector divisions in a region; the badge counts its plants. Brighter regions hold more of your capacity."
         case .room: return "Brighter regions import more than local plants make: demand you could build into."
@@ -231,38 +262,53 @@ struct MapLegend: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Circle().fill(layer.tint).frame(width: 10, height: 10).padding(.top, 3)
-            Text(text).font(.caption).foregroundStyle(Theme.secondary)
-            Spacer(minLength: 0)
+        Button {
+            expanded.toggle()
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                Circle().fill(layer.tint).frame(width: 8, height: 8).padding(.top, 4)
+                Text(expanded ? long : short)
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Image(systemName: expanded ? "chevron.down" : "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Theme.panel.opacity(0.92), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .padding(10)
-        .background(Theme.panel.opacity(0.92), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .buttonStyle(.plain)
         .frame(maxWidth: 520, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityHint(expanded ? "Shows less" : "Explains this map layer")
     }
 }
 
-/// The board's quarterly goal, one line over the map.
-struct BoardGoalStrip: View {
+/// The board's quarterly goal as one line inside the company HUD.
+struct GoalLine: View {
     let objective: ObjectiveDto
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "target").foregroundStyle(Theme.gold)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(objective.title).font(.caption.weight(.semibold)).foregroundStyle(Theme.primaryText).lineLimit(1)
-                    Spacer(minLength: 6)
-                    Text("\(objective.weeksLeft) wk").font(.caption2.monospacedDigit()).foregroundStyle(Theme.secondary)
-                }
-                ProgressView(value: Double(objective.progressBps) / 10_000).tint(Theme.gold)
-            }
+        HStack(spacing: 8) {
+            Image(systemName: "target").font(.caption).foregroundStyle(Theme.gold)
+            Text(objective.title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.primaryText)
+                .lineLimit(1)
+            ProgressView(value: Double(objective.progressBps) / 10_000)
+                .tint(Theme.gold)
+                .frame(maxWidth: 80)
+            Spacer(minLength: 4)
+            Text("\(objective.weeksLeft) wk left")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(Theme.secondary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Theme.panel.opacity(0.92), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Board goal: \(objective.title), \(objective.progressBps / 100) percent, \(objective.weeksLeft) weeks left")
     }
 }
+

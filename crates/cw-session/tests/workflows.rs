@@ -382,3 +382,52 @@ fn group_tree_and_intercompany_loan_use_real_authority() {
     assert!(parent_assets >= 0);
     let _ = Account::Cash;
 }
+
+#[test]
+fn weekly_cost_lines_reconcile_to_ebit_and_the_quarter_sums_net_income() {
+    let mut session = Session::create(ScenarioConfig {
+        seed: 11,
+        scenario: ScenarioKind::Guided,
+        mode: ScenarioMode::Sandbox,
+        dataset_hash: String::new(),
+        difficulty: cw_data::Difficulty::Standard,
+    })
+    .unwrap();
+    for _ in 0..20 {
+        if session.advance(1).pause.is_some() {
+            for event in session.world.events.pending.iter_mut() {
+                event.resolved = true;
+            }
+            session.dismiss_pause();
+        }
+    }
+    let firm = session.world.investor.primary_group.unwrap();
+    let summary = cw_session::dto::finance_summary(&session.world, firm.0).unwrap();
+    assert_eq!(summary.recent_weeks.len(), 13);
+    for week in &summary.recent_weeks {
+        assert_eq!(
+            week.revenue_cents
+                - week.cost_of_goods_cents
+                - week.wages_cents
+                - week.operating_expense_cents
+                - week.depreciation_cents,
+            week.ebit_cents,
+            "week {} cost lines do not reconcile",
+            week.week
+        );
+    }
+    // The quarter's profit is the closed weeks' net income, straight from the ledger closes.
+    let ledger_net: i64 = session
+        .world
+        .firms
+        .get(firm)
+        .unwrap()
+        .book
+        .recent_weeks()
+        .iter()
+        .map(|week| week.net_income)
+        .sum();
+    let overview = session.overview();
+    assert_eq!(overview.quarter_weeks, 13);
+    assert_eq!(overview.quarter_net_income_cents, ledger_net);
+}

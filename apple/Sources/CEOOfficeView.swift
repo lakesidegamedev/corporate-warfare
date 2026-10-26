@@ -12,101 +12,107 @@ struct CEOOfficeView: View {
     private var firm: FirmDto? { store.selectedFirmDto }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if let firm {
-                        masthead(firm)
-                        figures(firm)
-                        boardPanel
-                        focusPanel
-                        plantsPanel
-                        if let rejection {
-                            Text(rejection.message).font(.callout).foregroundStyle(Theme.negative)
-                        }
-                        NavigationLink {
-                            CompanyView().environmentObject(store)
-                        } label: {
-                            Label("Finance, shares, board and deals", systemImage: "chevron.right.circle")
-                                .font(.callout.weight(.semibold))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .tint(Theme.gold)
-                    } else {
-                        Panel {
-                            Text("Choose a company from the portfolio, or found one from the map.")
-                                .foregroundStyle(Theme.secondary)
-                        }
+        TabScreen(title: "CEO Office", subtitle: store.overview?.weekLabel) {
+            if let firm {
+                masthead(firm)
+                figures(firm)
+                if let weeks = store.finance?.recentWeeks, !weeks.isEmpty, store.finance?.firm == firm.handle {
+                    ProfitDrivers(weeks: weeks)
+                }
+                boardPanel
+                plantsPanel
+                focusPanel
+                if let rejection {
+                    Text(rejection.message).font(.callout).foregroundStyle(Theme.negative)
+                }
+                NavigationLink {
+                    CompanyView().environmentObject(store)
+                } label: {
+                    HStack {
+                        Label("Finance, shares, board and deals", systemImage: "building.columns")
+                            .font(.callout.weight(.semibold))
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
                     }
+                    .padding(12)
+                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-                .padding(16)
-                .frame(maxWidth: 900)
-                .frame(maxWidth: .infinity)
+                .tint(Theme.gold)
+            } else {
+                CalloutRow(symbol: "building.2", text: "Choose a company from the portfolio, or found one from the map.")
             }
-            .background(Theme.ink)
-            .navigationTitle("CEO Office")
-            .task {
-                if store.selectedFirm == nil, let primary = store.overview?.primaryFirm {
-                    await store.selectFirm(primary)
-                }
+        }
+        .task {
+            if store.selectedFirm == nil, let primary = store.overview?.primaryFirm {
+                await store.selectFirm(primary)
             }
-            .sheet(item: $retooling) { plant in
-                RetoolSheet(plant: plant) { result in rejection = result }
-                    .environmentObject(store)
-                    .presentationDetents([.medium, .large])
-                    .presentationBackground(Theme.panel)
-            }
-            .sheet(isPresented: $editingFocus) {
-                FocusSheet { result in rejection = result }
-                    .environmentObject(store)
-                    .presentationDetents([.medium])
-                    .presentationBackground(Theme.panel)
-            }
+        }
+        .sheet(item: $retooling) { plant in
+            RetoolSheet(plant: plant) { result in rejection = result }
+                .environmentObject(store)
+                .presentationDetents([.medium, .large])
+                .presentationBackground(Theme.panel)
+        }
+        .sheet(isPresented: $editingFocus) {
+            FocusSheet { result in rejection = result }
+                .environmentObject(store)
+                .presentationDetents([.medium])
+                .presentationBackground(Theme.panel)
         }
     }
 
+    /// Identity on two lines: the name, then sector, home region and credit grade on one line.
+    /// The share price sits with the name it belongs to.
     private func masthead(_ firm: FirmDto) -> some View {
-        HStack(spacing: 14) {
-            Text(monogram(firm.name))
-                .font(.title2.weight(.heavy))
-                .foregroundStyle(Theme.ink)
-                .frame(width: 58, height: 58)
-                .background(Sector.color(firm.industry), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(firm.name).font(.title2.weight(.bold)).foregroundStyle(Theme.primaryText)
-                HStack(spacing: 8) {
-                    Label(Sector.name(firm.industry), systemImage: Sector.symbol(firm.industry))
-                    Text("HQ \(firm.region)")
-                    Text("Grade \(firm.grade)")
+        HStack(spacing: 12) {
+            SectorBadge(sector: firm.industry, size: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(firm.name)
+                        .font(.headline)
+                        .foregroundStyle(Theme.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 4)
+                    Text("\(Format.money(firm.markCents))/share")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(Theme.secondary)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(Format.money(firm.markCents)).font(.title3.weight(.bold).monospacedDigit()).foregroundStyle(Theme.primaryText)
-                Eyebrow(text: "share price")
+                Text("\(Sector.name(firm.industry)) · HQ \(firm.region) · Credit \(firm.grade)")
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
         }
+        .accessibilityElement(children: .combine)
     }
 
-    private func monogram(_ name: String) -> String {
-        name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
-    }
-
+    /// Cash leads; the quarter's profit says whether it is growing; the rest is compact.
     private func figures(_ firm: FirmDto) -> some View {
-        let columns = [GridItem(.adaptive(minimum: 150), spacing: 10)]
-        let ebit = store.overview?.primaryFirm == firm.handle ? store.overview?.lastWeekEbitCents : nil
-        return LazyVGrid(columns: columns, spacing: 10) {
-            BigFigure(label: "Cash", value: Format.moneyCompact(firm.cashCents))
-            BigFigure(label: "Equity", value: Format.moneyCompact(firm.equityCents), tone: firm.equityCents >= 0 ? Theme.primaryText : Theme.negative)
-            BigFigure(label: "Fair value", value: Format.moneyCompact(firm.fairValueCents))
-            if let ebit {
-                BigFigure(label: "EBIT last week", value: Format.moneyCompact(ebit), tone: ebit >= 0 ? Theme.positive : Theme.negative)
-            }
-            BigFigure(label: "Plants", value: "\(firm.facilities)")
-            BigFigure(label: "Your votes", value: Format.percentBps(firm.investorVotesBps))
+        let isPrimary = store.overview?.primaryFirm == firm.handle
+        let quarter = isPrimary ? store.overview?.quarterNetIncomeCents : nil
+        let weeks = Int(store.overview?.quarterWeeks ?? 0)
+        var stats: [Stat] = []
+        if let quarter {
+            stats.append(Stat(label: weeks >= 13 ? "Profit, quarter" : "Profit, \(weeks) wk",
+                              value: Format.moneyCompact(quarter),
+                              tone: quarter >= 0 ? Theme.positive : Theme.negative))
         }
+        stats.append(Stat(label: "Equity", value: Format.moneyCompact(firm.equityCents),
+                          tone: firm.equityCents >= 0 ? Theme.primaryText : Theme.negative))
+        stats.append(Stat(label: "Fair value", value: Format.moneyCompact(firm.fairValueCents)))
+        stats.append(Stat(label: "Plants", value: "\(firm.facilities)"))
+        stats.append(Stat(label: "Your votes", value: Format.percentBps(firm.investorVotesBps)))
+        if let finance = store.finance, finance.firm == firm.handle, finance.restrictedCents > 0 {
+            stats.append(Stat(label: "Restricted", value: Format.moneyCompact(finance.restrictedCents)))
+        }
+        return StatGroup(
+            headline: Stat(label: "Company cash", value: Format.moneyCompact(firm.cashCents)),
+            stats: stats
+        )
     }
 
     private var focusPanel: some View {
@@ -138,8 +144,12 @@ struct CEOOfficeView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Eyebrow(text: "Logistics strength")
                             ProgressView(value: Double(ops.logisticsStrength), total: 200).tint(Theme.gold)
-                            Text("\(ops.logisticsStrength) of 200 · sprawl starts after \(ops.sprawlThreshold) divisions (you run \(ops.divisions))")
-                                .font(.caption).foregroundStyle(Theme.secondary)
+                            Text(ops.divisions < ops.sprawlThreshold
+                                 ? "Not needed yet: sprawl costs start after \(ops.sprawlThreshold) divisions and you run \(ops.divisions). Strength \(ops.logisticsStrength) of 200."
+                                 : "Sprawl is costing you: \(ops.divisions) divisions against a threshold of \(ops.sprawlThreshold). Strength \(ops.logisticsStrength) of 200 raises it.")
+                                .font(.caption)
+                                .foregroundStyle(ops.divisions < ops.sprawlThreshold ? Theme.secondary : Theme.warning)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         Menu {
                             ForEach([0, 5_000, 25_000, 100_000], id: \.self) { dollars in
@@ -179,8 +189,14 @@ struct CEOOfficeView: View {
                     if let objective = store.objective {
                         Text(objective.title).font(.headline).foregroundStyle(Theme.primaryText)
                         Text(objective.detail).font(.caption).foregroundStyle(Theme.secondary)
-                        ProgressView(value: Double(objective.progressBps) / 10_000).tint(Theme.gold)
-                        Text("Due week \(objective.dueWeek) · \(objective.weeksLeft) weeks left · meeting it pays you a management bonus")
+                        HStack(spacing: 10) {
+                            ProgressView(value: Double(objective.progressBps) / 10_000)
+                                .tint(objective.progressBps >= 10_000 ? Theme.positive : Theme.gold)
+                            Text(objective.progressBps >= 10_000 ? "Met" : objective.progressBps == 0 ? "Not started" : "\(objective.progressBps / 100)%")
+                                .font(.caption.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(objective.progressBps >= 10_000 ? Theme.positive : Theme.primaryText)
+                        }
+                        Text("\(objective.weeksLeft) weeks left (week \(objective.dueWeek)) · pays you a management bonus")
                             .font(.caption2).foregroundStyle(Theme.secondary)
                     }
                     ForEach(Array(store.objectiveHistory.prefix(3).enumerated()), id: \.offset) { _, result in
@@ -294,24 +310,6 @@ struct CEOOfficeView: View {
     private func setLogistics(_ cents: Int64) async -> CommandRejection? {
         guard let firm = store.selectedFirm else { return nil }
         return await store.submit(CommandJSON.command("SetLogisticsBudget", ["firm": firm, "amount_cents": cents]))
-    }
-}
-
-struct BigFigure: View {
-    let label: String
-    let value: String
-    var tone: Color = Theme.primaryText
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Eyebrow(text: label)
-            Text(value).font(.title3.weight(.bold).monospacedDigit()).foregroundStyle(tone)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
-        .accessibilityElement(children: .combine)
     }
 }
 

@@ -152,6 +152,12 @@ pub struct FinanceDto {
 pub struct WeekDto {
     pub week: u32,
     pub revenue_cents: i64,
+    pub cost_of_goods_cents: i64,
+    pub wages_cents: i64,
+    pub operating_expense_cents: i64,
+    pub depreciation_cents: i64,
+    pub net_interest_cents: i64,
+    pub tax_cents: i64,
     pub ebit_cents: i64,
     pub net_income_cents: i64,
 }
@@ -273,6 +279,8 @@ pub struct OverviewDto {
     pub firm_cash_cents: i64,
     pub forecast_four_week_cents: i64,
     pub last_week_ebit_cents: i64,
+    pub quarter_net_income_cents: i64,
+    pub quarter_weeks: u32,
     pub alerts: Vec<String>,
     pub pause: Option<String>,
     pub next_action_key: String,
@@ -672,6 +680,8 @@ fn overview_dto(overview: Overview) -> OverviewDto {
         firm_cash_cents: overview.firm_cash_cents,
         forecast_four_week_cents: overview.forecast_four_week_cents,
         last_week_ebit_cents: overview.last_week_ebit_cents,
+        quarter_net_income_cents: overview.quarter_net_income_cents,
+        quarter_weeks: overview.quarter_weeks,
         alerts: overview.alerts.into_iter().map(|alert| alert.key).collect(),
         pause: overview.pause,
         next_action_key: overview.next_action_key,
@@ -761,6 +771,12 @@ fn finance_dto(summary: FinanceSummary) -> FinanceDto {
             .map(|week| WeekDto {
                 week: week.week,
                 revenue_cents: week.revenue_cents,
+                cost_of_goods_cents: week.cost_of_goods_cents,
+                wages_cents: week.wages_cents,
+                operating_expense_cents: week.operating_expense_cents,
+                depreciation_cents: week.depreciation_cents,
+                net_interest_cents: week.net_interest_cents,
+                tax_cents: week.tax_cents,
                 ebit_cents: week.ebit_cents,
                 net_income_cents: week.net_income_cents,
             })

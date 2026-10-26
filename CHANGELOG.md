@@ -22,6 +22,18 @@ heading.
   the player's companies: more than four weeks of unsold stock cuts the target fifteen
   points down to thirty percent, under a week and a half of stock raises it back toward full;
   services follow sales against capacity. `SetAutoProduction` hands planning back.
+- Interface overhaul from a design audit. Every main screen has a compact header with its action
+  beside the title instead of a large title and empty space, and scrolled content ends at a hard
+  edge under the tab bar instead of showing through it. CEO Office opens with a one-line identity,
+  company cash and the quarter's profit grouped in one panel, and a breakdown of where the
+  quarter's money went (revenue against inputs, wages, overheads, depreciation, interest and tax)
+  with the biggest driver named. Markets shows one line per good with a signal (imported, tight,
+  glut), sales and weeks of stock in words, filters for short supply, gluts and your own goods,
+  and detail and pricing on tap. Inbox lists decisions first and only the news there is; a quiet
+  week is one line. Portfolio leads with net worth and shows where company cash is heading.
+  Saving and analytics moved to a Game panel. Step week and Play are now Next week and
+  Auto-advance. The map's goal strip folded into the company panel, its legend is one line with
+  detail on tap, and the HUD shows quarterly profit instead of last week's EBIT.
 - Rival companies grow again. Their limit of six plants was never rescaled when 1.2.0 cut plants
   to a fifth of their size, so almost no rival could build after 1.2.0; the limit is now thirty.
   Cautious rivals also enter a market when the corridor imports at least a full plant's worth,

@@ -1,25 +1,39 @@
 import SwiftUI
 
+enum AppTab: Hashable {
+    case map, office, markets, inbox, portfolio
+}
+
 struct RootView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var tab: AppTab
+
+    init(initialTab: AppTab = .map) {
+        _tab = State(initialValue: initialTab)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             if let notice = store.recoveryNotice {
                 RecoveryNoticeBanner(text: notice)
             }
-            TabView {
+            TabView(selection: $tab) {
                 MapHomeView()
                     .tabItem { Label("Map", systemImage: "map.fill") }
+                    .tag(AppTab.map)
                 CEOOfficeView()
                     .tabItem { Label("CEO Office", systemImage: "building.2.fill") }
+                    .tag(AppTab.office)
                 MarketsView()
                     .tabItem { Label("Markets", systemImage: "chart.bar.xaxis") }
+                    .tag(AppTab.markets)
                 InboxView()
                     .tabItem { Label("Inbox", systemImage: "tray.full.fill") }
                     .badge(store.events.filter { $0.mandatory }.count)
+                    .tag(AppTab.inbox)
                 OverviewView()
                     .tabItem { Label("Portfolio", systemImage: "building.columns.fill") }
+                    .tag(AppTab.portfolio)
             }
         }
     }
@@ -92,7 +106,7 @@ struct RunControls: View {
             Button {
                 Task { await store.advance(weeks: 1) }
             } label: {
-                Label("Step week", systemImage: "forward.frame")
+                Label("Next week", systemImage: "forward.frame")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -100,7 +114,7 @@ struct RunControls: View {
             Button {
                 store.toggleRun()
             } label: {
-                Label(store.runSpeed > 0 ? "Pause" : "Play", systemImage: store.runSpeed > 0 ? "pause.fill" : "play.fill")
+                Label(store.runSpeed > 0 ? "Pause" : "Auto-advance", systemImage: store.runSpeed > 0 ? "pause.fill" : "play.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
