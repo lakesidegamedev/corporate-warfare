@@ -22,6 +22,12 @@ heading.
   the player's companies: more than four weeks of unsold stock cuts the target fifteen
   points down to thirty percent, under a week and a half of stock raises it back toward full;
   services follow sales against capacity. `SetAutoProduction` hands planning back.
+- Anonymous market analytics: every five game weeks the app posts the engine's
+  market-balance snapshot (per good: made, sold, imported, exported, held, median asking price
+  against reference, household spend; corridor health; the player company's results) with a
+  random install id to the Lakeside ops ingest. No names, account or device data. On by default
+  with a switch under Portfolio, Settings; the privacy manifest declares Gameplay Content for
+  Analytics, not linked, not tracking.
 - Automatic pricing for the player's companies: every good they make follows the same
   sell-through rule as rivals each week unless the player sets its price by hand; a price of
   zero hands it back.

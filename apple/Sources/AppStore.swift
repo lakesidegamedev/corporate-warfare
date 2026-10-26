@@ -167,6 +167,10 @@ final class AppStore: ObservableObject {
                 }
             }
             await self.reload()
+            // Anonymous market-balance analytics every five weeks, in the background.
+            if let overview = self.overview, Telemetry.due(week: overview.tick), Telemetry.enabled {
+                Telemetry.send(snapshotJSON: await self.engine.marketSnapshotJSON())
+            }
             // Autosave on the four-week boundary only; background and manual saves cover the rest.
             if let overview = self.overview, overview.tick % 4 == 0 {
                 await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)

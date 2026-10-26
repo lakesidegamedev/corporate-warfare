@@ -1506,6 +1506,11 @@ impl SessionHandle {
         ))
     }
 
+    /// The market-balance snapshot as JSON, for anonymous gameplay analytics.
+    pub fn market_snapshot_json(&self) -> String {
+        serde_json::to_string(&self.lock().market_snapshot()).unwrap_or_default()
+    }
+
     /// The most recent market raids anywhere, newest first.
     pub fn recent_raids(&self) -> Vec<RaidRecordDto> {
         let session = self.lock();

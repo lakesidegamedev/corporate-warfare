@@ -6,6 +6,7 @@
 
 pub mod dto;
 pub mod save;
+pub mod telemetry;
 
 use std::collections::BTreeMap;
 

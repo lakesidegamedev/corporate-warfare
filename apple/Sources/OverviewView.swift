@@ -149,6 +149,8 @@ struct OverviewView: View {
                             }
                         }
 
+                        AnalyticsSettingsCard()
+
                         if let status = store.statusLine.isEmpty ? nil : store.statusLine {
                             Text(status)
                                 .font(.caption)
@@ -223,6 +225,21 @@ struct CashBridgeView: View {
             Text(title).fontWeight(bold ? .semibold : .regular)
             Spacer()
             Text(Format.money(cents)).monospacedDigit().fontWeight(bold ? .semibold : .regular)
+        }
+    }
+}
+
+/// The switch for anonymous market-balance analytics.
+struct AnalyticsSettingsCard: View {
+    @State private var enabled = Telemetry.enabled
+
+    var body: some View {
+        SectionCard(title: "Settings") {
+            Toggle("Share anonymous market data", isOn: $enabled)
+                .onChange(of: enabled) { _, value in Telemetry.enabled = value }
+            Text("Every five weeks the game sends a summary of the corridor's markets and your company's results, with a random id. No names, account or device data. It helps balance the economy.")
+                .font(.caption)
+                .foregroundStyle(Theme.secondary)
         }
     }
 }

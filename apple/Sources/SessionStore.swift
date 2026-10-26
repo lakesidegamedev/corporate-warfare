@@ -57,6 +57,10 @@ actor Engine {
         session?.raidQuote(firm: firm, target: target, region: region, industry: industry, budgetCents: budgetCents)
     }
 
+    func marketSnapshotJSON() -> String {
+        session?.marketSnapshotJson() ?? ""
+    }
+
     func recentRaids() -> [RaidRecordDto] {
         session?.recentRaids() ?? []
     }
