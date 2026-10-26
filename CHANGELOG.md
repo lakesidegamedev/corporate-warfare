@@ -11,6 +11,8 @@ heading.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-26
+
 ### Added
 
 - Pricing posture, from A House Divided. Every good a company makes can be priced
@@ -350,7 +352,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.0.0...v1.1.0
