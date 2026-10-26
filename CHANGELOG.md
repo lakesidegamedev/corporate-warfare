@@ -24,6 +24,11 @@ heading.
 - Buttons no longer flash while weeks process: a running week does not mark the app busy.
 - The seed field is gone from the new-career screen; every career gets a random seed.
 - Test runs no longer send anonymous market data.
+- Rival companies fight harder. Cost leaders, consolidators and vultures undercut prices, move
+  into markets you hold, review their plans every two weeks and can bid for your companies.
+  A rival waits at least 26 weeks between raids on the same target.
+- The start screen no longer names the Great Lakes; the corridor becomes one scenario among
+  others.
 - A proper Settings page, opened from a gear on Portfolio, holds saving, analytics, saves and
   recovery, the walkthrough and the version; Portfolio is back to the player's money.
 - On the map, Next week and the speed buttons fold into one time pill showing the current speed;

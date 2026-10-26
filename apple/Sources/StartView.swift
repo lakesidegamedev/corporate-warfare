@@ -23,7 +23,7 @@ struct StartView: View {
                         PixelLogo()
                             .frame(maxWidth: 300)
                             .padding(.top, 24)
-                        Text("Build an industrial empire across the Great Lakes corridor, 2000.")
+                        Text("Build an industrial empire. Outprice, outbuild and buy out your rivals.")
                             .font(.callout)
                             .foregroundStyle(Theme.secondary)
                             .multilineTextAlignment(.center)

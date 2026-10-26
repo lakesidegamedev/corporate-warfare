@@ -89,7 +89,7 @@ private fun StartScreen(store: GameStore) {
         LogoArt(Modifier.width(300.dp))
         Spacer(Modifier.height(14.dp))
         Text(
-            "Build an industrial empire across the Great Lakes corridor, 2000.",
+            "Build an industrial empire. Outprice, outbuild and buy out your rivals.",
             color = Palette.secondary,
             fontSize = 14.sp,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,

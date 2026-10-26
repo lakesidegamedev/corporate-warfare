@@ -58,7 +58,14 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         // Production follows sell-through plant by plant in the weekly tick, the same planner
         // as the player's automatic production (cw_sim::economy::pricing::plan).
         reopen(world, dataset, handle, &mut proposals);
-        if handle.slot() % 4 != cohort {
+        // Aggressive archetypes reconsider strategy every second week, the rest every fourth.
+        let aggressive = firm.archetype.map(aggressive).unwrap_or(false);
+        let due = if aggressive {
+            handle.slot() % 2 == cohort % 2
+        } else {
+            handle.slot() % 4 == cohort
+        };
+        if !due {
             continue;
         }
         strategic(world, dataset, handle, &mut proposals);
@@ -112,6 +119,16 @@ fn reopen(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Pr
 /// A rival stops building new plants at this many plants in total. Six full-size plants before
 /// 1.2.0 cut plants to a fifth of their size, so thirty now.
 const MAX_GROWTH_BLOCKS: i64 = 30;
+
+/// Weeks a raided company is left alone by rival raiders.
+const RAID_RESPITE_WEEKS: u32 = 26;
+
+/// Cost leaders, consolidators and vultures fight for markets: they undercut, invade occupied
+/// markets and reconsider strategy twice as often.
+fn aggressive(archetype: Archetype) -> bool {
+    let weights = archetype.weights();
+    weights[0] >= 3 || weights[4] >= 5
+}
 
 /// Four weeks of mandatory outflow plus principal due over the next thirteen weeks.
 fn reserve_target(world: &World, firm: Handle) -> i64 {
@@ -304,7 +321,19 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
             .get(&product)
             .copied()
             .unwrap_or_else(|| dataset.reference_price(product));
-        let target = cw_sim::economy::pricing::target_price(world, dataset, firm, product);
+        let mut target = cw_sim::economy::pricing::target_price(world, dataset, firm, product);
+        // Cost leaders and vultures undercut the going price by 3 percent wherever their own cost
+        // still leaves a 5 percent margin: a price war, never a sale at a loss.
+        if weights[0] >= 3
+            && let Some(cost) = cw_sim::economy::pricing::unit_cost(world, dataset, firm, product)
+        {
+            let going = cw_sim::economy::pricing::market_price(world, dataset, firm, product);
+            let undercut = going * 97 / 100;
+            let reference = dataset.reference_price(product).max(1);
+            if undercut < target && undercut >= cost * 105 / 100 {
+                target = undercut.clamp(reference / 2, reference * 2);
+            }
+        }
         if target != price {
             let weekly_sold = cw_sim::economy::pricing::weekly_sold(world, firm, product);
             candidates.push(Candidate {
@@ -774,8 +803,22 @@ fn best_expansion(
         let Some(output) = dataset.product_index.get(&template.output).copied() else {
             continue;
         };
+        let fighter = entity.archetype.map(aggressive).unwrap_or(false);
         for region in 0..world.regions.len() as u8 {
-            if room(world, dataset, output, region) * 5 < template.weekly_output_lots * room_fifths
+            // An aggressive rival may invade a market the player holds even without unmet
+            // demand, when it would still profit at prices a tenth lower in the fight to come.
+            let invading = fighter
+                && cw_sim::economy::sectors::division_strategy(
+                    world, dataset, firm, region, sector,
+                )
+                .is_none()
+                && cw_sim::economy::sectors::cell(world, dataset, region, sector)
+                    .0
+                    .iter()
+                    .any(|(holder, _)| player_controlled(world, *holder));
+            if !invading
+                && room(world, dataset, output, region) * 5
+                    < template.weekly_output_lots * room_fifths
             {
                 continue;
             }
@@ -803,10 +846,37 @@ fn best_expansion(
             } else {
                 0
             };
-            let npv = (block_contribution(world, dataset, firm, index as u16, region) + netback)
+            let price_war = if invading {
+                // A tenth off the output's price for the fight.
+                template.weekly_output_lots * public_price(world, dataset, output, region) / 10
+            } else {
+                0
+            };
+            let mut npv = (block_contribution(world, dataset, firm, index as u16, region)
+                + netback
+                - price_war)
                 * 156
                 - cost
                 - financing;
+            // Aggressive rivals prefer to fight for a market someone already holds, and the
+            // player's markets most of all: invading makes the cell contested and raidable.
+            if npv > 0 && entity.archetype.map(aggressive).unwrap_or(false) {
+                let (occupants, _) = cw_sim::economy::sectors::cell(world, dataset, region, sector);
+                let rivals: Vec<Handle> = occupants
+                    .iter()
+                    .map(|(holder, _)| *holder)
+                    .filter(|holder| !cw_sim::economy::ownership::same_group(world, *holder, firm))
+                    .collect();
+                if !rivals.is_empty() {
+                    npv += npv / 4;
+                }
+                if rivals
+                    .iter()
+                    .any(|holder| player_controlled(world, *holder))
+                {
+                    npv += npv / 4;
+                }
+            }
             if npv > 0 && best.map(|(b, _, _)| npv > b).unwrap_or(true) {
                 best = Some((npv, index as u16, region));
             }
@@ -834,6 +904,14 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
         let (firms, _) = sectors::cell(world, dataset, division.region, division.industry);
         for (rival, _) in firms {
             if rival == firm || cw_sim::economy::ownership::same_group(world, rival, firm) {
+                continue;
+            }
+            // A company that was raided in the last half year is left to recover first.
+            if world
+                .raids
+                .iter()
+                .any(|raid| raid.defender == rival && raid.tick + RAID_RESPITE_WEEKS > world.tick.0)
+            {
                 continue;
             }
             let probe = sectors::raid_quote(
@@ -962,8 +1040,8 @@ fn distressed_target(world: &World, buyer: Handle) -> Option<Handle> {
                 0
             };
             let discounted = firm.shares.mark_cents * 100 < firm.shares.fair_cents * 80;
+            // The player's companies are fair game: a weak or cheap player company draws bids.
             !group.contains(handle)
-                && !player_controlled(world, *handle)
                 && firm.status.can_trade()
                 && firm.operative()
                 && (losses < 0 || discounted)
