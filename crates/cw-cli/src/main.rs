@@ -27,9 +27,9 @@ fn main() {
             eprintln!(
                 "Usage: cw-cli <doctor|run|sweep|replay|diagnose|report>\n\
                  run    --weeks N [--seed N] [--scenario guided|founder] [--five-year|--sandbox] \
-                 [--policy none|conservative|growth|acquirer] [--verbose]\n\
+                 [--policy none|conservative|growth|acquirer|expander] [--verbose]\n\
                  sweep  --seeds N --weeks N [--from N] [--scenario guided|founder] \
-                 [--five-year|--sandbox] [--policy none|conservative|growth|acquirer] \
+                 [--five-year|--sandbox] [--policy none|conservative|growth|acquirer|expander] \
                  [--json PATH] [--verbose]\n\
                  replay --file PATH\n\
                  diagnose --weeks N [--seed N] [--guided|--founder]\n\

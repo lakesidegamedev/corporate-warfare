@@ -515,6 +515,9 @@ pub struct Firm {
     /// Next tick this firm may raid each (region, sector type) cell again.
     #[serde(default)]
     pub raid_ready: BTreeMap<(u8, u8), u32>,
+    /// Losses carried forward against future taxable profit, in cents.
+    #[serde(default)]
+    pub tax_loss_carry_cents: i64,
     /// Logistics and operations strength, 0..200, built by the logistics budget.
     pub logistics_strength: i32,
     pub policy_requests: Vec<PolicyRequest>,

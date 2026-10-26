@@ -311,12 +311,30 @@ fn accrue_tax(world: &mut World, firm: Handle) {
     let Some(entity) = world.firms.get(firm) else {
         return;
     };
-    let taxable: i64 = entity
+    let trailing: i64 = entity
         .book
         .recent_weeks()
         .iter()
         .map(|week| week.net_income)
         .sum();
+    // Losses carry forward: at each quarter end a losing quarter adds to the pool and a
+    // profitable one uses it up before any of its profit is taxed. Without this a seasonal
+    // business paid tax on its good quarters and never offset its bad ones.
+    let carry = entity.tax_loss_carry_cents;
+    if world.tick.0.is_multiple_of(13) {
+        let next = if trailing < 0 {
+            carry.saturating_add(-trailing)
+        } else {
+            (carry - trailing).max(0)
+        };
+        if let Some(entity) = world.firms.get_mut(firm) {
+            entity.tax_loss_carry_cents = next;
+        }
+    }
+    let Some(entity) = world.firms.get(firm) else {
+        return;
+    };
+    let taxable = (trailing - carry).max(0);
     if taxable <= 0 {
         return;
     }
@@ -453,6 +471,54 @@ mod tests {
     use super::*;
     use crate::economy::seed;
     use crate::state::{ScenarioKind, ScenarioMode};
+
+    #[test]
+    fn a_losing_quarter_is_carried_against_the_next_profitable_one() {
+        use cw_core::ledger::{Account, Txn};
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 42, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world.firms.iter().next().unwrap().0;
+        let close_weeks = |world: &mut World, weekly_income: i64| {
+            for week in 0..13 {
+                let book = &mut world.firms.get_mut(firm).unwrap().book;
+                let txn = if weekly_income >= 0 {
+                    Txn::new()
+                        .debit(Account::Cash, weekly_income, "test sale")
+                        .credit(Account::Revenue, weekly_income, "test sale")
+                } else {
+                    Txn::new()
+                        .debit(Account::OperatingExpense, -weekly_income, "test cost")
+                        .credit(Account::Cash, -weekly_income, "test cost")
+                };
+                let _ = book.commit(Tick(100 + week), txn);
+                let _ = book.close_week(Tick(100 + week));
+            }
+        };
+        let payable = |world: &World| {
+            world
+                .firms
+                .get(firm)
+                .unwrap()
+                .book
+                .balance(Account::TaxesPayable)
+        };
+        let before = payable(&world);
+        // A quarter losing $1,000 a week: at the quarter end it joins the carry, untaxed.
+        close_weeks(&mut world, -100_000);
+        world.tick = Tick(13);
+        accrue_tax(&mut world, firm);
+        assert_eq!(
+            world.firms.get(firm).unwrap().tax_loss_carry_cents,
+            1_300_000
+        );
+        assert_eq!(payable(&world), before);
+        // A quarter earning $3,000 a week: only the $26,000 above the $13,000 carry is taxed,
+        // at 25 percent, accrued a thirteenth a week: 26,000 * 0.25 / 13 = $500.
+        close_weeks(&mut world, 300_000);
+        world.tick = Tick(14);
+        accrue_tax(&mut world, firm);
+        assert_eq!(payable(&world) - before, -50_000);
+    }
 
     #[test]
     fn labour_income_tax_is_withheld_and_budgeted() {

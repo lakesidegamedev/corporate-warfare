@@ -42,13 +42,13 @@ pub const PLAYER_COMMAND_HIGH: u64 = 0x00C0_FFFF_0000_0000;
 /// Reference policies decide every four weeks, like the rival strategic cohorts.
 pub const CADENCE_WEEKS: u32 = 4;
 
-/// Founder bootstrap: region 035 is the corridor's first region; the farm is the documented
-/// starter recipe with the lowest capex (see `content/initial-balance.json`).
+/// Founder bootstrap: Central Ohio is the guided start's home region; the farm is the
+/// documented starter strategy (see `content/initial-balance.json`).
 const FOUNDER_REGION: &str = "OH-CEN";
 const FOUNDER_RECIPE: &str = "farm";
 const FOUNDER_NAME: &str = "Lakeside Holdings";
-/// Fund the farm's $200M capex plus $100M of working capital, matching the guided firm's
-/// opening assets and cash without its opening loan.
+/// Fund the founding farm plant plus working capital and room to build, matching the guided
+/// firm's opening assets and cash without its opening loan.
 const FOUNDER_CAPITAL_CENTS: i64 = 300_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,6 +57,8 @@ pub enum ReferencePolicy {
     Conservative,
     Growth,
     Acquirer,
+    /// Builds a plant every twelve weeks where imports show room, in any sector.
+    Expander,
 }
 
 impl ReferencePolicy {
@@ -66,6 +68,7 @@ impl ReferencePolicy {
             "conservative" => Some(ReferencePolicy::Conservative),
             "growth" => Some(ReferencePolicy::Growth),
             "acquirer" => Some(ReferencePolicy::Acquirer),
+            "expander" => Some(ReferencePolicy::Expander),
             _ => None,
         }
     }
@@ -76,6 +79,7 @@ impl ReferencePolicy {
             ReferencePolicy::Conservative => "conservative",
             ReferencePolicy::Growth => "growth",
             ReferencePolicy::Acquirer => "acquirer",
+            ReferencePolicy::Expander => "expander",
         }
     }
 
@@ -86,6 +90,7 @@ impl ReferencePolicy {
             ReferencePolicy::Conservative => 13,
             ReferencePolicy::Growth => 8,
             ReferencePolicy::Acquirer => 10,
+            ReferencePolicy::Expander => 8,
         }
     }
 
@@ -96,6 +101,7 @@ impl ReferencePolicy {
             ReferencePolicy::Conservative => 1,
             ReferencePolicy::Growth => 4,
             ReferencePolicy::Acquirer => 2,
+            ReferencePolicy::Expander => 2,
         }
     }
 
@@ -107,6 +113,60 @@ impl ReferencePolicy {
             _ => 0,
         }
     }
+}
+
+/// Weekly contribution of one new plant at reference prices: output less inputs (adjusted for
+/// sector focus and location), payroll at the region's wages plus any off-focus overhead,
+/// maintenance and land.
+fn plant_contribution(
+    world: &cw_sim::state::World,
+    dataset: &cw_data::Dataset,
+    firm: &cw_sim::state::Firm,
+    region: u8,
+    recipe: u16,
+) -> i64 {
+    use cw_sim::economy::{operations, sectors};
+    let template = &dataset.recipes[recipe as usize];
+    let price = |id: &str| {
+        dataset
+            .product_index
+            .get(id)
+            .map(|code| dataset.reference_price(*code))
+            .unwrap_or(0)
+    };
+    let industry = sectors::recipe_industry(dataset, recipe);
+    let (focus_bps, overhead_bps) = if industry == firm.industry {
+        (operations::PRIMARY_INPUT_BPS as i64, 0)
+    } else if Some(industry) == firm.secondary_industry {
+        (operations::SECONDARY_INPUT_BPS as i64, 0)
+    } else {
+        (10_000, operations::OFF_FOCUS_OVERHEAD_BPS)
+    };
+    let location =
+        sectors::location_factor_bps(dataset, firm.region, region, &template.industry) as i64;
+    let inputs: i64 = template
+        .weekly_inputs_lots
+        .iter()
+        .map(|(id, qty)| qty * price(id))
+        .sum::<i64>()
+        * focus_bps
+        / 10_000
+        * location
+        / 10_000;
+    let wage_index = world.regions[region as usize].wage_index_bps as i64;
+    let payroll: i64 = (0..3)
+        .map(|tier| template.workers_low_mid_high[tier] * dataset.baseline_weekly_wage_cents[tier])
+        .sum::<i64>()
+        * wage_index
+        / 10_000;
+    let land = dataset.fixture_land_rent_cents_weekly
+        * world.regions[region as usize].land_index_bps as i64
+        / 10_000;
+    template.weekly_output_lots * price(&template.output)
+        - inputs
+        - payroll * (10_000 + overhead_bps) / 10_000
+        - template.weekly_maintenance(dataset.maintenance_annual_bps)
+        - land
 }
 
 /// Counts of every policy attempt, kept in the sweep evidence.
@@ -167,6 +227,77 @@ impl PolicyRunner {
         }
         if self.policy == ReferencePolicy::Acquirer && !controlled.is_empty() {
             self.acquire(session, &controlled);
+        }
+        if self.policy == ReferencePolicy::Expander
+            && session.world.tick.0.is_multiple_of(12)
+            && let Some(primary) = session.world.investor.primary_group
+        {
+            self.expand(session, primary.0);
+        }
+    }
+
+    /// Build one plant where imports show the most room the firm can afford, in any sector: into
+    /// an existing division of the same strategy, or opening a new one (an off-focus sector pays
+    /// its coordination overhead). Keeps the policy's cash reserve.
+    fn expand(&mut self, session: &mut Session, firm: u64) {
+        use cw_sim::economy::sectors;
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let handle = Handle(firm);
+        let Some(entity) = world.firms.get(handle) else {
+            return;
+        };
+        let reserve = cw_sim::economy::insolvency::mandatory_weekly_outflow(world, handle)
+            .saturating_mul(self.policy.reserve_weeks());
+        let cash = entity.book.cash();
+        let mut best: Option<(i64, u8, u16)> = None;
+        for (index, recipe) in dataset.recipes.iter().enumerate() {
+            let recipe_index = index as u16;
+            let Some(output) = dataset.product_index.get(&recipe.output).copied() else {
+                continue;
+            };
+            for region in 0..world.regions.len() as u8 {
+                let industry = sectors::recipe_industry(dataset, recipe_index);
+                if sectors::division_strategy(world, dataset, handle, region, industry)
+                    .is_some_and(|strategy| strategy != recipe_index)
+                {
+                    continue;
+                }
+                let room = world
+                    .gateways
+                    .iter()
+                    .find(|g| g.region == region && g.product == output)
+                    .map(|g| g.smoothed_import_lots)
+                    .unwrap_or(0);
+                if room * 5 < recipe.weekly_output_lots * 4 {
+                    continue;
+                }
+                let quote = sectors::build_cost(world, dataset, handle, region, recipe_index, 1);
+                if cash < reserve + quote.total_cents() {
+                    continue;
+                }
+                // Three years of contribution at reference prices, with the plant's focus,
+                // location and coordination overhead, must repay the whole build.
+                let contribution = plant_contribution(world, dataset, entity, region, recipe_index);
+                let value = contribution * 156 - quote.total_cents();
+                if value <= 0 {
+                    continue;
+                }
+                if best.is_none_or(|(b, ..)| value > b) {
+                    best = Some((value, region, recipe_index));
+                }
+            }
+        }
+        if let Some((_, region, recipe)) = best {
+            self.submit(
+                session,
+                CommandIntent::BuildFacility {
+                    firm: handle,
+                    region,
+                    recipe,
+                    blocks: 1,
+                },
+            );
         }
     }
 

@@ -42,6 +42,8 @@ Planned as **1.2.0**: economic regions, sector divisions and corporate warfare. 
   region, a new state, an operating profit, a market share). Meeting it pays you a
   management bonus from the company, 2 percent of its quarter's operating profit and at
   least $25,000, moved from its cash. The goal shows over the map and in the CEO Office.
+- An `expander` reference policy for sweeps: every twelve weeks it builds the plant whose
+  three years of contribution at reference prices best repay its full cost, in any sector.
 - The map pipeline is a committed script (`tools/map/build_map.sh`) and regions a committed
   generator (`tools/map/build_regions.py`).
 
@@ -67,6 +69,10 @@ Planned as **1.2.0**: economic regions, sector divisions and corporate warfare. 
 
 ### Fixed
 
+- Corporate tax was assessed on each rolling quarter's profit with no offset for losing
+  quarters, so a seasonal business paid tax on its summers and was never credited for its
+  winters. Losses now carry forward against later profit.
+- `tools/design_check.py` held a copy of the farm worked example at the old plant size.
 - The build preview always previewed the first region instead of the chosen one.
 - Advertising split across media firms dropped the rounding remainder: the buyer paid more
   than the sellers received.

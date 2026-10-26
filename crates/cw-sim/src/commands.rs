@@ -654,6 +654,7 @@ fn apply_intent(
                 focus_transition_until: 0,
                 focus_cooldown_until: 0,
                 raid_ready: Default::default(),
+                tax_loss_carry_cents: 0,
                 logistics_strength: 0,
                 policy_requests: Vec::new(),
                 guarantees: Vec::new(),
