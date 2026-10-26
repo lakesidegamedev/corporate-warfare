@@ -282,8 +282,12 @@ pub struct OverviewDto {
 pub struct ScoreDto {
     pub week: u32,
     pub total: i32,
+    /// Growth of personal net worth over the start.
     pub return_component: i32,
+    pub expansion_component: i32,
+    pub leadership_component: i32,
     pub resilience_component: i32,
+    /// Reported, not scored.
     pub control_component: i32,
     pub conduct_component: i32,
     pub assisted: bool,
@@ -527,6 +531,25 @@ pub struct DivisionDto {
     pub blocks: u32,
     pub share_bps: i32,
     pub retooling: bool,
+}
+
+/// The board's quarterly objective for the player's primary company.
+#[derive(uniffi::Record)]
+pub struct ObjectiveDto {
+    pub title: String,
+    pub detail: String,
+    pub progress_bps: i32,
+    pub due_week: u32,
+    pub weeks_left: u32,
+}
+
+/// A closed objective.
+#[derive(uniffi::Record)]
+pub struct ObjectiveResultDto {
+    pub title: String,
+    pub met: bool,
+    pub closed_week: u32,
+    pub bonus_cents: i64,
 }
 
 /// A player division on the map: one circle per owned sector type in a region.
@@ -899,6 +922,49 @@ pub fn recipes() -> Vec<RecipeDto> {
 }
 
 /// The full strategy catalogue with inputs and reference margins.
+/// Player-facing title and detail for an objective.
+fn objective_copy(
+    dataset: &cw_data::Dataset,
+    kind: &cw_sim::economy::objectives::ObjectiveKind,
+) -> (String, String) {
+    use cw_sim::economy::objectives::ObjectiveKind;
+    let money = |cents: i64| {
+        let dollars = cents / 100;
+        if dollars.abs() >= 1_000 {
+            format!("${}K", dollars / 1_000)
+        } else {
+            format!("${dollars}")
+        }
+    };
+    match kind {
+        ObjectiveKind::NewRegion { .. } => (
+            "Enter a new region".to_owned(),
+            "Open a division in a region where the company does not operate yet.".to_owned(),
+        ),
+        ObjectiveKind::NewState { .. } => (
+            "Expand into another state".to_owned(),
+            "Open a division in a state where the company does not operate yet.".to_owned(),
+        ),
+        ObjectiveKind::WeeklyEbit { target_cents } => (
+            format!("Lift operating profit to {} a week", money(*target_cents)),
+            "Average weekly operating profit over the last four weeks.".to_owned(),
+        ),
+        ObjectiveKind::MarketShare {
+            region,
+            industry,
+            target_bps,
+        } => (
+            format!(
+                "Take {}% of {} in {}",
+                target_bps / 100,
+                cw_sim::state::INDUSTRY_NAMES[*industry as usize].replace('_', " "),
+                dataset.regions[*region as usize].name
+            ),
+            "Capacity share of the market, counting unmet imports.".to_owned(),
+        ),
+    }
+}
+
 fn raid_quote_dto(quote: cw_sim::economy::sectors::RaidQuote) -> RaidQuoteDto {
     RaidQuoteDto {
         attack_cents: quote.attack_cents,
@@ -1066,6 +1132,8 @@ impl SessionHandle {
             week: score.week.0,
             total: score.total,
             return_component: score.return_component,
+            expansion_component: score.expansion_component,
+            leadership_component: score.leadership_component,
             resilience_component: score.resilience_component,
             control_component: score.control_component,
             conduct_component: score.conduct_component,
@@ -1251,6 +1319,40 @@ impl SessionHandle {
                         })
                     }),
                 }
+            })
+            .collect()
+    }
+
+    /// The board's current objective, if one is open.
+    pub fn objective(&self) -> Option<ObjectiveDto> {
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let objective = world.objective.as_ref()?;
+        let (title, detail) = objective_copy(dataset, &objective.kind);
+        Some(ObjectiveDto {
+            title,
+            detail,
+            progress_bps: cw_sim::economy::objectives::progress_bps(world, dataset, objective)
+                as i32,
+            due_week: objective.due,
+            weeks_left: objective.due.saturating_sub(world.tick.0),
+        })
+    }
+
+    /// Closed objectives, newest first.
+    pub fn objective_history(&self) -> Vec<ObjectiveResultDto> {
+        let session = self.lock();
+        session
+            .world
+            .objective_history
+            .iter()
+            .rev()
+            .map(|result| ObjectiveResultDto {
+                title: objective_copy(&session.dataset, &result.objective.kind).0,
+                met: result.met,
+                closed_week: result.closed,
+                bonus_cents: result.bonus_cents,
             })
             .collect()
     }
@@ -2165,9 +2267,10 @@ mod tests {
         let score = session.score().expect("score at week 260");
         assert_eq!(score.week, 260);
         assert!((0..=100).contains(&score.total));
-        let weighted = (score.return_component as f64 * 0.6
-            + score.resilience_component as f64 * 0.2
-            + score.control_component as f64 * 0.1
+        let weighted = (score.return_component as f64 * 0.45
+            + score.expansion_component as f64 * 0.25
+            + score.leadership_component as f64 * 0.1
+            + score.resilience_component as f64 * 0.1
             + score.conduct_component as f64 * 0.1)
             .round() as i32;
         assert!(

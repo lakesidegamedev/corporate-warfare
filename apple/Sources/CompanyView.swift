@@ -313,7 +313,7 @@ struct BuildSheet: View {
                     Text("Blocks: \(blocks)")
                 }
                 if let template {
-                    DetailRow(title: "Capex per block", value: Format.money(template.capexCents))
+                    DetailRow(title: "Capex per plant", value: Format.money(template.capexCents))
                     DetailRow(title: "Weekly output", value: Format.lots(template.weeklyOutputLots))
                 }
             }

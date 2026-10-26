@@ -1100,7 +1100,12 @@ pub enum ScenarioMode {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Score {
     pub week: Tick,
+    /// Growth of personal net worth over the start.
     pub return_component: i32,
+    #[serde(default)]
+    pub expansion_component: i32,
+    #[serde(default)]
+    pub leadership_component: i32,
     pub resilience_component: i32,
     pub control_component: i32,
     pub conduct_component: i32,
@@ -1176,6 +1181,11 @@ pub struct World {
     /// The most recent market raids, newest last, bounded.
     #[serde(default)]
     pub raids: Vec<RaidRecord>,
+    /// The board's current quarterly objective for the player's primary company.
+    #[serde(default)]
+    pub objective: Option<crate::economy::objectives::Objective>,
+    #[serde(default)]
+    pub objective_history: Vec<crate::economy::objectives::ObjectiveResult>,
 }
 
 /// One market raid and its outcome.

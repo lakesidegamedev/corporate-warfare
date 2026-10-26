@@ -18,6 +18,7 @@ struct CEOOfficeView: View {
                     if let firm {
                         masthead(firm)
                         figures(firm)
+                        boardPanel
                         focusPanel
                         plantsPanel
                         if let rejection {
@@ -169,6 +170,36 @@ struct CEOOfficeView: View {
         }
     }
 
+    /// The board's quarterly goal and how the last ones went.
+    @ViewBuilder private var boardPanel: some View {
+        if store.objective != nil || !store.objectiveHistory.isEmpty {
+            Panel {
+                VStack(alignment: .leading, spacing: 10) {
+                    Eyebrow(text: "Board objective")
+                    if let objective = store.objective {
+                        Text(objective.title).font(.headline).foregroundStyle(Theme.primaryText)
+                        Text(objective.detail).font(.caption).foregroundStyle(Theme.secondary)
+                        ProgressView(value: Double(objective.progressBps) / 10_000).tint(Theme.gold)
+                        Text("Due week \(objective.dueWeek) · \(objective.weeksLeft) weeks left · meeting it pays you a management bonus")
+                            .font(.caption2).foregroundStyle(Theme.secondary)
+                    }
+                    ForEach(Array(store.objectiveHistory.prefix(3).enumerated()), id: \.offset) { _, result in
+                        HStack {
+                            Image(systemName: result.met ? "checkmark.circle.fill" : "xmark.circle")
+                                .foregroundStyle(result.met ? Theme.positive : Theme.secondary)
+                            Text(result.title).font(.caption).foregroundStyle(Theme.primaryText).lineLimit(1)
+                            Spacer()
+                            Text(result.met ? Format.moneyCompact(result.bonusCents) : "Missed")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(result.met ? Theme.gold : Theme.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
+        }
+    }
+
     private var plantsPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             Eyebrow(text: "Divisions")
@@ -189,7 +220,7 @@ struct CEOOfficeView: View {
                     SectorBadge(sector: division.industry, size: 28)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("\(Sector.name(division.industry)) · \(division.regionName)").font(.headline).foregroundStyle(Theme.primaryText)
-                        Text("\(division.strategyName) · \(division.plants.count) plant\(division.plants.count == 1 ? "" : "s"), \(division.blocks) block\(division.blocks == 1 ? "" : "s")")
+                        Text("\(division.strategyName) · \(division.blocks) plant\(division.blocks == 1 ? "" : "s") at \(division.plants.count) site\(division.plants.count == 1 ? "" : "s")")
                             .font(.caption).foregroundStyle(Theme.secondary)
                     }
                     Spacer()
@@ -224,7 +255,7 @@ struct CEOOfficeView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(strategy(for: plant)?.name ?? plant.recipe).font(.callout.weight(.semibold)).foregroundStyle(Theme.primaryText)
-                    Text("\(plant.region) · \(plant.blocks) block\(plant.blocks == 1 ? "" : "s") · \(plant.status)")
+                    Text("\(plant.region) · \(plant.blocks) plant\(plant.blocks == 1 ? "" : "s") · \(plant.status)")
                         .font(.caption).foregroundStyle(Theme.secondary)
                 }
                 Spacer()
@@ -290,7 +321,7 @@ struct RetoolSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("A division runs one strategy, so every plant in it retools together: a quarter of the new strategy's capex per block and a third of its build time, at least four weeks. The division produces nothing meanwhile.")
+                    Text("A division runs one strategy, so every plant in it retools together: a quarter of the new strategy's capex per plant and a third of its build time, at least four weeks. The division produces nothing meanwhile.")
                         .font(.caption).foregroundStyle(Theme.secondary)
                     ForEach(store.strategyCatalogue.filter { $0.industry == current?.industry && $0.id != plant.recipe }, id: \.index) { option in
                         Button {

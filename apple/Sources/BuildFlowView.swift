@@ -89,7 +89,7 @@ struct BuildFlowView: View {
                                 Text(Sector.name(id)).font(.callout.weight(.semibold)).foregroundStyle(Theme.primaryText)
                                 Text(focusLabel(id, ops)).font(.caption2).foregroundStyle(focusColor(id, ops))
                                 if let division = store.divisions.first(where: { $0.region == regionCode && $0.industry == id }) {
-                                    Text("Your division · \(division.plants.count) plant\(division.plants.count == 1 ? "" : "s")")
+                                    Text("Your division · \(division.blocks) plant\(division.blocks == 1 ? "" : "s")")
                                         .font(.caption2.weight(.semibold)).foregroundStyle(Theme.gold)
                                 } else if board?.specialization.contains(id) == true {
                                     Text("\(board?.stateName ?? "State") specialty")
@@ -166,7 +166,7 @@ struct BuildFlowView: View {
                         HStack {
                             Text("Size").foregroundStyle(Theme.primaryText)
                             Spacer()
-                            Text("\(blocks) block\(blocks == 1 ? "" : "s")").monospacedDigit().foregroundStyle(Theme.primaryText)
+                            Text("\(blocks) plant\(blocks == 1 ? "" : "s")").monospacedDigit().foregroundStyle(Theme.primaryText)
                         }
                     }
                     .onChange(of: blocks) { _, _ in Task { await refresh() } }
@@ -258,7 +258,7 @@ struct StrategyCard: View {
                 SectorBadge(sector: strategy.industry, size: 30)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(strategy.name).font(.headline).foregroundStyle(Theme.primaryText)
-                    Text("Makes \(strategy.weeklyOutputLots.formatted()) lots of \(strategy.outputName) a week per block")
+                    Text("Makes \(strategy.weeklyOutputLots.formatted()) lots of \(strategy.outputName) a week per plant")
                         .font(.caption).foregroundStyle(Theme.secondary)
                 }
                 Spacer(minLength: 0)

@@ -124,7 +124,7 @@ struct RaidNewsRow: View {
     private var headline: String {
         let market = Sector.name(raid.industry)
         if raid.success {
-            return "\(raid.attacker) took \(raid.blocks) \(market) block\(raid.blocks == 1 ? "" : "s") from \(raid.defender)"
+            return "\(raid.attacker) took \(raid.blocks) \(market) plant\(raid.blocks == 1 ? "" : "s") from \(raid.defender)"
         }
         return "\(raid.attacker) raided \(raid.defender) in \(market) and failed"
     }

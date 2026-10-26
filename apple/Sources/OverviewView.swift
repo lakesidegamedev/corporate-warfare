@@ -19,11 +19,12 @@ struct OverviewView: View {
                                     SectionCard(title: "Five-year score") {
                                         Text("\(score.total) / 100")
                                             .font(.largeTitle.monospacedDigit())
-                                        DetailRow(title: "Return (60%)", value: "\(score.returnComponent)")
-                                        DetailRow(title: "Resilience (20%)", value: "\(score.resilienceComponent)")
-                                        DetailRow(title: "Control (10%)", value: "\(score.controlComponent)")
+                                        DetailRow(title: "Growth (45%)", value: "\(score.returnComponent)")
+                                        DetailRow(title: "Expansion (25%)", value: "\(score.expansionComponent)")
+                                        DetailRow(title: "Leadership (10%)", value: "\(score.leadershipComponent)")
+                                        DetailRow(title: "Resilience (10%)", value: "\(score.resilienceComponent)")
                                         DetailRow(title: "Conduct (10%)", value: "\(score.conductComponent)")
-                                        Text("Return compares personal net worth with the starting position. Resilience is the share of weeks without past-due liabilities. Control is the controlled productive group as a share of the portfolio. Conduct deducts unresolved regulatory breaches and failed worker settlements.")
+                                        Text("Growth compares personal net worth with the start: 20 when flat, 100 at double. Expansion counts divisions beyond your first and states beyond your home. Leadership counts markets where your group has the most capacity. Resilience is the share of weeks without past-due liabilities. Conduct deducts unresolved regulatory breaches and failed worker settlements. Holding your starting company scores about a third.")
                                             .font(.footnote)
                                             .foregroundStyle(Theme.secondaryText(for: scheme))
                                         if score.assisted {

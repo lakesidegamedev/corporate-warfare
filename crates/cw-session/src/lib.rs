@@ -1371,7 +1371,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "04e59706abe2c44a0b6709e5eeb593e6e0e29f7da80cee1f340d0634623910a2"
+            "c64a9e584952d6e3a83f4d77393657142efe31e8e5ee0dbb4faf729f3db21852"
         );
     }
 

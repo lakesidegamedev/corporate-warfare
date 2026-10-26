@@ -15,6 +15,9 @@ final class AppStore: ObservableObject {
     @Published var divisions: [DivisionDto] = []
     @Published var raidTargets: [RaidOptionDto] = []
     @Published var recentRaids: [RaidRecordDto] = []
+    /// The board's quarterly goal for the primary company and its recent results.
+    @Published var objective: ObjectiveDto?
+    @Published var objectiveHistory: [ObjectiveResultDto] = []
     @Published var strategyCatalogue: [StrategyDto] = []
     @Published var firmOps: FirmOpsDto?
     @Published var facilities: [FacilityDto] = []
@@ -211,6 +214,8 @@ final class AppStore: ObservableObject {
         mapPlants = await engine.mapPlants()
         mapDivisions = await engine.mapDivisions()
         recentRaids = await engine.recentRaids()
+        objective = await engine.objective()
+        objectiveHistory = await engine.objectiveHistory()
         if strategyCatalogue.isEmpty {
             strategyCatalogue = strategies()
         }

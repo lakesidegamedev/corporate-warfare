@@ -38,11 +38,20 @@ Planned as **1.2.0**: economic regions, sector divisions and corporate warfare. 
   share, raid options, room to build, conditions and plants. Market news in the Inbox.
 - The build flow quotes the entry fee, founding discount, dominance surcharge and the input
   factor where the plant would sit.
+- Board objectives: each quarter the board of your primary company sets one goal (a new
+  region, a new state, an operating profit, a market share). Meeting it pays you a
+  management bonus from the company, 2 percent of its quarter's operating profit and at
+  least $25,000, moved from its cash. The goal shows over the map and in the CEO Office.
 - The map pipeline is a committed script (`tools/map/build_map.sh`) and regions a committed
   generator (`tools/map/build_regions.py`).
 
 ### Changed
 
+- The five-year score measures what you built over the opening position: growth of net
+  worth (20 when flat, 100 at double) 45 percent, expansion (divisions and states beyond
+  the first) 25 percent, market leadership 10 percent, resilience 10 percent and conduct 10
+  percent. Control is still shown but no longer scored. Holding the starting company now
+  scores about a third instead of matching active play.
 - A plant is a fifth of its 1.1.0 size: output, inputs, crews, capex and land rent all
   divide by five, and seeded companies hold five times the plants, so the economy keeps its
   capacity. A farm plant costs $400,000 instead of $2,000,000 and opening a division with a

@@ -121,7 +121,7 @@ struct RegionBoardView: View {
                                     Text(plant.firmName)
                                         .font(.callout.weight(plant.player ? .semibold : .regular))
                                         .foregroundStyle(plant.player ? Theme.gold : Theme.primaryText)
-                                    Text("\(plant.strategy) · \(plant.blocks) block\(plant.blocks == 1 ? "" : "s")")
+                                    Text("\(plant.strategy) · \(plant.blocks) plant\(plant.blocks == 1 ? "" : "s")")
                                         .font(.caption).foregroundStyle(Theme.secondary)
                                 }
                                 Spacer()
@@ -188,7 +188,7 @@ struct RegionBoardView: View {
             SectorBadge(sector: option.industry, size: 26)
             VStack(alignment: .leading, spacing: 1) {
                 Text(option.targetName).font(.callout).foregroundStyle(Theme.primaryText)
-                Text("\(option.rivalBlocks) blocks · \(option.quote.chanceBps / 100)% at a 2:1 campaign")
+                Text("\(option.rivalBlocks) plants · \(option.quote.chanceBps / 100)% at a 2:1 campaign")
                     .font(.caption.monospacedDigit()).foregroundStyle(Theme.secondary)
             }
             Spacer()
@@ -241,7 +241,7 @@ struct SectorCellRow: View {
 
     private var subtitle: String {
         if cell.operators == 0 { return "No operator; demand is imported" }
-        let lead = cell.leader.isEmpty ? "" : " · \(cell.leader) leads at \(cell.leaderShareBps / 100)%"
+        let lead = cell.leader.isEmpty ? "" : " · \(cell.leader) \(cell.leaderShareBps / 100)%"
         return "\(cell.operators) operator\(cell.operators == 1 ? "" : "s")" + lead
     }
 }
@@ -267,7 +267,7 @@ struct RaidSheet: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Eyebrow(text: "Target")
                             Text(option.targetName).font(.headline).foregroundStyle(Theme.primaryText)
-                            Text("\(Sector.name(option.industry)) in \(regionName) · \(option.rivalBlocks) blocks")
+                            Text("\(Sector.name(option.industry)) in \(regionName) · \(option.rivalBlocks) plants")
                                 .font(.caption).foregroundStyle(Theme.secondary)
                         }
                     }
@@ -284,16 +284,16 @@ struct RaidSheet: View {
                             row("Budget", Format.money(budget))
                             if let quote {
                                 row("Chance", "\(quote.chanceBps / 100)%")
-                                row("Plants at stake", "\(quote.blocksAtStake) block\(quote.blocksAtStake == 1 ? "" : "s")")
+                                row("Plants at stake", "\(quote.blocksAtStake) plant\(quote.blocksAtStake == 1 ? "" : "s")")
                                 row("Price if it lands", Format.money(quote.priceCents))
                             }
-                            Text("The budget buys advertising whatever happens. If the raid lands you take the blocks into your division at your strategy and pay the rival half their book value.")
+                            Text("The budget buys advertising whatever happens. If the raid lands you take the plants into your division at your strategy and pay the rival half their book value.")
                                 .font(.caption).foregroundStyle(Theme.secondary)
                         }
                     }
                     if let result {
                         Label(
-                            result.success ? "Took \(result.blocks) block\(result.blocks == 1 ? "" : "s") from \(result.defender)" : "The campaign did not move \(result.defender)'s customers",
+                            result.success ? "Took \(result.blocks) plant\(result.blocks == 1 ? "" : "s") from \(result.defender)" : "The campaign did not move \(result.defender)'s customers",
                             systemImage: result.success ? "checkmark.seal.fill" : "xmark.octagon"
                         )
                         .font(.callout.weight(.semibold))

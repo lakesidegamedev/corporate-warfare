@@ -51,7 +51,7 @@ enum Remedy {
             return ("No division in this market", "You can only raid a market you serve. Build a plant of this sector type in the region first.")
         }
         if detail.contains("rival_division") {
-            return ("Nothing to take", "The rival needs at least two blocks here: a raid never takes its last one.")
+            return ("Nothing to take", "The rival needs at least two plants here: a raid never takes its last one.")
         }
         if detail.contains("raid_cooldown") {
             return ("Campaign still running", "You can raid the same market once every thirteen weeks.")

@@ -116,12 +116,15 @@ vote needing action, first strike, save failure and week260 score. UI batches ro
 news into quarterly summaries; no demand for a click every tick. Resting a screen or
 backgrounding cannot silently reject a deal.
 
-Five-year score is numeric, explainable and optional to continue. Components, each 0..100:
-return = clamp(50 + 25*(ending_personal_net_worth/start_net_worth -1),0,100);
+Five-year score is numeric, explainable and optional to continue. It measures what the
+player built over the opening position (owner decision 2026-10-26). Components, each 0..100:
+growth = clamp(20 + 80*(ending_personal_net_worth/start_net_worth -1),0,100);
+expansion = clamp(20*(player divisions - 1) + 10*(states operated in - 1),0,100);
+leadership = clamp(25*markets where the player's group has the largest capacity,0,100);
 resilience = fraction of weeks without past-due liabilities *100;
-control = current controlled productive-group value / max(1,total_portfolio_value)*100,
-clamped; conduct = 100 - 10*unresolved_regulatory_breaches - 5*failed_worker_settlements,
-clamped. Total = 0.60*return+0.20*resilience+0.10*control+0.10*conduct. Integer rational
+conduct = 100 - 10*unresolved_regulatory_breaches - 5*failed_worker_settlements, clamped.
+Total = 0.45*growth+0.25*expansion+0.10*leadership+0.10*resilience+0.10*conduct. Control
+(controlled productive-group value / portfolio value) is reported, not scored. Integer rational
 implementation with explicit rounding. Net worth is personal cash + direct holdings at
 fair value - personal liabilities; no gross internal revenue or double parent/sub values.
 Assisted recovery score is flagged, not erased. Start wealth includes fair value of any

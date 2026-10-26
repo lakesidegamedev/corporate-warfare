@@ -27,6 +27,9 @@ struct MapHomeView: View {
             }
             VStack(spacing: 10) {
                 CompanyHUD()
+                if let objective = store.objective {
+                    BoardGoalStrip(objective: objective)
+                }
                 LayerChips(layer: $layer)
                 Spacer()
                 MapLegend(layer: layer)
@@ -72,7 +75,8 @@ struct MapHomeView: View {
         let grouped = Dictionary(grouping: store.mapDivisions) { $0.region + "/" + $0.industry }
         return grouped.values.compactMap { items in
             guard let first = items.first else { return nil }
-            return DivisionMarker(region: first.region, sector: first.industry, plants: Int(items.reduce(UInt32(0)) { $0 + $1.plants }))
+            // A plant is one block; a site can hold several.
+            return DivisionMarker(region: first.region, sector: first.industry, plants: Int(items.reduce(UInt32(0)) { $0 + $1.blocks }))
         }
     }
 
@@ -236,5 +240,29 @@ struct MapLegend: View {
         .background(Theme.panel.opacity(0.92), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .frame(maxWidth: 520, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The board's quarterly goal, one line over the map.
+struct BoardGoalStrip: View {
+    let objective: ObjectiveDto
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "target").foregroundStyle(Theme.gold)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(objective.title).font(.caption.weight(.semibold)).foregroundStyle(Theme.primaryText).lineLimit(1)
+                    Spacer(minLength: 6)
+                    Text("\(objective.weeksLeft) wk").font(.caption2.monospacedDigit()).foregroundStyle(Theme.secondary)
+                }
+                ProgressView(value: Double(objective.progressBps) / 10_000).tint(Theme.gold)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Theme.panel.opacity(0.92), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Board goal: \(objective.title), \(objective.progressBps / 100) percent, \(objective.weeksLeft) weeks left")
     }
 }

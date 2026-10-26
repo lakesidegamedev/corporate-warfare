@@ -816,8 +816,7 @@ fn settle_fills(
                     buyer_handle,
                     seller_handle,
                     product,
-                    from,
-                    region,
+                    (from, region),
                     qty,
                     cost,
                 ) && let Some(seller_firm) = world.firms.get_mut(seller_handle)
@@ -988,16 +987,18 @@ fn settle_government_fills(
     spent
 }
 
+/// Move `qty` of `product` from the seller's stock in region `route.0` to the buyer's stock in
+/// the market region `route.1`, for `cost` capped at the buyer's cash.
 fn trade_between(
     world: &mut World,
     buyer: Handle,
     seller: Handle,
     product: u16,
-    from: u8,
-    region: u8,
+    route: (u8, u8),
     qty: MilliLots,
     cost: Cents,
 ) -> bool {
+    let (from, region) = route;
     let cash = world
         .firms
         .get(buyer)

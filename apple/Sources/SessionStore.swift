@@ -61,6 +61,14 @@ actor Engine {
         session?.recentRaids() ?? []
     }
 
+    func objective() -> ObjectiveDto? {
+        session?.objective()
+    }
+
+    func objectiveHistory() -> [ObjectiveResultDto] {
+        session?.objectiveHistory() ?? []
+    }
+
     func mapPlants() -> [MapPlantDto] {
         session?.mapPlants() ?? []
     }
