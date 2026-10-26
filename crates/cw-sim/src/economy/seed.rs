@@ -873,13 +873,26 @@ fn build_gateways(world: &mut World, dataset: &Dataset) {
         .map(|product| product.id.as_str())
         .collect();
     products.push("electricity");
+    // Size each gateway to the larger of what the corridor's plants consume and what they
+    // produce: raw commodities and goods trade nationally, so a state's mines and mills can
+    // always reach the outside market at the gateway's discount, and its plants can always
+    // import at its premium.
     let mut corridor_volume: BTreeMap<u16, i64> = BTreeMap::new();
+    let mut corridor_output: BTreeMap<u16, i64> = BTreeMap::new();
     for (_, facility) in world.facilities.iter() {
         let recipe = &dataset.recipes[facility.recipe as usize];
         for (id, qty) in &recipe.weekly_inputs_lots {
             let code = dataset.product_index[id.as_str()];
             *corridor_volume.entry(code).or_default() += qty * facility.blocks as i64;
         }
+        if let Some(code) = dataset.product_index.get(&recipe.output) {
+            *corridor_output.entry(*code).or_default() +=
+                recipe.weekly_output_lots * facility.blocks as i64;
+        }
+    }
+    for (code, output) in corridor_output {
+        let entry = corridor_volume.entry(code).or_default();
+        *entry = (*entry).max(output);
     }
     for region in 0..world.regions.len() {
         for id in &products {

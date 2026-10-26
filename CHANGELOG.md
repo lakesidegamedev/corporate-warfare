@@ -56,6 +56,18 @@ Lakes and Ohio Valley.
   judged over three years at public prices net of capex and financing, and retools plants stuck
   in glut toward strategies whose output is short.
 
+### Fixed
+
+- Spot orders bought from the first out-of-state firm holding the good, which could strip a
+  carrier of its own steel input; they now buy from the nearest producer.
+- Favourable state conditions no longer push a plant beyond its rated capacity (they save
+  inputs), and adverse ones cap the run rate before inputs and deposits, so a mine extracts
+  exactly what it ships.
+- Outside gateways were sized only to the corridor's input demand, so a coal field producing
+  far more than local power plants burn could not reach the national market and failed in
+  every career. Gateways now also absorb what the corridor's plants produce, at their
+  discount.
+
 ## [1.0.0] - 2026-10-25
 
 First complete engine release: every automated rules requirement closed with evidence, and a
