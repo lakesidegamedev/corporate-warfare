@@ -1,7 +1,7 @@
 # Current checkpoint
 
-Date: 2026-10-26. In progress: **1.2.0**, economic regions, sector divisions and corporate
-warfare (PR #79, branch `feat/regions`). Kanban: 254796. Released: 1.1.0 (TestFlight build 2).
+Date: 2026-10-26. Released: **1.2.0**, economic regions, sector divisions and corporate
+warfare (feature PR #79, release branch `release/1.2.0`). Kanban: 254796.
 Saves from 1.1.0 do not load in 1.2.0; the changelog says so.
 
 ## 1.2.0
