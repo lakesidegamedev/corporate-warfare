@@ -1087,6 +1087,42 @@ fn seed_supply_contracts(world: &mut World, dataset: &Dataset) {
     }
 }
 
+/// A year of a firm's plants' standard EBITDA: output at reference less inputs at reference,
+/// baseline payroll, maintenance and land.
+fn expected_annual_ebitda(world: &World, dataset: &Dataset, firm: Handle) -> i64 {
+    let Some(entity) = world.firms.get(firm) else {
+        return 0;
+    };
+    let weekly: i64 = entity
+        .facilities
+        .iter()
+        .filter_map(|plant| world.facilities.get(*plant))
+        .map(|plant| {
+            let recipe = &dataset.recipes[plant.recipe as usize];
+            let revenue = dataset
+                .product_index
+                .get(&recipe.output)
+                .map(|code| recipe.weekly_output_lots * dataset.reference_price(*code))
+                .unwrap_or(0);
+            let inputs: i64 = recipe
+                .weekly_inputs_lots
+                .iter()
+                .filter_map(|(id, qty)| {
+                    dataset
+                        .product_index
+                        .get(id)
+                        .map(|code| qty * dataset.reference_price(*code))
+                })
+                .sum();
+            let payroll = recipe.baseline_weekly_payroll(dataset.baseline_weekly_wage_cents);
+            let fixed = recipe.weekly_maintenance(dataset.maintenance_annual_bps)
+                + dataset.fixture_land_rent_cents_weekly;
+            (revenue - inputs - payroll - fixed) * plant.blocks as i64
+        })
+        .sum();
+    weekly * 52
+}
+
 fn seed_share_marks(world: &mut World, dataset: &Dataset) {
     let handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
     for handle in handles {
@@ -1100,6 +1136,16 @@ fn seed_share_marks(world: &mut World, dataset: &Dataset) {
             Tick::OPENING,
             financial,
         );
+        // No week has closed yet, so the opening valuation reads its plants' standard earnings
+        // at reference prices and baseline wages instead of the book floor alone; otherwise
+        // every share would re-rate in step over the first quarter as real earnings arrive.
+        let mut value = value;
+        if !financial {
+            let expected = expected_annual_ebitda(world, dataset, handle);
+            let enterprise = value.enterprise_cents.max(expected.max(0) * 6 / 2);
+            value.equity_cents = (value.equity_cents - value.enterprise_cents + enterprise).max(0);
+            value.enterprise_cents = enterprise;
+        }
         let shares = &mut world.firms.get_mut(handle).unwrap().shares;
         let issued = shares.eligible_votes().max(1);
         shares.fair_cents = value.equity_cents / issued;
