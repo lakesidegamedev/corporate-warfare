@@ -175,6 +175,7 @@ fn forced_invalid(rng: &mut SplitMix64, session: &Session, turn: usize) -> Force
                 region: u8::MAX,
                 capital_cents: 30_000_000,
                 recipe: 0,
+                secondary: None,
             },
             key: "error.invalid_entity",
         },

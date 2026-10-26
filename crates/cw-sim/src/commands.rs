@@ -58,6 +58,10 @@ pub enum CommandIntent {
         region: u8,
         capital_cents: i64,
         recipe: u16,
+        /// Optional secondary sector type chosen at founding; the founding strategy's sector
+        /// is the primary. Set here it carries no refocus transition.
+        #[serde(default)]
+        secondary: Option<u8>,
     },
     AcceptManagementContract,
     SetPrimaryGroup {
@@ -553,6 +557,7 @@ fn apply_intent(
             region,
             capital_cents,
             recipe,
+            secondary,
         } => {
             if actor != INVESTOR_ACTOR {
                 return Err(DomainError::NoAuthority {
@@ -598,6 +603,14 @@ fn apply_intent(
                     .credit(Account::Revenue, fee, "formation fee"),
             );
             let template = &dataset.recipes[*recipe as usize];
+            let primary = industry_index(&template.industry);
+            if let Some(second) = secondary
+                && (*second as usize >= crate::state::INDUSTRY_NAMES.len() || *second == primary)
+            {
+                return Err(DomainError::Arithmetic {
+                    detail: ArithmeticFault::OutOfRange,
+                });
+            }
             let mut firm = Firm {
                 name: name.clone(),
                 industry: industry_index(&template.industry),
@@ -627,7 +640,7 @@ fn apply_intent(
                 layoffs: Vec::new(),
                 staff_history: Vec::new(),
                 outside_peak_bps: 0,
-                secondary_industry: None,
+                secondary_industry: *secondary,
                 focus_transition_until: 0,
                 focus_cooldown_until: 0,
                 logistics_strength: 0,
@@ -2584,9 +2597,17 @@ mod tests {
                 region,
                 capital_cents: capital,
                 recipe,
+                secondary: Some(crate::economy::operations::industry_index("retail").unwrap()),
             },
         );
         apply(&mut world, &dataset, &command).expect("founding accepted");
+        let founded = world.investor.primary_group.unwrap();
+        assert_eq!(
+            world.firm(founded).unwrap().secondary_industry,
+            crate::economy::operations::industry_index("retail"),
+            "a secondary focus chosen at founding carries no refocus transition"
+        );
+        assert_eq!(world.firm(founded).unwrap().focus_transition_until, 0);
         let firm = world.investor.primary_group.unwrap();
         // No permit bonus is active, so the project draws the permit card; left unanswered it
         // takes the four-week delay.

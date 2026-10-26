@@ -48,6 +48,8 @@ Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
   strength and programme, and every plant grouped by sector with utilisation, bottleneck and a
   retool flow.
 - UI snapshots of the main screens on iPhone and iPad, rendered in CI for review.
+- Corporation setup at founding: headquarters state, primary sector, a named founding strategy
+  and an optional secondary sector, set at founding without the refocus transition.
 
 - Release process: this changelog, the versioning and release procedure in
   `docs/RELEASING.md`, a pull request template, and a CI check that requires a changelog entry

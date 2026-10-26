@@ -612,13 +612,15 @@ final class AppStore: ObservableObject {
         await submitAsInvestor(CommandJSON.command("SetPrimaryGroup", ["firm": firm]))
     }
 
-    func foundFirm(name: String, region: UInt32, capitalCents: Int64, recipe: UInt32) async -> CommandRejection? {
-        await submitAsInvestor(CommandJSON.command("FoundFirm", [
+    func foundFirm(name: String, region: UInt32, capitalCents: Int64, recipe: UInt32, secondary: Int? = nil) async -> CommandRejection? {
+        var fields: [String: Any] = [
             "name": name,
             "region": region,
             "capital_cents": capitalCents,
             "recipe": recipe
-        ]))
+        ]
+        if let secondary { fields["secondary"] = secondary }
+        return await submitAsInvestor(CommandJSON.command("FoundFirm", fields))
     }
 
     func acceptManagementContract() async -> CommandRejection? {

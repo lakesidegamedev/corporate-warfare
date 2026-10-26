@@ -184,6 +184,7 @@ impl PolicyRunner {
                 region,
                 capital_cents: FOUNDER_CAPITAL_CENTS,
                 recipe,
+                secondary: None,
             },
         );
     }
