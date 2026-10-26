@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compact projected GeoJSON layers into apple/Resources/corridor-map.json.
 
-Input: the mapshaper outputs described in tools/map/README.md (Albers conic, metres). Output: a
+Input: the mapshaper outputs written by tools/map/build_map.sh (Albers conic, metres). Output: a
 10000-unit-wide view box with integer coordinates, flat [x0, y0, x1, y1, ...] rings and lines,
 and per-layer points thinned to a minimum spacing. Sources are US Census cartographic boundary
 and TIGER files and Natural Earth, all public domain.
@@ -36,8 +36,10 @@ def geometries(feature):
 
 def main(source, output):
     layers = {name: load(source, name) for name in
-              ["play_states", "context_states", "canada", "counties", "lakes", "rivers",
+              ["play_states", "context_states", "canada", "counties", "regions", "lakes", "rivers",
                "interstates_thin", "cities", "hubs"]}
+    names = {r["code"]: r["name"] for r in
+             json.load(open(Path(__file__).resolve().parents[2] / "content/geography/regions.json"))["regions"]}
     xs, ys = [], []
     for feature in layers["play_states"] + layers["context_states"] + layers["canada"]:
         for polygon in geometries(feature):
@@ -113,6 +115,15 @@ def main(source, output):
         r = rings(feature, 3)
         if r:
             counties.append({"fips": p["GEOID"], "name": p["NAME"], "state": FIPS[p["STATEFP"]], "rings": r})
+    regions = []
+    for feature in layers["regions"]:
+        code = feature["properties"]["region"]
+        r = rings(feature, 2)
+        if r:
+            regions.append({"code": code, "state": code[:2], "name": names[code], "rings": r})
+    regions.sort(key=lambda region: region["code"])
+    if sorted(names) != [region["code"] for region in regions]:
+        raise SystemExit("region shapes do not match content/geography/regions.json")
     lakes = [{"name": f["properties"].get("name") or "", "rings": rings(f, 3)} for f in layers["lakes"]]
     lakes = [lake for lake in lakes if lake["rings"]]
     rivers = [{"name": f["properties"].get("name") or "", "lines": lines(f, 6)} for f in layers["rivers"]]
@@ -143,11 +154,12 @@ def main(source, output):
         x, y = feature["geometry"]["coordinates"]
         hubs[feature["properties"]["code"]] = list(point(x, y))
     document = {
-        "schema": 1,
+        "schema": 2,
         "attribution": "Boundaries and roads: US Census Bureau cartographic boundary and TIGER/Line files (2018). Lakes, rivers, places and provinces: Natural Earth. All public domain.",
         "projection": "Albers equal-area conic, standard parallels 38N and 44N, centre 41N 82W",
         "viewbox": [WIDTH, height],
         "states": states,
+        "regions": regions,
         "counties": counties,
         "lakes": lakes,
         "rivers": rivers,
@@ -158,7 +170,7 @@ def main(source, output):
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     Path(output).write_text(json.dumps(document, separators=(",", ":")))
     size = Path(output).stat().st_size
-    print(f"wrote {output}: {size // 1024} KB, {len(states)} states/provinces, {len(counties)} counties, "
+    print(f"wrote {output}: {size // 1024} KB, {len(states)} states/provinces, {len(regions)} regions, {len(counties)} counties, "
           f"{len(lakes)} lakes, {len(rivers)} rivers, {len(interstates)} interstates, {len(cities)} cities")
 
 

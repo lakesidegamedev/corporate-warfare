@@ -675,7 +675,7 @@ fn opening_input_cost(dataset: &Dataset, recipe_index: u16, blocks: u8) -> i64 {
 }
 
 fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
-    let region = world.region_index("OH").unwrap_or(0);
+    let region = world.region_index("OH-CEN").unwrap_or(0);
     let recipe_index = dataset.recipe_index["farm"];
     let mut firm = placeholder_firm();
     firm.name = "Lakeside Holdings".to_owned();
@@ -897,10 +897,39 @@ fn build_gateways(world: &mut World, dataset: &Dataset) {
         let entry = corridor_volume.entry(code).or_default();
         *entry = (*entry).max(output);
     }
+    // What each region's own plants consume or produce: its gateway must always carry that.
+    let mut regional_volume: BTreeMap<(u8, u16), i64> = BTreeMap::new();
+    for (_, facility) in world.facilities.iter() {
+        let recipe = &dataset.recipes[facility.recipe as usize];
+        for (id, qty) in &recipe.weekly_inputs_lots {
+            let code = dataset.product_index[id.as_str()];
+            *regional_volume.entry((facility.region, code)).or_default() +=
+                qty * facility.blocks as i64;
+        }
+        if let Some(code) = dataset.product_index.get(&recipe.output) {
+            let entry = regional_volume.entry((facility.region, *code)).or_default();
+            *entry = (*entry).max(recipe.weekly_output_lots * facility.blocks as i64);
+        }
+    }
+    // The outside market carries one corridor volume per state, as in 1.1.0 when a region was
+    // a state; each state's regions split it by demand, and never below their own plants.
+    let total_demand: i64 = world
+        .regions
+        .iter()
+        .map(|region| region.demand_index_bps as i64)
+        .sum::<i64>()
+        .max(1);
+    let states = dataset.states.len().max(1) as i64;
     for region in 0..world.regions.len() {
+        let share = world.regions[region].demand_index_bps as i64;
         for id in &products {
             let code = dataset.product_index[*id];
-            let volume = corridor_volume.get(&code).copied().unwrap_or(100).max(100);
+            let corridor = corridor_volume.get(&code).copied().unwrap_or(100).max(100);
+            let own = regional_volume
+                .get(&(region as u8, code))
+                .copied()
+                .unwrap_or(0);
+            let volume = (corridor * states * share / total_demand).max(own);
             let reference = dataset.reference_price(code);
             // Electricity is a bulk local service: the gateway's finite capacity must be able
             // to absorb a generator block's weekly surplus, or unsold power expires and the

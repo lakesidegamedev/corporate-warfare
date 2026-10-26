@@ -1181,7 +1181,11 @@ mod tests {
             "no room, no build"
         );
         let plastics = dataset.product_index["plastics"];
-        let pa = dataset.regions.iter().position(|r| r.code == "PA").unwrap() as u8;
+        let pa = dataset
+            .regions
+            .iter()
+            .position(|r| r.code == "PA-CEN")
+            .unwrap() as u8;
         let mut found = false;
         for gateway in &mut world.gateways {
             if gateway.product == plastics && gateway.region == pa {

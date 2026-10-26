@@ -1,6 +1,6 @@
 //! Corporate operations evidence: sector focus, state conditions, sprawl and strategy retooling.
 //! Expected values are worked by hand from crates/cw-sim/src/economy/operations.rs rules and the
-//! condition indices in content/geography/states.json.
+//! condition indices in content/geography/regions.json.
 
 use cw_core::ids::Handle;
 use cw_core::ledger::{Account, Txn};
@@ -32,12 +32,20 @@ fn roads_move_freight_cost() {
     let dataset = Dataset::load().unwrap();
     // West Virginia roads 4800 and Kentucky 6000: average 5400, so +300 bps.
     assert_eq!(
-        operations::road_bps(&dataset, region(&dataset, "WV"), region(&dataset, "KY")),
+        operations::road_bps(
+            &dataset,
+            region(&dataset, "WV-SOU"),
+            region(&dataset, "KY-LOU")
+        ),
         10_300
     );
     // Indiana 6800 and Illinois 6200: average 6500, so -250 bps.
     assert_eq!(
-        operations::road_bps(&dataset, region(&dataset, "IN"), region(&dataset, "IL")),
+        operations::road_bps(
+            &dataset,
+            region(&dataset, "IN-CEN"),
+            region(&dataset, "IL-CHI")
+        ),
         9_750
     );
 }
@@ -50,26 +58,26 @@ fn state_conditions_shape_plant_output() {
     let mut plant = world.facilities.iter().next().unwrap().1.clone();
     plant.firm = firm;
     plant.recipe = recipe;
-    plant.region = region(&dataset, "NY");
+    plant.region = region(&dataset, "NY-NYC");
     let handle = world.facilities.insert(plant.clone());
-    // New York: grid 9400 is 100 under 9500, costing 40 bps; skill 6800 adds 144; broadband
-    // 3200 adds 120.
+    // New York Metro: grid 9400 is 100 under 9500, costing 40 bps; skill 6949 adds 155;
+    // broadband 4800 adds 280.
     assert_eq!(
         operations::condition_terms(&world, &dataset, handle, false),
-        (0, 224)
+        (0, 395)
     );
     assert_eq!(
         operations::output_bps(&world, &dataset, handle, false),
         10_000,
         "good conditions save inputs instead of exceeding rated capacity"
     );
-    plant.region = region(&dataset, "WV");
+    plant.region = region(&dataset, "WV-SOU");
     let wv = world.facilities.insert(plant);
-    // West Virginia: grid 9300 costs 80, skill 4000 costs 80, broadband 1000 costs 100.
-    assert_eq!(operations::output_bps(&world, &dataset, wv, false), 9_740);
+    // Southern West Virginia: grid 9300 costs 80, skill 3923 costs 86, broadband 996 costs 100.
+    assert_eq!(operations::output_bps(&world, &dataset, wv, false), 9_734);
     assert_eq!(
         operations::condition_terms(&world, &dataset, wv, false),
-        (260, 0)
+        (266, 0)
     );
 }
 

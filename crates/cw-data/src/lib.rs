@@ -20,10 +20,10 @@ use serde::{Deserialize, Serialize};
 pub use balance::{Balance, Product, ProductKind, Recipe};
 pub use events::EventCard;
 pub use firms::{Archetype, SeedFirm};
-pub use geography::{Conditions, Geography, Lane, Region};
+pub use geography::{Conditions, Geography, Lane, Region, StateInfo};
 
 pub const BALANCE_JSON: &str = include_str!("../../../content/initial-balance.json");
-pub const GEOGRAPHY_JSON: &str = include_str!("../../../content/geography/states.json");
+pub const GEOGRAPHY_JSON: &str = include_str!("../../../content/geography/regions.json");
 pub const EVENTS_JSON: &str = include_str!("../../../content/events/events.json");
 pub const FIRMS_JSON: &str = include_str!("../../../content/firms.json");
 
@@ -54,6 +54,8 @@ pub struct Dataset {
     pub recipe_index: BTreeMap<String, u16>,
     pub regions: Vec<Region>,
     pub region_index: BTreeMap<String, u8>,
+    /// Playable states, the political layer over regions, sorted by code.
+    pub states: Vec<StateInfo>,
     pub lanes: Vec<Lane>,
     pub events: Vec<EventCard>,
     pub seed_firms: Vec<SeedFirm>,
@@ -65,12 +67,30 @@ pub struct Dataset {
 }
 
 impl Dataset {
+    /// The state a region belongs to.
+    pub fn state_of(&self, region: u8) -> Option<&StateInfo> {
+        let code = self.regions.get(region as usize)?.state();
+        self.states.iter().find(|state| state.code == code)
+    }
+
+    /// Indices of every region in a state, in region order.
+    pub fn regions_in_state(&self, state: &str) -> Vec<u8> {
+        self.regions
+            .iter()
+            .enumerate()
+            .filter(|(_, region)| region.state() == state)
+            .map(|(index, _)| index as u8)
+            .collect()
+    }
+}
+
+impl Dataset {
     /// Load the pinned in-repo dataset and validate it.
     pub fn load() -> Result<Dataset, Vec<String>> {
         let balance: Balance = serde_json::from_str(BALANCE_JSON)
             .map_err(|error| vec![format!("initial-balance.json: {error}")])?;
         let geography: Geography = serde_json::from_str(GEOGRAPHY_JSON)
-            .map_err(|error| vec![format!("states.json: {error}")])?;
+            .map_err(|error| vec![format!("regions.json: {error}")])?;
         let events: events::EventDeck = serde_json::from_str(EVENTS_JSON)
             .map_err(|error| vec![format!("events.json: {error}")])?;
         let firms: firms::SeedFirms = serde_json::from_str(FIRMS_JSON)
@@ -83,6 +103,8 @@ impl Dataset {
         let geometry_note = geography.geometry_note();
         let mut regions = geography.regions;
         regions.sort_by(|a, b| a.code.cmp(&b.code));
+        let mut states = geography.states;
+        states.sort_by(|a, b| a.code.cmp(&b.code));
         let mut seed_firms = firms.firms;
         seed_firms.sort_by(|a, b| a.id.cmp(&b.id));
 
@@ -106,6 +128,7 @@ impl Dataset {
             recipe_index,
             regions,
             region_index,
+            states,
             lanes: geography.lanes,
             events: events.events,
             seed_firms,
@@ -223,11 +246,26 @@ impl Dataset {
         }
 
         for region in &self.regions {
-            if region.code.len() != 2 || !region.code.chars().all(|c| c.is_ascii_uppercase()) {
+            // Region codes are STATE-AREA: a two letter state code, a hyphen, two or three
+            // upper-case letters, and the prefix must be the region's own state.
+            let valid = match region.code.split_once('-') {
+                Some((state, area)) => {
+                    state.len() == 2
+                        && state.chars().all(|c| c.is_ascii_uppercase())
+                        && (2..=3).contains(&area.len())
+                        && area.chars().all(|c| c.is_ascii_uppercase())
+                        && region.states == vec![state.to_owned()]
+                }
+                None => false,
+            };
+            if !valid {
                 errors.push(format!(
-                    "region code {} is not a two letter state code",
+                    "region code {} is not STATE-AREA inside its own state",
                     region.code
                 ));
+            }
+            if !self.states.iter().any(|state| state.code == region.state()) {
+                errors.push(format!("region {} names an unknown state", region.code));
             }
             if region.wage_index_bps <= 0 || region.demand_index_bps <= 0 {
                 errors.push(format!(
@@ -238,6 +276,11 @@ impl Dataset {
         }
         if self.region_index.len() != self.regions.len() {
             errors.push("duplicate region code".to_owned());
+        }
+        for state in &self.states {
+            if self.regions_in_state(&state.code).len() < 2 {
+                errors.push(format!("state {} has fewer than two regions", state.code));
+            }
         }
         for left in 0..self.regions.len() {
             for right in (left + 1)..self.regions.len() {
@@ -417,26 +460,21 @@ mod tests {
         let dataset = Dataset::load().expect("dataset must validate");
         assert_eq!(dataset.products.len(), 34);
         assert_eq!(dataset.recipes.len(), 53);
-        assert_eq!(dataset.regions.len(), 8);
+        assert_eq!(dataset.regions.len(), 31);
+        assert_eq!(dataset.states.len(), 8);
         assert_eq!(dataset.events.len(), 24);
         assert_eq!(dataset.seed_firms.len(), 30);
         assert_eq!(dataset.hash.len(), 64);
     }
 
     #[test]
-    fn the_playable_states_are_unique_and_labelled() {
+    fn regions_sit_inside_eight_labelled_states() {
         let dataset = Dataset::load().unwrap();
-        assert_eq!(dataset.regions.len(), 8);
-        let mut codes = std::collections::BTreeSet::new();
+        assert_eq!(dataset.states.len(), 8);
+        assert_eq!(dataset.regions.len(), 31);
         for region in &dataset.regions {
-            assert!(codes.insert(region.code.clone()), "duplicate region code");
-            assert_eq!(
-                region.states,
-                vec![region.code.clone()],
-                "one region is one state"
-            );
             assert!(
-                region.population_2000 > 1_000_000,
+                region.population_2000 > 200_000,
                 "{} population",
                 region.code
             );
@@ -448,13 +486,20 @@ mod tests {
             }
         }
         // Census 2000 resident counts, sum of the eight states.
-        let total: i64 = dataset.regions.iter().map(|r| r.population_2000).sum();
+        let total: i64 = dataset.states.iter().map(|s| s.population_2000).sum();
         assert_eq!(total, 76_898_986);
-        assert!(
-            dataset.geometry_note.contains("authored condition indices"),
-            "the note labels the authored part: {}",
-            dataset.geometry_note
-        );
+        // Region populations come from county figures and agree with the state counts to
+        // within a tenth of a percent.
+        for state in &dataset.states {
+            let regions: i64 = dataset
+                .regions_in_state(&state.code)
+                .iter()
+                .map(|r| dataset.regions[*r as usize].population_2000)
+                .sum();
+            assert!((regions - state.population_2000).abs() * 1_000 < state.population_2000);
+        }
+        let ohio = dataset.region_index["OH-NE"];
+        assert_eq!(dataset.state_of(ohio).unwrap().name, "Ohio");
     }
 
     #[test]
@@ -465,8 +510,11 @@ mod tests {
                 assert!(dataset.lane_km(&left.code, &right.code).is_some());
             }
         }
-        assert_eq!(dataset.lane_km("OH", "OH"), Some(0));
-        assert_eq!(dataset.lane_km("OH", "MI"), dataset.lane_km("MI", "OH"));
+        assert_eq!(dataset.lane_km("OH-CEN", "OH-CEN"), Some(0));
+        assert_eq!(
+            dataset.lane_km("OH-CEN", "MI-DET"),
+            dataset.lane_km("MI-DET", "OH-CEN")
+        );
     }
 
     #[test]
