@@ -129,3 +129,47 @@ years in game accounting. Quarterly tax reserve accrues weekly; payment at week 
 of 13. Dividends never reduce company taxable profit. Investor dividend/capital gains
 personal tax is 15 percent, collected at realised payment/sale. Display rules as simplified
 scenario policy, not a reconstruction of all 2000 tax codes.
+
+## Divisions, market share and raids (1.2.0)
+
+Implemented in `crates/cw-sim/src/economy/sectors.rs`. A division is a firm's plants of one
+sector type in one region; it is derived from the plants, never stored apart. The first plant
+of a sector type in a region opens a division for a $100,000 entry fee, paid to the outside
+legal-services sector, with the founding plant at half its strategy's capex. Later plants join
+the division and must run its strategy; `RetoolFacility` on any plant retools every plant in
+its division (a quarter of the new capex per plant, a third of its build time, at least four
+weeks). An order may add up to 40 plants.
+
+Market share in a cell (region, sector type) is a firm's capacity value at reference price
+against all operating capacity in the cell plus the value of imports local plants are not
+meeting. Expanding an existing division past 50 percent share multiplies its capex by
+1 + 2 * ramp * rivals, where ramp is the square of the share above half as a fraction of the
+other half, and rivals is 0.35 with no rival in the cell rising to 1.0 at four or more.
+Opening a division never pays it.
+
+Sprawl overhead counts divisions, not plant sites (15 before logistics strength raises it).
+A plant in the firm's home region is the input baseline; another region of the home state uses
+2.5 percent more inputs and another state 5 percent more. Each state's primary and secondary
+specialized sector types use 3 and 1.5 percent fewer.
+
+`RaidMarket` spends a marketing budget against a rival's division in a cell the raider also
+operates in. Attack strength is the budget plus thirteen weeks of standing marketing; defence is
+thirteen weeks of the defender's marketing plus five percent of its division's quarterly output
+value. One percent of the defender's plants are at stake at even strength, rising linearly to
+twenty percent at two to one. Success probability is attack over attack plus defence, clamped
+to 5..95 percent, from the deterministic raid stream. The budget buys advertising whatever
+happens; on success the raider takes the plants into its own division at its own strategy and
+pays the defender half their book value. The defender always keeps one plant; a group cannot
+raid itself; each raider may raid a cell once per thirteen weeks. Rival AI raids when the
+chance-weighted three-year contribution of the captured plants exceeds the campaign and price.
+
+## Board objectives (1.2.0)
+
+Implemented in `crates/cw-sim/src/economy/objectives.rs`. In the first week of each quarter the
+board of the player's primary company sets one goal, rotating: enter a new region; lift average
+weekly operating profit over four weeks to a quarter above the current level (at least $5,000
+more); take ten points more of the home division's market (at most 95 percent); expand into
+another state. A goal met before its thirteen weeks run out pays a management bonus moved from
+the company to the investor: two percent of the company's quarter of operating profit, at
+least $25,000, never more than its cash.
+

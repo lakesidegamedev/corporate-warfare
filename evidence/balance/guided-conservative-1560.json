@@ -1,9 +1,9 @@
 {
   "schema": "cw-balance-sweep/1",
-  "engine_version": "1.0.0",
+  "engine_version": "1.1.0",
   "interface_version": 1,
   "rules_version": 1,
-  "dataset_hash": "5ef0b7630807aae3ecfad02c49dfa0c67646532c42b637ab5ff682435e4c1be1",
+  "dataset_hash": "5112c949d0a417a96326a0bb1482793b9d75aa83940e7664d3861e2007082e1b",
   "policy": "conservative",
   "scenario": "guided",
   "mode": "sandbox",
@@ -16,17 +16,17 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 795680000,
-      "investor_cash_cents": 349280000,
+      "investor_net_worth_cents": 647480000,
+      "investor_cash_cents": 499280000,
       "controlled_firms": 1,
-      "dissolved": 10,
+      "dissolved": 13,
       "past_due": 2,
       "weeks_with_past_due": 0,
-      "deals_settled": 17,
-      "canonical_hash": "47f7bfda8f82f6c5b3f4119cce1f24c488dae561473eb405b6aae86084959214",
+      "deals_settled": 29,
+      "canonical_hash": "47d3aff6dd5c63614dd51b3d0a64d4787c61c653ebc0f3b4e06f7f623d5ca0f8",
       "policy": {
-        "attempted": 392,
-        "accepted": 392,
+        "attempted": 395,
+        "accepted": 395,
         "rejected": 0,
         "rejections": {}
       },
@@ -38,53 +38,53 @@
       "archetypes": {
         "brand_builder": {
           "firms": 6,
-          "wins": 4,
-          "losses": 2,
-          "dissolved": 2,
-          "accepted_commands": 3098,
+          "wins": 1,
+          "losses": 5,
+          "dissolved": 4,
+          "accepted_commands": 5661,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "consolidator": {
           "firms": 7,
-          "wins": 3,
-          "losses": 4,
-          "dissolved": 3,
-          "accepted_commands": 4681,
+          "wins": 4,
+          "losses": 3,
+          "dissolved": 2,
+          "accepted_commands": 3351,
           "rejected_commands": 0,
-          "deals_started": 47,
-          "deals_settled": 15
+          "deals_started": 46,
+          "deals_settled": 21
         },
         "cost_leader": {
           "firms": 7,
           "wins": 3,
           "losses": 4,
-          "dissolved": 1,
-          "accepted_commands": 2636,
+          "dissolved": 3,
+          "accepted_commands": 672,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "technologist": {
           "firms": 6,
-          "wins": 4,
-          "losses": 2,
-          "dissolved": 1,
-          "accepted_commands": 2208,
+          "wins": 2,
+          "losses": 4,
+          "dissolved": 3,
+          "accepted_commands": 3491,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "vulture": {
           "firms": 4,
-          "wins": 1,
-          "losses": 3,
-          "dissolved": 3,
-          "accepted_commands": 1240,
+          "wins": 3,
+          "losses": 1,
+          "dissolved": 1,
+          "accepted_commands": 817,
           "rejected_commands": 0,
-          "deals_started": 8,
-          "deals_settled": 2
+          "deals_started": 30,
+          "deals_settled": 8
         }
       }
     },
@@ -93,17 +93,17 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 810680000,
-      "investor_cash_cents": 349280000,
+      "investor_net_worth_cents": 722680000,
+      "investor_cash_cents": 429280000,
       "controlled_firms": 1,
       "dissolved": 9,
-      "past_due": 2,
+      "past_due": 7,
       "weeks_with_past_due": 0,
-      "deals_settled": 15,
-      "canonical_hash": "e9be6274ce96ac52032dacf15c66f23aea475227e6d91c3e361f07023dde4a5d",
+      "deals_settled": 38,
+      "canonical_hash": "087609fe70e0c92005e064e28e30ee341ef3badfca39cd0e1787182c963ef42b",
       "policy": {
-        "attempted": 392,
-        "accepted": 392,
+        "attempted": 394,
+        "accepted": 394,
         "rejected": 0,
         "rejections": {}
       },
@@ -115,40 +115,40 @@
       "archetypes": {
         "brand_builder": {
           "firms": 6,
-          "wins": 3,
-          "losses": 3,
-          "dissolved": 2,
-          "accepted_commands": 3253,
+          "wins": 1,
+          "losses": 5,
+          "dissolved": 3,
+          "accepted_commands": 7692,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "consolidator": {
           "firms": 7,
-          "wins": 3,
-          "losses": 4,
-          "dissolved": 3,
-          "accepted_commands": 2763,
+          "wins": 4,
+          "losses": 3,
+          "dissolved": 1,
+          "accepted_commands": 2182,
           "rejected_commands": 0,
-          "deals_started": 109,
-          "deals_settled": 15
+          "deals_started": 55,
+          "deals_settled": 25
         },
         "cost_leader": {
           "firms": 7,
           "wins": 4,
           "losses": 3,
-          "dissolved": 0,
-          "accepted_commands": 2421,
+          "dissolved": 1,
+          "accepted_commands": 2601,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "technologist": {
           "firms": 6,
-          "wins": 4,
-          "losses": 2,
-          "dissolved": 2,
-          "accepted_commands": 343,
+          "wins": 3,
+          "losses": 3,
+          "dissolved": 3,
+          "accepted_commands": 4347,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
@@ -157,11 +157,11 @@
           "firms": 4,
           "wins": 1,
           "losses": 3,
-          "dissolved": 2,
-          "accepted_commands": 3956,
+          "dissolved": 1,
+          "accepted_commands": 1557,
           "rejected_commands": 0,
-          "deals_started": 6,
-          "deals_settled": 0
+          "deals_started": 22,
+          "deals_settled": 13
         }
       }
     },
@@ -170,14 +170,14 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 787280000,
-      "investor_cash_cents": 349280000,
+      "investor_net_worth_cents": 728180000,
+      "investor_cash_cents": 431780000,
       "controlled_firms": 1,
-      "dissolved": 10,
-      "past_due": 2,
+      "dissolved": 9,
+      "past_due": 6,
       "weeks_with_past_due": 0,
-      "deals_settled": 13,
-      "canonical_hash": "dadfeaf68fd03fe5e2eb44c422519d39438685db611667750abab65b890768d5",
+      "deals_settled": 31,
+      "canonical_hash": "162f94ef086a166cd397d4cb75438147502237cf1d37607cd99c73643adee723",
       "policy": {
         "attempted": 392,
         "accepted": 392,
@@ -192,53 +192,53 @@
       "archetypes": {
         "brand_builder": {
           "firms": 6,
-          "wins": 3,
-          "losses": 3,
+          "wins": 1,
+          "losses": 5,
           "dissolved": 3,
-          "accepted_commands": 3200,
+          "accepted_commands": 7111,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "consolidator": {
           "firms": 7,
-          "wins": 4,
-          "losses": 3,
+          "wins": 3,
+          "losses": 4,
           "dissolved": 2,
-          "accepted_commands": 2427,
+          "accepted_commands": 3171,
           "rejected_commands": 0,
-          "deals_started": 63,
-          "deals_settled": 13
+          "deals_started": 98,
+          "deals_settled": 27
         },
         "cost_leader": {
           "firms": 7,
-          "wins": 3,
-          "losses": 4,
-          "dissolved": 1,
-          "accepted_commands": 1959,
+          "wins": 4,
+          "losses": 3,
+          "dissolved": 0,
+          "accepted_commands": 2350,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "technologist": {
           "firms": 6,
-          "wins": 5,
-          "losses": 1,
-          "dissolved": 1,
-          "accepted_commands": 560,
+          "wins": 2,
+          "losses": 4,
+          "dissolved": 2,
+          "accepted_commands": 2900,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "vulture": {
           "firms": 4,
-          "wins": 0,
-          "losses": 4,
-          "dissolved": 3,
-          "accepted_commands": 2197,
+          "wins": 1,
+          "losses": 3,
+          "dissolved": 2,
+          "accepted_commands": 997,
           "rejected_commands": 0,
-          "deals_started": 9,
-          "deals_settled": 0
+          "deals_started": 65,
+          "deals_settled": 4
         }
       }
     },
@@ -247,17 +247,17 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 786680000,
-      "investor_cash_cents": 349280000,
+      "investor_net_worth_cents": 785080000,
+      "investor_cash_cents": 429280000,
       "controlled_firms": 1,
-      "dissolved": 9,
-      "past_due": 1,
+      "dissolved": 11,
+      "past_due": 2,
       "weeks_with_past_due": 0,
-      "deals_settled": 13,
-      "canonical_hash": "2e02529bf5ad55ee6966d9b104c57b8870cadfe414ca51b07a70b3024eb46799",
+      "deals_settled": 27,
+      "canonical_hash": "0b79823deae19ec9beeea28843b638bf9701b8399e50217bcbe0ce09e287b065",
       "policy": {
-        "attempted": 393,
-        "accepted": 393,
+        "attempted": 392,
+        "accepted": 392,
         "rejected": 0,
         "rejections": {}
       },
@@ -271,51 +271,51 @@
           "firms": 6,
           "wins": 3,
           "losses": 3,
-          "dissolved": 3,
-          "accepted_commands": 3128,
+          "dissolved": 2,
+          "accepted_commands": 5730,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "consolidator": {
           "firms": 7,
-          "wins": 6,
-          "losses": 1,
-          "dissolved": 1,
-          "accepted_commands": 1491,
+          "wins": 3,
+          "losses": 4,
+          "dissolved": 2,
+          "accepted_commands": 2685,
           "rejected_commands": 0,
-          "deals_started": 95,
-          "deals_settled": 13
+          "deals_started": 40,
+          "deals_settled": 21
         },
         "cost_leader": {
           "firms": 7,
           "wins": 4,
           "losses": 3,
-          "dissolved": 0,
-          "accepted_commands": 2189,
+          "dissolved": 1,
+          "accepted_commands": 393,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "technologist": {
           "firms": 6,
-          "wins": 5,
-          "losses": 1,
-          "dissolved": 1,
-          "accepted_commands": 231,
+          "wins": 2,
+          "losses": 4,
+          "dissolved": 4,
+          "accepted_commands": 3020,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "vulture": {
           "firms": 4,
-          "wins": 0,
-          "losses": 4,
-          "dissolved": 4,
-          "accepted_commands": 2371,
+          "wins": 2,
+          "losses": 2,
+          "dissolved": 2,
+          "accepted_commands": 972,
           "rejected_commands": 0,
-          "deals_started": 3,
-          "deals_settled": 0
+          "deals_started": 20,
+          "deals_settled": 6
         }
       }
     },
@@ -324,17 +324,17 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 349280000,
-      "investor_cash_cents": 349280000,
-      "controlled_firms": 0,
-      "dissolved": 14,
-      "past_due": 2,
-      "weeks_with_past_due": 4,
-      "deals_settled": 21,
-      "canonical_hash": "b5c3eaad7dc269f163976bf1d2c2eda1ef1c54d1051f37c421254a1adcb176e2",
+      "investor_net_worth_cents": 781980000,
+      "investor_cash_cents": 441780000,
+      "controlled_firms": 1,
+      "dissolved": 8,
+      "past_due": 3,
+      "weeks_with_past_due": 0,
+      "deals_settled": 32,
+      "canonical_hash": "a9e0f578034101716c0f87b368dc24557c9b38aecbb9ffc58fc8d287f4f63f98",
       "policy": {
-        "attempted": 333,
-        "accepted": 333,
+        "attempted": 392,
+        "accepted": 392,
         "rejected": 0,
         "rejections": {}
       },
@@ -346,30 +346,30 @@
       "archetypes": {
         "brand_builder": {
           "firms": 6,
-          "wins": 3,
-          "losses": 3,
-          "dissolved": 3,
-          "accepted_commands": 5278,
+          "wins": 1,
+          "losses": 5,
+          "dissolved": 4,
+          "accepted_commands": 5301,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "consolidator": {
           "firms": 7,
-          "wins": 3,
-          "losses": 4,
-          "dissolved": 3,
-          "accepted_commands": 4771,
+          "wins": 4,
+          "losses": 3,
+          "dissolved": 1,
+          "accepted_commands": 4049,
           "rejected_commands": 0,
-          "deals_started": 46,
-          "deals_settled": 19
+          "deals_started": 48,
+          "deals_settled": 26
         },
         "cost_leader": {
           "firms": 7,
           "wins": 3,
           "losses": 4,
-          "dissolved": 2,
-          "accepted_commands": 2760,
+          "dissolved": 1,
+          "accepted_commands": 903,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
@@ -379,20 +379,20 @@
           "wins": 5,
           "losses": 1,
           "dissolved": 1,
-          "accepted_commands": 316,
+          "accepted_commands": 323,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "vulture": {
           "firms": 4,
-          "wins": 0,
-          "losses": 4,
-          "dissolved": 4,
-          "accepted_commands": 1722,
+          "wins": 2,
+          "losses": 2,
+          "dissolved": 1,
+          "accepted_commands": 1144,
           "rejected_commands": 0,
-          "deals_started": 30,
-          "deals_settled": 2
+          "deals_started": 27,
+          "deals_settled": 6
         }
       }
     },
@@ -401,14 +401,14 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 813680000,
-      "investor_cash_cents": 349280000,
+      "investor_net_worth_cents": 787480000,
+      "investor_cash_cents": 429280000,
       "controlled_firms": 1,
-      "dissolved": 8,
+      "dissolved": 7,
       "past_due": 2,
       "weeks_with_past_due": 0,
-      "deals_settled": 15,
-      "canonical_hash": "31d5584ca8f6cf4807220aa0e5efa48557f47a0985f6d727c8900db639d73ff2",
+      "deals_settled": 32,
+      "canonical_hash": "0cbb2faa68a0c46c0a17a4e237b2c4f25fcbdda2fffd2b29e312ed2d55ee14a1",
       "policy": {
         "attempted": 392,
         "accepted": 392,
@@ -423,30 +423,30 @@
       "archetypes": {
         "brand_builder": {
           "firms": 6,
-          "wins": 3,
-          "losses": 3,
+          "wins": 2,
+          "losses": 4,
           "dissolved": 3,
-          "accepted_commands": 2046,
+          "accepted_commands": 6173,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "consolidator": {
           "firms": 7,
-          "wins": 6,
-          "losses": 1,
+          "wins": 4,
+          "losses": 3,
           "dissolved": 1,
-          "accepted_commands": 2925,
+          "accepted_commands": 1810,
           "rejected_commands": 0,
-          "deals_started": 98,
-          "deals_settled": 14
+          "deals_started": 43,
+          "deals_settled": 21
         },
         "cost_leader": {
           "firms": 7,
-          "wins": 5,
-          "losses": 2,
-          "dissolved": 0,
-          "accepted_commands": 2319,
+          "wins": 3,
+          "losses": 4,
+          "dissolved": 1,
+          "accepted_commands": 1296,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
@@ -456,20 +456,20 @@
           "wins": 5,
           "losses": 1,
           "dissolved": 1,
-          "accepted_commands": 226,
+          "accepted_commands": 3809,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "vulture": {
           "firms": 4,
-          "wins": 1,
-          "losses": 3,
-          "dissolved": 3,
-          "accepted_commands": 1771,
+          "wins": 2,
+          "losses": 2,
+          "dissolved": 1,
+          "accepted_commands": 517,
           "rejected_commands": 0,
-          "deals_started": 9,
-          "deals_settled": 1
+          "deals_started": 33,
+          "deals_settled": 11
         }
       }
     },
@@ -478,14 +478,91 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 463880000,
-      "investor_cash_cents": 349280000,
-      "controlled_firms": 1,
-      "dissolved": 8,
+      "investor_net_worth_cents": 421780000,
+      "investor_cash_cents": 421780000,
+      "controlled_firms": 0,
+      "dissolved": 14,
       "past_due": 2,
+      "weeks_with_past_due": 4,
+      "deals_settled": 20,
+      "canonical_hash": "05462ca758483441282a932dc6c0ea2c871b0da8486c598e53baa2b2456c3659",
+      "policy": {
+        "attempted": 200,
+        "accepted": 200,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      },
+      "archetypes": {
+        "brand_builder": {
+          "firms": 6,
+          "wins": 2,
+          "losses": 4,
+          "dissolved": 3,
+          "accepted_commands": 5502,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "consolidator": {
+          "firms": 7,
+          "wins": 2,
+          "losses": 5,
+          "dissolved": 3,
+          "accepted_commands": 6827,
+          "rejected_commands": 0,
+          "deals_started": 26,
+          "deals_settled": 14
+        },
+        "cost_leader": {
+          "firms": 7,
+          "wins": 1,
+          "losses": 6,
+          "dissolved": 3,
+          "accepted_commands": 1209,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "technologist": {
+          "firms": 6,
+          "wins": 3,
+          "losses": 3,
+          "dissolved": 3,
+          "accepted_commands": 1437,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "vulture": {
+          "firms": 4,
+          "wins": 1,
+          "losses": 3,
+          "dissolved": 1,
+          "accepted_commands": 2427,
+          "rejected_commands": 0,
+          "deals_started": 20,
+          "deals_settled": 6
+        }
+      }
+    },
+    {
+      "seed": 8,
+      "final_week": 1560,
+      "paused": null,
+      "score": null,
+      "investor_net_worth_cents": 764980000,
+      "investor_cash_cents": 496780000,
+      "controlled_firms": 1,
+      "dissolved": 5,
+      "past_due": 3,
       "weeks_with_past_due": 0,
-      "deals_settled": 23,
-      "canonical_hash": "ee1abbe2fa64117e28228d9392541f3c0d1bdb484b6fecda153b2ec99914d576",
+      "deals_settled": 24,
+      "canonical_hash": "99172bf1e168b9c61217816b24f2c1181d4c4fb3040d44c4737665b96d4266ef",
       "policy": {
         "attempted": 392,
         "accepted": 392,
@@ -502,128 +579,51 @@
           "firms": 6,
           "wins": 3,
           "losses": 3,
-          "dissolved": 2,
-          "accepted_commands": 3518,
+          "dissolved": 1,
+          "accepted_commands": 4098,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "consolidator": {
           "firms": 7,
-          "wins": 2,
-          "losses": 5,
+          "wins": 4,
+          "losses": 3,
           "dissolved": 2,
-          "accepted_commands": 1604,
+          "accepted_commands": 5681,
           "rejected_commands": 0,
-          "deals_started": 62,
-          "deals_settled": 20
+          "deals_started": 49,
+          "deals_settled": 19
         },
         "cost_leader": {
           "firms": 7,
-          "wins": 4,
-          "losses": 3,
+          "wins": 3,
+          "losses": 4,
           "dissolved": 1,
-          "accepted_commands": 2024,
+          "accepted_commands": 1245,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "technologist": {
           "firms": 6,
-          "wins": 5,
+          "wins": 4,
+          "losses": 2,
+          "dissolved": 0,
+          "accepted_commands": 812,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "vulture": {
+          "firms": 4,
+          "wins": 3,
           "losses": 1,
           "dissolved": 1,
-          "accepted_commands": 304,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "vulture": {
-          "firms": 4,
-          "wins": 2,
-          "losses": 2,
-          "dissolved": 2,
-          "accepted_commands": 1433,
+          "accepted_commands": 390,
           "rejected_commands": 0,
           "deals_started": 21,
-          "deals_settled": 3
-        }
-      }
-    },
-    {
-      "seed": 8,
-      "final_week": 1560,
-      "paused": null,
-      "score": null,
-      "investor_net_worth_cents": 790880000,
-      "investor_cash_cents": 349280000,
-      "controlled_firms": 1,
-      "dissolved": 7,
-      "past_due": 3,
-      "weeks_with_past_due": 0,
-      "deals_settled": 13,
-      "canonical_hash": "71dd89856fb973d0ac256dfcda6a31dc624b92792a7d609ebeaa33abc9cc644a",
-      "policy": {
-        "attempted": 392,
-        "accepted": 392,
-        "rejected": 0,
-        "rejections": {}
-      },
-      "invariants": {
-        "ledger_balanced": true,
-        "negative_cash": 0,
-        "negative_stock": 0
-      },
-      "archetypes": {
-        "brand_builder": {
-          "firms": 6,
-          "wins": 4,
-          "losses": 2,
-          "dissolved": 2,
-          "accepted_commands": 4210,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "consolidator": {
-          "firms": 7,
-          "wins": 4,
-          "losses": 3,
-          "dissolved": 1,
-          "accepted_commands": 4662,
-          "rejected_commands": 0,
-          "deals_started": 51,
-          "deals_settled": 13
-        },
-        "cost_leader": {
-          "firms": 7,
-          "wins": 4,
-          "losses": 3,
-          "dissolved": 0,
-          "accepted_commands": 2548,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "technologist": {
-          "firms": 6,
-          "wins": 4,
-          "losses": 2,
-          "dissolved": 2,
-          "accepted_commands": 274,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "vulture": {
-          "firms": 4,
-          "wins": 2,
-          "losses": 2,
-          "dissolved": 2,
-          "accepted_commands": 1305,
-          "rejected_commands": 0,
-          "deals_started": 17,
-          "deals_settled": 0
+          "deals_settled": 5
         }
       }
     },
@@ -632,14 +632,14 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 801680000,
-      "investor_cash_cents": 349280000,
+      "investor_net_worth_cents": 776080000,
+      "investor_cash_cents": 429280000,
       "controlled_firms": 1,
-      "dissolved": 7,
-      "past_due": 0,
+      "dissolved": 8,
+      "past_due": 3,
       "weeks_with_past_due": 0,
-      "deals_settled": 13,
-      "canonical_hash": "e5505336571b93a7418d362e143e4ee20bf5aeda0dab259b84d0f764e7f0603e",
+      "deals_settled": 31,
+      "canonical_hash": "9043f0685f5bd290f1bca755c35adb286eb292be30874d94418d7c70629a2cfb",
       "policy": {
         "attempted": 393,
         "accepted": 393,
@@ -654,10 +654,10 @@
       "archetypes": {
         "brand_builder": {
           "firms": 6,
-          "wins": 4,
-          "losses": 2,
-          "dissolved": 2,
-          "accepted_commands": 2935,
+          "wins": 1,
+          "losses": 5,
+          "dissolved": 3,
+          "accepted_commands": 6264,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
@@ -667,40 +667,40 @@
           "wins": 4,
           "losses": 3,
           "dissolved": 1,
-          "accepted_commands": 1576,
+          "accepted_commands": 5021,
           "rejected_commands": 0,
-          "deals_started": 64,
-          "deals_settled": 13
+          "deals_started": 61,
+          "deals_settled": 22
         },
         "cost_leader": {
           "firms": 7,
-          "wins": 5,
-          "losses": 2,
-          "dissolved": 0,
-          "accepted_commands": 1983,
+          "wins": 4,
+          "losses": 3,
+          "dissolved": 2,
+          "accepted_commands": 2435,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "technologist": {
           "firms": 6,
-          "wins": 4,
-          "losses": 2,
+          "wins": 3,
+          "losses": 3,
           "dissolved": 2,
-          "accepted_commands": 307,
+          "accepted_commands": 1959,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "vulture": {
           "firms": 4,
-          "wins": 0,
-          "losses": 4,
-          "dissolved": 2,
-          "accepted_commands": 1384,
+          "wins": 3,
+          "losses": 1,
+          "dissolved": 0,
+          "accepted_commands": 372,
           "rejected_commands": 0,
-          "deals_started": 4,
-          "deals_settled": 0
+          "deals_started": 27,
+          "deals_settled": 9
         }
       }
     },
@@ -709,14 +709,14 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 642680000,
-      "investor_cash_cents": 349280000,
+      "investor_net_worth_cents": 768680000,
+      "investor_cash_cents": 484280000,
       "controlled_firms": 1,
-      "dissolved": 10,
-      "past_due": 2,
+      "dissolved": 5,
+      "past_due": 5,
       "weeks_with_past_due": 0,
-      "deals_settled": 21,
-      "canonical_hash": "7d79250e79ef03f26f251feae25a9f23017e0dd0750e4e51aea215454c2a0218",
+      "deals_settled": 16,
+      "canonical_hash": "4e677daa9501d40e60d6cf8b19ac9d21b38e7f8d898aaf14c77eb7ee1a30760f",
       "policy": {
         "attempted": 392,
         "accepted": 392,
@@ -731,53 +731,53 @@
       "archetypes": {
         "brand_builder": {
           "firms": 6,
-          "wins": 3,
-          "losses": 3,
+          "wins": 2,
+          "losses": 4,
           "dissolved": 3,
-          "accepted_commands": 3928,
+          "accepted_commands": 6969,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "consolidator": {
           "firms": 7,
-          "wins": 3,
-          "losses": 4,
-          "dissolved": 2,
-          "accepted_commands": 3545,
-          "rejected_commands": 0,
-          "deals_started": 83,
-          "deals_settled": 18
-        },
-        "cost_leader": {
-          "firms": 7,
           "wins": 4,
           "losses": 3,
           "dissolved": 1,
-          "accepted_commands": 1481,
+          "accepted_commands": 3810,
+          "rejected_commands": 0,
+          "deals_started": 36,
+          "deals_settled": 15
+        },
+        "cost_leader": {
+          "firms": 7,
+          "wins": 6,
+          "losses": 1,
+          "dissolved": 0,
+          "accepted_commands": 830,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "technologist": {
           "firms": 6,
-          "wins": 4,
-          "losses": 2,
+          "wins": 3,
+          "losses": 3,
           "dissolved": 1,
-          "accepted_commands": 2785,
+          "accepted_commands": 4028,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "vulture": {
           "firms": 4,
-          "wins": 1,
-          "losses": 3,
-          "dissolved": 3,
-          "accepted_commands": 2148,
+          "wins": 3,
+          "losses": 1,
+          "dissolved": 0,
+          "accepted_commands": 2586,
           "rejected_commands": 0,
-          "deals_started": 29,
-          "deals_settled": 3
+          "deals_started": 6,
+          "deals_settled": 1
         }
       }
     },
@@ -786,17 +786,17 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 802280000,
-      "investor_cash_cents": 349280000,
+      "investor_net_worth_cents": 762880000,
+      "investor_cash_cents": 474280000,
       "controlled_firms": 1,
-      "dissolved": 6,
-      "past_due": 2,
+      "dissolved": 8,
+      "past_due": 5,
       "weeks_with_past_due": 0,
-      "deals_settled": 16,
-      "canonical_hash": "abc34f6ac895d405845501affef9619af7a3e7e5252f74bd4f4700b40f168ebb",
+      "deals_settled": 29,
+      "canonical_hash": "86bbbf0d5aef7f7cecc4218d857e713408e6bf4aa4f616a7e6be34b3b0b2808e",
       "policy": {
-        "attempted": 392,
-        "accepted": 392,
+        "attempted": 393,
+        "accepted": 393,
         "rejected": 0,
         "rejections": {}
       },
@@ -808,10 +808,10 @@
       "archetypes": {
         "brand_builder": {
           "firms": 6,
-          "wins": 3,
-          "losses": 3,
-          "dissolved": 2,
-          "accepted_commands": 2939,
+          "wins": 1,
+          "losses": 5,
+          "dissolved": 3,
+          "accepted_commands": 6798,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
@@ -821,27 +821,27 @@
           "wins": 5,
           "losses": 2,
           "dissolved": 1,
-          "accepted_commands": 2548,
+          "accepted_commands": 4246,
           "rejected_commands": 0,
-          "deals_started": 68,
-          "deals_settled": 16
+          "deals_started": 56,
+          "deals_settled": 23
         },
         "cost_leader": {
           "firms": 7,
-          "wins": 5,
-          "losses": 2,
-          "dissolved": 0,
-          "accepted_commands": 960,
+          "wins": 3,
+          "losses": 4,
+          "dissolved": 2,
+          "accepted_commands": 540,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "technologist": {
           "firms": 6,
-          "wins": 4,
-          "losses": 2,
-          "dissolved": 1,
-          "accepted_commands": 1758,
+          "wins": 3,
+          "losses": 3,
+          "dissolved": 2,
+          "accepted_commands": 1958,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
@@ -850,11 +850,11 @@
           "firms": 4,
           "wins": 1,
           "losses": 3,
-          "dissolved": 2,
-          "accepted_commands": 1513,
+          "dissolved": 0,
+          "accepted_commands": 1103,
           "rejected_commands": 0,
-          "deals_started": 14,
-          "deals_settled": 0
+          "deals_started": 17,
+          "deals_settled": 6
         }
       }
     },
@@ -863,17 +863,17 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 879680000,
-      "investor_cash_cents": 349280000,
+      "investor_net_worth_cents": 701880000,
+      "investor_cash_cents": 494280000,
       "controlled_firms": 1,
       "dissolved": 9,
-      "past_due": 5,
+      "past_due": 2,
       "weeks_with_past_due": 0,
-      "deals_settled": 25,
-      "canonical_hash": "ca7b1bf4b9b22ad96ca8fe9831f743de1f4b0b815a6ac490c606d8aa20ada69b",
+      "deals_settled": 28,
+      "canonical_hash": "cab6505443fab9c72b183affaf7b93157559c9c1346dd6644f1c9de2578baad0",
       "policy": {
-        "attempted": 392,
-        "accepted": 392,
+        "attempted": 395,
+        "accepted": 395,
         "rejected": 0,
         "rejections": {}
       },
@@ -888,50 +888,50 @@
           "wins": 1,
           "losses": 5,
           "dissolved": 4,
-          "accepted_commands": 3952,
+          "accepted_commands": 4775,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "consolidator": {
           "firms": 7,
-          "wins": 5,
-          "losses": 2,
-          "dissolved": 1,
-          "accepted_commands": 1989,
-          "rejected_commands": 0,
-          "deals_started": 66,
-          "deals_settled": 22
-        },
-        "cost_leader": {
-          "firms": 7,
           "wins": 4,
           "losses": 3,
           "dissolved": 1,
-          "accepted_commands": 2319,
+          "accepted_commands": 4230,
+          "rejected_commands": 0,
+          "deals_started": 51,
+          "deals_settled": 24
+        },
+        "cost_leader": {
+          "firms": 7,
+          "wins": 3,
+          "losses": 4,
+          "dissolved": 3,
+          "accepted_commands": 630,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "technologist": {
           "firms": 6,
-          "wins": 3,
-          "losses": 3,
-          "dissolved": 1,
-          "accepted_commands": 2598,
+          "wins": 4,
+          "losses": 2,
+          "dissolved": 0,
+          "accepted_commands": 3212,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "vulture": {
           "firms": 4,
-          "wins": 2,
-          "losses": 2,
-          "dissolved": 2,
-          "accepted_commands": 1306,
+          "wins": 3,
+          "losses": 1,
+          "dissolved": 1,
+          "accepted_commands": 198,
           "rejected_commands": 0,
-          "deals_started": 22,
-          "deals_settled": 3
+          "deals_started": 12,
+          "deals_settled": 4
         }
       }
     },
@@ -940,91 +940,14 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 423680000,
-      "investor_cash_cents": 349280000,
+      "investor_net_worth_cents": 790680000,
+      "investor_cash_cents": 449280000,
       "controlled_firms": 1,
-      "dissolved": 4,
+      "dissolved": 8,
       "past_due": 3,
       "weeks_with_past_due": 0,
-      "deals_settled": 17,
-      "canonical_hash": "494f4002fd7e714a392d668a2480303b33327fb0862dbb7523cd78278e911d59",
-      "policy": {
-        "attempted": 392,
-        "accepted": 392,
-        "rejected": 0,
-        "rejections": {}
-      },
-      "invariants": {
-        "ledger_balanced": true,
-        "negative_cash": 0,
-        "negative_stock": 0
-      },
-      "archetypes": {
-        "brand_builder": {
-          "firms": 6,
-          "wins": 3,
-          "losses": 3,
-          "dissolved": 2,
-          "accepted_commands": 4375,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "consolidator": {
-          "firms": 7,
-          "wins": 4,
-          "losses": 3,
-          "dissolved": 0,
-          "accepted_commands": 3997,
-          "rejected_commands": 0,
-          "deals_started": 84,
-          "deals_settled": 14
-        },
-        "cost_leader": {
-          "firms": 7,
-          "wins": 3,
-          "losses": 4,
-          "dissolved": 1,
-          "accepted_commands": 1840,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "technologist": {
-          "firms": 6,
-          "wins": 5,
-          "losses": 1,
-          "dissolved": 0,
-          "accepted_commands": 355,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "vulture": {
-          "firms": 4,
-          "wins": 2,
-          "losses": 2,
-          "dissolved": 1,
-          "accepted_commands": 1537,
-          "rejected_commands": 0,
-          "deals_started": 34,
-          "deals_settled": 3
-        }
-      }
-    },
-    {
-      "seed": 14,
-      "final_week": 1560,
-      "paused": null,
-      "score": null,
-      "investor_net_worth_cents": 760880000,
-      "investor_cash_cents": 349280000,
-      "controlled_firms": 1,
-      "dissolved": 6,
-      "past_due": 4,
-      "weeks_with_past_due": 0,
-      "deals_settled": 24,
-      "canonical_hash": "671f3d83656b852cdf9e52a02d552dce8954a827ee8b1c12feee270953e71c81",
+      "deals_settled": 37,
+      "canonical_hash": "0fd1a9fa1e698743b0993f1a331f90a1bbe99919b0f37d04ec36735a846253de",
       "policy": {
         "attempted": 392,
         "accepted": 392,
@@ -1042,7 +965,7 @@
           "wins": 3,
           "losses": 3,
           "dissolved": 3,
-          "accepted_commands": 4492,
+          "accepted_commands": 5901,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
@@ -1051,18 +974,95 @@
           "firms": 7,
           "wins": 4,
           "losses": 3,
+          "dissolved": 3,
+          "accepted_commands": 2339,
+          "rejected_commands": 0,
+          "deals_started": 66,
+          "deals_settled": 30
+        },
+        "cost_leader": {
+          "firms": 7,
+          "wins": 5,
+          "losses": 2,
           "dissolved": 0,
-          "accepted_commands": 6431,
-          "rejected_commands": 4,
-          "deals_started": 40,
-          "deals_settled": 18
+          "accepted_commands": 1856,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "technologist": {
+          "firms": 6,
+          "wins": 4,
+          "losses": 2,
+          "dissolved": 1,
+          "accepted_commands": 2654,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "vulture": {
+          "firms": 4,
+          "wins": 3,
+          "losses": 1,
+          "dissolved": 1,
+          "accepted_commands": 496,
+          "rejected_commands": 0,
+          "deals_started": 34,
+          "deals_settled": 7
+        }
+      }
+    },
+    {
+      "seed": 14,
+      "final_week": 1560,
+      "paused": null,
+      "score": null,
+      "investor_net_worth_cents": 479280000,
+      "investor_cash_cents": 479280000,
+      "controlled_firms": 0,
+      "dissolved": 11,
+      "past_due": 0,
+      "weeks_with_past_due": 4,
+      "deals_settled": 33,
+      "canonical_hash": "2d46cdcefe91c982a062f019d307d1568b3577a0b9f48e38055cd11cba03e8fd",
+      "policy": {
+        "attempted": 369,
+        "accepted": 369,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      },
+      "archetypes": {
+        "brand_builder": {
+          "firms": 6,
+          "wins": 2,
+          "losses": 4,
+          "dissolved": 4,
+          "accepted_commands": 7435,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "consolidator": {
+          "firms": 7,
+          "wins": 4,
+          "losses": 3,
+          "dissolved": 2,
+          "accepted_commands": 2543,
+          "rejected_commands": 0,
+          "deals_started": 49,
+          "deals_settled": 27
         },
         "cost_leader": {
           "firms": 7,
           "wins": 3,
           "losses": 4,
           "dissolved": 2,
-          "accepted_commands": 2734,
+          "accepted_commands": 3039,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
@@ -1072,7 +1072,7 @@
           "wins": 5,
           "losses": 1,
           "dissolved": 0,
-          "accepted_commands": 458,
+          "accepted_commands": 1489,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
@@ -1081,10 +1081,10 @@
           "firms": 4,
           "wins": 2,
           "losses": 2,
-          "dissolved": 1,
-          "accepted_commands": 2012,
+          "dissolved": 2,
+          "accepted_commands": 328,
           "rejected_commands": 0,
-          "deals_started": 29,
+          "deals_started": 22,
           "deals_settled": 6
         }
       }
@@ -1094,14 +1094,399 @@
       "final_week": 1560,
       "paused": null,
       "score": null,
-      "investor_net_worth_cents": 761480000,
-      "investor_cash_cents": 349280000,
+      "investor_net_worth_cents": 746180000,
+      "investor_cash_cents": 446780000,
       "controlled_firms": 1,
-      "dissolved": 8,
-      "past_due": 4,
+      "dissolved": 7,
+      "past_due": 2,
       "weeks_with_past_due": 0,
-      "deals_settled": 20,
-      "canonical_hash": "736747aa6efb5f4922722ca85503531f9c3832a5d6692184a7c9c4e10b300e3d",
+      "deals_settled": 22,
+      "canonical_hash": "61e70938267e5fd3dca0d9e415fcbd8841fe99a6228a4d0ab00935a5f2da253e",
+      "policy": {
+        "attempted": 393,
+        "accepted": 393,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      },
+      "archetypes": {
+        "brand_builder": {
+          "firms": 6,
+          "wins": 3,
+          "losses": 3,
+          "dissolved": 2,
+          "accepted_commands": 5712,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "consolidator": {
+          "firms": 7,
+          "wins": 3,
+          "losses": 4,
+          "dissolved": 3,
+          "accepted_commands": 5469,
+          "rejected_commands": 0,
+          "deals_started": 49,
+          "deals_settled": 18
+        },
+        "cost_leader": {
+          "firms": 7,
+          "wins": 5,
+          "losses": 2,
+          "dissolved": 0,
+          "accepted_commands": 1999,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "technologist": {
+          "firms": 6,
+          "wins": 4,
+          "losses": 2,
+          "dissolved": 1,
+          "accepted_commands": 2701,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "vulture": {
+          "firms": 4,
+          "wins": 3,
+          "losses": 1,
+          "dissolved": 1,
+          "accepted_commands": 236,
+          "rejected_commands": 0,
+          "deals_started": 19,
+          "deals_settled": 4
+        }
+      }
+    },
+    {
+      "seed": 16,
+      "final_week": 1560,
+      "paused": null,
+      "score": null,
+      "investor_net_worth_cents": 761980000,
+      "investor_cash_cents": 496780000,
+      "controlled_firms": 1,
+      "dissolved": 7,
+      "past_due": 3,
+      "weeks_with_past_due": 0,
+      "deals_settled": 21,
+      "canonical_hash": "37397986440cd97662d1c470577cc319f9ba7cd47eac70e43d934fc054265436",
+      "policy": {
+        "attempted": 393,
+        "accepted": 393,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      },
+      "archetypes": {
+        "brand_builder": {
+          "firms": 6,
+          "wins": 2,
+          "losses": 4,
+          "dissolved": 2,
+          "accepted_commands": 8955,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "consolidator": {
+          "firms": 7,
+          "wins": 4,
+          "losses": 3,
+          "dissolved": 2,
+          "accepted_commands": 2365,
+          "rejected_commands": 0,
+          "deals_started": 44,
+          "deals_settled": 18
+        },
+        "cost_leader": {
+          "firms": 7,
+          "wins": 5,
+          "losses": 2,
+          "dissolved": 0,
+          "accepted_commands": 1152,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "technologist": {
+          "firms": 6,
+          "wins": 2,
+          "losses": 4,
+          "dissolved": 2,
+          "accepted_commands": 3381,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "vulture": {
+          "firms": 4,
+          "wins": 3,
+          "losses": 1,
+          "dissolved": 1,
+          "accepted_commands": 799,
+          "rejected_commands": 0,
+          "deals_started": 14,
+          "deals_settled": 3
+        }
+      }
+    },
+    {
+      "seed": 17,
+      "final_week": 1560,
+      "paused": null,
+      "score": null,
+      "investor_net_worth_cents": 761980000,
+      "investor_cash_cents": 451780000,
+      "controlled_firms": 1,
+      "dissolved": 14,
+      "past_due": 3,
+      "weeks_with_past_due": 0,
+      "deals_settled": 33,
+      "canonical_hash": "77c2d3e4a72d66fb3250438e582f0cc4a0d70d31e25dd1e7840377d428fded1b",
+      "policy": {
+        "attempted": 392,
+        "accepted": 392,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      },
+      "archetypes": {
+        "brand_builder": {
+          "firms": 6,
+          "wins": 0,
+          "losses": 6,
+          "dissolved": 5,
+          "accepted_commands": 5458,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "consolidator": {
+          "firms": 7,
+          "wins": 2,
+          "losses": 5,
+          "dissolved": 2,
+          "accepted_commands": 5044,
+          "rejected_commands": 0,
+          "deals_started": 50,
+          "deals_settled": 27
+        },
+        "cost_leader": {
+          "firms": 7,
+          "wins": 5,
+          "losses": 2,
+          "dissolved": 1,
+          "accepted_commands": 324,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "technologist": {
+          "firms": 6,
+          "wins": 0,
+          "losses": 6,
+          "dissolved": 5,
+          "accepted_commands": 2202,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "vulture": {
+          "firms": 4,
+          "wins": 1,
+          "losses": 3,
+          "dissolved": 1,
+          "accepted_commands": 1756,
+          "rejected_commands": 0,
+          "deals_started": 18,
+          "deals_settled": 6
+        }
+      }
+    },
+    {
+      "seed": 18,
+      "final_week": 1560,
+      "paused": null,
+      "score": null,
+      "investor_net_worth_cents": 758380000,
+      "investor_cash_cents": 466780000,
+      "controlled_firms": 1,
+      "dissolved": 14,
+      "past_due": 1,
+      "weeks_with_past_due": 0,
+      "deals_settled": 40,
+      "canonical_hash": "8110b1b459b5509b60593a96c0ac91fc01caebea6ab1a83f4050f3a956c087e6",
+      "policy": {
+        "attempted": 392,
+        "accepted": 392,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      },
+      "archetypes": {
+        "brand_builder": {
+          "firms": 6,
+          "wins": 1,
+          "losses": 5,
+          "dissolved": 5,
+          "accepted_commands": 7637,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "consolidator": {
+          "firms": 7,
+          "wins": 4,
+          "losses": 3,
+          "dissolved": 3,
+          "accepted_commands": 3347,
+          "rejected_commands": 0,
+          "deals_started": 73,
+          "deals_settled": 32
+        },
+        "cost_leader": {
+          "firms": 7,
+          "wins": 4,
+          "losses": 3,
+          "dissolved": 1,
+          "accepted_commands": 2078,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "technologist": {
+          "firms": 6,
+          "wins": 3,
+          "losses": 3,
+          "dissolved": 3,
+          "accepted_commands": 611,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "vulture": {
+          "firms": 4,
+          "wins": 2,
+          "losses": 2,
+          "dissolved": 2,
+          "accepted_commands": 454,
+          "rejected_commands": 0,
+          "deals_started": 13,
+          "deals_settled": 8
+        }
+      }
+    },
+    {
+      "seed": 19,
+      "final_week": 1560,
+      "paused": null,
+      "score": null,
+      "investor_net_worth_cents": 775180000,
+      "investor_cash_cents": 436780000,
+      "controlled_firms": 1,
+      "dissolved": 11,
+      "past_due": 3,
+      "weeks_with_past_due": 0,
+      "deals_settled": 26,
+      "canonical_hash": "cc926f0d668c7f91d79ec3a998c08975cc76f563a3923ea79baf07df731bed75",
+      "policy": {
+        "attempted": 395,
+        "accepted": 395,
+        "rejected": 0,
+        "rejections": {}
+      },
+      "invariants": {
+        "ledger_balanced": true,
+        "negative_cash": 0,
+        "negative_stock": 0
+      },
+      "archetypes": {
+        "brand_builder": {
+          "firms": 6,
+          "wins": 4,
+          "losses": 2,
+          "dissolved": 0,
+          "accepted_commands": 8754,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "consolidator": {
+          "firms": 7,
+          "wins": 3,
+          "losses": 4,
+          "dissolved": 4,
+          "accepted_commands": 2692,
+          "rejected_commands": 0,
+          "deals_started": 42,
+          "deals_settled": 24
+        },
+        "cost_leader": {
+          "firms": 7,
+          "wins": 4,
+          "losses": 3,
+          "dissolved": 2,
+          "accepted_commands": 402,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "technologist": {
+          "firms": 6,
+          "wins": 0,
+          "losses": 6,
+          "dissolved": 3,
+          "accepted_commands": 2330,
+          "rejected_commands": 0,
+          "deals_started": 0,
+          "deals_settled": 0
+        },
+        "vulture": {
+          "firms": 4,
+          "wins": 2,
+          "losses": 2,
+          "dissolved": 2,
+          "accepted_commands": 384,
+          "rejected_commands": 0,
+          "deals_started": 10,
+          "deals_settled": 2
+        }
+      }
+    },
+    {
+      "seed": 20,
+      "final_week": 1560,
+      "paused": null,
+      "score": null,
+      "investor_net_worth_cents": 752280000,
+      "investor_cash_cents": 464280000,
+      "controlled_firms": 1,
+      "dissolved": 12,
+      "past_due": 1,
+      "weeks_with_past_due": 0,
+      "deals_settled": 34,
+      "canonical_hash": "888938d082d98bb11d293669289eadd0dec291a1c0ffff26bbc903a41549d0ac",
       "policy": {
         "attempted": 392,
         "accepted": 392,
@@ -1119,435 +1504,50 @@
           "wins": 2,
           "losses": 4,
           "dissolved": 4,
-          "accepted_commands": 3135,
+          "accepted_commands": 5979,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "consolidator": {
           "firms": 7,
-          "wins": 4,
-          "losses": 3,
-          "dissolved": 0,
-          "accepted_commands": 9119,
-          "rejected_commands": 4,
-          "deals_started": 79,
-          "deals_settled": 15
+          "wins": 3,
+          "losses": 4,
+          "dissolved": 2,
+          "accepted_commands": 2660,
+          "rejected_commands": 0,
+          "deals_started": 60,
+          "deals_settled": 29
         },
         "cost_leader": {
           "firms": 7,
-          "wins": 3,
-          "losses": 4,
-          "dissolved": 1,
-          "accepted_commands": 2029,
+          "wins": 4,
+          "losses": 3,
+          "dissolved": 2,
+          "accepted_commands": 401,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "technologist": {
           "firms": 6,
-          "wins": 5,
-          "losses": 1,
-          "dissolved": 0,
-          "accepted_commands": 478,
+          "wins": 3,
+          "losses": 3,
+          "dissolved": 3,
+          "accepted_commands": 2685,
           "rejected_commands": 0,
           "deals_started": 0,
           "deals_settled": 0
         },
         "vulture": {
           "firms": 4,
-          "wins": 1,
-          "losses": 3,
-          "dissolved": 3,
-          "accepted_commands": 2508,
+          "wins": 3,
+          "losses": 1,
+          "dissolved": 1,
+          "accepted_commands": 467,
           "rejected_commands": 0,
-          "deals_started": 32,
+          "deals_started": 20,
           "deals_settled": 5
-        }
-      }
-    },
-    {
-      "seed": 16,
-      "final_week": 1560,
-      "paused": null,
-      "score": null,
-      "investor_net_worth_cents": 802280000,
-      "investor_cash_cents": 349280000,
-      "controlled_firms": 1,
-      "dissolved": 7,
-      "past_due": 3,
-      "weeks_with_past_due": 0,
-      "deals_settled": 14,
-      "canonical_hash": "ac5bdef758702417999f395df0aee9390afee2d6574da3a8be6ddf672e1b2a58",
-      "policy": {
-        "attempted": 392,
-        "accepted": 392,
-        "rejected": 0,
-        "rejections": {}
-      },
-      "invariants": {
-        "ledger_balanced": true,
-        "negative_cash": 0,
-        "negative_stock": 0
-      },
-      "archetypes": {
-        "brand_builder": {
-          "firms": 6,
-          "wins": 3,
-          "losses": 3,
-          "dissolved": 3,
-          "accepted_commands": 3793,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "consolidator": {
-          "firms": 7,
-          "wins": 3,
-          "losses": 4,
-          "dissolved": 3,
-          "accepted_commands": 900,
-          "rejected_commands": 0,
-          "deals_started": 45,
-          "deals_settled": 12
-        },
-        "cost_leader": {
-          "firms": 7,
-          "wins": 4,
-          "losses": 3,
-          "dissolved": 0,
-          "accepted_commands": 1743,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "technologist": {
-          "firms": 6,
-          "wins": 5,
-          "losses": 1,
-          "dissolved": 0,
-          "accepted_commands": 1173,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "vulture": {
-          "firms": 4,
-          "wins": 2,
-          "losses": 2,
-          "dissolved": 1,
-          "accepted_commands": 1401,
-          "rejected_commands": 0,
-          "deals_started": 15,
-          "deals_settled": 2
-        }
-      }
-    },
-    {
-      "seed": 17,
-      "final_week": 1560,
-      "paused": null,
-      "score": null,
-      "investor_net_worth_cents": 768680000,
-      "investor_cash_cents": 349280000,
-      "controlled_firms": 1,
-      "dissolved": 6,
-      "past_due": 3,
-      "weeks_with_past_due": 0,
-      "deals_settled": 12,
-      "canonical_hash": "35e38bbcf626e27fbef6138713650efa1e4a4eb1561b2ee3cca43b98360ec860",
-      "policy": {
-        "attempted": 392,
-        "accepted": 392,
-        "rejected": 0,
-        "rejections": {}
-      },
-      "invariants": {
-        "ledger_balanced": true,
-        "negative_cash": 0,
-        "negative_stock": 0
-      },
-      "archetypes": {
-        "brand_builder": {
-          "firms": 6,
-          "wins": 3,
-          "losses": 3,
-          "dissolved": 1,
-          "accepted_commands": 4499,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "consolidator": {
-          "firms": 7,
-          "wins": 4,
-          "losses": 3,
-          "dissolved": 1,
-          "accepted_commands": 2378,
-          "rejected_commands": 0,
-          "deals_started": 148,
-          "deals_settled": 12
-        },
-        "cost_leader": {
-          "firms": 7,
-          "wins": 4,
-          "losses": 3,
-          "dissolved": 1,
-          "accepted_commands": 1916,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "technologist": {
-          "firms": 6,
-          "wins": 4,
-          "losses": 2,
-          "dissolved": 1,
-          "accepted_commands": 434,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "vulture": {
-          "firms": 4,
-          "wins": 0,
-          "losses": 4,
-          "dissolved": 2,
-          "accepted_commands": 1296,
-          "rejected_commands": 0,
-          "deals_started": 16,
-          "deals_settled": 0
-        }
-      }
-    },
-    {
-      "seed": 18,
-      "final_week": 1560,
-      "paused": null,
-      "score": null,
-      "investor_net_worth_cents": 751880000,
-      "investor_cash_cents": 349280000,
-      "controlled_firms": 1,
-      "dissolved": 7,
-      "past_due": 1,
-      "weeks_with_past_due": 0,
-      "deals_settled": 27,
-      "canonical_hash": "f1aa806d2eaab80bfed784be58403b910a9773d4b7a31e5062193b0281e147b0",
-      "policy": {
-        "attempted": 392,
-        "accepted": 392,
-        "rejected": 0,
-        "rejections": {}
-      },
-      "invariants": {
-        "ledger_balanced": true,
-        "negative_cash": 0,
-        "negative_stock": 0
-      },
-      "archetypes": {
-        "brand_builder": {
-          "firms": 6,
-          "wins": 2,
-          "losses": 4,
-          "dissolved": 3,
-          "accepted_commands": 5859,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "consolidator": {
-          "firms": 7,
-          "wins": 3,
-          "losses": 4,
-          "dissolved": 0,
-          "accepted_commands": 4238,
-          "rejected_commands": 0,
-          "deals_started": 80,
-          "deals_settled": 22
-        },
-        "cost_leader": {
-          "firms": 7,
-          "wins": 3,
-          "losses": 4,
-          "dissolved": 2,
-          "accepted_commands": 2744,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "technologist": {
-          "firms": 6,
-          "wins": 5,
-          "losses": 1,
-          "dissolved": 0,
-          "accepted_commands": 464,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "vulture": {
-          "firms": 4,
-          "wins": 1,
-          "losses": 3,
-          "dissolved": 2,
-          "accepted_commands": 1932,
-          "rejected_commands": 0,
-          "deals_started": 34,
-          "deals_settled": 5
-        }
-      }
-    },
-    {
-      "seed": 19,
-      "final_week": 1560,
-      "paused": null,
-      "score": null,
-      "investor_net_worth_cents": 349280000,
-      "investor_cash_cents": 349280000,
-      "controlled_firms": 0,
-      "dissolved": 10,
-      "past_due": 2,
-      "weeks_with_past_due": 4,
-      "deals_settled": 16,
-      "canonical_hash": "84f10fe3efbdb1cded09c846bfc0ed4491e1a6169aafc926119968dbcf745c46",
-      "policy": {
-        "attempted": 364,
-        "accepted": 364,
-        "rejected": 0,
-        "rejections": {}
-      },
-      "invariants": {
-        "ledger_balanced": true,
-        "negative_cash": 0,
-        "negative_stock": 0
-      },
-      "archetypes": {
-        "brand_builder": {
-          "firms": 6,
-          "wins": 3,
-          "losses": 3,
-          "dissolved": 3,
-          "accepted_commands": 5774,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "consolidator": {
-          "firms": 7,
-          "wins": 4,
-          "losses": 3,
-          "dissolved": 2,
-          "accepted_commands": 1438,
-          "rejected_commands": 0,
-          "deals_started": 61,
-          "deals_settled": 15
-        },
-        "cost_leader": {
-          "firms": 7,
-          "wins": 3,
-          "losses": 4,
-          "dissolved": 1,
-          "accepted_commands": 2981,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "technologist": {
-          "firms": 6,
-          "wins": 5,
-          "losses": 1,
-          "dissolved": 1,
-          "accepted_commands": 408,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "vulture": {
-          "firms": 4,
-          "wins": 1,
-          "losses": 3,
-          "dissolved": 2,
-          "accepted_commands": 2681,
-          "rejected_commands": 0,
-          "deals_started": 13,
-          "deals_settled": 1
-        }
-      }
-    },
-    {
-      "seed": 20,
-      "final_week": 1560,
-      "paused": null,
-      "score": null,
-      "investor_net_worth_cents": 722480000,
-      "investor_cash_cents": 349280000,
-      "controlled_firms": 1,
-      "dissolved": 5,
-      "past_due": 0,
-      "weeks_with_past_due": 0,
-      "deals_settled": 20,
-      "canonical_hash": "44e92da7092f42247847c3ecac4b4669dc1a655bf1471104f6df2e389fb15de2",
-      "policy": {
-        "attempted": 392,
-        "accepted": 392,
-        "rejected": 0,
-        "rejections": {}
-      },
-      "invariants": {
-        "ledger_balanced": true,
-        "negative_cash": 0,
-        "negative_stock": 0
-      },
-      "archetypes": {
-        "brand_builder": {
-          "firms": 6,
-          "wins": 3,
-          "losses": 3,
-          "dissolved": 2,
-          "accepted_commands": 3550,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "consolidator": {
-          "firms": 7,
-          "wins": 5,
-          "losses": 2,
-          "dissolved": 0,
-          "accepted_commands": 4194,
-          "rejected_commands": 4,
-          "deals_started": 80,
-          "deals_settled": 18
-        },
-        "cost_leader": {
-          "firms": 7,
-          "wins": 4,
-          "losses": 3,
-          "dissolved": 0,
-          "accepted_commands": 2540,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "technologist": {
-          "firms": 6,
-          "wins": 5,
-          "losses": 1,
-          "dissolved": 1,
-          "accepted_commands": 243,
-          "rejected_commands": 0,
-          "deals_started": 0,
-          "deals_settled": 0
-        },
-        "vulture": {
-          "firms": 4,
-          "wins": 1,
-          "losses": 3,
-          "dissolved": 2,
-          "accepted_commands": 4936,
-          "rejected_commands": 0,
-          "deals_started": 23,
-          "deals_settled": 2
         }
       }
     }
@@ -1562,30 +1562,30 @@
     },
     "deals_settled": {
       "count": 20,
-      "min": 12,
-      "median": 16,
-      "max": 27,
-      "mean": 17
+      "min": 16,
+      "median": 30,
+      "max": 40,
+      "mean": 29
     },
     "dissolved": {
       "count": 20,
-      "min": 4,
-      "median": 8,
+      "min": 5,
+      "median": 9,
       "max": 14,
-      "mean": 8
+      "mean": 9
     },
     "investor_net_worth_cents": {
       "count": 20,
-      "min": 349280000,
-      "median": 777680000,
-      "max": 879680000,
-      "mean": 703250000
+      "min": 421780000,
+      "median": 761980000,
+      "max": 790680000,
+      "mean": 723755000
     },
     "past_due": {
       "count": 20,
       "min": 0,
-      "median": 2,
-      "max": 5,
+      "median": 3,
+      "max": 7,
       "mean": 2
     },
     "weeks_with_past_due": {
@@ -1599,61 +1599,61 @@
   "archetypes": {
     "brand_builder": {
       "firms": 120,
-      "wins": 59,
-      "losses": 61,
-      "dissolved": 52,
-      "accepted_commands": 76962,
+      "wins": 36,
+      "losses": 84,
+      "dissolved": 61,
+      "accepted_commands": 127905,
       "rejected_commands": 0,
       "deals_started": 0,
       "deals_settled": 0
     },
     "consolidator": {
       "firms": 140,
-      "wins": 79,
-      "losses": 61,
-      "dissolved": 27,
-      "accepted_commands": 67677,
-      "rejected_commands": 12,
-      "deals_started": 1469,
-      "deals_settled": 317
+      "wins": 72,
+      "losses": 68,
+      "dissolved": 39,
+      "accepted_commands": 73522,
+      "rejected_commands": 0,
+      "deals_started": 1042,
+      "deals_settled": 463
     },
     "cost_leader": {
       "firms": 140,
-      "wins": 75,
-      "losses": 65,
-      "dissolved": 15,
-      "accepted_commands": 44126,
+      "wins": 76,
+      "losses": 64,
+      "dissolved": 26,
+      "accepted_commands": 26355,
       "rejected_commands": 0,
       "deals_started": 0,
       "deals_settled": 0
     },
     "technologist": {
       "firms": 120,
-      "wins": 91,
-      "losses": 29,
-      "dissolved": 18,
-      "accepted_commands": 15923,
+      "wins": 60,
+      "losses": 60,
+      "dissolved": 40,
+      "accepted_commands": 49349,
       "rejected_commands": 0,
       "deals_started": 0,
       "deals_settled": 0
     },
     "vulture": {
       "firms": 80,
-      "wins": 21,
-      "losses": 59,
-      "dissolved": 46,
-      "accepted_commands": 40649,
+      "wins": 44,
+      "losses": 36,
+      "dissolved": 22,
+      "accepted_commands": 18000,
       "rejected_commands": 0,
-      "deals_started": 368,
-      "deals_settled": 38
+      "deals_started": 450,
+      "deals_settled": 120
     }
   },
   "outliers": [
     {
-      "seed": 5,
+      "seed": 1,
       "kind": "tukey",
       "metric": "investor_net_worth_cents",
-      "value": 349280000,
+      "value": 647480000,
       "week": 1560,
       "reason": null
     },
@@ -1661,23 +1661,15 @@
       "seed": 7,
       "kind": "tukey",
       "metric": "investor_net_worth_cents",
-      "value": 463880000,
+      "value": 421780000,
       "week": 1560,
       "reason": null
     },
     {
-      "seed": 13,
+      "seed": 14,
       "kind": "tukey",
       "metric": "investor_net_worth_cents",
-      "value": 423680000,
-      "week": 1560,
-      "reason": null
-    },
-    {
-      "seed": 19,
-      "kind": "tukey",
-      "metric": "investor_net_worth_cents",
-      "value": 349280000,
+      "value": 479280000,
       "week": 1560,
       "reason": null
     }

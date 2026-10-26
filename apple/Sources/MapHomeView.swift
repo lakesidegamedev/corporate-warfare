@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The home screen: the real map of the corridor with the company HUD over it. Tap a state to
-/// open its board; build from there. On iPad the board docks as an inspector beside the map.
+/// The home screen: the real map of the corridor with the company HUD over it. Tap a region to
+/// open its board; build or raid from there. On iPad the board docks beside the map.
 struct MapHomeView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -15,10 +15,10 @@ struct MapHomeView: View {
     var body: some View {
         ZStack(alignment: .top) {
             HStack(spacing: 0) {
-                CorridorMapView(shading: shading, layer: layer, markers: markers, selected: $selected)
+                CorridorMapView(shading: shading, layer: layer, divisions: divisionMarkers, selected: $selected)
                     .ignoresSafeArea(edges: .bottom)
-                if wide, let code = selected, let state = store.states.first(where: { $0.code == code }) {
-                    StateBoardView(state: state, onBuild: { building = code }, onClose: { selected = nil })
+                if wide, let code = selected, let board = store.boards.first(where: { $0.code == code }) {
+                    RegionBoardView(board: board, onBuild: { building = code }, onClose: { selected = nil })
                         .frame(width: 380)
                         .background(Theme.panel)
                         .overlay(alignment: .leading) { Rectangle().fill(Theme.stroke).frame(width: 1) }
@@ -27,6 +27,9 @@ struct MapHomeView: View {
             }
             VStack(spacing: 10) {
                 CompanyHUD()
+                if let objective = store.objective {
+                    BoardGoalStrip(objective: objective)
+                }
                 LayerChips(layer: $layer)
                 Spacer()
                 MapLegend(layer: layer)
@@ -39,15 +42,15 @@ struct MapHomeView: View {
         .background(Theme.ink)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: selected)
         .sheet(item: compactSelection) { item in
-            if let state = store.states.first(where: { $0.code == item.id }) {
-                StateBoardView(state: state, onBuild: { building = item.id }, onClose: { selected = nil })
+            if let board = store.boards.first(where: { $0.code == item.id }) {
+                RegionBoardView(board: board, onBuild: { building = item.id }, onClose: { selected = nil })
                     .presentationDetents([.fraction(0.5), .large])
                     .presentationBackgroundInteraction(.enabled(upThrough: .fraction(0.5)))
                     .presentationBackground(Theme.panel)
             }
         }
         .sheet(item: buildSelection) { item in
-            BuildFlowView(stateCode: item.id)
+            BuildFlowView(regionCode: item.id)
                 .environmentObject(store)
                 .presentationBackground(Theme.panel)
         }
@@ -66,32 +69,38 @@ struct MapHomeView: View {
         Binding(get: { building.map(Code.init) }, set: { building = $0?.id })
     }
 
-    private var markers: [MapMarker] {
-        store.mapPlants.map {
-            MapMarker(id: $0.handle, state: $0.region, sector: $0.industry, player: $0.player, label: $0.firmName)
+    /// The player's divisions: one circle per owned sector type in a region, merged across the
+    /// player's companies.
+    private var divisionMarkers: [DivisionMarker] {
+        let grouped = Dictionary(grouping: store.mapDivisions) { $0.region + "/" + $0.industry }
+        return grouped.values.compactMap { items in
+            guard let first = items.first else { return nil }
+            // A plant is one block; a site can hold several.
+            return DivisionMarker(region: first.region, sector: first.industry, plants: Int(items.reduce(UInt32(0)) { $0 + $1.blocks }))
         }
     }
 
-    /// 0..1 intensity per state for the active layer.
+    /// 0..1 intensity per region for the active layer.
     private var shading: [String: Double] {
         switch layer {
         case .presence:
-            let counts = Dictionary(grouping: store.mapPlants.filter(\.player), by: \.region).mapValues { Double($0.count) }
-            let top = counts.values.max() ?? 1
-            return counts.mapValues { $0 / max(top, 1) }
+            let blocks = Dictionary(grouping: store.mapDivisions, by: \.region)
+                .mapValues { Double($0.reduce(UInt32(0)) { $0 + $1.blocks }) }
+            let top = blocks.values.max() ?? 1
+            return blocks.mapValues { $0 / max(top, 1) }
         case .room:
-            let values = Dictionary(uniqueKeysWithValues: store.states.map { state in
-                (state.code, Double(state.room.reduce(Int64(0)) { $0 + $1.importLots * $1.importPriceCents }))
+            let values = Dictionary(uniqueKeysWithValues: store.boards.map { board in
+                (board.code, Double(board.room.reduce(Int64(0)) { $0 + $1.importLots * $1.importPriceCents }))
             })
             let top = values.values.max() ?? 1
             return values.mapValues { top > 0 ? $0 / top : 0 }
         case .wages:
-            let values = store.states.map { Double($0.wageIndexBps) }
+            let values = store.boards.map { Double($0.wageIndexBps) }
             let low = values.min() ?? 0
             let high = values.max() ?? 1
-            return Dictionary(uniqueKeysWithValues: store.states.map { ($0.code, (Double($0.wageIndexBps) - low) / max(high - low, 1)) })
+            return Dictionary(uniqueKeysWithValues: store.boards.map { ($0.code, (Double($0.wageIndexBps) - low) / max(high - low, 1)) })
         case .skill:
-            return Dictionary(uniqueKeysWithValues: store.states.map { ($0.code, Double($0.skillBps) / 10_000) })
+            return Dictionary(uniqueKeysWithValues: store.boards.map { ($0.code, Double($0.skillBps) / 10_000) })
         }
     }
 }
@@ -214,9 +223,9 @@ struct MapLegend: View {
 
     private var text: String {
         switch layer {
-        case .presence: return "Brighter states hold more of your plants. Gold rings mark your plants; other markers are rivals, coloured by sector."
-        case .room: return "Brighter states import more than local plants make: demand you could build into."
-        case .wages: return "Brighter states pay more. Census 2000 populations; wages are rounded circa-2000 indices."
+        case .presence: return "Each circle is one of your sector divisions in a region; the badge counts its plants. Brighter regions hold more of your capacity."
+        case .room: return "Brighter regions import more than local plants make: demand you could build into."
+        case .wages: return "Brighter regions pay more, from 2000 county incomes. Thin lines are regions, thick lines states."
         case .skill: return "Workforce skill. High skill saves inputs in skilled sectors; low skill cuts their output."
         }
     }
@@ -231,5 +240,29 @@ struct MapLegend: View {
         .background(Theme.panel.opacity(0.92), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .frame(maxWidth: 520, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The board's quarterly goal, one line over the map.
+struct BoardGoalStrip: View {
+    let objective: ObjectiveDto
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "target").foregroundStyle(Theme.gold)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(objective.title).font(.caption.weight(.semibold)).foregroundStyle(Theme.primaryText).lineLimit(1)
+                    Spacer(minLength: 6)
+                    Text("\(objective.weeksLeft) wk").font(.caption2.monospacedDigit()).foregroundStyle(Theme.secondary)
+                }
+                ProgressView(value: Double(objective.progressBps) / 10_000).tint(Theme.gold)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Theme.panel.opacity(0.92), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Board goal: \(objective.title), \(objective.progressBps / 100) percent, \(objective.weeksLeft) weeks left")
     }
 }

@@ -86,7 +86,8 @@ pub fn input_bps(world: &World, dataset: &Dataset, facility: Handle) -> i32 {
         Focus::Off => 10_000,
     };
     let (_, bonus) = condition_terms(world, dataset, facility, false);
-    (focus_bps as i64 * (10_000 - bonus) as i64 / 10_000) as i32
+    let location = crate::economy::sectors::location_input_bps(world, dataset, facility) as i64;
+    (focus_bps as i64 * (10_000 - bonus) as i64 / 10_000 * location / 10_000) as i32
 }
 
 /// Output multiplier from adverse state conditions, in basis points, never above 10000: a plant
@@ -262,8 +263,11 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
                 shrinkage += value * rate / 10_000;
             }
         }
+        // Sprawl counts divisions (sector types run in a region), as in A House Divided's
+        // per-sector rule: adding plants to an existing division never sprawls.
         let (threshold, slope) = sprawl_terms(strength, has_secondary);
-        let over = (plants.len() as i64 - threshold).max(0);
+        let divisions = crate::economy::sectors::divisions_of(world, dataset, firm).len() as i64;
+        let over = (divisions - threshold).max(0);
         let sprawl = revenue * (over / 2) * slope / 10_000;
 
         pay_outside(world, firm, overhead, "coordination overhead");

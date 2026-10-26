@@ -411,6 +411,23 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         }
     }
 
+    // Raid a rival's division in a cell the firm also operates in, when the captured capacity
+    // is worth more over three years than the campaign and the purchase price, weighted by
+    // the chance of success. Brand builders, consolidators and vultures raid most.
+    if let Some((target, region, industry, budget, value)) = best_raid(world, dataset, firm) {
+        candidates.push(Candidate {
+            score: weights[2].max(weights[4]) * value,
+            target: target.0,
+            intent: CommandIntent::RaidMarket {
+                firm,
+                target,
+                region,
+                industry,
+                budget_cents: budget,
+            },
+        });
+    }
+
     // Consolidators and vultures bid for a distressed peer: 25 percent over the public mark,
     // for just over half the votes, only if escrow and diligence leave the reserve intact and
     // the combined debt stays within 60 percent of combined assets.
@@ -652,6 +669,12 @@ fn block_contribution(
         return 0;
     };
     let revenue = template.weekly_output_lots * public_price(world, dataset, output, region);
+    let location = cw_sim::economy::sectors::location_factor_bps(
+        dataset,
+        entity.region,
+        region,
+        &template.industry,
+    ) as i64;
     let inputs: i64 = template
         .weekly_inputs_lots
         .iter()
@@ -661,7 +684,9 @@ fn block_contribution(
                 .get(id)
                 .map(|p| qty * public_price(world, dataset, *p, region))
         })
-        .sum();
+        .sum::<i64>()
+        * location
+        / 10_000;
     let wage_index = world.regions[region as usize].wage_index_bps as i64;
     let payroll: i64 = (0..3)
         .map(|tier| {
@@ -703,12 +728,22 @@ fn best_expansion(world: &World, dataset: &Dataset, firm: Handle) -> Option<(u16
             if room(world, output, region) * 5 < template.weekly_output_lots * 4 {
                 continue;
             }
-            // Three years of contribution, less capex and three years of financing at the policy
-            // rate (docs/rules/FINANCE-LABOUR-AI.md, build candidate).
-            let financing =
-                template.capex_cents * world.macro_state.policy_rate_bps as i64 * 3 / 10_000;
+            // A division runs one strategy: a different one in an existing division would need
+            // a retool, which `best_retool` weighs separately.
+            if cw_sim::economy::sectors::division_strategy(world, dataset, firm, region, sector)
+                .is_some_and(|strategy| strategy != index as u16)
+            {
+                continue;
+            }
+            // Three years of contribution, less the real build cost (entry fee, founding
+            // discount, dominance) and three years of financing at the policy rate
+            // (docs/rules/FINANCE-LABOUR-AI.md, build candidate).
+            let cost =
+                cw_sim::economy::sectors::build_cost(world, dataset, firm, region, index as u16, 1)
+                    .total_cents();
+            let financing = cost * world.macro_state.policy_rate_bps as i64 * 3 / 10_000;
             let npv = block_contribution(world, dataset, firm, index as u16, region) * 156
-                - template.capex_cents
+                - cost
                 - financing;
             if npv > 0 && best.map(|(b, _, _)| npv > b).unwrap_or(true) {
                 best = Some((npv, index as u16, region));
@@ -716,6 +751,64 @@ fn best_expansion(world: &World, dataset: &Dataset, firm: Handle) -> Option<(u16
         }
     }
     best.map(|(npv, recipe, region)| (recipe, region, npv))
+}
+
+/// The best market raid for a firm: a rival division in a cell it shares, aiming for a
+/// two-to-one campaign, with a positive expected value after the campaign and purchase price.
+fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, u8, u8, i64, i64)> {
+    use cw_sim::economy::sectors;
+    let entity = world.firms.get(firm)?;
+    let reserve = reserve_target(world, firm);
+    let mut best: Option<(i64, Handle, u8, u8, i64)> = None;
+    for division in sectors::divisions_of(world, dataset, firm) {
+        let ready = entity
+            .raid_ready
+            .get(&(division.region, division.industry))
+            .copied()
+            .unwrap_or(0);
+        if world.tick.0 < ready {
+            continue;
+        }
+        let (firms, _) = sectors::cell(world, dataset, division.region, division.industry);
+        for (rival, _) in firms {
+            if rival == firm || cw_sim::economy::ownership::same_group(world, rival, firm) {
+                continue;
+            }
+            let probe = sectors::raid_quote(
+                world,
+                dataset,
+                firm,
+                rival,
+                division.region,
+                division.industry,
+                0,
+            );
+            let budget = probe.defence_cents * 2;
+            let quote = sectors::raid_quote(
+                world,
+                dataset,
+                firm,
+                rival,
+                division.region,
+                division.industry,
+                budget,
+            );
+            if quote.blocks_at_stake == 0
+                || entity.book.cash() < reserve + budget + quote.price_cents
+            {
+                continue;
+            }
+            let gain = block_contribution(world, dataset, firm, division.strategy, division.region)
+                * quote.blocks_at_stake as i64
+                * 156
+                - quote.price_cents;
+            let value = gain * quote.chance_bps as i64 / 10_000 - budget;
+            if value > 0 && best.map(|(b, ..)| value > b).unwrap_or(true) {
+                best = Some((value, rival, division.region, division.industry, budget));
+            }
+        }
+    }
+    best.map(|(value, rival, region, industry, budget)| (rival, region, industry, budget, value))
 }
 
 /// A plant in glut (four weeks of output unsold) switched to the same-sector strategy whose
@@ -739,8 +832,30 @@ fn best_retool(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle
         if entity.stock(output, plant.region).lots() <= weekly * 4 {
             continue;
         }
-        let now = block_contribution(world, dataset, firm, plant.recipe, plant.region)
-            * plant.blocks as i64;
+        // A retool moves the whole division, so it is valued and costed over all its plants,
+        // and waits until none of them is busy.
+        let industry = cw_sim::economy::sectors::recipe_industry(dataset, plant.recipe);
+        let division =
+            cw_sim::economy::sectors::division_plants(world, dataset, firm, plant.region, industry);
+        if division
+            .iter()
+            .filter_map(|h| world.facilities.get(*h))
+            .any(|p| {
+                !matches!(
+                    p.status,
+                    FacilityStatus::Operating | FacilityStatus::Mothballed
+                )
+            })
+        {
+            continue;
+        }
+        let division_blocks: i64 = division
+            .iter()
+            .filter_map(|h| world.facilities.get(*h))
+            .map(|p| p.blocks as i64)
+            .sum();
+        let now =
+            block_contribution(world, dataset, firm, plant.recipe, plant.region) * division_blocks;
         for (index, template) in dataset.recipes.iter().enumerate() {
             if template.industry != current.industry || index as u16 == plant.recipe {
                 continue;
@@ -754,8 +869,8 @@ fn best_retool(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle
                 continue;
             }
             let then = block_contribution(world, dataset, firm, index as u16, plant.region)
-                * plant.blocks as i64;
-            let gain = (then - now) * 156 - template.capex_cents * plant.blocks as i64 / 4;
+                * division_blocks;
+            let gain = (then - now) * 156 - template.capex_cents * division_blocks / 4;
             if gain > 0 && best.map(|(b, _, _)| gain > b).unwrap_or(true) {
                 best = Some((gain, *handle, index as u16));
             }
@@ -1181,7 +1296,11 @@ mod tests {
             "no room, no build"
         );
         let plastics = dataset.product_index["plastics"];
-        let pa = dataset.regions.iter().position(|r| r.code == "PA").unwrap() as u8;
+        let pa = dataset
+            .regions
+            .iter()
+            .position(|r| r.code == "PA-CEN")
+            .unwrap() as u8;
         let mut found = false;
         for gateway in &mut world.gateways {
             if gateway.product == plastics && gateway.region == pa {

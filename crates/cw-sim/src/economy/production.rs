@@ -382,12 +382,19 @@ fn run_facility(
     }
     ratio = ratio.min(input_limit).max(0);
 
-    // Ore deposits are finite.
+    // Deposits are finite. When the deposit binds, the run rate rounds up and output is then
+    // capped at exactly what remains, so a mine extracts its last lots instead of stranding a
+    // rounding remainder underground.
+    let mut deposit_cap: Option<MilliLots> = None;
     if facility.deposit_remaining.0 > 0 {
         let full = MilliLots::from_lots(recipe.weekly_output_lots * facility.blocks as i64);
         let wanted = full.0 * ratio as i64 / 10_000;
         if facility.deposit_remaining.0 < wanted {
-            ratio = (facility.deposit_remaining.0 * 10_000 / full.0.max(1)) as i32;
+            let denominator = full.0.max(1);
+            let rounded_up =
+                (facility.deposit_remaining.0 * 10_000 + denominator - 1) / denominator;
+            ratio = ratio.min(rounded_up as i32);
+            deposit_cap = Some(facility.deposit_remaining);
         }
     } else if recipe.depletes() {
         ratio = 0;
@@ -463,6 +470,9 @@ fn run_facility(
 
     let mut output =
         MilliLots::from_lots(recipe.weekly_output_lots * facility.blocks as i64).scale_bps(ratio);
+    if let Some(cap) = deposit_cap {
+        output = output.min(cap);
+    }
     // Seasonal yield applies to farm output only, before input planning in a full model.
     if recipe.industry == "agriculture" {
         let season = SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize];

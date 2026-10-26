@@ -336,8 +336,11 @@ mod tests {
     #[test]
     fn freight_cost_is_per_whole_lot_and_has_a_minimum() {
         let dataset = Dataset::load().unwrap();
-        let km = dataset.lane_km("OH", "MI").unwrap();
-        let (oh, mi) = (dataset.region_index["OH"], dataset.region_index["MI"]);
+        let km = dataset.lane_km("OH-CEN", "MI-DET").unwrap();
+        let (oh, mi) = (
+            dataset.region_index["OH-CEN"],
+            dataset.region_index["MI-DET"],
+        );
         // Ohio roads 6400 and Michigan 5200 average 5800: freight costs 1 percent more.
         let road = crate::economy::operations::road_bps(&dataset, oh, mi);
         assert_eq!(road, 10_100);

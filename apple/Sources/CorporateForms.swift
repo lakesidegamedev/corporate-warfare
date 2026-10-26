@@ -1550,8 +1550,8 @@ struct FoundFirmSheet: View {
                 TextField("Corporation name", text: $name)
                     .accessibilityLabel("New corporation name")
                 Picker("Headquarters", selection: $region) {
-                    ForEach(store.states, id: \.index) { item in
-                        Text(item.name).tag(item.index)
+                    ForEach(store.boards, id: \.index) { item in
+                        Text("\(item.name), \(item.stateCode)").tag(item.index)
                     }
                 }
                 TextField("Paid-in capital in dollars", text: $capitalText)
@@ -1576,7 +1576,7 @@ struct FoundFirmSheet: View {
                     Text("None").tag("none")
                     ForEach(Sector.order.filter { $0 != "financial" && $0 != sector }, id: \.self) { Text(Sector.name($0)).tag($0) }
                 }
-                Text("Primary-sector plants use 5% fewer inputs and secondary 2.5% fewer; any other sector pays a 10% payroll overhead. A secondary doubles the sprawl penalty past fifteen plants.")
+                Text("Primary-sector plants use 5% fewer inputs and secondary 2.5% fewer; any other sector pays a 10% payroll overhead. A secondary doubles the sprawl penalty past fifteen divisions.")
                     .font(.caption)
                     .foregroundStyle(Theme.secondary)
                 if let chosen {

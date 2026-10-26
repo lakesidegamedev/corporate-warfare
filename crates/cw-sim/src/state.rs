@@ -512,6 +512,12 @@ pub struct Firm {
     /// Focus change transition and lock, as tick numbers.
     pub focus_transition_until: u32,
     pub focus_cooldown_until: u32,
+    /// Next tick this firm may raid each (region, sector type) cell again.
+    #[serde(default)]
+    pub raid_ready: BTreeMap<(u8, u8), u32>,
+    /// Losses carried forward against future taxable profit, in cents.
+    #[serde(default)]
+    pub tax_loss_carry_cents: i64,
     /// Logistics and operations strength, 0..200, built by the logistics budget.
     pub logistics_strength: i32,
     pub policy_requests: Vec<PolicyRequest>,
@@ -1097,7 +1103,12 @@ pub enum ScenarioMode {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Score {
     pub week: Tick,
+    /// Growth of personal net worth over the start.
     pub return_component: i32,
+    #[serde(default)]
+    pub expansion_component: i32,
+    #[serde(default)]
+    pub leadership_component: i32,
     pub resilience_component: i32,
     pub control_component: i32,
     pub conduct_component: i32,
@@ -1170,6 +1181,29 @@ pub struct World {
     /// Construction lots already committed to build orders this week, by contractor.
     #[serde(default)]
     pub construction_orders: BTreeMap<Handle, i64>,
+    /// The most recent market raids, newest last, bounded.
+    #[serde(default)]
+    pub raids: Vec<RaidRecord>,
+    /// The board's current quarterly objective for the player's primary company.
+    #[serde(default)]
+    pub objective: Option<crate::economy::objectives::Objective>,
+    #[serde(default)]
+    pub objective_history: Vec<crate::economy::objectives::ObjectiveResult>,
+}
+
+/// One market raid and its outcome.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RaidRecord {
+    pub tick: u32,
+    pub attacker: Handle,
+    pub defender: Handle,
+    pub region: u8,
+    pub industry: u8,
+    pub budget_cents: i64,
+    pub chance_bps: i32,
+    pub success: bool,
+    pub blocks: u8,
+    pub price_cents: i64,
 }
 
 impl World {

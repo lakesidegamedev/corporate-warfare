@@ -27,9 +27,9 @@ fn main() {
             eprintln!(
                 "Usage: cw-cli <doctor|run|sweep|replay|diagnose|report>\n\
                  run    --weeks N [--seed N] [--scenario guided|founder] [--five-year|--sandbox] \
-                 [--policy none|conservative|growth|acquirer] [--verbose]\n\
+                 [--policy none|conservative|growth|acquirer|expander] [--verbose]\n\
                  sweep  --seeds N --weeks N [--from N] [--scenario guided|founder] \
-                 [--five-year|--sandbox] [--policy none|conservative|growth|acquirer] \
+                 [--five-year|--sandbox] [--policy none|conservative|growth|acquirer|expander] \
                  [--json PATH] [--verbose]\n\
                  replay --file PATH\n\
                  diagnose --weeks N [--seed N] [--guided|--founder]\n\
@@ -267,9 +267,11 @@ fn run(arguments: &[String]) {
     }
     if let Some(score) = &session.world.score {
         println!(
-            "score total={} return={} resilience={} control={} conduct={}",
+            "score total={} growth={} expansion={} leadership={} resilience={} control={} conduct={}",
             score.total,
             score.return_component,
+            score.expansion_component,
+            score.leadership_component,
             score.resilience_component,
             score.control_component,
             score.conduct_component
@@ -306,6 +308,8 @@ fn run(arguments: &[String]) {
 struct ScoreRow {
     total: i32,
     return_component: i32,
+    expansion_component: i32,
+    leadership_component: i32,
     resilience_component: i32,
     control_component: i32,
     conduct_component: i32,
@@ -513,6 +517,8 @@ fn observe(session: &Session, seed: u64, paused: Option<String>) -> RunReport {
     let score = session.world.score.as_ref().map(|score| ScoreRow {
         total: score.total,
         return_component: score.return_component,
+        expansion_component: score.expansion_component,
+        leadership_component: score.leadership_component,
         resilience_component: score.resilience_component,
         control_component: score.control_component,
         conduct_component: score.conduct_component,

@@ -309,11 +309,11 @@ struct BuildSheet: View {
                             .tag(item.index)
                     }
                 }
-                Stepper(value: $blocks, in: 1...8) {
+                Stepper(value: $blocks, in: 1...20) {
                     Text("Blocks: \(blocks)")
                 }
                 if let template {
-                    DetailRow(title: "Capex per block", value: Format.money(template.capexCents))
+                    DetailRow(title: "Capex per plant", value: Format.money(template.capexCents))
                     DetailRow(title: "Weekly output", value: Format.lots(template.weeklyOutputLots))
                 }
             }
@@ -337,7 +337,7 @@ struct BuildSheet: View {
             preview = nil
             return
         }
-        preview = await store.previewBuild(firm: firm.handle, recipe: recipe, blocks: blocks)
+        preview = await store.previewBuild(firm: firm.handle, region: region, recipe: recipe, blocks: blocks)
     }
 }
 

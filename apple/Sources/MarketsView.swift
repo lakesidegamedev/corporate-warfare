@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// The commodity board for one state: every good grouped by the sector that makes it, with the
+/// The commodity board for one region: every good grouped by the sector that makes it, with the
 /// last clearing price against reference, local stock, weekly sales and any import room.
 struct MarketsView: View {
     @EnvironmentObject private var store: AppStore
     @State private var showingPrice = false
 
-    private var stateCode: String? { store.selectedRegionCode ?? store.states.first?.code }
-    private var state: StateDto? { store.states.first { $0.code == stateCode } }
+    private var regionCode: String? { store.marketRegionCode }
+    private var state: RegionBoardDto? { store.boards.first { $0.code == regionCode } }
 
     /// Product id to the sector whose strategies make it. Goods no strategy makes are listed last.
     private var sectorOfProduct: [String: String] {
@@ -38,7 +38,7 @@ struct MarketsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     statePicker
                     if let state {
-                        Text("\(state.name) clears every good weekly. Prices are per lot. Services expire each week and cannot be stockpiled.")
+                        Text("\(state.name) clears goods and retail weekly; services clear across \(state.stateName). Prices are per lot.")
                             .font(.caption).foregroundStyle(Theme.secondary)
                     }
                     ForEach(groups) { group in
@@ -73,25 +73,28 @@ struct MarketsView: View {
     }
 
     private var statePicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(store.states, id: \.code) { item in
-                    let selected = item.code == stateCode
-                    Button {
-                        Task { await store.selectRegion(item.code) }
-                    } label: {
-                        Text(item.name)
-                            .font(.callout.weight(selected ? .semibold : .regular))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .foregroundStyle(selected ? Theme.ink : Theme.primaryText)
-                            .background(selected ? Theme.gold : Theme.panelRaised, in: Capsule())
+        let states = Array(Set(store.boards.map(\.stateCode))).sorted()
+        return Menu {
+            ForEach(states, id: \.self) { code in
+                Section(store.boards.first { $0.stateCode == code }?.stateName ?? code) {
+                    ForEach(store.boards.filter { $0.stateCode == code }, id: \.code) { item in
+                        Button(item.name) { Task { await store.selectRegion(item.code) } }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
+        } label: {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Eyebrow(text: state?.stateName ?? "Region")
+                    Text(state?.name ?? "Choose a region").font(.headline).foregroundStyle(Theme.primaryText)
+                }
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down").foregroundStyle(Theme.secondary)
+            }
+            .padding(12)
+            .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
+        .accessibilityLabel("Region: \(state?.name ?? "none")")
     }
 
     private var header: some View {

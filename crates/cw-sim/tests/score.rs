@@ -70,32 +70,76 @@ fn control_counts_a_controlled_parent_once_and_ignores_passive_stakes() {
     assert_eq!(ownership::group_value(&world), 5_000_000);
     // Portfolio: 5,000,000 + 100 * 3,000 = 5,300,000. Control = 5.0m / 5.3m = 94 percent.
     assert_eq!(score::personal_net_worth(&world), 5_300_000);
-    assert_eq!(score::compute(&world).control_component, 94);
+    assert_eq!(
+        score::compute(&world, &Dataset::load().unwrap()).control_component,
+        94
+    );
 }
 
 #[test]
-fn return_resilience_and_conduct_follow_the_published_formulas() {
+fn growth_resilience_and_conduct_follow_the_published_formulas() {
     let mut world = world(ScenarioMode::FiveYear);
     let start = score::personal_net_worth(&world);
     world.investor.starting_net_worth_cents = start;
-    // Half as much again: 50 + 25 * 0.5 = 62.5, reported as 62.
+    // Half as much again: 20 + 80 * 0.5 = 60.
     world.investor.cash_cents += start / 2;
     world.weeks_elapsed = 260;
     world.weeks_with_past_due = 26;
     world.regulatory_breaches = 2;
     world.failed_worker_settlements = 1;
-    let result = score::compute(&world);
-    assert_eq!(result.return_component, 62);
+    let dataset = Dataset::load().unwrap();
+    let result = score::compute(&world, &dataset);
+    assert_eq!(result.return_component, 60);
     assert_eq!(result.resilience_component, 90);
     assert_eq!(result.conduct_component, 75);
-    let expected = (result.return_component * 60
-        + result.resilience_component * 20
-        + result.control_component * 10
+    // The guided start is one division in one state: no expansion yet.
+    assert_eq!(result.expansion_component, 0);
+    let expected = (result.return_component * 45
+        + result.expansion_component * 25
+        + result.leadership_component * 10
+        + result.resilience_component * 10
         + result.conduct_component * 10)
         / 100;
     // The total is computed on unrounded components, so it may sit one point above the
     // rounded-component recombination but never below it.
     assert!((expected..=expected + 1).contains(&result.total));
+}
+
+#[test]
+fn expansion_counts_divisions_and_states_beyond_the_first() {
+    let dataset = Dataset::load().unwrap();
+    let mut world = world(ScenarioMode::FiveYear);
+    let (firm, plant) = world
+        .firms
+        .iter()
+        .find_map(|(handle, firm)| {
+            cw_sim::economy::events_engine::player_side(&world, handle)
+                .then(|| firm.facilities.first().copied())
+                .flatten()
+                .map(|plant| (handle, plant))
+        })
+        .expect("the player's farm");
+    let home = world.facilities.get(plant).unwrap().region;
+    // Two more divisions: another sector in the home region, and the farm strategy in a
+    // region of another state.
+    let other_state = (0..dataset.regions.len() as u8)
+        .find(|r| dataset.regions[*r as usize].state() != dataset.regions[home as usize].state())
+        .unwrap();
+    let retail = dataset.recipe_index["grocer"];
+    for (region, recipe) in [
+        (home, retail),
+        (other_state, world.facilities.get(plant).unwrap().recipe),
+    ] {
+        let mut copy = world.facilities.get(plant).unwrap().clone();
+        copy.region = region;
+        copy.recipe = recipe;
+        let handle = world.facilities.insert(copy);
+        world.firms.get_mut(firm).unwrap().facilities.push(handle);
+    }
+    let (divisions, states, _) = score::footprint(&world, &dataset);
+    assert_eq!((divisions, states), (3, 2));
+    // 20 * 2 more divisions + 10 * 1 more state = 50.
+    assert_eq!(score::compute(&world, &dataset).expansion_component, 50);
 }
 
 #[test]
@@ -130,7 +174,7 @@ fn career_losses_and_assisted_recovery_survive_a_reload() {
     assert_eq!(reloaded.investor.career_losses_cents, 123_456);
     assert_eq!(reloaded.investor.recovery_used, 1);
     assert!(
-        score::compute(&reloaded).assisted,
+        score::compute(&reloaded, &Dataset::load().unwrap()).assisted,
         "assisted scores are flagged, not erased"
     );
 }

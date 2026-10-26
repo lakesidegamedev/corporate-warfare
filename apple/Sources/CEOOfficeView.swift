@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The CEO office of the selected company, after A House Divided: masthead, the figures that
-/// matter this week, sector focus and logistics, and every plant grouped by sector type with
+/// matter this week, sector focus and logistics, and every division (a sector type in a region) with
 /// its strategy, size and utilisation. Deeper corporate controls stay one tap away.
 struct CEOOfficeView: View {
     @EnvironmentObject private var store: AppStore
@@ -18,6 +18,7 @@ struct CEOOfficeView: View {
                     if let firm {
                         masthead(firm)
                         figures(firm)
+                        boardPanel
                         focusPanel
                         plantsPanel
                         if let rejection {
@@ -137,7 +138,7 @@ struct CEOOfficeView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Eyebrow(text: "Logistics strength")
                             ProgressView(value: Double(ops.logisticsStrength), total: 200).tint(Theme.gold)
-                            Text("\(ops.logisticsStrength) of 200 · sprawl starts after \(ops.sprawlThreshold) plants (you run \(ops.plants))")
+                            Text("\(ops.logisticsStrength) of 200 · sprawl starts after \(ops.sprawlThreshold) divisions (you run \(ops.divisions))")
                                 .font(.caption).foregroundStyle(Theme.secondary)
                         }
                         Menu {
@@ -169,26 +170,80 @@ struct CEOOfficeView: View {
         }
     }
 
-    private var plantsPanel: some View {
-        let grouped = Dictionary(grouping: store.facilities) { plant in
-            strategy(for: plant)?.industry ?? "other"
-        }
-        return VStack(alignment: .leading, spacing: 12) {
-            Eyebrow(text: "Plants by sector")
-            if store.facilities.isEmpty {
-                Panel { Text("No plants yet. Open a state on the map to build one.").foregroundStyle(Theme.secondary) }
-            }
-            ForEach(Sector.order.filter { grouped[$0] != nil }, id: \.self) { sector in
-                Panel {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 8) {
-                            SectorBadge(sector: sector, size: 26)
-                            Text(Sector.name(sector)).font(.headline).foregroundStyle(Theme.primaryText)
-                        }
-                        ForEach(grouped[sector] ?? [], id: \.handle) { plant in
-                            plantRow(plant)
-                        }
+    /// The board's quarterly goal and how the last ones went.
+    @ViewBuilder private var boardPanel: some View {
+        if store.objective != nil || !store.objectiveHistory.isEmpty {
+            Panel {
+                VStack(alignment: .leading, spacing: 10) {
+                    Eyebrow(text: "Board objective")
+                    if let objective = store.objective {
+                        Text(objective.title).font(.headline).foregroundStyle(Theme.primaryText)
+                        Text(objective.detail).font(.caption).foregroundStyle(Theme.secondary)
+                        ProgressView(value: Double(objective.progressBps) / 10_000).tint(Theme.gold)
+                        Text("Due week \(objective.dueWeek) · \(objective.weeksLeft) weeks left · meeting it pays you a management bonus")
+                            .font(.caption2).foregroundStyle(Theme.secondary)
                     }
+                    ForEach(Array(store.objectiveHistory.prefix(3).enumerated()), id: \.offset) { _, result in
+                        HStack {
+                            Image(systemName: result.met ? "checkmark.circle.fill" : "xmark.circle")
+                                .foregroundStyle(result.met ? Theme.positive : Theme.secondary)
+                            Text(result.title).font(.caption).foregroundStyle(Theme.primaryText).lineLimit(1)
+                            Spacer()
+                            Text(result.met ? Format.moneyCompact(result.bonusCents) : "Missed")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(result.met ? Theme.gold : Theme.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
+        }
+    }
+
+    private var plantsPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Eyebrow(text: "Divisions")
+            if store.divisions.isEmpty {
+                Panel { Text("No divisions yet. Open a region on the map to enter a sector.").foregroundStyle(Theme.secondary) }
+            }
+            ForEach(store.divisions) { division in
+                divisionPanel(division)
+            }
+        }
+    }
+
+    private func divisionPanel(_ division: DivisionDto) -> some View {
+        let plants = store.facilities.filter { division.plants.contains($0.handle) }
+        return Panel {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    SectorBadge(sector: division.industry, size: 28)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("\(Sector.name(division.industry)) · \(division.regionName)").font(.headline).foregroundStyle(Theme.primaryText)
+                        Text("\(division.strategyName) · \(division.blocks) plant\(division.blocks == 1 ? "" : "s") at \(division.plants.count) site\(division.plants.count == 1 ? "" : "s")")
+                            .font(.caption).foregroundStyle(Theme.secondary)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("\(division.shareBps / 100)%").font(.callout.monospacedDigit().weight(.semibold)).foregroundStyle(Theme.gold)
+                        Eyebrow(text: "share")
+                    }
+                }
+                HStack {
+                    if division.retooling {
+                        Label("Retooling", systemImage: "gearshape.arrow.triangle.2.circlepath").font(.caption).foregroundStyle(Theme.warning)
+                    }
+                    Spacer()
+                    if let first = plants.first {
+                        Button("Retool division") { retooling = first }
+                            .font(.caption.weight(.semibold))
+                            .buttonStyle(.bordered)
+                            .tint(Theme.gold)
+                            .disabled(division.retooling || plants.contains { $0.status != "operating" && $0.status != "mothballed" })
+                    }
+                }
+                ForEach(plants, id: \.handle) { plant in
+                    plantRow(plant)
                 }
             }
         }
@@ -200,15 +255,10 @@ struct CEOOfficeView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(strategy(for: plant)?.name ?? plant.recipe).font(.callout.weight(.semibold)).foregroundStyle(Theme.primaryText)
-                    Text("\(plant.region) · \(plant.blocks) block\(plant.blocks == 1 ? "" : "s") · \(plant.status)")
+                    Text("\(plant.region) · \(plant.blocks) plant\(plant.blocks == 1 ? "" : "s") · \(plant.status)")
                         .font(.caption).foregroundStyle(Theme.secondary)
                 }
                 Spacer()
-                Button("Retool") { retooling = plant }
-                    .font(.caption.weight(.semibold))
-                    .buttonStyle(.bordered)
-                    .tint(Theme.gold)
-                    .disabled(plant.status != "operating" && plant.status != "mothballed")
             }
             ProgressView(value: min(max(utilisation, 0), 1)).tint(utilisation > 0.8 ? Theme.positive : Theme.warning)
             HStack {
@@ -252,8 +302,8 @@ struct BigFigure: View {
     }
 }
 
-/// Switch a plant to another strategy of its sector: a quarter of the new capex per block and a
-/// third of its build time, at least four weeks.
+/// Switch a division to another strategy of its sector: every plant moves together, for a
+/// quarter of the new capex per block and a third of its build time, at least four weeks.
 struct RetoolSheet: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -262,11 +312,16 @@ struct RetoolSheet: View {
 
     private var current: StrategyDto? { store.strategyCatalogue.first { $0.id == plant.recipe } }
 
+    /// Blocks across the division this plant belongs to.
+    private var divisionBlocks: Int64 {
+        Int64(store.divisions.first { $0.plants.contains(plant.handle) }?.blocks ?? plant.blocks)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Retooling costs a quarter of the new strategy's capex per block and a third of its build time, at least four weeks. The plant produces nothing meanwhile.")
+                    Text("A division runs one strategy, so every plant in it retools together: a quarter of the new strategy's capex per plant and a third of its build time, at least four weeks. The division produces nothing meanwhile.")
                         .font(.caption).foregroundStyle(Theme.secondary)
                     ForEach(store.strategyCatalogue.filter { $0.industry == current?.industry && $0.id != plant.recipe }, id: \.index) { option in
                         Button {
@@ -278,7 +333,7 @@ struct RetoolSheet: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 StrategyCard(strategy: option, room: nil)
-                                Text("Retool cost \(Format.money(option.capexCents * Int64(plant.blocks) / 4)) · \(max(option.buildWeeks / 3, 4)) weeks")
+                                Text("Retool cost \(Format.money(option.capexCents * divisionBlocks / 4)) · \(max(option.buildWeeks / 3, 4)) weeks")
                                     .font(.caption.monospacedDigit()).foregroundStyle(Theme.gold)
                             }
                         }
@@ -316,7 +371,7 @@ struct FocusSheet: View {
                     ForEach(sectors.filter { $0 != primary }, id: \.self) { Text(Sector.name($0)).tag($0) }
                 }
                 Section {
-                    Text("A change costs 5% of every plant's payroll for four weeks and locks focus for eight. A secondary type doubles the sprawl penalty beyond the plant threshold.")
+                    Text("A change costs 5% of every plant's payroll for four weeks and locks focus for eight. A secondary type doubles the sprawl penalty beyond the division threshold.")
                         .font(.caption).foregroundStyle(Theme.secondary)
                 }
             }

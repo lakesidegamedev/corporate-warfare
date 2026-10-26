@@ -14,6 +14,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PATH = ROOT / "content/initial-balance.json"
 
+# One plant (a block) is a fifth of the 1.1.0 unit, as in A House Divided where a corporation
+# runs many small plants: output, inputs, workers, capex and land rent all divide by this, and
+# seeded firms hold five times the blocks, so the economy keeps its capacity. The content file
+# records the scale it is at, so rerunning the script never divides twice.
+PLANT_SCALE = 5
+
+
+def scaled(quantity, factor):
+    """Divide a nonzero integer quantity, keeping at least one unit."""
+    return 0 if quantity == 0 else max(1, round(quantity / factor))
+
 NAMES = {
     "food_raw": "Food (farm output)", "ore": "Iron ore", "fuel": "Oil & fuel",
     "electricity": "Energy", "chemicals": "Industrial chemicals", "steel": "Steel",
@@ -95,6 +106,29 @@ NEW_RECIPES = [
 
 def main():
     data = json.loads(PATH.read_text())
+    factor = PLANT_SCALE / data.get("plant_scale", 1)
+    if factor != 1:
+        # Rounding small input and crew counts would move each strategy's margin, so after
+        # dividing them the output is re-solved to keep the strategy's calibrated margin.
+        prices = {p["id"]: p["reference_price_cents"] for p in data["products"]}
+        old_land = data["fixture_land_rent_cents_weekly"]
+        new_land = round(old_land / factor)
+
+        def unit_cost(recipe, land):
+            inputs = sum(q * prices[k] for k, q in recipe["weekly_inputs_lots"].items())
+            payroll = sum(a * b for a, b in zip(recipe["workers_low_mid_high"], data["baseline_weekly_wage_cents"]))
+            return inputs + payroll + recipe["capex_cents"] * data["maintenance_annual_bps"] // 10_000 // 52 + land
+
+        for recipe in data["recipes"]:
+            price = prices[recipe["output"]]
+            revenue = recipe["weekly_output_lots"] * price
+            margin = (revenue - unit_cost(recipe, old_land)) / revenue
+            recipe["weekly_inputs_lots"] = {k: scaled(v, factor) for k, v in recipe["weekly_inputs_lots"].items()}
+            recipe["workers_low_mid_high"] = [scaled(w, factor) for w in recipe["workers_low_mid_high"]]
+            recipe["capex_cents"] = max(1_000_000, round(recipe["capex_cents"] / factor / 1_000_000) * 1_000_000)
+            recipe["weekly_output_lots"] = max(1, round(unit_cost(recipe, new_land) / (1 - margin) / price))
+        data["fixture_land_rent_cents_weekly"] = new_land
+        data["plant_scale"] = PLANT_SCALE
     wages = data["baseline_weekly_wage_cents"]
     maint_bps = data["maintenance_annual_bps"]
     land = data["fixture_land_rent_cents_weekly"]
@@ -108,8 +142,10 @@ def main():
         industry, rid, name, output, lots, inputs, workers, capex, weeks, life = row
         recipes[rid] = {
             "industry": industry, "id": rid, "name": name, "output": output,
-            "weekly_output_lots": lots, "weekly_inputs_lots": dict(sorted(inputs.items())),
-            "workers_low_mid_high": workers, "capex_cents": int(round(capex * 100 * M)),
+            "weekly_output_lots": scaled(lots, PLANT_SCALE),
+            "weekly_inputs_lots": dict(sorted((k, scaled(v, PLANT_SCALE)) for k, v in inputs.items())),
+            "workers_low_mid_high": [scaled(w, PLANT_SCALE) for w in workers],
+            "capex_cents": int(round(capex * 100 * M / PLANT_SCALE)),
             "build_weeks": weeks, "life_years": life,
         }
 

@@ -7,10 +7,17 @@ final class AppStore: ObservableObject {
     @Published var overview: OverviewDto?
     @Published var firms: [FirmDto] = []
     @Published var regions: [RegionDto] = []
-    /// The playable states with conditions and room to build, every plant on the map, the
-    /// strategy catalogue and the selected firm's focus and logistics.
-    @Published var states: [StateDto] = []
+    /// Every region's board (conditions, room to build, sector cells), every plant, the player's
+    /// divisions for the map, the strategy catalogue and the selected firm's focus and logistics.
+    @Published var boards: [RegionBoardDto] = []
     @Published var mapPlants: [MapPlantDto] = []
+    @Published var mapDivisions: [MapDivisionDto] = []
+    @Published var divisions: [DivisionDto] = []
+    @Published var raidTargets: [RaidOptionDto] = []
+    @Published var recentRaids: [RaidRecordDto] = []
+    /// The board's quarterly goal for the primary company and its recent results.
+    @Published var objective: ObjectiveDto?
+    @Published var objectiveHistory: [ObjectiveResultDto] = []
     @Published var strategyCatalogue: [StrategyDto] = []
     @Published var firmOps: FirmOpsDto?
     @Published var facilities: [FacilityDto] = []
@@ -203,8 +210,12 @@ final class AppStore: ObservableObject {
         overview = await engine.overview()
         firms = await engine.firms()
         regions = await engine.regions(selected: selectedRegionCode)
-        states = await engine.states()
+        boards = await engine.regionBoards(firm: selectedFirm ?? overview?.primaryFirm)
         mapPlants = await engine.mapPlants()
+        mapDivisions = await engine.mapDivisions()
+        recentRaids = await engine.recentRaids()
+        objective = await engine.objective()
+        objectiveHistory = await engine.objectiveHistory()
         if strategyCatalogue.isEmpty {
             strategyCatalogue = strategies()
         }
@@ -228,8 +239,12 @@ final class AppStore: ObservableObject {
             labour = await engine.labour(firm: selectedFirm)
             policyState = await engine.policyState(firm: selectedFirm)
             firmOps = await engine.firmOps(firm: selectedFirm)
+            divisions = await engine.divisions(firm: selectedFirm)
+            raidTargets = await engine.raidTargets(firm: selectedFirm)
         } else {
             firmOps = nil
+            divisions = []
+            raidTargets = []
             facilities = []
             finance = nil
             ownership = nil
@@ -245,8 +260,16 @@ final class AppStore: ObservableObject {
         await loadMarkets()
     }
 
+    /// The region Markets shows: the chosen one, else the selected company's home region.
+    var marketRegionCode: String? {
+        selectedRegionCode
+            ?? selectedFirmDto.flatMap { firm in boards.first { $0.name == firm.region }?.code }
+            ?? boards.first?.code
+    }
+
     func loadMarkets() async {
-        let regionIndex = regions.first { $0.code == selectedRegionCode }?.index ?? regions.first?.index ?? 0
+        let code = marketRegionCode
+        let regionIndex = regions.first { $0.code == code }?.index ?? regions.first?.index ?? 0
         var rows: [MarketRow] = []
         for product in products() {
             let market = await engine.market(region: regionIndex, product: product.index)
@@ -508,6 +531,33 @@ final class AppStore: ObservableObject {
         ]))
     }
 
+    func buildQuote(region: UInt32, recipe: UInt32, blocks: UInt32) async -> BuildQuoteDto? {
+        guard let firm = selectedFirm ?? overview?.primaryFirm else { return nil }
+        return await engine.buildQuote(firm: firm, region: region, recipe: recipe, blocks: blocks)
+    }
+
+    func raidQuote(_ option: RaidOptionDto, budgetCents: Int64) async -> RaidQuoteDto? {
+        guard let firm = selectedFirm ?? overview?.primaryFirm else { return nil }
+        return await engine.raidQuote(
+            firm: firm, target: option.target, region: option.regionIndex,
+            industry: option.industryIndex, budgetCents: budgetCents
+        )
+    }
+
+    /// Launch a market raid on a rival division; the outcome lands in `recentRaids`.
+    func raid(_ option: RaidOptionDto, budgetCents: Int64) async -> CommandRejection? {
+        guard let firm = selectedFirm ?? overview?.primaryFirm else {
+            return CommandRejection(key: "error.invalid_entity", detail: "")
+        }
+        return await submit(CommandJSON.command("RaidMarket", [
+            "firm": firm,
+            "target": option.target,
+            "region": option.regionIndex,
+            "industry": option.industryIndex,
+            "budget_cents": budgetCents
+        ]))
+    }
+
     func payDividend(amount: Int64) async {
         guard let selectedFirm else { return }
         await perform {
@@ -605,8 +655,8 @@ final class AppStore: ObservableObject {
         await engine.previewIssue(firm: firm, qty: quantity, priceCents: priceCents)
     }
 
-    func previewBuild(firm: UInt64, recipe: UInt32, blocks: UInt32) async -> PreviewDto? {
-        await engine.previewBuild(firm: firm, recipe: recipe, blocks: blocks)
+    func previewBuild(firm: UInt64, region: UInt32, recipe: UInt32, blocks: UInt32) async -> PreviewDto? {
+        await engine.previewBuild(firm: firm, region: region, recipe: recipe, blocks: blocks)
     }
 
     func setPrimaryGroup(_ firm: UInt64) async -> CommandRejection? {
