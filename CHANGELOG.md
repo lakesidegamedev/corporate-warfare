@@ -22,6 +22,13 @@ heading.
   the player's companies: more than four weeks of unsold stock cuts the target fifteen
   points down to thirty percent, under a week and a half of stock raises it back toward full;
   services follow sales against capacity. `SetAutoProduction` hands planning back.
+- Rival companies grow again. Their limit of six plants was never rescaled when 1.2.0 cut plants
+  to a fifth of their size, so almost no rival could build after 1.2.0; the limit is now thirty.
+  Cautious rivals also enter a market when the corridor imports at least a full plant's worth,
+  and demand for goods is judged across the whole corridor, matching the commodity exchange. A
+  rival now drills oil in the corridor, which had always imported all its fuel.
+- Production is planned plant by plant. A firm's unsold stock in one good no longer cuts output
+  at its other plants, and stock it keeps as inputs for its own plants is not counted as unsold.
 - Supply contracts deliver only what the buyer can pay for in full, goods and freight together.
   Before, a buyer short of cash still received the whole week's goods and the unpaid part went
   onto its overdue bills while the seller was never paid for it. The rest now stays with the

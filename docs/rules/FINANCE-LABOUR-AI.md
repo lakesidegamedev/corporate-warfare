@@ -144,6 +144,12 @@ Build candidate NPV proxy = 156-week incremental contribution at public prices -
 years' financing at the policy rate.
 Only build if positive, forecast post-action cash >= reserve target, local labour feasible,
 and planned capacity <=1.25*observed reachable unmet demand. No omniscient hidden figures.
+Unmet demand for goods is the whole corridor's smoothed imports, since goods trade on one
+exchange; for other products it is the state's own. A goods plant's output is valued at what it nets at
+the best importing gateway after freight from the site, so a distant site wins only when its
+lower costs outweigh the freight. Growth-minded archetypes (growth weight 3)
+build when imports cover four fifths of a plant; cautious ones (weight 2) only when imports cover
+a full plant; vultures do not build. A rival stops building new plants at thirty plants.
 Acquisition candidate uses public fair estimate with 20 percent uncertainty haircut unless
 diligence reveals data. Require post-deal debt/assets <=60 percent and positive combined
 operating contribution. NPC public holders tender using CORPORATE reservation factors.

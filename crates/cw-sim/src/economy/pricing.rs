@@ -7,7 +7,8 @@
 //! out, with less than a week of stock, raises it two percent; otherwise it holds. The result
 //! stays within half and twice reference and never above the cheapest import price in the
 //! corridor, above which buyers import instead (services, with no import quote, stop at fifteen
-//! percent over reference).
+//! percent over reference). Stock a firm keeps as input cover for its own plants is not
+//! counted as unsold.
 
 use std::collections::BTreeSet;
 
@@ -52,6 +53,36 @@ pub fn weekly_sold(world: &World, firm: Handle, product: u16) -> i64 {
         .unwrap_or(0)
 }
 
+/// Lots of a good the firm holds beyond what its own plants keep as input cover. Input cover is
+/// not unsold output: a steelworks that also assembles goods keeps steel for its own plants.
+pub fn free_stock(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> i64 {
+    let Some(entity) = world.firms.get(firm) else {
+        return 0;
+    };
+    let held: i64 = entity
+        .inventory
+        .iter()
+        .filter(|((p, _), _)| *p == product)
+        .map(|(_, lot)| lot.qty.lots())
+        .sum();
+    let id = &dataset.products[product as usize].id;
+    let weekly_need: i64 = entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter(|plant| plant.status == crate::state::FacilityStatus::Operating)
+        .map(|plant| {
+            dataset.recipes[plant.recipe as usize]
+                .weekly_inputs_lots
+                .get(id)
+                .copied()
+                .unwrap_or(0)
+                * plant.blocks as i64
+        })
+        .sum();
+    (held - weekly_need * entity.policies.input_cover_weeks.max(1) as i64).max(0)
+}
+
 /// The price the sell-through rule sets this week for one good.
 pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> i64 {
     let reference = dataset.reference_price(product).max(1);
@@ -65,12 +96,7 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
         .copied()
         .unwrap_or(reference);
     let sold = weekly_sold(world, firm, product);
-    let stock: i64 = entity
-        .inventory
-        .iter()
-        .filter(|((p, _), _)| *p == product)
-        .map(|(_, lot)| lot.qty.lots())
-        .sum();
+    let stock = free_stock(world, dataset, firm, product);
     let mut target = price;
     if (sold == 0 && stock > 0) || stock > sold * 4 {
         target = price * 95 / 100;
@@ -91,68 +117,102 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
         .max(1)
 }
 
-/// Production target in basis points from sell-through. Goods: more than four weeks of unsold
-/// stock in any good cuts fifteen points, down to thirty percent; under a week and a half of
-/// stock in every good raises fifteen points, up to full capacity. Services keep no stock:
-/// sales under half of full capacity cut, above ninety percent raise. Otherwise it holds.
-pub fn production_target(world: &World, dataset: &Dataset, firm: Handle) -> i32 {
+/// Production planning from sell-through, plant by plant: each plant follows the good it makes.
+/// Goods: more than four weeks of unsold stock (beyond the firm's own input cover) cuts fifteen
+/// points, down to thirty percent; under a week and a half raises fifteen points, up to full
+/// capacity. Services keep no stock: sales under half of the firm's capacity for the service
+/// cut, above ninety percent raise. Otherwise the plant holds. A plant whose good has not sold
+/// yet, such as a new plant still waiting for inputs, holds too.
+pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Handle, i32)> {
     let Some(entity) = world.firms.get(firm) else {
-        return 10_000;
+        return Vec::new();
     };
-    let current = entity.policies.production_target_bps;
     let mut capacity: std::collections::BTreeMap<u16, i64> = std::collections::BTreeMap::new();
+    let mut plants: Vec<(Handle, u16, i32)> = Vec::new();
+    for handle in &entity.facilities {
+        let Some(plant) = world.facilities.get(*handle) else {
+            continue;
+        };
+        if plant.status != crate::state::FacilityStatus::Operating {
+            continue;
+        }
+        let recipe = &dataset.recipes[plant.recipe as usize];
+        if let Some(code) = dataset.product_index.get(&recipe.output) {
+            *capacity.entry(*code).or_default() += recipe.weekly_output_lots * plant.blocks as i64;
+            plants.push((*handle, *code, plant.target_bps));
+        }
+    }
+    plants
+        .into_iter()
+        .map(|(handle, product, current)| {
+            let sold = weekly_sold(world, firm, product);
+            let full = capacity[&product];
+            let (glut, tight) = if dataset.products[product as usize].kind.is_service() {
+                (sold * 2 < full, sold * 10 >= full * 9)
+            } else {
+                let stock = free_stock(world, dataset, firm, product);
+                (stock > sold.max(1) * 4, sold > 0 && stock * 2 < sold * 3)
+            };
+            let target = if glut {
+                (current - 1_500).max(3_000)
+            } else if tight {
+                (current + 1_500).min(10_000)
+            } else {
+                current
+            };
+            (handle, target)
+        })
+        .collect()
+}
+
+/// Apply this week's plant-by-plant plan. The firm's headline target becomes the
+/// capacity-weighted average of its plants.
+pub fn plan(world: &mut World, dataset: &Dataset, firm: Handle) {
+    for (handle, target) in plant_targets(world, dataset, firm) {
+        if let Some(plant) = world.facilities.get_mut(handle) {
+            plant.target_bps = target;
+        }
+    }
+    let Some(entity) = world.firms.get(firm) else {
+        return;
+    };
+    let (mut weighted, mut total) = (0i64, 0i64);
     for plant in entity
         .facilities
         .iter()
         .filter_map(|handle| world.facilities.get(*handle))
         .filter(|plant| plant.status == crate::state::FacilityStatus::Operating)
     {
-        let recipe = &dataset.recipes[plant.recipe as usize];
-        if let Some(code) = dataset.product_index.get(&recipe.output) {
-            *capacity.entry(*code).or_default() += recipe.weekly_output_lots * plant.blocks as i64;
-        }
+        let full = dataset.recipes[plant.recipe as usize].weekly_output_lots * plant.blocks as i64;
+        weighted += full * plant.target_bps as i64;
+        total += full;
     }
-    if capacity.is_empty() {
-        return current;
-    }
-    let mut glut = false;
-    let mut tight = true;
-    for (product, full) in &capacity {
-        let sold = weekly_sold(world, firm, *product);
-        if dataset.products[*product as usize].kind.is_service() {
-            if sold * 2 < *full {
-                glut = true;
-            }
-            if sold * 10 < *full * 9 {
-                tight = false;
-            }
-            continue;
-        }
-        let stock: i64 = entity
-            .inventory
-            .iter()
-            .filter(|((p, _), _)| p == product)
-            .map(|(_, lot)| lot.qty.lots())
-            .sum();
-        if stock > sold.max(1) * 4 {
-            glut = true;
-        }
-        if stock * 2 >= sold * 3 {
-            tight = false;
-        }
-    }
-    if glut {
-        (current - 1_500).max(3_000)
-    } else if tight {
-        (current + 1_500).min(10_000)
-    } else {
-        current
+    if total > 0 {
+        let average = (weighted / total) as i32;
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .policies
+            .production_target_bps = average;
     }
 }
 
 /// The player's automatic pricing: every good a player company makes, unless the player set
 /// its price by hand, follows the sell-through rule each week.
 pub fn weekly(world: &mut World, dataset: &Dataset) {
+    // Rivals always plan production this way; the player's companies do unless set by hand.
+    let rivals: Vec<Handle> = world
+        .firms
+        .iter()
+        .filter(|(handle, firm)| {
+            firm.operative() && !crate::economy::events_engine::player_side(world, *handle)
+        })
+        .map(|(handle, _)| handle)
+        .collect();
+    for firm in rivals {
+        plan(world, dataset, firm);
+    }
     let firms: Vec<Handle> = world
         .firms
         .iter()
@@ -181,8 +241,7 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
             .get(firm)
             .is_some_and(|f| f.policies.manual_production);
         if !manual {
-            let target = production_target(world, dataset, firm);
-            set_target(world, firm, target);
+            plan(world, dataset, firm);
         }
     }
 }

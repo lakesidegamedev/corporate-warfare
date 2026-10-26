@@ -116,12 +116,23 @@ fn the_player_prices_automatically_until_setting_a_price_by_hand() {
 }
 
 #[test]
-fn production_follows_stock_against_sales() {
+fn production_follows_stock_against_sales_plant_by_plant() {
     let dataset = Dataset::load().unwrap();
     let mut world = seed::build(&dataset, 57, ScenarioKind::Guided, ScenarioMode::Sandbox);
     let firm = world.investor.primary_group.unwrap();
     let food = dataset.product_index["food_raw"];
     let region = world.firms.get(firm).unwrap().region;
+    let plant = *world
+        .firms
+        .get(firm)
+        .unwrap()
+        .facilities
+        .iter()
+        .find(|h| {
+            let f = world.facilities.get(**h).unwrap();
+            dataset.recipes[f.recipe as usize].output == "food_raw"
+        })
+        .unwrap();
     let set_stock = |world: &mut World, lots: i64| {
         let entity = world.firms.get_mut(firm).unwrap();
         entity.inventory.retain(|(p, _), _| *p != food);
@@ -130,28 +141,61 @@ fn production_follows_stock_against_sales() {
             cw_core::money::Cents(0),
         );
     };
-    let entity = world.firms.get_mut(firm).unwrap();
-    entity.sales_history = vec![[((region, food), 100)].into_iter().collect(); 13];
-    entity.policies.production_target_bps = 10_000;
+    let planned = |world: &mut World, current: i32| {
+        world.facilities.get_mut(plant).unwrap().target_bps = current;
+        pricing::plant_targets(world, &dataset, firm)
+            .into_iter()
+            .find(|(h, _)| *h == plant)
+            .unwrap()
+            .1
+    };
+    world.firms.get_mut(firm).unwrap().sales_history =
+        vec![[((region, food), 100)].into_iter().collect(); 13];
     // Five weeks of stock: cut fifteen points.
     set_stock(&mut world, 500);
-    assert_eq!(pricing::production_target(&world, &dataset, firm), 8_500);
+    assert_eq!(planned(&mut world, 10_000), 8_500);
     // One week of stock at 85 percent: raise fifteen points back to full.
-    world
-        .firms
-        .get_mut(firm)
-        .unwrap()
-        .policies
-        .production_target_bps = 8_500;
     set_stock(&mut world, 100);
-    assert_eq!(pricing::production_target(&world, &dataset, firm), 10_000);
+    assert_eq!(planned(&mut world, 8_500), 10_000);
     // A deep glut stops at thirty percent.
-    world
-        .firms
-        .get_mut(firm)
-        .unwrap()
-        .policies
-        .production_target_bps = 3_500;
     set_stock(&mut world, 5_000);
-    assert_eq!(pricing::production_target(&world, &dataset, firm), 3_000);
+    assert_eq!(planned(&mut world, 3_500), 3_000);
+    // Nothing sold yet and nothing in stock, as at a new plant waiting for inputs: hold.
+    world.firms.get_mut(firm).unwrap().sales_history.clear();
+    set_stock(&mut world, 0);
+    assert_eq!(planned(&mut world, 7_000), 7_000);
+}
+
+#[test]
+fn input_cover_for_the_firms_own_plants_is_not_unsold_stock() {
+    let dataset = Dataset::load().unwrap();
+    let mut world = seed::build(&dataset, 57, ScenarioKind::Guided, ScenarioMode::Sandbox);
+    let firm = world.investor.primary_group.unwrap();
+    // The farm burns fuel; whatever fuel it holds up to its cover weeks is its own input.
+    let fuel = dataset.product_index["fuel"];
+    let entity = world.firms.get(firm).unwrap();
+    let weekly: i64 = entity
+        .facilities
+        .iter()
+        .map(|h| world.facilities.get(*h).unwrap())
+        .filter(|f| f.status == cw_sim::state::FacilityStatus::Operating)
+        .map(|f| {
+            dataset.recipes[f.recipe as usize]
+                .weekly_inputs_lots
+                .get("fuel")
+                .copied()
+                .unwrap_or(0)
+                * f.blocks as i64
+        })
+        .sum();
+    assert!(weekly > 0, "the guided farm uses fuel");
+    let cover = weekly * entity.policies.input_cover_weeks.max(1) as i64;
+    let region = entity.region;
+    let entity = world.firms.get_mut(firm).unwrap();
+    entity.inventory.retain(|(p, _), _| *p != fuel);
+    entity.stock_lot_mut(fuel, region).receive(
+        cw_core::quantity::MilliLots::from_lots(cover + 7),
+        cw_core::money::Cents(0),
+    );
+    assert_eq!(pricing::free_stock(&world, &dataset, firm, fuel), 7);
 }

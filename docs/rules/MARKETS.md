@@ -162,12 +162,17 @@ resort at equal price. The seller receives its asking price and the buyer pays t
 Prices and production follow sell-through. Each week an automatically priced good is cut 5
 percent when stock exceeds four weeks of sales or nothing sold, and raised 2 percent when stock
 is under one week, within half to twice reference and never above the cheapest import (services:
-reference plus 15 percent). The production target moves 15 points a week toward what sold,
-floor 30 percent; a service is judged by sold against capacity. Rivals always plan this way;
+reference plus 15 percent). Stock a firm keeps as input cover for its own plants does not count
+as unsold. Production is planned plant by plant: each plant's target moves 15 points a week
+toward what its good sold, floor 30 percent, so one product's glut never idles a firm's other
+plants; a service is judged by sold against capacity, and a plant whose good has not sold yet
+holds. Rivals always plan this way;
 the player's companies do too until the player sets a price or target by hand, and either can be
 handed back to automatic. Contract deliveries, power dispatched to the grid and construction
 services all count as sales. A contract delivery is limited to what the buyer can pay for in
-full, goods and freight together, in whole lots; the rest stays with the seller. Services that reach customers across a state
+full, goods and freight together, in whole lots; the rest stays with the seller.
+
+Services that reach customers across a state
 (software, telecom, advertising, research, maintenance, care, training, water and construction)
 clear statewide: an offer in a region may draw on the seller's stock in any region of the same
 state, and settlement removes it from where it sits. Background public works buy eighteen lots

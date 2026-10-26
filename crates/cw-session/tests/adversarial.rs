@@ -978,11 +978,11 @@ fn long_careers_keep_history_bounded_and_lifetime_figures_consistent() {
     // 110 weeks crosses eight quarterly report boundaries and two full journal windows, so the
     // posting journal, sales history and weekly closes are all pruning by the end.
     const WEEKS: u32 = 110;
-    // Observed envelope: the busiest firm holds about 1,211 postings here, thirteen weeks at
-    // roughly ninety-three postings a week now that operations overheads, shrinkage and the
-    // logistics programme post weekly. Without pruning the same firm would pass ten thousand by
-    // week 110, so this still catches an accidental removal of compaction.
-    const JOURNAL_ENVELOPE: usize = 1_600;
+    // Observed envelope: the busiest firm holds about 1,665 postings here, thirteen weeks at
+    // roughly 128 postings a week now that rivals grow to more plants and trade on the corridor
+    // exchange. Without pruning the same firm would pass ten thousand by week 110, so this still
+    // catches an accidental removal of compaction.
+    const JOURNAL_ENVELOPE: usize = 2_400;
 
     let mut session = session(0x00C0_5A7E, ScenarioKind::Founder);
     let mut totals: BTreeMap<u64, (i64, i64)> = BTreeMap::new();
