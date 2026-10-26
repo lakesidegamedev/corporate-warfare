@@ -1268,24 +1268,28 @@ fn apply_intent(
                         .unwrap_or(false)
                 })
             };
+            // Goods sit where they were made, which need not be the seller's headquarters.
             let source = world
                 .firms
                 .iter()
-                .filter(|(_, entity)| {
-                    entity.operative()
-                        && entity.region != *region
-                        && entity.stock(*product, entity.region).0 > 0
-                        && produces(entity)
+                .filter(|(_, entity)| entity.operative() && produces(entity))
+                .flat_map(|(handle, entity)| {
+                    entity
+                        .inventory
+                        .iter()
+                        .filter(|((good, from), lot)| {
+                            *good == *product && *from != *region && lot.qty.0 > 0
+                        })
+                        .map(move |((_, from), _)| (handle, *from))
                 })
-                .min_by_key(|(handle, entity)| {
+                .min_by_key(|(handle, from)| {
                     (
-                        crate::economy::freight::freight_cost(dataset, entity.region, *region, qty),
+                        crate::economy::freight::freight_cost(dataset, *from, *region, qty),
                         *handle,
+                        *from,
                     )
-                })
-                .map(|(handle, _)| handle);
-            if let Some(seller) = source {
-                let seller_region = world.firms.get(seller).map(|f| f.region).unwrap_or(0);
+                });
+            if let Some((seller, seller_region)) = source {
                 let available = world
                     .firms
                     .get(seller)

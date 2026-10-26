@@ -78,6 +78,21 @@ Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
 
 ### Fixed
 
+- Only firms headquartered in a state could sell there: business, household and public-works
+  sales and gateway exports all filtered on headquarters, so a plant built in another state
+  could not sell its output. Sellers now only need stock in the state. Spot orders search
+  every state where a producer holds the good.
+- Business offers included a firm's own input stock, so rivals sold and then discounted the
+  steel and plastics their plants needed. Offers now keep the plant's input cover back, as
+  gateway exports already did.
+- Liquidation wrote off the inventory account but left the physical stock in place.
+- A shipment that a short-of-cash buyer paid only in part arrived carrying its full list
+  value, more cost than the ledger recorded.
+- Vehicle Assembly was priced for a 12 percent margin, below every other new good, and lost
+  money on Michigan wages at gateway prices. Vehicles are now priced for 22 percent ($4,790).
+- Rivals raised prices toward twice reference whenever the gateway bought their whole output.
+  Prices now stop at the state's import price, above which local buyers import instead.
+- Rerunning the sector content script duplicated the new goods.
 - Every sale overwrote the week's unit sales for that good and state instead of adding to
   them, so a firm selling to households and then exporting recorded only the last fill.
 - Rival pricing read the open sales week, which is empty between ticks, so rivals never

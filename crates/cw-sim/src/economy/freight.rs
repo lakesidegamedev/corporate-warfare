@@ -63,10 +63,10 @@ fn receive_shipment(world: &mut World, shipment: &Shipment, dataset: &Dataset) {
     if let Some(buyer) = world.firms.get_mut(shipment.buyer) {
         buyer
             .stock_lot_mut(shipment.product, shipment.to_region)
-            .receive(
-                shipment.quantity,
-                Cents(shipment.unit_price_cents * shipment.quantity.lots()),
-            );
+            // Carry what the buyer actually paid and posted to inventory at dispatch. A buyer
+            // short of cash pays part and the rest is deferred as an expense, so the list
+            // price would carry cost the ledger never recorded.
+            .receive(shipment.quantity, Cents(shipment.goods_value_cents));
         if same_group {
             buyer.record_intercompany_receipt(
                 shipment.seller,

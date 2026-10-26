@@ -180,7 +180,7 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
         let sellers: Vec<Handle> = world
             .firms
             .iter()
-            .filter(|(_, firm)| firm.region == region as u8 && firm.operative())
+            .filter(|(_, firm)| firm.operative())
             .filter(|(_, firm)| firm.stock(service, region as u8).0 > 0)
             .map(|(handle, _)| handle)
             .collect();
@@ -309,10 +309,11 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
         let mut offers: Vec<Offer> = Vec::new();
         let mut seller_handles: Vec<OfferSource> = Vec::new();
         for (handle, firm) in world.firms.iter() {
-            if firm.region != region || !firm.operative() {
+            if !firm.operative() {
                 continue;
             }
-            let qty = firm.stock(product, region).0;
+            let cover = own_input_cover_lots(world, dataset, firm, region, product) * 1_000;
+            let qty = firm.stock(product, region).0 - cover;
             if qty <= 0 {
                 continue;
             }
@@ -362,6 +363,37 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
     }
 }
 
+/// Lots of a good a firm keeps in one state as input cover for its own plants there. Stock up
+/// to this level is not for sale: a plant's inputs are never offered to other buyers.
+fn own_input_cover_lots(
+    world: &World,
+    dataset: &Dataset,
+    firm: &crate::state::Firm,
+    region: u8,
+    product: u16,
+) -> i64 {
+    let cover_weeks = firm.policies.input_cover_weeks.max(1) as i64;
+    let mut need = 0i64;
+    for facility_handle in &firm.facilities {
+        let Some(facility) = world.facilities.get(*facility_handle) else {
+            continue;
+        };
+        if facility.region != region {
+            continue;
+        }
+        let recipe = &dataset.recipes[facility.recipe as usize];
+        if let Some(weekly) = recipe
+            .weekly_inputs_lots
+            .iter()
+            .find(|(id, _)| dataset.product_index[*id] == product)
+            .map(|(_, qty)| *qty)
+        {
+            need += weekly * facility.blocks as i64 * cover_weeks;
+        }
+    }
+    need
+}
+
 fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, product: u16) {
     let Some(index) = world
         .gateways
@@ -381,7 +413,7 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
     let sellers: Vec<Handle> = world
         .firms
         .iter()
-        .filter(|(_, firm)| firm.region == region && firm.operative())
+        .filter(|(_, firm)| firm.operative())
         .filter(|(_, firm)| firm.stock(product, region).0 > 0)
         .map(|(handle, _)| handle)
         .collect();
@@ -392,25 +424,7 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
         let Some(firm) = world.firms.get(seller) else {
             continue;
         };
-        let cover_weeks = firm.policies.input_cover_weeks.max(1) as i64;
-        let mut own_need = 0i64;
-        for facility_handle in &firm.facilities {
-            let Some(facility) = world.facilities.get(*facility_handle) else {
-                continue;
-            };
-            if facility.region != region {
-                continue;
-            }
-            let recipe = &dataset.recipes[facility.recipe as usize];
-            if let Some(weekly) = recipe
-                .weekly_inputs_lots
-                .iter()
-                .find(|(id, _)| dataset.product_index[*id] == product)
-                .map(|(_, qty)| *qty)
-            {
-                own_need += weekly * facility.blocks as i64 * cover_weeks;
-            }
-        }
+        let own_need = own_input_cover_lots(world, dataset, firm, region, product);
         // Stock promised to active sell contracts is not surplus and cannot be exported.
         let committed: i64 = world
             .contracts
@@ -532,7 +546,7 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
             let mut offers: Vec<Offer> = Vec::new();
             let mut sources: Vec<OfferSource> = Vec::new();
             for (handle, firm) in world.firms.iter() {
-                if firm.region != region_index as u8 || !firm.operative() {
+                if !firm.operative() {
                     continue;
                 }
                 let qty = firm.stock(product, region_index as u8).0;
@@ -629,7 +643,7 @@ fn clear_government(world: &mut World, dataset: &Dataset) {
             let mut offers = Vec::new();
             let mut sources = Vec::new();
             for (handle, firm) in world.firms.iter() {
-                if firm.region != region as u8 || !firm.operative() {
+                if !firm.operative() {
                     continue;
                 }
                 let qty = firm.stock(product, region as u8).0;

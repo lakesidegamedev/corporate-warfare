@@ -36,7 +36,7 @@ NEW_GOODS = [
     ("fertilizers", "Fertilizers", "goods", "fertilizer_plant", 0.22),
     ("pharmaceuticals", "Pharmaceuticals", "goods", "pharma_plant", 0.34),
     ("building_materials", "Building materials", "goods", "building_products", 0.20),
-    ("vehicles", "Vehicles", "goods", "vehicle_assembly", 0.12),
+    ("vehicles", "Vehicles", "goods", "vehicle_assembly", 0.22),
 ]
 
 # Display names for the existing recipes, which stay each sector's standard strategy.
@@ -185,7 +185,8 @@ def main():
     order = [p["id"] for p in data["products"]]
     goods_tail = [pid for pid, *_ in NEW_GOODS]
     financial = [pid for pid in order if products[pid]["kind"] == "financial_contract"]
-    ordered = [pid for pid in order if pid not in financial] + goods_tail + financial
+    # Rerunning on its own output must not duplicate the new goods.
+    ordered = [pid for pid in order if pid not in financial and pid not in goods_tail] + goods_tail + financial
     data["products"] = [products[pid] for pid in ordered]
     industries = ["agriculture", "extraction", "energy", "chemical_industries", "manufacturing",
                   "construction", "logistics", "retail", "healthcare", "technology", "media",

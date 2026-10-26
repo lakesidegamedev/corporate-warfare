@@ -191,7 +191,7 @@
     {
       "id": "vehicles",
       "name": "Vehicles",
-      "reference_price_cents": 424000,
+      "reference_price_cents": 479000,
       "kind": "goods"
     },
     {
@@ -676,7 +676,7 @@
         40,
         10
       ],
-      "capex_cents": 126000000,
+      "capex_cents": 263000000,
       "build_weeks": 39,
       "life_years": 25
     },
@@ -853,7 +853,7 @@
         25,
         4
       ],
-      "capex_cents": 306000000,
+      "capex_cents": 298000000,
       "build_weeks": 8,
       "life_years": 25
     },
@@ -1227,7 +1227,7 @@
         45,
         15
       ],
-      "capex_cents": 481000000,
+      "capex_cents": 458000000,
       "build_weeks": 39,
       "life_years": 25
     },
