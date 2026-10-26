@@ -1,10 +1,41 @@
 # Current checkpoint
 
-Date: 2026-10-26. Released: **1.1.0**, single-player A House Divided corporations on a
-real map (feature PR #76, release branch `release/1.1.0`). Kanban: 254781.
-Saves from 1.0.0 do not load in 1.1.0; the changelog says so.
+Date: 2026-10-26. In progress: **1.2.0**, economic regions, sector divisions and corporate
+warfare (PR #79, branch `feat/regions`). Kanban: 254796. Released: 1.1.0 (TestFlight build 2).
+Saves from 1.1.0 do not load in 1.2.0; the changelog says so.
 
-## 1.1.0
+## 1.2.0
+
+Owner direction (DECISIONS.md, 2026-10-26): economic regions inside the states, A House
+Divided sector divisions with plants inside them, the map showing only the player's divisions
+with plant counts, cheaper plants, and the most ambitious update so far. Built:
+
+- 31 county-built economic regions (Census 2000, SAIPE 2000); states as the political layer
+  with two specialized sectors each; statewide service markets; per-state public works and
+  gateways.
+- Divisions: entry fee, founding discount, one strategy per division, division retools,
+  market share and dominance pricing, home and specialization input factors, sprawl by
+  division.
+- Market raids with rival AI use; market news.
+- Board objectives with a management bonus; the score rebased on growth, expansion and
+  leadership; an expander reference policy.
+- Plants a fifth of their 1.1.0 size; tax loss carryforward.
+- App: region map with owned sector circles and plant badges, region boards, division build
+  flow with a full cost quote, raid sheet, board goal strip, CEO Office divisions.
+
+Verified at `6a36dcb`: `cargo test --locked --workspace` through the check scheduler and
+hosted Verify and Apple smoke (Swift compiles, bridge and snapshot tests pass). Balance (R36)
+regenerated: `evidence/balance-report.md`, zero errors; the no-action career scores 36 and
+the expander 59.
+
+Open:
+
+1. Reference policies need a sell-through rule (the thirty-year expander finding).
+2. Rival dissolutions 3.7 percent, construction weakest.
+3. Human and device gates from 1.0.0 remain: R32/R33/R35, R37, R38, R39, R42.
+
+# 1.1.0 checkpoint (history)
+
 
 Owner direction (DECISIONS.md, 2026-10-26): play AHD corporations single-player over a real
 map of eight states, keeping this engine. Built:
