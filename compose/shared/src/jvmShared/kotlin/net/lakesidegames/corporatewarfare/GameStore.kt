@@ -47,6 +47,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var ready by mutableStateOf(false); private set
     var busy by mutableStateOf(false); private set
     var running by mutableStateOf(false); private set
+    /** Weeks a second while running: 1, 2 or 4. */
+    var speed by mutableStateOf(1); private set
     var status by mutableStateOf(""); private set
     var error by mutableStateOf<String?>(null)
 
@@ -90,19 +92,28 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     fun advance() = perform { step() }
 
-    fun toggleRun() {
-        if (runJob != null) {
+    fun toggleRun() = setSpeed(if (runJob == null) 1 else 0)
+
+    /**
+     * Time runs at [weeksPerSecond]: 0 pauses, 1, 2 or 4 play. One tick is one week. A running
+     * loop picks up a new speed from the next week; ticks never mark the app busy, so buttons
+     * stay put while time runs.
+     */
+    fun setSpeed(weeksPerSecond: Int) {
+        if (weeksPerSecond <= 0) {
             runJob?.cancel()
             runJob = null
             running = false
             return
         }
+        speed = weeksPerSecond
+        if (runJob != null) return
         running = true
         runJob = scope.launch {
             while (isActive) {
                 step()
                 if (overview?.pause != null || events.any { it.mandatory }) break
-                delay(1_000)
+                delay(1_000L / speed)
             }
             running = false
             runJob = null

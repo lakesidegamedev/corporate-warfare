@@ -6,7 +6,6 @@ struct StartView: View {
     @AppStorage(OnboardingKeys.completed) private var onboardingCompleted = false
     @State private var guided = true
     @State private var fiveYear = true
-    @State private var seedText = ""
     @State private var showingAbout = false
     @State private var showingSaves = false
     @State private var export: DiagnosticExport?
@@ -32,11 +31,8 @@ struct StartView: View {
                     SectionCard(title: "New career") {
                         Toggle("Guided start (60% of a running firm)", isOn: $guided)
                         Toggle("Five-year scored scenario", isOn: $fiveYear)
-                        TextField("Optional seed", text: $seedText)
-                            .textFieldStyle(.roundedBorder)
-                            .keyboardType(.numberPad)
                         Button {
-                            let seed = UInt64(seedText) ?? UInt64.random(in: 1...9_999_999)
+                            let seed = UInt64.random(in: 1...9_999_999)
                             Task { await store.newCareer(guided: guided, fiveYear: fiveYear, seed: seed) }
                         } label: {
                             Label("Start", systemImage: "play.fill")

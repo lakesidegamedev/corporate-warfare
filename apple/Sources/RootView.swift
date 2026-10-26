@@ -103,7 +103,7 @@ struct RunControls: View {
     @EnvironmentObject private var store: AppStore
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Button {
                 Task { await store.advance(weeks: 1) }
             } label: {
@@ -113,17 +113,46 @@ struct RunControls: View {
             .buttonStyle(.borderedProminent)
             .tint(Theme.gold)
             .foregroundStyle(Theme.ink)
-
-            Button {
-                store.toggleRun()
-            } label: {
-                Label(store.runSpeed > 0 ? "Pause" : "Auto-advance", systemImage: store.runSpeed > 0 ? "pause.fill" : "play.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .tint(Theme.gold)
+            .controlSize(.large)
+            .disabled(store.isBusy || store.runSpeed > 0)
+            SpeedControl()
         }
-        .controlSize(.large)
-        .disabled(store.isBusy)
+    }
+}
+
+/// Pause, 1x, 2x, 4x. One tick is one week; 1x is a week a second.
+struct SpeedControl: View {
+    @EnvironmentObject private var store: AppStore
+    var compact = false
+
+    private let speeds: [(Double, String)] = [(0, "pause.fill"), (1, "1x"), (2, "2x"), (4, "4x")]
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(speeds, id: \.0) { speed, label in
+                let selected = speed == 0 ? store.runSpeed == 0 : store.runSpeed == speed
+                Button {
+                    store.setSpeed(speed)
+                } label: {
+                    Group {
+                        if speed == 0 {
+                            Image(systemName: label)
+                        } else {
+                            Text(label).monospacedDigit()
+                        }
+                    }
+                    .font((compact ? Font.caption : Font.callout).weight(.bold))
+                    .frame(minWidth: compact ? 30 : 38, minHeight: compact ? 28 : 36)
+                    .foregroundStyle(selected ? Theme.ink : Theme.primaryText)
+                    .background(selected ? Theme.gold : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(speed == 0 ? "Pause" : "Speed \(label)")
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
     }
 }

@@ -171,18 +171,13 @@ struct CompanyHUD: View {
             } label: {
                 Image(systemName: "forward.frame.fill")
             }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.gold)
+            .foregroundStyle(Theme.ink)
+            .disabled(store.isBusy || store.runSpeed > 0)
             .accessibilityLabel("Next week")
-            Button {
-                store.toggleRun()
-            } label: {
-                Image(systemName: store.runSpeed > 0 ? "pause.fill" : "play.fill")
-            }
-            .accessibilityLabel(store.runSpeed > 0 ? "Pause" : "Auto-advance")
+            SpeedControl(compact: true)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(Theme.gold)
-        .foregroundStyle(Theme.ink)
-        .disabled(store.isBusy)
     }
 }
 

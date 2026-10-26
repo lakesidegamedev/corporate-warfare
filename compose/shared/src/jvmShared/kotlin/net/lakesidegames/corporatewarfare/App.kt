@@ -2,6 +2,7 @@ package net.lakesidegames.corporatewarfare
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -454,12 +455,33 @@ private fun PortfolioScreen(store: GameStore) {
 @Composable
 fun RunControls(store: GameStore) {
     Column {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             GoldButton("Next week", Modifier.weight(1f), enabled = !store.busy && !store.running) { store.advance() }
-            OutlinedButton(onClick = { store.toggleRun() }, modifier = Modifier.weight(1f)) {
-                Text(if (store.running) "Pause" else "Auto-advance", color = Palette.gold)
-            }
+            SpeedControl(store)
         }
-        Text("Next week settles one week. Auto-advance plays a week a second and stops for any decision.", color = Palette.secondary, fontSize = 11.sp)
+        Text("One tick is one week. 1x plays a week a second, 2x two, 4x four; play stops for any decision.", color = Palette.secondary, fontSize = 11.sp)
+    }
+}
+
+/** Pause, 1x, 2x, 4x. */
+@Composable
+fun SpeedControl(store: GameStore) {
+    Row(
+        Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(Palette.panelRaised).padding(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        listOf(0 to "II", 1 to "1x", 2 to "2x", 4 to "4x").forEach { (value, label) ->
+            val selected = if (value == 0) !store.running else store.running && store.speed == value
+            Text(
+                label,
+                color = if (selected) Palette.ink else Palette.primaryText,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                    .background(if (selected) Palette.gold else androidx.compose.ui.graphics.Color.Transparent)
+                    .clickable { store.setSpeed(value) }
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+            )
+        }
     }
 }

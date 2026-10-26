@@ -178,7 +178,7 @@ private fun MapHud(store: GameStore) {
             }
             GoldButton("Next", enabled = !store.busy && !store.running) { store.advance() }
             Spacer(Modifier.width(6.dp))
-            GoldButton(if (store.running) "Pause" else "Auto") { store.toggleRun() }
+            SpeedControl(store)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Column {

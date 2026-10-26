@@ -23,7 +23,7 @@ struct OverviewView: View {
                     CalloutRow(symbol: "exclamationmark.triangle.fill", text: alert, tint: Theme.warning)
                 }
                 RunControls()
-                Text("Next week settles one week. Auto-advance plays a week a second and stops for any decision.")
+                Text("Next week settles one week. The speed control plays a week a second at 1x, two at 2x and four at 4x, and stops for any decision.")
                     .font(.caption2)
                     .foregroundStyle(Theme.secondary)
                 groupPanel

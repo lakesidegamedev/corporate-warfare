@@ -1,0 +1,329 @@
+{
+ "size": 12,
+ "note": "8-bit sector icons, one per sector type, shared by every platform. '.' is transparent; each letter maps to its icon's palette.",
+ "icons": {
+  "agriculture": {
+   "palette": {
+    "y": "#E2B04A",
+    "o": "#B8862B",
+    "g": "#8BC34A",
+    "d": "#4E7A1F"
+   },
+   "rows": [
+    "..y...y...y.",
+    ".yoy.yoy.yoy",
+    ".yoy.yoy.yoy",
+    "..y...y...y.",
+    ".yoy.yoy.yoy",
+    "..yo.yo..yo.",
+    "...o..o..o..",
+    "...o..o..o..",
+    "....o.o.o...",
+    ".....ooo....",
+    "..g..ooo..g.",
+    "gdggggggggdg"
+   ]
+  },
+  "extraction": {
+   "palette": {
+    "s": "#B0BEC5",
+    "d": "#607D8B",
+    "b": "#8D6E3F",
+    "w": "#ECEFF1"
+   },
+   "rows": [
+    "............",
+    ".ssss.......",
+    "s....s......",
+    ".....bs.....",
+    "......b.....",
+    ".......b....",
+    "....w...b...",
+    "...wdw...b..",
+    "..wdddw...b.",
+    ".wdddddw....",
+    "wdddddddw...",
+    "dddddddddd.."
+   ]
+  },
+  "energy": {
+   "palette": {
+    "y": "#FFC107",
+    "o": "#F57F17",
+    "w": "#FFF59D"
+   },
+   "rows": [
+    "......yyy...",
+    ".....yyo....",
+    "....yyo.....",
+    "...yyo......",
+    "..yywyyyy...",
+    "..yyyyyyo...",
+    "......yyo...",
+    ".....yyo....",
+    "....yyo.....",
+    "...yyo......",
+    "..yo........",
+    ".yo........."
+   ]
+  },
+  "chemical_industries": {
+   "palette": {
+    "g": "#B0BEC5",
+    "c": "#26C6DA",
+    "d": "#00838F",
+    "w": "#E0F7FA"
+   },
+   "rows": [
+    "....gggg....",
+    "....g..g....",
+    "....g..g....",
+    "....g..g....",
+    "...g....g...",
+    "..g......g..",
+    "..gccwcccg..",
+    ".gcccccwccg.",
+    ".gcdccccdcg.",
+    "gcccccdccccg",
+    "gccdccccccdg",
+    ".gggggggggg."
+   ]
+  },
+  "manufacturing": {
+   "palette": {
+    "m": "#90A4AE",
+    "d": "#546E7A",
+    "k": "#263238"
+   },
+   "rows": [
+    ".....mm.....",
+    "..m..mm..m..",
+    ".mmmmmmmmmm.",
+    "..mmmmmmmm..",
+    ".mmmdddmmmm.",
+    "mmmmdkkdmmmm",
+    "mmmmdkkdmmmm",
+    ".mmmmddmmmm.",
+    "..mmmmmmmm..",
+    ".mmmmmmmmmm.",
+    "..m..mm..m..",
+    ".....mm....."
+   ]
+  },
+  "construction": {
+   "palette": {
+    "o": "#FF8A65",
+    "d": "#BF360C",
+    "g": "#90A4AE",
+    "b": "#8D6E3F"
+   },
+   "rows": [
+    "............",
+    "..ooooooo...",
+    "..ooooooodd.",
+    "..ooooooo...",
+    ".....bb.....",
+    ".....bb.....",
+    ".....bb.....",
+    ".....bb.....",
+    ".....bb.....",
+    ".....bb.....",
+    "....gggg....",
+    "...gggggg..."
+   ]
+  },
+  "logistics": {
+   "palette": {
+    "p": "#7E57C2",
+    "d": "#4527A0",
+    "w": "#ECEFF1",
+    "k": "#263238"
+   },
+   "rows": [
+    "............",
+    "............",
+    "pppppppp....",
+    "pppppppp.ww.",
+    "pppppppp.www",
+    "pppppppppppp",
+    "pppppppppppp",
+    "pdddpppppddp",
+    ".kkk.....kkk",
+    ".kwk.....kwk",
+    "..k.......k.",
+    "............"
+   ]
+  },
+  "retail": {
+   "palette": {
+    "r": "#EC407A",
+    "d": "#AD1457",
+    "k": "#263238"
+   },
+   "rows": [
+    "............",
+    "rr..........",
+    ".r..........",
+    ".rrrrrrrrrr.",
+    ".rrddrrddrr.",
+    "..rrrrrrrr..",
+    "..rrddrrdr..",
+    "...rrrrrr...",
+    "...r.....r..",
+    "...rrrrrrr..",
+    "...k....k...",
+    "..kkk..kkk.."
+   ]
+  },
+  "healthcare": {
+   "palette": {
+    "r": "#EF5350",
+    "w": "#FFFFFF",
+    "d": "#B71C1C"
+   },
+   "rows": [
+    "............",
+    "....rrrr....",
+    "....rwwr....",
+    "....rwwr....",
+    ".rrrrwwrrrr.",
+    ".rwwwwwwwwr.",
+    ".rwwwwwwwwr.",
+    ".rrrrwwrrrr.",
+    "....rwwr....",
+    "....rwwr....",
+    "....rrrr....",
+    "............"
+   ]
+  },
+  "technology": {
+   "palette": {
+    "b": "#42A5F5",
+    "d": "#1565C0",
+    "g": "#B0BEC5",
+    "w": "#E3F2FD"
+   },
+   "rows": [
+    "..g.g.g.g...",
+    "..g.g.g.g...",
+    "gbbbbbbbbbg.",
+    ".bddddddddb.",
+    "gbdwwwwwwdbg",
+    ".bdwddddwdb.",
+    "gbdwddddwdbg",
+    ".bdwwwwwwdb.",
+    "gbddddddddbg",
+    ".bbbbbbbbbb.",
+    "..g.g.g.g...",
+    "..g.g.g.g..."
+   ]
+  },
+  "media": {
+   "palette": {
+    "p": "#AB47BC",
+    "d": "#6A1B9A",
+    "s": "#CE93D8",
+    "k": "#263238"
+   },
+   "rows": [
+    "...k....k...",
+    "....k..k....",
+    ".....kk.....",
+    "pppppppppppp",
+    "pddddddddspp",
+    "pdssssssdpsp",
+    "pdssssssdpsp",
+    "pdssssssdppp",
+    "pddddddddpsp",
+    "pppppppppppp",
+    ".k........k.",
+    "............"
+   ]
+  },
+  "telecommunications": {
+   "palette": {
+    "c": "#29B6F6",
+    "d": "#0277BD",
+    "g": "#90A4AE"
+   },
+   "rows": [
+    "c..........c",
+    ".c...cc...c.",
+    "..c.c..c.c..",
+    ".c...dd...c.",
+    "c....dd....c",
+    ".....gg.....",
+    ".....gg.....",
+    "....g..g....",
+    "....g..g....",
+    "...g....g...",
+    "...g....g...",
+    "..gggggggg.."
+   ]
+  },
+  "real_estate": {
+   "palette": {
+    "g": "#66BB6A",
+    "d": "#2E7D32",
+    "w": "#FFF59D",
+    "b": "#8D6E3F"
+   },
+   "rows": [
+    ".....gg.....",
+    "....gggg....",
+    "...gggggg...",
+    "..gggggggg..",
+    ".gggggggggg.",
+    "..dddddddd..",
+    "..dwwddwwd..",
+    "..dwwddwwd..",
+    "..dddddddd..",
+    "..dwwdbbdd..",
+    "..dddbbbdd..",
+    ".bbbbbbbbbb."
+   ]
+  },
+  "defense": {
+   "palette": {
+    "s": "#78909C",
+    "d": "#37474F",
+    "y": "#E2B04A"
+   },
+   "rows": [
+    "ssssssssssss",
+    "sdddddddddds",
+    "sddddyyddsds",
+    "sdddyyyydsds",
+    "sdyyyyyyyyds",
+    "sddyyyyyydds",
+    ".sddyyyydds.",
+    ".sdyyddyyds.",
+    "..sddddddds.",
+    "...sddddds..",
+    "....sddds...",
+    ".....sss...."
+   ]
+  },
+  "financial": {
+   "palette": {
+    "y": "#FFD54F",
+    "o": "#F9A825",
+    "w": "#FFF8E1"
+   },
+   "rows": [
+    "............",
+    "...yyyyyy...",
+    "..yoooooyy..",
+    ".yowwwwooyy.",
+    ".yowoooooyy.",
+    ".yowwwwooyy.",
+    ".yoooowooyy.",
+    ".yowwwwooyy.",
+    "..yoooooyy..",
+    "...yyyyyy...",
+    "............",
+    "............"
+   ]
+  }
+ }
+}

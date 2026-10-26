@@ -10,8 +10,14 @@ enum Telemetry {
     private static let enabledKey = "cw.telemetry.enabled"
     private static let installKey = "cw.telemetry.installId"
 
+    /// Test runs (CI's simulator and snapshot tests) never upload: their careers are not play.
+    private static var underTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || NSClassFromString("XCTestCase") != nil
+    }
+
     static var enabled: Bool {
-        get { UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true }
+        get { !underTest && (UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true) }
         set { UserDefaults.standard.set(newValue, forKey: enabledKey) }
     }
 
