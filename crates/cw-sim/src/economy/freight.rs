@@ -337,12 +337,19 @@ mod tests {
     fn freight_cost_is_per_whole_lot_and_has_a_minimum() {
         let dataset = Dataset::load().unwrap();
         let km = dataset.lane_km("OH", "MI").unwrap();
-        let cost = freight_cost(&dataset, 3, 6, MilliLots::from_lots(10));
-        assert_eq!(cost, 10 * km as i64 * FREIGHT_CENTS_PER_LOT_KM);
-        let tiny = freight_cost(&dataset, 3, 6, MilliLots::from_lots(1));
-        assert_eq!(tiny, km as i64 * FREIGHT_CENTS_PER_LOT_KM);
+        let (oh, mi) = (dataset.region_index["OH"], dataset.region_index["MI"]);
+        // Ohio roads 6400 and Michigan 5200 average 5800: freight costs 1 percent more.
+        let road = crate::economy::operations::road_bps(&dataset, oh, mi);
+        assert_eq!(road, 10_100);
+        let cost = freight_cost(&dataset, oh, mi, MilliLots::from_lots(10));
+        assert_eq!(
+            cost,
+            10 * km as i64 * FREIGHT_CENTS_PER_LOT_KM * road / 10_000
+        );
+        let tiny = freight_cost(&dataset, oh, mi, MilliLots::from_lots(1));
+        assert_eq!(tiny, km as i64 * FREIGHT_CENTS_PER_LOT_KM * road / 10_000);
         // The minimum only binds on a lane shorter than twenty kilometres.
-        assert!(freight_cost(&dataset, 3, 6, MilliLots::from_lots(1)) >= FREIGHT_MINIMUM_CENTS);
+        assert!(freight_cost(&dataset, oh, mi, MilliLots::from_lots(1)) >= FREIGHT_MINIMUM_CENTS);
         assert_eq!(freight_cost(&dataset, 3, 3, MilliLots::from_lots(10)), 0);
     }
 }

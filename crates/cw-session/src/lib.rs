@@ -1284,7 +1284,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "1d5209e2b975ca2a603cb50e3f83a5ca8935cfdd62f43f9534d2fef723e7f66c"
+            "17187e1843b84da5d25f0c810c287a92d92f21b16a34929e7b931ba52687d1e6"
         );
     }
 
@@ -1324,13 +1324,42 @@ mod tests {
         assert_eq!(replayed, session.canonical_hash());
     }
 
+    /// Answer every waiting mandatory player card with its first choice, as the inbox would.
+    fn answer_cards(session: &mut Session) {
+        let waiting: Vec<(u64, String)> = session
+            .world
+            .events
+            .pending
+            .iter()
+            .filter(|event| !event.resolved && event.mandatory)
+            .filter_map(|event| {
+                let card = session.dataset.event(&event.card)?;
+                Some((event.id, card.choices.first()?.id.clone()))
+            })
+            .collect();
+        for (event, choice) in waiting {
+            let _ = session.submit(cw_sim::commands::CommandEnvelope {
+                command_id_high: 0xCA2D,
+                command_id_low: event,
+                actor: 0,
+                expected_revision: session.revision(),
+                submitted_tick: session.world.tick.0,
+                intent: CommandIntent::RespondEvent { event, choice },
+            });
+        }
+    }
+
     #[test]
     fn the_five_year_score_pauses_and_the_career_continues() {
         let mut session = Session::create(config(201)).unwrap();
         // The five-year mode pauses exactly at week 260 and records a score. Advance is capped
         // at sixteen weeks per call, so a caller loops until the pause.
         let mut result = session.advance(16);
-        while result.final_week < 260 && result.pause.is_none() {
+        while result.final_week < 260 && result.pause.as_deref() != Some("five_year_score") {
+            if result.pause.is_some() {
+                answer_cards(&mut session);
+                session.dismiss_pause();
+            }
             result = session.advance(16);
         }
         assert_eq!(result.final_week, 260);

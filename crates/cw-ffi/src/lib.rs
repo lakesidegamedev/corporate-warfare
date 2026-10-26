@@ -435,6 +435,95 @@ pub struct QuoteDto {
     pub blocked_detail: Option<String>,
 }
 
+/// One input of an operating strategy, in lots per block-week.
+#[derive(uniffi::Record)]
+pub struct StrategyInputDto {
+    pub product: String,
+    pub product_name: String,
+    pub lots: i64,
+}
+
+/// An operating strategy (recipe) with everything the build and retool screens show.
+#[derive(uniffi::Record)]
+pub struct StrategyDto {
+    pub index: u32,
+    pub id: String,
+    pub name: String,
+    pub industry: String,
+    pub output: String,
+    pub output_name: String,
+    pub weekly_output_lots: i64,
+    pub inputs: Vec<StrategyInputDto>,
+    pub workers_low: i64,
+    pub workers_mid: i64,
+    pub workers_high: i64,
+    pub capex_cents: i64,
+    pub build_weeks: u32,
+    pub life_years: u32,
+    /// EBITDA margin at reference prices and baseline wages, full capacity, in basis points.
+    pub reference_margin_bps: i32,
+    pub depletes: bool,
+}
+
+/// A good a state imports: demand local plants are not meeting.
+#[derive(uniffi::Record)]
+pub struct RoomDto {
+    pub product: String,
+    pub product_name: String,
+    pub import_lots: i64,
+    pub import_price_cents: i64,
+}
+
+/// A playable state with its conditions and room to build.
+#[derive(uniffi::Record)]
+pub struct StateDto {
+    pub index: u32,
+    pub code: String,
+    pub name: String,
+    pub hub_city: String,
+    pub population_2000: i64,
+    pub wage_index_bps: i32,
+    pub demand_index_bps: i32,
+    pub power_grid_bps: i32,
+    pub road_bps: i32,
+    pub broadband_bps: i32,
+    pub skill_bps: i32,
+    pub crime_bps: i32,
+    pub cost_of_living_bps: i32,
+    pub organisation_bps: i32,
+    pub room: Vec<RoomDto>,
+}
+
+/// Every plant in the world for the map. Rival plants show only public facts.
+#[derive(uniffi::Record)]
+pub struct MapPlantDto {
+    pub handle: u64,
+    pub firm: u64,
+    pub firm_name: String,
+    /// The investor ultimately controls the owner.
+    pub player: bool,
+    pub region: String,
+    pub industry: String,
+    pub strategy: String,
+    pub blocks: u32,
+    pub status: String,
+    pub utilisation_bps: i32,
+}
+
+/// A firm's sector focus and logistics position.
+#[derive(uniffi::Record)]
+pub struct FirmOpsDto {
+    pub firm: u64,
+    pub primary: String,
+    pub secondary: Option<String>,
+    pub focus_transition_weeks: u32,
+    pub focus_cooldown_weeks: u32,
+    pub logistics_strength: i32,
+    pub logistics_budget_cents: i64,
+    pub plants: u32,
+    pub sprawl_threshold: u32,
+}
+
 #[derive(uniffi::Record)]
 pub struct BuyerDto {
     pub index: u32,
@@ -711,6 +800,79 @@ pub fn recipes() -> Vec<RecipeDto> {
     }
 }
 
+/// The full strategy catalogue with inputs and reference margins.
+#[uniffi::export]
+pub fn strategies() -> Vec<StrategyDto> {
+    let Ok(dataset) = cw_data::Dataset::load() else {
+        return Vec::new();
+    };
+    let price = |id: &str| {
+        dataset
+            .product_index
+            .get(id)
+            .map(|code| dataset.reference_price(*code))
+            .unwrap_or(0)
+    };
+    let name = |id: &str| {
+        dataset
+            .product_index
+            .get(id)
+            .map(|code| dataset.products[*code as usize].name.clone())
+            .unwrap_or_else(|| id.to_owned())
+    };
+    dataset
+        .recipes
+        .iter()
+        .enumerate()
+        .map(|(index, recipe)| {
+            let revenue = recipe.weekly_output_lots * price(&recipe.output);
+            let inputs: i64 = recipe
+                .weekly_inputs_lots
+                .iter()
+                .map(|(id, qty)| qty * price(id))
+                .sum();
+            let cost = inputs
+                + recipe.baseline_weekly_payroll(dataset.baseline_weekly_wage_cents)
+                + recipe.weekly_maintenance(dataset.maintenance_annual_bps)
+                + dataset.fixture_land_rent_cents_weekly;
+            StrategyDto {
+                index: index as u32,
+                id: recipe.id.clone(),
+                name: if recipe.name.is_empty() {
+                    recipe.id.clone()
+                } else {
+                    recipe.name.clone()
+                },
+                industry: recipe.industry.clone(),
+                output: recipe.output.clone(),
+                output_name: name(&recipe.output),
+                weekly_output_lots: recipe.weekly_output_lots,
+                inputs: recipe
+                    .weekly_inputs_lots
+                    .iter()
+                    .map(|(id, qty)| StrategyInputDto {
+                        product: id.clone(),
+                        product_name: name(id),
+                        lots: *qty,
+                    })
+                    .collect(),
+                workers_low: recipe.workers_low_mid_high[0],
+                workers_mid: recipe.workers_low_mid_high[1],
+                workers_high: recipe.workers_low_mid_high[2],
+                capex_cents: recipe.capex_cents,
+                build_weeks: recipe.build_weeks,
+                life_years: recipe.life_years,
+                reference_margin_bps: if revenue > 0 {
+                    ((revenue - cost) as i128 * 10_000 / revenue as i128) as i32
+                } else {
+                    0
+                },
+                depletes: recipe.depletes(),
+            }
+        })
+        .collect()
+}
+
 fn preview_dto(preview: cw_sim::commands::Preview) -> PreviewDto {
     PreviewDto {
         revision: preview.revision,
@@ -842,6 +1004,130 @@ impl SessionHandle {
                 .collect(),
             _ => Vec::new(),
         }
+    }
+
+    /// The eight playable states with conditions and room to build.
+    pub fn states(&self) -> Vec<StateDto> {
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        dataset
+            .regions
+            .iter()
+            .enumerate()
+            .map(|(index, region)| {
+                let mut room: Vec<RoomDto> = world
+                    .gateways
+                    .iter()
+                    .filter(|g| g.region as usize == index && g.smoothed_import_lots > 0)
+                    .map(|g| RoomDto {
+                        product: dataset.products[g.product as usize].id.clone(),
+                        product_name: dataset.products[g.product as usize].name.clone(),
+                        import_lots: g.smoothed_import_lots,
+                        import_price_cents: g.sell_price_cents,
+                    })
+                    .collect();
+                room.sort_by(|a, b| {
+                    (b.import_lots * b.import_price_cents)
+                        .cmp(&(a.import_lots * a.import_price_cents))
+                });
+                let c = region.conditions;
+                StateDto {
+                    index: index as u32,
+                    code: region.code.clone(),
+                    name: region.name.clone(),
+                    hub_city: region.principal_city.clone(),
+                    population_2000: region.population_2000,
+                    wage_index_bps: region.wage_index_bps,
+                    demand_index_bps: region.demand_index_bps,
+                    power_grid_bps: c.power_grid_bps,
+                    road_bps: c.road_bps,
+                    broadband_bps: c.broadband_bps,
+                    skill_bps: c.skill_bps,
+                    crime_bps: c.crime_bps,
+                    cost_of_living_bps: c.cost_of_living_bps,
+                    organisation_bps: world
+                        .regions
+                        .get(index)
+                        .map(|r| r.organisation_bps)
+                        .unwrap_or(region.opening_organisation_bps),
+                    room,
+                }
+            })
+            .collect()
+    }
+
+    /// Every plant in the world, for the map.
+    pub fn map_plants(&self) -> Vec<MapPlantDto> {
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        world
+            .facilities
+            .iter()
+            .filter_map(|(handle, plant)| {
+                let firm = world.firms.get(plant.firm)?;
+                if !firm.operative() {
+                    return None;
+                }
+                let recipe = &dataset.recipes[plant.recipe as usize];
+                let capacity = recipe.weekly_output_lots * plant.blocks as i64;
+                Some(MapPlantDto {
+                    handle: handle.0,
+                    firm: plant.firm.0,
+                    firm_name: firm.name.clone(),
+                    player: cw_sim::economy::events_engine::player_side(world, plant.firm),
+                    region: dataset.regions[plant.region as usize].code.clone(),
+                    industry: recipe.industry.clone(),
+                    strategy: if recipe.name.is_empty() {
+                        recipe.id.clone()
+                    } else {
+                        recipe.name.clone()
+                    },
+                    blocks: plant.blocks as u32,
+                    status: format!("{:?}", plant.status)
+                        .split(' ')
+                        .next()
+                        .unwrap_or("")
+                        .to_lowercase(),
+                    utilisation_bps: if capacity > 0 {
+                        (plant.last_output.lots() * 10_000 / capacity).clamp(0, 10_000) as i32
+                    } else {
+                        0
+                    },
+                })
+            })
+            .collect()
+    }
+
+    /// A firm's sector focus and logistics position.
+    pub fn firm_ops(&self, firm: u64) -> Option<FirmOpsDto> {
+        let session = self.lock();
+        let world = &session.world;
+        let entity = world.firms.get(cw_core::ids::Handle(firm))?;
+        let names = cw_sim::state::INDUSTRY_NAMES;
+        let (threshold, _) = cw_sim::economy::operations::sprawl_terms(
+            entity.logistics_strength,
+            entity.secondary_industry.is_some(),
+        );
+        Some(FirmOpsDto {
+            firm,
+            primary: names
+                .get(entity.industry as usize)
+                .copied()
+                .unwrap_or("")
+                .to_owned(),
+            secondary: entity
+                .secondary_industry
+                .and_then(|s| names.get(s as usize).copied())
+                .map(str::to_owned),
+            focus_transition_weeks: entity.focus_transition_until.saturating_sub(world.tick.0),
+            focus_cooldown_weeks: entity.focus_cooldown_until.saturating_sub(world.tick.0),
+            logistics_strength: entity.logistics_strength,
+            logistics_budget_cents: entity.policies.logistics_budget_cents,
+            plants: entity.facilities.len() as u32,
+            sprawl_threshold: threshold as u32,
+        })
     }
 
     pub fn finance(&self, firm: u64) -> Option<FinanceDto> {
@@ -1683,6 +1969,36 @@ mod tests {
                 Some("error.malformed_command"),
                 "{body}"
             );
+        }
+    }
+
+    #[test]
+    fn the_map_and_strategy_surfaces_cover_the_world() {
+        let session = SessionHandle::new(211, true, false).unwrap();
+        let states = session.states();
+        assert_eq!(states.len(), 8);
+        assert!(
+            states
+                .iter()
+                .all(|s| s.population_2000 > 1_000_000 && s.code.len() == 2)
+        );
+        let plants = session.map_plants();
+        assert!(plants.len() >= 30, "every rival plant is on the map");
+        assert!(
+            plants.iter().any(|p| p.player),
+            "the player's plant is marked"
+        );
+        let catalogue = strategies();
+        assert_eq!(catalogue.len(), 53);
+        assert!(
+            catalogue
+                .iter()
+                .all(|s| !s.name.is_empty() && s.weekly_output_lots > 0)
+        );
+        let primary = session.overview().primary_firm;
+        if let Some(firm) = primary {
+            let ops = session.firm_ops(firm).expect("ops for the player's firm");
+            assert_eq!(ops.sprawl_threshold, 15);
         }
     }
 }

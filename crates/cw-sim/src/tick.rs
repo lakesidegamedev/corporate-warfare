@@ -458,14 +458,16 @@ mod tests {
         let dataset = Dataset::load().unwrap();
         let mut world = seed::build(&dataset, 41, ScenarioKind::Guided, ScenarioMode::Sandbox);
         advance(&mut world, &dataset);
-        let mut gross = 0i64;
+        // Withholding is a regional aggregate: twenty percent of each state's paid wages,
+        // rounded down per state, then summed.
+        let mut expected = 0i64;
         for region in &world.regions {
+            let mut gross = region.paid_named_wages_cents;
             for tier in 0..3 {
                 gross += region.background_employed[tier] * region.background_wage_cents[tier];
             }
-            gross += region.paid_named_wages_cents;
+            expected += gross * 2_000 / 10_000;
         }
-        let expected = gross * 2_000 / 10_000;
         assert_eq!(
             *world
                 .government
@@ -554,10 +556,11 @@ mod tests {
         );
         let mut expected = 0i64;
         for region in &world.regions {
+            let mut gross = region.paid_named_wages_cents;
             for tier in 0..3 {
-                expected += region.background_employed[tier] * region.background_wage_cents[tier];
+                gross += region.background_employed[tier] * region.background_wage_cents[tier];
             }
-            expected += region.paid_named_wages_cents;
+            expected += gross * 2_000 / 10_000;
         }
         assert_eq!(
             *world
@@ -565,7 +568,7 @@ mod tests {
                 .tax_receipts_history
                 .last()
                 .expect("a closed fiscal week"),
-            expected * 2_000 / 10_000,
+            expected,
             "only paid wages are taxed"
         );
         assert!(world.firm(firm).unwrap().book.is_balanced());

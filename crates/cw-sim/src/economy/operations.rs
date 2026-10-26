@@ -6,10 +6,11 @@
 //!   percent fewer. Any other plant pays a coordination overhead of 10 percent of its payroll.
 //!   Changing focus costs 5 percent of every plant's payroll for four weeks and locks further
 //!   changes for eight.
-//! - State conditions. Power-grid reliability below 95 percent cuts output (4 points per 10
-//!   points of reliability lost). Workforce skill moves output of skilled sectors by up to 4
-//!   percent, broadband moves digital sectors by up to 4 percent, roads move freight cost, and
-//!   crime costs retail and property plants a shrinkage share of their output value.
+//! - State conditions. Power-grid reliability below 95 percent, low workforce skill (skilled
+//!   sectors) and low broadband (digital sectors) cut output, up to 4 percent each; good skill
+//!   and broadband save up to 4 percent of inputs instead, so no plant exceeds its rated
+//!   capacity. Roads move freight cost, and crime costs retail and property plants a
+//!   shrinkage share of their output value.
 //! - Sprawl. Plants beyond 15 cost 0.5 percent of weekly revenue per two plants, doubled with a
 //!   secondary type. Logistics strength (0..200), built by a weekly logistics budget, raises the
 //!   threshold to 30 and halves the slope.
@@ -75,36 +76,53 @@ pub fn focus(world: &World, dataset: &Dataset, facility: Handle) -> Focus {
     }
 }
 
-/// Input requirement in basis points of the recipe for this plant.
+/// Input requirement in basis points of the recipe for this plant: sector focus, then any
+/// favourable state conditions (skill, broadband), which save inputs rather than push output
+/// beyond the plant's rated capacity.
 pub fn input_bps(world: &World, dataset: &Dataset, facility: Handle) -> i32 {
-    match focus(world, dataset, facility) {
+    let focus_bps = match focus(world, dataset, facility) {
         Focus::Primary => PRIMARY_INPUT_BPS,
         Focus::Secondary => SECONDARY_INPUT_BPS,
         Focus::Off => 10_000,
-    }
+    };
+    let (_, bonus) = condition_terms(world, dataset, facility, false);
+    (focus_bps as i64 * (10_000 - bonus) as i64 / 10_000) as i32
 }
 
-/// Output multiplier from the plant's state conditions, in basis points.
+/// Output multiplier from adverse state conditions, in basis points, never above 10000: a plant
+/// cannot produce beyond its rated capacity.
 pub fn output_bps(world: &World, dataset: &Dataset, facility: Handle, utility: bool) -> i32 {
+    let (penalty, _) = condition_terms(world, dataset, facility, utility);
+    10_000 - penalty
+}
+
+/// (output penalty, input saving) in basis points from the plant's state conditions: grid
+/// reliability below 95 percent, and skill and broadband either side of their pivots.
+pub fn condition_terms(
+    world: &World,
+    dataset: &Dataset,
+    facility: Handle,
+    utility: bool,
+) -> (i32, i32) {
     let Some(plant) = world.facilities.get(facility) else {
-        return 10_000;
+        return (0, 0);
     };
     let Some(region) = dataset.regions.get(plant.region as usize) else {
-        return 10_000;
+        return (0, 0);
     };
     let conditions = region.conditions;
     let industry = dataset.recipes[plant.recipe as usize].industry.as_str();
-    let mut bps = 10_000;
+    let mut delta = 0;
     if !utility {
-        bps -= (9_500 - conditions.power_grid_bps).max(0) * 400 / 1_000;
+        delta -= (9_500 - conditions.power_grid_bps).max(0) * 400 / 1_000;
     }
     if SKILLED.contains(&industry) {
-        bps += ((conditions.skill_bps - 5_000) * 400 / 5_000).clamp(-400, 400);
+        delta += ((conditions.skill_bps - 5_000) * 400 / 5_000).clamp(-400, 400);
     }
     if DIGITAL.contains(&industry) {
-        bps += ((conditions.broadband_bps - 2_000) * 400 / 4_000).clamp(-400, 400);
+        delta += ((conditions.broadband_bps - 2_000) * 400 / 4_000).clamp(-400, 400);
     }
-    bps.max(0)
+    if delta < 0 { (-delta, 0) } else { (0, delta) }
 }
 
 /// Freight cost multiplier for a lane from the two states' road condition, in basis points.

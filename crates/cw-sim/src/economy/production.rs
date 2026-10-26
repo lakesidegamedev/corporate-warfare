@@ -317,6 +317,11 @@ fn run_facility(
     if !utility {
         ratio = ratio.min(power_ratio_bps);
     }
+    // Adverse state conditions (grid reliability, low skill or broadband) are a capacity limit,
+    // applied before inputs and deposits so the plant consumes and extracts only what it makes.
+    ratio = (ratio as i64
+        * crate::economy::operations::output_bps(world, dataset, handle, utility) as i64
+        / 10_000) as i32;
     if ratio <= 0 {
         update_facility_result(world, handle, MilliLots::ZERO, staff_ratio, true);
         return MilliLots::ZERO;
@@ -463,10 +468,6 @@ fn run_facility(
         let season = SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize];
         output = output.scale_bps(season);
     }
-    // State conditions: grid reliability, workforce skill and broadband.
-    output = output.scale_bps(crate::economy::operations::output_bps(
-        world, dataset, handle, utility,
-    ));
     // Supply-side events (crop loss, outages) reduce physical output, not household demand.
     if let Some(code) = dataset.product_index.get(&recipe.output) {
         output = output.scale_bps(world.supply_ratio_bps(facility.region, *code) as i32);
@@ -677,12 +678,21 @@ mod tests {
             }
         }
         produce(&mut world, &dataset);
+        // Every plant whose strategy draws electricity stops; strategies that use none (for
+        // example infrastructure buildout or timber) are unaffected.
+        let mut checked = 0;
         for (_, facility) in world.facilities.iter() {
-            assert_eq!(
-                facility.last_output,
-                MilliLots::ZERO,
-                "no power means no output"
-            );
+            let recipe = &dataset.recipes[facility.recipe as usize];
+            if recipe.weekly_inputs_lots.contains_key("electricity") {
+                checked += 1;
+                assert_eq!(
+                    facility.last_output,
+                    MilliLots::ZERO,
+                    "no power means no output for {}",
+                    recipe.id
+                );
+            }
         }
+        assert!(checked > 20, "most strategies draw power");
     }
 }

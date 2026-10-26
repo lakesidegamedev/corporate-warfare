@@ -81,21 +81,60 @@ fn one_firm(world: &World, industry: &str) -> Handle {
         .expect("seeded firm for industry")
 }
 
-fn facility_of(world: &World, firm: Handle, recipe_id: &str, dataset: &Dataset) -> Handle {
-    world
-        .firm(firm)
-        .expect("firm")
-        .facilities
+/// The firm's plant running `recipe_id`. Seeded firms run named strategies, so when none runs
+/// the scenario's recipe, the fixture switches one of the firm's same-sector plants to it (with
+/// a fresh deposit for an extraction strategy). The scenario then tests that recipe's model.
+fn facility_of(world: &mut World, firm: Handle, recipe_id: &str, dataset: &Dataset) -> Handle {
+    let plants = world.firm(firm).expect("firm").facilities.clone();
+    if let Some(found) = plants.iter().copied().find(|handle| {
+        world
+            .facilities
+            .get(*handle)
+            .map(|facility| dataset.recipes[facility.recipe as usize].id == recipe_id)
+            .unwrap_or(false)
+    }) {
+        return found;
+    }
+    let recipe = dataset.recipe_index[recipe_id];
+    let template = &dataset.recipes[recipe as usize];
+    let plant = plants
         .iter()
         .copied()
         .find(|handle| {
             world
                 .facilities
                 .get(*handle)
-                .map(|facility| dataset.recipes[facility.recipe as usize].id == recipe_id)
+                .map(|facility| {
+                    dataset.recipes[facility.recipe as usize].industry == template.industry
+                })
                 .unwrap_or(false)
         })
-        .expect("facility with recipe")
+        .expect("a plant in the recipe's sector");
+    let facility = world.facilities.get_mut(plant).unwrap();
+    facility.recipe = recipe;
+    facility.deposit_remaining = if template.depletes() {
+        MilliLots::from_lots(template.weekly_output_lots * facility.blocks as i64 * 52 * 20)
+    } else {
+        MilliLots::ZERO
+    };
+    let (blocks, region) = (facility.blocks as i64, facility.region);
+    // The switched plant starts with four weeks of its new strategy's physical inputs, as a
+    // seeded plant would.
+    for (input, weekly) in &template.weekly_inputs_lots {
+        let code = dataset.product_index[input];
+        if !dataset.products[code as usize].kind.is_service() {
+            let current = world.firm(firm).unwrap().stock(code, region).lots();
+            set_stock(
+                world,
+                dataset,
+                firm,
+                input,
+                region,
+                current.max(weekly * blocks * 4),
+            );
+        }
+    }
+    plant
 }
 
 /// Employ every worker the recipe needs, so staffing is never the binding constraint.
@@ -299,7 +338,7 @@ fn agriculture_output_follows_the_documented_seasonal_index() {
         let mut world = seeded(101);
         let farm = one_firm(&world, "agriculture");
         staff(&mut world, &dataset, farm);
-        let facility = facility_of(&world, farm, "farm", &dataset);
+        let facility = facility_of(&mut world, farm, "farm", &dataset);
         world.tick = Tick(week);
         tick::advance(&mut world, &dataset);
         assert_eq!(world.tick, Tick(week + 1));
@@ -338,7 +377,7 @@ fn extraction_depletes_a_finite_deposit_and_never_goes_negative() {
     let mut world = seeded(102);
     let miner = one_firm(&world, "extraction");
     staff(&mut world, &dataset, miner);
-    let facility = facility_of(&world, miner, "mine", &dataset);
+    let facility = facility_of(&mut world, miner, "mine", &dataset);
     let ore = dataset.product_code("ore").unwrap();
     let region = world.firm(miner).unwrap().region;
     set_stock(&mut world, &dataset, miner, "fuel", region, 200);
@@ -416,7 +455,7 @@ fn energy_generators_are_dispatched_and_power_is_a_weekly_allocated_service() {
     // for the electricity they place into their region.
     let mut generator_output = 0i64;
     for firm in firms_in(&world, "energy") {
-        let facility = facility_of(&world, firm, "generator", &dataset);
+        let facility = facility_of(&mut world, firm, "generator", &dataset);
         let output = facility_output(&world, facility);
         assert!(
             output.is_positive(),
@@ -457,7 +496,7 @@ fn energy_generators_are_dispatched_and_power_is_a_weekly_allocated_service() {
 
     // Consumers that need electricity do produce while supply exists.
     let farm = one_firm(&world, "agriculture");
-    let farm_facility = facility_of(&world, farm, "farm", &dataset);
+    let farm_facility = facility_of(&mut world, farm, "farm", &dataset);
     assert!(facility_output(&world, farm_facility).is_positive());
 
     // Withdraw every generator and the electricity gateway: dispatch leaves consumers
@@ -505,7 +544,7 @@ fn chemical_industries_consumes_each_input_in_recipe_proportion() {
     let mut world = seeded(105);
     let plant = one_firm(&world, "chemical_industries");
     // The plant converts fuel + ore + purchased electricity into chemicals.
-    let facility = facility_of(&world, plant, "chemical_plant", &dataset);
+    let facility = facility_of(&mut world, plant, "chemical_plant", &dataset);
     let blocks = world.facilities.get(facility).unwrap().blocks as i64;
     assert!((1..=4).contains(&blocks), "seeded plant has real capacity");
     staff(&mut world, &dataset, plant);
@@ -532,27 +571,40 @@ fn chemical_industries_consumes_each_input_in_recipe_proportion() {
 
     production::produce(&mut world, &dataset);
 
-    // Half of full capacity is attainable, so every input is consumed at 50 percent and
-    // output is exactly half the recipe quantity. There is no free conversion.
-    let expected_ratio_bps = 5_000i64;
-    let expected_output = 200 * blocks * expected_ratio_bps / 10_000;
-    let expected_ore = ore_lots_per_block * blocks * expected_ratio_bps / 10_000;
-    let expected_fuel = 100 * blocks * expected_ratio_bps / 10_000;
-    assert_eq!(
-        facility_output(&world, facility),
-        MilliLots::from_lots(expected_output)
+    // Ore is the binding input: the plant runs at whatever share of its focus-adjusted ore need
+    // the stock covers, and consumes every input at that same share. Sector focus and state
+    // conditions scale the per-lot input need (docs: economy/operations.rs); output stays at
+    // the recipe quantity per unit of attainable capacity. There is no free conversion.
+    let input = cw_sim::economy::operations::input_bps(&world, &dataset, facility);
+    // Adverse state conditions cap the run rate before inputs; good ones only save inputs.
+    let condition_cap = cw_sim::economy::operations::output_bps(&world, &dataset, facility, false);
+    let full_ore = MilliLots::from_lots(ore_lots_per_block * blocks).scale_bps(input);
+    let ratio = ((MilliLots::from_lots(ore_lots_per_block * blocks / 2).0 * 10_000 / full_ore.0)
+        as i32)
+        .min(condition_cap);
+    let expected_output = MilliLots::from_lots(200 * blocks).scale_bps(ratio);
+    let expected_ore = MilliLots::from_lots(ore_lots_per_block * blocks)
+        .scale_bps(input)
+        .scale_bps(ratio);
+    let expected_fuel = MilliLots::from_lots(100 * blocks)
+        .scale_bps(input)
+        .scale_bps(ratio);
+    assert!(
+        ratio > 5_000 && ratio < 6_000,
+        "about half capacity, a little more for focus savings"
     );
+    assert_eq!(facility_output(&world, facility), expected_output);
     assert_eq!(
-        chemicals_before + MilliLots::from_lots(expected_output).0,
+        chemicals_before + expected_output.0,
         world.firm(plant).unwrap().stock(chemicals, region).0
     );
     assert_eq!(
-        ore_before - MilliLots::from_lots(expected_ore).0,
+        ore_before - expected_ore.0,
         world.firm(plant).unwrap().stock(ore, region).0,
         "ore consumed in recipe proportion"
     );
     assert_eq!(
-        fuel_before - MilliLots::from_lots(expected_fuel).0,
+        fuel_before - expected_fuel.0,
         world.firm(plant).unwrap().stock(fuel, region).0,
         "fuel consumed in recipe proportion"
     );
@@ -633,8 +685,10 @@ fn manufacturing_chain_converts_each_stage_from_opening_stock_only() {
     let goods_made = facility_output(&world, assembly);
     assert!(goods_made.is_positive(), "goods made");
     assert!(world.firm(firm).unwrap().stock(goods, region).is_positive());
+    // One lot of components per lot of goods, less the plant's focus and condition saving.
+    let input = cw_sim::economy::operations::input_bps(&world, &dataset, assembly);
     assert_eq!(
-        components_after_week_two.0 + components_made.0 - goods_made.0,
+        components_after_week_two.0 + components_made.0 - goods_made.scale_bps(input).0,
         world.firm(firm).unwrap().stock(component_code, region).0,
         "assembly consumed exactly its components, one lot of components per lot of goods"
     );
@@ -651,7 +705,7 @@ fn construction_capex_is_escrowed_and_released_on_completion() {
     let mut world = seeded(107);
     let builder = one_firm(&world, "construction");
     staff(&mut world, &dataset, builder);
-    let contractor = facility_of(&world, builder, "contractor", &dataset);
+    let contractor = facility_of(&mut world, builder, "contractor", &dataset);
     let region = world.firm(builder).unwrap().region;
 
     // Project-service output has no buyer, so it cannot be carried past the week.
@@ -808,6 +862,20 @@ fn logistics_carriers_earn_freight_and_delivery_waits_for_the_lane_lead_time() {
     let to_region = world.firm(buyer).unwrap().region;
     assert_ne!(from_region, to_region, "an inter-region lane is required");
     let quantity = MilliLots::from_lots(100);
+    fund(&mut world, seller, 100_000_000);
+    let held = world
+        .firm(seller)
+        .unwrap()
+        .stock(product, from_region)
+        .lots();
+    set_stock(
+        &mut world,
+        &dataset,
+        seller,
+        "food_raw",
+        from_region,
+        held.max(500),
+    );
     assert!(world.firm(seller).unwrap().stock(product, from_region) >= quantity);
 
     let price = dataset.reference_price(product);
@@ -935,11 +1003,13 @@ fn spot_imports_charge_goods_and_freight_exactly_once() {
     }
     tick::advance(&mut world, &dataset);
 
-    // Steel is produced only in the metal-works region, so the seller is unambiguous.
+    // The seller is the steel producer in another state; firms holding steel only as an input
+    // (carriers, contractors) are never spot sellers.
     let product = dataset.product_code("steel").unwrap();
     let price = dataset.reference_price(product);
     let buyer = one_firm(&world, "telecommunications");
     let buyer_region = world.firm(buyer).unwrap().region;
+    let metal = dataset.recipe_index["metal_works"];
     let seller = world
         .firms
         .iter()
@@ -947,6 +1017,13 @@ fn spot_imports_charge_goods_and_freight_exactly_once() {
             firm.operative()
                 && firm.region != buyer_region
                 && firm.stock(product, firm.region).is_positive()
+                && firm.facilities.iter().any(|f| {
+                    world
+                        .facilities
+                        .get(*f)
+                        .map(|p| p.recipe == metal)
+                        .unwrap_or(false)
+                })
         })
         .map(|(handle, _)| handle)
         .expect("one steel supplier in another region");
@@ -1044,12 +1121,35 @@ fn spot_imports_charge_goods_and_freight_exactly_once() {
         world.firm(buyer).unwrap().stock(product, buyer_region),
         MilliLots::ZERO
     );
-    for _ in 0..lead {
+    // Deliver on the shipment's own arrival week. A freight event card may push that week
+    // back, so the test follows the shipment rather than assuming no card ever fires.
+    let mut due = shipment.arrive;
+    for _ in 0..lead + 4 {
+        if let Some(pending) = world
+            .shipments
+            .iter()
+            .find(|s| s.buyer == buyer && s.product == product)
+        {
+            due = pending.arrive;
+        } else {
+            break;
+        }
         tick::advance(&mut world, &dataset);
     }
+    assert_eq!(world.tick, due, "the import arrives on its scheduled week");
+    // On arrival the buyer may resell to a local steel user the same week, so the import is
+    // accounted for exactly as stock still held plus units sold that week.
+    let held = world.firm(buyer).unwrap().stock(product, buyer_region);
+    let sold = world
+        .firm(buyer)
+        .unwrap()
+        .sales_history
+        .last()
+        .and_then(|week| week.get(&(buyer_region, product)).copied())
+        .unwrap_or(0);
     assert_eq!(
-        world.firm(buyer).unwrap().stock(product, buyer_region),
-        quantity,
+        held.0 + MilliLots::from_lots(sold).0,
+        quantity.0,
         "the import arrives after the lane lead time"
     );
     assert_invariants(&world);
@@ -1077,6 +1177,12 @@ fn retail_sells_consumer_goods_to_households_and_producers_do_not() {
         ProductKind::ConsumerGoods
     );
 
+    // Give the farm far more raw food than grocers can take in a week, so it still holds
+    // stock that households could in principle have bought.
+    let farm = one_firm(&world, "agriculture");
+    let farm_region = world.firm(farm).unwrap().region;
+    fund(&mut world, farm, 1_000_000_000);
+    set_stock(&mut world, &dataset, farm, "food_raw", farm_region, 50_000);
     tick::advance(&mut world, &dataset);
 
     let household = &world.regions[region as usize].households;
@@ -1100,8 +1206,6 @@ fn retail_sells_consumer_goods_to_households_and_producers_do_not() {
     );
 
     // A producer with raw food stock earns nothing from household demand directly.
-    let farm = one_firm(&world, "agriculture");
-    let farm_region = world.firm(farm).unwrap().region;
     assert!(
         world
             .firm(farm)
@@ -1334,7 +1438,7 @@ fn financial_insurer_reserves_claims_and_pays_from_real_cash() {
         .find(|firm| world.firm(*firm).unwrap().insurer.is_some())
         .expect("seeded insurer");
     let insured = one_firm(&world, "manufacturing");
-    let facility = facility_of(&world, insured, "metal_works", &dataset);
+    let facility = facility_of(&mut world, insured, "metal_works", &dataset);
     let region = world.facilities.get(facility).unwrap().region;
 
     // Specialise the underwriter so a single-region book is legal while this fixture tests
@@ -1476,7 +1580,7 @@ fn technology_software_is_sold_as_a_subscription_and_expires_unsold() {
     let mut world = seeded(113);
     let studio = one_firm(&world, "technology");
     staff(&mut world, &dataset, studio);
-    let facility = facility_of(&world, studio, "software_studio", &dataset);
+    let facility = facility_of(&mut world, studio, "software_studio", &dataset);
     let region = world.firm(studio).unwrap().region;
     let software = dataset.product_code("software").unwrap();
     assert_eq!(
@@ -1546,7 +1650,7 @@ fn media_advertising_is_weekly_capacity_and_earns_nothing_unsold() {
     let mut world = seeded(114);
     let studio = one_firm(&world, "media");
     staff(&mut world, &dataset, studio);
-    let facility = facility_of(&world, studio, "media_studio", &dataset);
+    let facility = facility_of(&mut world, studio, "media_studio", &dataset);
     let region = world.firm(studio).unwrap().region;
     let advertising = dataset.product_code("advertising").unwrap();
     assert_eq!(
@@ -1602,7 +1706,7 @@ fn telecommunications_installed_capacity_is_finite_and_sells_subscriptions() {
     let mut world = seeded(115);
     let operator = one_firm(&world, "telecommunications");
     staff(&mut world, &dataset, operator);
-    let network = facility_of(&world, operator, "network", &dataset);
+    let network = facility_of(&mut world, operator, "network", &dataset);
     let region = world.firm(operator).unwrap().region;
     let telecom = dataset.product_code("telecom").unwrap();
     let blocks = world.facilities.get(network).unwrap().blocks as i64;
@@ -1668,7 +1772,7 @@ fn real_estate_leases_earn_on_occupied_blocks_and_nothing_when_vacant() {
     let mut world = seeded(116);
     let landlord = one_firm(&world, "real_estate");
     staff(&mut world, &dataset, landlord);
-    let property = facility_of(&world, landlord, "rental_property", &dataset);
+    let property = facility_of(&mut world, landlord, "rental_property", &dataset);
     let region = world.firm(landlord).unwrap().region;
     for industry in INDUSTRY_NAMES {
         for firm in firms_in(&world, industry) {
@@ -1692,7 +1796,7 @@ fn real_estate_leases_earn_on_occupied_blocks_and_nothing_when_vacant() {
     let mut world = seeded(117);
     let landlord = one_firm(&world, "real_estate");
     staff(&mut world, &dataset, landlord);
-    let property = facility_of(&world, landlord, "rental_property", &dataset);
+    let property = facility_of(&mut world, landlord, "rental_property", &dataset);
     let region = world.firm(landlord).unwrap().region;
     for industry in INDUSTRY_NAMES {
         for firm in firms_in(&world, industry) {
@@ -1745,7 +1849,7 @@ fn defense_procurement_is_capped_by_the_government_budget() {
     let mut world = seeded(118);
     let prime = one_firm(&world, "defense");
     staff(&mut world, &dataset, prime);
-    let plant = facility_of(&world, prime, "defense_plant", &dataset);
+    let plant = facility_of(&mut world, prime, "defense_plant", &dataset);
     let region = world.firm(prime).unwrap().region;
     let defense = dataset.product_code("defense").unwrap();
     assert_eq!(

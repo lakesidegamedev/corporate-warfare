@@ -1238,14 +1238,37 @@ fn apply_intent(
             }
             require_region(world, *region)?;
             let qty = MilliLots::from_lots(*quantity_lots);
-            // Cross-region spot buys dispatch a shipment; local buys settle next week.
+            // Cross-region spot buys dispatch a shipment; local buys settle next week. The seller
+            // is a producer of the good, nearest by freight then lowest handle: a firm holding
+            // the good only as an input is never stripped of it.
+            let produces = |entity: &Firm| {
+                entity.facilities.iter().any(|facility| {
+                    world
+                        .facilities
+                        .get(*facility)
+                        .and_then(|f| {
+                            dataset
+                                .product_index
+                                .get(&dataset.recipes[f.recipe as usize].output)
+                        })
+                        .map(|code| code == product)
+                        .unwrap_or(false)
+                })
+            };
             let source = world
                 .firms
                 .iter()
-                .find(|(_, entity)| {
+                .filter(|(_, entity)| {
                     entity.operative()
                         && entity.region != *region
                         && entity.stock(*product, entity.region).0 > 0
+                        && produces(entity)
+                })
+                .min_by_key(|(handle, entity)| {
+                    (
+                        crate::economy::freight::freight_cost(dataset, entity.region, *region, qty),
+                        *handle,
+                    )
                 })
                 .map(|(handle, _)| handle);
             if let Some(seller) = source {

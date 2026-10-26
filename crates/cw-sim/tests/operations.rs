@@ -55,13 +55,22 @@ fn state_conditions_shape_plant_output() {
     // New York: grid 9400 is 100 under 9500, costing 40 bps; skill 6800 adds 144; broadband
     // 3200 adds 120.
     assert_eq!(
+        operations::condition_terms(&world, &dataset, handle, false),
+        (0, 224)
+    );
+    assert_eq!(
         operations::output_bps(&world, &dataset, handle, false),
-        10_224
+        10_000,
+        "good conditions save inputs instead of exceeding rated capacity"
     );
     plant.region = region(&dataset, "WV");
     let wv = world.facilities.insert(plant);
     // West Virginia: grid 9300 costs 80, skill 4000 costs 80, broadband 1000 costs 100.
     assert_eq!(operations::output_bps(&world, &dataset, wv, false), 9_740);
+    assert_eq!(
+        operations::condition_terms(&world, &dataset, wv, false),
+        (260, 0)
+    );
 }
 
 #[test]
@@ -76,7 +85,10 @@ fn focus_sets_input_needs_and_off_focus_plants_pay_overhead() {
         operations::focus(&world, &dataset, plant),
         operations::Focus::Primary
     );
-    assert_eq!(operations::input_bps(&world, &dataset, plant), 9_500);
+    // Focus savings compound with any state-condition saving for the plant.
+    let (_, bonus) = operations::condition_terms(&world, &dataset, plant, false);
+    let with = |focus_bps: i64| (focus_bps * (10_000 - bonus as i64) / 10_000) as i32;
+    assert_eq!(operations::input_bps(&world, &dataset, plant), with(9_500));
     let own = world.firm(firm).unwrap().industry;
     let other = (own + 1) % 14;
     world.firms.get_mut(firm).unwrap().secondary_industry = None;
@@ -85,9 +97,9 @@ fn focus_sets_input_needs_and_off_focus_plants_pay_overhead() {
         operations::focus(&world, &dataset, plant),
         operations::Focus::Off
     );
-    assert_eq!(operations::input_bps(&world, &dataset, plant), 10_000);
+    assert_eq!(operations::input_bps(&world, &dataset, plant), with(10_000));
     world.firms.get_mut(firm).unwrap().secondary_industry = Some(own);
-    assert_eq!(operations::input_bps(&world, &dataset, plant), 9_750);
+    assert_eq!(operations::input_bps(&world, &dataset, plant), with(9_750));
     // Off focus again: overhead is a tenth of the plant's payroll, paid to the outside sector.
     world.firms.get_mut(firm).unwrap().secondary_industry = None;
     let workers = world.facilities.get(plant).unwrap().workers;
