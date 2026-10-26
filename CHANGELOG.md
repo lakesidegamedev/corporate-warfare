@@ -11,6 +11,13 @@ heading.
 
 ## [Unreleased]
 
+### Fixed
+
+- iPhone release builds failed at signing once the team reached Apple's cap on development
+  certificates, because every CI run creates a new one on its fresh Mac. The release workflow
+  now revokes the certificates earlier CI runs created through the API before it signs, and the
+  iPhone archive is built without Mac Catalyst.
+
 ## [1.4.0] - 2026-10-26
 
 ### Added
