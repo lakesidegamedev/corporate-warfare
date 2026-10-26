@@ -370,3 +370,10 @@ The AHD margin modifiers become physical effects in this engine: sector focus ch
 and adds a coordination overhead, and state conditions change output, freight cost and
 shrinkage, each paid to a real counterparty.
 
+### Owner decision: ship 1.1.0, fix scoring in 1.1.1, 2026-10-26
+
+The 1.1.0 balance gate found that a five-year career with no player action scores the same
+as the scripted reference policies (median 64 against 62 to 64), as in 1.0.0. The reference
+policies predate the map and never build plants. Decision: release 1.1.0 with the finding
+recorded. 1.1.1 rescoring measures change from the opening position (net worth, plants,
+share) and adds a map-aware reference policy that builds, then reruns the evidence.
