@@ -21,6 +21,21 @@ REQUIRED_REASON_APIS = {
 }
 
 
+# Owner-approved anonymous telemetry (market-balance snapshots, default on, toggle in Settings).
+# Exactly one file may use the network, and only to reach this one endpoint.
+TELEMETRY_FILE = "Telemetry.swift"
+TELEMETRY_ENDPOINT = "https://ops.lakesidegames.net/api/cw/telemetry"
+# The only collected data type allowed: gameplay numbers for analytics, never linked, never tracking.
+APPROVED_COLLECTION = {
+    "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeGameplayContent",
+    "NSPrivacyCollectedDataTypeLinked": False,
+    "NSPrivacyCollectedDataTypeTracking": False,
+    "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAnalytics"],
+}
+SDK_PATTERN = r"\b(Firebase\w*|Sentry\w*|Amplitude\w*|Mixpanel\w*|Crashlytics|FBSDK\w*|AppsFlyer\w*|Adjust\w*|Segment\w*|GoogleAnalytics\w*)\b"
+SDK_IMPORT = r"^\s*import\s+(Firebase|Sentry|Amplitude|Mixpanel|Crashlytics|FBSDK|AppsFlyer|Adjust|Segment|GoogleAnalytics|AppTrackingTransparency|AdSupport)"
+
+
 def swift_sources():
     return [path for path in SOURCES.rglob("*.swift")]
 
@@ -46,20 +61,31 @@ def main() -> int:
                          if item.get("NSPrivacyAccessedAPIType") == api)
             if not entry.get("NSPrivacyAccessedAPITypeReasons"):
                 problems.append(f"{api} declared without a reason code")
-    if any(re.search(r"URLSession|https?://[a-zA-Z]", body) for body in text.values()):
-        problems.append("network calls found; the offline declaration no longer holds")
-    if any(re.search(r"Analytics|Firebase|Sentry|Amplitude|Mixpanel|Crashlytics", body)
-           for body in text.values()):
-        problems.append("analytics or crash SDK reference found; owner approval required")
+    for path, body in text.items():
+        urls = set(re.findall(r"https?://[^\s\"')]+", body))
+        uses_network = bool(re.search(r"URLSession|NWConnection|CFNetwork|WebSocket", body))
+        if path.name == TELEMETRY_FILE:
+            if urls - {TELEMETRY_ENDPOINT}:
+                problems.append(f"telemetry reaches an unapproved address: {sorted(urls - {TELEMETRY_ENDPOINT})}")
+        elif urls or uses_network:
+            problems.append(f"network use in {path.relative_to(ROOT)}; only {TELEMETRY_FILE} may call out")
+    for path, body in text.items():
+        if re.search(SDK_IMPORT, body, re.MULTILINE) or re.search(SDK_PATTERN, body):
+            problems.append(f"analytics, ad or crash SDK reference in {path.relative_to(ROOT)}; owner approval required")
+        if re.search(r"identifierForVendor|advertisingIdentifier|ASIdentifierManager", body):
+            problems.append(f"device identifier read in {path.relative_to(ROOT)}; snapshots must stay anonymous")
     if manifest.get("NSPrivacyTracking") is not False:
         problems.append("NSPrivacyTracking must be false for this release")
-    if manifest.get("NSPrivacyCollectedDataTypes"):
-        problems.append("collected data types declared; owner approval required")
+    if manifest.get("NSPrivacyTrackingDomains"):
+        problems.append("tracking domains declared; none are approved")
+    for item in manifest.get("NSPrivacyCollectedDataTypes", []):
+        if item != APPROVED_COLLECTION:
+            problems.append(f"collected data type not approved: {item}")
     if problems:
         for problem in problems:
             print(f"privacy: {problem}", file=sys.stderr)
         return 1
-    print("privacy audit ok: no collection, no tracking, declared required-reason APIs only")
+    print("privacy audit ok: anonymous gameplay telemetry only, no tracking, declared required-reason APIs only")
     return 0
 
 

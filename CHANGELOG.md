@@ -27,7 +27,7 @@ heading.
   against reference, household spend; corridor health; the player company's results) with a
   random install id to the Lakeside ops ingest. No names, account or device data. On by default
   with a switch under Portfolio, Settings; the privacy manifest declares Gameplay Content for
-  Analytics, not linked, not tracking.
+  Analytics, not linked, not tracking. The privacy audit allows network use only in the telemetry file and only to that endpoint, and rejects any other collected data type, SDK or device identifier.
 - Automatic pricing for the player's companies: every good they make follows the same
   sell-through rule as rivals each week unless the player sets its price by hand; a price of
   zero hands it back.
