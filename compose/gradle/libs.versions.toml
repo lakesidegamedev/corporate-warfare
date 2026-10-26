@@ -1,0 +1,23 @@
+# Pinned 2026-10-26. Kotlin 2.2.21, AGP 8.13.2 and Gradle 8.14.5 are the pair proven on the
+# build host (see MOVGame-native). Compose Multiplatform 1.9.3 maps to AndroidX Compose 1.9,
+# the newest line that does not require compileSdk 37 (the host SDK has API 36).
+[versions]
+kotlin = "2.2.21"
+agp = "8.13.2"
+composeMultiplatform = "1.9.3"
+activityCompose = "1.10.1"
+jna = "5.17.0"
+compileSdk = "36"
+minSdk = "26"
+
+[libraries]
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
+
+[plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }

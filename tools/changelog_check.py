@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-GATED = ("crates/", "apple/", "content/", "tools/", ".github/workflows/")
+GATED = ("crates/", "apple/", "compose/", "content/", "tools/", ".github/workflows/")
 HEADING = re.compile(r"^## \[(Unreleased|\d+\.\d+\.\d+)\](?: - (\d{4}-\d{2}-\d{2}))?\s*$")
 
 
