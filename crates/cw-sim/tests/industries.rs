@@ -383,7 +383,7 @@ fn extraction_depletes_a_finite_deposit_and_never_goes_negative() {
     set_stock(&mut world, &dataset, miner, "fuel", region, 200);
     let ore_before = world.firm(miner).unwrap().stock(ore, region);
 
-    // A deposit of 100 lots is smaller than one week's planned output (400 lots per block).
+    // A deposit of 100 lots is smaller than one week's planned output (84 lots per plant).
     world
         .facilities
         .get_mut(facility)
@@ -428,8 +428,12 @@ fn extraction_depletes_a_finite_deposit_and_never_goes_negative() {
         .unwrap()
         .deposit_remaining = MilliLots(1);
     production::produce(&mut world, &dataset);
-    assert_eq!(facility_output(&world, facility), MilliLots::ZERO);
-    assert!(world.facilities.get(facility).unwrap().deposit_remaining.0 >= 0);
+    // The last milli-lot is extracted, never more, and the deposit ends exactly empty.
+    assert!(facility_output(&world, facility) <= MilliLots(1));
+    assert_eq!(
+        world.facilities.get(facility).unwrap().deposit_remaining,
+        MilliLots::ZERO
+    );
     assert_invariants(&world);
 }
 
@@ -461,9 +465,9 @@ fn energy_generators_are_dispatched_and_power_is_a_weekly_allocated_service() {
             output.is_positive(),
             "a fully staffed generator produces electricity"
         );
+        let plant = world.facilities.get(facility).unwrap();
         let capacity = MilliLots::from_lots(
-            dataset.recipes[world.facilities.get(facility).unwrap().recipe as usize]
-                .weekly_output_lots,
+            dataset.recipes[plant.recipe as usize].weekly_output_lots * plant.blocks as i64,
         )
         .scale_bps(10_000);
         assert!(output <= capacity, "output within planned capacity");
@@ -546,12 +550,13 @@ fn chemical_industries_consumes_each_input_in_recipe_proportion() {
     // The plant converts fuel + ore + purchased electricity into chemicals.
     let facility = facility_of(&mut world, plant, "chemical_plant", &dataset);
     let blocks = world.facilities.get(facility).unwrap().blocks as i64;
-    assert!((1..=4).contains(&blocks), "seeded plant has real capacity");
+    assert!((1..=20).contains(&blocks), "seeded plant has real capacity");
     staff(&mut world, &dataset, plant);
     let region = world.firm(plant).unwrap().region;
 
-    // Make ore the binding input: half of the recipe's ten lots per block.
-    let ore_lots_per_block = 10;
+    // Make ore the binding input: half of the recipe's ore per block.
+    let ore_lots_per_block =
+        dataset.recipes[dataset.recipe_index["chemical_plant"] as usize].weekly_inputs_lots["ore"];
     set_stock(
         &mut world,
         &dataset,
@@ -560,7 +565,7 @@ fn chemical_industries_consumes_each_input_in_recipe_proportion() {
         region,
         ore_lots_per_block * blocks / 2,
     );
-    set_stock(&mut world, &dataset, plant, "fuel", region, 200);
+    set_stock(&mut world, &dataset, plant, "fuel", region, 2_000);
 
     let chemicals = dataset.product_code("chemicals").unwrap();
     let ore = dataset.product_code("ore").unwrap();
@@ -582,11 +587,14 @@ fn chemical_industries_consumes_each_input_in_recipe_proportion() {
     let ratio = ((MilliLots::from_lots(ore_lots_per_block * blocks / 2).0 * 10_000 / full_ore.0)
         as i32)
         .min(condition_cap);
-    let expected_output = MilliLots::from_lots(200 * blocks).scale_bps(ratio);
+    let chemical = &dataset.recipes[dataset.recipe_index["chemical_plant"] as usize];
+    let fuel_lots_per_block = chemical.weekly_inputs_lots["fuel"];
+    let expected_output =
+        MilliLots::from_lots(chemical.weekly_output_lots * blocks).scale_bps(ratio);
     let expected_ore = MilliLots::from_lots(ore_lots_per_block * blocks)
         .scale_bps(input)
         .scale_bps(ratio);
-    let expected_fuel = MilliLots::from_lots(100 * blocks)
+    let expected_fuel = MilliLots::from_lots(fuel_lots_per_block * blocks)
         .scale_bps(input)
         .scale_bps(ratio);
     assert!(

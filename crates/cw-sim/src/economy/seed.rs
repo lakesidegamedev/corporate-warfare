@@ -696,15 +696,18 @@ fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
             / 10_000,
     ];
     let handle = world.firms.insert(firm);
+    // The opening farm: five plants of the traditional strategy, the 1.1.0 farm's capacity.
+    const PLAYER_FARM_BLOCKS: u8 = 5;
+    let asset = dataset.recipes[recipe_index as usize].capex_cents * PLAYER_FARM_BLOCKS as i64;
     let mut facility = open_facility(
         world.firms.get_mut(handle).unwrap(),
         dataset,
         region,
         recipe_index,
-        1,
+        PLAYER_FARM_BLOCKS,
         Tick::OPENING,
     );
-    facility.capex_cents = 200_000_000;
+    facility.capex_cents = asset;
     facility.target_bps = 10_000;
     let facility_handle = world
         .facilities
@@ -715,10 +718,9 @@ fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
         .unwrap()
         .facilities
         .push(facility_handle);
-    let inventory_cost = opening_input_cost(dataset, recipe_index, 1);
+    let inventory_cost = opening_input_cost(dataset, recipe_index, PLAYER_FARM_BLOCKS);
     let cash = 100_000_000;
     let loan = 50_000_000;
-    let asset = 200_000_000;
     let capital = asset + inventory_cost + cash - loan;
     let _ = world.firms.get_mut(handle).unwrap().book.commit(
         Tick::OPENING,

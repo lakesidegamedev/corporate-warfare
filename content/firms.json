@@ -10,7 +10,7 @@
       "archetype": "cost_leader",
       "region": "OH-NW",
       "recipe": "farm_industrial",
-      "blocks": 3,
+      "blocks": 15,
       "public": false
     },
     {
@@ -20,7 +20,7 @@
       "archetype": "brand_builder",
       "region": "IL-CEN",
       "recipe": "farm",
-      "blocks": 3,
+      "blocks": 14,
       "public": true
     },
     {
@@ -30,7 +30,7 @@
       "archetype": "consolidator",
       "region": "MI-NOR",
       "recipe": "mine",
-      "blocks": 1,
+      "blocks": 5,
       "public": true
     },
     {
@@ -40,7 +40,7 @@
       "archetype": "technologist",
       "region": "WV-SOU",
       "recipe": "coal_mine",
-      "blocks": 2,
+      "blocks": 10,
       "public": false
     },
     {
@@ -50,7 +50,7 @@
       "archetype": "cost_leader",
       "region": "OH-NE",
       "recipe": "generator_coal",
-      "blocks": 1,
+      "blocks": 5,
       "public": true
     },
     {
@@ -60,7 +60,7 @@
       "archetype": "vulture",
       "region": "PA-WES",
       "recipe": "generator_gas",
-      "blocks": 1,
+      "blocks": 4,
       "public": false
     },
     {
@@ -70,7 +70,7 @@
       "archetype": "brand_builder",
       "region": "OH-CEN",
       "recipe": "chemical_plant",
-      "blocks": 2,
+      "blocks": 10,
       "public": true
     },
     {
@@ -80,7 +80,7 @@
       "archetype": "consolidator",
       "region": "PA-WES",
       "recipe": "plastics_plant",
-      "blocks": 1,
+      "blocks": 5,
       "public": false
     },
     {
@@ -90,7 +90,7 @@
       "archetype": "cost_leader",
       "region": "OH-NE",
       "recipe": "metal_works",
-      "blocks": 3,
+      "blocks": 13,
       "public": true
     },
     {
@@ -100,7 +100,7 @@
       "archetype": "technologist",
       "region": "MI-DET",
       "recipe": "vehicle_assembly",
-      "blocks": 1,
+      "blocks": 5,
       "public": false
     },
     {
@@ -110,7 +110,7 @@
       "archetype": "consolidator",
       "region": "IN-CEN",
       "recipe": "contractor",
-      "blocks": 1,
+      "blocks": 5,
       "public": false
     },
     {
@@ -120,7 +120,7 @@
       "archetype": "cost_leader",
       "region": "PA-PHL",
       "recipe": "infrastructure",
-      "blocks": 1,
+      "blocks": 5,
       "public": true
     },
     {
@@ -130,7 +130,7 @@
       "archetype": "vulture",
       "region": "OH-SW",
       "recipe": "carrier",
-      "blocks": 1,
+      "blocks": 5,
       "public": true
     },
     {
@@ -140,7 +140,7 @@
       "archetype": "brand_builder",
       "region": "IL-CHI",
       "recipe": "freight_rail",
-      "blocks": 1,
+      "blocks": 5,
       "public": false
     },
     {
@@ -150,7 +150,7 @@
       "archetype": "cost_leader",
       "region": "OH-CEN",
       "recipe": "grocer",
-      "blocks": 2,
+      "blocks": 10,
       "public": true
     },
     {
@@ -160,7 +160,7 @@
       "archetype": "consolidator",
       "region": "NY-NYC",
       "recipe": "goods_store",
-      "blocks": 2,
+      "blocks": 10,
       "public": false
     },
     {
@@ -170,7 +170,7 @@
       "archetype": "brand_builder",
       "region": "OH-SW",
       "recipe": "clinic",
-      "blocks": 2,
+      "blocks": 10,
       "public": true
     },
     {
@@ -180,7 +180,7 @@
       "archetype": "technologist",
       "region": "PA-PHL",
       "recipe": "hospital",
-      "blocks": 1,
+      "blocks": 5,
       "public": false
     },
     {
@@ -210,7 +210,7 @@
       "archetype": "technologist",
       "region": "OH-NE",
       "recipe": "software_studio",
-      "blocks": 2,
+      "blocks": 10,
       "public": true
     },
     {
@@ -220,7 +220,7 @@
       "archetype": "vulture",
       "region": "IN-NE",
       "recipe": "hardware_maker",
-      "blocks": 1,
+      "blocks": 5,
       "public": false
     },
     {
@@ -230,7 +230,7 @@
       "archetype": "brand_builder",
       "region": "NY-NYC",
       "recipe": "media_studio",
-      "blocks": 1,
+      "blocks": 5,
       "public": true
     },
     {
@@ -240,7 +240,7 @@
       "archetype": "consolidator",
       "region": "IL-CHI",
       "recipe": "publishing",
-      "blocks": 1,
+      "blocks": 5,
       "public": false
     },
     {
@@ -250,7 +250,7 @@
       "archetype": "technologist",
       "region": "MI-WES",
       "recipe": "network",
-      "blocks": 1,
+      "blocks": 5,
       "public": true
     },
     {
@@ -260,7 +260,7 @@
       "archetype": "cost_leader",
       "region": "NY-WES",
       "recipe": "wireless",
-      "blocks": 1,
+      "blocks": 5,
       "public": false
     },
     {
@@ -270,7 +270,7 @@
       "archetype": "consolidator",
       "region": "IL-CHI",
       "recipe": "rental_property",
-      "blocks": 1,
+      "blocks": 4,
       "public": true
     },
     {
@@ -280,7 +280,7 @@
       "archetype": "brand_builder",
       "region": "KY-LOU",
       "recipe": "residential",
-      "blocks": 1,
+      "blocks": 4,
       "public": false
     },
     {
@@ -290,7 +290,7 @@
       "archetype": "technologist",
       "region": "OH-NE",
       "recipe": "defense_plant",
-      "blocks": 1,
+      "blocks": 5,
       "public": true
     },
     {
@@ -300,7 +300,7 @@
       "archetype": "vulture",
       "region": "PA-WES",
       "recipe": "munitions",
-      "blocks": 1,
+      "blocks": 4,
       "public": false
     }
   ]

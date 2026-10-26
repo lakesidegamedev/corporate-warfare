@@ -162,7 +162,7 @@ struct BuildFlowView: View {
             StrategyCard(strategy: strategy, room: roomFor(strategy))
             Panel {
                 VStack(alignment: .leading, spacing: 10) {
-                    Stepper(value: $blocks, in: 1...4) {
+                    Stepper(value: $blocks, in: 1...20) {
                         HStack {
                             Text("Size").foregroundStyle(Theme.primaryText)
                             Spacer()

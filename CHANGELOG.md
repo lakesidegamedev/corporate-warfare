@@ -11,6 +11,58 @@ heading.
 
 ## [Unreleased]
 
+Planned as **1.2.0**: economic regions, sector divisions and corporate warfare. Saves from
+1.1.0 do not load in this release.
+
+### Added
+
+- 31 economic regions inside the eight states, built from whole counties joined to the
+  nearest anchor metro in the same state, with Census 2000 populations and SAIPE 2000
+  incomes. A region is the economic unit: its own labour pool, wages, household demand,
+  land cost, goods markets and freight lanes. The state is the political layer: conditions,
+  union law and taxes.
+- State specializations: each state's two specialized sector types use 3 and 1.5 percent
+  fewer inputs (for example West Virginia extraction and chemicals).
+- Sector divisions, as in A House Divided: the first plant of a sector type in a region opens
+  a division for a $100,000 entry fee with the founding plant at half price; later plants
+  join it and run its strategy, and a retool moves the whole division.
+- Market share and dominance per region and sector: expanding past half a market costs up to
+  three times as much, softened when there are few rivals.
+- Market raids: spend a marketing campaign against a rival's division in a market you both
+  serve to take up to a fifth of its plants, bought at half book value. Odds follow the
+  campaign's strength against the defender's; the defender keeps one plant; each market has
+  a 13-week cooldown. Rivals raid too, including you.
+- The map draws regions inside the states and shows only your divisions: one sector circle
+  per owned sector type in a region, with a badge counting its plants.
+- Region boards: the state's specializations, every sector's operators, leader and your
+  share, raid options, room to build, conditions and plants. Market news in the Inbox.
+- The build flow quotes the entry fee, founding discount, dominance surcharge and the input
+  factor where the plant would sit.
+- The map pipeline is a committed script (`tools/map/build_map.sh`) and regions a committed
+  generator (`tools/map/build_regions.py`).
+
+### Changed
+
+- A plant is a fifth of its 1.1.0 size: output, inputs, crews, capex and land rent all
+  divide by five, and seeded companies hold five times the plants, so the economy keeps its
+  capacity. A farm plant costs $400,000 instead of $2,000,000 and opening a division with a
+  founding plant about $300,000. Standard strategies keep their calibrated margins.
+- Plants managed from outside the home region pay 2.5 percent more for inputs, outside the
+  home state 5 percent.
+- Services that reach customers statewide (software, telecom, advertising, research,
+  maintenance, care, training, water, construction) clear across the state; goods, retail,
+  leases and electricity clear in their region.
+- Public works and outside gateway capacity are sized per state and split by region demand.
+- Markets picks a region from a menu grouped by state; the CEO Office groups plants by
+  division and retools whole divisions.
+
+### Fixed
+
+- The build preview always previewed the first region instead of the chosen one.
+- Advertising split across media firms dropped the rounding remainder: the buyer paid more
+  than the sellers received.
+- A mine whose deposit was smaller than a week's output stranded a rounding remainder.
+
 ## [1.1.0] - 2026-10-26
 
 Single-player A House Divided corporations on a real map of the Great Lakes and Ohio Valley.

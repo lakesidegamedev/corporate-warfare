@@ -1293,7 +1293,7 @@ impl SessionHandle {
             handle,
             region,
             recipe,
-            blocks.clamp(1, 8) as u8,
+            blocks.clamp(1, cw_sim::economy::sectors::MAX_BLOCKS_PER_ORDER as u32) as u8,
         );
         let industry = sectors::recipe_industry(dataset, recipe);
         let locked = sectors::division_strategy(world, dataset, handle, region, industry);

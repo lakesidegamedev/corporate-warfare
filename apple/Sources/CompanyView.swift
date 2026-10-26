@@ -309,7 +309,7 @@ struct BuildSheet: View {
                             .tag(item.index)
                     }
                 }
-                Stepper(value: $blocks, in: 1...8) {
+                Stepper(value: $blocks, in: 1...20) {
                     Text("Blocks: \(blocks)")
                 }
                 if let template {

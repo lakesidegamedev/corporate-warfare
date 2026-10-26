@@ -150,20 +150,23 @@ mod tests {
             .map(|(id, qty)| qty * prices[id.as_str()])
             .sum();
         let payroll = farm.baseline_weekly_payroll(balance.baseline_weekly_wage_cents);
-        // 600 * $100 = $60,000; fuel 20 * $300 = $6,000; power 10 * $1,200 = $12,000.
-        assert_eq!(revenue, 6_000_000);
-        assert_eq!(inputs, 1_800_000);
-        assert_eq!(payroll, 3_480_000);
+        // One plant: 129 * $100 = $12,900; fuel 4 * $300 + power 2 * $1,200 = $3,600;
+        // crew 12 * $400 + 2 * $800 + 1 * $1,400 = $7,800.
+        assert_eq!(revenue, 1_290_000);
+        assert_eq!(inputs, 360_000);
+        assert_eq!(payroll, 780_000);
         let maintenance = farm.weekly_maintenance(balance.maintenance_annual_bps);
         let depreciation = farm.weekly_depreciation();
-        // $2,000,000 * 2 percent / 52 weeks = $769.23, carried exactly in cents.
-        assert_eq!(maintenance, 76_923);
-        // $2,000,000 / (20 * 52) = $1,923.08.
-        assert_eq!(depreciation, 192_308);
+        // $400,000 * 2 percent / 52 weeks = $153.846, rounded to $153.85.
+        assert_eq!(maintenance, 15_385);
+        // $400,000 / (20 * 52) = $384.615, rounded to $384.62.
+        assert_eq!(depreciation, 38_462);
+        // Land is $200 a week per plant.
+        assert_eq!(balance.fixture_land_rent_cents_weekly, 20_000);
         let ebitda =
             revenue - inputs - payroll - maintenance - balance.fixture_land_rent_cents_weekly;
         let ebit = ebitda - depreciation;
-        assert_eq!(ebitda, 543_077);
-        assert_eq!(ebit, 350_769);
+        assert_eq!(ebitda, 114_615);
+        assert_eq!(ebit, 76_153);
     }
 }

@@ -16,6 +16,9 @@ use cw_data::Dataset;
 use crate::economy::operations::industry_index;
 use crate::state::{FacilityStatus, RaidRecord, World};
 
+/// The most plants one build order may add.
+pub const MAX_BLOCKS_PER_ORDER: u8 = 40;
+
 /// Paid once to the outside legal-services sector when a firm opens a division.
 pub const ENTRY_FEE_CENTS: i64 = 10_000_000;
 /// The founding plant of a division is built at half its strategy's capex per block.

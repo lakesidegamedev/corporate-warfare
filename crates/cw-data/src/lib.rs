@@ -329,7 +329,8 @@ impl Dataset {
             if !self.region_index.contains_key(&firm.region) {
                 errors.push(format!("firm {} has unknown region", firm.id));
             }
-            if firm.blocks == 0 || firm.blocks > 4 {
+            // Plants are a fifth of the 1.1.0 unit, so seeds hold up to twenty.
+            if firm.blocks == 0 || firm.blocks > 20 {
                 errors.push(format!("firm {} block count out of range", firm.id));
             }
             if firm.recipe != "bank"

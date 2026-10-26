@@ -810,7 +810,7 @@ fn apply_intent(
             blocks,
         } => {
             require_control(world, actor, *firm)?;
-            if *blocks == 0 || *blocks > 8 {
+            if *blocks == 0 || *blocks > sectors::MAX_BLOCKS_PER_ORDER {
                 return Err(DomainError::Arithmetic {
                     detail: ArithmeticFault::OutOfRange,
                 });
