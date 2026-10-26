@@ -730,6 +730,15 @@ pub struct Gateway {
     pub sell_price_cents: i64,
     /// Price at which the gateway buys out of the region.
     pub buy_price_cents: i64,
+    /// Lots imported into and exported out of the region last week, and a smoothed import
+    /// volume (a quarter weight on the latest week). Imports are demand local plants did not
+    /// meet: the public "room to build" signal.
+    #[serde(default)]
+    pub last_import_lots: i64,
+    #[serde(default)]
+    pub last_export_lots: i64,
+    #[serde(default)]
+    pub smoothed_import_lots: i64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

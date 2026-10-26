@@ -155,6 +155,13 @@ fn ceil_cost(price_cents: i64, milli_lots: i64) -> i64 {
 
 /// Clear every spot book for the week: industrial inputs, household demand, procurement.
 pub fn clear_week(world: &mut World, dataset: &Dataset) {
+    // Roll the gateway volume signal: last week's imports feed the smoothed average.
+    for gateway in &mut world.gateways {
+        gateway.smoothed_import_lots =
+            (gateway.smoothed_import_lots * 3 + gateway.last_import_lots) / 4;
+        gateway.last_import_lots = 0;
+        gateway.last_export_lots = 0;
+    }
     clear_intermediate(world, dataset);
     clear_households(world, dataset);
     clear_government(world, dataset);
@@ -453,6 +460,7 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
                 .credit(Account::Cash, paid, "export purchase")
                 .debit(Account::Inventory, paid, "export purchase"),
         );
+        world.gateways[index].last_export_lots += qty.lots();
         remaining = MilliLots(remaining.0 - qty.0);
     }
 }
@@ -749,6 +757,7 @@ fn settle_fills(
                     .unwrap()
                     .stock_lot_mut(product, region)
                     .receive(qty, Cents(paid));
+                world.gateways[index].last_import_lots += qty.lots();
                 let _ = world.outside.gateway_book.commit(
                     world.tick,
                     Txn::new()

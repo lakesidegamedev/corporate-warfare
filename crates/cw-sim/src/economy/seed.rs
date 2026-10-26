@@ -903,6 +903,9 @@ fn build_gateways(world: &mut World, dataset: &Dataset) {
                 capacity_lots: capacity,
                 sell_price_cents: reference + reference * 5 / 100,
                 buy_price_cents: reference - reference * 5 / 100,
+                last_import_lots: 0,
+                last_export_lots: 0,
+                smoothed_import_lots: 0,
             });
         }
     }
