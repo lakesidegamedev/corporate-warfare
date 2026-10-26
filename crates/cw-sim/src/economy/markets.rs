@@ -162,6 +162,8 @@ pub fn clear_week(world: &mut World, dataset: &Dataset) {
         gateway.last_import_lots = 0;
         gateway.last_export_lots = 0;
     }
+    let opening = world.outside.gateway_book.cash().max(0);
+    world.outside.gateway_floor_cents = opening - opening / 100;
     clear_intermediate(world, dataset);
     clear_households(world, dataset);
     clear_government(world, dataset);
@@ -205,12 +207,14 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
             if qty.0 <= 0 {
                 continue;
             }
-            let cost = qty
-                .value_at(Cents(dataset.reference_price(service)))
-                .unwrap_or(Cents::ZERO)
-                .0;
-            let cash = world.outside.gateway_book.cash().max(0);
-            let paid = cost.min(cash);
+            // Buy only what the paced outside account can pay for in full.
+            let price = dataset.reference_price(service).max(1);
+            let affordable = world.outside.gateway_spendable() / price * 1_000;
+            let qty = qty.min(MilliLots(affordable));
+            if qty.0 <= 0 {
+                break;
+            }
+            let paid = qty.value_at(Cents(price)).unwrap_or(Cents::ZERO).0;
             if paid <= 0 {
                 break;
             }
@@ -442,13 +446,17 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
         if exportable <= 0 {
             continue;
         }
-        let qty = MilliLots::from_lots(exportable).min(remaining);
-        let cost = qty
-            .value_at(Cents(gateway.buy_price_cents.max(1)))
-            .unwrap_or(Cents::ZERO)
-            .0;
-        let gateway_cash = world.outside.gateway_book.cash().max(0);
-        let paid = cost.min(gateway_cash);
+        // The gateway buys only what its paced cash pays for in full; a seller never hands
+        // over goods for part of their price.
+        let price = gateway.buy_price_cents.max(1);
+        let affordable = world.outside.gateway_spendable() / price * 1_000;
+        let qty = MilliLots::from_lots(exportable)
+            .min(remaining)
+            .min(MilliLots(affordable));
+        if qty.0 <= 0 {
+            break;
+        }
+        let paid = qty.value_at(Cents(price)).unwrap_or(Cents::ZERO).0;
         if paid <= 0 {
             break;
         }

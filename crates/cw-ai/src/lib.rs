@@ -274,16 +274,17 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         }
         target = target.clamp(reference / 2, reference * 2).max(1);
         // Import parity: above the gateway's import price local buyers switch to imports, so
-        // selling out to the gateway is no signal to keep raising the price.
-        if let Some(import) = world
+        // selling out to the gateway is no signal to keep raising the price. Services have no
+        // import quote; a fixed-price public buyer taking all of them is no signal either, so
+        // they stop at the same headroom over reference.
+        let ceiling = world
             .gateways
             .iter()
             .find(|gateway| gateway.region == region && gateway.product == product)
             .map(|gateway| gateway.sell_price_cents)
             .filter(|price| *price > 0)
-        {
-            target = target.min(import);
-        }
+            .unwrap_or(reference + reference * 15 / 100);
+        target = target.min(ceiling);
         if target != price {
             let weekly_units = sold / 13;
             candidates.push(Candidate {

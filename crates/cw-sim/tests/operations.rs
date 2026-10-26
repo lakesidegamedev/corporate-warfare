@@ -233,3 +233,29 @@ fn a_retool_switches_strategy_within_the_sector_at_a_quarter_of_capex() {
         }
     );
 }
+
+#[test]
+fn the_outside_account_draws_at_most_one_percent_a_week() {
+    let (mut world, dataset) = world();
+    // Leave the outside account nearly empty: the paced draw must still hold.
+    let cash = world.outside.gateway_book.cash();
+    let keep = 2_000_000;
+    let _ = world.outside.gateway_book.commit(
+        world.tick,
+        Txn::new()
+            .credit(Account::Cash, cash - keep, "probe transfer")
+            .debit(Account::OtherAssets, cash - keep, "probe transfer"),
+    );
+    for _ in 0..6 {
+        let before = world.outside.gateway_book.cash();
+        cw_sim::tick::advance(&mut world, &dataset);
+        let after = world.outside.gateway_book.cash();
+        // Imports only add to the account, so the net week can never fall below the floor.
+        assert!(
+            after >= before - before / 100,
+            "week drew {} of {before}",
+            before - after
+        );
+        assert!(after >= 0);
+    }
+}

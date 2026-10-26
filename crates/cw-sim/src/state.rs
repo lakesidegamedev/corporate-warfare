@@ -1052,6 +1052,18 @@ pub struct OutsideSectors {
     pub legal_services_book: Ledger,
     /// Outside gateway settlement account. Imports and exports post here exactly once.
     pub gateway_book: Ledger,
+    /// Cash the outside account keeps this week. It may draw at most one percent of its
+    /// opening cash net of the week's import receipts, so a corridor running a trade surplus
+    /// sees exports taper toward balance instead of the account emptying in one step.
+    #[serde(default)]
+    pub gateway_floor_cents: i64,
+}
+
+impl OutsideSectors {
+    /// Cash the gateway may still spend this week on exports and public works.
+    pub fn gateway_spendable(&self) -> i64 {
+        (self.gateway_book.cash() - self.gateway_floor_cents).max(0)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

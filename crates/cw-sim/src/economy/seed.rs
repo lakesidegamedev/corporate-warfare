@@ -121,6 +121,7 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
             advocacy_book: Ledger::default(),
             legal_services_book: Ledger::default(),
             gateway_book: Ledger::default(),
+            gateway_floor_cents: 0,
         },
         macro_state: MacroState {
             policy_rate_bps: BASE_POLICY_RATE_BPS,
@@ -153,17 +154,19 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
     };
 
     // Outside gateway capital is finite but real: exports are paid from it, imports add to it.
+    // The outside economy is large next to the corridor; weekly pacing in `clear_week` keeps
+    // a sustained surplus from emptying it at once.
     let _ = world.outside.gateway_book.commit(
         Tick::OPENING,
         Txn::new()
             .debit(
                 cw_core::ledger::Account::Cash,
-                5_000_000_000,
+                50_000_000_000,
                 "gateway capital",
             )
             .credit(
                 cw_core::ledger::Account::ShareCapital,
-                5_000_000_000,
+                50_000_000_000,
                 "gateway capital",
             ),
     );

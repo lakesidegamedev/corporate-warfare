@@ -78,6 +78,13 @@ Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
 
 ### Fixed
 
+- The outside economy settled through a $50 million account that a corridor export surplus
+  emptied in about two years, after which gateways stopped buying and public works stopped
+  paying, taking every exporter and construction firm with them. It now opens at $500
+  million and draws at most one percent a week, so exports taper toward balanced trade
+  instead of stopping. When short it buys only what it can pay for in full; before, a
+  seller handed over a whole shipment for part of its price.
+- Services, which have no import quote, stop at 15 percent over reference when rivals reprice.
 - Only firms headquartered in a state could sell there: business, household and public-works
   sales and gateway exports all filtered on headquarters, so a plant built in another state
   could not sell its output. Sellers now only need stock in the state. Spot orders search
