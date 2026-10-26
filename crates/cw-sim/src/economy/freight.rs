@@ -14,7 +14,7 @@ use cw_data::Dataset;
 
 use crate::state::{ContractStatus, Shipment, World};
 
-pub const FREIGHT_CENTS_PER_LOT_KM: i64 = 10;
+pub const FREIGHT_CENTS_PER_LOT_KM: i64 = 3;
 pub const FREIGHT_MINIMUM_CENTS: i64 = 100;
 
 pub fn lead_time_weeks(km: u32) -> u32 {
@@ -140,7 +140,58 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
             continue;
         }
 
-        // Remove seller stock and charge the buyer.
+        // The buyer takes only what it can pay for in full, goods and freight together; a
+        // seller never hands over goods for part of their price. What the buyer cannot afford
+        // stays with the seller for the exchange, and the week counts as delivered.
+        let price = contract.price_cents;
+        let buyer_cash = world
+            .firms
+            .get(contract.buyer)
+            .map(|f| f.book.cash())
+            .unwrap_or(0)
+            .max(0);
+        let full_cost = deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0
+            + freight_cost(
+                dataset,
+                contract.from_region,
+                contract.to_region,
+                deliverable,
+            );
+        let mut deliverable = deliverable;
+        if full_cost > buyer_cash {
+            // Whole lots only, so the reduced shipment's freight is never above its share.
+            let lots = (deliverable.0 as i128 * buyer_cash as i128
+                / full_cost.max(1) as i128
+                / 1_000) as i64;
+            deliverable = MilliLots::from_lots(lots);
+            // The freight minimum can make a small shipment dearer per lot; trim to fit.
+            while deliverable.0 > 0
+                && deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0
+                    + freight_cost(
+                        dataset,
+                        contract.from_region,
+                        contract.to_region,
+                        deliverable,
+                    )
+                    > buyer_cash
+            {
+                deliverable = MilliLots(deliverable.0 - 1_000);
+            }
+        }
+        if deliverable.0 <= 0 {
+            if let Some(stored) = world.contracts.get_mut(handle) {
+                stored.next_delivery = Tick(world.tick.0 + 1);
+                stored.remaining_weeks = stored.remaining_weeks.saturating_sub(1);
+                if stored.remaining_weeks == 0 {
+                    if stored.auto_renew {
+                        stored.remaining_weeks = 52;
+                    } else {
+                        stored.status = ContractStatus::Completed;
+                    }
+                }
+            }
+            continue;
+        }
         let carrying = if let Some(seller) = world.firms.get_mut(contract.seller) {
             seller
                 .issue_stock(contract.product, contract.from_region, deliverable)
@@ -148,7 +199,6 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
         } else {
             continue;
         };
-        let price = contract.price_cents;
         let goods_value = deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0;
         let margin = goods_value.saturating_sub(carrying).max(0);
         let freight = freight_cost(
@@ -157,27 +207,8 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
             contract.to_region,
             deliverable,
         );
-        let total = goods_value + freight;
-        let buyer_cash = world
-            .firms
-            .get(contract.buyer)
-            .map(|f| f.book.cash())
-            .unwrap_or(0);
-        let paid = total.min(buyer_cash.max(0));
-        if paid < total {
-            crate::economy::insolvency::defer_expense(
-                world,
-                contract.buyer,
-                total - paid,
-                Account::CostOfGoods,
-                "contract payment",
-            );
-        }
-        let paid_goods = if total > 0 {
-            goods_value * paid / total
-        } else {
-            0
-        };
+        let paid = (goods_value + freight).min(buyer_cash);
+        let paid_goods = goods_value.min(paid);
         let paid_freight = paid - paid_goods;
         if paid_goods > 0 {
             let _ = world.firms.get_mut(contract.buyer).unwrap().book.commit(
@@ -196,6 +227,9 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
                     .credit(Account::Inventory, carrying, "contract cogs")
                     .debit(Account::CostOfGoods, carrying, "contract cogs"),
             );
+            // A contract delivery is a sale like any other: it belongs in the unit-sales record
+            // that pricing, the market board and the AI read.
+            seller.record_sale(contract.to_region, contract.product, deliverable);
         }
         if paid_freight > 0 {
             pay_freight(world, contract.buyer, paid_freight, "contract freight");

@@ -52,6 +52,11 @@ final class SnapshotTests: XCTestCase {
         render("markets-pad", pad, compact: false, MarketsView().environmentObject(store))
         render("inbox-phone", phone, compact: true, InboxView().environmentObject(store))
         render("root-phone", phone, compact: true, RootView().environmentObject(store))
+        // Each tab inside the real tab bar, so content against the bar is reviewed as shipped.
+        render("tab-office-phone", phone, compact: true, RootView(initialTab: .office).environmentObject(store))
+        render("tab-markets-phone", phone, compact: true, RootView(initialTab: .markets).environmentObject(store))
+        render("tab-inbox-phone", phone, compact: true, RootView(initialTab: .inbox).environmentObject(store))
+        render("tab-portfolio-phone", phone, compact: true, RootView(initialTab: .portfolio).environmentObject(store))
     }
 
     private func render<V: View>(_ name: String, _ size: CGSize, compact: Bool, _ view: V) {

@@ -52,6 +52,23 @@ pub enum Focus {
     Off,
 }
 
+/// Share of a plant's capex, in basis points, charged to bring it back from mothballs: rehiring,
+/// recommissioning and restocking spares. Workers are hired again through the labour market.
+pub const REOPEN_COST_BPS: i64 = 500;
+
+/// Mothball a plant: it stops producing and releases its whole workforce, so it carries no
+/// payroll, maintenance, rent or depreciation until it reopens.
+pub fn mothball(facility: &mut crate::state::Facility, now: Tick) {
+    facility.status = FacilityStatus::Mothballed;
+    facility.mothballed_since = Some(now);
+    facility.workers = [0; 3];
+}
+
+/// Cash needed to reopen a mothballed plant.
+pub fn reopen_cost(facility: &crate::state::Facility) -> i64 {
+    (facility.capex_cents.max(0) * REOPEN_COST_BPS / 10_000).max(100_000)
+}
+
 pub fn industry_index(name: &str) -> Option<u8> {
     INDUSTRY_NAMES
         .iter()

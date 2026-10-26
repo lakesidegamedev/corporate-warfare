@@ -309,6 +309,23 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
         }
     }
 
+    // Goods clear on one corridor-wide exchange per product; services and other kinds keep
+    // their regional or statewide books below.
+    let mut exchange: BTreeMap<u16, Vec<(Handle, u8, i64, i64)>> = BTreeMap::new();
+    needed.retain(|(region, product), buyers| {
+        if dataset.products[*product as usize].kind != cw_data::ProductKind::Goods {
+            return true;
+        }
+        let entry = exchange.entry(*product).or_default();
+        for (firm, qty, budget) in buyers.iter() {
+            entry.push((*firm, *region, *qty, *budget));
+        }
+        false
+    });
+    for (product, buyers) in exchange {
+        clear_goods_exchange(world, dataset, product, buyers);
+    }
+
     for ((region, product), buyers) in needed {
         // Combine multiple facilities of one firm into one buyer.
         let mut merged: BTreeMap<Handle, (i64, i64)> = BTreeMap::new();
@@ -384,6 +401,213 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
         .collect();
     for (region, product) in gateways {
         sell_surplus_to_gateway(world, dataset, region, product);
+    }
+}
+
+/// The corridor commodity exchange for one good. Every buyer's need in any region meets every
+/// seller's stock in any region, plus the import offer of the buyer's own region. Each pairing
+/// is priced as delivered: the seller's asking price plus freight over the lane. Pairings fill
+/// cheapest first, so local and nearby supply beat distant supply and the outside market is the
+/// last resort. The seller receives its asking price; the buyer pays the freight to the
+/// carrier. Exchange deliveries arrive within the week. A buyer only takes what it can pay for
+/// in full.
+fn clear_goods_exchange(
+    world: &mut World,
+    dataset: &Dataset,
+    product: u16,
+    buyers: Vec<(Handle, u8, i64, i64)>,
+) {
+    // Merge each firm's facilities into one buyer per region.
+    let mut demand: BTreeMap<(Handle, u8), (i64, i64)> = BTreeMap::new();
+    for (firm, region, qty, budget) in buyers {
+        let entry = demand.entry((firm, region)).or_insert((0, 0));
+        entry.0 += qty;
+        entry.1 += budget;
+    }
+    if demand.is_empty() {
+        return;
+    }
+    // Sellers: each firm's stock by region beyond its own plants' input cover.
+    let mut supply: BTreeMap<(Handle, u8), i64> = BTreeMap::new();
+    for (handle, firm) in world.firms.iter() {
+        if !firm.operative() {
+            continue;
+        }
+        for ((code, from), lot) in firm.inventory.iter() {
+            if *code != product || lot.qty.0 <= 0 {
+                continue;
+            }
+            let cover = own_input_cover_lots(world, dataset, firm, *from, product) * 1_000;
+            let qty = lot.qty.0 - cover;
+            if qty > 0 {
+                supply.insert((handle, *from), qty);
+            }
+        }
+    }
+    let freight_per_lot = |from: u8, to: u8| {
+        crate::economy::freight::freight_cost(dataset, from, to, MilliLots::from_lots(100)) / 100
+    };
+    let asking = |world: &World, firm: Handle| {
+        world
+            .firms
+            .get(firm)
+            .and_then(|f| f.policies.prices.get(&product).copied())
+            .unwrap_or_else(|| dataset.reference_price(product))
+            .max(1)
+    };
+    // Every pairing with its delivered price per lot. A seller never buys from itself.
+    #[derive(Clone, Copy)]
+    enum Source {
+        Firm(Handle, u8),
+        Gateway(usize),
+    }
+    // (delivered price, seller key, buyer key, buyer, source)
+    type Pairing = (i64, u64, u64, (Handle, u8), Source);
+    let mut pairs: Vec<Pairing> = Vec::new();
+    for (buyer_key, _) in demand.iter() {
+        let (buyer, to) = *buyer_key;
+        for (seller_key, _) in supply.iter() {
+            let (seller, from) = *seller_key;
+            if seller == buyer {
+                continue;
+            }
+            let delivered = asking(world, seller) + freight_per_lot(from, to);
+            pairs.push((
+                delivered,
+                seller.0 ^ ((from as u64) << 56),
+                buyer.0 ^ ((to as u64) << 56),
+                *buyer_key,
+                Source::Firm(seller, from),
+            ));
+        }
+        for (index, gateway) in world.gateways.iter().enumerate() {
+            if gateway.region == to && gateway.product == product && gateway.sell_price_cents > 0 {
+                pairs.push((
+                    gateway.sell_price_cents,
+                    // Each gateway is its own source, after every firm seller at equal price.
+                    u64::MAX - index as u64,
+                    buyer.0 ^ ((to as u64) << 56),
+                    *buyer_key,
+                    Source::Gateway(index),
+                ));
+            }
+        }
+    }
+    pairs.sort_by_key(|(price, seller, buyer, ..)| (*price, *seller, *buyer));
+    let mut import_left: BTreeMap<usize, i64> = BTreeMap::new();
+    // Work through the pairings one price tier and source at a time. Buyers tied on the same
+    // source at the same delivered price share it in proportion to what each still wants and
+    // can pay for, so a large buyer cannot starve a small one by handle order.
+    let mut index = 0;
+    while index < pairs.len() {
+        let (delivered, seller_key, ..) = pairs[index];
+        let mut end = index;
+        while end < pairs.len() && pairs[end].0 == delivered && pairs[end].1 == seller_key {
+            end += 1;
+        }
+        let tier: Vec<((Handle, u8), Source)> =
+            pairs[index..end].iter().map(|p| (p.3, p.4)).collect();
+        index = end;
+        let source = tier[0].1;
+        let available = match source {
+            Source::Firm(seller, from) => supply.get(&(seller, from)).copied().unwrap_or(0),
+            Source::Gateway(gate) => *import_left
+                .entry(gate)
+                .or_insert(world.gateways[gate].capacity_lots * 1_000),
+        };
+        if available <= 0 {
+            continue;
+        }
+        // What each tied buyer wants and can pay for at this price, in milli-lots.
+        let wants: Vec<(u64, i64)> = tier
+            .iter()
+            .map(|(buyer_key, _)| {
+                let (want, budget) = demand[buyer_key];
+                let cash = world
+                    .firms
+                    .get(buyer_key.0)
+                    .map(|f| f.book.cash())
+                    .unwrap_or(0)
+                    .max(0);
+                let affordable =
+                    (budget.min(cash).max(0) as i128 * 1_000 / delivered as i128) as i64;
+                (
+                    buyer_key.0.0 ^ ((buyer_key.1 as u64) << 56),
+                    want.min(affordable).max(0),
+                )
+            })
+            .collect();
+        let total: i64 = wants.iter().map(|(_, w)| *w).sum();
+        if total <= 0 {
+            continue;
+        }
+        let shares: Vec<i64> = if total <= available {
+            wants.iter().map(|(_, w)| *w).collect()
+        } else {
+            allocate_cents(Cents(available), &wants)
+                .iter()
+                .map(|(_, c)| c.0)
+                .collect()
+        };
+        for ((buyer_key, source), qty) in tier.into_iter().zip(shares) {
+            if qty <= 0 {
+                continue;
+            }
+            let (buyer, to) = buyer_key;
+            let qty_lots = MilliLots(qty);
+            match source {
+                Source::Firm(seller, from) => {
+                    let price = asking(world, seller);
+                    let goods = qty_lots.value_at(Cents(price)).unwrap_or(Cents::ZERO);
+                    if !trade_between(world, buyer, seller, product, (from, to), qty_lots, goods) {
+                        continue;
+                    }
+                    if let Some(entity) = world.firms.get_mut(seller) {
+                        entity.record_sale(to, product, qty_lots);
+                    }
+                    let freight =
+                        crate::economy::freight::freight_cost(dataset, from, to, qty_lots);
+                    crate::economy::freight::pay_freight(world, buyer, freight, "exchange freight");
+                    if let Some(left) = supply.get_mut(&(seller, from)) {
+                        *left -= qty;
+                    }
+                    let entry = demand.get_mut(&buyer_key).unwrap();
+                    entry.0 -= qty;
+                    entry.1 -= goods.0 + freight;
+                }
+                Source::Gateway(gate) => {
+                    let paid = qty_lots.value_at(Cents(delivered)).unwrap_or(Cents::ZERO).0;
+                    if paid <= 0 {
+                        continue;
+                    }
+                    let _ = world.firms.get_mut(buyer).unwrap().book.commit(
+                        world.tick,
+                        Txn::new().credit(Account::Cash, paid, "import").debit(
+                            Account::Inventory,
+                            paid,
+                            "import",
+                        ),
+                    );
+                    world
+                        .firms
+                        .get_mut(buyer)
+                        .unwrap()
+                        .stock_lot_mut(product, to)
+                        .receive(qty_lots, Cents(paid));
+                    world.gateways[gate].last_import_lots += qty_lots.lots();
+                    let _ = world.outside.gateway_book.commit(
+                        world.tick,
+                        Txn::new()
+                            .debit(Account::Cash, paid, "export receipt")
+                            .credit(Account::Revenue, paid, "export receipt"),
+                    );
+                    *import_left.get_mut(&gate).unwrap() -= qty;
+                    let entry = demand.get_mut(&buyer_key).unwrap();
+                    entry.0 -= qty;
+                    entry.1 -= paid;
+                }
+            }
+        }
     }
 }
 
@@ -1069,6 +1293,164 @@ fn handle_of(raw: u64) -> Option<Handle> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Give a firm exactly `lots` of a good in a region, booked at reference cost.
+    fn stock(
+        world: &mut World,
+        dataset: &Dataset,
+        firm: Handle,
+        product: u16,
+        region: u8,
+        lots: i64,
+    ) {
+        let entity = world.firms.get_mut(firm).unwrap();
+        entity.inventory.retain(|(p, _), _| *p != product);
+        let cost = lots * dataset.reference_price(product);
+        entity
+            .stock_lot_mut(product, region)
+            .receive(MilliLots::from_lots(lots), Cents(cost));
+        let _ = entity.book.commit(
+            world.tick,
+            Txn::new()
+                .debit(Account::Inventory, cost, "test stock")
+                .credit(Account::ShareCapital, cost, "test stock"),
+        );
+    }
+
+    #[test]
+    fn the_exchange_fills_cheapest_delivered_first_and_imports_last() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            301,
+            crate::state::ScenarioKind::Founder,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let steel = dataset.product_index["steel"];
+        let firms: Vec<Handle> = world.firms.iter().map(|(h, _)| h).take(3).collect();
+        let (buyer, local, remote) = (firms[0], firms[1], firms[2]);
+        let to = dataset.region_index["OH-CEN"];
+        let far = dataset.region_index["PA-WES"];
+        for firm in [buyer, local, remote] {
+            world
+                .firms
+                .get_mut(firm)
+                .unwrap()
+                .inventory
+                .retain(|(p, _), _| *p != steel);
+        }
+        // A local seller asking $440 and a remote one asking $380 plus freight.
+        stock(&mut world, &dataset, local, steel, to, 10);
+        stock(&mut world, &dataset, remote, steel, far, 10);
+        world
+            .firms
+            .get_mut(local)
+            .unwrap()
+            .policies
+            .prices
+            .insert(steel, 44_000);
+        world
+            .firms
+            .get_mut(remote)
+            .unwrap()
+            .policies
+            .prices
+            .insert(steel, 38_000);
+        let freight_lot =
+            crate::economy::freight::freight_cost(&dataset, far, to, MilliLots::from_lots(100))
+                / 100;
+        assert!(
+            38_000 + freight_lot < 44_000,
+            "the remote seller is cheaper delivered"
+        );
+        let buyer_cash = world.firms.get(buyer).unwrap().book.cash();
+        // The buyer wants 15 lots: all ten remote lots first, then five local ones.
+        clear_goods_exchange(
+            &mut world,
+            &dataset,
+            steel,
+            vec![(buyer, to, 15_000, 100_000_000)],
+        );
+        let held = |w: &World, f: Handle, r: u8| w.firms.get(f).unwrap().stock(steel, r).lots();
+        assert_eq!(held(&world, buyer, to), 15);
+        assert_eq!(held(&world, remote, far), 0);
+        assert_eq!(held(&world, local, to), 5);
+        let freight =
+            crate::economy::freight::freight_cost(&dataset, far, to, MilliLots::from_lots(10));
+        assert_eq!(
+            buyer_cash - world.firms.get(buyer).unwrap().book.cash(),
+            10 * 38_000 + freight + 5 * 44_000,
+            "goods at asking prices plus freight once"
+        );
+        // Eight more lots: the local seller's last five at $440, then three imports at $460.
+        let imports_before: i64 = world
+            .gateways
+            .iter()
+            .filter(|g| g.product == steel && g.region == to)
+            .map(|g| g.last_import_lots)
+            .sum();
+        clear_goods_exchange(
+            &mut world,
+            &dataset,
+            steel,
+            vec![(buyer, to, 8_000, 100_000_000)],
+        );
+        let imports_after: i64 = world
+            .gateways
+            .iter()
+            .filter(|g| g.product == steel && g.region == to)
+            .map(|g| g.last_import_lots)
+            .sum();
+        assert_eq!(imports_after - imports_before, 3);
+        assert_eq!(held(&world, local, to), 0);
+        assert_eq!(held(&world, buyer, to), 23);
+    }
+
+    #[test]
+    fn tied_buyers_share_a_scarce_source_in_proportion() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            302,
+            crate::state::ScenarioKind::Founder,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let steel = dataset.product_index["steel"];
+        let firms: Vec<Handle> = world.firms.iter().map(|(h, _)| h).take(3).collect();
+        let (big, small, seller) = (firms[0], firms[1], firms[2]);
+        let to = dataset.region_index["OH-CEN"];
+        for firm in [big, small, seller] {
+            world
+                .firms
+                .get_mut(firm)
+                .unwrap()
+                .inventory
+                .retain(|(p, _), _| *p != steel);
+        }
+        // Remove the import so the single seller is the only source.
+        world
+            .gateways
+            .retain(|g| !(g.product == steel && g.region == to));
+        stock(&mut world, &dataset, seller, steel, to, 10);
+        // 30 and 10 lots wanted against 10 available: 7.5 and 2.5.
+        clear_goods_exchange(
+            &mut world,
+            &dataset,
+            steel,
+            vec![
+                (big, to, 30_000, 100_000_000),
+                (small, to, 10_000, 100_000_000),
+            ],
+        );
+        assert_eq!(
+            world.firms.get(big).unwrap().stock(steel, to),
+            MilliLots(7_500)
+        );
+        assert_eq!(
+            world.firms.get(small).unwrap().stock(steel, to),
+            MilliLots(2_500)
+        );
+    }
 
     fn offer(seller: u64, qty: i64, price: i64) -> Offer {
         Offer {

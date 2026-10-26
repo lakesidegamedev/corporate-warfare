@@ -85,6 +85,9 @@ pub enum CommandIntent {
     MothballFacility {
         facility: Handle,
     },
+    ReopenFacility {
+        facility: Handle,
+    },
     DisposeFacility {
         facility: Handle,
     },
@@ -98,6 +101,11 @@ pub enum CommandIntent {
         firm: Handle,
         tier: u8,
         wage_cents: i64,
+    },
+    /// Hand production planning back to (or take it from) the weekly sell-through rule.
+    SetAutoProduction {
+        firm: Handle,
+        enabled: bool,
     },
     SetProductionTarget {
         firm: Handle,
@@ -370,10 +378,12 @@ impl CommandIntent {
             CommandIntent::ExpandFacility { .. } => "expand_facility",
             CommandIntent::RetoolFacility { .. } => "retool_facility",
             CommandIntent::MothballFacility { .. } => "mothball_facility",
+            CommandIntent::ReopenFacility { .. } => "reopen_facility",
             CommandIntent::DisposeFacility { .. } => "dispose_facility",
             CommandIntent::SetPrice { .. } => "set_price",
             CommandIntent::SetWageOffer { .. } => "set_wage_offer",
             CommandIntent::SetProductionTarget { .. } => "set_production_target",
+            CommandIntent::SetAutoProduction { .. } => "set_auto_production",
             CommandIntent::SetMarketingBudget { .. } => "set_marketing_budget",
             CommandIntent::SetResearchBudget { .. } => "set_research_budget",
             CommandIntent::SetTrainingBudget { .. } => "set_training_budget",
@@ -1040,9 +1050,42 @@ fn apply_intent(
                 })?;
             require_control(world, actor, owner)?;
             if let Some(stored) = world.facilities.get_mut(*facility) {
-                stored.status = FacilityStatus::Mothballed;
-                stored.mothballed_since = Some(world.tick);
-                stored.workers = [0; 3];
+                if stored.status != FacilityStatus::Operating {
+                    return Err(DomainError::WrongPhase {
+                        expected: "operating",
+                        actual: "not operating",
+                    });
+                }
+                crate::economy::operations::mothball(stored, world.tick);
+            }
+            Ok(())
+        }
+        CommandIntent::ReopenFacility { facility } => {
+            let (owner, status, cost) = world
+                .facilities
+                .get(*facility)
+                .map(|entity| {
+                    (
+                        entity.firm,
+                        entity.status,
+                        crate::economy::operations::reopen_cost(entity),
+                    )
+                })
+                .ok_or(DomainError::InvalidEntity {
+                    handle: facility.0,
+                    kind: EntityKind::Facility,
+                })?;
+            require_control(world, actor, owner)?;
+            if status != FacilityStatus::Mothballed {
+                return Err(DomainError::WrongPhase {
+                    expected: "mothballed",
+                    actual: "not mothballed",
+                });
+            }
+            spend_firm_cash(world, owner, cost, "plant restart")?;
+            if let Some(stored) = world.facilities.get_mut(*facility) {
+                stored.status = FacilityStatus::Operating;
+                stored.mothballed_since = None;
             }
             Ok(())
         }
@@ -1088,6 +1131,18 @@ fn apply_intent(
             price_cents,
         } => {
             require_control(world, actor, *firm)?;
+            // A zero price hands the good back to automatic pricing.
+            if *price_cents == 0 {
+                reference_price(dataset, *product)?;
+                world
+                    .firms
+                    .get_mut(*firm)
+                    .unwrap()
+                    .policies
+                    .manual_prices
+                    .remove(product);
+                return Ok(());
+            }
             if *price_cents < 1 {
                 return Err(DomainError::Arithmetic {
                     detail: ArithmeticFault::OutOfRange,
@@ -1107,6 +1162,16 @@ fn apply_intent(
                 .policies
                 .prices
                 .insert(*product, *price_cents);
+            // The player's own price stays until the player hands it back.
+            if actor == INVESTOR_ACTOR {
+                world
+                    .firms
+                    .get_mut(*firm)
+                    .unwrap()
+                    .policies
+                    .manual_prices
+                    .insert(*product);
+            }
             Ok(())
         }
         CommandIntent::SetWageOffer {
@@ -1137,14 +1202,25 @@ fn apply_intent(
                     detail: ArithmeticFault::OutOfRange,
                 });
             }
-            let entity = world.firms.get_mut(*firm).unwrap();
-            entity.policies.production_target_bps = *target_bps;
-            let facilities = entity.facilities.clone();
-            for handle in facilities {
-                if let Some(facility) = world.facilities.get_mut(handle) {
-                    facility.target_bps = *target_bps;
-                }
+            crate::economy::pricing::set_target(world, *firm, *target_bps);
+            if actor == INVESTOR_ACTOR {
+                world
+                    .firms
+                    .get_mut(*firm)
+                    .unwrap()
+                    .policies
+                    .manual_production = true;
             }
+            Ok(())
+        }
+        CommandIntent::SetAutoProduction { firm, enabled } => {
+            require_control(world, actor, *firm)?;
+            world
+                .firms
+                .get_mut(*firm)
+                .unwrap()
+                .policies
+                .manual_production = !*enabled;
             Ok(())
         }
         CommandIntent::SetMarketingBudget { firm, amount_cents } => {
@@ -2526,6 +2602,10 @@ fn pay_construction_service(
                     .debit(Account::Cash, paid, memo)
                     .credit(Account::Revenue, paid, memo),
             );
+            // Construction ordered for a build is a sale, for planning and the board.
+            if let Some(service) = dataset.product_code("construction") {
+                firm.record_sale(region, service, MilliLots::from_lots(lots));
+            }
         }
         *world.construction_orders.entry(contractor).or_default() += lots;
         remaining -= paid;

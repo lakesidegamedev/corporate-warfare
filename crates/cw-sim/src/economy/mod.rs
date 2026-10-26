@@ -16,6 +16,7 @@ pub mod objectives;
 pub mod operations;
 pub mod ownership;
 pub mod policy;
+pub mod pricing;
 pub mod procurement;
 pub mod production;
 pub mod research;

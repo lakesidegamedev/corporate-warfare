@@ -267,3 +267,69 @@ fn the_outside_account_draws_at_most_one_percent_a_week() {
         assert!(after >= 0);
     }
 }
+
+#[test]
+fn a_mothballed_plant_carries_no_staff_and_reopens_for_a_twentieth_of_its_capex() {
+    let (mut world, dataset) = world();
+    let (firm, plant) = world
+        .facilities
+        .iter()
+        .find(|(_, f)| f.status == FacilityStatus::Operating && f.workers.iter().sum::<i64>() > 0)
+        .map(|(h, f)| (f.firm, h))
+        .unwrap();
+    let tick = world.tick;
+    world
+        .firms
+        .get_mut(firm)
+        .unwrap()
+        .book
+        .commit(
+            tick,
+            Txn::new()
+                .debit(Account::Cash, 100_000_000_000, "fixture")
+                .credit(Account::ShareCapital, 100_000_000_000, "fixture"),
+        )
+        .unwrap();
+    // Only a mothballed plant can reopen.
+    let early = envelope(
+        &world,
+        firm,
+        CommandIntent::ReopenFacility { facility: plant },
+    );
+    assert!(apply(&mut world, &dataset, &early).is_err());
+
+    let mothball = envelope(
+        &world,
+        firm,
+        CommandIntent::MothballFacility { facility: plant },
+    );
+    apply(&mut world, &dataset, &mothball).expect("mothball an operating plant");
+    let stored = world.facilities.get(plant).unwrap();
+    assert_eq!(stored.status, FacilityStatus::Mothballed);
+    assert_eq!(
+        stored.workers, [0; 3],
+        "a mothballed plant keeps nobody on payroll"
+    );
+    let again = envelope(
+        &world,
+        firm,
+        CommandIntent::MothballFacility { facility: plant },
+    );
+    assert!(apply(&mut world, &dataset, &again).is_err());
+
+    let capex = world.facilities.get(plant).unwrap().capex_cents;
+    let cash = world.firm(firm).unwrap().book.cash();
+    let reopen = envelope(
+        &world,
+        firm,
+        CommandIntent::ReopenFacility { facility: plant },
+    );
+    apply(&mut world, &dataset, &reopen).expect("reopen a mothballed plant");
+    assert_eq!(
+        cash - world.firm(firm).unwrap().book.cash(),
+        (capex / 20).max(100_000)
+    );
+    let stored = world.facilities.get(plant).unwrap();
+    assert_eq!(stored.status, FacilityStatus::Operating);
+    assert_eq!(stored.mothballed_since, None);
+}

@@ -113,6 +113,12 @@ struct PriceSheet: View {
     @EnvironmentObject private var store: AppStore
     @State private var priceText = ""
     @State private var product: UInt32 = 0
+    /// Opens on this product when set, as from a market row.
+    let initialProduct: UInt32?
+
+    init(initialProduct: UInt32? = nil) {
+        self.initialProduct = initialProduct
+    }
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
 
@@ -160,7 +166,10 @@ struct PriceSheet: View {
                     .accessibilityHint("Entered in dollars per lot. The command sends integer cents.")
             }
         }
-        .task { await refresh() }
+        .task {
+            if let initialProduct { product = initialProduct }
+            await refresh()
+        }
         .onChange(of: priceText) { _, _ in Task { await refresh() } }
         .onChange(of: product) { _, _ in Task { await refresh() } }
     }

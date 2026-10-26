@@ -6,6 +6,7 @@
 
 pub mod dto;
 pub mod save;
+pub mod telemetry;
 
 use std::collections::BTreeMap;
 
@@ -621,6 +622,16 @@ impl Session {
             .investor
             .primary_group
             .filter(|handle| world.firms.contains(*handle));
+        let (quarter_net, quarter_weeks) = primary
+            .and_then(|handle| world.firms.get(handle))
+            .map(|firm| {
+                let weeks = firm.book.recent_weeks();
+                (
+                    weeks.iter().map(|week| week.net_income).sum::<i64>(),
+                    weeks.len() as u32,
+                )
+            })
+            .unwrap_or((0, 0));
         let (name, cash, forecast, ebit) = match primary {
             Some(handle) => {
                 let firm = world.firms.get(handle).unwrap();
@@ -693,6 +704,8 @@ impl Session {
             firm_cash_cents: cash,
             forecast_four_week_cents: forecast,
             last_week_ebit_cents: ebit,
+            quarter_net_income_cents: quarter_net,
+            quarter_weeks,
             alerts,
             pause: world.pending_pause.clone(),
             next_action_key: advice.0,
@@ -1035,6 +1048,7 @@ fn empty_facility(handle: u64) -> FacilitySummary {
         bottleneck: String::new(),
         deposit_remaining: 0,
         target_bps: 0,
+        reopen_cost_cents: 0,
     }
 }
 
@@ -1371,7 +1385,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "1ce5a3b695d549ca2f9ee987630730870b391517ec0b5e9c2f0c5ca54099063e"
+            "732000982c52e1a98b5c938fc2be494f4d13d63f0abad60270d6dfd49c0c344a"
         );
     }
 

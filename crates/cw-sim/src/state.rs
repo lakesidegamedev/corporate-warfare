@@ -358,6 +358,14 @@ pub struct Policies {
     pub quality_budgets_cents: BTreeMap<u16, i64>,
     /// Desired weeks of input cover for automatic purchasing.
     pub input_cover_weeks: i32,
+    /// Goods whose price the player set by hand. Every other good a player company makes is
+    /// priced automatically from sell-through each week.
+    #[serde(default)]
+    pub manual_prices: std::collections::BTreeSet<u16>,
+    /// True once the player sets a production target by hand; automatic planning stops until
+    /// the player turns it back on.
+    #[serde(default)]
+    pub manual_production: bool,
 }
 
 impl Default for Policies {
@@ -372,6 +380,8 @@ impl Default for Policies {
             training_budget_cents: 0,
             quality_budgets_cents: BTreeMap::new(),
             input_cover_weeks: 4,
+            manual_prices: Default::default(),
+            manual_production: false,
         }
     }
 }

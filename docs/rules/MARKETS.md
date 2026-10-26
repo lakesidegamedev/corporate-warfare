@@ -120,7 +120,7 @@ ratio. If no prior sale, use reference price. Existing budgets still limit purch
 Unspent category budgets return to household savings, not another automatic purchase loop.
 R&D/brand can redistribute seller demand; neither creates household cash.
 
-A gateway quotes finite buy and sell offers at reference index +/-5 percent plus
+A gateway quotes finite buy and sell offers at reference index +/-15 percent plus
 freight. Each state's weekly gateway capacity per product = the larger of the corridor's
 weekly input demand and weekly output for that product at seed, floor 100 lots, so a
 shortage can be filled and a producing region's surplus has a buyer. Gateways record the
@@ -142,7 +142,7 @@ persisted residual; final issue takes all remaining carrying cost. Spoilage writ
 stock/carrying cost, never cash again. Financial statements label this accounting policy.
 
 Freight distance comes from actual region centroids/validated lanes. Baseline road rate
-$0.05 per lot per km, minimum $1 per inter-region shipment, lead time max(1, ceil(km/500))
+$0.03 per lot per km, minimum $1 per inter-region shipment, lead time max(1, ceil(km/500))
 weeks. Charge once; own logistics firm receipts equal the transport service postings.
 If no named operator supplies capacity, finite background carrier offers apply. Retail
 purchases final consumer goods; households buy retail delivery rather than both producer
@@ -151,8 +151,28 @@ product metadata allows it. No double counting of household demand.
 
 ## Regions and statewide services (1.2.0)
 
-Goods, retail, leases and electricity clear in each of the 31 economic regions; goods move
-between regions by freight over the region lanes. Services that reach customers across a state
+Retail, leases and electricity clear in each of the 31 economic regions. Goods sold between
+firms clear on one corridor commodity exchange per product: every buyer's need in any region
+meets every seller's stock in any region beyond that seller's own input cover, plus the import
+offer of the buyer's region. Each pairing is priced as delivered, the seller's asking price plus
+freight over the lane. Pairings fill cheapest delivered first; buyers tied on one source at one
+price share it in proportion to what each still wants and can pay for; imports are the last
+resort at equal price. The seller receives its asking price and the buyer pays the freight.
+
+Prices and production follow sell-through. Each week an automatically priced good is cut 5
+percent when stock exceeds four weeks of sales or nothing sold, and raised 2 percent when stock
+is under one week, within half to twice reference and never above the cheapest import (services:
+reference plus 15 percent). Stock a firm keeps as input cover for its own plants does not count
+as unsold. Production is planned plant by plant: each plant's target moves 15 points a week
+toward what its good sold, floor 30 percent, so one product's glut never idles a firm's other
+plants; a service is judged by sold against capacity, and a plant whose good has not sold yet
+holds. Rivals always plan this way;
+the player's companies do too until the player sets a price or target by hand, and either can be
+handed back to automatic. Contract deliveries, power dispatched to the grid and construction
+services all count as sales. A contract delivery is limited to what the buyer can pay for in
+full, goods and freight together, in whole lots; the rest stays with the seller.
+
+Services that reach customers across a state
 (software, telecom, advertising, research, maintenance, care, training, water and construction)
 clear statewide: an offer in a region may draw on the seller's stock in any region of the same
 state, and settlement removes it from where it sits. Background public works buy eighteen lots

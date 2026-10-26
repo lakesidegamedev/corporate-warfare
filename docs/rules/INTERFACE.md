@@ -42,7 +42,7 @@ applicable. Implement one central permissions/solvency service, not screen-speci
 | Family | Intents | Required preview |
 |---|---|---|
 | Career | FoundFirm, AcceptManagementContract, SetPrimaryGroup | Personal vs firm funding and authority |
-| Operations | BuildFacility, ExpandFacility, RetoolFacility, MothballFacility, DisposeFacility | Escrow, dates, staff/inputs and maintenance |
+| Operations | BuildFacility, ExpandFacility, RetoolFacility, MothballFacility, ReopenFacility, DisposeFacility | Escrow, dates, staff/inputs and maintenance |
 | Policy | SetPrice, SetWageOffer, SetProductionTarget, SetMarketingBudget, SetResearchBudget | Per-week spend, limits, observed margin |
 | Supply | OfferContract, AcceptContract, CancelContract, PlaceSpotOrder | Delivered price, quantities, transit, penalty |
 | Group | MakeIntercompanyLoan, SetTransferContract, GrantGuarantee | Both firms' cash, consolidation, minority restrictions |

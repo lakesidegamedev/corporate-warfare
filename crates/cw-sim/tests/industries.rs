@@ -1005,6 +1005,92 @@ fn logistics_carriers_earn_freight_and_delivery_waits_for_the_lane_lead_time() {
     assert_invariants(&world);
 }
 
+#[test]
+fn a_contract_buyer_takes_only_what_it_can_pay_for_in_full() {
+    let dataset = dataset();
+    let mut world = seeded(108);
+    let seller = one_firm(&world, "agriculture");
+    let buyer = one_firm(&world, "financial");
+    let product = dataset.product_code("food_raw").unwrap();
+    let from_region = world.firm(seller).unwrap().region;
+    let to_region = world.firm(buyer).unwrap().region;
+    set_stock(&mut world, &dataset, seller, "food_raw", from_region, 500);
+    let price = dataset.reference_price(product);
+    world.contracts.insert(Contract {
+        buyer,
+        seller,
+        product,
+        from_region,
+        to_region,
+        quantity_weekly: MilliLots::from_lots(100),
+        price_cents: price,
+        penalty_bps: 500,
+        escrow_cents: 0,
+        remaining_weeks: 1,
+        next_delivery: world.tick,
+        status: ContractStatus::Active,
+        shortfalls: MilliLots::ZERO,
+        auto_renew: false,
+    });
+    // The buyer holds exactly enough for 30 lots with their freight, plus a few cents.
+    let affordable = MilliLots::from_lots(30);
+    let thirty = affordable.value_at(Cents(price)).unwrap().0
+        + freight::freight_cost(&dataset, from_region, to_region, affordable);
+    let cash = world.firm(buyer).unwrap().book.cash();
+    let tick = world.tick;
+    world
+        .firms
+        .get_mut(buyer)
+        .unwrap()
+        .book
+        .commit(
+            tick,
+            Txn::new()
+                .credit(Account::Cash, cash - thirty - 7, "test drain")
+                .debit(Account::OperatingExpense, cash - thirty - 7, "test drain"),
+        )
+        .unwrap();
+    let overdue_before = world
+        .firm(buyer)
+        .unwrap()
+        .book
+        .balance(Account::OverduePayables);
+    let seller_cash = world.firm(seller).unwrap().book.cash();
+
+    freight::settle(&mut world, &dataset);
+
+    assert_eq!(
+        world
+            .firm(seller)
+            .unwrap()
+            .stock(product, from_region)
+            .lots(),
+        470,
+        "only the affordable 30 lots leave the seller"
+    );
+    assert_eq!(
+        world.firm(seller).unwrap().book.cash() - seller_cash,
+        affordable.value_at(Cents(price)).unwrap().0,
+        "the seller is paid in full for every lot it hands over"
+    );
+    assert_eq!(world.firm(buyer).unwrap().book.cash(), 7);
+    assert_eq!(
+        world
+            .firm(buyer)
+            .unwrap()
+            .book
+            .balance(Account::OverduePayables),
+        overdue_before,
+        "no unpaid delivery is pushed onto the buyer's overdue bills"
+    );
+    let shipment = world
+        .shipments
+        .iter()
+        .find(|s| s.product == product && s.buyer == buyer)
+        .expect("the affordable lots are in transit");
+    assert_eq!(shipment.quantity, affordable);
+}
+
 // ---------------------------------------------------------------------------------------
 // Logistics: spot import settlement
 // ---------------------------------------------------------------------------------------
@@ -1033,7 +1119,6 @@ fn spot_imports_charge_goods_and_freight_exactly_once() {
         .find(|(_, firm)| {
             firm.operative()
                 && firm.region != buyer_region
-                && firm.stock(product, firm.region).is_positive()
                 && firm.facilities.iter().any(|f| {
                     world
                         .facilities
@@ -1046,6 +1131,9 @@ fn spot_imports_charge_goods_and_freight_exactly_once() {
         .expect("one steel supplier in another region");
     let seller_region = world.firm(seller).unwrap().region;
     assert_ne!(seller_region, buyer_region);
+    // The corridor exchange may have sold the producer's opening stock this week; give it
+    // steel to sell on the spot order.
+    set_stock(&mut world, &dataset, seller, "steel", seller_region, 50);
 
     let quantity = MilliLots::from_lots(10);
     let goods_value = quantity.value_at(Cents(price)).expect("value fits").0;
@@ -1154,15 +1242,21 @@ fn spot_imports_charge_goods_and_freight_exactly_once() {
         tick::advance(&mut world, &dataset);
     }
     assert_eq!(world.tick, due, "the import arrives on its scheduled week");
-    // On arrival the buyer may resell to a local steel user the same week, so the import is
-    // accounted for exactly as stock still held plus units sold that week.
+    // On arrival the buyer may resell on the corridor exchange the same week, to a steel user
+    // in any region, so the import is accounted for exactly as stock still held plus units
+    // sold that week anywhere.
     let held = world.firm(buyer).unwrap().stock(product, buyer_region);
-    let sold = world
+    let sold: i64 = world
         .firm(buyer)
         .unwrap()
         .sales_history
         .last()
-        .and_then(|week| week.get(&(buyer_region, product)).copied())
+        .map(|week| {
+            week.iter()
+                .filter(|((_, p), _)| *p == product)
+                .map(|(_, qty)| *qty)
+                .sum()
+        })
         .unwrap_or(0);
     assert_eq!(
         held.0 + MilliLots::from_lots(sold).0,

@@ -1,8 +1,10 @@
 # Export compliance determination (code-based draft)
 
-The shipped app makes no network connections and contains no encryption or cryptographic
-communication code. It uses BLAKE3 hashing for save integrity and canonical state hashes; hashing
-is not encryption and does not require an export determination.
+The app's only network connection is an HTTPS POST of anonymous market analytics through
+Apple's URLSession, which uses the operating system's TLS. Using only the encryption built into
+the operating system is exempt. The app contains no encryption code of its own. It uses BLAKE3
+hashing for save integrity and canonical state hashes; hashing is not encryption and does not
+require an export determination.
 
 Proposed Info.plist value: `ITSAppUsesNonExemptEncryption = false`.
 
