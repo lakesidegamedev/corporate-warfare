@@ -1,7 +1,13 @@
 # Current checkpoint
 
-Date: 2026-10-26. Released: **1.3.1**, profitability (feature PR #85, release branch
-`release/1.3.1`). Kanban: 254806. Saves from 1.3.0 load.
+Date: 2026-10-26. Released: **1.4.0**, stock exchange and commodity board, valuation fix, and
+the first Android, Windows, Linux and Mac (Catalyst) builds (PRs #88, #89, #90). Kanban: 254808.
+Saves from 1.3.1 load.
+
+Open: Google Play listing and upload-key enrolment (owner), Mac App Store/TestFlight needs the
+macOS platform on the App Store Connect record (owner), Mac and Windows builds are unsigned.
+
+# 1.3.1 checkpoint (history)
 
 ## 1.3.1
 
