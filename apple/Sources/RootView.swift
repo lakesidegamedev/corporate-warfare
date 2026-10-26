@@ -9,16 +9,17 @@ struct RootView: View {
                 RecoveryNoticeBanner(text: notice)
             }
             TabView {
-                OverviewView()
-                    .tabItem { Label("Portfolio", systemImage: "building.columns") }
-                CompanyView()
-                    .tabItem { Label("Company", systemImage: "building.2") }
-                RegionsView()
-                    .tabItem { Label("Regions", systemImage: "map") }
+                MapHomeView()
+                    .tabItem { Label("Map", systemImage: "map.fill") }
+                CEOOfficeView()
+                    .tabItem { Label("CEO Office", systemImage: "building.2.fill") }
                 MarketsView()
                     .tabItem { Label("Markets", systemImage: "chart.bar.xaxis") }
                 InboxView()
-                    .tabItem { Label("Inbox", systemImage: "tray") }
+                    .tabItem { Label("Inbox", systemImage: "tray.full.fill") }
+                    .badge(store.events.filter { $0.mandatory }.count)
+                OverviewView()
+                    .tabItem { Label("Portfolio", systemImage: "building.columns.fill") }
             }
         }
     }

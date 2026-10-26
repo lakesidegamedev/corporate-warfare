@@ -37,6 +37,8 @@ struct CommandRejection: Identifiable, Equatable {
 
     var title: String { Remedy.title(for: key) }
     var remedy: String { Remedy.text(for: key) }
+    /// One line for inline display: the title and what to do about it.
+    var message: String { "\(title). \(remedy)" }
 }
 
 enum Remedy {
@@ -392,6 +394,10 @@ struct ActionButton: View {
 }
 
 extension BoardVoteDto: Identifiable {}
+
+extension FacilityDto: Identifiable {
+    public var id: UInt64 { handle }
+}
 
 extension DealDto: Identifiable {
     public var id: UInt64 { handle }

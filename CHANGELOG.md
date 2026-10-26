@@ -38,6 +38,16 @@ Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
 - State conditions shape output (grid reliability, skill, broadband), freight cost (roads) and
   retail and property shrinkage (crime).
 - Gateways record imports and exports, giving a public room-to-build signal.
+- A map-first app: the real corridor map is the home screen, with pan and zoom, plant markers
+  coloured by sector (your plants ringed in gold), and layers for your presence, room to build,
+  wages and workforce skill. Tapping a state opens its board: conditions, the plants operating
+  there and what it imports. On iPad the board docks beside the map.
+- A House Divided style building: pick a sector type, compare its strategies (inputs, margin,
+  capex, build time, staff, deposits, local imports) and confirm against the engine's preview.
+- A CEO office: masthead, the week's key figures, sector focus with the change flow, logistics
+  strength and programme, and every plant grouped by sector with utilisation, bottleneck and a
+  retool flow.
+- UI snapshots of the main screens on iPhone and iPad, rendered in CI for review.
 
 - Release process: this changelog, the versioning and release procedure in
   `docs/RELEASING.md`, a pull request template, and a CI check that requires a changelog entry
@@ -45,6 +55,8 @@ Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
 
 ### Changed
 
+- The app uses a dark cartographic look with a sector colour and symbol system in place of the
+  light dashboard style; tabs are Map, CEO Office, Markets, Inbox and Portfolio.
 - Playable regions are whole states instead of eleven authored economic areas; the thirty
   named rivals moved to states where their industries actually sit and run named strategies.
 - Retooling switches a plant to another strategy of the same sector for a quarter of the new

@@ -32,7 +32,8 @@ struct CorporateWarfareApp: App {
                         .environmentObject(store)
                 }
             }
-            .tint(Theme.navy)
+            .tint(Theme.gold)
+            .preferredColorScheme(.dark)
             .task {
                 if !Self.isUITesting {
                     await store.restoreLatestIfAvailable()
