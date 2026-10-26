@@ -11,6 +11,8 @@ heading.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-26
+
 ### Added
 
 - Android version, first build: the same Rust engine through uniffi's Kotlin bindings with a
@@ -392,7 +394,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.1.0...v1.2.0
