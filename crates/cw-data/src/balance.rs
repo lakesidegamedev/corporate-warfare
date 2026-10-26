@@ -151,10 +151,11 @@ mod tests {
             .sum();
         let payroll = farm.baseline_weekly_payroll(balance.baseline_weekly_wage_cents);
         // One plant: 129 * $100 = $12,900; fuel 4 * $300 + power 2 * $1,200 = $3,600;
-        // crew 12 * $400 + 2 * $800 + 1 * $1,400 = $7,800.
+        // crew 8 * $400 + 2 * $800 + 1 * $1,400 = $6,200 (trimmed in 1.3.1 so the plant clears
+        // about a fifth of revenue after depreciation; tools/content/rebalance_margins.py).
         assert_eq!(revenue, 1_290_000);
         assert_eq!(inputs, 360_000);
-        assert_eq!(payroll, 780_000);
+        assert_eq!(payroll, 620_000);
         let maintenance = farm.weekly_maintenance(balance.maintenance_annual_bps);
         let depreciation = farm.weekly_depreciation();
         // $400,000 * 2 percent / 52 weeks = $153.846, rounded to $153.85.
@@ -166,7 +167,9 @@ mod tests {
         let ebitda =
             revenue - inputs - payroll - maintenance - balance.fixture_land_rent_cents_weekly;
         let ebit = ebitda - depreciation;
-        assert_eq!(ebitda, 114_615);
-        assert_eq!(ebit, 76_153);
+        assert_eq!(ebitda, 274_615);
+        assert_eq!(ebit, 236_153);
+        // $2,361.53 of $12,900 is an 18.3 percent margin after depreciation.
+        assert_eq!(ebit * 1_000 / revenue, 183);
     }
 }

@@ -19,6 +19,7 @@ struct CEOOfficeView: View {
                 if let weeks = store.finance?.recentWeeks, !weeks.isEmpty, store.finance?.firm == firm.handle {
                     ProfitDrivers(weeks: weeks)
                 }
+                PricingPanel()
                 boardPanel
                 plantsPanel
                 focusPanel

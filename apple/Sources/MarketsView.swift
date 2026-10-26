@@ -95,7 +95,14 @@ struct MarketsView: View {
             }
         }
         .sheet(item: $pricing) { target in
-            PriceSheet(initialProduct: target.product).environmentObject(store)
+            if let line = store.productLines.first(where: { $0.product == target.product }) {
+                PostureSheet(line: line)
+                    .environmentObject(store)
+                    .presentationDetents([.medium, .large])
+                    .presentationBackground(Theme.panel)
+            } else {
+                PriceSheet(initialProduct: target.product).environmentObject(store)
+            }
         }
     }
 

@@ -252,6 +252,7 @@ fn add_facility(
         last_inputs_short: false,
         last_staff_ratio_bps: 10_000,
         mothballed_since: None,
+        equipment_due_cents: 0,
         outage: None,
     };
     let handle = world.facilities.insert(facility);
@@ -708,7 +709,7 @@ fn manufacturing_chain_converts_each_stage_from_opening_stock_only() {
 // ---------------------------------------------------------------------------------------
 
 #[test]
-fn construction_capex_is_escrowed_and_released_on_completion() {
+fn construction_is_paid_in_stages_and_waits_for_the_equipment_payment() {
     let dataset = dataset();
     let mut world = seeded(107);
     let builder = one_firm(&world, "construction");
@@ -784,10 +785,12 @@ fn construction_capex_is_escrowed_and_released_on_completion() {
         .copied()
         .find(|handle| world.facilities.get(*handle).unwrap().status == FacilityStatus::Building)
         .expect("project under construction");
+    let service = capex * 40 / 100;
+    let equipment = capex - service;
     assert_eq!(
         world.firm(builder).unwrap().book.cash(),
-        cash_before - capex - fee,
-        "capex and the entry fee left cash exactly once"
+        cash_before - service - fee,
+        "the entry fee and the construction service are paid at the start; equipment is not"
     );
     assert_eq!(
         world
@@ -798,10 +801,11 @@ fn construction_capex_is_escrowed_and_released_on_completion() {
         wip_before + capex * 40 / 100,
         "the construction service share is carried as work in progress"
     );
+    assert_eq!(world.facilities.get(project).unwrap().escrow_cents, 0);
     assert_eq!(
-        world.facilities.get(project).unwrap().escrow_cents,
-        capex - capex * 40 / 100,
-        "escrow holds the equipment share until delivery"
+        world.facilities.get(project).unwrap().equipment_due_cents,
+        equipment,
+        "the equipment share is owed on delivery"
     );
     assert_eq!(
         world.facilities.get(project).unwrap().completes,
@@ -831,10 +835,47 @@ fn construction_capex_is_escrowed_and_released_on_completion() {
             "still building at week {week}"
         );
     }
+    // Delivery week with too little cash: the plant waits at the depot instead of pushing the
+    // builder into arrears.
+    let cash = world.firm(builder).unwrap().book.cash();
+    let tick_now = world.tick;
+    world
+        .firms
+        .get_mut(builder)
+        .unwrap()
+        .book
+        .commit(
+            tick_now,
+            Txn::new().credit(Account::Cash, cash, "test drain").debit(
+                Account::OperatingExpense,
+                cash,
+                "test drain",
+            ),
+        )
+        .unwrap();
+    tick::advance(&mut world, &dataset);
+    let waiting = world.facilities.get(project).unwrap();
+    assert_eq!(
+        waiting.status,
+        FacilityStatus::Building,
+        "waits for the payment"
+    );
+    assert_eq!(waiting.equipment_due_cents, equipment);
+    // With the money in hand the equipment is paid for and the plant opens.
+    fund(&mut world, builder, equipment + 50_000_000);
+    let cash_before_delivery = world.firm(builder).unwrap().book.cash();
     tick::advance(&mut world, &dataset);
     let facility = world.facilities.get(project).expect("completed project");
     assert_eq!(facility.status, FacilityStatus::Operating);
-    assert_eq!(facility.escrow_cents, 0, "escrow released");
+    assert_eq!(facility.escrow_cents, 0);
+    assert_eq!(
+        facility.equipment_due_cents, 0,
+        "equipment paid on delivery"
+    );
+    assert!(
+        world.firm(builder).unwrap().book.cash() <= cash_before_delivery - equipment,
+        "the equipment payment left cash"
+    );
     assert_eq!(
         world
             .firm(builder)

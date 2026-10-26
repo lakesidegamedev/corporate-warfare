@@ -680,3 +680,80 @@ pub fn insurance(world: &World, firm: u64) -> Vec<InsuranceLine> {
 pub fn deal_state_key(state: DealState) -> &'static str {
     state.key()
 }
+
+/// One good a firm makes, as its pricing panel shows it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProductLine {
+    pub product: u16,
+    pub product_id: String,
+    pub name: String,
+    pub price_cents: i64,
+    pub reference_cents: i64,
+    /// Median asking price of the other firms that make the good.
+    pub market_cents: i64,
+    /// Cost of one lot at the firm's plants' full run rate; 0 when it has no operating plant.
+    pub unit_cost_cents: i64,
+    pub made_last_week_lots: i64,
+    pub sold_last_week_lots: i64,
+    /// Stock beyond the firm's own input cover.
+    pub stock_lots: i64,
+    /// "auto", "market", "cost_plus" or "fixed".
+    pub mode: String,
+    pub posture_bps: i32,
+}
+
+pub fn product_lines(world: &World, dataset: &Dataset, firm: u64) -> Vec<ProductLine> {
+    use cw_sim::economy::pricing;
+    let handle = cw_core::ids::Handle(firm);
+    let Some(entity) = world.firms.get(handle) else {
+        return Vec::new();
+    };
+    pricing::outputs(world, dataset, handle)
+        .into_iter()
+        .map(|product| {
+            let id = dataset.products[product as usize].id.clone();
+            let made: i64 = entity
+                .facilities
+                .iter()
+                .filter_map(|plant| world.facilities.get(*plant))
+                .filter(|plant| dataset.recipes[plant.recipe as usize].output == id)
+                .map(|plant| plant.last_output.lots())
+                .sum();
+            let sold: i64 = entity
+                .last_closed_sales()
+                .map(|week| {
+                    week.iter()
+                        .filter(|((_, p), _)| *p == product)
+                        .map(|(_, qty)| *qty)
+                        .sum()
+                })
+                .unwrap_or(0);
+            let reference = dataset.reference_price(product);
+            let (mode, posture_bps) = match entity.policies.price_postures.get(&product) {
+                Some(cw_sim::state::PricePosture::Market { bps }) => ("market", *bps),
+                Some(cw_sim::state::PricePosture::CostPlus { bps }) => ("cost_plus", *bps),
+                None if entity.policies.manual_prices.contains(&product) => ("fixed", 0),
+                None => ("auto", 0),
+            };
+            ProductLine {
+                product,
+                name: dataset.products[product as usize].name.clone(),
+                product_id: id,
+                price_cents: entity
+                    .policies
+                    .prices
+                    .get(&product)
+                    .copied()
+                    .unwrap_or(reference),
+                reference_cents: reference,
+                market_cents: pricing::market_price(world, dataset, handle, product),
+                unit_cost_cents: pricing::unit_cost(world, dataset, handle, product).unwrap_or(0),
+                made_last_week_lots: made,
+                sold_last_week_lots: sold,
+                stock_lots: pricing::free_stock(world, dataset, handle, product),
+                mode: mode.to_owned(),
+                posture_bps,
+            }
+        })
+        .collect()
+}

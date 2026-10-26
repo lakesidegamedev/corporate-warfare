@@ -11,6 +11,29 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- Pricing posture, from A House Divided. Every good a company makes can be priced
+  automatically, at a step from 20 percent under to 20 percent over the market, or at a markup
+  of 10 to 50 percent over the company's own cost per lot. A new Pricing panel in the CEO Office
+  lists each good with its price, its profit per lot (green or red) and the share of last week's
+  output that sold; tap one to change its posture or set an exact price. "Set your price" in
+  Markets opens the same sheet.
+
+### Changed
+
+- Plants make money when run well. Twenty-one strategies earned under 20 percent of revenue at
+  normal prices after wages, inputs, upkeep and depreciation (farms 6 to 9 percent, the truck
+  carrier below zero, goods assembly 2 percent); their crews are trimmed so each now earns about
+  17 to 24 percent. Output and market volumes are unchanged, and the released workers return to
+  the regional labour pool. A guided career with no player action now ends its second year with
+  about $1.4 million in company cash on average, up from about $1.0 million.
+- Farms run seasonal crews: in the 80 percent yield quarters they keep 80 percent of the crew,
+  so wages follow the harvest instead of staying fixed while output falls.
+- Building a plant is paid in stages: the entry fee and construction service when work starts,
+  the equipment when it is delivered. A company short of cash at delivery waits a week at a time
+  instead of falling into arrears. The build quote shows what is due now and on delivery.
+
 ## [1.3.0] - 2026-10-26
 
 ### Added

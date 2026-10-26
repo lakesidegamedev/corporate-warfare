@@ -179,6 +179,10 @@ struct BuildFlowView: View {
                             figureRow("Dominance surcharge", String(format: "x%.2f", Double(quote.dominanceBps) / 10_000), tone: Theme.warning)
                         }
                         figureRow("Total", Format.money(quote.totalCents))
+                        // Staged payment: entry fee and construction service now, equipment
+                        // when it is delivered at completion.
+                        figureRow("Pay now", Format.money(quote.entryFeeCents + quote.capexCents * 40 / 100))
+                        figureRow("On delivery", Format.money(quote.capexCents - quote.capexCents * 40 / 100), tone: Theme.secondary)
                         figureRow("Your share after", "\(quote.shareAfterBps / 100)%")
                         figureRow("Inputs here", locationLabel(quote.locationInputBps), tone: quote.locationInputBps < 10_000 ? Theme.positive : quote.locationInputBps > 10_000 ? Theme.warning : Theme.primaryText)
                     } else {

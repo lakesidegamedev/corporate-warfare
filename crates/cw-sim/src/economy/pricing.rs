@@ -198,6 +198,96 @@ pub fn plan(world: &mut World, dataset: &Dataset, firm: Handle) {
     }
 }
 
+/// The market price of a good, as a seller sees it: the median asking price of the other firms
+/// that make it, or the reference price when nobody else does.
+pub fn market_price(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> i64 {
+    let id = &dataset.products[product as usize].id;
+    let mut asks: Vec<i64> = world
+        .firms
+        .iter()
+        .filter(|(handle, entity)| *handle != firm && entity.operative())
+        .filter(|(_, entity)| {
+            entity.facilities.iter().any(|plant| {
+                world
+                    .facilities
+                    .get(*plant)
+                    .is_some_and(|plant| &dataset.recipes[plant.recipe as usize].output == id)
+            })
+        })
+        .filter_map(|(_, entity)| entity.policies.prices.get(&product).copied())
+        .collect();
+    if asks.is_empty() {
+        return dataset.reference_price(product).max(1);
+    }
+    asks.sort_unstable();
+    asks[asks.len() / 2].max(1)
+}
+
+/// What one lot of a good costs the firm to make at its plants' full run rate this season:
+/// inputs at reference, its own wage offers for the crew, maintenance, land and depreciation,
+/// over the lots those plants make. None when the firm has no operating plant for the good.
+pub fn unit_cost(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> Option<i64> {
+    let entity = world.firms.get(firm)?;
+    let id = &dataset.products[product as usize].id;
+    let (mut cost, mut lots) = (0i64, 0i64);
+    for plant in entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter(|plant| plant.status == crate::state::FacilityStatus::Operating)
+    {
+        let recipe = &dataset.recipes[plant.recipe as usize];
+        if &recipe.output != id {
+            continue;
+        }
+        let blocks = plant.blocks as i64;
+        let crew_bps = crate::economy::production::crew_need_bps(world, recipe);
+        let inputs: i64 = recipe
+            .weekly_inputs_lots
+            .iter()
+            .filter_map(|(input, qty)| {
+                dataset
+                    .product_index
+                    .get(input)
+                    .map(|code| qty * dataset.reference_price(*code))
+            })
+            .sum();
+        let wages: i64 = (0..3)
+            .map(|tier| {
+                recipe.workers_low_mid_high[tier] * entity.policies.wage_offer[tier] * crew_bps
+                    / 10_000
+            })
+            .sum();
+        let fixed = recipe.weekly_maintenance(dataset.maintenance_annual_bps)
+            + dataset.fixture_land_rent_cents_weekly
+            + recipe.weekly_depreciation();
+        cost += (inputs + wages + fixed) * blocks;
+        lots += recipe.weekly_output_lots * blocks;
+    }
+    (lots > 0).then(|| (cost / lots).max(1))
+}
+
+/// The price a posture sets this week, within half and twice reference. None when the good has
+/// no posture, or a cost-plus posture has no cost to mark up.
+pub fn posture_price(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> Option<i64> {
+    let posture = *world
+        .firms
+        .get(firm)?
+        .policies
+        .price_postures
+        .get(&product)?;
+    let base = match posture {
+        crate::state::PricePosture::Market { bps } => {
+            market_price(world, dataset, firm, product) * (10_000 + bps as i64) / 10_000
+        }
+        crate::state::PricePosture::CostPlus { bps } => {
+            unit_cost(world, dataset, firm, product)? * (10_000 + bps as i64) / 10_000
+        }
+    };
+    let reference = dataset.reference_price(product).max(1);
+    Some(base.clamp(reference / 2, reference * 2).max(1))
+}
+
 /// The player's automatic pricing: every good a player company makes, unless the player set
 /// its price by hand, follows the sell-through rule each week.
 pub fn weekly(world: &mut World, dataset: &Dataset) {
@@ -223,6 +313,13 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
         .collect();
     for firm in firms {
         for product in outputs(world, dataset, firm) {
+            // A posture sets the price from the market or the firm's own cost.
+            if let Some(price) = posture_price(world, dataset, firm, product) {
+                if let Some(entity) = world.firms.get_mut(firm) {
+                    entity.policies.prices.insert(product, price);
+                }
+                continue;
+            }
             let manual = world
                 .firms
                 .get(firm)

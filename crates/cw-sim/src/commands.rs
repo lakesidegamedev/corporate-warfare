@@ -97,6 +97,15 @@ pub enum CommandIntent {
         product: u16,
         price_cents: i64,
     },
+    /// Pricing posture for one good: mode 0 hands it back to automatic pricing, 1 prices at
+    /// `bps` against the market (-2000..=2000), 2 marks up the firm's cost per lot by `bps`
+    /// (0..=10000).
+    SetPricePosture {
+        firm: Handle,
+        product: u16,
+        mode: u8,
+        bps: i32,
+    },
     SetWageOffer {
         firm: Handle,
         tier: u8,
@@ -381,6 +390,7 @@ impl CommandIntent {
             CommandIntent::ReopenFacility { .. } => "reopen_facility",
             CommandIntent::DisposeFacility { .. } => "dispose_facility",
             CommandIntent::SetPrice { .. } => "set_price",
+            CommandIntent::SetPricePosture { .. } => "set_price_posture",
             CommandIntent::SetWageOffer { .. } => "set_wage_offer",
             CommandIntent::SetProductionTarget { .. } => "set_production_target",
             CommandIntent::SetAutoProduction { .. } => "set_auto_production",
@@ -859,11 +869,15 @@ fn apply_intent(
                     reason: AuthorityReason::BoardApprovalRequired,
                 });
             }
+            // Staged payment: the entry fee and the construction service now, the equipment on
+            // delivery (see `complete_construction`).
+            let service = cost * 40 / 100;
+            let equipment = cost - service;
             let available = firm_ref(world, *firm)?.book.cash();
-            if available < cost + fee {
+            if available < service + fee {
                 return Err(DomainError::InsufficientCash {
                     entity: firm.0,
-                    required: cost + fee,
+                    required: service + fee,
                     available,
                 });
             }
@@ -889,11 +903,9 @@ fn apply_intent(
                     ),
                 );
             }
-            spend_firm_cash(world, *firm, cost, "construction escrow")?;
+            spend_firm_cash(world, *firm, service, "construction service")?;
             // Forty percent is construction service bought as the work is commissioned; sixty
-            // percent is equipment held in escrow until completion.
-            let service = cost * 40 / 100;
-            let equipment = cost - service;
+            // percent is equipment, paid for when it is delivered at completion.
             if let Some(entity) = world.firms.get_mut(*firm) {
                 let _ = entity.book.commit(
                     world.tick,
@@ -913,7 +925,8 @@ fn apply_intent(
             let mut facility = start_facility(
                 world, dataset, *firm, *region, *recipe, *blocks, world.tick, cost,
             );
-            facility.escrow_cents = equipment;
+            facility.escrow_cents = 0;
+            facility.equipment_due_cents = equipment;
             let handle = world.facilities.insert(facility);
             world.firms.get_mut(*firm).unwrap().facilities.push(handle);
             Ok(())
@@ -1134,13 +1147,9 @@ fn apply_intent(
             // A zero price hands the good back to automatic pricing.
             if *price_cents == 0 {
                 reference_price(dataset, *product)?;
-                world
-                    .firms
-                    .get_mut(*firm)
-                    .unwrap()
-                    .policies
-                    .manual_prices
-                    .remove(product);
+                let policies = &mut world.firms.get_mut(*firm).unwrap().policies;
+                policies.manual_prices.remove(product);
+                policies.price_postures.remove(product);
                 return Ok(());
             }
             if *price_cents < 1 {
@@ -1164,13 +1173,55 @@ fn apply_intent(
                 .insert(*product, *price_cents);
             // The player's own price stays until the player hands it back.
             if actor == INVESTOR_ACTOR {
+                let policies = &mut world.firms.get_mut(*firm).unwrap().policies;
+                policies.manual_prices.insert(*product);
+                policies.price_postures.remove(product);
+            }
+            Ok(())
+        }
+        CommandIntent::SetPricePosture {
+            firm,
+            product,
+            mode,
+            bps,
+        } => {
+            require_control(world, actor, *firm)?;
+            reference_price(dataset, *product)?;
+            let posture = match (*mode, *bps) {
+                (0, _) => None,
+                (1, bps) if (-2_000..=2_000).contains(&bps) => {
+                    Some(crate::state::PricePosture::Market { bps })
+                }
+                (2, bps) if (0..=10_000).contains(&bps) => {
+                    Some(crate::state::PricePosture::CostPlus { bps })
+                }
+                _ => {
+                    return Err(DomainError::Arithmetic {
+                        detail: ArithmeticFault::OutOfRange,
+                    });
+                }
+            };
+            let policies = &mut world.firms.get_mut(*firm).unwrap().policies;
+            policies.manual_prices.remove(product);
+            match posture {
+                Some(posture) => {
+                    policies.price_postures.insert(*product, posture);
+                }
+                None => {
+                    policies.price_postures.remove(product);
+                }
+            }
+            // The posture prices the good straight away rather than at the next weekly review.
+            if let Some(price) =
+                crate::economy::pricing::posture_price(world, dataset, *firm, *product)
+            {
                 world
                     .firms
                     .get_mut(*firm)
                     .unwrap()
                     .policies
-                    .manual_prices
-                    .insert(*product);
+                    .prices
+                    .insert(*product, price);
             }
             Ok(())
         }
@@ -2674,6 +2725,7 @@ fn start_facility(
         last_inputs_short: false,
         last_staff_ratio_bps: 10_000,
         mothballed_since: None,
+        equipment_due_cents: 0,
         outage: None,
     }
 }

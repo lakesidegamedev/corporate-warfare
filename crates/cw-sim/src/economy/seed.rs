@@ -626,6 +626,7 @@ fn open_facility(
         last_inputs_short: false,
         last_staff_ratio_bps: 10_000,
         mothballed_since: None,
+        equipment_due_cents: 0,
         outage: None,
     };
     if recipe.depletes() {

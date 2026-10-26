@@ -19,8 +19,10 @@ uses milli-lots and a carried input remainder, no rounding-free resources. Facil
 maintenance is 2 percent initial capex/year; straight-line depreciation over listed life;
 fixture land rent $1,000/week before sourced regional modifier. Construction purchases
 40 percent construction service and 60 percent equipment, both within declared capex,
-never capex plus another uncapped duplicate expense. Pay into construction escrow,
-release by completed work and equipment receipt. Insufficient service/equipment supply
+never capex plus another uncapped duplicate expense. A new plant pays its construction
+service (and any division entry fee) when work starts and its equipment on delivery at
+completion; a firm without the cash for the equipment waits a week at a time rather than
+falling into arrears (1.3.1, staged payment). Insufficient service/equipment supply
 delays the project rather than generating missing inputs. The seed world starts with
 working construction/equipment providers; a founder is not forced to build every industry.
 
@@ -41,7 +43,11 @@ household purchase. Services and subscriptions have per-week availability, no st
 Electricity is a weekly local service; unused capacity expires. Ore deposits have initial
 recoverable lots equal to 20 years full output; extraction consumes deposit stock and
 has a 5 percent revenue reclamation provision. Farm yield seasonal index by quarter:
-[8000,11000,13000,8000] BPS, annual mean 10000. Production cannot exceed harvested stock;
+[8000,11000,13000,8000] BPS, annual mean 10000. Farms run seasonal crews: in a quarter
+below full yield the crew target is that share of the full crew and a plant counts as fully
+staffed at it, so wages follow the harvest. Strategy calibration (1.3.1): every strategy earns
+at least about 17 percent of revenue at reference prices after inputs, wages, maintenance,
+land and depreciation, by trimming crews (tools/content/rebalance_margins.py). Production cannot exceed harvested stock;
 recipe base capacity is adjusted before input planning.
 
 Healthcare payer split 70 percent explicit government budget, 30 percent households.

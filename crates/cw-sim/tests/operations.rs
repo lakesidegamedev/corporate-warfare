@@ -333,3 +333,52 @@ fn a_mothballed_plant_carries_no_staff_and_reopens_for_a_twentieth_of_its_capex(
     assert_eq!(stored.status, FacilityStatus::Operating);
     assert_eq!(stored.mothballed_since, None);
 }
+
+#[test]
+fn farm_crews_follow_the_season_and_count_as_full_crews() {
+    let (mut world, dataset) = world();
+    let (plant, recipe) = world
+        .facilities
+        .iter()
+        .find(|(_, f)| {
+            dataset.recipes[f.recipe as usize].industry == "agriculture"
+                && f.status == FacilityStatus::Operating
+        })
+        .map(|(h, f)| (h, f.recipe))
+        .unwrap();
+    let template = &dataset.recipes[recipe as usize];
+    // A winter quarter: the yield is 80 percent, so is the crew.
+    assert_eq!(world.tick.quarter(), 1);
+    assert_eq!(
+        cw_sim::economy::production::crew_need_bps(&world, template),
+        8_000
+    );
+    let blocks = world.facilities.get(plant).unwrap().blocks as i64;
+    let full: Vec<i64> = (0..3)
+        .map(|t| template.workers_low_mid_high[t] * blocks)
+        .collect();
+    {
+        let facility = world.facilities.get_mut(plant).unwrap();
+        facility.target_bps = 10_000;
+        facility.workers = [full[0], full[1], full[2]];
+    }
+    cw_sim::economy::labour::clear(&mut world, &dataset);
+    let staffed = world.facilities.get(plant).unwrap().workers;
+    for tier in 0..3 {
+        assert_eq!(
+            staffed[tier],
+            full[tier] * 8_000 / 10_000,
+            "tier {tier} keeps the winter crew"
+        );
+    }
+    // Every other industry needs its whole crew in any season.
+    let mill = dataset
+        .recipes
+        .iter()
+        .find(|r| r.industry == "manufacturing")
+        .unwrap();
+    assert_eq!(
+        cw_sim::economy::production::crew_need_bps(&world, mill),
+        10_000
+    );
+}

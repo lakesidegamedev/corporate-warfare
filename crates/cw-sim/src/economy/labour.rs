@@ -179,7 +179,11 @@ fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: u
             None => continue,
         };
         let full = facility_full_workers(facility, dataset, tier);
-        let desired = full * facility.target_bps as i64 / 10_000;
+        let crew_bps = crate::economy::production::crew_need_bps(
+            world,
+            &dataset.recipes[facility.recipe as usize],
+        );
+        let desired = full * facility.target_bps as i64 / 10_000 * crew_bps / 10_000;
         // A lower production target is a real layoff, not just a hiring freeze. Severance is
         // one week's wage per released worker, paid through solvency rules.
         if *workers > desired {

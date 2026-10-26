@@ -238,6 +238,15 @@ impl FirmStatus {
     }
 }
 
+/// How a good's asking price is set each week when the player chooses a posture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PricePosture {
+    /// Basis points against the market price of the good: -2000 undercuts by a fifth.
+    Market { bps: i32 },
+    /// Basis points over the firm's own cost per lot.
+    CostPlus { bps: i32 },
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FacilityStatus {
     Building,
@@ -299,6 +308,11 @@ pub struct Facility {
     pub started: Tick,
     pub completes: Tick,
     pub escrow_cents: i64,
+    /// Equipment still to be paid for, due when construction completes. A new plant pays its
+    /// construction service up front and its equipment on delivery, so a build does not tie up
+    /// the whole capex for the build period.
+    #[serde(default)]
+    pub equipment_due_cents: i64,
     pub capex_cents: i64,
     pub accumulated_depreciation: i64,
     /// Workers actually employed this week by tier.
@@ -362,6 +376,11 @@ pub struct Policies {
     /// priced automatically from sell-through each week.
     #[serde(default)]
     pub manual_prices: std::collections::BTreeSet<u16>,
+    /// Pricing posture by good, after A House Divided: a percentage against the market price
+    /// or a markup over the firm's own cost per lot. Applied each week; a posture replaces both
+    /// automatic pricing and a hand-set price for that good.
+    #[serde(default)]
+    pub price_postures: BTreeMap<u16, PricePosture>,
     /// True once the player sets a production target by hand; automatic planning stops until
     /// the player turns it back on.
     #[serde(default)]
@@ -381,6 +400,7 @@ impl Default for Policies {
             quality_budgets_cents: BTreeMap::new(),
             input_cover_weeks: 4,
             manual_prices: Default::default(),
+            price_postures: Default::default(),
             manual_production: false,
         }
     }

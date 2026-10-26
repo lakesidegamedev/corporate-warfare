@@ -224,7 +224,7 @@
         "electricity": 2
       },
       "workers_low_mid_high": [
-        12,
+        8,
         2,
         1
       ],
@@ -245,7 +245,7 @@
         "fuel": 6
       },
       "workers_low_mid_high": [
-        12,
+        8,
         2,
         1
       ],
@@ -266,8 +266,8 @@
         "software": 2
       },
       "workers_low_mid_high": [
-        8,
-        3,
+        5,
+        2,
         1
       ],
       "capex_cents": 60000000,
@@ -285,7 +285,7 @@
         "fuel": 2
       },
       "workers_low_mid_high": [
-        10,
+        6,
         2,
         1
       ],
@@ -589,9 +589,9 @@
         "electricity": 2
       },
       "workers_low_mid_high": [
-        8,
-        6,
-        2
+        3,
+        3,
+        1
       ],
       "capex_cents": 80000000,
       "build_weeks": 20,
@@ -609,8 +609,8 @@
         "electricity": 1
       },
       "workers_low_mid_high": [
-        4,
-        4,
+        3,
+        3,
         1
       ],
       "capex_cents": 60000000,
@@ -651,7 +651,7 @@
         "timber": 24
       },
       "workers_low_mid_high": [
-        8,
+        7,
         2,
         1
       ],
@@ -750,8 +750,8 @@
         "electricity": 1
       },
       "workers_low_mid_high": [
-        8,
-        2,
+        4,
+        1,
         1
       ],
       "capex_cents": 40000000,
@@ -771,8 +771,8 @@
         "steel": 1
       },
       "workers_low_mid_high": [
-        10,
-        4,
+        7,
+        3,
         1
       ],
       "capex_cents": 68000000,
@@ -791,8 +791,8 @@
         "software": 2
       },
       "workers_low_mid_high": [
-        8,
-        4,
+        6,
+        3,
         1
       ],
       "capex_cents": 34000000,
@@ -809,8 +809,8 @@
         "electricity": 1
       },
       "workers_low_mid_high": [
-        12,
-        4,
+        6,
+        3,
         1
       ],
       "capex_cents": 30000000,
@@ -828,8 +828,8 @@
         "electricity": 1
       },
       "workers_low_mid_high": [
-        12,
-        4,
+        9,
+        3,
         1
       ],
       "capex_cents": 20000000,
@@ -849,8 +849,8 @@
         "vehicles": 1
       },
       "workers_low_mid_high": [
-        11,
-        5,
+        6,
+        4,
         1
       ],
       "capex_cents": 60000000,
@@ -870,8 +870,8 @@
         "software": 2
       },
       "workers_low_mid_high": [
-        5,
-        4,
+        3,
+        2,
         1
       ],
       "capex_cents": 32000000,
@@ -889,7 +889,7 @@
       },
       "workers_low_mid_high": [
         2,
-        7,
+        6,
         4
       ],
       "capex_cents": 80000000,
@@ -910,7 +910,7 @@
       },
       "workers_low_mid_high": [
         8,
-        18,
+        16,
         9
       ],
       "capex_cents": 296000000,
@@ -929,8 +929,8 @@
         "pharmaceuticals": 1
       },
       "workers_low_mid_high": [
-        12,
-        8,
+        11,
+        7,
         2
       ],
       "capex_cents": 83000000,
@@ -1180,9 +1180,9 @@
         "electricity": 1
       },
       "workers_low_mid_high": [
-        8,
-        8,
-        3
+        6,
+        6,
+        2
       ],
       "capex_cents": 100000000,
       "build_weeks": 39,
@@ -1202,9 +1202,9 @@
         "rare_earth": 2
       },
       "workers_low_mid_high": [
-        6,
-        10,
-        6
+        5,
+        8,
+        5
       ],
       "capex_cents": 126000000,
       "build_weeks": 52,
@@ -1223,9 +1223,9 @@
         "vehicles": 1
       },
       "workers_low_mid_high": [
-        12,
-        9,
-        3
+        10,
+        8,
+        2
       ],
       "capex_cents": 136000000,
       "build_weeks": 39,
@@ -1243,8 +1243,8 @@
         "steel": 8
       },
       "workers_low_mid_high": [
-        10,
-        7,
+        9,
+        6,
         2
       ],
       "capex_cents": 126000000,
@@ -1258,5 +1258,6 @@
   ],
   "maintenance_annual_bps": 200,
   "fixture_land_rent_cents_weekly": 20000,
-  "plant_scale": 5
+  "plant_scale": 5,
+  "margin_floor": 0.2
 }
