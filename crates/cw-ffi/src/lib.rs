@@ -1983,7 +1983,13 @@ mod tests {
                 .all(|s| s.population_2000 > 1_000_000 && s.code.len() == 2)
         );
         let plants = session.map_plants();
-        assert!(plants.len() >= 30, "every rival plant is on the map");
+        // Thirty seeded rivals, of which the bank and the insurer run no plants, plus the
+        // player's own plant.
+        assert_eq!(
+            plants.iter().filter(|p| !p.player).count(),
+            28,
+            "every rival plant is on the map"
+        );
         assert!(
             plants.iter().any(|p| p.player),
             "the player's plant is marked"
