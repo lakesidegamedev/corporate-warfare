@@ -11,6 +11,20 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- Android version, first build: the same Rust engine through uniffi's Kotlin bindings with a
+  Compose interface shared with the coming Windows and Linux versions. A career can be started,
+  continued from its autosave, played week by week or on auto-advance, and saved; the CEO Office
+  shows the company, the quarter's profit breakdown, the pricing panel with postures and the
+  divisions; Markets shows a region's board; Inbox answers decisions; Portfolio shows wealth, the
+  cash outlook and the companies. The map is a region list for now. A new CI workflow builds
+  the engine for Android, runs an engine smoke test through the Kotlin bindings and uploads a
+  debug APK.
+- Windows and Linux versions, first build: the same Compose app in a desktop window, packaged as
+  an MSI on Windows and a .deb on Linux by CI. Saves go to the usual per-user application data
+  folder.
+
 ## [1.3.1] - 2026-10-26
 
 ### Added

@@ -16,3 +16,10 @@ __pycache__/
 /tools/data-gen/raw/
 /evidence/local/
 /worktrees/
+
+# Compose apps (Android, desktop): Gradle state, outputs and the generated engine.
+compose/.gradle/
+compose/build/
+compose/*/build/
+compose/local.properties
+compose/.kotlin/
