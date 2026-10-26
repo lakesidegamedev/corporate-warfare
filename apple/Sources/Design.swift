@@ -150,6 +150,39 @@ enum SectorIcons {
     }
 }
 
+/// The Corporate Warfare logo: the CW emblem over the pixel wordmark, drawn from the shared
+/// Resources/cw-logo.json so every platform shows the same pixels.
+struct PixelLogo: View {
+    private struct File: Decodable {
+        let width: Int
+        let height: Int
+        let palette: [String: String]
+        let rows: [String]
+    }
+
+    private static let file: File? = Bundle.main.url(forResource: "cw-logo", withExtension: "json")
+        .flatMap { try? Data(contentsOf: $0) }
+        .flatMap { try? JSONDecoder().decode(File.self, from: $0) }
+
+    var body: some View {
+        let file = Self.file
+        Canvas { context, canvas in
+            guard let file else { return }
+            let cell = min(canvas.width / CGFloat(file.width), canvas.height / CGFloat(file.height))
+            let origin = CGPoint(x: (canvas.width - cell * CGFloat(file.width)) / 2, y: (canvas.height - cell * CGFloat(file.height)) / 2)
+            for (y, row) in file.rows.enumerated() {
+                for (x, character) in row.enumerated() where character != "." {
+                    guard let hex = file.palette[String(character)] else { continue }
+                    let rect = CGRect(x: origin.x + CGFloat(x) * cell, y: origin.y + CGFloat(y) * cell, width: cell + 0.5, height: cell + 0.5)
+                    context.fill(Path(rect), with: .color(SectorIcons.color(hex)))
+                }
+            }
+        }
+        .aspectRatio(CGFloat(file?.width ?? 64) / CGFloat(file?.height ?? 58), contentMode: .fit)
+        .accessibilityLabel("Corporate Warfare")
+    }
+}
+
 /// A sector's 8-bit icon on a dark tile with a rim in the sector's colour.
 struct SectorBadge: View {
     let sector: String

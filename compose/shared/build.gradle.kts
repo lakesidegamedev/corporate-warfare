@@ -91,8 +91,12 @@ compose.desktop {
             packageVersion = rootProject.file("../Cargo.toml").readLines()
                 .first { it.startsWith("version = ") }.substringAfter('"').substringBefore('"')
             vendor = "Lakeside Games"
-            linux { packageName = "corporate-warfare" }
+            linux {
+                packageName = "corporate-warfare"
+                iconFile.set(project.file("icons/corporate-warfare.png"))
+            }
             windows {
+                iconFile.set(project.file("icons/corporate-warfare.ico"))
                 menuGroup = "Corporate Warfare"
                 upgradeUuid = "5b6f6b2e-3c1d-4b8e-9f1a-0c7d2e4a9b31"
             }

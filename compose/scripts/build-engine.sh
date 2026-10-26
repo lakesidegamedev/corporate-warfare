@@ -15,6 +15,8 @@ cp apple/Resources/corridor-map.json "$OUT/resources/"
 cp apple/Resources/corridor-map.json "$OUT/desktop/"
 cp apple/Resources/sector-icons.json "$OUT/resources/"
 cp apple/Resources/sector-icons.json "$OUT/desktop/"
+cp apple/Resources/cw-logo.json "$OUT/resources/"
+cp apple/Resources/cw-logo.json "$OUT/desktop/"
 
 android() {
   local ndk="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"

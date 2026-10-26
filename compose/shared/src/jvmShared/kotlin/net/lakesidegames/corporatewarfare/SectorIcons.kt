@@ -16,3 +16,13 @@ object SectorIcons {
 
     fun color(hex: String): Color = Color(0xFF000000 or hex.removePrefix("#").toLong(16))
 }
+
+/** The Corporate Warfare logo (cw-logo.json), the same pixels as on iPhone. */
+object PixelLogo {
+    @Serializable data class File(val width: Int, val height: Int, val palette: Map<String, String>, val rows: List<String>)
+
+    val file: File? by lazy {
+        val stream = PixelLogo::class.java.getResourceAsStream("/cw-logo.json") ?: return@lazy null
+        Json { ignoreUnknownKeys = true }.decodeFromString(File.serializer(), stream.bufferedReader().readText())
+    }
+}

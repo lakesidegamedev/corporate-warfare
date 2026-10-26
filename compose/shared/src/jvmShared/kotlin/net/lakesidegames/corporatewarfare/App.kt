@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
@@ -85,22 +86,48 @@ private fun StartScreen(store: GameStore) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Corporate Warfare", color = Palette.primaryText, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        LogoArt(Modifier.width(300.dp))
+        Spacer(Modifier.height(14.dp))
         Text(
-            "Build an industrial empire across the Rust Belt corridor, 2000.",
+            "Build an industrial empire across the Great Lakes corridor, 2000.",
             color = Palette.secondary,
             fontSize = 14.sp,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Sectors.order.take(8).forEach { SectorBadge(it, 26) }
+        }
+        Spacer(Modifier.height(28.dp))
         if (store.hasAutosave) {
-            GoldButton("Continue career", enabled = !store.busy) { store.continueCareer() }
+            GoldButton("Continue career", Modifier.width(260.dp), enabled = !store.busy) { store.continueCareer() }
             Spacer(Modifier.height(10.dp))
         }
-        GoldButton("New guided career", enabled = !store.busy) { store.newCareer(System.currentTimeMillis() % 1_000_000, guided = true) }
+        GoldButton("New guided career", Modifier.width(260.dp), enabled = !store.busy) { store.newCareer(System.nanoTime() % 9_999_999, guided = true) }
         Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = { store.newCareer(System.currentTimeMillis() % 1_000_000, guided = false) }, enabled = !store.busy) {
+        OutlinedButton(onClick = { store.newCareer(System.nanoTime() % 9_999_999, guided = false) }, enabled = !store.busy, modifier = Modifier.width(260.dp)) {
             Text("New sandbox career", color = Palette.primaryText)
+        }
+    }
+}
+
+/** The pixel logo, scaled to fit with square pixels. */
+@Composable
+fun LogoArt(modifier: Modifier) {
+    val file = PixelLogo.file ?: return
+    androidx.compose.foundation.Canvas(modifier.aspectRatio(file.width.toFloat() / file.height)) {
+        val cell = minOf(size.width / file.width, size.height / file.height)
+        file.rows.forEachIndexed { y, row ->
+            row.forEachIndexed { x, character ->
+                val hex = if (character == '.') null else file.palette[character.toString()]
+                if (hex != null) {
+                    drawRect(
+                        SectorIcons.color(hex),
+                        topLeft = androidx.compose.ui.geometry.Offset(x * cell, y * cell),
+                        size = androidx.compose.ui.geometry.Size(cell + 0.5f, cell + 0.5f),
+                    )
+                }
+            }
         }
     }
 }
@@ -479,7 +506,7 @@ fun SpeedControl(store: GameStore) {
                 fontSize = 13.sp,
                 modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
                     .background(if (selected) Palette.gold else androidx.compose.ui.graphics.Color.Transparent)
-                    .clickable { store.setSpeed(value) }
+                    .clickable { store.playAt(value) }
                     .padding(horizontal = 10.dp, vertical = 7.dp),
             )
         }

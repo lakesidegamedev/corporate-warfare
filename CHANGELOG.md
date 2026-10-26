@@ -11,6 +11,20 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- A new 8-bit Corporate Warfare logo: a gold C beside a W drawn as a stock line that runs green
+  to red and breaks out into an arrow. It is the app icon on iPhone, iPad, Mac, Android, Windows
+  and Linux and leads the redesigned start screen, with a row of the new 8-bit sector icons.
+- 8-bit icons for all fifteen sectors, shared by every platform.
+- A speed control: pause, 1x, 2x and 4x (one tick is one week; 1x is a week a second).
+
+### Changed
+
+- Buttons no longer flash while weeks process: a running week does not mark the app busy.
+- The seed field is gone from the new-career screen; every career gets a random seed.
+- Test runs no longer send anonymous market data.
+
 ### Fixed
 
 - iPhone release builds failed at signing once the team reached Apple's cap on development

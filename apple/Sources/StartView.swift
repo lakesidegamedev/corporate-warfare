@@ -19,14 +19,22 @@ struct StartView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Corporate Warfare")
-                            .font(.largeTitle.weight(.semibold))
-                            .foregroundStyle(Theme.navy)
-                        Text("A Great Lakes business simulation. Offline, single player, one investor across every company you own or lose.")
-                            .font(.body)
+                    VStack(spacing: 14) {
+                        PixelLogo()
+                            .frame(maxWidth: 300)
+                            .padding(.top, 24)
+                        Text("Build an industrial empire across the Great Lakes corridor, 2000.")
+                            .font(.callout)
                             .foregroundStyle(Theme.secondary)
+                            .multilineTextAlignment(.center)
+                        HStack(spacing: 6) {
+                            ForEach(Sector.order.prefix(8), id: \.self) { sector in
+                                SectorBadge(sector: sector, size: 26)
+                            }
+                        }
+                        .accessibilityHidden(true)
                     }
+                    .frame(maxWidth: .infinity)
 
                     SectionCard(title: "New career") {
                         Toggle("Guided start (60% of a running firm)", isOn: $guided)
@@ -67,7 +75,7 @@ struct StartView: View {
                         Text("Engine \(info.version) · interface \(info.interfaceVersion) · rules \(info.rulesVersion)")
                             .font(.caption.monospaced())
                             .foregroundStyle(Theme.secondary)
-                        Text("Premium offline game. No account, no ads, no network calls. Institutions are simplified game rules, not legal, tax or investment advice.")
+                        Text("No account, no ads. An anonymous market summary is shared every five weeks unless switched off in Settings. Institutions are simplified game rules, not legal, tax or investment advice.")
                             .font(.footnote)
                             .foregroundStyle(Theme.secondary)
                         Button(walkthroughTitle) {
@@ -89,7 +97,7 @@ struct StartView: View {
                 }
             }
             .background(Theme.background(for: scheme))
-            .navigationTitle("Start")
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingSaves) {
                 SavesView()
                     .environmentObject(store)

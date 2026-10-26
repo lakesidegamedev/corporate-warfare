@@ -92,14 +92,14 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     fun advance() = perform { step() }
 
-    fun toggleRun() = setSpeed(if (runJob == null) 1 else 0)
+    fun toggleRun() = playAt(if (runJob == null) 1 else 0)
 
     /**
      * Time runs at [weeksPerSecond]: 0 pauses, 1, 2 or 4 play. One tick is one week. A running
      * loop picks up a new speed from the next week; ticks never mark the app busy, so buttons
      * stay put while time runs.
      */
-    fun setSpeed(weeksPerSecond: Int) {
+    fun playAt(weeksPerSecond: Int) {
         if (weeksPerSecond <= 0) {
             runJob?.cancel()
             runJob = null
