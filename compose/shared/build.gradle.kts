@@ -48,6 +48,8 @@ kotlin {
                 implementation(compose.ui)
                 implementation(compose.materialIconsExtended)
                 implementation(libs.jna)
+                // Skia's native renderer for the OS building the package (each OS packages its own).
+                implementation(compose.desktop.currentOs)
             }
         }
         val desktopTest by getting {
@@ -67,5 +69,27 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+// Windows and Linux (and, unsigned, macOS) desktop builds of the same app.
+compose.desktop {
+    application {
+        mainClass = "net.lakesidegames.corporatewarfare.MainKt"
+        nativeDistributions {
+            targetFormats(
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg,
+            )
+            packageName = "Corporate Warfare"
+            packageVersion = "1.3.1"
+            vendor = "Lakeside Games"
+            linux { packageName = "corporate-warfare" }
+            windows {
+                menuGroup = "Corporate Warfare"
+                upgradeUuid = "5b6f6b2e-3c1d-4b8e-9f1a-0c7d2e4a9b31"
+            }
+        }
     }
 }

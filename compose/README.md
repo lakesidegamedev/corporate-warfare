@@ -7,7 +7,9 @@ built as a shared library and called through uniffi's Kotlin bindings, which loa
   Each target brings its own JNA (an AAR on Android, a JAR on the desktop), which is why the app
   is one source directory shared by both rather than an intermediate source set.
 - `androidApp/`: the Android application (`net.lakesidegames.corporatewarfare`).
-- Desktop app (Windows, Linux): next, reusing `shared` with a desktop entry point.
+- Desktop app (Windows, Linux): `shared/src/desktopMain/.../Main.kt`, the same app in a window.
+  `./gradlew :shared:run` runs it; `:shared:packageMsi` (on Windows) and `:shared:packageDeb` (on
+  Linux) build installers. Headless machines need `SKIKO_RENDER_API=SOFTWARE`.
 
 Build:
 

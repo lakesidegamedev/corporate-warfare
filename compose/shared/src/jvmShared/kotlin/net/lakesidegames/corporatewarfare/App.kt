@@ -85,7 +85,12 @@ private fun StartScreen(store: GameStore) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("Corporate Warfare", color = Palette.primaryText, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        Text("Build an industrial empire across the Rust Belt corridor, 2000.", color = Palette.secondary, fontSize = 14.sp)
+        Text(
+            "Build an industrial empire across the Rust Belt corridor, 2000.",
+            color = Palette.secondary,
+            fontSize = 14.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
         Spacer(Modifier.height(32.dp))
         if (store.hasAutosave) {
             GoldButton("Continue career", enabled = !store.busy) { store.continueCareer() }

@@ -21,6 +21,9 @@ heading.
   cash outlook and the companies. The map is a region list for now. A new CI workflow builds
   the engine for Android, runs an engine smoke test through the Kotlin bindings and uploads a
   debug APK.
+- Windows and Linux versions, first build: the same Compose app in a desktop window, packaged as
+  an MSI on Windows and a .deb on Linux by CI. Saves go to the usual per-user application data
+  folder.
 
 ## [1.3.1] - 2026-10-26
 
