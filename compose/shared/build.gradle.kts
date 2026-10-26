@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.android.library)
 }
@@ -35,6 +36,7 @@ kotlin {
                 implementation(compose.ui)
                 implementation(compose.materialIconsExtended)
                 implementation("${libs.jna.get()}@aar")
+                implementation(libs.kotlinx.serialization.json)
             }
         }
         val desktopMain by getting {
@@ -48,6 +50,7 @@ kotlin {
                 implementation(compose.ui)
                 implementation(compose.materialIconsExtended)
                 implementation(libs.jna)
+                implementation(libs.kotlinx.serialization.json)
                 // Skia's native renderer for the OS building the package (each OS packages its own).
                 implementation(compose.desktop.currentOs)
             }
@@ -62,6 +65,8 @@ kotlin {
 
 android {
     namespace = "net.lakesidegames.corporatewarfare.shared"
+    // The corridor map, shared with the iPhone app (copied by scripts/build-engine.sh).
+    sourceSets["main"].resources.srcDir(rootProject.layout.projectDirectory.dir("build/engine/resources"))
     compileSdk = libs.versions.compileSdk.get().toInt()
     defaultConfig {
         minSdk = libs.versions.minSdk.get().toInt()
@@ -83,7 +88,8 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg,
             )
             packageName = "Corporate Warfare"
-            packageVersion = "1.3.1"
+            packageVersion = rootProject.file("../Cargo.toml").readLines()
+                .first { it.startsWith("version = ") }.substringAfter('"').substringBefore('"')
             vendor = "Lakeside Games"
             linux { packageName = "corporate-warfare" }
             windows {

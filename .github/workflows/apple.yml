@@ -26,6 +26,18 @@ jobs:
       - run: xcodegen generate --spec apple/project.yml --project apple
       - name: Simulator compile
         run: xcodebuild -project apple/CorporateWarfare.xcodeproj -scheme CorporateWarfare -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - name: Mac Catalyst compile
+        run: xcodebuild -project apple/CorporateWarfare.xcodeproj -scheme CorporateWarfare -configuration Release -destination 'generic/platform=macOS,variant=Mac Catalyst' -derivedDataPath apple/build/catalyst CODE_SIGNING_ALLOWED=NO build
+      - name: Package the Mac app
+        run: |
+          app=$(find apple/build/catalyst -path '*Release-maccatalyst/*.app' -maxdepth 6 -type d | head -1)
+          test -n "$app"
+          ditto -c -k --keepParent "$app" apple/build/CorporateWarfare-mac.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corporate-warfare-mac-unsigned
+          path: apple/build/CorporateWarfare-mac.zip
+          retention-days: 14
       - name: Execute Rust bridge in simulator
         run: bash apple/scripts/test-simulator.sh
       - name: Collect UI snapshots

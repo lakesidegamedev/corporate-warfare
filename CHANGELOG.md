@@ -21,6 +21,15 @@ heading.
   cash outlook and the companies. The map is a region list for now. A new CI workflow builds
   the engine for Android, runs an engine smoke test through the Kotlin bindings and uploads a
   debug APK.
+- The Android, Windows and Linux versions gain the drawn corridor map (pan and zoom, your
+  divisions with plant counts, room to build and wage layers, every region's board on tap),
+  building plants from a region with the full quote, and the Markets exchange: stocks with the
+  corridor index and buy and sell orders, commodities with their movement, and region boards.
+- Every GitHub release now carries a signed Android APK, the Windows installer, the Linux
+  package and the Mac app, built by a new release workflow. Android, Windows and Linux take
+  their version from the same workspace version as the iPhone app.
+- Mac version: the iPhone app builds for the Mac through Mac Catalyst under the same App Store
+  record, sandboxed, with the engine built for Apple silicon and Intel Macs.
 - Windows and Linux versions, first build: the same Compose app in a desktop window, packaged as
   an MSI on Windows and a .deb on Linux by CI. Saves go to the usual per-user application data
   folder.
