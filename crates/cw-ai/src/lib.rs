@@ -66,6 +66,7 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
                 },
             });
         }
+        reopen(world, dataset, handle, &mut proposals);
         if handle.slot() % 4 != cohort {
             continue;
         }
@@ -73,6 +74,48 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
     }
     proposals.truncate(WEEKLY_PROPOSALS);
     proposals
+}
+
+/// Bring a mothballed plant back when its output pays at public prices, the corridor is
+/// importing at least half a plant's output, and the restart leaves the cash reserve intact.
+fn reopen(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
+    let Some(entity) = world.firms.get(firm) else {
+        return;
+    };
+    if !matches!(entity.status, FirmStatus::Operating) {
+        return;
+    }
+    for plant_handle in &entity.facilities {
+        let Some(plant) = world.facilities.get(*plant_handle) else {
+            continue;
+        };
+        if plant.status != FacilityStatus::Mothballed {
+            continue;
+        }
+        let template = &dataset.recipes[plant.recipe as usize];
+        let Some(output) = dataset.product_index.get(&template.output).copied() else {
+            continue;
+        };
+        let imported: i64 = world
+            .gateways
+            .iter()
+            .filter(|g| g.product == output)
+            .map(|g| g.smoothed_import_lots)
+            .sum();
+        let cost = cw_sim::economy::operations::reopen_cost(plant);
+        if block_contribution(world, dataset, firm, plant.recipe, plant.region) > 0
+            && imported * 2 >= template.weekly_output_lots * plant.blocks as i64
+            && entity.book.cash() - cost >= reserve_target(world, firm)
+        {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::ReopenFacility {
+                    facility: *plant_handle,
+                },
+            });
+            return;
+        }
+    }
 }
 
 /// Four weeks of mandatory outflow plus principal due over the next thirteen weeks.

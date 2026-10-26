@@ -64,6 +64,8 @@ pub struct FacilitySummary {
     pub bottleneck: String,
     pub deposit_remaining: i64,
     pub target_bps: i32,
+    /// Cash to bring the plant back from mothballs.
+    pub reopen_cost_cents: i64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -310,6 +312,7 @@ pub fn facility_summary(world: &World, dataset: &Dataset, handle: u64) -> Option
         bottleneck: bottleneck.to_owned(),
         deposit_remaining: facility.deposit_remaining.lots(),
         target_bps: facility.target_bps,
+        reopen_cost_cents: cw_sim::economy::operations::reopen_cost(facility),
     })
 }
 

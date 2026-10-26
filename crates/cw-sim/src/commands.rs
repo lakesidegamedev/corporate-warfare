@@ -85,6 +85,9 @@ pub enum CommandIntent {
     MothballFacility {
         facility: Handle,
     },
+    ReopenFacility {
+        facility: Handle,
+    },
     DisposeFacility {
         facility: Handle,
     },
@@ -375,6 +378,7 @@ impl CommandIntent {
             CommandIntent::ExpandFacility { .. } => "expand_facility",
             CommandIntent::RetoolFacility { .. } => "retool_facility",
             CommandIntent::MothballFacility { .. } => "mothball_facility",
+            CommandIntent::ReopenFacility { .. } => "reopen_facility",
             CommandIntent::DisposeFacility { .. } => "dispose_facility",
             CommandIntent::SetPrice { .. } => "set_price",
             CommandIntent::SetWageOffer { .. } => "set_wage_offer",
@@ -1046,9 +1050,42 @@ fn apply_intent(
                 })?;
             require_control(world, actor, owner)?;
             if let Some(stored) = world.facilities.get_mut(*facility) {
-                stored.status = FacilityStatus::Mothballed;
-                stored.mothballed_since = Some(world.tick);
-                stored.workers = [0; 3];
+                if stored.status != FacilityStatus::Operating {
+                    return Err(DomainError::WrongPhase {
+                        expected: "operating",
+                        actual: "not operating",
+                    });
+                }
+                crate::economy::operations::mothball(stored, world.tick);
+            }
+            Ok(())
+        }
+        CommandIntent::ReopenFacility { facility } => {
+            let (owner, status, cost) = world
+                .facilities
+                .get(*facility)
+                .map(|entity| {
+                    (
+                        entity.firm,
+                        entity.status,
+                        crate::economy::operations::reopen_cost(entity),
+                    )
+                })
+                .ok_or(DomainError::InvalidEntity {
+                    handle: facility.0,
+                    kind: EntityKind::Facility,
+                })?;
+            require_control(world, actor, owner)?;
+            if status != FacilityStatus::Mothballed {
+                return Err(DomainError::WrongPhase {
+                    expected: "mothballed",
+                    actual: "not mothballed",
+                });
+            }
+            spend_firm_cash(world, owner, cost, "plant restart")?;
+            if let Some(stored) = world.facilities.get_mut(*facility) {
+                stored.status = FacilityStatus::Operating;
+                stored.mothballed_since = None;
             }
             Ok(())
         }

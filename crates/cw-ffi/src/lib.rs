@@ -123,6 +123,7 @@ pub struct FacilityDto {
     pub workers_high: i64,
     pub bottleneck: String,
     pub target_bps: i32,
+    pub reopen_cost_cents: i64,
 }
 
 #[derive(uniffi::Record)]
@@ -731,6 +732,7 @@ fn facility_dto(summary: FacilitySummary) -> FacilityDto {
         workers_high: summary.workers[2],
         bottleneck: summary.bottleneck,
         target_bps: summary.target_bps,
+        reopen_cost_cents: summary.reopen_cost_cents,
     }
 }
 

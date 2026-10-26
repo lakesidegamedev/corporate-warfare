@@ -259,6 +259,19 @@ struct CEOOfficeView: View {
                         .font(.caption).foregroundStyle(Theme.secondary)
                 }
                 Spacer()
+                if plant.status == "operating" {
+                    Button("Mothball") { Task { rejection = await store.submit(CommandJSON.command("MothballFacility", ["facility": plant.handle])) } }
+                        .font(.caption.weight(.semibold))
+                        .buttonStyle(.bordered)
+                        .tint(Theme.secondary)
+                        .accessibilityHint("Stops the plant and releases its staff until you reopen it")
+                } else if plant.status == "mothballed" {
+                    Button("Reopen \(Format.moneyCompact(plant.reopenCostCents))") { Task { rejection = await store.submit(CommandJSON.command("ReopenFacility", ["facility": plant.handle])) } }
+                        .font(.caption.weight(.semibold))
+                        .buttonStyle(.borderedProminent)
+                        .tint(Theme.gold)
+                        .accessibilityHint("Restarts the plant; staff are hired again over the following weeks")
+                }
             }
             ProgressView(value: min(max(utilisation, 0), 1)).tint(utilisation > 0.8 ? Theme.positive : Theme.warning)
             HStack {

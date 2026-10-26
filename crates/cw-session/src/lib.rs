@@ -1036,6 +1036,7 @@ fn empty_facility(handle: u64) -> FacilitySummary {
         bottleneck: String::new(),
         deposit_remaining: 0,
         target_bps: 0,
+        reopen_cost_cents: 0,
     }
 }
 

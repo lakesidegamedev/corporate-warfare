@@ -296,7 +296,8 @@ fn random_intent(rng: &mut SplitMix64, session: &Session) -> CommandIntent {
             facility,
             blocks: 1,
         },
-        7 => CommandIntent::MothballFacility { facility },
+        7 if rng.below(2) == 0 => CommandIntent::MothballFacility { facility },
+        7 => CommandIntent::ReopenFacility { facility },
         8 => CommandIntent::RetoolFacility { facility, recipe },
         9 => CommandIntent::OfferContract {
             buyer: primary,

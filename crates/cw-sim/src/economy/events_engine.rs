@@ -1059,8 +1059,7 @@ fn apply(
                         && facility.region == region
                         && facility.status == FacilityStatus::Operating
                     {
-                        facility.status = FacilityStatus::Mothballed;
-                        facility.mothballed_since = Some(world.tick);
+                        crate::economy::operations::mothball(facility, world.tick);
                     }
                 }
             }
