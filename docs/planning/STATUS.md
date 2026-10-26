@@ -1,8 +1,19 @@
 # Current checkpoint
 
-Date: 2026-10-26. Released: **1.3.0**, active economy and interface overhaul (feature PR #82,
-release branch `release/1.3.0`). Kanban: 254801 (economy), 254803 (interface).
-Saves from 1.2.0 load in 1.3.0.
+Date: 2026-10-26. Released: **1.3.1**, profitability (feature PR #85, release branch
+`release/1.3.1`). Kanban: 254806. Saves from 1.3.0 load.
+
+## 1.3.1
+
+Owner on 1.3.0: "I just lose money constantly. Pricing posture from AHD didn't really make the
+transition either. And it's probably not this sector only." Chose all four fixes and a margin
+of about 20 percent. Built: pricing posture per good (auto, -20..+20 percent vs market,
+cost-plus) with a CEO Office pricing panel; 21 thin strategies rebalanced by crew to about
+17-24 percent after depreciation; seasonal farm crews; staged build payment. Guided career at
+week 104 averages $1.44M company cash over eight seeds (1.3.0: $976K); rival dissolutions 1 in
+600 firm-runs over five years.
+
+# 1.3.0 checkpoint (history)
 
 ## 1.3.0
 
