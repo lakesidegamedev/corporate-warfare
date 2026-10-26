@@ -1,7 +1,7 @@
 {
   "requirement": "R36",
   "result": "pass",
-  "commit": "3fa5a327af92b62415627d3a344c18bb774cf811",
+  "commit": "6586ab6b0d52317fd3b763c61f8979834c9c9036",
   "procedure": "Release cw-cli sweeps at the tested commit: 100 five-year seeds for each of conservative, growth and acquirer policies in guided and founder starts, 20 thirty-year careers for each policy, and a 20-seed no-action baseline; dissolution_census by industry and archetype; outliers and exploits investigated in evidence/balance-report.md.",
   "artifacts": [
     "evidence/balance-report.md",
@@ -16,6 +16,6 @@
     "evidence/balance/guided-acquirer-1560.json",
     "evidence/balance/guided-none-260.json"
   ],
-  "limitations": "Standard difficulty only; Easy/Hard are not yet defined. Reference policies are scripted, not human play, and the acquirer founder policy is deliberately aggressive. Balance is not a fun sign-off; R38 human playtests remain.",
-  "verified_at": "2026-10-25"
+  "limitations": "Standard difficulty only; Easy/Hard are not yet defined. Reference policies are scripted, not human play, and the acquirer founder policy is deliberately aggressive. A no-action career scores the same as active play (open finding in the report). Balance is not a fun sign-off; R38 human playtests remain.",
+  "verified_at": "2026-10-26"
 }

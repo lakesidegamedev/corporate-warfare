@@ -1,7 +1,41 @@
 # Current checkpoint
 
-Date: 2026-10-25. Version: 1.0.0 (engine, workspace crates and iOS marketing version).
-Branch: `release/1.0.0` (PR #70). Kanban: 254781.
+Date: 2026-10-26. Released: 1.0.0. In progress: **1.1.0**, single-player A House Divided
+corporations on a real map (PR #76, branch `feat/states-and-map`). Kanban: 254781.
+Saves from 1.0.0 do not load in 1.1.0; the changelog says so.
+
+## 1.1.0 (this branch)
+
+Owner direction (DECISIONS.md, 2026-10-26): play AHD corporations single-player over a real
+map of eight states, keeping this engine. Built:
+
+- World: eight playable states (IL, IN, KY, MI, NY, OH, PA, WV) with 2000 Census population,
+  wage, land and demand indices and AHD-style conditions (power grid, roads, broadband,
+  skill, crime, cost of living); 28 freight lanes from great-circle distances.
+- Corporations: AHD sector types with 53 named operating strategies over 34 goods, primary
+  and secondary sector focus with transition and cooldown, logistics strength and sprawl,
+  retooling within a sector, depleting deposits for extraction, and founding with
+  headquarters, strategy and secondary focus.
+- Markets: smoothed gateway imports as "room to build"; rivals build where imports point and
+  retool out of glut; sellers trade wherever their goods sit; a paced outside economy.
+- App: dark cartographic design system; vector map (Census, TIGER, Natural Earth) as home
+  with presence, room, wage and skill layers; state boards; build flow; CEO office; commodity
+  board Markets; restyled legacy screens; CI renders iPhone and iPad snapshots for review.
+
+Verified at `6586ab6`: `cargo test --locked --workspace` through the check scheduler, hosted
+Verify and Apple smoke (Swift compiles, engine bridge and snapshot tests pass, the
+cross-platform hash `840de364...` matches on the simulator). Balance (R36) regenerated:
+`evidence/balance-report.md`, zero errors, 8 of 600 rival five-year firm-runs dissolve.
+
+Open before tagging 1.1.0:
+
+1. Owner call on the scoring finding: a no-action career scores the same as active play.
+2. Merge PR #76, then the release PR (version bump, changelog section, tag, GitHub release).
+   TestFlight build via Muse or the `Release` workflow.
+
+# 1.0.0 checkpoint (history)
+
+Date: 2026-10-25. Version: 1.0.0. Branch: `release/1.0.0` (PR #70).
 
 ## What exists now
 
