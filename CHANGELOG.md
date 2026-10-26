@@ -73,8 +73,8 @@ Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
   in glut toward strategies whose output is short.
 
 ### Fixed
-- Choosing a state on Markets now reloads its prices instead of keeping the previous state's.
 
+- Choosing a state on Markets now reloads its prices instead of keeping the previous state's.
 - Spot orders bought from the first out-of-state firm holding the good, which could strip a
   carrier of its own steel input; they now buy from the nearest producer.
 - Favourable state conditions no longer push a plant beyond its rated capacity (they save
