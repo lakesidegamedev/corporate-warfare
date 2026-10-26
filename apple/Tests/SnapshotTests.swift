@@ -33,6 +33,9 @@ final class SnapshotTests: XCTestCase {
         XCTAssertEqual(store.boards.count, 31)
         XCTAssertEqual(CorridorMap.shared.regions.count, 31, "the bundled map decodes its regions")
         XCTAssertFalse(store.mapDivisions.isEmpty, "the player's division is on the map")
+        XCTAssertGreaterThanOrEqual(store.stocks.count, 20, "the stock board lists the corridor's companies")
+        XCTAssertFalse(store.commodities.isEmpty, "the commodity board has goods")
+        XCTAssertEqual(store.stocks.first?.historyCents.count, 10, "ten weekly closes after ten weeks")
         XCTAssertEqual(store.divisions.count, 1)
 
         let phone = CGSize(width: 393, height: 852)
@@ -49,6 +52,11 @@ final class SnapshotTests: XCTestCase {
         render("ceo-phone", phone, compact: true, CEOOfficeView().environmentObject(store))
         render("ceo-pad", pad, compact: false, CEOOfficeView().environmentObject(store))
         render("markets-phone", phone, compact: true, MarketsView().environmentObject(store))
+        render("markets-commodities-phone", phone, compact: true, MarketsView(initialSection: .commodities).environmentObject(store))
+        render("markets-regions-phone", phone, compact: true, MarketsView(initialSection: .regions).environmentObject(store))
+        if let stock = store.stocks.first(where: { $0.controlledByYou }) ?? store.stocks.first {
+            render("stock-sheet-phone", phone, compact: true, StockSheet(stock: stock).environmentObject(store))
+        }
         render("markets-pad", pad, compact: false, MarketsView().environmentObject(store))
         render("inbox-phone", phone, compact: true, InboxView().environmentObject(store))
         render("root-phone", phone, compact: true, RootView().environmentObject(store))

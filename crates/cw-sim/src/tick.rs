@@ -108,6 +108,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         world.pending_pause = pause_reason(world);
     }
     crate::economy::pricing::weekly(world, dataset);
+    crate::economy::pricing::record_closing_prices(world, dataset);
     crate::economy::objectives::weekly(world, dataset);
     crate::economy::score::update(world, dataset);
     if let Some(reason) = world.pending_pause.clone() {

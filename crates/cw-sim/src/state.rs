@@ -1219,7 +1219,21 @@ pub struct World {
     pub objective: Option<crate::economy::objectives::Objective>,
     #[serde(default)]
     pub objective_history: Vec<crate::economy::objectives::ObjectiveResult>,
+    /// Weekly closing prices of every good and share, oldest first, at most a year.
+    #[serde(default)]
+    pub price_history: Vec<PricePoint>,
 }
+
+/// One week's closing prices: each good's corridor price and each firm's share price.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PricePoint {
+    pub week: u32,
+    pub goods: BTreeMap<u16, i64>,
+    pub shares: BTreeMap<Handle, i64>,
+}
+
+/// Weeks of closing prices the world keeps.
+pub const PRICE_HISTORY_WEEKS: usize = 52;
 
 /// One market raid and its outcome.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

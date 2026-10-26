@@ -24,6 +24,23 @@ heading.
 - Windows and Linux versions, first build: the same Compose app in a desktop window, packaged as
   an MSI on Windows and a .deb on Linux by CI. Saves go to the usual per-user application data
   folder.
+- Markets is now an exchange with three sections. Stocks lists every operating company with its
+  share price, weekly move, market cap and a sparkline, under a market-cap weighted corridor
+  index; sort by top movers, size or your holdings, and open a company for a price chart, P/E,
+  fair value, free float, your position and a buy or sell order. Commodities lists every good's
+  corridor price (the median ask of the companies that make it, or the import price where
+  nobody does) with its weekly and quarterly move, a sparkline and supply against demand; open
+  one for its chart, import and export quotes and, for your own goods, your pricing posture.
+  Regions keeps each region's board.
+- The engine keeps a year of weekly closing prices for every good and share.
+
+### Fixed
+
+- Company valuations used one quarter's EBITDA from week thirteen on instead of a year's, so
+  every fair value fell to about a quarter of the rule (six times annual EBITDA) once a full
+  quarter had closed. Opening share prices now reflect each company's expected plant earnings
+  instead of the book floor alone, so shares no longer all climb in step at the weekly limit over
+  the first quarter. Share prices show cents, and a P/E above 200 shows as n/m.
 
 ## [1.3.1] - 2026-10-26
 

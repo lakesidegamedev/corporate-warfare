@@ -97,6 +97,14 @@ actor Engine {
         session?.productLines(firm: firm) ?? []
     }
 
+    func commodityBoard() -> [CommodityDto] {
+        session?.commodityBoard() ?? []
+    }
+
+    func stockBoard() -> [StockDto] {
+        session?.stockBoard() ?? []
+    }
+
     func ownership(firm: UInt64) -> OwnershipDto? {
         session?.ownership(firm: firm)
     }

@@ -23,6 +23,8 @@ final class AppStore: ObservableObject {
     @Published var facilities: [FacilityDto] = []
     @Published var finance: FinanceDto?
     @Published var productLines: [ProductLineDto] = []
+    @Published var commodities: [CommodityDto] = []
+    @Published var stocks: [StockDto] = []
     @Published var ownership: OwnershipDto?
     @Published var contracts: [ContractDto] = []
     @Published var loans: [LoanDto] = []
@@ -225,6 +227,8 @@ final class AppStore: ObservableObject {
             strategyCatalogue = strategies()
         }
         events = await engine.events()
+        commodities = await engine.commodityBoard()
+        stocks = await engine.stockBoard()
         deals = await engine.deals()
         groupTree = await engine.groupTree()
         institutions = await engine.institutions()

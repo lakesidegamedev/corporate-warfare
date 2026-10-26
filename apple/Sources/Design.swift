@@ -181,6 +181,11 @@ enum Format {
         return currency.string(from: NSNumber(value: dollars)) ?? "$0"
     }
 
+    /// A per-unit price with cents, for share prices where whole dollars hide the movement.
+    static func price(_ cents: Int64) -> String {
+        String(format: "$%.2f", Double(cents) / 100.0)
+    }
+
     static func moneyCompact(_ cents: Int64) -> String {
         let magnitude = abs(Double(cents) / 100.0)
         // The sign leads the currency symbol: -$21K, not $-21K.

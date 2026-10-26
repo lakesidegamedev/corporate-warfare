@@ -356,3 +356,60 @@ pub fn set_target(world: &mut World, firm: Handle, target_bps: i32) {
         }
     }
 }
+
+/// A good's corridor price this week: the median asking price of the firms that make it, or
+/// the cheapest import quote when nobody does, or the reference price.
+pub fn corridor_price(world: &World, dataset: &Dataset, product: u16) -> i64 {
+    let id = &dataset.products[product as usize].id;
+    let mut asks: Vec<i64> = world
+        .firms
+        .iter()
+        .filter(|(_, entity)| entity.operative())
+        .filter(|(_, entity)| {
+            entity.facilities.iter().any(|plant| {
+                world
+                    .facilities
+                    .get(*plant)
+                    .is_some_and(|plant| &dataset.recipes[plant.recipe as usize].output == id)
+            })
+        })
+        .filter_map(|(_, entity)| entity.policies.prices.get(&product).copied())
+        .collect();
+    if !asks.is_empty() {
+        asks.sort_unstable();
+        return asks[asks.len() / 2].max(1);
+    }
+    world
+        .gateways
+        .iter()
+        .filter(|gateway| gateway.product == product && gateway.sell_price_cents > 0)
+        .map(|gateway| gateway.sell_price_cents)
+        .min()
+        .unwrap_or_else(|| dataset.reference_price(product))
+        .max(1)
+}
+
+/// Close the week's prices into the bounded history: every priced good and every operating
+/// firm's share price.
+pub fn record_closing_prices(world: &mut World, dataset: &Dataset) {
+    let goods = (0..dataset.products.len() as u16)
+        .filter(|code| dataset.products[*code as usize].reference_price_cents > 0)
+        .map(|code| (code, corridor_price(world, dataset, code)))
+        .collect();
+    let shares = world
+        .firms
+        .iter()
+        .filter(|(_, entity)| entity.operative() && entity.shares.issued > 0)
+        .map(|(handle, entity)| (handle, entity.shares.mark_cents.max(1)))
+        .collect();
+    world.price_history.push(crate::state::PricePoint {
+        week: world.tick.0,
+        goods,
+        shares,
+    });
+    let excess = world
+        .price_history
+        .len()
+        .saturating_sub(crate::state::PRICE_HISTORY_WEEKS);
+    world.price_history.drain(..excess);
+}

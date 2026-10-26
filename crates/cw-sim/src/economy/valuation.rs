@@ -26,18 +26,15 @@ pub fn trailing_ebitda(ledger: &Ledger) -> i64 {
     ledger.recent_weeks().iter().map(|week| week.ebitda()).sum()
 }
 
-/// Annualisation factor before thirteen observations exist: annualise the available weeks.
+/// Annual EBITDA from the closed weeks: the trailing thirteen weeks times four, or the
+/// available weeks scaled to a year before thirteen exist. (Before 1.4.0 a full quarter was used
+/// unscaled, so every valuation fell to about a quarter of the rule at week thirteen.)
 pub fn annualised_ebitda(ledger: &Ledger) -> i64 {
     let weeks = ledger.recent_weeks().len() as i64;
     if weeks == 0 {
         return 0;
     }
-    let trailing = trailing_ebitda(ledger);
-    if weeks >= 13 {
-        trailing
-    } else {
-        trailing * 52 / weeks
-    }
+    trailing_ebitda(ledger) * 52 / weeks.min(13)
 }
 
 pub fn ordinary_enterprise_value(ledger: &Ledger) -> i64 {
@@ -130,5 +127,29 @@ mod tests {
         assert_eq!(value.enterprise_cents, 200_000);
         // Equity = enterprise + unrestricted cash (500,000).
         assert_eq!(value.equity_cents, 700_000);
+    }
+
+    #[test]
+    fn ebitda_is_annualised_before_and_after_a_full_quarter() {
+        // $1,000 of revenue a week and nothing else: $52,000 a year whatever the history length.
+        let mut ledger = Ledger::default();
+        for week in 1..=20u32 {
+            ledger
+                .commit(
+                    Tick(week),
+                    Txn::new().debit(Account::Cash, 100_000, "sale").credit(
+                        Account::Revenue,
+                        100_000,
+                        "sale",
+                    ),
+                )
+                .unwrap();
+            ledger.close_week(Tick(week));
+            assert_eq!(
+                annualised_ebitda(&ledger),
+                5_200_000,
+                "week {week}: a year of weekly EBITDA"
+            );
+        }
     }
 }

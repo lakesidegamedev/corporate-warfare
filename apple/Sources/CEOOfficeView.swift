@@ -75,7 +75,7 @@ struct CEOOfficeView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                     Spacer(minLength: 4)
-                    Text("\(Format.money(firm.markCents))/share")
+                    Text("\(Format.price(firm.markCents))/share")
                         .font(.caption.weight(.semibold).monospacedDigit())
                         .foregroundStyle(Theme.secondary)
                         .lineLimit(1)
