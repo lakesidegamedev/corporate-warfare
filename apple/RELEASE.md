@@ -54,6 +54,9 @@ success. `INVALID`/`FAILED`/`EXPIRED` exit 2.
    OS, profile session, crashes, memory/performance and known issues under `evidence/releases/`.
 4. TestFlight builds expire after ninety days.
 
-The privacy manifest declares no tracking and no collected data, and the UserDefaults
-required-reason API (`CA92.1`) used by onboarding completion. Re-audit it whenever a dependency
+The privacy manifest declares no tracking, one collected data type (gameplay content for
+analytics, not linked to the player: the anonymous market snapshot every five game weeks,
+which the player can switch off), and the UserDefaults required-reason API (`CA92.1`).
+`apple/scripts/privacy_audit.py` allows network use only in `Telemetry.swift` and only to the
+documented endpoint. Re-audit it whenever a dependency
 or API usage changes.

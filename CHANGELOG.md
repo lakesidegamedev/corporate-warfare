@@ -11,6 +11,8 @@ heading.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-26
+
 ### Added
 
 - A corridor commodity exchange for goods. Every company's need for an input, in any region,
@@ -22,35 +24,6 @@ heading.
   the player's companies: more than four weeks of unsold stock cuts the target fifteen
   points down to thirty percent, under a week and a half of stock raises it back toward full;
   services follow sales against capacity. `SetAutoProduction` hands planning back.
-- Interface overhaul from a design audit. Every main screen has a compact header with its action
-  beside the title instead of a large title and empty space, and scrolled content ends at a hard
-  edge under the tab bar instead of showing through it. CEO Office opens with a one-line identity,
-  company cash and the quarter's profit grouped in one panel, and a breakdown of where the
-  quarter's money went (revenue against inputs, wages, overheads, depreciation, interest and tax)
-  with the biggest driver named. Markets shows one line per good with a signal (imported, tight,
-  glut), sales and weeks of stock in words, filters for short supply, gluts and your own goods,
-  and detail and pricing on tap. Inbox lists decisions first and only the news there is; a quiet
-  week is one line. Portfolio leads with net worth and shows where company cash is heading.
-  Saving and analytics moved to a Game panel. Step week and Play are now Next week and
-  Auto-advance. The map's goal strip folded into the company panel, its legend is one line with
-  detail on tap, and the HUD shows quarterly profit instead of last week's EBIT.
-- Rival companies grow again. Their limit of six plants was never rescaled when 1.2.0 cut plants
-  to a fifth of their size, so almost no rival could build after 1.2.0; the limit is now thirty.
-  Cautious rivals also enter a market when the corridor imports at least a full plant's worth,
-  and demand for goods is judged across the whole corridor, matching the commodity exchange. A
-  rival now drills oil in the corridor, which had always imported all its fuel.
-- Production is planned plant by plant. A firm's unsold stock in one good no longer cuts output
-  at its other plants, and stock it keeps as inputs for its own plants is not counted as unsold.
-- Supply contracts deliver only what the buyer can pay for in full, goods and freight together.
-  Before, a buyer short of cash still received the whole week's goods and the unpaid part went
-  onto its overdue bills while the seller was never paid for it. The rest now stays with the
-  seller to sell on the exchange.
-- Mothballed plants can reopen. Mothballing now releases the whole workforce whether the player
-  chooses it or an insurance catastrophe forces it; before, a catastrophe-mothballed plant kept
-  paying full wages with no output and no way back, which bankrupted the corridor's only iron
-  mine within months. Reopening costs 5 percent of the plant's capex and rehires through the
-  labour market. Rivals reopen when the output pays and the corridor is importing it. Each plant
-  row in the CEO office has Mothball and Reopen buttons.
 - Anonymous market analytics: every five game weeks the app posts the engine's
   market-balance snapshot (per good: made, sold, imported, exported, held, median asking price
   against reference, household spend; corridor health; the player company's results) with a
@@ -63,6 +36,20 @@ heading.
 
 ### Changed
 
+- Production is planned plant by plant. A firm's unsold stock in one good no longer cuts output
+  at its other plants, and stock it keeps as inputs for its own plants is not counted as unsold.
+- Interface overhaul from a design audit. Every main screen has a compact header with its action
+  beside the title instead of a large title and empty space, and scrolled content ends at a hard
+  edge under the tab bar instead of showing through it. CEO Office opens with a one-line identity,
+  company cash and the quarter's profit grouped in one panel, and a breakdown of where the
+  quarter's money went (revenue against inputs, wages, overheads, depreciation, interest and tax)
+  with the biggest driver named. Markets shows one line per good with a signal (imported, tight,
+  glut), sales and weeks of stock in words, filters for short supply, gluts and your own goods,
+  and detail and pricing on tap. Inbox lists decisions first and only the news there is; a quiet
+  week is one line. Portfolio leads with net worth and shows where company cash is heading.
+  Saving and analytics moved to a Game panel. Step week and Play are now Next week and
+  Auto-advance. The map's goal strip folded into the company panel, its legend is one line with
+  detail on tap, and the HUD shows quarterly profit instead of last week's EBIT.
 - The outside market quotes reference plus or minus 15 percent, up from 5, so domestic supply
   and demand set prices inside a real band.
 - Freight costs $0.03 a lot per kilometre, down from $0.10, so goods can travel between
@@ -73,6 +60,21 @@ heading.
 
 ### Fixed
 
+- Mothballed plants can reopen. Mothballing now releases the whole workforce whether the player
+  chooses it or an insurance catastrophe forces it; before, a catastrophe-mothballed plant kept
+  paying full wages with no output and no way back, which bankrupted the corridor's only iron
+  mine within months. Reopening costs 5 percent of the plant's capex and rehires through the
+  labour market. Rivals reopen when the output pays and the corridor is importing it. Each plant
+  row in the CEO office has Mothball and Reopen buttons.
+- Supply contracts deliver only what the buyer can pay for in full, goods and freight together.
+  Before, a buyer short of cash still received the whole week's goods and the unpaid part went
+  onto its overdue bills while the seller was never paid for it. The rest now stays with the
+  seller to sell on the exchange.
+- Rival companies grow again. Their limit of six plants was never rescaled when 1.2.0 cut plants
+  to a fifth of their size, so almost no rival could build after 1.2.0; the limit is now thirty.
+  Cautious rivals also enter a market when the corridor imports at least a full plant's worth,
+  and demand for goods is judged across the whole corridor, matching the commodity exchange. A
+  rival now drills oil in the corridor, which had always imported all its fuel.
 - Business purchases only cleared inside one region, so producers exported everything and
   buyers in other regions imported the same goods: the corridor barely traded with itself.
 - Imports took a share of every order by attractiveness even when cheaper local stock sat
@@ -325,7 +327,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v0.1.0...v1.0.0
