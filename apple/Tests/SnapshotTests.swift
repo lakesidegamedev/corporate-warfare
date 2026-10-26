@@ -46,6 +46,9 @@ final class SnapshotTests: XCTestCase {
         }
         render("ceo-phone", phone, compact: true, CEOOfficeView().environmentObject(store))
         render("ceo-pad", pad, compact: false, CEOOfficeView().environmentObject(store))
+        render("markets-phone", phone, compact: true, MarketsView().environmentObject(store))
+        render("markets-pad", pad, compact: false, MarketsView().environmentObject(store))
+        render("inbox-phone", phone, compact: true, InboxView().environmentObject(store))
         render("root-phone", phone, compact: true, RootView().environmentObject(store))
     }
 

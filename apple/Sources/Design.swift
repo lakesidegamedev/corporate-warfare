@@ -251,19 +251,15 @@ struct MetricTile: View {
 struct SectionCard<Content: View>: View {
     let title: String
     @ViewBuilder var content: Content
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(Theme.text(for: scheme))
-            content
+        Panel {
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow(text: title)
+                content
+            }
+            .foregroundStyle(Theme.primaryText)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Theme.surface(for: scheme))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
@@ -271,8 +267,8 @@ struct EmptyNote: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.body)
-            .foregroundStyle(.secondary)
+            .font(.callout)
+            .foregroundStyle(Theme.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

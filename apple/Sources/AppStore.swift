@@ -271,6 +271,7 @@ final class AppStore: ObservableObject {
     func selectRegion(_ code: String?) async {
         selectedRegionCode = code
         regions = await engine.regions(selected: code)
+        await loadMarkets()
     }
 
     // MARK: Lifecycle

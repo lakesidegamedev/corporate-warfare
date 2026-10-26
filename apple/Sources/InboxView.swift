@@ -16,8 +16,8 @@ struct InboxView: View {
                             EmptyNote(text: "No open decisions. Routine news is summarised with the quarterly report.")
                         } else {
                             ForEach(store.events, id: \.id) { event in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(event.title).font(.headline)
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(event.title).font(.headline).foregroundStyle(Theme.primaryText)
                                     Text(event.subject)
                                         .font(.caption)
                                         .foregroundStyle(Theme.secondaryText(for: scheme))
@@ -26,16 +26,24 @@ struct InboxView: View {
                                             .font(.caption2)
                                             .foregroundStyle(Theme.warning)
                                     }
-                                    HStack {
-                                        ForEach(event.choices, id: \.id) { choice in
-                                            Button(choice.label) {
-                                                Task { await store.respond(event: event.id, choice: choice.id) }
-                                            }
-                                            .buttonStyle(.bordered)
-                                            .font(.caption)
+                                    ForEach(event.choices, id: \.id) { choice in
+                                        Button {
+                                            Task { await store.respond(event: event.id, choice: choice.id) }
+                                        } label: {
+                                            Text(choice.label)
+                                                .font(.callout.weight(.medium))
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 9)
+                                                .foregroundStyle(Theme.primaryText)
+                                                .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
                                         }
+                                        .buttonStyle(.plain)
+                                        .disabled(store.isBusy)
                                     }
                                 }
+                                .padding(.vertical, 4)
                             }
                         }
                     }
@@ -46,13 +54,13 @@ struct InboxView: View {
                         } else {
                             ForEach(store.deals, id: \.handle) { deal in
                                 VStack(alignment: .leading) {
-                                    Text("\(deal.buyer) → \(deal.target)").font(.callout)
+                                    Text("\(deal.buyer) bids for \(deal.target)").font(.callout).foregroundStyle(Theme.primaryText)
                                     Text("\(deal.state.replacingOccurrences(of: "_", with: " ")) · offer \(Format.money(deal.offerPriceCents))/share")
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(Theme.secondary)
                                     Text("Escrow \(Format.money(deal.escrowCents)) · committed \(deal.committedShares.formatted()) shares")
                                         .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(Theme.secondary)
                                 }
                             }
                         }

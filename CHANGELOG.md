@@ -48,6 +48,8 @@ Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
   strength and programme, and every plant grouped by sector with utilisation, bottleneck and a
   retool flow.
 - UI snapshots of the main screens on iPhone and iPad, rendered in CI for review.
+- Markets is a commodity board for the selected state: goods grouped by sector, last price
+  against reference, weekly sales, local stock, gateway prices and import room.
 - Corporation setup at founding: headquarters state, primary sector, a named founding strategy
   and an optional secondary sector, set at founding without the refocus transition.
 
@@ -71,6 +73,7 @@ Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
   in glut toward strategies whose output is short.
 
 ### Fixed
+- Choosing a state on Markets now reloads its prices instead of keeping the previous state's.
 
 - Spot orders bought from the first out-of-state firm holding the good, which could strip a
   carrier of its own steel input; they now buy from the nearest producer.
