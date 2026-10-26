@@ -231,6 +231,8 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
                 }
                 if let Some(firm) = world.firms.get_mut(*seller) {
                     firm.issue_stock(electricity, region_index as u8, qty);
+                    // Power dispatched to the grid is a sale, for planning and the board.
+                    firm.record_sale(region_index as u8, electricity, qty);
                 }
             }
         }

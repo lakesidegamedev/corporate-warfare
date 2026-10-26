@@ -114,3 +114,44 @@ fn the_player_prices_automatically_until_setting_a_price_by_hand() {
     pricing::weekly(&mut world, &dataset);
     assert_eq!(world.firms.get(firm).unwrap().policies.prices[&food], next);
 }
+
+#[test]
+fn production_follows_stock_against_sales() {
+    let dataset = Dataset::load().unwrap();
+    let mut world = seed::build(&dataset, 57, ScenarioKind::Guided, ScenarioMode::Sandbox);
+    let firm = world.investor.primary_group.unwrap();
+    let food = dataset.product_index["food_raw"];
+    let region = world.firms.get(firm).unwrap().region;
+    let set_stock = |world: &mut World, lots: i64| {
+        let entity = world.firms.get_mut(firm).unwrap();
+        entity.inventory.retain(|(p, _), _| *p != food);
+        entity.stock_lot_mut(food, region).receive(
+            cw_core::quantity::MilliLots::from_lots(lots),
+            cw_core::money::Cents(0),
+        );
+    };
+    let entity = world.firms.get_mut(firm).unwrap();
+    entity.sales_history = vec![[((region, food), 100)].into_iter().collect(); 13];
+    entity.policies.production_target_bps = 10_000;
+    // Five weeks of stock: cut fifteen points.
+    set_stock(&mut world, 500);
+    assert_eq!(pricing::production_target(&world, &dataset, firm), 8_500);
+    // One week of stock at 85 percent: raise fifteen points back to full.
+    world
+        .firms
+        .get_mut(firm)
+        .unwrap()
+        .policies
+        .production_target_bps = 8_500;
+    set_stock(&mut world, 100);
+    assert_eq!(pricing::production_target(&world, &dataset, firm), 10_000);
+    // A deep glut stops at thirty percent.
+    world
+        .firms
+        .get_mut(firm)
+        .unwrap()
+        .policies
+        .production_target_bps = 3_500;
+    set_stock(&mut world, 5_000);
+    assert_eq!(pricing::production_target(&world, &dataset, firm), 3_000);
+}

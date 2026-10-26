@@ -55,6 +55,17 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
             continue;
         }
         urgent(world, dataset, handle, &mut proposals);
+        // Production follows sell-through every week, through the same command as the player.
+        let target = cw_sim::economy::pricing::production_target(world, dataset, handle);
+        if target != firm.policies.production_target_bps {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::SetProductionTarget {
+                    firm: handle,
+                    target_bps: target,
+                },
+            });
+        }
         if handle.slot() % 4 != cohort {
             continue;
         }

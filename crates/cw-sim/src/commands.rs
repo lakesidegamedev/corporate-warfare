@@ -99,6 +99,11 @@ pub enum CommandIntent {
         tier: u8,
         wage_cents: i64,
     },
+    /// Hand production planning back to (or take it from) the weekly sell-through rule.
+    SetAutoProduction {
+        firm: Handle,
+        enabled: bool,
+    },
     SetProductionTarget {
         firm: Handle,
         target_bps: i32,
@@ -374,6 +379,7 @@ impl CommandIntent {
             CommandIntent::SetPrice { .. } => "set_price",
             CommandIntent::SetWageOffer { .. } => "set_wage_offer",
             CommandIntent::SetProductionTarget { .. } => "set_production_target",
+            CommandIntent::SetAutoProduction { .. } => "set_auto_production",
             CommandIntent::SetMarketingBudget { .. } => "set_marketing_budget",
             CommandIntent::SetResearchBudget { .. } => "set_research_budget",
             CommandIntent::SetTrainingBudget { .. } => "set_training_budget",
@@ -1159,14 +1165,25 @@ fn apply_intent(
                     detail: ArithmeticFault::OutOfRange,
                 });
             }
-            let entity = world.firms.get_mut(*firm).unwrap();
-            entity.policies.production_target_bps = *target_bps;
-            let facilities = entity.facilities.clone();
-            for handle in facilities {
-                if let Some(facility) = world.facilities.get_mut(handle) {
-                    facility.target_bps = *target_bps;
-                }
+            crate::economy::pricing::set_target(world, *firm, *target_bps);
+            if actor == INVESTOR_ACTOR {
+                world
+                    .firms
+                    .get_mut(*firm)
+                    .unwrap()
+                    .policies
+                    .manual_production = true;
             }
+            Ok(())
+        }
+        CommandIntent::SetAutoProduction { firm, enabled } => {
+            require_control(world, actor, *firm)?;
+            world
+                .firms
+                .get_mut(*firm)
+                .unwrap()
+                .policies
+                .manual_production = !*enabled;
             Ok(())
         }
         CommandIntent::SetMarketingBudget { firm, amount_cents } => {
@@ -2548,6 +2565,10 @@ fn pay_construction_service(
                     .debit(Account::Cash, paid, memo)
                     .credit(Account::Revenue, paid, memo),
             );
+            // Construction ordered for a build is a sale, for planning and the board.
+            if let Some(service) = dataset.product_code("construction") {
+                firm.record_sale(region, service, MilliLots::from_lots(lots));
+            }
         }
         *world.construction_orders.entry(contractor).or_default() += lots;
         remaining -= paid;

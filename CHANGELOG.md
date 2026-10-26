@@ -18,6 +18,10 @@ heading.
   priced as delivered (asking price plus freight over the lane) and filled cheapest first, so
   domestic producers supply domestic plants and the outside market is the last resort. Buyers
   tied on one source share it in proportion. Exchange deliveries arrive within the week.
+- Production planning from sell-through, for rivals and (automatically, until set by hand)
+  the player's companies: more than four weeks of unsold stock cuts the target fifteen
+  points down to thirty percent, under a week and a half of stock raises it back toward full;
+  services follow sales against capacity. `SetAutoProduction` hands planning back.
 - Automatic pricing for the player's companies: every good they make follows the same
   sell-through rule as rivals each week unless the player sets its price by hand; a price of
   zero hands it back.
@@ -40,6 +44,8 @@ heading.
   unsold; goods now fill in merit order.
 - Rival pricing compared a quarter's sales with current stock, so anything that sold at all
   ratcheted to its cap and anything that did not slid toward half price.
+- Power dispatched to the grid and construction ordered for builds were not recorded as
+  sales.
 - Contract deliveries were not recorded as sales, so pricing, the market board and the AI saw
   contract sellers as selling nothing.
 
