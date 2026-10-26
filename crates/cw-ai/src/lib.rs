@@ -247,14 +247,16 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
     let reserve = reserve_target(world, firm);
     let mut candidates: Vec<Candidate> = Vec::new();
 
-    // Pricing: use actual last four weeks of sell-through. Benefit proxy: a year of the price
-    // change on the volume actually sold.
-    for (region, product) in entity
-        .last_week_units_sold
-        .keys()
-        .copied()
-        .collect::<Vec<_>>()
-    {
+    // Pricing: use actual trailing sell-through. Benefit proxy: a year of the price change on
+    // the volume actually sold. Rivals decide between ticks, when the open sales week is
+    // empty, so the markets come from the closed history: every market sold in during the
+    // trailing thirteen weeks, including one that has since stopped selling.
+    let markets: std::collections::BTreeSet<(u8, u16)> = entity
+        .sales_history
+        .iter()
+        .flat_map(|week| week.keys().copied())
+        .collect();
+    for (region, product) in markets {
         let sold = entity.trailing_units(region, product);
         let stock = entity.stock(product, region).lots();
         let price = entity

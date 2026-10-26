@@ -908,10 +908,9 @@ fn diagnose(arguments: &[String]) {
                 .map(|facility| facility.last_output.lots())
                 .sum();
             let sold: i64 = firm
-                .last_week_units_sold
-                .values()
-                .map(|qty| qty.lots())
-                .sum();
+                .last_closed_sales()
+                .map(|week| week.values().sum())
+                .unwrap_or(0);
             let staff: i32 = firm
                 .facilities
                 .iter()

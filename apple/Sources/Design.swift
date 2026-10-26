@@ -182,16 +182,17 @@ enum Format {
     }
 
     static func moneyCompact(_ cents: Int64) -> String {
-        let dollars = Double(cents) / 100.0
-        let magnitude = abs(dollars)
+        let magnitude = abs(Double(cents) / 100.0)
+        // The sign leads the currency symbol: -$21K, not $-21K.
+        let sign = cents < 0 ? "-" : ""
         if magnitude >= 1_000_000_000 {
-            return String(format: "$%.1fB", dollars / 1_000_000_000)
+            return sign + String(format: "$%.1fB", magnitude / 1_000_000_000)
         }
         if magnitude >= 1_000_000 {
-            return String(format: "$%.1fM", dollars / 1_000_000)
+            return sign + String(format: "$%.1fM", magnitude / 1_000_000)
         }
         if magnitude >= 10_000 {
-            return String(format: "$%.0fK", dollars / 1_000)
+            return sign + String(format: "$%.0fK", magnitude / 1_000)
         }
         return money(cents)
     }

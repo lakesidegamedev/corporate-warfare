@@ -251,6 +251,7 @@ pub struct EventDto {
 #[derive(uniffi::Record)]
 pub struct MarketDto {
     pub product: String,
+    pub product_id: String,
     pub reference_price_cents: i64,
     pub last_price_cents: i64,
     pub regional_stock_lots: i64,
@@ -1172,6 +1173,7 @@ impl SessionHandle {
         {
             cw_session::Detail::Market(row) => Some(MarketDto {
                 product: row.product,
+                product_id: row.product_id,
                 reference_price_cents: row.reference_price_cents,
                 last_price_cents: row.last_price_cents,
                 regional_stock_lots: row.regional_stock_lots,

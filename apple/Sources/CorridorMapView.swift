@@ -114,7 +114,12 @@ struct CorridorMapView: View {
 
     private func framing(in size: CGSize) -> Framing {
         let bounds = map.playBounds.isNull ? CGRect(origin: .zero, size: map.size) : map.playBounds.insetBy(dx: -150, dy: -150)
-        let fit = min(size.width / max(bounds.width, 1), size.height / max(bounds.height, 1))
+        // The eight states are wider than tall. A portrait phone fitting the whole width leaves
+        // most of the screen empty, so it frames the middle of the corridor at a readable size
+        // and the player pans east or west.
+        let portrait = size.height > size.width * 1.2
+        let widthShown = portrait ? bounds.width * 0.58 : bounds.width
+        let fit = min(size.width / max(widthShown, 1), size.height / max(bounds.height, 1))
         let scale = fit * zoom * pinch
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         return Framing(
@@ -145,8 +150,8 @@ struct CorridorMapView: View {
             let isSelected = state.code == selected
             context.stroke(path, with: .color(isSelected ? Theme.gold : Theme.secondary.opacity(0.7)), lineWidth: isSelected ? 3 : 1.2)
         }
-        drawCities(in: &context, frame: frame)
         drawMarkers(in: &context, frame: frame)
+        drawCities(in: &context, frame: frame)
         _ = hairline
     }
 
@@ -156,9 +161,17 @@ struct CorridorMapView: View {
             let point = frame.toScreen(CGPoint(x: city.x, y: city.y))
             let dot = CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5)
             context.fill(Path(ellipseIn: dot), with: .color(Theme.primaryText.opacity(0.85)))
+            // Labels sit above plant markers with an ink halo so a busy city stays readable.
+            let at = CGPoint(x: point.x + 6, y: point.y)
+            let halo = context.resolve(Text(city.name).font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.ink))
+            for dx in [-1.0, 1.0] {
+                for dy in [-1.0, 1.0] {
+                    context.draw(halo, at: CGPoint(x: at.x + dx, y: at.y + dy), anchor: .leading)
+                }
+            }
             context.draw(
-                Text(city.name).font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.primaryText.opacity(0.75)),
-                at: CGPoint(x: point.x + 5, y: point.y),
+                Text(city.name).font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.primaryText.opacity(0.9)),
+                at: at,
                 anchor: .leading
             )
         }
@@ -173,23 +186,40 @@ struct CorridorMapView: View {
             if anchors.isEmpty, let hub = map.hubs[code] { anchors = [hub] }
             guard !anchors.isEmpty else { continue }
             let radius: CGFloat = 9
-            for (index, plant) in plants.sorted(by: { $0.id < $1.id }).enumerated() {
-                let anchor = frame.toScreen(anchors[index % anchors.count])
-                let ring = index / anchors.count
-                let angle = Double(ring) * 1.9 + Double(index) * 0.7
-                let distance = CGFloat(ring) * radius * 1.9 + radius * 1.4
-                let center = CGPoint(x: anchor.x + CGFloat(cos(angle)) * distance, y: anchor.y + CGFloat(sin(angle)) * distance)
-                let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
-                context.fill(Path(ellipseIn: rect), with: .color(Sector.color(plant.sector)))
-                context.stroke(
-                    Path(ellipseIn: rect.insetBy(dx: -1.5, dy: -1.5)),
-                    with: .color(plant.player ? Theme.gold : Theme.ink),
-                    lineWidth: plant.player ? 3 : 1.5
-                )
-                var symbol = context.resolve(Image(systemName: Sector.symbol(plant.sector)))
-                symbol.shading = .color(Theme.ink)
-                context.draw(symbol, in: rect.insetBy(dx: 4.5, dy: 4.5))
+            // City labels run to the right of their dot, so plants fan out on the left half:
+            // three slots in the first ring, five in each wider ring.
+            let plantsByCity = Dictionary(grouping: plants.sorted(by: { $0.id < $1.id }).enumerated().map { $0 }) { $0.offset % anchors.count }
+            for (city, group) in plantsByCity {
+                for (slot, entry) in group.enumerated() {
+                    let anchor = frame.toScreen(anchors[city])
+                    let (ring, angle) = Self.slot(slot)
+                    let distance = radius * (2.2 + 2.1 * CGFloat(ring))
+                    let center = CGPoint(x: anchor.x + CGFloat(cos(angle)) * distance, y: anchor.y + CGFloat(sin(angle)) * distance)
+                    drawMarker(entry.element, at: center, radius: radius, in: &context)
+                }
             }
         }
+    }
+
+    /// Ring and angle for the n-th plant at one city, all on the side away from its label.
+    private static func slot(_ n: Int) -> (Int, Double) {
+        if n < 3 {
+            return (0, Double.pi * (2.0 / 3.0 + Double(n) / 3.0))
+        }
+        let k = n - 3
+        return (1 + k / 5, Double.pi * (0.5 + Double(k % 5) / 4.0))
+    }
+
+    private func drawMarker(_ plant: MapMarker, at center: CGPoint, radius: CGFloat, in context: inout GraphicsContext) {
+        let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+        context.fill(Path(ellipseIn: rect), with: .color(Sector.color(plant.sector)))
+        context.stroke(
+            Path(ellipseIn: rect.insetBy(dx: -1.5, dy: -1.5)),
+            with: .color(plant.player ? Theme.gold : Theme.ink),
+            lineWidth: plant.player ? 3 : 1.5
+        )
+        var symbol = context.resolve(Image(systemName: Sector.symbol(plant.sector)))
+        symbol.shading = .color(Theme.ink)
+        context.draw(symbol, in: rect.insetBy(dx: 4.5, dy: 4.5))
     }
 }

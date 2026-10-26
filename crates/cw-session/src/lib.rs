@@ -1093,6 +1093,93 @@ mod tests {
     }
 
     #[test]
+    fn the_market_board_reports_every_firm_selling_in_a_state() {
+        let mut session = Session::create(config(175)).unwrap();
+        session.advance(8);
+        assert!(session.world.tick.0 >= 4, "the career advanced");
+        // A plant whose firm is headquartered in another state still trades where it sits.
+        // Move a selling plant's headquarters to another state to prove it.
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let (firm, region, recipe) = world
+            .facilities
+            .iter()
+            .find_map(|(_, facility)| {
+                let code = dataset.product_index
+                    [dataset.recipes[facility.recipe as usize].output.as_str()];
+                let owner = world.firms.get(facility.firm)?;
+                let sold = owner
+                    .last_closed_sales()
+                    .and_then(|week| week.get(&(facility.region, code)).copied())
+                    .unwrap_or(0);
+                (sold > 0).then_some((facility.firm, facility.region, facility.recipe))
+            })
+            .expect("some plant sold its output last week");
+        let regions = world.regions.len() as u8;
+        session.world.firms.get_mut(firm).unwrap().region = (region + 1) % regions;
+        let output =
+            session.dataset.product_index[session.dataset.recipes[recipe as usize].output.as_str()];
+        let line = match session.query(Query::Market(region, output)) {
+            Detail::Market(line) => line,
+            _ => panic!("market query answers"),
+        };
+        assert_eq!(
+            line.product_id,
+            session.dataset.recipes[recipe as usize].output
+        );
+        assert!(
+            line.last_week_sales_lots + line.regional_stock_lots > 0,
+            "an out-of-state producer's sales or stock show on the board"
+        );
+        let selling = (0..regions).any(|region| {
+            (0..session.dataset.products.len() as u16).any(|product| {
+                matches!(session.query(Query::Market(region, product)),
+                    Detail::Market(line) if line.last_week_sales_lots > 0)
+            })
+        });
+        assert!(
+            selling,
+            "between ticks the board reads the last closed week, not an empty one"
+        );
+    }
+
+    #[test]
+    fn rivals_reprice_from_their_sales_history() {
+        let mut session = Session::create(config(177)).unwrap();
+        let before: Vec<_> = session
+            .world
+            .firms
+            .iter()
+            .map(|(handle, firm)| (handle, firm.policies.prices.clone()))
+            .collect();
+        session.advance(16);
+        let moved = before.iter().any(|(handle, prices)| {
+            !cw_ai::player_controlled(&session.world, *handle)
+                && session
+                    .world
+                    .firms
+                    .get(*handle)
+                    .is_some_and(|firm| firm.policies.prices != *prices)
+        });
+        assert!(
+            moved,
+            "some rival changed a price after four months of trading"
+        );
+    }
+
+    #[test]
+    fn sales_in_one_market_accumulate_across_fills() {
+        let mut session = Session::create(config(176)).unwrap();
+        let (handle, _) = session.world.firms.iter().next().unwrap();
+        let firm = session.world.firms.get_mut(handle).unwrap();
+        firm.last_week_units_sold.clear();
+        firm.record_sale(0, 1, cw_core::quantity::MilliLots::from_lots(3));
+        firm.record_sale(0, 1, cw_core::quantity::MilliLots::from_lots(4));
+        firm.close_sales_week();
+        assert_eq!(firm.last_closed_sales().unwrap().get(&(0, 1)), Some(&7));
+    }
+
+    #[test]
     fn advancing_produces_a_new_week_and_a_receipt() {
         let mut session = Session::create(config(172)).unwrap();
         let result = session.advance(4);
@@ -1284,7 +1371,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "2ca55a9baa516b1d3350be0673632e3373355fa53f67c3093e43d896e6f1abef"
+            "21fa907c27e349c062075ad02b07a94cf6969ef8c2c1561b3acbee2f7d75e7fb"
         );
     }
 
@@ -1369,8 +1456,17 @@ mod tests {
         assert!((0..=100).contains(&score.total));
         // Continuing from the score sheet is an ordinary advance, not a new career.
         session.dismiss_pause();
-        let continued = session.advance(4);
-        assert_eq!(continued.weeks_advanced, 4);
+        // An event card can pause the continued career too; answering it is ordinary play.
+        let mut weeks = 0;
+        for _ in 0..8 {
+            weeks += session.advance(4 - weeks).weeks_advanced;
+            if weeks >= 4 {
+                break;
+            }
+            answer_cards(&mut session);
+            session.dismiss_pause();
+        }
+        assert_eq!(weeks, 4);
         assert_eq!(session.world.tick.0, 264);
         assert!(session.world.score.is_some(), "the recorded score is kept");
     }

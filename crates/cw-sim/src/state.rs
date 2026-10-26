@@ -613,6 +613,22 @@ impl Firm {
         self.stock_lot_mut(product, region).issue(take, &mut carry)
     }
 
+    /// Add one fill to this week's unit sales. A firm can sell the same good in one state to
+    /// households, businesses, government and the gateway in a single week; every fill counts.
+    pub fn record_sale(&mut self, region: u8, product: u16, qty: MilliLots) {
+        let entry = self
+            .last_week_units_sold
+            .entry((region, product))
+            .or_insert(MilliLots::ZERO);
+        *entry = entry.checked_add(qty).unwrap_or(*entry);
+    }
+
+    /// Unit sales of the last closed week. Outside a tick the open week is empty, so readers
+    /// between ticks (reports, rival AI) use this.
+    pub fn last_closed_sales(&self) -> Option<&BTreeMap<(u8, u16), i64>> {
+        self.sales_history.last()
+    }
+
     /// Trailing thirteen-week unit sales in one regional product market.
     pub fn trailing_units(&self, region: u8, product: u16) -> i64 {
         self.sales_history

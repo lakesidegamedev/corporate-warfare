@@ -21,8 +21,9 @@ struct MarketsView: View {
     private var groups: [BoardGroup] {
         let sectors = sectorOfProduct
         var bySector: [String: [AppStore.MarketRow]] = [:]
-        for row in store.marketRows {
-            let sector = row.market.flatMap { sectors[$0.product] } ?? "other"
+        // Financial balances such as bank deposits carry no price and are not traded goods.
+        for row in store.marketRows where row.product.referencePriceCents > 0 {
+            let sector = row.market.flatMap { sectors[$0.productId] } ?? "other"
             bySector[sector, default: []].append(row)
         }
         return (Sector.order + ["other"]).compactMap { sector in
@@ -105,7 +106,7 @@ struct MarketsView: View {
     }
 
     private func room(for row: AppStore.MarketRow) -> RoomDto? {
-        guard let id = row.market?.product else { return nil }
+        guard let id = row.market?.productId else { return nil }
         return state?.room.first { $0.product == id }
     }
 }
@@ -150,7 +151,8 @@ private struct BoardRow: View {
             }
             HStack(spacing: 10) {
                 Text("Stock \(Format.lots(row.market?.regionalStockLots ?? 0))")
-                if let market = row.market {
+                // Services cannot cross a state line, so they have no gateway quote.
+                if let market = row.market, market.gatewaySellCents > 0 {
                     Text("Import \(Format.money(market.gatewaySellCents)) · export \(Format.money(market.gatewayBuyCents))")
                 }
                 if let room {

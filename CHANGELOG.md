@@ -48,6 +48,10 @@ Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
   strength and programme, and every plant grouped by sector with utilisation, bottleneck and a
   retool flow.
 - UI snapshots of the main screens on iPhone and iPad, rendered in CI for review.
+- On a portrait phone the map frames the middle of the corridor at a readable size instead
+  of fitting all eight states into a strip. City labels draw above plant markers with a
+  halo, and plants fan out on the side away from the label. The map header keeps the
+  company name on its own line when the figures do not fit beside it.
 - Markets is a commodity board for the selected state: goods grouped by sector, last price
   against reference, weekly sales, local stock, gateway prices and import room.
 - Corporation setup at founding: headquarters state, primary sector, a named founding strategy
@@ -74,6 +78,16 @@ Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
 
 ### Fixed
 
+- Every sale overwrote the week's unit sales for that good and state instead of adding to
+  them, so a firm selling to households and then exporting recorded only the last fill.
+- Rival pricing read the open sales week, which is empty between ticks, so rivals never
+  repriced. It now reads the trailing thirteen weeks of closed sales.
+- The market board counted only firms headquartered in a state, read the empty open week for
+  sales, and showed reference price for every producer good. It now counts every firm's
+  stock and sales where the goods sit, and quotes the lowest local ask, capped at the import
+  price, for goods households do not buy.
+- Negative compact amounts read "$-21K"; they now read "-$21K".
+- "Washington,  D.C." lost its double space on the map.
 - UI snapshots attach to the app's window scene; detached windows rendered blank, and the
   snapshot test now fails on a blank image.
 - The map's zoom reset and board panel honour Reduce Motion.

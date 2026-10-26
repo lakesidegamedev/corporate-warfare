@@ -101,44 +101,71 @@ struct CompanyHUD: View {
     @EnvironmentObject private var store: AppStore
 
     var body: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Eyebrow(text: store.overview?.weekLabel ?? "")
-                Text(store.overview?.primaryName.isEmpty == false ? store.overview!.primaryName : "No company yet")
-                    .font(.headline)
-                    .foregroundStyle(Theme.primaryText)
-                    .lineLimit(1)
+        // One row where it fits; on a phone the name keeps its own line above the figures.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) {
+                title
+                Spacer(minLength: 8)
+                figures
+                controls
             }
-            Spacer(minLength: 8)
-            HUDFigure(label: "Cash", value: Format.moneyCompact(store.overview?.firmCashCents ?? 0))
-            HUDFigure(
-                label: "EBIT/wk",
-                value: Format.moneyCompact(store.overview?.lastWeekEbitCents ?? 0),
-                tone: (store.overview?.lastWeekEbitCents ?? 0) >= 0 ? Theme.positive : Theme.negative
-            )
-            HStack(spacing: 6) {
-                Button {
-                    Task { await store.advance(weeks: 1) }
-                } label: {
-                    Image(systemName: "forward.frame.fill")
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    title
+                    Spacer(minLength: 8)
+                    controls
                 }
-                .accessibilityLabel("Step one week")
-                Button {
-                    store.toggleRun()
-                } label: {
-                    Image(systemName: store.runSpeed > 0 ? "pause.fill" : "play.fill")
+                HStack(spacing: 18) {
+                    figures
+                    Spacer(minLength: 0)
                 }
-                .accessibilityLabel(store.runSpeed > 0 ? "Pause" : "Play")
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.gold)
-            .foregroundStyle(Theme.ink)
-            .disabled(store.isBusy)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+    }
+
+    private var title: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Eyebrow(text: store.overview?.weekLabel ?? "")
+            Text(store.overview?.primaryName.isEmpty == false ? store.overview!.primaryName : "No company yet")
+                .font(.headline)
+                .foregroundStyle(Theme.primaryText)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
+    @ViewBuilder private var figures: some View {
+        HUDFigure(label: "Cash", value: Format.moneyCompact(store.overview?.firmCashCents ?? 0))
+        HUDFigure(
+            label: "EBIT/wk",
+            value: Format.moneyCompact(store.overview?.lastWeekEbitCents ?? 0),
+            tone: (store.overview?.lastWeekEbitCents ?? 0) >= 0 ? Theme.positive : Theme.negative
+        )
+    }
+
+    private var controls: some View {
+        HStack(spacing: 6) {
+            Button {
+                Task { await store.advance(weeks: 1) }
+            } label: {
+                Image(systemName: "forward.frame.fill")
+            }
+            .accessibilityLabel("Step one week")
+            Button {
+                store.toggleRun()
+            } label: {
+                Image(systemName: store.runSpeed > 0 ? "pause.fill" : "play.fill")
+            }
+            .accessibilityLabel(store.runSpeed > 0 ? "Pause" : "Play")
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Theme.gold)
+        .foregroundStyle(Theme.ink)
+        .disabled(store.isBusy)
     }
 }
 

@@ -129,7 +129,7 @@ def main(source, output):
             continue
         region = p.get("ADM1NAME") or ""
         cities.append({
-            "name": p["NAME"],
+            "name": " ".join(p["NAME"].split()),
             "region": region,
             "country": p.get("ADM0_A3"),
             "x": px,

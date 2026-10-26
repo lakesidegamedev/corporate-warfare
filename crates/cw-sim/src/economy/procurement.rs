@@ -146,9 +146,7 @@ pub fn settle(world: &mut World, dataset: &Dataset) {
                 .map(|firm| firm.issue_stock(product, procurement.region, delivered).0)
                 .unwrap_or(0);
             if let Some(supplier) = world.firms.get_mut(procurement.supplier) {
-                supplier
-                    .last_week_units_sold
-                    .insert((procurement.region, product), delivered);
+                supplier.record_sale(procurement.region, product, delivered);
                 let _ = supplier.book.commit(
                     world.tick,
                     Txn::new()

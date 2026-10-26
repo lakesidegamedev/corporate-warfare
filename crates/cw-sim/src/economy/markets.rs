@@ -227,8 +227,7 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
                         .credit(Account::Inventory, carrying, "public works cogs")
                         .debit(Account::CostOfGoods, carrying, "public works cogs"),
                 );
-                firm.last_week_units_sold
-                    .insert((region as u8, service), qty);
+                firm.record_sale(region as u8, service, qty);
             }
             let _ = world.outside.gateway_book.commit(
                 world.tick,
@@ -452,7 +451,7 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
                     .credit(Account::Inventory, carrying, "export cogs")
                     .debit(Account::CostOfGoods, carrying, "export cogs"),
             );
-            firm.last_week_units_sold.insert((region, product), qty);
+            firm.record_sale(region, product, qty);
         }
         let _ = world.outside.gateway_book.commit(
             world.tick,
@@ -724,9 +723,7 @@ fn settle_fills(
                     cost,
                 ) && let Some(seller_firm) = world.firms.get_mut(seller_handle)
                 {
-                    seller_firm
-                        .last_week_units_sold
-                        .insert((region, product), qty);
+                    seller_firm.record_sale(region, product, qty);
                 }
             }
             OfferSource::Gateway(index) => {
@@ -811,7 +808,7 @@ fn settle_household_fills(
                         .credit(Account::Inventory, carrying, "cogs")
                         .debit(Account::CostOfGoods, carrying, "cogs"),
                 );
-                firm.last_week_units_sold.insert((region, product), qty);
+                firm.record_sale(region, product, qty);
             }
             spent += cost.0;
         }
@@ -874,7 +871,7 @@ fn settle_government_fills(
                         .debit(Account::CostOfGoods, carrying, "cogs"),
                 );
                 // Procurement is a real sale and belongs in the unit-sales record.
-                firm.last_week_units_sold.insert((region, product), qty);
+                firm.record_sale(region, product, qty);
             }
             spent += paid;
         }
