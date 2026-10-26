@@ -11,8 +11,8 @@ heading.
 
 ## [Unreleased]
 
-Planned as **2.0.0**: single-player A House Divided corporations on a real map of the Great
-Lakes and Ohio Valley.
+Planned as **1.1.0**: single-player A House Divided corporations on a real map of the Great
+Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
 
 ### Added
 

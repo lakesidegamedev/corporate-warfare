@@ -349,7 +349,7 @@ estimates. No county rows, BEA crosswalk or historical observation is claimed. R
 are evaluated against this approved authored scheme, with the limitation visible in the data,
 evidence and store copy.
 
-### Owner direction for 2.0.0: single-player AHD corporations on a real map, 2026-10-26
+### Owner direction for 1.1.0: single-player AHD corporations on a real map, 2026-10-26
 
 The owner judged 1.0.0 to read as an operations app rather than an economic strategy game, and
 directed a redesign: Corporate Warfare should play as single-player A House Divided
@@ -364,7 +364,7 @@ rich, real map. Decisions, all owner-confirmed:
 4. A real map (geography, not satellite imagery), bundled and offline.
 5. Target iPhone and iPad with SwiftUI now; other platforms later.
 6. Versioning: patch for minor updates, minor for big features, major for wide releases. The
-   redesign ships as 2.0.0.
+   owner set this redesign at 1.1.0 (2026-10-26).
 
 The AHD margin modifiers become physical effects in this engine: sector focus changes input use
 and adds a coordination overhead, and state conditions change output, freight cost and
