@@ -58,6 +58,8 @@ Planned as **1.2.0**: economic regions, sector divisions and corporate warfare. 
   divide by five, and seeded companies hold five times the plants, so the economy keeps its
   capacity. A farm plant costs $400,000 instead of $2,000,000 and opening a division with a
   founding plant about $300,000. Standard strategies keep their calibrated margins.
+- Sprawl counts divisions, as in A House Divided's per-sector rule, instead of plant sites:
+  adding plants to a division you already run never sprawls.
 - Plants managed from outside the home region pay 2.5 percent more for inputs, outside the
   home state 5 percent.
 - Services that reach customers statewide (software, telecom, advertising, research,

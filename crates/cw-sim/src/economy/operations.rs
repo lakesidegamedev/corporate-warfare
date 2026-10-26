@@ -263,8 +263,11 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
                 shrinkage += value * rate / 10_000;
             }
         }
+        // Sprawl counts divisions (sector types run in a region), as in A House Divided's
+        // per-sector rule: adding plants to an existing division never sprawls.
         let (threshold, slope) = sprawl_terms(strength, has_secondary);
-        let over = (plants.len() as i64 - threshold).max(0);
+        let divisions = crate::economy::sectors::divisions_of(world, dataset, firm).len() as i64;
+        let over = (divisions - threshold).max(0);
         let sprawl = revenue * (over / 2) * slope / 10_000;
 
         pay_outside(world, firm, overhead, "coordination overhead");

@@ -642,6 +642,8 @@ pub struct FirmOpsDto {
     pub logistics_strength: i32,
     pub logistics_budget_cents: i64,
     pub plants: u32,
+    /// Divisions run; sprawl applies past the threshold.
+    pub divisions: u32,
     pub sprawl_threshold: u32,
 }
 
@@ -1603,6 +1605,12 @@ impl SessionHandle {
             logistics_strength: entity.logistics_strength,
             logistics_budget_cents: entity.policies.logistics_budget_cents,
             plants: entity.facilities.len() as u32,
+            divisions: cw_sim::economy::sectors::divisions_of(
+                world,
+                &session.dataset,
+                cw_core::ids::Handle(firm),
+            )
+            .len() as u32,
             sprawl_threshold: threshold as u32,
         })
     }

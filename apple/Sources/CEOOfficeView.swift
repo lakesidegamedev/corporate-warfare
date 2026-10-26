@@ -138,7 +138,7 @@ struct CEOOfficeView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Eyebrow(text: "Logistics strength")
                             ProgressView(value: Double(ops.logisticsStrength), total: 200).tint(Theme.gold)
-                            Text("\(ops.logisticsStrength) of 200 · sprawl starts after \(ops.sprawlThreshold) plants (you run \(ops.plants))")
+                            Text("\(ops.logisticsStrength) of 200 · sprawl starts after \(ops.sprawlThreshold) divisions (you run \(ops.divisions))")
                                 .font(.caption).foregroundStyle(Theme.secondary)
                         }
                         Menu {
@@ -371,7 +371,7 @@ struct FocusSheet: View {
                     ForEach(sectors.filter { $0 != primary }, id: \.self) { Text(Sector.name($0)).tag($0) }
                 }
                 Section {
-                    Text("A change costs 5% of every plant's payroll for four weeks and locks focus for eight. A secondary type doubles the sprawl penalty beyond the plant threshold.")
+                    Text("A change costs 5% of every plant's payroll for four weeks and locks focus for eight. A secondary type doubles the sprawl penalty beyond the division threshold.")
                         .font(.caption).foregroundStyle(Theme.secondary)
                 }
             }
