@@ -34,6 +34,14 @@ heading.
   Regions keeps each region's board.
 - The engine keeps a year of weekly closing prices for every good and share.
 
+### Fixed
+
+- Company valuations used one quarter's EBITDA from week thirteen on instead of a year's, so
+  every fair value fell to about a quarter of the rule (six times annual EBITDA) once a full
+  quarter had closed. Opening share prices now reflect each company's expected plant earnings
+  instead of the book floor alone, so shares no longer all climb in step at the weekly limit over
+  the first quarter. Share prices show cents, and a P/E above 200 shows as n/m.
+
 ## [1.3.1] - 2026-10-26
 
 ### Added

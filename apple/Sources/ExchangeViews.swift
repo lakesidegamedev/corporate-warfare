@@ -216,7 +216,7 @@ private struct StockRow: View {
             Sparkline(values: stock.historyCents, tint: Change.tint(stock.changeQuarterBps))
                 .frame(width: 54, height: 22)
             VStack(alignment: .trailing, spacing: 2) {
-                Text(Format.money(stock.priceCents)).font(.callout.weight(.semibold).monospacedDigit()).foregroundStyle(Theme.primaryText)
+                Text(Format.price(stock.priceCents)).font(.callout.weight(.semibold).monospacedDigit()).foregroundStyle(Theme.primaryText)
                 SignalPill(text: Change.text(stock.changeWeekBps), tint: Change.tint(stock.changeWeekBps))
             }
         }
@@ -242,7 +242,9 @@ struct StockSheet: View {
 
     private var priceEarnings: String {
         guard let earnings = annualEarnings, earnings > 0 else { return "Loss" }
-        return String(format: "%.1f", Double(stock.marketCapCents) / Double(earnings))
+        let ratio = Double(stock.marketCapCents) / Double(earnings)
+        // Thin early earnings make the ratio meaningless rather than informative.
+        return ratio > 200 ? "n/m" : String(format: "%.1f", ratio)
     }
 
     var body: some View {
@@ -250,13 +252,13 @@ struct StockSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     StatGroup(
-                        headline: Stat(label: "Share price", value: Format.money(stock.priceCents),
+                        headline: Stat(label: "Share price", value: Format.price(stock.priceCents),
                                        note: "\(Change.text(stock.changeWeekBps)) this week"),
                         stats: [
                             Stat(label: "Quarter", value: Change.text(stock.changeQuarterBps), tone: Change.tint(stock.changeQuarterBps)),
                             Stat(label: "Market cap", value: Format.moneyCompact(stock.marketCapCents)),
                             Stat(label: "P/E", value: priceEarnings),
-                            Stat(label: "Fair value", value: Format.money(stock.fairCents)),
+                            Stat(label: "Fair value", value: Format.price(stock.fairCents)),
                             Stat(label: "Free float", value: Format.percentBps(Int32(clamping: stock.floatBps))),
                             Stat(label: "You hold", value: stock.yourShares.formatted(),
                                  note: Format.moneyCompact(stock.yourShares * stock.priceCents)),
