@@ -40,6 +40,7 @@ struct MapMarker: Identifiable {
 /// The real map of the Great Lakes and Ohio Valley, drawn from bundled public-domain geometry
 /// with pan, pinch zoom and tap-to-select. Shading, markers and selection come from the caller.
 struct CorridorMapView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let shading: [String: Double]
     let layer: MapLayer
     let markers: [MapMarker]
@@ -74,7 +75,7 @@ struct CorridorMapView: View {
                 )
             )
             .onTapGesture(count: 2) {
-                withAnimation(.easeOut(duration: 0.25)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
                     zoom = 1
                     pan = .zero
                 }

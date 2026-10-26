@@ -5,6 +5,7 @@ import SwiftUI
 struct MapHomeView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var layer: MapLayer = .presence
     @State private var selected: String?
     @State private var building: String?
@@ -36,7 +37,7 @@ struct MapHomeView: View {
             .padding(.trailing, wide && selected != nil ? 380 : 0)
         }
         .background(Theme.ink)
-        .animation(.easeOut(duration: 0.2), value: selected)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: selected)
         .sheet(item: compactSelection) { item in
             if let state = store.states.first(where: { $0.code == item.id }) {
                 StateBoardView(state: state, onBuild: { building = item.id }, onClose: { selected = nil })

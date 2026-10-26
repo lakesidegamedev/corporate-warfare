@@ -7,7 +7,7 @@ coefficient, or that calibrated prices are real measurements.
 
 Order: [markets and weekly settlement](MARKETS.md), [corporate state machines](CORPORATE.md),
 [finance, labour, policy and AI](FINANCE-LABOUR-AI.md), [content and pacing](CONTENT-PACING.md),
-[session/commands/phone flows](INTERFACE.md), and [exact event deck](EVENTS.md), and [phone visual specification](VISUAL.md). Machine-readable initial parameters:
+[session/commands/phone flows](INTERFACE.md), and [exact event deck](EVENTS.md), and [visual specification](VISUAL.md). Machine-readable initial parameters:
 [initial-balance.json](../../content/initial-balance.json). Execution checklist:
 [execution.json](../planning/execution.json).
 

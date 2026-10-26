@@ -59,7 +59,11 @@ final class SnapshotTests: XCTestCase {
             .frame(width: size.width, height: size.height)
         let host = UIHostingController(rootView: root)
         host.overrideUserInterfaceStyle = .dark
-        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        // A window outside a scene is never drawn on iOS 13 and later; attach it to the test
+        // host's scene or every snapshot comes back blank.
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow()
+        window.frame = CGRect(origin: .zero, size: size)
         window.rootViewController = host
         window.makeKeyAndVisible()
         host.view.frame = window.bounds
@@ -71,6 +75,7 @@ final class SnapshotTests: XCTestCase {
         guard let data = image.pngData() else {
             return XCTFail("snapshot \(name) did not encode")
         }
+        XCTAssertGreaterThan(distinctShades(image), 8, "snapshot \(name) rendered a blank image")
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("cw-snapshot-\(name).png")
         try? data.write(to: url)
         let attachment = XCTAttachment(image: image)
@@ -78,5 +83,18 @@ final class SnapshotTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         window.isHidden = true
+    }
+
+    /// Distinct grey levels across a coarse grid of samples. A blank or unrendered window has one.
+    private func distinctShades(_ image: UIImage) -> Int {
+        guard let cg = image.cgImage else { return 0 }
+        let side = 48
+        var pixels = [UInt8](repeating: 0, count: side * side)
+        guard let context = CGContext(
+            data: &pixels, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side,
+            space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else { return 0 }
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: side, height: side))
+        return Set(pixels).count
     }
 }

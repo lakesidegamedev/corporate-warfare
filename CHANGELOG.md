@@ -74,6 +74,9 @@ Lakes and Ohio Valley. Saves from 1.0.0 do not load in this release.
 
 ### Fixed
 
+- UI snapshots attach to the app's window scene; detached windows rendered blank, and the
+  snapshot test now fails on a blank image.
+- The map's zoom reset and board panel honour Reduce Motion.
 - Choosing a state on Markets now reloads its prices instead of keeping the previous state's.
 - Spot orders bought from the first out-of-state firm holding the good, which could strip a
   carrier of its own steel input; they now buy from the nearest producer.

@@ -18,7 +18,7 @@ struct MarketsView: View {
         return map
     }
 
-    private var groups: [(sector: String, rows: [AppStore.MarketRow])] {
+    private var groups: [BoardGroup] {
         let sectors = sectorOfProduct
         var bySector: [String: [AppStore.MarketRow]] = [:]
         for row in store.marketRows {
@@ -27,7 +27,7 @@ struct MarketsView: View {
         }
         return (Sector.order + ["other"]).compactMap { sector in
             guard let rows = bySector[sector], !rows.isEmpty else { return nil }
-            return (sector, rows.sorted { $0.product.name < $1.product.name })
+            return BoardGroup(sector: sector, rows: rows.sorted { $0.product.name < $1.product.name })
         }
     }
 
@@ -40,7 +40,7 @@ struct MarketsView: View {
                         Text("\(state.name) clears every good weekly. Prices are per lot. Services expire each week and cannot be stockpiled.")
                             .font(.caption).foregroundStyle(Theme.secondary)
                     }
-                    ForEach(groups, id: \.sector) { group in
+                    ForEach(groups) { group in
                         Panel {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(spacing: 8) {
@@ -108,6 +108,12 @@ struct MarketsView: View {
         guard let id = row.market?.product else { return nil }
         return state?.room.first { $0.product == id }
     }
+}
+
+private struct BoardGroup: Identifiable {
+    let sector: String
+    let rows: [AppStore.MarketRow]
+    var id: String { sector }
 }
 
 private struct BoardRow: View {
