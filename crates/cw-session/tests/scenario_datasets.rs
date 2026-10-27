@@ -326,7 +326,8 @@ fn silicon_valley_opens_solvent_and_keeps_the_player_company_alive() {
 fn silicon_valley_posts_go_to_the_california_cast_first() {
     let session = run_answering(2, "silicon-valley-1995", 1);
     let ds = &session.dataset;
-    let home = |p: cw_sim::economy::cast::PersonId| ds.cast[p as usize].scenario == "silicon-valley-1995";
+    let home =
+        |p: cw_sim::economy::cast::PersonId| ds.cast[p as usize].scenario == "silicon-valley-1995";
     let in_post = |p: Option<cw_sim::economy::cast::PersonId>| p.is_some_and(home);
     let ceos = session
         .world
