@@ -72,7 +72,9 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::economy::policy::weekly(world);
     crate::economy::research::weekly(world, dataset);
     crate::economy::production::expire_services(world, dataset);
+    crate::economy::storage::weekly(world, dataset);
     crate::economy::production::spoil_perishables(world, dataset);
+    crate::economy::storage::close_week(world);
     crate::economy::equity::refresh_valuation(world, dataset);
     crate::economy::equity::clear_exchange(world, dataset);
     crate::economy::world_prices::weekly(world);

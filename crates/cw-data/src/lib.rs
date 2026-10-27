@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 use cw_core::hash::{CanonicalHasher, DOMAIN_STATE};
 use serde::{Deserialize, Serialize};
 
-pub use balance::{Balance, Product, ProductKind, Recipe};
+pub use balance::{Balance, Product, ProductKind, Recipe, StorageClass};
 pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetting};
 pub use events::EventCard;
 pub use firms::{Archetype, ExtraPlant, SeedFirm};
@@ -309,6 +309,21 @@ impl Dataset {
                     ));
                 }
             }
+            if recipe.storage_class.is_some() {
+                let space = self
+                    .product_index
+                    .get(&recipe.output)
+                    .map(|i| &self.products[*i as usize]);
+                if recipe.industry != "logistics"
+                    || !recipe.by_products.is_empty()
+                    || !space.is_some_and(|p| p.kind.is_service())
+                {
+                    errors.push(format!(
+                        "storage recipe {} must be a logistics service with no by-products",
+                        recipe.id
+                    ));
+                }
+            }
             for input in recipe.weekly_inputs_lots.keys() {
                 if !self.product_index.contains_key(input) {
                     errors.push(format!("recipe {} input {} is unknown", recipe.id, input));
@@ -498,6 +513,13 @@ impl Dataset {
             .map(|index| &self.regions[*index as usize])
     }
 
+    /// The store a good needs, or None for services and financial contracts, which are never held.
+    pub fn storage_class_of(&self, product: u16) -> Option<StorageClass> {
+        let product = &self.products[product as usize];
+        (!product.kind.is_service() && !product.kind.is_financial())
+            .then_some(product.storage_class)
+    }
+
     pub fn reference_price(&self, product: u16) -> i64 {
         self.products[product as usize].reference_price_cents
     }
@@ -514,7 +536,9 @@ impl Dataset {
                 .string(&product.id)
                 .u8(product.kind.code())
                 .i64(product.reference_price_cents)
-                .u32(product.spoilage_bps_weekly);
+                .u32(product.spoilage_bps_weekly)
+                .u8(product.storage_class.code())
+                .u32(product.holding_bps_weekly);
         }
         for recipe in &self.recipes {
             hasher
@@ -524,7 +548,8 @@ impl Dataset {
                 .i64(recipe.weekly_output_lots)
                 .i64(recipe.capex_cents)
                 .u32(recipe.build_weeks)
-                .u32(recipe.life_years);
+                .u32(recipe.life_years)
+                .u8(recipe.storage_class.map(|c| c.code() + 1).unwrap_or(0));
             for (input, quantity) in &recipe.weekly_inputs_lots {
                 hasher.string(input).i64(*quantity);
             }
@@ -630,8 +655,8 @@ mod tests {
     #[test]
     fn pinned_dataset_loads_and_validates() {
         let dataset = Dataset::load().expect("dataset must validate");
-        assert_eq!(dataset.products.len(), 43);
-        assert_eq!(dataset.recipes.len(), 60);
+        assert_eq!(dataset.products.len(), 44);
+        assert_eq!(dataset.recipes.len(), 64);
         assert_eq!(dataset.regions.len(), 31);
         assert_eq!(dataset.states.len(), 8);
         assert_eq!(dataset.events.len(), 24);

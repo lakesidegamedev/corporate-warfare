@@ -376,6 +376,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
             sales_history: Vec::new(),
             quality_bps: BTreeMap::new(),
             intercompany_inventory: BTreeMap::new(),
+            storage: Default::default(),
         };
 
         if is_financial {
@@ -596,6 +597,7 @@ fn placeholder_firm() -> Firm {
         sales_history: Vec::new(),
         quality_bps: BTreeMap::new(),
         intercompany_inventory: BTreeMap::new(),
+        storage: Default::default(),
     }
 }
 
@@ -682,6 +684,7 @@ fn open_facility(
         mothballed_since: None,
         equipment_due_cents: 0,
         outage: None,
+        stock_plan: Default::default(),
     };
     if recipe.depletes() {
         facility.deposit_remaining =

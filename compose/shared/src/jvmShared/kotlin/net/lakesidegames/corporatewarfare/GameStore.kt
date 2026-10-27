@@ -15,6 +15,8 @@ import kotlinx.coroutines.withContext
 import uniffi.cw_ffi.BuildQuoteDto
 import uniffi.cw_ffi.CommodityDto
 import uniffi.cw_ffi.DivisionDto
+import uniffi.cw_ffi.HeldStockDto
+import uniffi.cw_ffi.StorageSummaryDto
 import uniffi.cw_ffi.OwnershipDto
 import uniffi.cw_ffi.PeriodDto
 import uniffi.cw_ffi.RaidRecordDto
@@ -81,6 +83,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var recentRaids by mutableStateOf<List<RaidRecordDto>>(emptyList()); private set
     var commodities by mutableStateOf<List<CommodityDto>>(emptyList()); private set
     var mapDivisions by mutableStateOf<List<MapDivisionDto>>(emptyList()); private set
+    /** Goods the selected company holds back from sale, with any open buy orders. */
+    var held by mutableStateOf<List<HeldStockDto>>(emptyList()); private set
+    var storageSummary by mutableStateOf<StorageSummaryDto?>(null); private set
     val strategyCatalogue: List<StrategyDto> by lazy { strategies() }
     /** Every player action with its form, in Command Center order. */
     val actions: List<uniffi.cw_ffi.ActionDto> by lazy { uniffi.cw_ffi.actionCatalogue() }
@@ -224,6 +229,41 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         submit(CommandJson.command("SetProductionTarget", "firm" to firm, "target_bps" to bps))
     }
 
+    /** Every plant in [plants] keeps [weeks] of inputs on hand (zero is the company default). */
+    fun setStockTarget(plants: List<ULong>, weeks: Int, seasonal: Boolean) = perform {
+        val handle = session ?: return@perform
+        var failed = false
+        for (plant in plants) {
+            val json = CommandJson.command("SetStockTarget", "facility" to plant, "weeks" to weeks, "seasonal" to seasonal)
+            val receipt = withContext(engine) { handle.submitJson(json) }
+            if (!receipt.accepted) {
+                error = Messages.rejection(receipt.errorKey ?: "error.internal_fault", receipt.errorDetail ?: "")
+                failed = true
+                break
+            }
+        }
+        if (!failed) {
+            error = null
+            status = "Stock target set."
+        }
+        reload()
+    }
+
+    /** Index of a region in the engine's region list, for commands that take one. */
+    fun regionIndex(code: String): UInt = boards.firstOrNull { it.code == code }?.index ?: 0u
+
+    /** Buy [lots] of a good into storage in a region, paying up to [limitBps] of its reference price. */
+    fun buyToStore(product: UInt, region: UInt, lots: Long, limitBps: Int) {
+        val firm = selectedFirm ?: return
+        submit(CommandJson.command("BuyToStore", "firm" to firm, "product" to product, "region" to region, "lots" to lots, "limit_bps" to limitBps))
+    }
+
+    /** Release stored goods for sale; zero lots releases everything held there. */
+    fun releaseStored(product: UInt, region: UInt, lots: Long) {
+        val firm = selectedFirm ?: return
+        submit(CommandJson.command("SellFromStore", "firm" to firm, "product" to product, "region" to region, "lots" to lots))
+    }
+
     /** What a build would cost, computed by the engine without changing anything. */
     fun quote(region: UInt, recipe: UInt, blocks: UInt, onResult: (BuildQuoteDto?) -> Unit) {
         val handle = session ?: return
@@ -346,6 +386,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 firm?.let { handle.history(it) } ?: emptyList<PeriodDto>(), firm?.let { handle.ownership(it) },
                 handle.recentRaids(),
                 handle.economy(), firm?.let { handle.research(it) },
+                firm?.let { handle.heldStock(it) } ?: emptyList<HeldStockDto>(),
+                firm?.let { handle.storageSummary(it) },
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
@@ -366,6 +408,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 recentRaids = parts[13] as List<RaidRecordDto>
                 economy = parts[14] as uniffi.cw_ffi.EconomyDto
                 research = parts[15] as uniffi.cw_ffi.ResearchDto?
+                held = parts[16] as List<HeldStockDto>
+                storageSummary = parts[17] as StorageSummaryDto?
             }
         }
         loadMarkets()

@@ -303,6 +303,7 @@ struct CEOOfficeView: View {
                 ForEach(plants, id: \.handle) { plant in
                     plantRow(plant)
                 }
+                DivisionStockTarget(division: division)
             }
         }
     }

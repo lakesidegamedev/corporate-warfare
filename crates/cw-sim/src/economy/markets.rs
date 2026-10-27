@@ -281,10 +281,17 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
                 continue;
             }
             let code = dataset.product_index[product_id];
-            let cover = crate::economy::pricing::cover_weeks(firm, dataset, code);
+            let cover =
+                crate::economy::storage::plant_cover_weeks(world, dataset, firm, facility, code);
             let demand = world.demand_ratio_bps(facility.region, Some(code));
             let target = weekly * facility.blocks as i64 * cover * demand / 10_000;
-            let have = firm.stock(code, facility.region).whole_lots_floor();
+            // Goods held back for speculation do not count as the plant's own cover.
+            let have = MilliLots(
+                (firm.stock(code, facility.region).0
+                    - firm.storage.held_of(code, facility.region).0)
+                    .max(0),
+            )
+            .whole_lots_floor();
             let want = (target - have).max(0);
             if want <= 0 {
                 continue;
@@ -323,7 +330,39 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
         false
     });
     for (product, buyers) in exchange {
-        clear_goods_exchange(world, dataset, product, buyers);
+        clear_goods_exchange(world, dataset, product, buyers, &BTreeMap::new());
+    }
+    // Speculators come last: they buy what the plants left, into held stock.
+    for (product, (buyers, caps)) in crate::economy::storage::order_buyers(world, dataset) {
+        let before: Vec<(Handle, u8, i64)> = buyers
+            .iter()
+            .map(|(firm, region, _, _)| {
+                (
+                    *firm,
+                    *region,
+                    world
+                        .firms
+                        .get(*firm)
+                        .map(|f| f.stock(product, *region).0)
+                        .unwrap_or(0),
+                )
+            })
+            .collect();
+        clear_goods_exchange(world, dataset, product, buyers, &caps);
+        for (firm, region, was) in before {
+            let now = world
+                .firms
+                .get(firm)
+                .map(|f| f.stock(product, region).0)
+                .unwrap_or(0);
+            crate::economy::storage::record_received(
+                world,
+                firm,
+                product,
+                region,
+                MilliLots(now - was),
+            );
+        }
     }
 
     for ((region, product), buyers) in needed {
@@ -416,6 +455,7 @@ fn clear_goods_exchange(
     dataset: &Dataset,
     product: u16,
     buyers: Vec<(Handle, u8, i64, i64)>,
+    caps: &BTreeMap<(Handle, u8), i64>,
 ) {
     // Merge each firm's facilities into one buyer per region.
     let mut demand: BTreeMap<(Handle, u8), (i64, i64)> = BTreeMap::new();
@@ -472,6 +512,9 @@ fn clear_goods_exchange(
                 continue;
             }
             let delivered = asking(world, seller) + freight_per_lot(from, to);
+            if caps.get(buyer_key).is_some_and(|cap| delivered > *cap) {
+                continue;
+            }
             pairs.push((
                 delivered,
                 seller.0 ^ ((from as u64) << 56),
@@ -481,7 +524,13 @@ fn clear_goods_exchange(
             ));
         }
         for (index, gateway) in world.gateways.iter().enumerate() {
-            if gateway.region == to && gateway.product == product && gateway.sell_price_cents > 0 {
+            if gateway.region == to
+                && gateway.product == product
+                && gateway.sell_price_cents > 0
+                && caps
+                    .get(buyer_key)
+                    .is_none_or(|cap| gateway.sell_price_cents <= *cap)
+            {
                 pairs.push((
                     gateway.sell_price_cents,
                     // Each gateway is its own source, after every firm seller at equal price.
@@ -626,26 +675,8 @@ fn own_input_cover_lots(
     region: u8,
     product: u16,
 ) -> i64 {
-    let cover_weeks = crate::economy::pricing::cover_weeks(firm, dataset, product);
-    let mut need = 0i64;
-    for facility_handle in &firm.facilities {
-        let Some(facility) = world.facilities.get(*facility_handle) else {
-            continue;
-        };
-        if facility.region != region {
-            continue;
-        }
-        let recipe = &dataset.recipes[facility.recipe as usize];
-        if let Some(weekly) = recipe
-            .weekly_inputs_lots
-            .iter()
-            .find(|(id, _)| dataset.product_index[*id] == product)
-            .map(|(_, qty)| *qty)
-        {
-            need += weekly * facility.blocks as i64 * cover_weeks;
-        }
-    }
-    need
+    // Input cover plus goods held back, rounded up to whole lots.
+    (crate::economy::storage::reserved_milli(world, dataset, firm, region, product) + 999) / 1_000
 }
 
 fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, product: u16) {
@@ -1376,6 +1407,7 @@ mod tests {
             &dataset,
             steel,
             vec![(buyer, to, 15_000, 100_000_000)],
+            &BTreeMap::new(),
         );
         let held = |w: &World, f: Handle, r: u8| w.firms.get(f).unwrap().stock(steel, r).lots();
         assert_eq!(held(&world, buyer, to), 15);
@@ -1400,6 +1432,7 @@ mod tests {
             &dataset,
             steel,
             vec![(buyer, to, 8_000, 100_000_000)],
+            &BTreeMap::new(),
         );
         let imports_after: i64 = world
             .gateways
@@ -1447,6 +1480,7 @@ mod tests {
                 (big, to, 30_000, 100_000_000),
                 (small, to, 10_000, 100_000_000),
             ],
+            &BTreeMap::new(),
         );
         assert_eq!(
             world.firms.get(big).unwrap().stock(steel, to),

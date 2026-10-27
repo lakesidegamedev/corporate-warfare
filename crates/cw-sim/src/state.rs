@@ -327,6 +327,9 @@ pub struct Facility {
     pub mothballed_since: Option<Tick>,
     /// Temporary capacity cap from an outage card: (cap bps, last affected week exclusive).
     pub outage: Option<(i32, Tick)>,
+    /// Standing stock target and seasonal build for this plant's inputs.
+    #[serde(default)]
+    pub stock_plan: crate::economy::storage::StockPlan,
 }
 
 impl Facility {
@@ -582,6 +585,9 @@ pub struct Firm {
     /// profit still carried in the buyer's inventory and is eliminated from consolidated assets.
     #[serde(default)]
     pub intercompany_inventory: BTreeMap<(Handle, u16, u8), IntercompanyLayer>,
+    /// Held goods, buy orders and storage costs. See `economy::storage`.
+    #[serde(default)]
+    pub storage: crate::economy::storage::StorageBook,
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]

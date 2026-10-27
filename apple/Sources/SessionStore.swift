@@ -61,6 +61,10 @@ actor Engine {
         session?.divisions(firm: firm) ?? []
     }
 
+    func heldStock(firm: UInt64) -> [HeldStockDto] {
+        session?.heldStock(firm: firm) ?? []
+    }
+
     func mapDivisions() -> [MapDivisionDto] {
         session?.mapDivisions() ?? []
     }

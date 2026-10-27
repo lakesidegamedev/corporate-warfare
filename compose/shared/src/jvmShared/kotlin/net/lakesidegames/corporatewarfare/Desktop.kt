@@ -409,6 +409,9 @@ private fun DesktopMap(store: GameStore) {
                         Cell("${d.shareBps / 100}%", cols[2], Palette.gold, bold = true)
                     }
                 }
+                store.divisions.firstOrNull { it.region == selected }?.let { d ->
+                    Column(Modifier.padding(12.dp)) { DivisionStock(store, d) }
+                }
             }
             Pane("Rival moves", Modifier.fillMaxWidth().weight(1f)) {
                 val raids = store.recentRaids.take(14)
@@ -472,6 +475,11 @@ private fun RegionBoardDetail(store: GameStore, board: RegionBoardDto) {
             room.forEachIndexed { i, r ->
                 TableRow(i) { Cell(r.productName, rc[0]); Cell(Format.count(r.importLots), rc[1]); Cell(Format.money(r.importPriceCents), rc[2]) }
             }
+        }
+        if (board.storage.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Eyebrow("Your storage here")
+            StorageLines(board.storage)
         }
         val ours = store.divisions.filter { it.region == board.code }
         if (ours.isNotEmpty()) {

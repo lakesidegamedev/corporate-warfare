@@ -360,6 +360,7 @@ internal fun CommodityDialog(store: GameStore, line: CommodityDto, onClose: () -
                     Sparkline(line.historyCents, changeTint(line.changeQuarterBps), Modifier.fillMaxWidth().height(90.dp))
                 }
                 if (mine != null) Text("You make this: ${Format.money(mine.priceCents)} a lot. Change it from the CEO Office pricing panel.", color = Palette.gold, fontSize = 12.sp)
+                StoreGoodSection(store, line)
             }
         },
         confirmButton = { TextButton(onClick = onClose) { Text("Close") } },

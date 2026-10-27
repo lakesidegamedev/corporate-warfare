@@ -752,7 +752,7 @@ impl Session {
             None => (String::new(), 0, 0, 0),
         };
         let mut alerts = Vec::new();
-        for (handle, firm) in world.firms.iter() {
+        for (_, firm) in world.firms.iter() {
             if firm.shares.qty(cw_sim::state::HolderId::Investor) == 0 {
                 continue;
             }
@@ -774,7 +774,7 @@ impl Session {
                     severity: 2,
                 });
             }
-            let _ = handle;
+            storage_alerts(world, &self.dataset, firm, &mut alerts);
         }
         for event in dto::events(world, &self.dataset) {
             if event.mandatory {
@@ -1189,6 +1189,53 @@ fn empty_ownership(handle: u64) -> OwnershipSummary {
     }
 }
 
+/// Storage alerts for one of the investor's companies, only when they matter: space nearly full
+/// in a class where stock is substantial, outside storage and holding cost above 3 percent of
+/// four weeks of revenue, or spoilage above 2 percent. Each also needs a floor in dollars so
+/// a small firm is not nagged.
+fn storage_alerts(
+    world: &cw_sim::state::World,
+    dataset: &cw_data::Dataset,
+    firm: &cw_sim::state::Firm,
+    alerts: &mut Vec<Alert>,
+) {
+    const FLOOR_CENTS: i64 = 200_000;
+    let revenue_4w: i64 = firm
+        .book
+        .recent_weeks()
+        .iter()
+        .rev()
+        .take(4)
+        .map(|week| week.revenue)
+        .sum();
+    let recent = firm.storage.recent(4);
+    let cost = recent.fee_cents + recent.holding_cents;
+    if cost >= FLOOR_CENTS && cost * 100 >= revenue_4w.max(1) * 3 {
+        alerts.push(Alert {
+            key: "alert.storage_fees".to_owned(),
+            subject: firm.name.clone(),
+            severity: 1,
+        });
+    }
+    if recent.spoiled_cents >= FLOOR_CENTS && recent.spoiled_cents * 100 >= revenue_4w.max(1) * 2 {
+        alerts.push(Alert {
+            key: "alert.spoilage".to_owned(),
+            subject: firm.name.clone(),
+            severity: 1,
+        });
+    }
+    let full = cw_sim::economy::storage::uses(world, dataset, firm)
+        .into_iter()
+        .any(|u| u.used_milli >= 500_000 && u.used_milli * 100 >= u.capacity_milli() * 95);
+    if full {
+        alerts.push(Alert {
+            key: "alert.storage_full".to_owned(),
+            subject: firm.name.clone(),
+            severity: 1,
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1496,7 +1543,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "c04f6aadf2b605941b3abb60c9e8c7ed58f4420c352c4bc22fd558f3558aad04"
+            "1ec1c70637ab5310fabb745148702b7f25763e40c5296474350e6c4ac3247fb3"
         );
     }
 

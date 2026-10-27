@@ -1,5 +1,5 @@
 {
-  "schema": 2,
+  "schema": 3,
   "classification": "authored engineering calibration; NOT real regional observations",
   "currency_base": "nominal circa-2000 game USD",
   "baseline_weekly_wage_cents": [
@@ -13,19 +13,25 @@
       "name": "Food (farm output)",
       "reference_price_cents": 10000,
       "kind": "goods",
-      "spoilage_bps_weekly": 400
+      "spoilage_bps_weekly": 400,
+      "storage_class": "cold",
+      "holding_bps_weekly": 12
     },
     {
       "id": "ore",
       "name": "Iron ore",
       "reference_price_cents": 20000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "silo",
+      "holding_bps_weekly": 5
     },
     {
       "id": "fuel",
       "name": "Oil & fuel",
       "reference_price_cents": 30000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "tank",
+      "holding_bps_weekly": 6
     },
     {
       "id": "electricity",
@@ -37,25 +43,33 @@
       "id": "chemicals",
       "name": "Industrial chemicals",
       "reference_price_cents": 60000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "tank",
+      "holding_bps_weekly": 6
     },
     {
       "id": "steel",
       "name": "Steel",
       "reference_price_cents": 40000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "dry",
+      "holding_bps_weekly": 8
     },
     {
       "id": "components",
       "name": "Electronics & components",
       "reference_price_cents": 100000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "dry",
+      "holding_bps_weekly": 8
     },
     {
       "id": "goods",
       "name": "Consumer goods",
       "reference_price_cents": 200000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "dry",
+      "holding_bps_weekly": 8
     },
     {
       "id": "construction",
@@ -74,13 +88,17 @@
       "name": "Groceries",
       "reference_price_cents": 17000,
       "kind": "consumer_goods",
-      "spoilage_bps_weekly": 400
+      "spoilage_bps_weekly": 400,
+      "storage_class": "cold",
+      "holding_bps_weekly": 12
     },
     {
       "id": "goods_retail",
       "name": "Retail goods",
       "reference_price_cents": 300000,
-      "kind": "consumer_goods"
+      "kind": "consumer_goods",
+      "storage_class": "dry",
+      "holding_bps_weekly": 8
     },
     {
       "id": "care",
@@ -116,7 +134,9 @@
       "id": "defense",
       "name": "Defense systems",
       "reference_price_cents": 1100000,
-      "kind": "contract_goods"
+      "kind": "contract_goods",
+      "storage_class": "dry",
+      "holding_bps_weekly": 8
     },
     {
       "id": "research",
@@ -146,55 +166,73 @@
       "id": "coal",
       "name": "Coal",
       "reference_price_cents": 16000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "silo",
+      "holding_bps_weekly": 5
     },
     {
       "id": "natural_gas",
       "name": "Natural gas",
       "reference_price_cents": 20000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "tank",
+      "holding_bps_weekly": 6
     },
     {
       "id": "timber",
       "name": "Timber",
       "reference_price_cents": 9800,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "dry",
+      "holding_bps_weekly": 8
     },
     {
       "id": "rare_earth",
       "name": "Rare earth minerals",
       "reference_price_cents": 126000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "dry",
+      "holding_bps_weekly": 8
     },
     {
       "id": "plastics",
       "name": "Plastics",
       "reference_price_cents": 29000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "dry",
+      "holding_bps_weekly": 8
     },
     {
       "id": "fertilizers",
       "name": "Fertilizers",
       "reference_price_cents": 22000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "silo",
+      "holding_bps_weekly": 5
     },
     {
       "id": "pharmaceuticals",
       "name": "Pharmaceuticals",
       "reference_price_cents": 260000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "cold",
+      "holding_bps_weekly": 12
     },
     {
       "id": "building_materials",
       "name": "Building materials",
       "reference_price_cents": 21000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "silo",
+      "holding_bps_weekly": 5
     },
     {
       "id": "vehicles",
       "name": "Vehicles",
       "reference_price_cents": 471000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "dry",
+      "holding_bps_weekly": 8
     },
     {
       "id": "deposit",
@@ -218,57 +256,81 @@
       "id": "crude_oil",
       "name": "Crude oil",
       "reference_price_cents": 15000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "tank",
+      "holding_bps_weekly": 6
     },
     {
       "id": "gasoline",
       "name": "Gasoline",
       "reference_price_cents": 31000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "tank",
+      "holding_bps_weekly": 6
     },
     {
       "id": "jet_fuel",
       "name": "Jet fuel",
       "reference_price_cents": 33000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "tank",
+      "holding_bps_weekly": 6
     },
     {
       "id": "petrochem_feedstock",
       "name": "Petrochemical feedstock",
       "reference_price_cents": 26000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "tank",
+      "holding_bps_weekly": 6
     },
     {
       "id": "ngl",
       "name": "Natural gas liquids",
       "reference_price_cents": 50000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "tank",
+      "holding_bps_weekly": 6
     },
     {
       "id": "pig_iron",
       "name": "Pig iron",
       "reference_price_cents": 32000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "silo",
+      "holding_bps_weekly": 5
     },
     {
       "id": "scrap",
       "name": "Steel scrap",
       "reference_price_cents": 18000,
-      "kind": "goods"
+      "kind": "goods",
+      "storage_class": "silo",
+      "holding_bps_weekly": 5
     },
     {
       "id": "grain",
       "name": "Grain",
       "reference_price_cents": 6000,
       "kind": "goods",
-      "spoilage_bps_weekly": 150
+      "spoilage_bps_weekly": 150,
+      "storage_class": "silo",
+      "holding_bps_weekly": 5
     },
     {
       "id": "livestock",
       "name": "Livestock",
       "reference_price_cents": 12000,
       "kind": "goods",
-      "spoilage_bps_weekly": 300
+      "spoilage_bps_weekly": 300,
+      "storage_class": "cold",
+      "holding_bps_weekly": 12
+    },
+    {
+      "id": "storage_space",
+      "name": "Storage space",
+      "reference_price_cents": 100,
+      "kind": "service"
     }
   ],
   "recipes": [
@@ -1503,6 +1565,76 @@
           "weekly_lots": 30
         }
       ]
+    },
+    {
+      "industry": "logistics",
+      "id": "warehouse",
+      "name": "Warehouse",
+      "output": "storage_space",
+      "weekly_output_lots": 5000,
+      "storage_class": "dry",
+      "weekly_inputs_lots": {},
+      "workers_low_mid_high": [
+        2,
+        1,
+        0
+      ],
+      "capex_cents": 40000000,
+      "build_weeks": 8,
+      "life_years": 25
+    },
+    {
+      "industry": "logistics",
+      "id": "tank_farm",
+      "name": "Tank Farm",
+      "output": "storage_space",
+      "weekly_output_lots": 4000,
+      "storage_class": "tank",
+      "weekly_inputs_lots": {},
+      "workers_low_mid_high": [
+        2,
+        1,
+        1
+      ],
+      "capex_cents": 60000000,
+      "build_weeks": 13,
+      "life_years": 30
+    },
+    {
+      "industry": "logistics",
+      "id": "grain_silo",
+      "name": "Grain Silo",
+      "output": "storage_space",
+      "weekly_output_lots": 8000,
+      "storage_class": "silo",
+      "weekly_inputs_lots": {},
+      "workers_low_mid_high": [
+        1,
+        1,
+        0
+      ],
+      "capex_cents": 35000000,
+      "build_weeks": 8,
+      "life_years": 30
+    },
+    {
+      "industry": "logistics",
+      "id": "cold_store",
+      "name": "Cold Store",
+      "output": "storage_space",
+      "weekly_output_lots": 5000,
+      "storage_class": "cold",
+      "weekly_inputs_lots": {
+        "electricity": 1
+      },
+      "workers_low_mid_high": [
+        2,
+        1,
+        1
+      ],
+      "capex_cents": 55000000,
+      "build_weeks": 13,
+      "life_years": 20
     }
   ],
   "financial_businesses": [

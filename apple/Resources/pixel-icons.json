@@ -2092,6 +2092,31 @@
     "................"
    ]
   },
+  "storage": {
+   "palette": {
+    "g": "#E2B04A",
+    "s": "#8996A6",
+    "w": "#E8EEF4"
+   },
+   "rows": [
+    "................",
+    "................",
+    ".......ww.......",
+    ".....wwwww......",
+    "....wwwwwwww....",
+    "...wwwwwwwwww...",
+    "..wwwwwwwwwwww..",
+    "..ssssssssssss..",
+    "..ssssssssssss..",
+    "..ssgggssgggss..",
+    "..ssgggssgggss..",
+    "..ssssssssssss..",
+    "..ssgggssgggss..",
+    "..ssssssssssss..",
+    "..ssgggssgggss..",
+    "................"
+   ]
+  },
   "swap": {
    "palette": {
     "s": "#8996A6",

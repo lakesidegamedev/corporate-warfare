@@ -12,7 +12,7 @@ use crate::Session;
 
 /// Weeks between snapshots.
 pub const SNAPSHOT_EVERY_WEEKS: u32 = 5;
-pub const SNAPSHOT_SCHEMA: u32 = 1;
+pub const SNAPSHOT_SCHEMA: u32 = 2;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct GoodLine {
@@ -35,6 +35,22 @@ pub struct CorridorLine {
     pub outside_cash_cents: i64,
 }
 
+/// Storage over the last thirteen weeks for the whole corridor, or for the player's company:
+/// what is stored against what space there is, and what overflow, holding and spoilage cost.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct StorageLine {
+    pub used_lots: i64,
+    pub capacity_lots: i64,
+    pub owned_capacity_lots: i64,
+    pub outside_lots: i64,
+    pub outside_fees_13w_cents: i64,
+    pub holding_13w_cents: i64,
+    pub spoiled_lots_13w: i64,
+    pub spoiled_13w_cents: i64,
+    pub held_lots: i64,
+    pub open_buy_orders: u32,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct PlayerLine {
     pub cash_cents: i64,
@@ -42,6 +58,7 @@ pub struct PlayerLine {
     pub net_income_13w_cents: i64,
     pub divisions: u32,
     pub plants: u32,
+    pub storage: StorageLine,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -54,7 +71,35 @@ pub struct MarketSnapshot {
     pub week: u32,
     pub goods: Vec<GoodLine>,
     pub corridor: CorridorLine,
+    pub storage: StorageLine,
     pub player: Option<PlayerLine>,
+}
+
+fn storage_line(
+    world: &cw_sim::state::World,
+    dataset: &cw_data::Dataset,
+    firms: impl Iterator<Item = cw_core::ids::Handle>,
+) -> StorageLine {
+    let mut line = StorageLine::default();
+    for handle in firms {
+        let Some(firm) = world.firms.get(handle) else {
+            continue;
+        };
+        for u in cw_sim::economy::storage::uses(world, dataset, firm) {
+            line.used_lots += u.used_milli / 1_000;
+            line.capacity_lots += u.capacity_milli() / 1_000;
+            line.owned_capacity_lots += u.owned_milli / 1_000;
+            line.outside_lots += u.outside_milli() / 1_000;
+        }
+        let quarter = firm.storage.recent(13);
+        line.outside_fees_13w_cents += quarter.fee_cents;
+        line.holding_13w_cents += quarter.holding_cents;
+        line.spoiled_lots_13w += quarter.spoiled_milli / 1_000;
+        line.spoiled_13w_cents += quarter.spoiled_cents;
+        line.held_lots += firm.storage.held.values().map(|q| q.lots()).sum::<i64>();
+        line.open_buy_orders += firm.storage.orders.len() as u32;
+    }
+    line
 }
 
 /// True on the weeks a snapshot is due.
@@ -147,8 +192,18 @@ impl Session {
                     .filter_map(|h| world.facilities.get(*h))
                     .map(|p| p.blocks as u32)
                     .sum(),
+                storage: storage_line(world, dataset, [handle].into_iter()),
             })
         });
+        let storage = storage_line(
+            world,
+            dataset,
+            world
+                .firms
+                .iter()
+                .filter(|(_, f)| f.operative())
+                .map(|(h, _)| h),
+        );
         MarketSnapshot {
             schema: SNAPSHOT_SCHEMA,
             engine_version: cw_core::ENGINE_VERSION.to_owned(),
@@ -158,6 +213,7 @@ impl Session {
             week: world.tick.0,
             goods,
             corridor,
+            storage,
             player,
         }
     }

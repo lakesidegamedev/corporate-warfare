@@ -464,6 +464,7 @@ private struct CommoditySheet: View {
                             }
                         }
                     }
+                    StoreGoodPanel(line: line)
                     if let mine = store.productLines.first(where: { $0.product == line.product }) {
                         Button {
                             pricing = mine

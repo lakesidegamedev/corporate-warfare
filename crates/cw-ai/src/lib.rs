@@ -69,9 +69,116 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
             continue;
         }
         strategic(world, dataset, handle, &mut proposals);
+        speculate(world, dataset, handle, &mut proposals);
     }
     proposals.truncate(WEEKLY_PROPOSALS);
     proposals
+}
+
+/// Goods bought into store when the world price is low and recovering are released when it is high
+/// or turning down. Tied to the world price path and the business cycle: a family at least 10
+/// percent under its day-one level, no longer falling by more than 2 percent over the quarter,
+/// while the cycle is in recession or recovery, is a buy; a family 5 percent over day one, or
+/// falling more than 5 percent over the quarter above its day-one level, or a boom, is a sell.
+/// A rival only deals in goods its plants make or use, only with cash well over its reserve and
+/// profits behind it, never over 6 percent of cash per order, and only into space it already has.
+fn speculate(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
+    use cw_sim::state::CyclePhase;
+    let Some(entity) = world.firms.get(firm) else {
+        return;
+    };
+    let phase = world.macro_state.cycle.phase;
+    let reserve = reserve_target(world, firm);
+    let recent_income: i64 = entity
+        .book
+        .recent_weeks()
+        .iter()
+        .map(|week| week.net_income)
+        .sum();
+    let uses = cw_sim::economy::storage::uses(world, dataset, entity);
+    let mut touched: std::collections::BTreeSet<(u16, u8)> = std::collections::BTreeSet::new();
+    for handle in &entity.facilities {
+        let Some(plant) = world.facilities.get(*handle) else {
+            continue;
+        };
+        let recipe = &dataset.recipes[plant.recipe as usize];
+        if recipe.storage_class.is_some() {
+            continue;
+        }
+        for (id, _) in recipe.outputs() {
+            if let Some(code) = dataset.product_index.get(id) {
+                touched.insert((*code, plant.region));
+            }
+        }
+        for id in recipe.weekly_inputs_lots.keys() {
+            if let Some(code) = dataset.product_index.get(id) {
+                touched.insert((*code, plant.region));
+            }
+        }
+    }
+    for (product, region) in touched {
+        let Some(class) = dataset.storage_class_of(product) else {
+            continue;
+        };
+        if dataset.products[product as usize].kind != cw_data::ProductKind::Goods
+            || dataset.products[product as usize].spoilage_bps_weekly >= 200
+        {
+            continue;
+        }
+        let Some(family) = world.world_prices.family_of(product) else {
+            continue;
+        };
+        let level = family.index_bps;
+        let trend = family.trend_bps();
+        let held = entity.storage.held_of(product, region);
+        if held.0 > 0
+            && (level >= 10_500 || (trend <= -500 && level > 10_000) || phase == CyclePhase::Boom)
+        {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::SellFromStore {
+                    firm,
+                    product,
+                    region,
+                    lots: 0,
+                },
+            });
+            continue;
+        }
+        let buy = level <= 9_000
+            && trend >= -200
+            && matches!(phase, CyclePhase::Recession | CyclePhase::Recovery);
+        if !buy
+            || held.0 > 0
+            || !entity.storage.orders.is_empty()
+            || entity.book.cash() < reserve * 2
+            || recent_income <= 0
+        {
+            continue;
+        }
+        let reference = dataset.reference_price(product).max(1);
+        let lots = (entity.book.cash() * 6 / 100 / reference).clamp(0, 300);
+        // Only into space the firm already has: yard and owned capacity beyond what it holds.
+        let spare = uses
+            .iter()
+            .find(|u| u.region == region && u.class == class)
+            .map(|u| (u.capacity_milli() - u.used_milli).max(0) / 1_000)
+            .unwrap_or(0);
+        let lots = lots.min(spare);
+        if lots < 10 {
+            continue;
+        }
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::BuyToStore {
+                firm,
+                product,
+                region,
+                lots,
+                limit_bps: 10_000,
+            },
+        });
+    }
 }
 
 /// Bring a mothballed plant back when its output pays at public prices, the corridor is
@@ -856,7 +963,7 @@ fn best_expansion(
         let Some(sector) = cw_sim::economy::operations::industry_index(&template.industry) else {
             continue;
         };
-        if !sectors.contains(&sector) {
+        if !sectors.contains(&sector) || template.storage_class.is_some() {
             continue;
         }
         if !dataset.product_index.contains_key(&template.output) {
@@ -1060,7 +1167,10 @@ fn best_retool(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle
         let now =
             block_contribution(world, dataset, firm, plant.recipe, plant.region) * division_blocks;
         for (index, template) in dataset.recipes.iter().enumerate() {
-            if template.industry != current.industry || index as u16 == plant.recipe {
+            if template.industry != current.industry
+                || index as u16 == plant.recipe
+                || template.storage_class.is_some()
+            {
                 continue;
             }
             let Some(next_output) = dataset.product_index.get(&template.output).copied() else {
@@ -1474,6 +1584,107 @@ mod tests {
             .map(|p| format!("{p:?}"))
             .collect();
         assert_eq!(before, after);
+    }
+
+    #[test]
+    fn rivals_buy_cheap_world_goods_into_store_and_release_when_dear() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 177, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        cw_sim::economy::world_prices::init(
+            &mut world,
+            &dataset,
+            &cw_data::price_paths::PricePathFile::load(),
+            "great-lakes-2000",
+            cw_data::PricePath::Historical,
+            177,
+        );
+        // A rival that makes or uses a good in a price family, flush with cash and profit.
+        let (rival, product, region) = world
+            .firms
+            .iter()
+            .filter(|(handle, firm)| !player_controlled(&world, *handle) && firm.operative())
+            .find_map(|(handle, firm)| {
+                firm.facilities
+                    .iter()
+                    .filter_map(|f| world.facilities.get(*f))
+                    .flat_map(|plant| {
+                        dataset.recipes[plant.recipe as usize]
+                            .outputs()
+                            .filter_map(|(id, _)| dataset.product_index.get(id).copied())
+                            .map(|code| (code, plant.region))
+                            .collect::<Vec<_>>()
+                    })
+                    .find(|(code, _)| {
+                        world.world_prices.family_of(*code).is_some()
+                            && dataset.products[*code as usize].spoilage_bps_weekly < 200
+                            && dataset.products[*code as usize].kind == cw_data::ProductKind::Goods
+                    })
+                    .map(|(code, region)| (handle, code, region))
+            })
+            .expect("a rival with a priced good");
+        let tick = world.tick;
+        {
+            let entity = world.firms.get_mut(rival).unwrap();
+            entity
+                .book
+                .commit(
+                    tick,
+                    cw_core::ledger::Txn::new()
+                        .debit(cw_core::ledger::Account::Cash, 5_000_000_000, "test")
+                        .credit(
+                            cw_core::ledger::Account::ShareCapital,
+                            5_000_000_000,
+                            "test",
+                        )
+                        .debit(cw_core::ledger::Account::Cash, 1, "test")
+                        .credit(cw_core::ledger::Account::Revenue, 1, "test"),
+                )
+                .unwrap();
+            let _ = entity.book.close_week(tick);
+            entity.storage.orders.clear();
+        }
+        let family = world.world_prices.product_family[&product] as usize;
+        let run = |world: &World| -> Vec<Proposal> {
+            let mut proposals = Vec::new();
+            speculate(world, &dataset, rival, &mut proposals);
+            proposals
+        };
+        // Day-one prices and an expansion: nothing to do.
+        assert!(run(&world).is_empty());
+        // A low, steadying world price in a recession is a buy for a good the rival can store.
+        world.world_prices.families[family].index_bps = 8_000;
+        world.world_prices.families[family].recent = vec![8_050];
+        world.macro_state.cycle.phase = cw_sim::state::CyclePhase::Recession;
+        let uses = cw_sim::economy::storage::uses(&world, &dataset, world.firm(rival).unwrap());
+        let class = dataset.storage_class_of(product).unwrap();
+        let spare = uses
+            .iter()
+            .find(|u| u.region == region && u.class == class)
+            .map(|u| (u.capacity_milli() - u.used_milli) / 1_000)
+            .unwrap_or(0);
+        let bought = run(&world);
+        assert!(spare >= 10, "the test rival has yard to spare: {spare}");
+        {
+            assert!(
+                bought.iter().any(|p| matches!(
+                    p.intent,
+                    CommandIntent::BuyToStore { product: x, .. } if x == product
+                )),
+                "a cheap, steadying good is bought into the yard: {bought:?}"
+            );
+        }
+        // Holding it while the price is 10 percent over day one releases it.
+        world.firms.get_mut(rival).unwrap().storage.held.insert(
+            (product, region),
+            cw_core::quantity::MilliLots::from_lots(50),
+        );
+        world.world_prices.families[family].index_bps = 11_000;
+        world.macro_state.cycle.phase = cw_sim::state::CyclePhase::Expansion;
+        let sold = run(&world);
+        assert!(sold.iter().any(|p| matches!(
+            p.intent,
+            CommandIntent::SellFromStore { product: x, lots: 0, .. } if x == product
+        )));
     }
 
     #[test]
