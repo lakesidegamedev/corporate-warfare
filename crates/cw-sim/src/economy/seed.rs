@@ -179,6 +179,7 @@ pub fn build_with(
         price_history: Vec::new(),
         firm_history: BTreeMap::new(),
         politics: crate::state::Politics::default(),
+        logistics: Default::default(),
     };
 
     // Outside gateway capital is finite but real: exports are paid from it, imports add to it.
@@ -685,6 +686,8 @@ fn open_facility(
         equipment_due_cents: 0,
         outage: None,
         stock_plan: Default::default(),
+        ship: Default::default(),
+        serves: Vec::new(),
     };
     if recipe.depletes() {
         facility.deposit_remaining =

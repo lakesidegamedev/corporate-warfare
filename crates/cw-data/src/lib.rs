@@ -12,6 +12,7 @@ pub mod custom;
 pub mod events;
 pub mod firms;
 pub mod geography;
+pub mod logistics;
 pub mod price_paths;
 
 use std::collections::BTreeMap;
@@ -24,6 +25,7 @@ pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetti
 pub use events::EventCard;
 pub use firms::{Archetype, ExtraPlant, SeedFirm};
 pub use geography::{Conditions, Geography, Lane, Region, StateInfo};
+pub use logistics::{GatewayLink, LogisticsData, ModeDef, SeaSystem};
 
 pub const BALANCE_JSON: &str = include_str!("../../../content/initial-balance.json");
 pub const GEOGRAPHY_JSON: &str = include_str!("../../../content/geography/regions.json");
@@ -115,6 +117,15 @@ pub struct Dataset {
     pub maintenance_annual_bps: i32,
     pub fixture_land_rent_cents_weekly: i64,
     pub geometry_note: String,
+    /// Freight modes, public terminals and sea systems.
+    pub logistics: LogisticsData,
+    /// Land distance in kilometres between every pair of regions, row major, zero on the diagonal.
+    pub km_matrix: Vec<u32>,
+    /// Sea distance between ports of one sea system, row major; zero when there is no sea lane.
+    pub sea_matrix: Vec<u32>,
+    /// Regions that have a public rail yard and a public port from the start.
+    pub public_rail: Vec<bool>,
+    pub public_ports: Vec<bool>,
     pub hash: String,
 }
 
@@ -174,6 +185,42 @@ impl Dataset {
             region_index.insert(region.code.clone(), index as u8);
         }
 
+        let logistics = LogisticsData::load().map_err(|error| vec![error])?;
+        let n = regions.len();
+        let mut km_matrix = vec![0u32; n * n];
+        for lane in &geography.lanes {
+            if let (Some(a), Some(b)) = (region_index.get(&lane.a), region_index.get(&lane.b)) {
+                km_matrix[*a as usize * n + *b as usize] = lane.km;
+                km_matrix[*b as usize * n + *a as usize] = lane.km;
+            }
+        }
+        let mut sea_matrix = vec![0u32; n * n];
+        for system in &logistics.sea_systems {
+            let ports: Vec<usize> = system
+                .ports
+                .iter()
+                .filter_map(|code| region_index.get(code).map(|i| *i as usize))
+                .collect();
+            for &a in &ports {
+                for &b in &ports {
+                    if a != b {
+                        let km = km_matrix[a * n + b] as i64 * system.factor_bps / 10_000;
+                        sea_matrix[a * n + b] = km.max(1) as u32;
+                    }
+                }
+            }
+        }
+        let flags = |codes: &[String]| -> Vec<bool> {
+            let mut out = vec![false; n];
+            for code in codes {
+                if let Some(i) = region_index.get(code) {
+                    out[*i as usize] = true;
+                }
+            }
+            out
+        };
+        let public_rail = flags(&logistics.public_rail);
+        let public_ports = flags(&logistics.public_ports);
         let dataset = Dataset {
             products,
             product_index,
@@ -189,6 +236,11 @@ impl Dataset {
             maintenance_annual_bps: balance.maintenance_annual_bps,
             fixture_land_rent_cents_weekly: balance.fixture_land_rent_cents_weekly,
             geometry_note,
+            logistics,
+            km_matrix,
+            sea_matrix,
+            public_rail,
+            public_ports,
             hash: String::new(),
         };
         let errors = dataset.validate();
@@ -324,6 +376,37 @@ impl Dataset {
                     ));
                 }
             }
+            if let Some(mode) = &recipe.transport_mode {
+                let carries = self.logistics.mode_index(mode).is_some();
+                let freight = self
+                    .product_index
+                    .get(&recipe.output)
+                    .map(|i| &self.products[*i as usize]);
+                if !carries
+                    || recipe.industry != "logistics"
+                    || recipe.storage_class.is_some()
+                    || !freight.is_some_and(|p| p.kind == ProductKind::TransportService)
+                {
+                    errors.push(format!(
+                        "carrier recipe {} needs a known mode, the logistics sector and freight output",
+                        recipe.id
+                    ));
+                }
+                if recipe.terminal
+                    && !self
+                        .logistics
+                        .modes
+                        .iter()
+                        .any(|m| &m.id == mode && m.needs_terminal)
+                {
+                    errors.push(format!(
+                        "terminal recipe {} is for a mode with no terminals",
+                        recipe.id
+                    ));
+                }
+            } else if recipe.terminal {
+                errors.push(format!("terminal recipe {} has no mode", recipe.id));
+            }
             for input in recipe.weekly_inputs_lots.keys() {
                 if !self.product_index.contains_key(input) {
                     errors.push(format!("recipe {} input {} is unknown", recipe.id, input));
@@ -409,6 +492,56 @@ impl Dataset {
             }
         }
 
+        for mode in &self.logistics.modes {
+            if mode.rate_milli_cents_per_lot_km <= 0 || mode.speed_km_week == 0 || mode.min_lots < 1
+            {
+                errors.push(format!(
+                    "freight mode {} has non-positive constants",
+                    mode.id
+                ));
+            }
+            for product in &mode.excluded_products {
+                if !self.product_index.contains_key(product) {
+                    errors.push(format!(
+                        "mode {} excludes unknown product {product}",
+                        mode.id
+                    ));
+                }
+            }
+        }
+        if self.logistics.modes.first().map(|m| m.id.as_str()) != Some("truck")
+            || self.logistics.modes.len() > 8
+        {
+            errors.push("freight modes must start with truck and number at most eight".to_owned());
+        }
+        for code in self
+            .logistics
+            .public_rail
+            .iter()
+            .chain(&self.logistics.public_ports)
+            .chain(self.logistics.gateway_links.iter().map(|l| &l.region))
+            .chain(
+                self.logistics
+                    .sea_systems
+                    .iter()
+                    .flat_map(|s| s.ports.iter()),
+            )
+        {
+            if !self.region_index.contains_key(code) {
+                errors.push(format!("logistics names unknown region {code}"));
+            }
+        }
+        let logistics_ok = {
+            let l = &self.logistics;
+            l.outside_premium_bps >= l.empty_lane_bps
+                && l.empty_lane_bps > l.own_cost_bps
+                && l.own_cost_bps > 0
+                && (1..=10_000).contains(&l.contract_discount_bps)
+        };
+        if !logistics_ok {
+            errors.push("freight price levels must satisfy own < empty <= outside".to_owned());
+        }
+
         let mut event_ids = std::collections::BTreeSet::new();
         for card in &self.events {
             if !event_ids.insert(card.id.as_str()) {
@@ -481,6 +614,38 @@ impl Dataset {
         errors
     }
 
+    /// Land distance between two regions by index; zero within a region.
+    pub fn km(&self, a: u8, b: u8) -> u32 {
+        let n = self.regions.len();
+        self.km_matrix
+            .get(a as usize * n + b as usize)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// Sea distance between two ports of one sea system, if they share one.
+    pub fn sea_km(&self, a: u8, b: u8) -> Option<u32> {
+        let n = self.regions.len();
+        self.sea_matrix
+            .get(a as usize * n + b as usize)
+            .copied()
+            .filter(|km| *km > 0)
+    }
+
+    /// Whether a freight mode may carry a good at all: its storage class and the exclusion list.
+    pub fn mode_carries(&self, mode: u8, product: u16) -> bool {
+        let Some(def) = self.logistics.modes.get(mode as usize) else {
+            return false;
+        };
+        let item = &self.products[product as usize];
+        let class = if item.kind.is_service() || item.kind.is_financial() {
+            return false;
+        } else {
+            item.storage_class
+        };
+        def.classes.contains(&class) && !def.excluded_products.contains(&item.id)
+    }
+
     pub fn lane_km(&self, left: &str, right: &str) -> Option<u32> {
         if left == right {
             return Some(0);
@@ -549,7 +714,9 @@ impl Dataset {
                 .i64(recipe.capex_cents)
                 .u32(recipe.build_weeks)
                 .u32(recipe.life_years)
-                .u8(recipe.storage_class.map(|c| c.code() + 1).unwrap_or(0));
+                .u8(recipe.storage_class.map(|c| c.code() + 1).unwrap_or(0))
+                .string(recipe.transport_mode.as_deref().unwrap_or(""))
+                .bool(recipe.terminal);
             for (input, quantity) in &recipe.weekly_inputs_lots {
                 hasher.string(input).i64(*quantity);
             }
@@ -571,6 +738,42 @@ impl Dataset {
         }
         for lane in &self.lanes {
             hasher.string(&lane.a).string(&lane.b).u32(lane.km);
+        }
+        let l = &self.logistics;
+        hasher
+            .i64(l.outside_premium_bps)
+            .i64(l.empty_lane_bps)
+            .i64(l.own_cost_bps)
+            .i64(l.contract_discount_bps);
+        for mode in &l.modes {
+            hasher
+                .string(&mode.id)
+                .i64(mode.rate_milli_cents_per_lot_km)
+                .u32(mode.speed_km_week)
+                .u32(mode.reach_km)
+                .i64(mode.min_lots)
+                .bool(mode.needs_terminal)
+                .bool(mode.needs_infrastructure)
+                .bool(mode.outside_backstop)
+                .bool(mode.road_sensitive);
+            for class in &mode.classes {
+                hasher.u8(class.code());
+            }
+            for product in &mode.excluded_products {
+                hasher.string(product);
+            }
+        }
+        for flag in self.public_rail.iter().chain(&self.public_ports) {
+            hasher.bool(*flag);
+        }
+        for km in &self.sea_matrix {
+            hasher.u32(*km);
+        }
+        for link in &l.gateway_links {
+            hasher
+                .string(&link.region)
+                .string(&link.gateway)
+                .u32(link.km);
         }
         for card in &self.events {
             hasher.string(&card.id).u32(card.cooldown_weeks);
@@ -656,7 +859,7 @@ mod tests {
     fn pinned_dataset_loads_and_validates() {
         let dataset = Dataset::load().expect("dataset must validate");
         assert_eq!(dataset.products.len(), 44);
-        assert_eq!(dataset.recipes.len(), 64);
+        assert_eq!(dataset.recipes.len(), 68);
         assert_eq!(dataset.regions.len(), 31);
         assert_eq!(dataset.states.len(), 8);
         assert_eq!(dataset.events.len(), 24);

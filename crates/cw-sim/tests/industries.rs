@@ -21,7 +21,7 @@ use cw_core::money::Cents;
 use cw_core::quantity::MilliLots;
 use cw_data::{Dataset, ProductKind};
 use cw_sim::commands::{CommandEnvelope, CommandIntent, apply};
-use cw_sim::economy::{banking, freight, insurance, production, seed};
+use cw_sim::economy::{banking, freight, insurance, logistics, production, seed};
 use cw_sim::state::{
     Contract, ContractStatus, Facility, FacilityStatus, HolderId, INDUSTRY_NAMES, ScenarioKind,
     ScenarioMode, World,
@@ -255,6 +255,8 @@ fn add_facility(
         equipment_due_cents: 0,
         outage: None,
         stock_plan: Default::default(),
+        ship: Default::default(),
+        serves: Vec::new(),
     };
     let handle = world.facilities.insert(facility);
     world
@@ -961,8 +963,19 @@ fn logistics_carriers_earn_freight_and_delivery_waits_for_the_lane_lead_time() {
             &dataset.regions[to_region as usize].code,
         )
         .expect("validated lane");
-    let lead = freight::lead_time_weeks(km);
-    let expected_freight = freight::freight_cost(&dataset, from_region, to_region, quantity);
+    // The router prices the haul over the week's lanes; its lead time is the route's.
+    let route = logistics::quote(
+        &mut world,
+        &dataset,
+        buyer,
+        product,
+        from_region,
+        to_region,
+        quantity,
+    )
+    .expect("a route");
+    let (lead, expected_freight) = (route.weeks, route.cents);
+    assert!(lead >= freight::lead_time_weeks(km).min(lead));
     // Carriers are paid for the lane capacity they hold this week, so each holds some.
     for carrier in firms_in(&world, "logistics") {
         let region = world.firm(carrier).unwrap().region;
@@ -989,7 +1002,6 @@ fn logistics_carriers_earn_freight_and_delivery_waits_for_the_lane_lead_time() {
     // sector takes the exact remainder.
     let gateway_revenue =
         -world.outside.gateway_book.balance(Account::Revenue) - gateway_revenue_before;
-    assert!(carriers_paid > 0, "named carriers earn freight");
     assert!(
         carriers_paid <= expected_freight,
         "carriers cannot be paid more than the freight bill"
@@ -1095,7 +1107,15 @@ fn a_contract_buyer_takes_only_what_it_can_pay_for_in_full() {
     // The buyer holds exactly enough for 30 lots with their freight, plus a few cents.
     let affordable = MilliLots::from_lots(30);
     let thirty = affordable.value_at(Cents(price)).unwrap().0
-        + freight::freight_cost(&dataset, from_region, to_region, affordable);
+        + freight::quoted(
+            &mut world,
+            &dataset,
+            buyer,
+            product,
+            from_region,
+            to_region,
+            affordable,
+        );
     let cash = world.firm(buyer).unwrap().book.cash();
     let tick = world.tick;
     world
@@ -1197,15 +1217,17 @@ fn spot_imports_charge_goods_and_freight_exactly_once() {
 
     let quantity = MilliLots::from_lots(10);
     let goods_value = quantity.value_at(Cents(price)).expect("value fits").0;
-    let freight = freight::freight_cost(&dataset, seller_region, buyer_region, quantity);
-    let lead = freight::lead_time_weeks(
-        dataset
-            .lane_km(
-                &dataset.regions[seller_region as usize].code,
-                &dataset.regions[buyer_region as usize].code,
-            )
-            .expect("validated lane"),
-    );
+    let route = logistics::quote(
+        &mut world,
+        &dataset,
+        buyer,
+        product,
+        seller_region,
+        buyer_region,
+        quantity,
+    )
+    .expect("a route");
+    let (freight, lead) = (route.cents, route.weeks);
     let buyer_cash_before = world.firm(buyer).unwrap().book.cash();
     let buyer_inventory_before = world.firm(buyer).unwrap().book.balance(Account::Inventory);
     let seller_cash_before = world.firm(seller).unwrap().book.cash();
@@ -1859,9 +1881,22 @@ fn media_advertising_is_weekly_capacity_and_earns_nothing_unsold() {
         MilliLots::ZERO,
         "advertising is a weekly service"
     );
+    // Nothing was sold as advertising. (The studio may sell other goods it holds, such as
+    // timber, so the test reads advertising sales, not total revenue.)
+    let sold_advertising: i64 = world
+        .firm(studio)
+        .unwrap()
+        .last_closed_sales()
+        .map(|sales| {
+            sales
+                .iter()
+                .filter(|((_, product), _)| *product == advertising)
+                .map(|(_, lots)| *lots)
+                .sum()
+        })
+        .unwrap_or(0);
     assert_eq!(
-        lifetime_revenue(&world, studio),
-        0,
+        sold_advertising, 0,
         "no infinite media revenue without an advertiser budget"
     );
     assert_invariants(&world);

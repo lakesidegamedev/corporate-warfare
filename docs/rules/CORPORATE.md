@@ -147,7 +147,7 @@ meeting. Expanding an existing division past 50 percent share multiplies its cap
 other half, and rivals is 0.35 with no rival in the cell rising to 1.0 at four or more.
 Opening a division never pays it.
 
-Sprawl overhead counts divisions, not plant sites (15 before logistics strength raises it).
+Sprawl overhead counts divisions, not plant sites. It grows smoothly with the square of the division count; logistics strength and owned logistics divisions take part of it off (see MARKETS.md, owned logistics).
 A plant in the firm's home region is the input baseline; another region of the home state uses
 2.5 percent more inputs and another state 5 percent more. Each state's primary and secondary
 specialized sector types use 3 and 1.5 percent fewer.

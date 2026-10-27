@@ -285,6 +285,71 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             ],
         ),
         a(
+            "SetShippingPolicy",
+            "Supply",
+            "Shipping policy",
+            "How a division routes the freight it pays for, goods arriving in its region. The engine picks the route each week. A preferred mode or carrier is used when a route allows it.",
+            "freight route cheapest fastest rail truck pipeline ship carrier logistics",
+            vec![
+                f("facility", "Division site", "my_facility"),
+                f("kind", "Policy", "choice").choices(
+                    "number",
+                    &[
+                        ("0", "Cheapest"),
+                        ("1", "Fastest"),
+                        ("2", "Own carriers first"),
+                        ("3", "Most reliable"),
+                    ],
+                ),
+                f("mode", "Preferred mode", "choice")
+                    .choices(
+                        "optional",
+                        &[
+                            ("0", "Truck"),
+                            ("1", "Rail"),
+                            ("2", "Pipeline"),
+                            ("3", "Ship"),
+                        ],
+                    )
+                    .optional(),
+                f("carrier", "Preferred carrier", "any_firm").optional(),
+            ],
+        ),
+        a(
+            "ReserveLane",
+            "Supply",
+            "Reserve lane capacity",
+            "Reserve lots a week on a lane for a number of weeks at the lane's current rate less a commitment discount, fixed for the term. Other firms cannot use the reserved lots, so a busy lane pushes them onto dearer routes.",
+            "freight lane contract reserve lockout capacity logistics",
+            vec![
+                firm(),
+                f("from", "From", "region"),
+                f("to", "To", "region"),
+                f("mode", "Mode", "choice").choices(
+                    "number",
+                    &[
+                        ("0", "Truck"),
+                        ("1", "Rail"),
+                        ("2", "Pipeline"),
+                        ("3", "Ship"),
+                    ],
+                ),
+                f("lots", "Lots a week", "count").range(1, 20_000, 10, 100),
+                f("weeks", "Weeks", "weeks").range(4, 52, 1, 13),
+            ],
+        ),
+        a(
+            "SetCarrierLane",
+            "Supply",
+            "Pin carrier lane",
+            "Point a carrier division at the lane from its region to one other region. Leave the region empty to let it follow the busiest lanes.",
+            "freight lane carrier pipeline rail trucking focus logistics",
+            vec![
+                f("facility", "Carrier site", "my_facility"),
+                f("region", "Other end", "region").optional(),
+            ],
+        ),
+        a(
             "SetLogisticsBudget",
             "Operations",
             "Logistics programme",

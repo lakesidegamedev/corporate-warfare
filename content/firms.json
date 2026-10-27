@@ -207,7 +207,7 @@
       "archetype": "vulture",
       "region": "OH-SW",
       "recipe": "carrier",
-      "blocks": 5,
+      "blocks": 2,
       "public": true
     },
     {
@@ -217,7 +217,7 @@
       "archetype": "brand_builder",
       "region": "IL-CHI",
       "recipe": "freight_rail",
-      "blocks": 5,
+      "blocks": 2,
       "public": false
     },
     {

@@ -12,6 +12,7 @@ pub mod history;
 pub mod insolvency;
 pub mod insurance;
 pub mod labour;
+pub mod logistics;
 pub mod macro_cycle;
 pub mod markets;
 pub mod objectives;

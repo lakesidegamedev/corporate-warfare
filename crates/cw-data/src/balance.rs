@@ -164,6 +164,14 @@ pub struct Recipe {
     /// the lots of space one block holds (balance schema 3) and it makes no goods.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub storage_class: Option<StorageClass>,
+    /// Set on a carrier: the freight mode it adds lane capacity in (balance schema 3). Its
+    /// `weekly_output_lots` is then the lots a block can move each week.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport_mode: Option<String>,
+    /// A rail terminal or a port: it opens its region to the mode for every firm and adds a
+    /// little capacity of its own.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub terminal: bool,
     pub weekly_inputs_lots: BTreeMap<String, i64>,
     pub workers_low_mid_high: [i64; 3],
     pub capex_cents: i64,

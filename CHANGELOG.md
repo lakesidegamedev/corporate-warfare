@@ -25,6 +25,23 @@ heading.
 
 ### Added
 
+- Owned logistics (1.7 preview 3). Freight is now lane capacity. Trucking, rail, pipelines and
+  lake and sea shipping carry goods between regions; each mode has its own price, speed, smallest
+  load, terminal needs and list of goods it may carry (pipelines liquids and gas only, cold goods
+  by truck or rail). Carrier divisions give your group finite weekly capacity on the lanes they
+  serve, and you ship on your own carriers first and at cost. Other shippers pay a price that
+  rises smoothly as the lane fills; outside carriers take the overflow at a premium so goods
+  never stop. Rail terminals and ports are buildable and open their region to every firm. Each
+  division has a standing shipping policy (cheapest, fastest, own carriers first, most reliable,
+  with an optional preferred mode or carrier) and the engine routes every shipment over up to
+  three legs. Lane contracts reserve capacity for 4 to 52 weeks at a locked rate, so you can lock
+  rivals off a lane you depend on. Great Lakes ports get lake shipping, and the data supports
+  gateway sea legs for later scenarios. Alerts appear only for lanes you ship on: full for four
+  weeks, a carrier rate hike, a rival reserving a lane. Rivals choose policies, build carriers
+  where lanes overflow and sign lane contracts. Map freight layer with congestion colours, a lane
+  panel, a shipping policy picker per division and Reserve lane in the Command Center, on
+  Compose and SwiftUI. Snapshot schema 3 adds lane use, rates and the outside carrier share.
+
 - Storage (1.7 preview 2). Goods now take up space. Every plant has a working yard, six weeks of
   what it uses and makes; anything beyond that sits in the region's outside storage for a weekly
   fee per lot, so goods never vanish for lack of room but a pile costs money. Four new logistics
@@ -144,6 +161,14 @@ heading.
   elsewhere, which could strip a plant's own inputs; they now deliver from the plant's region.
 - Stock of food sat unsold in storage at twelve thousand lots; spoilage and shorter perishable
   cover bring it down.
+
+### Changed
+
+- Sprawl overhead no longer jumps at 15 divisions. It grows smoothly with division count, and
+  owning logistics divisions takes part of it off on top of logistics strength.
+- Freight capacity per block, the freight reference price and the two seeded carriers were
+  recalibrated so a carrier earns its keep from lane use. Crossroads Carriers and Oaken Freight
+  Lines now survive nearly every seed instead of failing in most.
 
 ## [1.6.1] - 2026-10-27
 

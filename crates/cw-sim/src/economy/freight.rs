@@ -1,8 +1,10 @@
-//! Freight, supply contracts and inter-region delivery.
+//! Supply contracts and inter-region delivery.
 //!
-//! Distance comes from validated lane lengths. Baseline road rate is five cents per lot per
-//! kilometre with a one dollar minimum per inter-region shipment; lead time is
-//! `max(1, ceil(km / 500))` weeks. Contracts are honoured before spot capacity, delivery
+//! Distance comes from validated lane lengths. `freight_cost` is the reference truck rate (three
+//! cents per lot per kilometre with a one dollar minimum per inter-region shipment) used to
+//! rank sellers and size plans; the price actually charged comes from `economy::logistics`,
+//! which routes each shipment over lanes with finite capacity. Lead time over a single truck leg
+//! is `max(1, ceil(km / 500))` weeks. Contracts are honoured before spot capacity, delivery
 //! settles once, and stock never teleports between regions.
 
 use cw_core::calendar::Tick;
@@ -25,12 +27,7 @@ pub fn freight_cost(dataset: &Dataset, from: u8, to: u8, qty: MilliLots) -> i64 
     if from == to {
         return 0;
     }
-    let km = dataset
-        .lane_km(
-            &dataset.regions[from as usize].code,
-            &dataset.regions[to as usize].code,
-        )
-        .unwrap_or(500);
+    let km = dataset.km(from, to);
     let lots = qty.lots().max(1);
     let cost = lots
         * km as i64
@@ -144,6 +141,7 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
         // seller never hands over goods for part of their price. What the buyer cannot afford
         // stays with the seller for the exchange, and the week counts as delivered.
         let price = contract.price_cents;
+        let product = contract.product;
         let buyer_cash = world
             .firms
             .get(contract.buyer)
@@ -151,31 +149,46 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
             .unwrap_or(0)
             .max(0);
         let full_cost = deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0
-            + freight_cost(
+            + quoted(
+                world,
                 dataset,
+                contract.buyer,
+                product,
                 contract.from_region,
                 contract.to_region,
                 deliverable,
             );
+        let wanted = deliverable;
         let mut deliverable = deliverable;
+        let bill = |world: &mut World, lots: MilliLots| {
+            lots.value_at(Cents(price)).unwrap_or(Cents::ZERO).0
+                + quoted(
+                    world,
+                    dataset,
+                    contract.buyer,
+                    product,
+                    contract.from_region,
+                    contract.to_region,
+                    lots,
+                )
+        };
         if full_cost > buyer_cash {
-            // Whole lots only, so the reduced shipment's freight is never above its share.
+            // Whole lots only. Start from the proportional share, trim until the goods and the
+            // freight for that many lots fit, then take any further lots that still fit: freight
+            // per lot falls with the size of a haul, so the first guess can land short.
             let lots = (deliverable.0 as i128 * buyer_cash as i128
                 / full_cost.max(1) as i128
                 / 1_000) as i64;
             deliverable = MilliLots::from_lots(lots);
-            // The freight minimum can make a small shipment dearer per lot; trim to fit.
-            while deliverable.0 > 0
-                && deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0
-                    + freight_cost(
-                        dataset,
-                        contract.from_region,
-                        contract.to_region,
-                        deliverable,
-                    )
-                    > buyer_cash
-            {
+            while deliverable.0 > 0 && bill(world, deliverable) > buyer_cash {
                 deliverable = MilliLots(deliverable.0 - 1_000);
+            }
+            for _ in 0..24 {
+                let next = MilliLots(deliverable.0 + 1_000);
+                if next.0 > wanted.0 || bill(world, next) > buyer_cash {
+                    break;
+                }
+                deliverable = next;
             }
         }
         if deliverable.0 <= 0 {
@@ -201,15 +214,17 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
         };
         let goods_value = deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0;
         let margin = goods_value.saturating_sub(carrying).max(0);
-        let freight = freight_cost(
+        let freight = quoted(
+            world,
             dataset,
+            contract.buyer,
+            product,
             contract.from_region,
             contract.to_region,
             deliverable,
         );
         let paid = (goods_value + freight).min(buyer_cash);
         let paid_goods = goods_value.min(paid);
-        let paid_freight = paid - paid_goods;
         if paid_goods > 0 {
             let _ = world.firms.get_mut(contract.buyer).unwrap().book.commit(
                 world.tick,
@@ -231,14 +246,23 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
             // that pricing, the market board and the AI read.
             seller.record_sale(contract.to_region, contract.product, deliverable);
         }
-        if paid_freight > 0 {
-            pay_freight(
+        // The route is booked after the goods change hands. A buyer that could only pay part of
+        // the bill pays part of the freight, as before.
+        let mut transit_weeks = 1;
+        let mut paid_freight = 0;
+        if contract.from_region != contract.to_region {
+            let booked = crate::economy::logistics::book(
                 world,
                 dataset,
                 contract.buyer,
-                paid_freight,
+                product,
+                contract.from_region,
+                contract.to_region,
+                deliverable,
                 "contract freight",
             );
+            transit_weeks = booked.weeks;
+            paid_freight = booked.cents;
         }
 
         if contract.from_region == contract.to_region {
@@ -259,12 +283,6 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
                 }
             }
         } else {
-            let km = dataset
-                .lane_km(
-                    &dataset.regions[contract.from_region as usize].code,
-                    &dataset.regions[contract.to_region as usize].code,
-                )
-                .unwrap_or(500);
             world.shipments.push(Shipment {
                 seller: contract.seller,
                 buyer: contract.buyer,
@@ -272,7 +290,7 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
                 quantity: deliverable,
                 from_region: contract.from_region,
                 to_region: contract.to_region,
-                arrive: Tick(world.tick.0 + lead_time_weeks(km)),
+                arrive: Tick(world.tick.0 + transit_weeks),
                 unit_price_cents: price,
                 goods_value_cents: paid_goods,
                 freight_cents: paid_freight,
@@ -296,38 +314,23 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
     }
 }
 
-/// Charge one freight bill to the payer and pay it to a named carrier when one exists,
-/// otherwise to the finite outside carrier sector. The payer is debited exactly once so the
-/// transport service has a real counterparty instead of minting carrier revenue.
-pub fn pay_freight(world: &mut World, dataset: &Dataset, payer: Handle, amount: i64, memo: &str) {
-    if amount <= 0 {
-        return;
+/// The freight bill for a shipment as the router would book it now, in cents. Within a region
+/// there is none.
+pub fn quoted(
+    world: &mut World,
+    dataset: &Dataset,
+    buyer: Handle,
+    product: u16,
+    from: u8,
+    to: u8,
+    qty: MilliLots,
+) -> i64 {
+    if from == to {
+        return 0;
     }
-    let cash = world
-        .firms
-        .get(payer)
-        .map(|firm| firm.book.cash())
-        .unwrap_or(0)
-        .max(0);
-    let paid = amount.min(cash);
-    if paid <= 0 {
-        return;
-    }
-    let _ = world.firms.get_mut(payer).unwrap().book.commit(
-        world.tick,
-        Txn::new()
-            .credit(Account::Cash, paid, memo)
-            .debit(Account::CostOfGoods, paid, memo),
-    );
-    pay_carriers(world, dataset, payer, paid, memo);
-}
-
-/// Pay a freight bill to the carriers that hold freight capacity this week, in proportion to what
-/// they hold, which also records their sale; the remainder goes to the finite outside carrier
-/// sector. Carriers with no capacity left earn nothing, so a bill is never split by headcount.
-fn pay_carriers(world: &mut World, dataset: &Dataset, payer: Handle, paid: i64, memo: &str) {
-    let freight = dataset.product_index["freight"];
-    crate::economy::services::pay_for_service(world, dataset, Some(payer), freight, paid, memo);
+    crate::economy::logistics::quote(world, dataset, buyer, product, from, to, qty)
+        .map(|plan| plan.cents)
+        .unwrap_or_else(|| freight_cost(dataset, from, to, qty))
 }
 
 #[cfg(test)]
@@ -347,6 +350,13 @@ mod tests {
     fn freight_cost_is_per_whole_lot_and_has_a_minimum() {
         let dataset = Dataset::load().unwrap();
         let km = dataset.lane_km("OH-CEN", "MI-DET").unwrap();
+        assert_eq!(
+            dataset.km(
+                dataset.region_index["OH-CEN"],
+                dataset.region_index["MI-DET"]
+            ),
+            km
+        );
         let (oh, mi) = (
             dataset.region_index["OH-CEN"],
             dataset.region_index["MI-DET"],

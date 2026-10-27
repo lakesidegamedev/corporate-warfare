@@ -444,6 +444,96 @@ pub struct StorageSummaryDto {
     pub rent_cents_13w: i64,
 }
 
+/// One freight mode: its price, speed, smallest shipment and what it can carry.
+#[derive(uniffi::Record)]
+pub struct FreightModeDto {
+    pub index: u32,
+    pub id: String,
+    pub name: String,
+    pub rate_milli_cents_per_lot_km: i64,
+    pub speed_km_week: u32,
+    pub min_lots: i64,
+    pub needs_terminal: bool,
+    pub needs_infrastructure: bool,
+    /// Storage class keys the mode may carry: dry, tank, silo, cold.
+    pub classes: Vec<String>,
+}
+
+/// A firm's capacity share on a lane.
+#[derive(uniffi::Record)]
+pub struct LaneOwnerDto {
+    pub firm: u64,
+    pub name: String,
+    pub lots: i32,
+    pub mine: bool,
+}
+
+/// One lane this week: two regions in one mode, with its capacity, use and price.
+#[derive(uniffi::Record)]
+pub struct LaneDto {
+    pub a: String,
+    pub b: String,
+    pub a_name: String,
+    pub b_name: String,
+    pub mode: u32,
+    pub mode_id: String,
+    pub mode_name: String,
+    pub km: u32,
+    pub capacity_lots: i32,
+    pub used_lots: i32,
+    /// Lots under lane contracts.
+    pub held_lots: i32,
+    /// Lots that overflowed to outside carriers.
+    pub outside_lots: i32,
+    pub fill_bps: i32,
+    /// Spot price of one lot over the whole lane, and the outside carriers' price.
+    pub rate_cents_per_lot: i64,
+    pub outside_rate_cents_per_lot: i64,
+    /// Weeks running the lane has been full or overflowing.
+    pub hot_weeks: u32,
+    pub owners: Vec<LaneOwnerDto>,
+    pub contracts: u32,
+    pub my_capacity_lots: i32,
+    pub my_shipped_lots: i32,
+    pub my_contract_lots: i32,
+    /// Lots the player's group could reserve now.
+    pub reservable_lots: i64,
+}
+
+/// A lane contract: reserved capacity at a fixed weekly rate.
+#[derive(uniffi::Record)]
+pub struct LaneContractDto {
+    pub id: u32,
+    pub holder: u64,
+    pub holder_name: String,
+    pub mine: bool,
+    pub a: String,
+    pub b: String,
+    pub a_name: String,
+    pub b_name: String,
+    pub mode: u32,
+    pub mode_name: String,
+    pub lots: i32,
+    pub held_lots: i32,
+    pub used_lots: i32,
+    pub fee_cents_per_lot: i64,
+    pub weeks_left: u32,
+}
+
+/// The corridor's freight in one glance, for the week just closed.
+#[derive(uniffi::Record)]
+pub struct FreightSummaryDto {
+    pub carriers: u32,
+    pub lanes_with_capacity: u32,
+    pub capacity_lots: i64,
+    pub moved_lots: i64,
+    pub outside_share_bps: i32,
+    pub own_group_lots: i64,
+    pub contract_lots: i64,
+    pub paid_cents: i64,
+    pub congested_lanes: u32,
+}
+
 #[derive(uniffi::Record)]
 pub struct RecipeDto {
     pub index: u32,
@@ -619,6 +709,10 @@ pub struct StrategyDto {
     pub depletes: bool,
     /// Set on a storage facility: dry, tank, silo or cold. Empty for a producing plant.
     pub storage_class: String,
+    /// Set on a carrier: truck, rail, pipeline or sea. Its output is lots of lane capacity.
+    pub transport_mode: String,
+    /// A rail terminal or port, which opens its region to the mode for every firm.
+    pub terminal: bool,
 }
 
 /// A good a state imports: demand local plants are not meeting.
@@ -690,6 +784,15 @@ pub struct DivisionDto {
     pub seasonal_build: bool,
     /// The firm's storage in the division's region.
     pub storage: Vec<StorageCellDto>,
+    /// The division's shipping policy: 0 cheapest, 1 fastest, 2 own carriers first, 3 most
+    /// reliable; the preferred mode index or -1; the preferred carrier or 0.
+    pub ship_kind: u32,
+    pub ship_mode: i32,
+    pub ship_carrier: u64,
+    /// The freight mode the division carries when it is a carrier, else empty, and the regions
+    /// its capacity is pinned to (empty is automatic).
+    pub carrier_mode: String,
+    pub serves: Vec<String>,
 }
 
 /// The board's quarterly objective for the player's primary company.
@@ -801,8 +904,9 @@ pub struct FirmOpsDto {
     pub logistics_strength: i32,
     pub logistics_budget_cents: i64,
     pub plants: u32,
-    /// Divisions run; sprawl applies past the threshold.
     pub divisions: u32,
+    /// Sprawl overhead rises smoothly with divisions; this is the count at which it reaches one
+    /// percent of weekly revenue, given strength, owned logistics and any secondary type.
     pub sprawl_threshold: u32,
 }
 
@@ -854,6 +958,18 @@ fn alert_text(alert: cw_session::Alert) -> String {
         ),
         "alert.spoilage" => format!(
             "{}: spoilage is losing real money. Sell perishables sooner or build cold storage.",
+            alert.subject
+        ),
+        "alert.lane_congested" => format!(
+            "{}: the lane has been full for weeks. Add capacity or reserve it before rivals do.",
+            alert.subject
+        ),
+        "alert.carrier_hike" => format!(
+            "{}: carriers raised their rate by a fifth in four weeks. Another mode or your own carrier may pay.",
+            alert.subject
+        ),
+        "alert.lane_reserved" => format!(
+            "{}: a rival reserved capacity on a lane you ship on.",
             alert.subject
         ),
         _ => alert.key,
@@ -1246,6 +1362,30 @@ fn raid_quote_dto(quote: cw_sim::economy::sectors::RaidQuote) -> RaidQuoteDto {
 }
 
 #[uniffi::export]
+pub fn freight_modes() -> Vec<FreightModeDto> {
+    match cw_data::Dataset::load() {
+        Ok(dataset) => dataset
+            .logistics
+            .modes
+            .iter()
+            .enumerate()
+            .map(|(index, mode)| FreightModeDto {
+                index: index as u32,
+                id: mode.id.clone(),
+                name: mode.name.clone(),
+                rate_milli_cents_per_lot_km: mode.rate_milli_cents_per_lot_km,
+                speed_km_week: mode.speed_km_week,
+                min_lots: mode.min_lots,
+                needs_terminal: mode.needs_terminal,
+                needs_infrastructure: mode.needs_infrastructure,
+                classes: mode.classes.iter().map(|c| c.key().to_owned()).collect(),
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+#[uniffi::export]
 pub fn strategies() -> Vec<StrategyDto> {
     let Ok(dataset) = cw_data::Dataset::load() else {
         return Vec::new();
@@ -1341,6 +1481,8 @@ pub fn strategies() -> Vec<StrategyDto> {
                     .storage_class
                     .map(|c| c.key().to_owned())
                     .unwrap_or_default(),
+                transport_mode: recipe.transport_mode.clone().unwrap_or_default(),
+                terminal: recipe.terminal,
             }
         })
         .collect()
@@ -1805,9 +1947,188 @@ impl SessionHandle {
                         .get(handle)
                         .map(|f| storage_cells(world, dataset, f, Some(d.region)))
                         .unwrap_or_default(),
+                    ship_kind: d
+                        .plants
+                        .first()
+                        .and_then(|h| world.facilities.get(*h))
+                        .map(|p| p.ship.kind.code() as u32)
+                        .unwrap_or(0),
+                    ship_mode: d
+                        .plants
+                        .first()
+                        .and_then(|h| world.facilities.get(*h))
+                        .and_then(|p| p.ship.mode)
+                        .map(|m| m as i32)
+                        .unwrap_or(-1),
+                    ship_carrier: d
+                        .plants
+                        .first()
+                        .and_then(|h| world.facilities.get(*h))
+                        .and_then(|p| p.ship.carrier)
+                        .map(|h| h.0)
+                        .unwrap_or(0),
+                    carrier_mode: recipe.transport_mode.clone().unwrap_or_default(),
+                    serves: d
+                        .plants
+                        .first()
+                        .and_then(|h| world.facilities.get(*h))
+                        .map(|p| {
+                            p.serves
+                                .iter()
+                                .map(|r| dataset.regions[*r as usize].code.clone())
+                                .collect()
+                        })
+                        .unwrap_or_default(),
                 }
             })
             .collect()
+    }
+
+    /// Every lane with capacity or traffic this week, busiest first.
+    pub fn lanes(&self) -> Vec<LaneDto> {
+        use cw_sim::economy::logistics as lg;
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let mine =
+            |firm: cw_core::ids::Handle| cw_sim::economy::events_engine::player_side(world, firm);
+        let primary = world.investor.primary_group;
+        let mut out: Vec<LaneDto> = lg::lane_views(world, dataset)
+            .into_iter()
+            .map(|view| {
+                let key = view.key;
+                let stat = world.logistics.stats.get(&key);
+                let lane = world.logistics.lanes.get(&key);
+                let contracts_mine: i32 = world
+                    .logistics
+                    .contracts
+                    .iter()
+                    .filter(|c| c.key == key && mine(c.holder))
+                    .map(|c| c.held)
+                    .sum();
+                LaneDto {
+                    a: dataset.regions[key.a as usize].code.clone(),
+                    b: dataset.regions[key.b as usize].code.clone(),
+                    a_name: dataset.regions[key.a as usize].name.clone(),
+                    b_name: dataset.regions[key.b as usize].name.clone(),
+                    mode: key.mode as u32,
+                    mode_id: dataset.logistics.modes[key.mode as usize].id.clone(),
+                    mode_name: dataset.logistics.modes[key.mode as usize].name.clone(),
+                    km: view.km,
+                    capacity_lots: view.cap,
+                    used_lots: view.used,
+                    held_lots: view.held,
+                    outside_lots: view.outside,
+                    fill_bps: view.fill_bps,
+                    rate_cents_per_lot: view.rate_cents,
+                    outside_rate_cents_per_lot: lg::leg_cents(
+                        dataset,
+                        key.a,
+                        key.b,
+                        key.mode,
+                        1,
+                        dataset.logistics.outside_premium_bps,
+                    )
+                    .max(1),
+                    hot_weeks: stat.map(|s| s.hot_weeks as u32).unwrap_or(0),
+                    owners: view
+                        .owners
+                        .iter()
+                        .map(|(firm, lots)| LaneOwnerDto {
+                            firm: firm.0,
+                            name: world
+                                .firms
+                                .get(*firm)
+                                .map(|f| f.name.clone())
+                                .unwrap_or_default(),
+                            lots: *lots,
+                            mine: mine(*firm),
+                        })
+                        .collect(),
+                    contracts: view.contracts as u32,
+                    my_capacity_lots: view
+                        .owners
+                        .iter()
+                        .filter(|(f, _)| mine(*f))
+                        .map(|(_, l)| *l)
+                        .sum(),
+                    my_shipped_lots: lane
+                        .map(|l| {
+                            l.users
+                                .iter()
+                                .filter(|(f, _)| mine(*f))
+                                .map(|(_, lots)| *lots)
+                                .sum()
+                        })
+                        .unwrap_or(0),
+                    my_contract_lots: contracts_mine,
+                    reservable_lots: primary
+                        .map(|p| lg::reservable_lots(world, p, key))
+                        .unwrap_or(0),
+                }
+            })
+            .collect();
+        out.sort_by(|x, y| {
+            (y.capacity_lots + y.outside_lots)
+                .cmp(&(x.capacity_lots + x.outside_lots))
+                .then_with(|| (&x.a, &x.b, x.mode).cmp(&(&y.a, &y.b, y.mode)))
+        });
+        out
+    }
+
+    /// Every live lane contract.
+    pub fn lane_contracts(&self) -> Vec<LaneContractDto> {
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        world
+            .logistics
+            .contracts
+            .iter()
+            .filter(|c| c.weeks_left > 0)
+            .map(|c| LaneContractDto {
+                id: c.id,
+                holder: c.holder.0,
+                holder_name: world
+                    .firms
+                    .get(c.holder)
+                    .map(|f| f.name.clone())
+                    .unwrap_or_default(),
+                mine: cw_sim::economy::events_engine::player_side(world, c.holder),
+                a: dataset.regions[c.key.a as usize].code.clone(),
+                b: dataset.regions[c.key.b as usize].code.clone(),
+                a_name: dataset.regions[c.key.a as usize].name.clone(),
+                b_name: dataset.regions[c.key.b as usize].name.clone(),
+                mode: c.key.mode as u32,
+                mode_name: dataset.logistics.modes[c.key.mode as usize].name.clone(),
+                lots: c.lots,
+                held_lots: c.held,
+                used_lots: c.used,
+                fee_cents_per_lot: c.fee_per_lot_cents,
+                weeks_left: c.weeks_left,
+            })
+            .collect()
+    }
+
+    /// The corridor's freight for the week just closed.
+    pub fn freight_summary(&self) -> FreightSummaryDto {
+        let session = self.lock();
+        let world = &session.world;
+        let st = &world.logistics;
+        let last = &st.last;
+        let moved: i64 = last.lots_by_mode.iter().sum();
+        let outside: i64 = last.outside_lots_by_mode.iter().sum();
+        FreightSummaryDto {
+            carriers: st.carriers.len() as u32,
+            lanes_with_capacity: st.lanes.values().filter(|l| l.cap() > 0).count() as u32,
+            capacity_lots: st.lanes.values().map(|l| l.cap() as i64).sum(),
+            moved_lots: moved,
+            outside_share_bps: (outside * 10_000 / moved.max(1)) as i32,
+            own_group_lots: last.own_lots,
+            contract_lots: last.contract_lots,
+            paid_cents: last.cents,
+            congested_lanes: st.stats.values().filter(|s| s.hot_weeks >= 4).count() as u32,
+        }
     }
 
     /// A firm's storage in every region where it holds stock or owns space.
@@ -2222,8 +2543,12 @@ impl SessionHandle {
         let world = &session.world;
         let entity = world.firms.get(cw_core::ids::Handle(firm))?;
         let names = cw_sim::state::INDUSTRY_NAMES;
-        let (threshold, _) = cw_sim::economy::operations::sprawl_terms(
+        let handle = cw_core::ids::Handle(firm);
+        let owned =
+            cw_sim::economy::operations::owned_logistics_divisions(world, &session.dataset, handle);
+        let threshold = cw_sim::economy::operations::sprawl_onset(
             entity.logistics_strength,
+            owned,
             entity.secondary_industry.is_some(),
         );
         Some(FirmOpsDto {
@@ -3298,7 +3623,7 @@ mod tests {
             "the player's plant is marked"
         );
         let catalogue = strategies();
-        assert_eq!(catalogue.len(), 64);
+        assert_eq!(catalogue.len(), 68);
         // A refinery lists its by-products for the build screens.
         let refinery = catalogue.iter().find(|s| s.id == "refinery").unwrap();
         assert_eq!(refinery.by_products.len(), 3);
@@ -3313,6 +3638,7 @@ mod tests {
                 .all(|s| !s.name.is_empty() && s.weekly_output_lots > 0)
         );
         let ops = session.firm_ops(firm).expect("ops for the player's firm");
-        assert_eq!(ops.sprawl_threshold, 15);
+        // Sprawl is a smooth curve now; this is where it reaches one percent of revenue.
+        assert_eq!(ops.sprawl_threshold, 24);
     }
 }

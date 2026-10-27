@@ -341,6 +341,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
                         Text("${division.shareBps / 100}% share", color = Palette.gold, fontSize = 13.sp)
                     }
                     DivisionStock(store, division)
+                    DivisionShipping(store, division)
                 }
             }
         }

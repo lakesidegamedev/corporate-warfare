@@ -104,7 +104,7 @@ fn the_snapshot_reports_storage_use_fees_and_spoilage() {
     let mut session = Session::create(config()).unwrap();
     session.advance(13);
     let snapshot = session.market_snapshot();
-    assert_eq!(snapshot.schema, 2);
+    assert_eq!(snapshot.schema, 3);
     assert!(snapshot.storage.capacity_lots > 0, "yards count as space");
     assert!(snapshot.storage.used_lots > 0);
     let player = snapshot.player.as_ref().expect("the player has a company");

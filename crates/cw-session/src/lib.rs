@@ -776,6 +776,7 @@ impl Session {
             }
             storage_alerts(world, &self.dataset, firm, &mut alerts);
         }
+        logistics_alerts(world, &self.dataset, &mut alerts);
         for event in dto::events(world, &self.dataset) {
             if event.mandatory {
                 alerts.push(Alert {
@@ -1189,6 +1190,84 @@ fn empty_ownership(handle: u64) -> OwnershipSummary {
     }
 }
 
+/// A lane's name for alerts: "Columbus to Toledo by rail".
+pub fn lane_label(dataset: &cw_data::Dataset, key: cw_sim::economy::logistics::LaneKey) -> String {
+    let city = |r: u8| {
+        dataset.regions[r as usize]
+            .principal_city
+            .split(',')
+            .next()
+            .unwrap_or("")
+            .to_owned()
+    };
+    format!(
+        "{} to {} by {}",
+        city(key.a),
+        city(key.b),
+        dataset.logistics.modes[key.mode as usize]
+            .name
+            .to_lowercase()
+    )
+}
+
+/// Freight alerts, only when they matter and only for lanes the investor's companies ship on:
+/// a lane full for four weeks running, a carrier rate hike of a fifth over four weeks, or a rival
+/// reserving a lane in the last three weeks. Each is told once per lane while it holds.
+fn logistics_alerts(
+    world: &cw_sim::state::World,
+    dataset: &cw_data::Dataset,
+    alerts: &mut Vec<Alert>,
+) {
+    use cw_sim::economy::logistics as lg;
+    let mine =
+        |firm: cw_core::ids::Handle| cw_sim::economy::events_engine::player_side(world, firm);
+    let st = &world.logistics;
+    for (key, stat) in &st.stats {
+        let depends = stat
+            .users
+            .iter()
+            .any(|(firm, last)| mine(*firm) && world.tick.0.saturating_sub(*last) <= 4);
+        if !depends {
+            continue;
+        }
+        if stat.hot_weeks >= lg::SUSTAINED_WEEKS {
+            alerts.push(Alert {
+                key: "alert.lane_congested".to_owned(),
+                subject: lane_label(dataset, *key),
+                severity: 1,
+            });
+        }
+        if stat.mult_hist.len() >= 5 {
+            let now = *stat.mult_hist.last().unwrap_or(&0) as i64;
+            let before = stat.mult_hist[stat.mult_hist.len() - 5] as i64;
+            if before > 0 && now * 10_000 >= before * (10_000 + lg::HIKE_BPS as i64) {
+                alerts.push(Alert {
+                    key: "alert.carrier_hike".to_owned(),
+                    subject: lane_label(dataset, *key),
+                    severity: 1,
+                });
+            }
+        }
+    }
+    for reservation in &st.reservations {
+        if world.tick.0.saturating_sub(reservation.tick) > 3 || mine(reservation.holder) {
+            continue;
+        }
+        let affected = st.stats.get(&reservation.key).is_some_and(|stat| {
+            stat.users
+                .iter()
+                .any(|(firm, last)| mine(*firm) && world.tick.0.saturating_sub(*last) <= 4)
+        });
+        if affected {
+            alerts.push(Alert {
+                key: "alert.lane_reserved".to_owned(),
+                subject: lane_label(dataset, reservation.key),
+                severity: 2,
+            });
+        }
+    }
+}
+
 /// Storage alerts for one of the investor's companies, only when they matter: space nearly full
 /// in a class where stock is substantial, outside storage and holding cost above 3 percent of
 /// four weeks of revenue, or spoilage above 2 percent. Each also needs a floor in dollars so
@@ -1543,7 +1622,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "1ec1c70637ab5310fabb745148702b7f25763e40c5296474350e6c4ac3247fb3"
+            "08749e8102cc8a16d65cb39070b8687fadcccd2e0047f7c7a7307aea93711855"
         );
     }
 

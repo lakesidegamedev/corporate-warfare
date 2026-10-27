@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "classification": "authored engineering calibration; NOT real freight rates",
+  "outside_premium_bps": 12500,
+  "empty_lane_bps": 10000,
+  "own_cost_bps": 6500,
+  "contract_discount_bps": 9000,
+  "modes": [
+    {
+      "id": "truck",
+      "reach_km": 700,
+      "name": "Truck",
+      "rate_milli_cents_per_lot_km": 3000,
+      "speed_km_week": 500,
+      "min_lots": 1,
+      "needs_terminal": false,
+      "needs_infrastructure": false,
+      "outside_backstop": true,
+      "road_sensitive": true,
+      "classes": ["dry", "tank", "silo", "cold"]
+    },
+    {
+      "id": "rail",
+      "reach_km": 1100,
+      "name": "Rail",
+      "rate_milli_cents_per_lot_km": 2000,
+      "speed_km_week": 600,
+      "min_lots": 20,
+      "needs_terminal": true,
+      "needs_infrastructure": false,
+      "outside_backstop": true,
+      "road_sensitive": false,
+      "classes": ["dry", "tank", "silo", "cold"]
+    },
+    {
+      "id": "pipeline",
+      "reach_km": 0,
+      "name": "Pipeline",
+      "rate_milli_cents_per_lot_km": 900,
+      "speed_km_week": 400,
+      "min_lots": 10,
+      "needs_terminal": false,
+      "needs_infrastructure": true,
+      "outside_backstop": false,
+      "road_sensitive": false,
+      "classes": ["tank"]
+    },
+    {
+      "id": "sea",
+      "reach_km": 100000,
+      "name": "Ship",
+      "rate_milli_cents_per_lot_km": 700,
+      "speed_km_week": 450,
+      "min_lots": 50,
+      "needs_terminal": true,
+      "needs_infrastructure": false,
+      "outside_backstop": true,
+      "road_sensitive": false,
+      "classes": ["dry", "tank", "silo"]
+    }
+  ],
+  "public_rail": [
+    "IL-CHI", "IL-WCN", "IN-CEN", "IN-NW", "KY-LOU", "MI-DET", "MI-WES", "NY-NYC", "NY-CAP",
+    "NY-WES", "OH-NE", "OH-CEN", "OH-SW", "OH-NW", "PA-PHL", "PA-WES", "PA-CEN", "WV-SOU"
+  ],
+  "public_ports": ["IL-CHI", "MI-DET", "OH-NE", "NY-WES"],
+  "sea_systems": [
+    {
+      "id": "great_lakes",
+      "name": "Great Lakes",
+      "factor_bps": 15000,
+      "ports": ["IL-CHI", "IN-NW", "MI-DET", "MI-NOR", "OH-NW", "OH-NE", "NY-WES"]
+    }
+  ],
+  "gateway_links": [
+    { "region": "NY-NYC", "gateway": "atlantic", "km": 600 },
+    { "region": "PA-PHL", "gateway": "atlantic", "km": 500 },
+    { "region": "NY-WES", "gateway": "st_lawrence", "km": 900 }
+  ]
+}

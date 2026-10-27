@@ -20,11 +20,26 @@ fn region(dataset: &Dataset, code: &str) -> u8 {
 }
 
 #[test]
-fn sprawl_threshold_and_slope_follow_logistics_strength() {
-    assert_eq!(operations::sprawl_terms(0, false), (15, 50));
-    assert_eq!(operations::sprawl_terms(200, false), (30, 25));
-    assert_eq!(operations::sprawl_terms(0, true), (15, 100));
-    assert_eq!(operations::sprawl_terms(100, false), (22, 38));
+fn sprawl_is_a_smooth_curve_that_logistics_offsets() {
+    // 0.18 bps per division squared: no cliff at any count, and it only ever rises.
+    let at = |d: i64| operations::sprawl_rate_bps(d, 0, 0, false);
+    assert_eq!(at(0), 0);
+    assert_eq!(at(10), 18);
+    assert_eq!(at(20), 72);
+    assert_eq!(at(30), 162);
+    for d in 1..30 {
+        assert!(at(d + 1) >= at(d), "monotone at {d}");
+        assert!(at(d + 1) - at(d) <= 11, "no step at {d}");
+    }
+    // Strength 200 halves it; four owned logistics divisions take off 24 percent; both stack.
+    assert_eq!(operations::sprawl_rate_bps(20, 200, 0, false), 36);
+    assert_eq!(operations::sprawl_rate_bps(20, 0, 4, false), 54);
+    assert_eq!(operations::sprawl_rate_bps(20, 200, 4, false), 27);
+    // The offset caps at forty percent, and a secondary type doubles the bill.
+    assert_eq!(operations::sprawl_rate_bps(20, 0, 20, false), 43);
+    assert_eq!(operations::sprawl_rate_bps(20, 0, 0, true), 144);
+    assert!(operations::sprawl_onset(0, 0, false) > operations::sprawl_onset(0, 4, true));
+    assert!(operations::sprawl_onset(200, 4, false) > operations::sprawl_onset(0, 0, false));
 }
 
 #[test]

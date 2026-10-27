@@ -16,6 +16,10 @@ final class AppStore: ObservableObject {
     @Published var divisions: [DivisionDto] = []
     /// Goods the selected company holds back from sale, with any open buy orders.
     @Published var held: [HeldStockDto] = []
+    /// Freight lanes this week, lane contracts, and the corridor's freight at a glance.
+    @Published var lanes: [LaneDto] = []
+    @Published var laneContracts: [LaneContractDto] = []
+    @Published var freight: FreightSummaryDto?
     @Published var raidTargets: [RaidOptionDto] = []
     @Published var recentRaids: [RaidRecordDto] = []
     /// The board's quarterly goal for the primary company and its recent results.
@@ -332,6 +336,9 @@ final class AppStore: ObservableObject {
             firmOps = await engine.firmOps(firm: selectedFirm)
             divisions = await engine.divisions(firm: selectedFirm)
             held = await engine.heldStock(firm: selectedFirm)
+            lanes = await engine.lanes()
+            laneContracts = await engine.laneContracts()
+            freight = await engine.freightSummary()
             raidTargets = await engine.raidTargets(firm: selectedFirm)
             research = await engine.research(firm: selectedFirm)
         } else {
@@ -339,6 +346,9 @@ final class AppStore: ObservableObject {
             firmOps = nil
             divisions = []
             held = []
+            lanes = []
+            laneContracts = []
+            freight = nil
             raidTargets = []
             facilities = []
             finance = nil

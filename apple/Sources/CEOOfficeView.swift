@@ -187,8 +187,8 @@ struct CEOOfficeView: View {
                             Eyebrow(text: "Logistics strength")
                             ProgressView(value: Double(ops.logisticsStrength), total: 200).tint(Theme.gold)
                             Text(ops.divisions < ops.sprawlThreshold
-                                 ? "Not needed yet: sprawl costs start after \(ops.sprawlThreshold) divisions and you run \(ops.divisions). Strength \(ops.logisticsStrength) of 200."
-                                 : "Sprawl is costing you: \(ops.divisions) divisions against a threshold of \(ops.sprawlThreshold). Strength \(ops.logisticsStrength) of 200 raises it.")
+                                 ? "Overhead grows gradually with divisions and reaches 1% of revenue at \(ops.sprawlThreshold); you run \(ops.divisions). Strength \(ops.logisticsStrength) of 200 and owning logistics divisions both cut it."
+                                 : "Sprawl is costing you over 1% of revenue: \(ops.divisions) divisions. Strength \(ops.logisticsStrength) of 200 and owning logistics divisions cut it.")
                                 .font(.caption)
                                 .foregroundStyle(ops.divisions < ops.sprawlThreshold ? Theme.secondary : Theme.warning)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -304,6 +304,7 @@ struct CEOOfficeView: View {
                     plantRow(plant)
                 }
                 DivisionStockTarget(division: division)
+                DivisionShipping(division: division)
             }
         }
     }

@@ -369,6 +369,40 @@ pub enum CommandIntent {
         region: u8,
         lots: i64,
     },
+    /// A division's standing shipping policy for the freight it pays for. `kind`: 0 cheapest,
+    /// 1 fastest, 2 own carriers first, 3 most reliable. `mode` and `carrier` are optional
+    /// preferences; a route that cannot meet them still ships.
+    SetShippingPolicy {
+        facility: Handle,
+        kind: u8,
+        #[serde(default)]
+        mode: Option<u8>,
+        #[serde(default)]
+        carrier: Option<Handle>,
+    },
+    /// Pin the lanes a carrier division spreads its capacity over, as the other region of each.
+    /// Empty returns it to automatic, which follows the busiest lanes.
+    SetCarrierLanes {
+        facility: Handle,
+        regions: Vec<u8>,
+    },
+    /// Pin a carrier division to the lane from its region to one other region, or return it to
+    /// automatic with none.
+    SetCarrierLane {
+        facility: Handle,
+        #[serde(default)]
+        region: Option<u8>,
+    },
+    /// Reserve capacity on a lane for a number of weeks at the lane's spot rate less the
+    /// commitment discount, fixed for the term. Other firms cannot use the reserved lots.
+    ReserveLane {
+        firm: Handle,
+        from: u8,
+        to: u8,
+        mode: u8,
+        lots: i32,
+        weeks: u32,
+    },
     /// Weekly logistics and operations programme that builds logistics strength.
     SetLogisticsBudget {
         firm: Handle,
@@ -464,6 +498,10 @@ impl CommandIntent {
             CommandIntent::SetSectorFocus { .. } => "set_sector_focus",
             CommandIntent::SetLogisticsBudget { .. } => "set_logistics_budget",
             CommandIntent::SetStockTarget { .. } => "set_stock_target",
+            CommandIntent::SetShippingPolicy { .. } => "set_shipping_policy",
+            CommandIntent::SetCarrierLanes { .. } => "set_carrier_lanes",
+            CommandIntent::SetCarrierLane { .. } => "set_carrier_lane",
+            CommandIntent::ReserveLane { .. } => "reserve_lane",
             CommandIntent::BuyToStore { .. } => "buy_to_store",
             CommandIntent::SellFromStore { .. } => "sell_from_store",
             CommandIntent::RaidMarket { .. } => "raid_market",
@@ -1532,18 +1570,15 @@ fn apply_intent(
                         .value_at(Cents(*max_price_cents))
                         .unwrap_or_default()
                         .0;
-                    let freight = crate::economy::freight::freight_cost(
+                    let freight = crate::economy::freight::quoted(
+                        world,
                         dataset,
+                        *firm,
+                        *product,
                         seller_region,
                         *region,
                         deliver,
                     );
-                    let km = dataset
-                        .lane_km(
-                            &dataset.regions[seller_region as usize].code,
-                            &dataset.regions[*region as usize].code,
-                        )
-                        .unwrap_or(500);
                     // Reserve the goods and the freight bill, so the buyer cannot overdraw.
                     spend_firm_cash(world, *firm, goods_value + freight, "spot reserve")?;
                     let mut carry = 0i64;
@@ -1576,16 +1611,17 @@ fn apply_intent(
                                 .debit(Account::Inventory, goods_value, "spot purchase"),
                         );
                     }
-                    if freight > 0 {
-                        release_firm_cash(world, *firm, freight, "spot freight release");
-                        crate::economy::freight::pay_freight(
-                            world,
-                            dataset,
-                            *firm,
-                            freight,
-                            "spot freight",
-                        );
-                    }
+                    release_firm_cash(world, *firm, freight, "spot freight release");
+                    let booked = crate::economy::logistics::book(
+                        world,
+                        dataset,
+                        *firm,
+                        *product,
+                        seller_region,
+                        *region,
+                        deliver,
+                        "spot freight",
+                    );
                     world.shipments.push(crate::state::Shipment {
                         seller,
                         buyer: *firm,
@@ -1593,10 +1629,10 @@ fn apply_intent(
                         quantity: deliver,
                         from_region: seller_region,
                         to_region: *region,
-                        arrive: Tick(world.tick.0 + crate::economy::freight::lead_time_weeks(km)),
+                        arrive: Tick(world.tick.0 + booked.weeks),
                         unit_price_cents: *max_price_cents,
                         goods_value_cents: goods_value,
-                        freight_cents: freight,
+                        freight_cents: booked.cents,
                         margin_cents: 0,
                     });
                     return Ok(());
@@ -2633,6 +2669,82 @@ fn apply_intent(
             crate::economy::storage::release(world, *firm, *product, *region, *lots);
             Ok(())
         }
+        CommandIntent::SetShippingPolicy {
+            facility,
+            kind,
+            mode,
+            carrier,
+        } => {
+            let owner = world
+                .facilities
+                .get(*facility)
+                .map(|entity| entity.firm)
+                .ok_or(DomainError::InvalidEntity {
+                    handle: facility.0,
+                    kind: EntityKind::Facility,
+                })?;
+            require_control(world, actor, owner)?;
+            let kind = crate::economy::logistics::ShipKind::from_code(*kind).ok_or(
+                DomainError::Arithmetic {
+                    detail: ArithmeticFault::OutOfRange,
+                },
+            )?;
+            crate::economy::logistics::set_policy(
+                world,
+                dataset,
+                *facility,
+                crate::economy::logistics::ShipPolicy {
+                    kind,
+                    mode: *mode,
+                    carrier: *carrier,
+                },
+            )
+        }
+        CommandIntent::SetCarrierLanes { facility, regions } => {
+            let owner = world
+                .facilities
+                .get(*facility)
+                .map(|entity| entity.firm)
+                .ok_or(DomainError::InvalidEntity {
+                    handle: facility.0,
+                    kind: EntityKind::Facility,
+                })?;
+            require_control(world, actor, owner)?;
+            crate::economy::logistics::set_serves(world, dataset, *facility, regions.clone())
+        }
+        CommandIntent::SetCarrierLane { facility, region } => {
+            let owner = world
+                .facilities
+                .get(*facility)
+                .map(|entity| entity.firm)
+                .ok_or(DomainError::InvalidEntity {
+                    handle: facility.0,
+                    kind: EntityKind::Facility,
+                })?;
+            require_control(world, actor, owner)?;
+            crate::economy::logistics::set_serves(
+                world,
+                dataset,
+                *facility,
+                region.iter().copied().collect(),
+            )
+        }
+        CommandIntent::ReserveLane {
+            firm,
+            from,
+            to,
+            mode,
+            lots,
+            weeks,
+        } => {
+            require_control(world, actor, *firm)?;
+            require_region(world, *from)?;
+            require_region(world, *to)?;
+            crate::economy::logistics::reserve_lane(
+                world, dataset, *firm, *from, *to, *mode, *lots, *weeks,
+            )
+            .map(|_| ())
+        }
         CommandIntent::SetLogisticsBudget { firm, amount_cents } => {
             require_control(world, actor, *firm)?;
             if *amount_cents < 0 {
@@ -2836,6 +2948,8 @@ fn start_facility(
         equipment_due_cents: 0,
         outage: None,
         stock_plan: Default::default(),
+        ship: Default::default(),
+        serves: Vec::new(),
     }
 }
 
