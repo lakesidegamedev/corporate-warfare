@@ -204,7 +204,7 @@ private struct StockRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            SectorBadge(sector: stock.industry, size: 26)
+            FirmLogo(name: stock.name, size: 28)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(stock.name).font(.callout.weight(.medium)).foregroundStyle(Theme.primaryText).lineLimit(1)
@@ -236,6 +236,8 @@ struct StockSheet: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     let stock: StockDto
+    var showPage = true
+    @State private var showCompany = false
     @State private var buy = true
     @State private var quantityText = "1000"
     @State private var limitText = ""
@@ -278,6 +280,9 @@ struct StockSheet: View {
                         }
                     }
                     DossierSection(firm: stock.firm)
+                    if showPage {
+                        Button("Open company page") { showCompany = true }.buttonStyle(.bordered)
+                    }
                     Panel(padding: 12) {
                         VStack(alignment: .leading, spacing: 10) {
                             Eyebrow(text: "Order")
@@ -325,6 +330,7 @@ struct StockSheet: View {
             }
             .background(Theme.panel)
             .navigationTitle(stock.name)
+            .sheet(isPresented: $showCompany) { CompanyPageSheet(firm: stock.firm) }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
         }

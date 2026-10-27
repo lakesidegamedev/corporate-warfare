@@ -89,6 +89,35 @@ impl Person {
     }
 }
 
+/// A generated chief executive for a firm outside the twelve-person cast. Presentation only:
+/// extras never hold posts, are not in the dataset hash and do not change with the world.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Extra {
+    pub id: String,
+    pub name: String,
+    pub age: u32,
+    pub home: String,
+    pub temperament: Temperament,
+    pub background: String,
+}
+
+impl Extra {
+    pub fn person(&self) -> Person {
+        Person {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            age: self.age,
+            scenario: String::new(),
+            home: self.home.clone(),
+            state: String::new(),
+            temperament: self.temperament,
+            roles: vec![Role::Ceo],
+            stance: None,
+            background: self.background.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CastFile {
     pub schema: u32,
@@ -97,6 +126,19 @@ pub struct CastFile {
     #[serde(default)]
     pub note: String,
     pub people: Vec<Person>,
+    /// Generated chief executives for firms the cast does not reach (tools/cast_portraits.py).
+    #[serde(default)]
+    pub extras: Vec<Extra>,
+}
+
+/// The generated chief executives, in file order.
+pub fn extras() -> &'static [Extra] {
+    static EXTRAS: std::sync::OnceLock<Vec<Extra>> = std::sync::OnceLock::new();
+    EXTRAS.get_or_init(|| {
+        serde_json::from_str::<CastFile>(CAST_JSON)
+            .map(|file| file.extras)
+            .unwrap_or_default()
+    })
 }
 
 /// Content problems with the cast, for dataset validation.
@@ -124,4 +166,25 @@ pub fn validate(people: &[Person]) -> Vec<String> {
         errors.push("cast: too many people".to_owned());
     }
     errors
+}
+
+#[cfg(test)]
+mod extras_tests {
+    use super::*;
+
+    #[test]
+    fn extras_are_unique_and_do_not_reuse_the_cast() {
+        let file: CastFile = serde_json::from_str(CAST_JSON).unwrap();
+        assert!(file.extras.len() >= 64);
+        let mut ids = std::collections::BTreeSet::new();
+        let mut names = std::collections::BTreeSet::new();
+        for p in &file.people {
+            ids.insert(p.id.clone());
+            names.insert(p.name.clone());
+        }
+        for e in &file.extras {
+            assert!(ids.insert(e.id.clone()), "duplicate id {}", e.id);
+            assert!(names.insert(e.name.clone()), "duplicate name {}", e.name);
+        }
+    }
 }

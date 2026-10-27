@@ -147,8 +147,6 @@ struct RivalLeaderRow: View {
     var region: String? = nil
     var industry: String? = nil
     @State private var open = false
-    @State private var dossier: DossierDto?
-
     var body: some View {
         HStack(spacing: 8) {
             Button {
@@ -156,6 +154,7 @@ struct RivalLeaderRow: View {
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
+                        FirmLogo(name: name, size: 22)
                         Text(name).font(.callout).foregroundStyle(Theme.primaryText).lineLimit(1)
                         Spacer()
                         Text(detail).font(.caption).foregroundStyle(Theme.secondary)
@@ -170,17 +169,6 @@ struct RivalLeaderRow: View {
                 RaidMarketButton(target: firm, region: region, industry: industry, compact: true)
             }
         }
-        .sheet(isPresented: $open) {
-            NavigationStack {
-                ScrollView {
-                    if let dossier { DossierBody(dossier: dossier).padding(14) }
-                }
-                .background(Theme.ink)
-                .navigationTitle(name)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { open = false } } }
-            }
-            .environmentObject(store)
-            .task { dossier = await store.dossier(firm) }
-        }
+        .sheet(isPresented: $open) { CompanyPageSheet(firm: firm) }
     }
 }

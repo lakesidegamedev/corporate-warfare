@@ -146,24 +146,9 @@ fun DossierSection(store: GameStore, firm: ULong) {
     RaidMarketsList(store, firm)
 }
 
-/** A tappable rival line that opens its dossier. */
+/** A rival's company page. */
 @Composable
-fun DossierDialog(store: GameStore, firm: ULong, onClose: () -> Unit) {
-    var dossier by remember(firm) { mutableStateOf<DossierDto?>(null) }
-    LaunchedEffect(firm) { store.dossier(firm) { dossier = it } }
-    AlertDialog(
-        onDismissRequest = onClose,
-        containerColor = Palette.panel,
-        title = { Text(dossier?.firmName ?: "Rival") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                dossier?.let { DossierBody(it) } ?: Text("Loading", color = Palette.secondary)
-                RaidMarketsList(store, firm)
-            }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
-    )
-}
+fun DossierDialog(store: GameStore, firm: ULong, onClose: () -> Unit) = CompanyPageDialog(store, firm, onClose)
 
 @Composable
 fun RivalLeaderRow(store: GameStore, name: String, firm: ULong, detail: String, region: String? = null, industry: String? = null) {
@@ -171,6 +156,8 @@ fun RivalLeaderRow(store: GameStore, name: String, firm: ULong, detail: String, 
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.weight(1f).clickable { open = true }, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                FirmLogo(name, size = 22.dp)
+                Spacer(Modifier.width(6.dp))
                 Text(name, color = Palette.primaryText, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
                 Spacer(Modifier.width(6.dp))
                 Text(detail, color = Palette.secondary, fontSize = 12.sp)
