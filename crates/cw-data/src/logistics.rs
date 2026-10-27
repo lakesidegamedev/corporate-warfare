@@ -80,9 +80,35 @@ pub struct LogisticsData {
     pub gateway_links: Vec<GatewayLink>,
 }
 
+/// What a scenario supplies on top of the shared freight rules: its public rail yards and ports,
+/// its sea systems and its legs to outside gateways. The modes and price levels are universal.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogisticsOverlay {
+    #[serde(default)]
+    pub classification: String,
+    pub public_rail: Vec<String>,
+    pub public_ports: Vec<String>,
+    #[serde(default)]
+    pub sea_systems: Vec<SeaSystem>,
+    #[serde(default)]
+    pub gateway_links: Vec<GatewayLink>,
+}
+
 impl LogisticsData {
     pub fn load() -> Result<LogisticsData, String> {
         serde_json::from_str(LOGISTICS_JSON).map_err(|error| format!("logistics.json: {error}"))
+    }
+
+    /// The shared rules with one scenario's terminals, sea systems and gateway legs.
+    pub fn load_with(overlay_json: &str) -> Result<LogisticsData, String> {
+        let overlay: LogisticsOverlay = serde_json::from_str(overlay_json)
+            .map_err(|error| format!("scenario logistics.json: {error}"))?;
+        let mut data = Self::load()?;
+        data.public_rail = overlay.public_rail;
+        data.public_ports = overlay.public_ports;
+        data.sea_systems = overlay.sea_systems;
+        data.gateway_links = overlay.gateway_links;
+        Ok(data)
     }
 
     pub fn mode_index(&self, id: &str) -> Option<u8> {

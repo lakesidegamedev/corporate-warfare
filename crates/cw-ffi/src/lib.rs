@@ -1232,12 +1232,16 @@ pub struct ScenarioDto {
 /// The scenarios a new career can start in, in display order.
 #[uniffi::export]
 pub fn scenarios() -> Vec<ScenarioDto> {
-    let regions = cw_data::Dataset::load()
-        .map(|dataset| dataset.regions.len() as u32)
-        .unwrap_or_default();
     cw_data::scenarios()
         .into_iter()
-        .map(|scenario| ScenarioDto {
+        .map(|scenario| {
+            // Each scenario has its own regions; one with no content of its own shows none.
+            let regions = cw_data::Dataset::load_scenario(&scenario.id)
+                .map(|dataset| dataset.regions.len() as u32)
+                .unwrap_or_default();
+            (scenario, regions)
+        })
+        .map(|(scenario, regions)| ScenarioDto {
             default_price_path: scenario.price_path().key().to_owned(),
             id: scenario.id,
             name: scenario.name,

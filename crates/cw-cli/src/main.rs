@@ -111,11 +111,12 @@ fn scenario_flags(arguments: &[String]) -> (bool, bool) {
 }
 
 /// `--prices off|default|historical|historical_variance|random`. Off is the pre-1.7 behaviour
-/// (no world commodity prices); the others use the Great Lakes 2000 scenario. Default takes the
-/// scenario's own mode.
+/// (no world commodity prices); the others use the scenario named by `--scenario`, Great Lakes
+/// 2000 unless given. Default takes the scenario's own mode.
 fn prices_flag(arguments: &[String]) -> cw_session::PriceSetup {
     let name = flag(arguments, "--prices").unwrap_or_else(|| "default".to_owned());
-    let scenario_id = "great-lakes-2000".to_owned();
+    let scenario_id =
+        flag(arguments, "--scenario-id").unwrap_or_else(|| "great-lakes-2000".to_owned());
     match name.as_str() {
         "off" => cw_session::PriceSetup::default(),
         "default" => cw_session::PriceSetup {

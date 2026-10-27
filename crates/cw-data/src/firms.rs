@@ -62,6 +62,10 @@ pub struct SeedFirm {
     /// goods that would otherwise be import-only a local producer.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra_plants: Vec<ExtraPlant>,
+    /// For a carrier main plant: the regions its lanes are pinned to, so a pipeline opens on a
+    /// named corridor. Empty leaves the carrier to choose its lanes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub serves: Vec<String>,
 }
 
 /// One additional opening plant of a seed firm.
@@ -70,6 +74,9 @@ pub struct ExtraPlant {
     pub recipe: String,
     pub region: String,
     pub blocks: u8,
+    /// For a carrier: the regions its lanes are pinned to. Empty leaves the lanes automatic.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub serves: Vec<String>,
 }
 
 fn full_percent() -> u16 {

@@ -401,6 +401,8 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
                 dataset.recipe_index[&seed_firm.recipe],
                 seed_firm.blocks,
             )];
+            // The lanes a carrier plant is pinned to, by plant order; empty is automatic.
+            let mut pins: Vec<&[String]> = vec![&seed_firm.serves];
             for extra in &seed_firm.extra_plants {
                 plants.push((
                     world
@@ -409,18 +411,25 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
                     dataset.recipe_index[&extra.recipe],
                     extra.blocks,
                 ));
+                pins.push(&extra.serves);
             }
             let facilities: Vec<Facility> = plants
                 .iter()
-                .map(|(plant_region, recipe_index, blocks)| {
-                    open_facility(
+                .zip(&pins)
+                .map(|((plant_region, recipe_index, blocks), pin)| {
+                    let mut facility = open_facility(
                         &mut firm,
                         dataset,
                         *plant_region,
                         *recipe_index,
                         *blocks,
                         Tick::OPENING,
-                    )
+                    );
+                    facility.serves = pin
+                        .iter()
+                        .filter_map(|code| world.region_index(code))
+                        .collect();
+                    facility
                 })
                 .collect();
             let handle = world.firms.insert(firm);
@@ -750,11 +759,11 @@ fn opening_input_cost(dataset: &Dataset, recipe_index: u16, blocks: u8) -> i64 {
 }
 
 fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
-    let region = world.region_index("OH-CEN").unwrap_or(0);
-    let recipe_index = dataset.recipe_index["farm"];
+    let region = world.region_index(&dataset.player_region).unwrap_or(0);
+    let recipe_index = dataset.recipe_index[&dataset.player_recipe];
     let mut firm = placeholder_firm();
     firm.name = "Lakeside Holdings".to_owned();
-    firm.industry = industry_index("agriculture");
+    firm.industry = industry_index(&dataset.recipes[recipe_index as usize].industry);
     firm.region = region;
     firm.policies.wage_offer = [
         dataset.baseline_weekly_wage_cents[0]
@@ -768,7 +777,7 @@ fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
             / 10_000,
     ];
     let handle = world.firms.insert(firm);
-    // The opening farm: five plants of the traditional strategy, the 1.1.0 farm's capacity.
+    // The opening plant: five blocks of the scenario's starter strategy, the 1.1.0 farm's capacity.
     const PLAYER_FARM_BLOCKS: u8 = 5;
     let asset = dataset.recipes[recipe_index as usize].capex_cents * PLAYER_FARM_BLOCKS as i64;
     let mut facility = open_facility(

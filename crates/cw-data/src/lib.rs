@@ -20,12 +20,12 @@ use std::collections::BTreeMap;
 use cw_core::hash::{CanonicalHasher, DOMAIN_STATE};
 use serde::{Deserialize, Serialize};
 
-pub use balance::{Balance, Product, ProductKind, Recipe, StorageClass};
+pub use balance::{Balance, BalanceOverlay, Product, ProductKind, Recipe, StorageClass};
 pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetting};
 pub use events::EventCard;
 pub use firms::{Archetype, ExtraPlant, SeedFirm};
 pub use geography::{Conditions, Geography, Lane, Region, StateInfo};
-pub use logistics::{GatewayLink, LogisticsData, ModeDef, SeaSystem};
+pub use logistics::{GatewayLink, LogisticsData, LogisticsOverlay, ModeDef, SeaSystem};
 
 pub const BALANCE_JSON: &str = include_str!("../../../content/initial-balance.json");
 pub const GEOGRAPHY_JSON: &str = include_str!("../../../content/geography/regions.json");
@@ -33,6 +33,60 @@ pub const EVENTS_JSON: &str = include_str!("../../../content/events/events.json"
 pub const FIRMS_JSON: &str = include_str!("../../../content/firms.json");
 /// Scenario catalogue for the start screen. Presentation only: not part of the dataset hash.
 pub const SCENARIOS_JSON: &str = include_str!("../../../content/scenarios.json");
+
+/// The scenario whose content sits at the top level of `content/`, and the one `Dataset::load`
+/// builds. Every other scenario with its own data keeps it under `content/scenarios/<id>/`.
+pub const DEFAULT_SCENARIO: &str = "great-lakes-2000";
+
+/// The content one scenario selects from the shared products, strategies and events: its
+/// geography, its seed firms and, where it differs, its freight terminals and starting balance.
+#[derive(Clone, Copy, Debug)]
+pub struct ScenarioContent {
+    pub id: &'static str,
+    pub geography_json: &'static str,
+    pub firms_json: &'static str,
+    /// Public rail, ports, sea systems and gateway legs; None keeps the shared file's.
+    pub logistics_json: Option<&'static str>,
+    /// Wage level and opening prices; None keeps the shared balance.
+    pub balance_json: Option<&'static str>,
+    /// The region a guided career's opening company is in, and the strategy it runs there.
+    pub player_region: &'static str,
+    pub player_recipe: &'static str,
+}
+
+/// Every scenario that has its own dataset. A scenario not listed here uses the default one.
+pub const SCENARIO_CONTENT: [ScenarioContent; 2] = [
+    ScenarioContent {
+        id: DEFAULT_SCENARIO,
+        geography_json: GEOGRAPHY_JSON,
+        firms_json: FIRMS_JSON,
+        logistics_json: None,
+        balance_json: None,
+        player_region: "OH-CEN",
+        player_recipe: "farm",
+    },
+    ScenarioContent {
+        id: "texas-1981",
+        geography_json: include_str!("../../../content/scenarios/texas-1981/regions.json"),
+        firms_json: include_str!("../../../content/scenarios/texas-1981/firms.json"),
+        logistics_json: Some(include_str!(
+            "../../../content/scenarios/texas-1981/logistics.json"
+        )),
+        balance_json: Some(include_str!(
+            "../../../content/scenarios/texas-1981/balance.json"
+        )),
+        player_region: "TX-PMB",
+        player_recipe: "oil_wells",
+    },
+];
+
+/// The content for a scenario id, or the default scenario's when the id has none of its own.
+pub fn scenario_content(id: &str) -> &'static ScenarioContent {
+    SCENARIO_CONTENT
+        .iter()
+        .find(|content| content.id == id)
+        .unwrap_or(&SCENARIO_CONTENT[0])
+}
 
 /// One playable scenario as listed on the start screen.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -102,6 +156,11 @@ pub const INDUSTRIES: [&str; 15] = [
 
 #[derive(Clone, Debug)]
 pub struct Dataset {
+    /// The scenario this dataset is the content of.
+    pub scenario_id: String,
+    /// Where a guided career's opening company is, and the strategy it runs.
+    pub player_region: String,
+    pub player_recipe: String,
     pub products: Vec<Product>,
     pub product_index: BTreeMap<String, u16>,
     pub recipes: Vec<Recipe>,
@@ -148,17 +207,37 @@ impl Dataset {
 }
 
 impl Dataset {
-    /// Load the pinned in-repo dataset and validate it.
+    /// Load the default scenario's pinned in-repo dataset and validate it.
     pub fn load() -> Result<Dataset, Vec<String>> {
-        let balance: Balance = serde_json::from_str(BALANCE_JSON)
+        Self::load_scenario(DEFAULT_SCENARIO)
+    }
+
+    /// The dataset whose hash a save or replay recorded, if any bundled scenario produces it.
+    pub fn for_hash(hash: &str) -> Option<Dataset> {
+        SCENARIO_CONTENT
+            .iter()
+            .filter_map(|content| Dataset::load_scenario(content.id).ok())
+            .find(|dataset| dataset.hash == hash)
+    }
+
+    /// Load one scenario's pinned in-repo dataset and validate it. A scenario with no content
+    /// of its own gets the default scenario's.
+    pub fn load_scenario(scenario_id: &str) -> Result<Dataset, Vec<String>> {
+        let content = scenario_content(scenario_id);
+        let mut balance: Balance = serde_json::from_str(BALANCE_JSON)
             .map_err(|error| vec![format!("initial-balance.json: {error}")])?;
+        if let Some(overlay) = content.balance_json {
+            let overlay: BalanceOverlay = serde_json::from_str(overlay)
+                .map_err(|error| vec![format!("{} balance.json: {error}", content.id)])?;
+            overlay.apply(&mut balance).map_err(|error| vec![error])?;
+        }
         let balance = balance.migrate().map_err(|error| vec![error])?;
-        let geography: Geography = serde_json::from_str(GEOGRAPHY_JSON)
-            .map_err(|error| vec![format!("regions.json: {error}")])?;
+        let geography: Geography = serde_json::from_str(content.geography_json)
+            .map_err(|error| vec![format!("{} regions.json: {error}", content.id)])?;
         let events: events::EventDeck = serde_json::from_str(EVENTS_JSON)
             .map_err(|error| vec![format!("events.json: {error}")])?;
-        let firms: firms::SeedFirms = serde_json::from_str(FIRMS_JSON)
-            .map_err(|error| vec![format!("firms.json: {error}")])?;
+        let firms: firms::SeedFirms = serde_json::from_str(content.firms_json)
+            .map_err(|error| vec![format!("{} firms.json: {error}", content.id)])?;
 
         let mut products = balance.products;
         let mut recipes = balance.recipes;
@@ -185,7 +264,11 @@ impl Dataset {
             region_index.insert(region.code.clone(), index as u8);
         }
 
-        let logistics = LogisticsData::load().map_err(|error| vec![error])?;
+        let logistics = match content.logistics_json {
+            Some(overlay) => LogisticsData::load_with(overlay),
+            None => LogisticsData::load(),
+        }
+        .map_err(|error| vec![error])?;
         let n = regions.len();
         let mut km_matrix = vec![0u32; n * n];
         for lane in &geography.lanes {
@@ -222,6 +305,9 @@ impl Dataset {
         let public_rail = flags(&logistics.public_rail);
         let public_ports = flags(&logistics.public_ports);
         let dataset = Dataset {
+            scenario_id: content.id.to_owned(),
+            player_region: content.player_region.to_owned(),
+            player_recipe: content.player_recipe.to_owned(),
             products,
             product_index,
             recipes,
@@ -288,10 +374,29 @@ impl Dataset {
                 self.events.len()
             ));
         }
-        if self.seed_firms.len() != 30 {
+        // The default scenario names exactly thirty firms, two per industry. A scenario with
+        // its own roster may name more where its economy is concentrated, but never fewer.
+        let roster_ok = if self.scenario_id == DEFAULT_SCENARIO {
+            self.seed_firms.len() == 30
+        } else {
+            self.seed_firms.len() >= 30
+        };
+        if !roster_ok {
             errors.push(format!(
-                "expected 30 named firms, found {}",
+                "expected 30 named firms or more, found {}",
                 self.seed_firms.len()
+            ));
+        }
+        if !self.recipe_index.contains_key(&self.player_recipe) {
+            errors.push(format!(
+                "the opening strategy {} is not in the scenario",
+                self.player_recipe
+            ));
+        }
+        if !self.region_index.contains_key(&self.player_region) {
+            errors.push(format!(
+                "the opening region {} is not in the scenario",
+                self.player_region
             ));
         }
 
@@ -568,6 +673,11 @@ impl Dataset {
             if firm.blocks == 0 || firm.blocks > 20 {
                 errors.push(format!("firm {} block count out of range", firm.id));
             }
+            for code in &firm.serves {
+                if !self.region_index.contains_key(code) {
+                    errors.push(format!("firm {} pins unknown region {code}", firm.id));
+                }
+            }
             if firm.recipe != "bank"
                 && firm.recipe != "property_insurer"
                 && !self.recipe_index.contains_key(&firm.recipe)
@@ -596,6 +706,14 @@ impl Dataset {
                 if !self.region_index.contains_key(&plant.region) {
                     errors.push(format!("firm {} extra plant has unknown region", firm.id));
                 }
+                for code in &plant.serves {
+                    if !self.region_index.contains_key(code) {
+                        errors.push(format!(
+                            "firm {} extra plant pins unknown region {code}",
+                            firm.id
+                        ));
+                    }
+                }
                 if plant.blocks == 0 || plant.blocks > 20 {
                     errors.push(format!(
                         "firm {} extra plant block count out of range",
@@ -605,9 +723,15 @@ impl Dataset {
             }
         }
         for industry in INDUSTRIES {
-            if per_industry.get(industry).copied().unwrap_or(0) != 2 {
+            let count = per_industry.get(industry).copied().unwrap_or(0);
+            let ok = if self.scenario_id == DEFAULT_SCENARIO {
+                count == 2
+            } else {
+                count >= 2
+            };
+            if !ok {
                 errors.push(format!(
-                    "industry {industry} does not have exactly two named firms"
+                    "industry {industry} does not have its named firms (found {count})"
                 ));
             }
         }
@@ -789,11 +913,17 @@ impl Dataset {
                 .string(&firm.recipe)
                 .u8(firm.blocks)
                 .bool(firm.public);
+            for code in &firm.serves {
+                hasher.string(code);
+            }
             for plant in &firm.extra_plants {
                 hasher
                     .string(&plant.recipe)
                     .string(&plant.region)
                     .u8(plant.blocks);
+                for code in &plant.serves {
+                    hasher.string(code);
+                }
             }
         }
         hasher.finish_hex()
@@ -1062,6 +1192,7 @@ mod tests {
             recipe: "steel_mill".to_owned(),
             region: firm.region.clone(),
             blocks: 1,
+            serves: Vec::new(),
         });
         let errors = dataset.validate();
         assert!(
