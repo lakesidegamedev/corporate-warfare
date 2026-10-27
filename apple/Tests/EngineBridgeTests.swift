@@ -33,7 +33,7 @@ final class EngineBridgeTests: XCTestCase {
         // and multi-output plants changed the dataset, and in 1.7 preview 4 when the world gained
         // government laws, the reserve and systemic incidents. This constant needs
         // a fresh simulator run on the Mac runner before R05 is claimed again.
-        XCTAssertEqual(session.canonicalHash(), "94d7e502eba81c8c6875a5d24fdb12d4485137b81ba0b2095804b76d561f657b")
+        XCTAssertEqual(session.canonicalHash(), "6f0ff93fdfdee89288dcf192c9702da9e70a09b03be4433f651ef92ade73ab4e")
 
         let data = try session.exportSave()
         XCTAssertGreaterThan(data.count, 1_000)

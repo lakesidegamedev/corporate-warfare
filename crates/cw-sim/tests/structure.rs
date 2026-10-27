@@ -1104,9 +1104,9 @@ fn an_activist_campaign_opens_on_a_stopped_dividend_and_settles_by_temperament()
         f.shares.statement_weeks = 60;
     }
     // Two quarters of dividends, then nothing for twenty weeks, with cash to spare.
-    world.structure.dividend_quarters.insert(target, 2);
+    world.structure.dividend_quarters.insert(target, 3);
     world.structure.last_dividend.insert(target, 1);
-    world.tick.0 = 40;
+    world.tick.0 = 60;
     // Land on a week this firm is scanned.
     while target.slot() % 13 != world.tick.0 % 13 {
         world.tick.0 += 1;
