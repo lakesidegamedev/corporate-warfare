@@ -173,3 +173,35 @@ another state. A goal met before its thirteen weeks run out pays a management bo
 the company to the investor: two percent of the company's quarter of operating profit, at
 least $25,000, never more than its cash.
 
+
+## State rescue, nationalisation and privatisation (1.7)
+
+A firm is strategic when it carries freight, stores goods or makes energy, or is a bank or
+insurer. The rescue law is set by the party in power (see MARKETS.md, Government laws):
+
+- None: normal restructuring and liquidation.
+- Bailout (Commerce Party programme): when a strategic firm's payment grace has run out, the
+  state lends it the whole of its arrears (overdue payables plus loan arrears) at the policy
+  rate plus 3 points over 104 weeks, and the arrears are paid at once. The firm leaves
+  past-due status and is not rescued again for three years: a second failure goes to the court.
+- Nationalisation (Workers' Party programme): when the court would liquidate the firm (its
+  assets would not cover half its debt) the state buys every private share at the higher
+  of fair value and the market mark, paid from the government's cash to each holder (the
+  investor, outside investors, other firms); then recapitalises the firm with the arrears in
+  exchange for new shares at that price. All shares sit with the holder State. A firm the
+  investor controls is never nationalised: it gets the bailout loan, as does any sound firm
+  that is merely out of cash.
+- The state acts only when the whole cost is at most 30% of its cash. Otherwise the court
+  proceeds as before. Every payment has a counterparty on a real ledger.
+- A state firm asks cost plus 5% for its goods and never more than the market ceiling. The
+  rival AI makes no strategic moves for it. State dividends go to the government's cash.
+- Privatisation (Commerce Party programme): a state firm that has been held 52 weeks, is
+  operating and earned over the last 13 weeks is sold, one firm a week, to outside investors
+  at the higher of fair value and mark, as far as their cash goes. Once the state no longer
+  holds more than half the votes the firm is private again.
+
+Merger review covers vertical integration when the law sets a threshold (Workers' Party,
+35%): buying a firm that supplies a good your plants use, or a customer for what you make, goes
+to the same four-week review as a horizontal deal when the maker's group holds at least the
+threshold share of trailing unit sales in any regional market for that good. The usual remedy
+rules apply.

@@ -238,8 +238,44 @@ pub struct Reservation {
     pub lots: i32,
 }
 
+/// A disruption to lanes: capacity on matching lanes is cut to `cap_bps` of normal until the
+/// week `until`. A closure with `a == b` covers every lane of the mode that touches the region.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Closure {
+    pub a: u8,
+    pub b: u8,
+    pub mode: u8,
+    pub cap_bps: i32,
+    pub until: u32,
+}
+
+impl Closure {
+    pub fn covers(&self, key: LaneKey) -> bool {
+        if key.mode != self.mode {
+            return false;
+        }
+        if self.a == self.b {
+            key.a == self.a || key.b == self.a
+        } else {
+            key.a == self.a.min(self.b) && key.b == self.a.max(self.b)
+        }
+    }
+}
+
+/// Longest share of a lane's capacity a contract may hold under common carrier law.
+pub const COMMON_CARRIER_CONTRACT_BPS: i64 = 4_000;
+/// Share of the gap between the empty-lane rate and the outside price that a common carrier may
+/// charge at most.
+pub const COMMON_CARRIER_RATE_PCT: i64 = 40;
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct LogisticsState {
+    /// Common carrier law was in force when the week's capacity was built.
+    #[serde(default)]
+    pub common_carrier: bool,
+    /// Pipeline spills, port strikes and lane outages in force.
+    #[serde(default)]
+    pub closures: Vec<Closure>,
     /// The tick the week's capacity was built for.
     pub week: u32,
     pub carriers: Vec<Carrier>,
@@ -331,6 +367,21 @@ pub fn spot_mult_bps(ds: &Dataset, fill_bps: i32) -> i64 {
     l.empty_lane_bps + (l.outside_premium_bps - l.empty_lane_bps) * f * f / 100_000_000
 }
 
+/// The most a common carrier may charge, in basis points of the base rate.
+pub fn regulated_cap_bps(ds: &Dataset) -> i64 {
+    let l = &ds.logistics;
+    l.empty_lane_bps + (l.outside_premium_bps - l.empty_lane_bps) * COMMON_CARRIER_RATE_PCT / 100
+}
+
+/// The share of a lane's capacity contracts may hold.
+fn contract_share_bps(st: &LogisticsState) -> i64 {
+    if st.common_carrier {
+        COMMON_CARRIER_CONTRACT_BPS
+    } else {
+        MAX_CONTRACT_SHARE_BPS
+    }
+}
+
 fn leg_km(ds: &Dataset, a: u8, b: u8, mode: u8) -> u32 {
     if ds.logistics.modes[mode as usize].id == "sea" {
         ds.sea_km(a, b).unwrap_or(0)
@@ -362,7 +413,14 @@ fn leg_weeks(ds: &Dataset, a: u8, b: u8, mode: u8) -> u32 {
 /// Basis points of the base rate for a lane's spot price now.
 pub fn lane_mult_bps(ds: &Dataset, st: &LogisticsState, key: LaneKey) -> i64 {
     match st.lanes.get(&key) {
-        Some(lane) if lane.cap() > 0 => spot_mult_bps(ds, lane.fill_bps()),
+        Some(lane) if lane.cap() > 0 => {
+            let mult = spot_mult_bps(ds, lane.fill_bps());
+            if st.common_carrier {
+                mult.min(regulated_cap_bps(ds))
+            } else {
+                mult
+            }
+        }
         _ => ds.logistics.outside_premium_bps,
     }
 }
@@ -473,6 +531,9 @@ pub fn begin_week(world: &mut World, ds: &Dataset) {
     world.logistics.estimates.clear();
     world.logistics.week = world.tick.0;
     world.logistics.last = std::mem::take(&mut world.logistics.totals);
+    world.logistics.common_carrier = world.politics.laws.common_carrier;
+    let now = world.tick.0;
+    world.logistics.closures.retain(|c| c.until > now);
 
     // Carriers, in plant order.
     let mut carriers: Vec<Carrier> = Vec::new();
@@ -526,6 +587,20 @@ pub fn begin_week(world: &mut World, ds: &Dataset) {
                     used: 0,
                     held: 0,
                 });
+        }
+    }
+    // Spills, strikes and outages cut the capacity of the lanes they cover.
+    for (key, lane) in lanes.iter_mut() {
+        let mut keep = 10_000i64;
+        for closure in &world.logistics.closures {
+            if closure.covers(*key) {
+                keep = keep.min(closure.cap_bps.clamp(0, 10_000) as i64);
+            }
+        }
+        if keep < 10_000 {
+            for alloc in &mut lane.allocs {
+                alloc.cap = (alloc.cap as i64 * keep / 10_000) as i32;
+            }
         }
     }
     world.logistics.carriers = carriers;
@@ -655,7 +730,17 @@ fn apply_contracts(world: &mut World, ds: &Dataset) {
             })
             .unwrap_or_default();
         let available: i32 = free.iter().map(|(_, f)| *f).sum();
-        let held = contract.lots.min(available);
+        // Contracts together may hold only so much of a lane (less under common carrier law).
+        let room = world
+            .logistics
+            .lanes
+            .get(&contract.key)
+            .map(|lane| {
+                let limit = lane.cap() as i64 * contract_share_bps(&world.logistics) / 10_000;
+                (limit - lane.held() as i64).max(0) as i32
+            })
+            .unwrap_or(0);
+        let held = contract.lots.min(available).min(room);
         let fee = held as i64 * contract.fee_per_lot_cents;
         let cash = world
             .firms
@@ -711,7 +796,12 @@ fn close_stats(world: &mut World, ds: &Dataset) {
         let cap = lane.cap();
         let fill = lane.fill_bps();
         let mult = if cap > 0 {
-            spot_mult_bps(ds, fill) as i32
+            let raw = spot_mult_bps(ds, fill);
+            (if st.common_carrier {
+                raw.min(regulated_cap_bps(ds))
+            } else {
+                raw
+            }) as i32
         } else {
             ds.logistics.outside_premium_bps as i32
         };
@@ -874,7 +964,10 @@ fn quote_leg(
                 let committed = (lane.used() + lane.held()) as i64;
                 let f0 = committed * 10_000 / cap;
                 let f1 = (committed + take) * 10_000 / cap;
-                let mult = spot_mult_bps(ds, ((f0 + f1) / 2) as i32);
+                let mut mult = spot_mult_bps(ds, ((f0 + f1) / 2) as i32);
+                if st.common_carrier {
+                    mult = mult.min(regulated_cap_bps(ds));
+                }
                 let total = leg_cents(ds, from, to, mode, take, mult);
                 let weights: Vec<(u64, i64)> =
                     others.iter().map(|(c, f)| (*c as u64, *f as i64)).collect();
@@ -1576,7 +1669,8 @@ pub fn reservable_lots(world: &World, firm: Handle, key: LaneKey) -> i64 {
     st.lanes
         .get(&key)
         .map(|lane| {
-            lane.allocs
+            let open: i64 = lane
+                .allocs
                 .iter()
                 .filter(|a| {
                     !crate::economy::ownership::same_group(
@@ -1586,7 +1680,9 @@ pub fn reservable_lots(world: &World, firm: Handle, key: LaneKey) -> i64 {
                     )
                 })
                 .map(|a| (a.cap - a.held).max(0) as i64)
-                .sum()
+                .sum();
+            let room = lane.cap() as i64 * contract_share_bps(st) / 10_000 - lane.held() as i64;
+            open.min(room.max(0))
         })
         .unwrap_or(0)
 }
@@ -1629,7 +1725,7 @@ pub fn reserve_lane(
     let open = reservable_lots(world, firm, key);
     if cap <= 0
         || lots as i64 > open
-        || lots as i64 * 10_000 > cap * MAX_CONTRACT_SHARE_BPS
+        || lots as i64 * 10_000 > cap * contract_share_bps(&world.logistics)
         || world
             .logistics
             .contracts
@@ -1645,7 +1741,11 @@ pub fn reserve_lane(
         let lane = &world.logistics.lanes[&key];
         (((lane.used() + lane.held()) as i64 + lots as i64) * 10_000 / cap).clamp(0, 10_000)
     };
-    let mult = spot_mult_bps(ds, after as i32) * ds.logistics.contract_discount_bps / 10_000;
+    let mut spot = spot_mult_bps(ds, after as i32);
+    if world.logistics.common_carrier {
+        spot = spot.min(regulated_cap_bps(ds));
+    }
+    let mult = spot * ds.logistics.contract_discount_bps / 10_000;
     let fee = leg_cents(ds, from, to, mode, 1, mult).max(1);
     let id = world.logistics.next_contract;
     world.logistics.next_contract += 1;

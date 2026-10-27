@@ -180,6 +180,7 @@ pub fn build_with(
         firm_history: BTreeMap::new(),
         politics: crate::state::Politics::default(),
         logistics: Default::default(),
+        systemic: Default::default(),
     };
 
     // Outside gateway capital is finite but real: exports are paid from it, imports add to it.
@@ -353,6 +354,9 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
             guarantees: Vec::new(),
             last_strategic_week: 0,
             merged_into: None,
+            state_owned_since: None,
+            rescued_week: 0,
+            inputs_used: Vec::new(),
             founding_week: Tick::OPENING,
             bank: if seed_firm.recipe == "bank" {
                 Some(BankModel {
@@ -589,6 +593,9 @@ fn placeholder_firm() -> Firm {
         guarantees: Vec::new(),
         last_strategic_week: 0,
         merged_into: None,
+        state_owned_since: None,
+        rescued_week: 0,
+        inputs_used: Vec::new(),
         founding_week: Tick::OPENING,
         bank: None,
         insurer: None,

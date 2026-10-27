@@ -50,6 +50,8 @@ pub enum HolderId {
     Firm(Handle),
     Outside(u32),
     Treasury,
+    /// The state, after a nationalisation. Holds the shares of a state firm until privatised.
+    State,
 }
 
 impl HolderId {
@@ -577,6 +579,16 @@ pub struct Firm {
     pub guarantees: Vec<Guarantee>,
     pub last_strategic_week: u32,
     pub merged_into: Option<Handle>,
+    /// The week the state took the firm over, while it is state owned.
+    #[serde(default)]
+    pub state_owned_since: Option<u32>,
+    /// The week the firm last received a state rescue.
+    #[serde(default)]
+    pub rescued_week: u32,
+    /// Goods the firm's operating plants use as inputs, refreshed weekly. Read by vertical
+    /// merger review.
+    #[serde(default)]
+    pub inputs_used: Vec<u16>,
     pub founding_week: Tick,
     pub bank: Option<BankModel>,
     pub insurer: Option<InsurerModel>,
@@ -818,6 +830,9 @@ pub struct Gateway {
     #[serde(default)]
     pub smoothed_import_lots: i64,
 }
+
+/// The `Lender::Outside` index that stands for the government.
+pub const STATE_LENDER: u32 = u32::MAX;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Lender {
@@ -1484,6 +1499,10 @@ pub struct World {
     /// Freight lanes, carriers and lane contracts. See `economy::logistics`.
     #[serde(default)]
     pub logistics: crate::economy::logistics::LogisticsState,
+    /// Pipeline spills, strikes, fires, lane outages and harvest failures. See
+    /// `economy::systemic`.
+    #[serde(default)]
+    pub systemic: crate::economy::systemic::SystemicState,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.
@@ -1538,6 +1557,28 @@ impl UnionLaw {
     }
 }
 
+/// What the government does with a failing strategic firm.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Rescue {
+    /// Nothing: the normal restructuring or liquidation runs.
+    #[default]
+    None,
+    /// A state loan clears the arrears and the firm stays private.
+    Bailout,
+    /// The state buys the shares and runs the firm until it is privatised.
+    Nationalise,
+}
+
+impl Rescue {
+    pub const fn key(self) -> &'static str {
+        match self {
+            Rescue::None => "none",
+            Rescue::Bailout => "bailout",
+            Rescue::Nationalise => "nationalise",
+        }
+    }
+}
+
 /// The laws companies live under.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Laws {
@@ -1548,6 +1589,29 @@ pub struct Laws {
     /// Combined regional share at which a merger goes to review.
     pub merger_review_bps: i64,
     pub unions: UnionLaw,
+    /// Owned pipelines, rail and ships sell spare capacity to anyone at a regulated rate and
+    /// cannot lock a lane up with contracts.
+    #[serde(default)]
+    pub common_carrier: bool,
+    /// Share of a supplier's or customer's regional market at which buying it goes to review.
+    /// Zero means vertical deals are not reviewed.
+    #[serde(default)]
+    pub vertical_review_bps: i64,
+    /// The government buys and stores commodities in busts and sells in spikes.
+    #[serde(default)]
+    pub reserve: bool,
+    #[serde(default)]
+    pub rescue: Rescue,
+    /// State firms are sold back to the market once they are sound.
+    #[serde(default)]
+    pub privatise: bool,
+    /// Output cap for extraction goods in quota states, as a share of capacity, applied while
+    /// their price is depressed. Zero means no quotas.
+    #[serde(default)]
+    pub quota_bps: i32,
+    /// Bit i is set when the state at index i (states sorted by code) has quotas.
+    #[serde(default)]
+    pub quota_states: u64,
 }
 
 impl Default for Laws {
@@ -1557,6 +1621,13 @@ impl Default for Laws {
             wage_floor_cents: 34_000,
             merger_review_bps: 3_500,
             unions: UnionLaw::Standard,
+            common_carrier: false,
+            vertical_review_bps: 0,
+            reserve: false,
+            rescue: Rescue::None,
+            privatise: false,
+            quota_bps: 0,
+            quota_states: 0,
         }
     }
 }
@@ -1586,6 +1657,28 @@ pub struct Politics {
     pub laws: Laws,
     pub pending: Option<LawChange>,
     pub news: Vec<PoliticalNews>,
+    /// The first week's programme for the starting party has been put in force.
+    #[serde(default)]
+    pub programmed: bool,
+    /// Laws that changed so far, counting each announced change that took effect.
+    #[serde(default)]
+    pub law_changes: u32,
+    /// The week the latest announced change took effect.
+    #[serde(default)]
+    pub last_effective: u32,
+    /// The strategic reserve. See `economy::reserve`.
+    #[serde(default)]
+    pub reserve: crate::economy::reserve::Reserve,
+    /// Rescues so far: bailouts, nationalisations and privatisations.
+    #[serde(default)]
+    pub bailouts: u32,
+    #[serde(default)]
+    pub nationalisations: u32,
+    #[serde(default)]
+    pub privatisations: u32,
+    /// Regions whose extraction goods are under a quota this week, for display and rivals.
+    #[serde(default)]
+    pub quota_active: Vec<(u8, u16)>,
 }
 
 impl Default for Politics {
@@ -1599,6 +1692,14 @@ impl Default for Politics {
             laws: Laws::default(),
             pending: None,
             news: Vec::new(),
+            programmed: false,
+            law_changes: 0,
+            last_effective: 0,
+            reserve: Default::default(),
+            bailouts: 0,
+            nationalisations: 0,
+            privatisations: 0,
+            quota_active: Vec::new(),
         }
     }
 }

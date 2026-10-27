@@ -128,6 +128,11 @@ pub fn settle(world: &mut World, dataset: &Dataset) -> Vec<(Handle, &'static str
                     firm.past_due_weeks
                 };
                 if weeks > PAST_DUE_GRACE_WEEKS {
+                    // A failing strategic firm may be rescued by the state before the court.
+                    if crate::economy::rescue::try_rescue(world, dataset, handle) {
+                        events.push((handle, "rescued"));
+                        continue;
+                    }
                     let liquid = crate::economy::valuation::liquidation_value(
                         &world.firms.get(handle).unwrap().book,
                     );
@@ -621,12 +626,20 @@ fn pay_claimant(world: &mut World, holder: HolderId, amount: i64, claim: Account
                 entity.capital_cents += amount;
             }
         }
+        HolderId::State => {
+            let _ = world.government.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, amount, memo)
+                    .credit(claim, amount, memo),
+            );
+        }
         HolderId::Treasury => {}
     }
 }
 
 /// Pay a shareholder its liquidation residual; the holding is written off at cost basis.
-fn pay_equity(world: &mut World, holder: HolderId, amount: i64, basis: i64) {
+pub(crate) fn pay_equity(world: &mut World, holder: HolderId, amount: i64, basis: i64) {
     match holder {
         HolderId::Investor => {
             world.investor.cash_cents += amount;
@@ -662,6 +675,19 @@ fn pay_equity(world: &mut World, holder: HolderId, amount: i64, basis: i64) {
             if let Some(entity) = world.outside.investors.get_mut(index as usize) {
                 entity.capital_cents += amount;
             }
+        }
+        HolderId::State => {
+            let _ = world.government.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, amount, "liquidation distribution")
+                    .credit(Account::Investments, basis, "holding written off")
+                    .credit(
+                        Account::OtherIncome,
+                        amount - basis,
+                        "liquidation gain or loss",
+                    ),
+            );
         }
         HolderId::Treasury => {}
     }

@@ -177,10 +177,17 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
         .min()
         .map(|import| import * 95 / 100)
         .unwrap_or(reference + reference * 15 / 100);
-    target
+    let mut priced = target
         .clamp(reference / 2, reference * 2)
         .min(ceiling)
-        .max(1)
+        .max(1);
+    // A state firm has one aim: cover its costs. It asks cost plus five percent and no more.
+    if entity.state_owned_since.is_some()
+        && let Some(cost) = unit_cost(world, dataset, firm, product)
+    {
+        priced = priced.min((cost * 105 / 100).max(1));
+    }
+    priced
 }
 
 /// Production planning from sell-through, plant by plant: each plant follows the good it makes.

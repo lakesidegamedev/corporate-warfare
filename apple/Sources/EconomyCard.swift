@@ -277,6 +277,7 @@ struct EconomyCard: View {
             if let pending = e.pendingLaws {
                 lawsTable(pending, heading: "From \(ResultBuckets.weekLabel(e.pendingEffectiveWeek))")
             }
+            marketRules(e)
         }
     }
 
@@ -289,11 +290,73 @@ struct EconomyCard: View {
             lawRow("Low-skill wage floor", Format.price(laws.wageFloorHourlyCents) + " an hour")
             lawRow("Merger review from", "\(laws.mergerReviewBps / 100)% market share")
             lawRow("Union law", laws.unions.prefix(1).uppercased() + laws.unions.dropFirst())
+            lawRow("Common carrier", laws.commonCarrier ? "Spare lane capacity sold at a regulated rate" : "Not required")
+            lawRow("Production quotas", laws.quotaBps > 0 && !laws.quotaStates.isEmpty
+                   ? "\(laws.quotaStates.joined(separator: ", ")): up to \(laws.quotaBps / 100)% of capacity when prices are soft"
+                   : "None")
+            lawRow("Supplier and customer deals", laws.verticalReviewBps > 0 ? "Reviewed from \(laws.verticalReviewBps / 100)% market share" : "Not reviewed")
+            lawRow("Strategic reserve", laws.reserve ? "Buys in busts, sells in spikes" : "None")
+            lawRow("Failing strategic firms", rescueText(laws))
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(heading != nil ? Theme.gold.opacity(0.1) : Theme.ink,
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func rescueText(_ laws: LawsDto) -> String {
+        let base: String
+        switch laws.rescue {
+        case "bailout": base = "State rescue loan"
+        case "nationalise": base = "Nationalised"
+        default: base = "Left to the courts"
+        }
+        return laws.privatise && laws.rescue != "none" ? base + ", sold back when sound" : base
+    }
+
+    /// The strategic reserve, quotas biting now, state firms and the latest disruptions.
+    @ViewBuilder
+    private func marketRules(_ e: EconomyDto) -> some View {
+        if !(e.reserve.isEmpty && e.quotas.isEmpty && e.incidents.isEmpty && e.stateFirms.isEmpty) {
+            VStack(alignment: .leading, spacing: 4) {
+                Eyebrow(text: "Markets and rules")
+                if !e.reserve.isEmpty {
+                    HStack(spacing: 6) {
+                        PixelIcon("storage", size: 14)
+                        Text("Reserve holds \(Format.price(e.reserveValueCents)) at cost")
+                            .font(.caption).foregroundStyle(Theme.primaryText)
+                    }
+                    ForEach(Array(e.reserve.enumerated()), id: \.offset) { _, r in
+                        Text("\(r.label): \(r.lots) lots, \(r.phase)")
+                            .font(.caption)
+                            .foregroundStyle(r.phase == "buying" ? Theme.positive : r.phase == "selling" ? Theme.warning : Theme.secondary)
+                    }
+                }
+                ForEach(Array(e.quotas.enumerated()), id: \.offset) { _, q in
+                    HStack(spacing: 6) {
+                        PixelIcon("gavel", size: 14)
+                        Text("\(q.label) in \(q.regionName) capped at \(q.capBps / 100)% of capacity")
+                            .font(.caption).foregroundStyle(Theme.secondary)
+                    }
+                }
+                if !e.stateFirms.isEmpty {
+                    HStack(spacing: 6) {
+                        PixelIcon("flag", size: 14)
+                        Text("State owned: \(e.stateFirms.joined(separator: ", "))")
+                            .font(.caption).foregroundStyle(Theme.secondary)
+                    }
+                }
+                ForEach(Array(e.incidents.prefix(4).enumerated()), id: \.offset) { _, i in
+                    HStack(spacing: 6) {
+                        PixelIcon(i.touchesYou ? "alert" : "warning", size: 14)
+                        Text(i.text + (i.weeksLeft > 0 ? " \(i.weeksLeft) weeks left." : ""))
+                            .font(.caption)
+                            .foregroundStyle(i.touchesYou ? Theme.primaryText : Theme.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
     }
 
     private func lawRow(_ title: String, _ value: String) -> some View {

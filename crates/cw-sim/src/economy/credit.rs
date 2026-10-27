@@ -158,6 +158,19 @@ pub fn service(world: &mut World, dataset: &Dataset) {
 
 fn credit_lender(world: &mut World, loan: &Loan, paid: i64, interest_paid: i64) {
     match loan.lender {
+        Lender::Outside(crate::state::STATE_LENDER) => {
+            let _ = world.government.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, paid, "state loan receipt")
+                    .credit(Account::InterestIncome, interest_paid, "interest income")
+                    .credit(
+                        Account::Receivables,
+                        paid - interest_paid,
+                        "principal received",
+                    ),
+            );
+        }
         Lender::Outside(index) => {
             if let Some(lender) = world.outside.lenders.get_mut(index as usize) {
                 lender.capital_cents += paid;
@@ -321,7 +334,7 @@ fn distribute_to_holders(world: &mut World, bond: &Bond, amount: i64) {
                     holder.capital_cents += share;
                 }
             }
-            HolderId::Treasury => {}
+            HolderId::Treasury | HolderId::State => {}
         }
     }
 }
@@ -379,6 +392,14 @@ pub fn repay(world: &mut World, loan: Handle, amount: i64) {
         );
     }
     match lender {
+        Lender::Outside(crate::state::STATE_LENDER) => {
+            let _ = world.government.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, payment, "state loan repaid")
+                    .credit(Account::Receivables, payment, "state loan repaid"),
+            );
+        }
         Lender::Outside(index) => {
             if let Some(holder) = world.outside.lenders.get_mut(index as usize) {
                 holder.capital_cents += payment;

@@ -1549,6 +1549,51 @@ pub struct LawsDto {
     pub wage_floor_hourly_cents: i64,
     pub merger_review_bps: i64,
     pub unions: String,
+    /// Owned pipelines, rail and ships sell spare capacity at a regulated rate.
+    pub common_carrier: bool,
+    /// Share at which buying a supplier or customer goes to review; zero when it does not.
+    pub vertical_review_bps: i64,
+    /// The government buys in busts and sells in spikes.
+    pub reserve: bool,
+    /// none, bailout or nationalise.
+    pub rescue: String,
+    pub privatise: bool,
+    /// Output cap in quota states, as a share of capacity; zero when there are no quotas.
+    pub quota_bps: i32,
+    /// Names of the states with quotas.
+    pub quota_states: Vec<String>,
+}
+
+/// One good in the strategic reserve.
+#[derive(uniffi::Record)]
+pub struct ReserveLineDto {
+    pub product: String,
+    pub label: String,
+    pub lots: i64,
+    /// buying, selling or holding.
+    pub phase: String,
+}
+
+/// A production quota biting this week.
+#[derive(uniffi::Record)]
+pub struct QuotaDto {
+    pub region_name: String,
+    pub product: String,
+    pub label: String,
+    pub cap_bps: i32,
+}
+
+/// A pipeline spill, port strike, refinery fire, lane outage or harvest failure.
+#[derive(uniffi::Record)]
+pub struct IncidentDto {
+    pub week: u32,
+    /// spill, port_strike, refinery_fire, lane_outage or harvest_failure.
+    pub kind: String,
+    pub text: String,
+    /// Weeks left until it is over.
+    pub weeks_left: u32,
+    /// One of your companies is touched.
+    pub touches_you: bool,
 }
 
 /// The economy, the central bank and the government, for the Markets economy card.
@@ -1583,6 +1628,12 @@ pub struct EconomyDto {
     pub pending_laws: Option<LawsDto>,
     pub pending_effective_week: u32,
     pub news: Vec<NewsDto>,
+    pub reserve: Vec<ReserveLineDto>,
+    pub reserve_value_cents: i64,
+    pub quotas: Vec<QuotaDto>,
+    pub incidents: Vec<IncidentDto>,
+    /// State-owned firms, by name.
+    pub state_firms: Vec<String>,
     /// How world commodity prices move: off, historical, historical_variance or random.
     pub price_path: String,
     /// The outside world's price levels the gateways follow, one per product family.
@@ -1622,12 +1673,30 @@ pub struct ResearchDto {
     pub next_quality_bps: i32,
 }
 
-fn laws_dto(laws: &cw_sim::state::Laws) -> LawsDto {
+fn laws_dto(laws: &cw_sim::state::Laws, dataset: &cw_data::Dataset) -> LawsDto {
     LawsDto {
         corporate_tax_bps: laws.corporate_tax_bps,
         wage_floor_hourly_cents: laws.wage_floor_cents / 40,
         merger_review_bps: laws.merger_review_bps,
         unions: laws.unions.key().to_owned(),
+        common_carrier: laws.common_carrier,
+        vertical_review_bps: laws.vertical_review_bps,
+        reserve: laws.reserve,
+        rescue: laws.rescue.key().to_owned(),
+        privatise: laws.privatise,
+        quota_bps: laws.quota_bps,
+        quota_states: if laws.quota_bps > 0 {
+            dataset
+                .states
+                .iter()
+                .enumerate()
+                .take(64)
+                .filter(|(i, _)| laws.quota_states & (1 << i) != 0)
+                .map(|(_, s)| s.name.clone())
+                .collect()
+        } else {
+            Vec::new()
+        },
     }
 }
 
@@ -2629,8 +2698,10 @@ impl SessionHandle {
             party: p.party.key().to_owned(),
             approval_bps: p.approval_bps,
             next_election_week: p.next_election,
-            laws: laws_dto(&p.laws),
-            pending_laws: p.pending.map(|change| laws_dto(&change.laws)),
+            laws: laws_dto(&p.laws, &session.dataset),
+            pending_laws: p
+                .pending
+                .map(|change| laws_dto(&change.laws, &session.dataset)),
             pending_effective_week: p.pending.map(|change| change.effective).unwrap_or(0),
             news: p
                 .news
@@ -2641,6 +2712,55 @@ impl SessionHandle {
                     week: n.week,
                     text: n.text.clone(),
                 })
+                .collect(),
+            reserve: cw_sim::economy::reserve::strategic_goods(&session.dataset)
+                .into_iter()
+                .filter(|code| p.reserve.lots_of(*code) > 0)
+                .map(|code| ReserveLineDto {
+                    product: session.dataset.products[code as usize].id.clone(),
+                    label: session.dataset.products[code as usize].name.clone(),
+                    lots: p.reserve.lots_of(code),
+                    phase: match cw_sim::economy::reserve::phase(world, &session.dataset, code) {
+                        cw_sim::economy::reserve::Phase::Buying => "buying",
+                        cw_sim::economy::reserve::Phase::Selling => "selling",
+                        cw_sim::economy::reserve::Phase::Idle => "holding",
+                    }
+                    .to_owned(),
+                })
+                .collect(),
+            reserve_value_cents: p.reserve.value_cents(),
+            quotas: p
+                .quota_active
+                .iter()
+                .map(|(region, product)| QuotaDto {
+                    region_name: session.dataset.regions[*region as usize].name.clone(),
+                    product: session.dataset.products[*product as usize].id.clone(),
+                    label: session.dataset.products[*product as usize].name.clone(),
+                    cap_bps: p.laws.quota_bps,
+                })
+                .collect(),
+            incidents: world
+                .systemic
+                .incidents
+                .iter()
+                .rev()
+                .take(8)
+                .map(|i| IncidentDto {
+                    week: i.week,
+                    kind: cw_sim::economy::systemic::kind_key(i.kind).to_owned(),
+                    text: i.text.clone(),
+                    weeks_left: (i.week + 1 + i.weeks as u32).saturating_sub(world.tick.0),
+                    touches_you: i
+                        .firms
+                        .iter()
+                        .any(|f| cw_sim::economy::events_engine::player_side(world, *f)),
+                })
+                .collect(),
+            state_firms: world
+                .firms
+                .iter()
+                .filter(|(_, f)| f.state_owned_since.is_some() && f.operative())
+                .map(|(_, f)| f.name.clone())
                 .collect(),
             price_path: world.world_prices.mode.key().to_owned(),
             world_prices: world

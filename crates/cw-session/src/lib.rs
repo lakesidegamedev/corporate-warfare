@@ -234,6 +234,7 @@ impl Session {
                     "strong" => cw_sim::state::UnionLaw::Strong,
                     _ => cw_sim::state::UnionLaw::Standard,
                 },
+                ..world.politics.laws
             };
         }
         let career_id = cw_core::rng::scramble(config.seed) & 0x00FF_FFFF_FFFF_FFFF;
@@ -777,6 +778,7 @@ impl Session {
             storage_alerts(world, &self.dataset, firm, &mut alerts);
         }
         logistics_alerts(world, &self.dataset, &mut alerts);
+        government_alerts(world, &self.dataset, &mut alerts);
         for event in dto::events(world, &self.dataset) {
             if event.mandatory {
                 alerts.push(Alert {
@@ -1268,6 +1270,155 @@ fn logistics_alerts(
     }
 }
 
+/// Alerts from laws, the reserve, quotas, state rescue and systemic incidents, only when they
+/// touch the investor's companies:
+///
+/// * a law about carriers announced or just in force, when a company of theirs owns or ships on
+///   a carrier lane;
+/// * a quota capping a good one of their plants makes;
+/// * the state reserve buying or selling a good one of their companies makes;
+/// * a rescue law announced or in force, when a company of theirs is a strategic firm, and any
+///   rescue of one of their companies in the last month;
+/// * a pipeline spill, strike, fire, lane outage or harvest failure that touches one of their
+///   companies in the last four weeks.
+fn government_alerts(
+    world: &cw_sim::state::World,
+    dataset: &cw_data::Dataset,
+    alerts: &mut Vec<Alert>,
+) {
+    use cw_sim::economy::{rescue, reserve, systemic};
+    let mine: Vec<cw_core::ids::Handle> = world
+        .firms
+        .iter()
+        .filter(|(h, f)| f.operative() && cw_sim::economy::events_engine::player_side(world, *h))
+        .map(|(h, _)| h)
+        .collect();
+    if mine.is_empty() {
+        return;
+    }
+    let now = world.tick.0;
+    let p = &world.politics;
+    let recent_law = p
+        .pending
+        .is_some_and(|c| now.saturating_sub(c.announced) <= 4)
+        || (p.last_effective > 0 && now.saturating_sub(p.last_effective) <= 4);
+    if recent_law {
+        let changed = p.pending.map(|c| c.laws).unwrap_or(p.laws);
+        let ships = mine.iter().any(|f| {
+            world.logistics.carriers.iter().any(|c| c.firm == *f)
+                || world
+                    .logistics
+                    .stats
+                    .values()
+                    .any(|s| s.users.iter().any(|(u, _)| u == f))
+        });
+        if ships && changed.common_carrier != world.logistics.common_carrier {
+            alerts.push(Alert {
+                key: "alert.law_carrier".to_owned(),
+                subject: if changed.common_carrier {
+                    "Common carrier rules are coming: owned lanes must sell spare capacity at a regulated rate."
+                } else {
+                    "Common carrier rules are being repealed: owners of lanes can price freely again."
+                }
+                .to_owned(),
+                severity: 1,
+            });
+        }
+        if mine
+            .iter()
+            .any(|f| rescue::is_strategic(world, dataset, *f))
+            && changed.rescue != world.politics.laws.rescue
+        {
+            alerts.push(Alert {
+                key: "alert.law_rescue".to_owned(),
+                subject: match changed.rescue {
+                    cw_sim::state::Rescue::Nationalise => {
+                        "Failing strategic firms will be nationalised. Yours would get a state loan instead."
+                    }
+                    cw_sim::state::Rescue::Bailout => {
+                        "Failing strategic firms will get state rescue loans."
+                    }
+                    cw_sim::state::Rescue::None => "State rescue of failing strategic firms ends.",
+                }
+                .to_owned(),
+                severity: 1,
+            });
+        }
+    }
+    for (region, product) in &p.quota_active {
+        let touches = world.facilities.iter().any(|(_, plant)| {
+            plant.region == *region
+                && mine.contains(&plant.firm)
+                && dataset
+                    .product_index
+                    .get(&dataset.recipes[plant.recipe as usize].output)
+                    == Some(product)
+        });
+        if touches {
+            alerts.push(Alert {
+                key: "alert.quota".to_owned(),
+                subject: format!(
+                    "{} output in {} is capped at {}% of capacity while prices are soft.",
+                    dataset.products[*product as usize].name,
+                    dataset.regions[*region as usize].name,
+                    p.laws.quota_bps / 100
+                ),
+                severity: 1,
+            });
+        }
+    }
+    if p.laws.reserve {
+        let made: std::collections::BTreeSet<u16> = mine
+            .iter()
+            .flat_map(|f| cw_sim::economy::pricing::outputs(world, dataset, *f))
+            .collect();
+        for product in reserve::strategic_goods(dataset) {
+            if !made.contains(&product) {
+                continue;
+            }
+            let (verb, sev) = match reserve::phase(world, dataset, product) {
+                reserve::Phase::Buying => ("is buying", 0),
+                reserve::Phase::Selling if p.reserve.lots_of(product) > 0 => ("is selling", 1),
+                _ => continue,
+            };
+            alerts.push(Alert {
+                key: "alert.reserve".to_owned(),
+                subject: format!(
+                    "The state reserve {verb} {}.",
+                    dataset.products[product as usize].name.to_lowercase()
+                ),
+                severity: sev,
+            });
+        }
+    }
+    for firm in &mine {
+        if world
+            .firms
+            .get(*firm)
+            .is_some_and(|f| f.rescued_week > 0 && now.saturating_sub(f.rescued_week) <= 4)
+        {
+            let name = world
+                .firms
+                .get(*firm)
+                .map(|f| f.name.clone())
+                .unwrap_or_default();
+            alerts.push(Alert {
+                key: "alert.state_rescue".to_owned(),
+                subject: format!("{name} received a state rescue loan."),
+                severity: 2,
+            });
+        }
+        for incident in systemic::touching(world, *firm, 4) {
+            alerts.push(Alert {
+                key: "alert.incident".to_owned(),
+                subject: incident.text.clone(),
+                severity: 2,
+            });
+        }
+    }
+    alerts.dedup_by(|a, b| a.key == b.key && a.subject == b.subject);
+}
+
 /// Storage alerts for one of the investor's companies, only when they matter: space nearly full
 /// in a class where stock is substantial, outside storage and holding cost above 3 percent of
 /// four weeks of revenue, or spoilage above 2 percent. Each also needs a floor in dollars so
@@ -1598,7 +1749,9 @@ mod tests {
         // facility's `deposit_remaining`, which is only stocked for ore mines; ordinary plants
         // had been drifting to large negative deposits. The economy is unchanged otherwise. On
         // 2026-10-27 it moved to daca9262... when the world gained its world price state (empty
-        // here, as this fixture runs without world prices). The Swift constant must be updated
+        // here, as this fixture runs without world prices), and again in 1.7 preview 4 when the
+        // world gained government laws, the reserve and systemic incidents. The Swift constant
+        // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
         // equality again.
         let mut session = Session::create(config(42)).unwrap();
@@ -1622,7 +1775,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "e0b840441dbc384da085eb9fbaf0d443c3965d120cd69b3de3304262e1b8991e"
+            "94d7e502eba81c8c6875a5d24fdb12d4485137b81ba0b2095804b76d561f657b"
         );
     }
 

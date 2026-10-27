@@ -103,7 +103,15 @@ fn lanes_contracts_and_policies_survive_a_save_and_continue_identically() {
     let mut restored = Session::import_save(&bytes).unwrap();
     assert_eq!(session.canonical_hash(), restored.canonical_hash());
     assert!(!restored.world.logistics.carriers.is_empty());
-    assert_eq!(restored.world.logistics.contracts.len(), 1);
+    // Rivals answering congestion cards may hold contracts too; the injected one is there.
+    assert!(
+        restored
+            .world
+            .logistics
+            .contracts
+            .iter()
+            .any(|c| c.id == 900)
+    );
     run(&mut session, 10);
     run(&mut restored, 10);
     assert_eq!(
@@ -127,7 +135,7 @@ fn telemetry_reports_lanes_rates_and_the_outside_share() {
     let mut session = Session::create(config(63)).unwrap();
     run(&mut session, 20);
     let snapshot = session.market_snapshot();
-    assert_eq!(snapshot.schema, 3);
+    assert_eq!(snapshot.schema, 4);
     let l = &snapshot.logistics;
     assert_eq!(l.mode_ids, ["truck", "rail", "pipeline", "sea"]);
     assert_eq!(l.lots_by_mode.len(), 4);

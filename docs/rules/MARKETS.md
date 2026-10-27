@@ -417,3 +417,44 @@ and aggressive rivals reserve part of a busy lane they own a fifth of and ship o
 division count over 100 (10 divisions 0.18 percent, 20 0.72, 30 1.6), doubled with a secondary
 type. Logistics strength takes up to half off and each owned logistics division takes six percent
 off, up to forty.
+
+## Government laws on markets and logistics (1.7)
+
+Four new laws sit beside tax, wage floor, merger review and unions. The party in power sets
+them in its programme. A new government announces its programme at the election and it takes
+effect 13 weeks later; a government returned to office re-announces its market programme if
+it differs from what is in force. The starting government's programme is in force from week
+one. Laws that are per state (quotas) are a bit per state in code order.
+
+| Law | Commerce Party | Workers' Party |
+|---|---|---|
+| Common carrier | off | on |
+| Production quotas | on in states that specialise in extraction, 80% of capacity | off |
+| Vertical merger review | off | from 35% share |
+| Strategic reserve | off | on |
+| Rescue of failing strategic firms | bailout, then privatise | nationalise |
+
+Common carrier. A lane's price already rises with fill from the empty-lane rate to the outside
+premium. Under the law the price owners may charge other shippers is capped at the empty-lane
+rate plus 40% of the gap to the premium (110% of the base rate with the shipped content, since the empty lane is 100% and the premium 125%), the
+same cap applies to contract rates, and lane contracts together may hold at most 40% of a
+lane's capacity instead of 80%. Rivals do not try to lock lanes up. The rate cap lowers the
+return on a new carrier, which rival build tests read.
+
+Production quotas (prorationing). While an extraction good's corridor price is under 92% of
+its 52-week average (after 26 weeks of history), plants making it in a quota state may run
+at only the quota share of capacity. The cap is a regional supply modifier recomputed every
+week and lifts the week the price recovers or the law is repealed. Rivals do not build new
+extraction capacity in a capped region. Applies to any extraction good in any scenario.
+
+Strategic reserve. For extraction goods that do not spoil, the government buys when the
+corridor price is under 85% of the 52-week average: up to 300 lots a week per good, at the
+corridor price, from firms' free stock (stock beyond their own plants' input cover), paying
+from government cash (at most 1/40 of it a week across goods), up to 4,000 lots per good. When
+the price is over 120% of the average it offers up to 150 lots a week per region from its
+stock in that region, priced 3% under the going price, through the same exchange as everyone
+else, so it competes with speculators and with importers. Its purchases and sales are real
+cash on the government ledger. Rival speculators sell their own store when the reserve sells,
+and buy beside it when the reserve buys.
+
+Systemic events, state rescue and vertical review: see EVENTS.md and CORPORATE.md.
