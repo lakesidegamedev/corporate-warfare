@@ -433,6 +433,11 @@ private fun DesktopMap(store: GameStore) {
                             color = tone, fontSize = 12.sp,
                         )
                         Text("${ResultBuckets.weekLabel(r.week.toInt())} · ${Sectors.name(r.industry)} · $region", color = Palette.secondary, fontSize = 11.sp)
+                        val chiefs = listOfNotNull(
+                            r.attackerCeo.takeIf { it.isNotEmpty() }?.let { "Led by $it (${temperamentLabel(r.attackerTemperament)})" },
+                            r.defenderCeo.takeIf { it.isNotEmpty() }?.let { "against $it (${temperamentLabel(r.defenderTemperament)})" },
+                        )
+                        if (chiefs.isNotEmpty()) Text(chiefs.joinToString(" "), color = Palette.secondary, fontSize = 11.sp)
                     }
                 }
             }
@@ -491,7 +496,7 @@ private fun RegionBoardDetail(store: GameStore, board: RegionBoardDto) {
         if (rivalLeaders.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             Eyebrow("Rivals here")
-            rivalLeaders.forEach { RivalLeaderRow(store, it.leader, it.leaderFirm, "${Sectors.name(it.industry)} · ${it.leaderShareBps / 100}%") }
+            rivalLeaders.forEach { RivalLeaderRow(store, it.leader, it.leaderFirm, "${Sectors.name(it.industry)} · ${it.leaderShareBps / 100}%", board.code, it.industry) }
         }
         val ours = store.divisions.filter { it.region == board.code }
         if (ours.isNotEmpty()) {
@@ -536,6 +541,8 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(0.9f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                RivalsCard(store)
+                Spacer(Modifier.height(10.dp))
                 store.finance?.takeIf { it.firm == firm.handle && it.recentWeeks.isNotEmpty() }?.let { ProfitDrivers(it.recentWeeks) }
                     ?: Callout("Results appear after the first week closes.", Palette.secondary)
                 if (store.facilities.isNotEmpty()) {
@@ -745,7 +752,13 @@ private fun DesktopInbox(store: GameStore) {
                 }
             }
         }
-        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (store.rivalFeed.isNotEmpty()) {
+                Panel {
+                    Eyebrow("Rival moves")
+                    store.rivalFeed.take(8).forEach { RivalMoveRow(it) }
+                }
+            }
             if (current != null) DecisionCard(store, current)
             else Callout("When a decision arrives it opens here with its choices. Time stops for any decision that is due.", Palette.secondary)
         }

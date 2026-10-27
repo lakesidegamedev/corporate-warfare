@@ -19,6 +19,18 @@ heading.
   silently. A new Analytics switch in Settings turns it off. The iPhone build already sends the
   current snapshot format, since the snapshot comes straight from the engine.
 
+### Added
+
+- Raid from where you see a rival. Every rival row (region board, map region sheet, dossier and
+  stock page) now carries a Raid button that opens the engine's quote: success chance, plants at
+  stake, price, the rival's defence, any repeat-raid surcharge and a budget slider. When a raid is
+  not open the panel says why in one line and, when a plant of yours in that market would fix it,
+  offers a Build button. Compose gets the raid panel for the first time.
+- Rivals show their personalities. Rival rows carry the chief executive's portrait and name, a
+  temperament tag and grudge or ally marks. The inbox lists rival moves and names the chief and
+  temperament behind each move and raid. A compact Rivals card in the CEO Office lists the groups
+  with a grudge against you, your allies and who you can raid now with the quoted chance.
+
 ## [1.7.0] - 2026-10-27
 
 Lone Star: supply chains you can own and contest, a shipping network, deeper corporate play, rivals with names and memories, and three new playable scenarios: Texas Oil Patch 1981, Silicon Valley 1995 and Ruhr and Rhine 1991 with currencies. Saves from 1.6 do not load in 1.7.0.

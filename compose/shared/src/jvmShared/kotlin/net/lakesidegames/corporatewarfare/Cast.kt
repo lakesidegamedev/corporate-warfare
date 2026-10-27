@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -141,6 +143,7 @@ fun DossierSection(store: GameStore, firm: ULong) {
             DossierBody(d)
         }
     }
+    RaidMarketsList(store, firm)
 }
 
 /** A tappable rival line that opens its dossier. */
@@ -152,22 +155,30 @@ fun DossierDialog(store: GameStore, firm: ULong, onClose: () -> Unit) {
         onDismissRequest = onClose,
         containerColor = Palette.panel,
         title = { Text(dossier?.firmName ?: "Rival") },
-        text = { dossier?.let { DossierBody(it) } ?: Text("Loading", color = Palette.secondary) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                dossier?.let { DossierBody(it) } ?: Text("Loading", color = Palette.secondary)
+                RaidMarketsList(store, firm)
+            }
+        },
         confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
     )
 }
 
 @Composable
-fun RivalLeaderRow(store: GameStore, name: String, firm: ULong, detail: String) {
+fun RivalLeaderRow(store: GameStore, name: String, firm: ULong, detail: String, region: String? = null, industry: String? = null) {
     var open by remember { mutableStateOf(false) }
-    Row(
-        Modifier.fillMaxWidth().clickable { open = true }.padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(name, color = Palette.primaryText, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
-        Spacer(Modifier.width(6.dp))
-        Text(detail, color = Palette.secondary, fontSize = 12.sp)
-        PixelIcon("chevron_down", size = 10.dp, tint = Palette.secondary, modifier = Modifier.padding(start = 6.dp))
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.weight(1f).clickable { open = true }, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, color = Palette.primaryText, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                Spacer(Modifier.width(6.dp))
+                Text(detail, color = Palette.secondary, fontSize = 12.sp)
+                PixelIcon("chevron_down", size = 10.dp, tint = Palette.secondary, modifier = Modifier.padding(start = 6.dp))
+            }
+            RivalIdentity(store, firm, 24.dp)
+        }
+        if (region != null && industry != null) RaidMarketButton(store, firm, region, industry)
     }
     if (open) DossierDialog(store, firm) { open = false }
 }

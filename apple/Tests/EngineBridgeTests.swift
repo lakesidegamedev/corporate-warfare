@@ -43,6 +43,19 @@ final class EngineBridgeTests: XCTestCase {
         XCTAssertEqual(restored.overview().tick, 2)
     }
 
+    func testRivalsCardAndRaidCheckCrossTheBoundary() throws {
+        let session = try SessionHandle(seed: 42, guided: true, fiveYear: true)
+        _ = session.advance(weeks: 4)
+        let firm = try XCTUnwrap(session.overview().primaryFirm)
+        let rivals = session.rivals(firm: firm)
+        XCTAssertFalse(rivals.isEmpty)
+        let rival = try XCTUnwrap(rivals.first)
+        let check = session.raidCheck(firm: firm, target: rival.tag.firm, region: "none", industry: "retail")
+        XCTAssertFalse(check.raidable)
+        XCTAssertFalse(check.reason.isEmpty)
+        XCTAssertNotNil(session.rivalTag(firm: rival.tag.firm, you: firm))
+    }
+
     func testRejectedCommandKeepsTheRevision() throws {
         let session = try SessionHandle(seed: 43, guided: false, fiveYear: false)
         let before = session.revision()

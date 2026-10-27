@@ -19,7 +19,9 @@ uniffi::setup_scaffolding!();
 mod cast;
 mod catalogue;
 mod custom;
-pub use cast::{DossierDto, MoveDto, PersonDto, PostDto};
+pub use cast::{
+    DossierDto, MoveDto, PersonDto, PostDto, RivalMoveFeedDto, RivalSummaryDto, RivalTagDto,
+};
 pub use catalogue::{ActionDto, FieldDto, OptionDto, action_catalogue};
 
 #[derive(uniffi::Record)]
@@ -984,7 +986,7 @@ pub struct PickDto {
 }
 
 /// A rival division the selected firm can raid.
-#[derive(uniffi::Record)]
+#[derive(Clone, uniffi::Record)]
 pub struct RaidOptionDto {
     pub target: u64,
     pub target_name: String,
@@ -998,7 +1000,7 @@ pub struct RaidOptionDto {
     pub quote: RaidQuoteDto,
 }
 
-#[derive(uniffi::Record)]
+#[derive(Clone, uniffi::Record)]
 pub struct RaidQuoteDto {
     pub attack_cents: i64,
     pub defence_cents: i64,
@@ -1022,6 +1024,23 @@ pub struct RaidRecordDto {
     pub blocks: u32,
     pub player_attacker: bool,
     pub player_defender: bool,
+    pub attacker_ceo: String,
+    pub attacker_temperament: String,
+    pub defender_ceo: String,
+    pub defender_temperament: String,
+}
+
+/// Whether the selected firm can raid a rival in one market, and if not, why and how to fix it.
+#[derive(uniffi::Record)]
+pub struct RaidCheckDto {
+    pub raidable: bool,
+    /// ok, own_group, other_currency, no_division, rival_absent or unknown.
+    pub kind: String,
+    /// One plain sentence when not raidable.
+    pub reason: String,
+    /// True when building a plant of that sector in that region would unlock the raid.
+    pub needs_build: bool,
+    pub option: Option<RaidOptionDto>,
 }
 
 /// Every plant in the world for the map. Rival plants show only public facts.
@@ -1562,6 +1581,54 @@ fn raid_quote_dto(quote: cw_sim::economy::sectors::RaidQuote) -> RaidQuoteDto {
         stake_bps: quote.stake_bps,
         surcharge_cents: quote.surcharge_cents,
     }
+}
+
+/// The raid `me` could launch on `rival`'s division in one market, quoted at a two-to-one
+/// campaign. None when the rival has no plants there or `me` is the rival's own group.
+pub(crate) fn raid_option(
+    world: &cw_sim::state::World,
+    dataset: &cw_data::Dataset,
+    me: cw_core::ids::Handle,
+    rival: cw_core::ids::Handle,
+    region: u8,
+    industry: u8,
+) -> Option<RaidOptionDto> {
+    use cw_sim::economy::sectors;
+    if rival == me
+        || cw_sim::economy::ownership::same_group(world, rival, me)
+        || cw_sim::economy::fx::require_same_currency(world, me, rival).is_err()
+        || sectors::division_plants(world, dataset, me, region, industry).is_empty()
+    {
+        return None;
+    }
+    let rival_blocks: u32 = sectors::division_plants(world, dataset, rival, region, industry)
+        .iter()
+        .filter_map(|h| world.facilities.get(*h))
+        .map(|p| p.blocks as u32)
+        .sum();
+    if rival_blocks < 1 {
+        return None;
+    }
+    let probe = sectors::raid_quote(world, dataset, me, rival, region, industry, 0);
+    let budget = probe.defence_cents * 2;
+    let quote = sectors::raid_quote(world, dataset, me, rival, region, industry, budget);
+    Some(RaidOptionDto {
+        target: rival.0,
+        target_name: world
+            .firms
+            .get(rival)
+            .map(|f| f.name.clone())
+            .unwrap_or_default(),
+        region: dataset.regions[region as usize].code.clone(),
+        region_index: region as u32,
+        industry: cw_sim::state::INDUSTRY_NAMES[industry as usize].to_owned(),
+        industry_index: industry as u32,
+        rival_blocks,
+        // No cooldown any more: repeat raids on a rival cost more instead.
+        ready_week: 0,
+        suggested_budget_cents: budget,
+        quote: raid_quote_dto(quote),
+    })
 }
 
 #[uniffi::export]
@@ -2946,44 +3013,116 @@ impl SessionHandle {
         for d in sectors::divisions_of(world, dataset, handle) {
             let (firms, _) = sectors::cell(world, dataset, d.region, d.industry);
             for (rival, _) in firms {
-                if rival == handle || cw_sim::economy::ownership::same_group(world, rival, handle) {
-                    continue;
+                if let Some(option) =
+                    raid_option(world, dataset, handle, rival, d.region, d.industry)
+                {
+                    out.push(option);
                 }
-                let rival_blocks: u32 =
-                    sectors::division_plants(world, dataset, rival, d.region, d.industry)
-                        .iter()
-                        .filter_map(|h| world.facilities.get(*h))
-                        .map(|p| p.blocks as u32)
-                        .sum();
-                if rival_blocks < 1 {
-                    continue;
-                }
-                let probe =
-                    sectors::raid_quote(world, dataset, handle, rival, d.region, d.industry, 0);
-                let budget = probe.defence_cents * 2;
-                let quote = sectors::raid_quote(
-                    world, dataset, handle, rival, d.region, d.industry, budget,
-                );
-                out.push(RaidOptionDto {
-                    target: rival.0,
-                    target_name: world
-                        .firms
-                        .get(rival)
-                        .map(|f| f.name.clone())
-                        .unwrap_or_default(),
-                    region: dataset.regions[d.region as usize].code.clone(),
-                    region_index: d.region as u32,
-                    industry: cw_sim::state::INDUSTRY_NAMES[d.industry as usize].to_owned(),
-                    industry_index: d.industry as u32,
-                    rival_blocks,
-                    // No cooldown any more: repeat raids on a rival cost more instead.
-                    ready_week: 0,
-                    suggested_budget_cents: budget,
-                    quote: raid_quote_dto(quote),
-                });
             }
         }
         out
+    }
+
+    /// Whether the firm can raid `target` in a market (region code, industry name), with the
+    /// quoted option when it can and a one-line reason and fix when it cannot.
+    pub fn raid_check(
+        &self,
+        firm: u64,
+        target: u64,
+        region: String,
+        industry: String,
+    ) -> RaidCheckDto {
+        use cw_sim::economy::sectors;
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let me = cw_core::ids::Handle(firm);
+        let rival = cw_core::ids::Handle(target);
+        let no = |kind: &str, reason: String, needs_build: bool| RaidCheckDto {
+            raidable: false,
+            kind: kind.to_owned(),
+            reason,
+            needs_build,
+            option: None,
+        };
+        let region_index = dataset.regions.iter().position(|r| r.code == region);
+        let industry_index = cw_sim::state::INDUSTRY_NAMES
+            .iter()
+            .position(|n| *n == industry);
+        let (Some(region_index), Some(industry_index)) = (region_index, industry_index) else {
+            return no(
+                "unknown",
+                "That market could not be found.".to_owned(),
+                false,
+            );
+        };
+        let (region_index, industry_index) = (region_index as u8, industry_index as u8);
+        let (Some(_), Some(rival_firm)) = (world.firms.get(me), world.firms.get(rival)) else {
+            return no("unknown", "That company is gone.".to_owned(), false);
+        };
+        let rival_name = rival_firm.name.clone();
+        let market = format!(
+            "{} in {}",
+            industry.replace('_', " "),
+            dataset.regions[region_index as usize].name
+        );
+        if me == rival || cw_sim::economy::ownership::same_group(world, me, rival) {
+            return no(
+                "own_group",
+                format!("{rival_name} is part of your own group."),
+                false,
+            );
+        }
+        if cw_sim::economy::fx::require_same_currency(world, me, rival).is_err() {
+            return no(
+                "other_currency",
+                format!("{rival_name} keeps its books in another currency, so you cannot raid it."),
+                false,
+            );
+        }
+        if sectors::division_plants(world, dataset, me, region_index, industry_index).is_empty() {
+            return no(
+                "no_division",
+                format!("You have no plant in {market}. Build one there to raid {rival_name}."),
+                true,
+            );
+        }
+        match raid_option(world, dataset, me, rival, region_index, industry_index) {
+            Some(option) => RaidCheckDto {
+                raidable: true,
+                kind: "ok".to_owned(),
+                reason: String::new(),
+                needs_build: false,
+                option: Some(option),
+            },
+            None => no(
+                "rival_absent",
+                format!("{rival_name} has no plants in {market} to take."),
+                false,
+            ),
+        }
+    }
+
+    /// Rival groups for the CEO Office card: threats, allies and who can be raided now.
+    pub fn rivals(&self, firm: u64) -> Vec<RivalSummaryDto> {
+        cast::rivals(&self.lock(), firm)
+    }
+
+    /// The tag for one company: its chief, temperament, and any grudge or tie with the firm.
+    pub fn rival_tag(&self, firm: u64, you: u64) -> Option<RivalTagDto> {
+        let session = self.lock();
+        cast::rival_tag(
+            &session.world,
+            &session.dataset,
+            cw_core::ids::Handle(firm),
+            cw_core::ids::Handle(you),
+        )
+    }
+
+    /// The latest rival moves anywhere, newest first, naming the chief behind each.
+    pub fn rival_feed(&self, limit: u32) -> Vec<RivalMoveFeedDto> {
+        let session = self.lock();
+        cast::rival_feed(&session.world, &session.dataset, limit as usize)
     }
 
     /// The odds and stake of a raid at a chosen budget.
@@ -3113,6 +3252,10 @@ impl SessionHandle {
                 blocks: r.blocks as u32,
                 player_attacker: cw_sim::economy::events_engine::player_side(world, r.attacker),
                 player_defender: cw_sim::economy::events_engine::player_side(world, r.defender),
+                attacker_ceo: cast::who(world, dataset, r.attacker).0,
+                attacker_temperament: cast::who(world, dataset, r.attacker).1,
+                defender_ceo: cast::who(world, dataset, r.defender).0,
+                defender_temperament: cast::who(world, dataset, r.defender).1,
             })
             .collect()
     }
@@ -4056,6 +4199,33 @@ mod tests {
         let bytes = session.export_save().unwrap();
         let imported = import_save(bytes).unwrap();
         assert_eq!(session.canonical_hash(), imported.canonical_hash());
+    }
+
+    #[test]
+    fn raid_check_explains_why_and_the_rivals_card_names_the_chief() {
+        let session = SessionHandle::new(181, true, true).unwrap();
+        session.advance(4);
+        let me = session.overview().primary_firm.unwrap();
+        let rivals = session.rivals(me);
+        assert!(!rivals.is_empty(), "the world has rivals to show");
+        assert!(rivals.iter().any(|r| !r.tag.ceo_name.is_empty()));
+        // A rival checked in a sector and region where we have no plant must say to build.
+        let targets = session.raid_targets(me);
+        let rival = rivals[0].tag.firm;
+        let check = session.raid_check(me, rival, "ZZZ".to_owned(), "retail".to_owned());
+        assert!(!check.raidable);
+        assert_eq!(check.kind, "unknown");
+        if let Some(option) = targets.first() {
+            let ok = session.raid_check(
+                me,
+                option.target,
+                option.region.clone(),
+                option.industry.clone(),
+            );
+            assert!(ok.raidable && ok.option.is_some());
+        }
+        let own = session.raid_check(me, me, "ZZZ".to_owned(), "retail".to_owned());
+        assert!(!own.raidable);
     }
 
     #[test]
