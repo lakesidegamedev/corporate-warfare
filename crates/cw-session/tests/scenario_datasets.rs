@@ -505,6 +505,16 @@ fn ruhr_rhine_reporting_currency_changes_the_figures_not_the_world() {
     let view = session.fx_view().expect("an fx view");
     assert_eq!(view.reporting, "FRF");
     assert_eq!(view.currencies.len(), 4);
+    // Every central bank has a named chair from the cast, and no two banks share one.
+    let mut chairs: Vec<&str> = view
+        .currencies
+        .iter()
+        .map(|c| c.chair_name.as_str())
+        .collect();
+    assert!(chairs.iter().all(|name| !name.is_empty()), "{chairs:?}");
+    chairs.sort_unstable();
+    chairs.dedup();
+    assert_eq!(chairs.len(), 4, "four banks, four chairs");
 }
 
 #[test]

@@ -222,6 +222,9 @@ private fun CurrencyRow(c: CurrencyDto, isReporting: Boolean, symbol: String) {
                 }
             }
             Text("${c.centralBank}: rate ${pct(c.policyRateBps, 2)}, inflation ${pct(c.inflationBps)}", color = Palette.secondary, fontSize = 12.sp)
+            if (c.chairName.isNotEmpty()) {
+                Text("Chair ${c.chairName}, ${c.chairStance}", color = Palette.secondary, fontSize = 12.sp)
+            }
             if (!isReporting) {
                 val (text, color) = pegStatus(c)
                 Text(text, color = color, fontSize = 12.sp)

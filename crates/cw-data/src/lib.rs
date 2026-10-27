@@ -1014,8 +1014,7 @@ impl Dataset {
                     .i64(currency.face_milli)
                     .i32(currency.policy_spread_bps)
                     .i32(currency.inflation_spread_bps)
-                    .i32(currency.volatility_bps)
-                    .i32(currency.chair_stance.unwrap_or(i32::MIN));
+                    .i32(currency.volatility_bps);
                 if let Some(peg) = &currency.peg {
                     hasher
                         .string(&peg.anchor)

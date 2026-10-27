@@ -1869,6 +1869,9 @@ pub struct CurrencyDto {
     pub symbol: String,
     pub country: String,
     pub central_bank: String,
+    /// The bank's chair and their stance (dovish to hawkish); empty without a cast.
+    pub chair_name: String,
+    pub chair_stance: String,
     /// What one unit is worth in the reporting currency, in millionths.
     pub value_ppm: i64,
     /// Change over the last 13 weeks, in basis points.
@@ -1913,6 +1916,8 @@ fn fx_dto(view: cw_session::dto::FxView) -> FxDto {
                 symbol: c.symbol,
                 country: c.country,
                 central_bank: c.central_bank,
+                chair_name: c.chair_name,
+                chair_stance: c.chair_stance,
                 value_ppm: c.value_ppm,
                 trend_bps: c.trend_bps,
                 policy_rate_bps: c.policy_rate_bps,

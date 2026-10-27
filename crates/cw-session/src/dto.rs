@@ -989,6 +989,9 @@ pub struct CurrencyView {
     pub symbol: String,
     pub country: String,
     pub central_bank: String,
+    /// The bank's chair and their stance (dovish to hawkish); empty without a cast.
+    pub chair_name: String,
+    pub chair_stance: String,
     /// What one unit is worth in the reporting currency, in millionths.
     pub value_ppm: i64,
     /// Change over the last 13 weeks, in basis points.
@@ -1042,6 +1045,27 @@ pub fn fx_view(world: &World, dataset: &Dataset, reporting: u8) -> Option<FxView
         .enumerate()
         .map(|(index, def)| {
             let st = &fx.currencies[index];
+            let chair = if index == 0 {
+                let c = &world.macro_state.cycle.chair;
+                (c.name.clone(), c.stance_label().to_owned())
+            } else {
+                fx.chairs
+                    .get(index)
+                    .copied()
+                    .flatten()
+                    .and_then(|person| dataset.cast.get(person as usize))
+                    .map(|person| {
+                        let banker = cw_sim::state::CentralBanker {
+                            name: person.name.clone(),
+                            stance: person.stance.unwrap_or(0),
+                            appointed_week: 0,
+                            term_ends: 0,
+                            person: None,
+                        };
+                        (banker.name.clone(), banker.stance_label().to_owned())
+                    })
+                    .unwrap_or_default()
+            };
             let relative = |value: i64, back: usize| -> i64 {
                 cw_core::money::round_even_div(
                     value as i128 * cw_sim::economy::fx::PPM as i128,
@@ -1076,6 +1100,8 @@ pub fn fx_view(world: &World, dataset: &Dataset, reporting: u8) -> Option<FxView
                 symbol: def.symbol.clone(),
                 country: def.country.clone(),
                 central_bank: def.central_bank.clone(),
+                chair_name: chair.0,
+                chair_stance: chair.1,
                 value_ppm: fx.rate_ppm(index as u8, reporting),
                 trend_bps: if then > 0 {
                     ((now - then) * 10_000 / then) as i32

@@ -18,8 +18,7 @@
       "policy_spread_bps": 0,
       "inflation_spread_bps": 0,
       "volatility_bps": 40,
-      "central_bank": "Deutsche Bundesbank",
-      "chair_stance": 75
+      "central_bank": "Deutsche Bundesbank"
     },
     {
       "id": "NLG",

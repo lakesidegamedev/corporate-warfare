@@ -58,10 +58,6 @@ pub struct CurrencyDef {
     /// Name of the central bank, for display.
     #[serde(default)]
     pub central_bank: String,
-    /// For the numeraire only: the opening stance of the anchor central bank's chair, from
-    /// dovish (-100) to hawkish (100). None keeps the engine's default chair.
-    #[serde(default)]
-    pub chair_stance: Option<i32>,
 }
 
 fn default_face() -> i64 {

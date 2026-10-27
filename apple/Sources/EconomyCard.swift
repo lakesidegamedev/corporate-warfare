@@ -480,6 +480,12 @@ struct FxSection: View {
                     .font(.caption)
                     .foregroundStyle(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if !c.chairName.isEmpty {
+                    Text("Chair \(c.chairName), \(c.chairStance)")
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if !isReporting {
                     let peg = pegStatus(c)
                     Text(peg.0).font(.caption).foregroundStyle(peg.1).fixedSize(horizontal: false, vertical: true)

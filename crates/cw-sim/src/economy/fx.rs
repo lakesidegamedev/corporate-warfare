@@ -86,6 +86,9 @@ pub struct FxState {
     pub currencies: Vec<CurrencyState>,
     pub rng: Rng,
     pub receivables: Vec<Receivable>,
+    /// The cast person chairing each currency's central bank, by currency index. The numeraire's
+    /// chair is the macro model's. Empty until chairs are assigned.
+    pub chairs: Vec<Option<u8>>,
     /// The currency index of every region, copied from the dataset so rules that only hold the
     /// world can resolve a firm's money.
     pub region_currency: Vec<u8>,
@@ -102,6 +105,7 @@ impl Default for FxState {
             currencies: Vec::new(),
             rng: Rng::new(0),
             receivables: Vec::new(),
+            chairs: Vec::new(),
             region_currency: Vec::new(),
             pnl: BTreeMap::new(),
             crises: Vec::new(),
@@ -137,6 +141,7 @@ pub fn init(dataset: &Dataset, seed: u64) -> FxState {
         currencies,
         rng: Rng::stream(seed, TAG_FX),
         receivables: Vec::new(),
+        chairs: Vec::new(),
         region_currency: dataset.region_currency.clone(),
         pnl: BTreeMap::new(),
         crises: Vec::new(),
@@ -332,6 +337,25 @@ fn collect(world: &mut World) {
     }
 }
 
+/// Name a chair for every central bank but the anchor's from the cast, in currency order, using
+/// people not already in a post. Their stance tilts their bank's rate. Deterministic for a seed.
+pub fn assign_chairs(world: &mut World, dataset: &Dataset) {
+    if !world.fx.active || dataset.cast.is_empty() {
+        return;
+    }
+    let count = world.fx.currencies.len();
+    world.fx.chairs = vec![None; count];
+    let mut rng = Rng::stream(world.seed, TAG_FX ^ 0xC4A1_5E41);
+    for index in 1..count {
+        let pool = crate::economy::cast::free_people(world, dataset, cw_data::Role::Chair);
+        if pool.is_empty() {
+            break;
+        }
+        let pick = pool[rng.uniform_below(pool.len() as u64) as usize];
+        world.fx.chairs[index] = Some(pick);
+    }
+}
+
 /// Run one week of the currency model, after the macro cycle has set the anchor's numbers.
 pub fn weekly(world: &mut World, dataset: &Dataset) {
     if !world.fx.active {
@@ -345,6 +369,7 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
     let anchor_inflation = world.macro_state.inflation_bps;
     let historical = world.world_prices.mode.follows_history();
     let before: Vec<i64> = world.fx.currencies.iter().map(|c| c.value_ppm).collect();
+    let world_chairs = world.fx.chairs.clone();
     // The anchor country's own figures.
     if let Some(anchor) = world.fx.currencies.get_mut(0) {
         anchor.policy_rate_bps = anchor_rate;
@@ -365,8 +390,16 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
             .clamp(-300, 2_500);
         let excess = inflation - anchor_inflation - def.inflation_spread_bps;
         let strain_term = (st.strain_bps / 8).clamp(0, 300);
-        let rate =
-            (anchor_rate + def.policy_spread_bps + excess / 2 + strain_term).clamp(25, 2_000);
+        // A hawk in the chair runs a tighter bank than a dove.
+        let stance = world_chairs
+            .get(index)
+            .copied()
+            .flatten()
+            .and_then(|person| dataset.cast.get(person as usize))
+            .and_then(|person| person.stance)
+            .unwrap_or(0);
+        let rate = (anchor_rate + def.policy_spread_bps + excess / 2 + strain_term + stance / 5)
+            .clamp(25, 2_000);
         st.inflation_bps = inflation;
         st.policy_rate_bps = rate;
         // Fundamental value: purchasing power parity with a carry tilt and a shock.
