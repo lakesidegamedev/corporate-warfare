@@ -70,6 +70,8 @@ heading.
   Linux, Mac and Android open the download.
 - Tester previews: preview builds show as 1.6.0-preview.N, follow pre-releases in the updater so
   each preview offers the next one and then the final release, and install over each other.
+- A Preview release workflow that builds tester previews for Windows, Linux and Android and
+  publishes them as GitHub pre-releases; the full release workflow now skips pre-releases.
 - The Windows installer adds a Start menu entry and a desktop shortcut and lets you choose the
   install folder.
 
