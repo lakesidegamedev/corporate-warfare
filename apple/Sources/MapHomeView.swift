@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The home screen: the real map of the corridor with the company HUD over it. Tap a region to
+/// The home screen: the world map, framed on the scenario, with the company HUD over it. Tap a region to
 /// open its board; build or raid from there. On iPad the board docks beside the map.
 struct MapHomeView: View {
     @EnvironmentObject private var store: AppStore
@@ -15,7 +15,7 @@ struct MapHomeView: View {
     var body: some View {
         ZStack(alignment: .top) {
             HStack(spacing: 0) {
-                CorridorMapView(shading: shading, layer: layer, divisions: divisionMarkers, selected: $selected)
+                WorldMapView(shading: shading, layer: layer, divisions: divisionMarkers, selected: $selected)
                     .ignoresSafeArea(edges: .bottom)
                 if wide, let code = selected, let board = store.boards.first(where: { $0.code == code }) {
                     RegionBoardView(board: board, onBuild: { building = code }, onClose: { selected = nil })

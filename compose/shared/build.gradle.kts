@@ -65,7 +65,7 @@ kotlin {
 
 android {
     namespace = "net.lakesidegames.corporatewarfare.shared"
-    // The corridor map, shared with the iPhone app (copied by scripts/build-engine.sh).
+    // The world map, shared with the iPhone app (copied by scripts/build-engine.sh).
     sourceSets["main"].resources.srcDir(rootProject.layout.projectDirectory.dir("build/engine/resources"))
     compileSdk = libs.versions.compileSdk.get().toInt()
     defaultConfig {

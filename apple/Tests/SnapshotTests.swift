@@ -31,7 +31,7 @@ final class SnapshotTests: XCTestCase {
         }
         XCTAssertFalse(store.mapPlants.isEmpty, "the map has plants")
         XCTAssertEqual(store.boards.count, 31)
-        XCTAssertEqual(CorridorMap.shared.regions.count, 31, "the bundled map decodes its regions")
+        XCTAssertEqual(WorldMap.shared.regions.count, 31, "the bundled map decodes its regions")
         XCTAssertFalse(store.mapDivisions.isEmpty, "the player's division is on the map")
         XCTAssertGreaterThanOrEqual(store.stocks.count, 20, "the stock board lists the corridor's companies")
         XCTAssertFalse(store.commodities.isEmpty, "the commodity board has goods")
