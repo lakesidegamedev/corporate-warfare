@@ -36,8 +36,9 @@ with diagnostics rather than silently pruning companies.
 Parent authority can appoint managers at the governance boundary, not spend subsidiary
 cash directly. Internal loans require lender and borrower authority, positive term/rate,
 and solvency previews. Transactions with minority-owned subsidiaries disclose terms;
-transfer prices must lie within +/-20 percent of the current regional reference price,
-except explicit approved restructuring. Same beneficial-owner wash trades cannot move
+explicit transfer contracts must lie within +/-20 percent of the current regional reference price,
+except explicit approved restructuring. Standing group supply (below) is priced by the
+supplier's transfer setting instead, and its consequences replace the band. Same beneficial-owner wash trades cannot move
 exchange reference prices. Guarantees identify guarantor, covered claim and maximum sum.
 
 Board has five seats allocated at the 13-week meeting by largest-remainder voting share.
@@ -138,7 +139,8 @@ of a sector type in a region opens a division for a $100,000 entry fee, paid to 
 legal-services sector, with the founding plant at half its strategy's capex. Later plants join
 the division and must run its strategy; `RetoolFacility` on any plant retools every plant in
 its division (a quarter of the new capex per plant, a third of its build time, at least four
-weeks). An order may add up to 40 plants.
+weeks). An order may add up to 255 plants; past construction capacity (below) it costs more and
+takes longer.
 
 Market share in a cell (region, sector type) is a firm's capacity value at reference price
 against all operating capacity in the cell plus the value of imports local plants are not
@@ -159,8 +161,8 @@ value. One percent of the defender's plants are at stake at even strength, risin
 twenty percent at two to one. Success probability is attack over attack plus defence, clamped
 to 5..95 percent, from the deterministic raid stream. The budget buys advertising whatever
 happens; on success the raider takes the plants into its own division at its own strategy and
-pays the defender half their book value. The defender always keeps one plant; a group cannot
-raid itself; each raider may raid a cell once per thirteen weeks. Rival AI raids when the
+pays the defender half their book value. A group cannot raid itself. The 1.7 raid
+rules below replace the one-plant floor and the cooldown. Rival AI raids when the
 chance-weighted three-year contribution of the captured plants exceeds the campaign and price.
 
 ## Board objectives (1.2.0)
@@ -209,3 +211,99 @@ Merger review covers vertical integration when the law sets a threshold (Workers
 to the same four-week review as a horizontal deal when the maker's group holds at least the
 threshold share of trailing unit sales in any regional market for that good. The usual remedy
 rules apply.
+## Corporate structure and integration (1.7)
+
+Implemented in `crates/cw-sim/src/economy/structure.rs`. Every rule works the same in every
+scenario and runs on defaults; alerts appear only when a decision is needed.
+
+**Group supply.** Firms with one ultimate controller form a group. Each week the engine keeps one
+standing contract for every (buyer, supplier, product) where a member burns what another makes,
+sized to the buyer's need and the supplier's output. Contracts settle before the open market, so
+group members get first call on each other's stock. Freight, intercompany inventory margin and
+consolidation work as for any contract; there is no shortfall penalty inside a group.
+
+**Transfer price.** Each supplying division (firm, region, sector type) has one setting, 0 to
+12,000 basis points. 0 is the supplier's unit cost, 10,000 is the market price (median ask of
+other makers, the default) and above is market plus a markup. Between 0 and 10,000 the price is
+cost plus that share of the gap to market. Consequences, all measured on the goods actually
+delivered:
+
+- The squeeze. The firm on the losing side of a price away from market (the supplier when the
+  price is under market, the buyer when over) has its non-controlling holders bear their share of
+  the gap. That sum accumulates per firm and fades by 1/52 a week. An annualised squeeze of 3
+  percent of equity draws an activist challenge (below).
+- Tax. Each firm is taxed in its own region at the corporate rate plus any regional modifier.
+  Profit moved to the lower-taxed firm saves the group the difference; the running total is in
+  telemetry.
+- Markdown. A group supplier whose trailing 13-week net income stays negative is marked down by
+  half a point of fair equity for every week beyond 13, up to 25 percent. The count falls two
+  weeks for every week it is not losing.
+
+**Reputation.** Each division has a reputation from 0 to 10,000, starting at 2,500. The target is
+2,500 plus twice the quality margin over 10,000 (-2,000 to +6,000, averaged over its products),
+plus five points per basis point of revenue spent on marketing (up to 3,000) and the brand stock
+above 10,000 (up to 3,000). It rises by 1/26 of the gap a week and falls by 1/52, so it is earned
+faster than it is lost. It scales a seller's perceived quality in every market by up to +15
+percent at 10,000 and -5 percent at 0, which is both a price premium and customer loyalty: the
+seller keeps its share at a higher price. A successful raid costs the defender 300 plus a fifth
+of the stake taken in reputation points, a failed one 100; a repeat raider loses 120 per raid on
+record.
+
+**Raids, smoothed.** The raid cooldown is gone. Each raid on the same rival still on the record
+(one is forgotten per quarter) adds forty percent of the campaign budget in legal and
+retaliation cost, paid to the outside legal sector. The stake at risk rises from 1 percent of the
+defender's blocks at even strength to the whole division at five to one. The defender keeps no
+guaranteed plant; instead the success chance is the attack-over-total chance times one minus
+85 percent of the stake share, so a whole-division raid succeeds at a fifth of the base chance.
+
+**Construction capacity.** A firm builds at normal cost and speed while the blocks under
+construction, including a new order, stay within 40 plus a tenth of the blocks it already runs
+(at most 400). Each capacity's worth of excess adds fifty percent to capex (at most 2.5 times) and
+a full base build time to the lead time (at most three times). Orders of up to 255 plants are
+allowed.
+
+**Bonds.** Price = base yield + credit spread. The base is the central bank's ten-year yield for
+terms of ten years and more, blending linearly toward the policy rate for shorter terms. The
+spread is 75 points plus 2.5 points per point of leverage (debt after the issue over net tangible
+assets) plus 6 per point squared, plus 3,000,000 over coverage (annual EBITDA over annual interest
+with the issue; capped at 900; 900 when EBITDA is not positive; neutral for firms with under four
+weeks of results), plus 1.5 points per point of the issue over equity (capped at 300). The market
+refuses spreads over 1,200 or leverage over 150 percent; otherwise there is only a price. Terms
+are 26 to 780 weeks, the minimum issue $250,000, the fee 2 percent. Coupons are paid quarterly
+from the ledger; unpaid coupons and principal become past-due liabilities and feed insolvency.
+Principal returned at maturity comes off the holder's cost, never into interest income. Bonds trade
+on a simple board at the mark, 10,000 less the gap between the issuer's yield now and its coupon
+times the years left (3,000 to 11,500; at most 6,000 for a distressed issuer), plus accrued
+coupon.
+
+**Carve-out, listing, spin-off.** A carve-out moves a completed division into a new subsidiary
+the parent wholly owns, with working capital of 5 percent of book (at least $100,000); the parent
+keeps at least one other division. A listing sells 5 to 49 percent of a subsidiary's votes to
+outside investors at 95 percent of its mark, after 13 weeks of results, never giving up control;
+the fee is 2 percent (at least $100,000). A spin-off hands the parent's whole stake to its
+shareholders in proportion to their shares, with no cash.
+
+**Joint ventures.** Two groups pay capital in proportion to stated stakes (20 to 80 percent for
+the proposer) into a new firm that builds one division. The larger holder controls it; an even
+split leaves it independent and run by the standing rules. Surplus cash above two months of
+outflow is paid out as a dividend each quarter, 60 percent of it, in proportion to the stakes.
+After 26 weeks a partner can buy the other out at fair value plus 10 percent or leave: the other
+partner has first refusal at 95 percent of fair value, otherwise outside investors take the stake
+at 85 percent.
+
+**Activists.** Each quarter, for each firm with at least 3 percent of its votes held outside and 26
+weeks of results, the engine looks for a grievance: a mark 30 percent or more under its peak
+(peaks fade 0.5 percent a week), two missed board goals in a row (the player's primary company),
+an annualised squeeze of 3 percent of equity, or a dividend that stopped after two quarters of
+payments while cash covers eight weeks of outflow. The strongest case opens a campaign with a
+demand (special dividend, divest the weakest subsidiary or division, a new chief executive, or
+restitution with prices back at market). One campaign per firm per year. The player answers with
+Concede (demand met in full), Negotiate (half, small fee) or Fight; unanswered, the board answers
+by its temperament after four weeks. A fight is won by the activist with probability 60 percent of
+the case's justification, plus up to 20 percent for its stake, a fifth of the outside float, less
+30 percent of the controller's holding (5 to 90 percent). A win means the full demand plus damages
+of 0.4 percent of equity; a loss costs 0.15 percent in legal fees.
+
+**Temperament.** Rival decisions here read `structure::temperament`, a table of weights (tax
+shifting, leverage, listing, partnering, resistance) derived from the archetype today. The
+character AI replaces that one function.

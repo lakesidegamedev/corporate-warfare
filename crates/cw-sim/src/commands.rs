@@ -11,13 +11,15 @@ use cw_core::error::{
 };
 use cw_core::ids::Handle;
 use cw_core::ledger::{Account, Txn};
-use cw_core::money::{Cents, round_even_div};
+use cw_core::money::Cents;
 use cw_core::quantity::MilliLots;
 use cw_data::Dataset;
 
-use crate::economy::{deals, equity, governance, insolvency, ownership, policy, sectors, unions};
+use crate::economy::{
+    deals, equity, governance, insolvency, ownership, policy, sectors, structure, unions,
+};
 use crate::state::{
-    BankModel, Bond, DealKind, Facility, FacilityStatus, Firm, FirmStatus, Grade, HolderId,
+    BankModel, DealKind, Facility, FacilityStatus, Firm, FirmStatus, Grade, HolderId,
     INITIAL_SHARES, Lender, Loan, Policies, PolicyKind, ShareLot, World,
 };
 
@@ -256,6 +258,7 @@ pub enum CommandIntent {
     },
     PlaceBondOrder {
         bond: Handle,
+        #[serde(default = "yes")]
         investor: bool,
         qty: i64,
     },
@@ -426,6 +429,64 @@ pub enum CommandIntent {
         event: u64,
         choice: String,
     },
+    /// A supplying division's transfer price to the rest of its group: 0 at cost, 10,000 at
+    /// market (the default), up to 12,000 for market plus a fifth.
+    SetTransferPrice {
+        firm: Handle,
+        region: u8,
+        industry: u8,
+        bps: i32,
+    },
+    /// Move a division into a new wholly owned subsidiary.
+    CarveOutDivision {
+        firm: Handle,
+        region: u8,
+        industry: u8,
+        name: String,
+    },
+    /// Float a share of a subsidiary on the exchange, keeping control.
+    ListSubsidiary {
+        firm: Handle,
+        stake_bps: i32,
+    },
+    /// Hand a subsidiary to the parent's shareholders.
+    SpinOffSubsidiary {
+        firm: Handle,
+    },
+    /// Co-own a new division with another group. `stake_bps` is the proposer's stake.
+    FormJointVenture {
+        firm: Handle,
+        partner: Handle,
+        region: u8,
+        recipe: u16,
+        blocks: u8,
+        stake_bps: i32,
+        name: String,
+    },
+    /// A partner buys the other partner out of a joint venture.
+    BuyOutVenture {
+        venture: Handle,
+        firm: Handle,
+    },
+    /// A partner leaves a joint venture.
+    ExitVenture {
+        venture: Handle,
+        firm: Handle,
+    },
+    /// Sell bonds held to the market at the mark.
+    SellBond {
+        bond: Handle,
+        qty: i64,
+    },
+    /// Answer an activist campaign: stance 0 concede, 1 negotiate, 2 fight.
+    RespondActivist {
+        campaign: u32,
+        stance: u8,
+    },
+}
+
+fn yes() -> bool {
+    true
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -507,6 +568,15 @@ impl CommandIntent {
             CommandIntent::RaidMarket { .. } => "raid_market",
             CommandIntent::FileLobbyRequest { .. } => "file_lobby_request",
             CommandIntent::RespondEvent { .. } => "respond_event",
+            CommandIntent::SetTransferPrice { .. } => "set_transfer_price",
+            CommandIntent::CarveOutDivision { .. } => "carve_out_division",
+            CommandIntent::ListSubsidiary { .. } => "list_subsidiary",
+            CommandIntent::SpinOffSubsidiary { .. } => "spin_off_subsidiary",
+            CommandIntent::FormJointVenture { .. } => "form_joint_venture",
+            CommandIntent::BuyOutVenture { .. } => "buy_out_venture",
+            CommandIntent::ExitVenture { .. } => "exit_venture",
+            CommandIntent::SellBond { .. } => "sell_bond",
+            CommandIntent::RespondActivist { .. } => "respond_activist",
         }
     }
 }
@@ -706,70 +776,14 @@ fn apply_intent(
                     detail: ArithmeticFault::OutOfRange,
                 });
             }
-            let mut firm = Firm {
-                name: name.clone(),
-                industry: industry_index(&template.industry),
-                region: *region,
-                archetype: None,
-                book: Default::default(),
-                status: FirmStatus::Operating,
-                shares: crate::state::ShareBook::new(Default::default()),
-                board: crate::state::Board::new(Tick(world.tick.0 + 13)),
-                policies: Policies::default(),
-                inventory: Default::default(),
-                facilities: Vec::new(),
-                loans: Vec::new(),
-                bonds: Vec::new(),
-                insurance: Vec::new(),
-                contracts_buy: Vec::new(),
-                contracts_sell: Vec::new(),
-                grade: Grade::B,
-                past_due_weeks: 0,
-                payout_freeze: false,
-                organisation: Default::default(),
-                union: Default::default(),
-                tech_level: 1,
-                tech_progress_cents: 0,
-                brand_bps: Default::default(),
-                reputation_bps: 0,
-                layoffs: Vec::new(),
-                staff_history: Vec::new(),
-                outside_peak_bps: 0,
-                secondary_industry: *secondary,
-                focus_transition_until: 0,
-                focus_cooldown_until: 0,
-                raid_ready: Default::default(),
-                tax_loss_carry_cents: 0,
-                logistics_strength: 0,
-                policy_requests: Vec::new(),
-                guarantees: Vec::new(),
-                last_strategic_week: 0,
-                merged_into: None,
-                state_owned_since: None,
-                rescued_week: 0,
-                inputs_used: Vec::new(),
-                founding_week: world.tick,
-                bank: None,
-                insurer: None,
-                valuation: Default::default(),
-                reserved_cash_cents: 0,
-                last_week_units_sold: Default::default(),
-                sales_history: Vec::new(),
-                quality_bps: Default::default(),
-                intercompany_inventory: Default::default(),
-                storage: Default::default(),
-            };
-            firm.policies.wage_offer = [
-                dataset.baseline_weekly_wage_cents[0]
-                    * world.regions[*region as usize].wage_index_bps as i64
-                    / 10_000,
-                dataset.baseline_weekly_wage_cents[1]
-                    * world.regions[*region as usize].wage_index_bps as i64
-                    / 10_000,
-                dataset.baseline_weekly_wage_cents[2]
-                    * world.regions[*region as usize].wage_index_bps as i64
-                    / 10_000,
-            ];
+            let mut firm = blank_firm(
+                world,
+                dataset,
+                name.clone(),
+                industry_index(&template.industry),
+                *region,
+            );
+            firm.secondary_industry = *secondary;
             let handle = world.firms.insert(firm);
             let entity = world.firms.get_mut(handle).unwrap();
             let _ = entity.book.commit(
@@ -900,7 +914,7 @@ fn apply_intent(
             blocks,
         } => {
             require_control(world, actor, *firm)?;
-            if *blocks == 0 || *blocks > sectors::MAX_BLOCKS_PER_ORDER {
+            if *blocks == 0 {
                 return Err(DomainError::Arithmetic {
                     detail: ArithmeticFault::OutOfRange,
                 });
@@ -926,78 +940,7 @@ fn apply_intent(
                     actual: "other_strategy",
                 });
             }
-            let quote = sectors::build_cost(world, dataset, *firm, *region, *recipe, *blocks);
-            let cost = quote.capex_cents;
-            let fee = quote.entry_fee_cents;
-            let debt = firm_ref(world, *firm)?.book.debt();
-            if governance::approval_required(world, *firm, debt, cost + fee)
-                && !governance::large_action_authorised(world, *firm)
-            {
-                return Err(DomainError::NoAuthority {
-                    actor,
-                    reason: AuthorityReason::BoardApprovalRequired,
-                });
-            }
-            // Staged payment: the entry fee and the construction service now, the equipment on
-            // delivery (see `complete_construction`).
-            let service = cost * 40 / 100;
-            let equipment = cost - service;
-            let available = firm_ref(world, *firm)?.book.cash();
-            if available < service + fee {
-                return Err(DomainError::InsufficientCash {
-                    entity: firm.0,
-                    required: service + fee,
-                    available,
-                });
-            }
-            if fee > 0 {
-                // Opening a division: registration and licensing bought from the outside
-                // legal-services sector, expensed as incurred.
-                if let Some(entity) = world.firms.get_mut(*firm) {
-                    let _ = entity.book.commit(
-                        world.tick,
-                        Txn::new().credit(Account::Cash, fee, "sector entry").debit(
-                            Account::OperatingExpense,
-                            fee,
-                            "sector entry",
-                        ),
-                    );
-                }
-                let _ = world.outside.legal_services_book.commit(
-                    world.tick,
-                    Txn::new().debit(Account::Cash, fee, "sector entry").credit(
-                        Account::Revenue,
-                        fee,
-                        "sector entry",
-                    ),
-                );
-            }
-            spend_firm_cash(world, *firm, service, "construction service")?;
-            // Forty percent is construction service bought as the work is commissioned; sixty
-            // percent is equipment, paid for when it is delivered at completion.
-            if let Some(entity) = world.firms.get_mut(*firm) {
-                let _ = entity.book.commit(
-                    world.tick,
-                    Txn::new()
-                        .debit(Account::WorkInProgress, service, "construction service")
-                        .credit(Account::RestrictedCash, service, "construction service"),
-                );
-            }
-            pay_construction_service(
-                world,
-                dataset,
-                *firm,
-                *region,
-                service,
-                "construction service",
-            );
-            let mut facility = start_facility(
-                world, dataset, *firm, *region, *recipe, *blocks, world.tick, cost,
-            );
-            facility.escrow_cents = 0;
-            facility.equipment_due_cents = equipment;
-            let handle = world.facilities.insert(facility);
-            world.firms.get_mut(*firm).unwrap().facilities.push(handle);
+            commission_plant(world, dataset, actor, *firm, *region, *recipe, *blocks)?;
             Ok(())
         }
         CommandIntent::ExpandFacility { facility, blocks } => {
@@ -1019,6 +962,8 @@ fn apply_intent(
                 .unwrap_or(0);
             let cost = sectors::build_cost(world, dataset, owner, region, recipe_index, *blocks)
                 .capex_cents;
+            let (excess, capacity) = sectors::construction_excess(world, owner, *blocks);
+            let lead = sectors::stretched_weeks(recipe.build_weeks, excess, capacity);
             let debt = firm_ref(world, owner)?.book.debt();
             if governance::approval_required(world, owner, debt, cost)
                 && !governance::large_action_authorised(world, owner)
@@ -1041,7 +986,7 @@ fn apply_intent(
                 stored.blocks += *blocks;
                 stored.capex_cents += cost;
                 stored.status = FacilityStatus::Building;
-                stored.completes = Tick(world.tick.0 + recipe.build_weeks);
+                stored.completes = Tick(world.tick.0 + lead);
             }
             Ok(())
         }
@@ -2089,51 +2034,8 @@ fn apply_intent(
             weeks,
         } => {
             require_control(world, actor, *firm)?;
-            let entity = firm_ref(world, *firm)?;
-            if *principal_cents < 50_000_000 || !matches!(entity.grade, Grade::A | Grade::B) {
-                return Err(DomainError::SolvencyRestriction {
-                    entity: firm.0,
-                    reason: SolvencyReason::CreditGradeTooLow,
-                });
-            }
-            let tangible = entity.book.net_tangible_assets().max(1);
-            let debt_after = entity.book.debt() + principal_cents;
-            if debt_after * 100 > tangible * 60 {
-                return Err(DomainError::SolvencyRestriction {
-                    entity: firm.0,
-                    reason: SolvencyReason::CoverageTooLow,
-                });
-            }
-            let buyer = (0..world.outside.investors.len())
-                .find(|index| world.outside.investors[*index].capital_cents >= *principal_cents)
-                .ok_or(DomainError::InsufficientCash {
-                    entity: 0,
-                    required: *principal_cents,
-                    available: 0,
-                })?;
-            world.outside.investors[buyer].capital_cents -= *principal_cents;
-            let fee = round_even_div(*principal_cents as i128 * 200, 10_000) as i64;
-            let _ = world.firms.get_mut(*firm).unwrap().book.commit(
-                world.tick,
-                Txn::new()
-                    .debit(Account::Cash, *principal_cents - fee, "bond issue")
-                    .debit(Account::OperatingExpense, fee, "bond fee")
-                    .credit(Account::Bonds, *principal_cents, "bond issue"),
-            );
-            let mut holders = std::collections::BTreeMap::new();
-            holders.insert(HolderId::Outside(buyer as u32), *principal_cents);
-            let bond = Bond {
-                issuer: *firm,
-                principal_cents: *principal_cents,
-                coupon_bps: *coupon_bps,
-                maturity: Tick(world.tick.0 + *weeks),
-                issued: world.tick,
-                holders,
-                carry: 0,
-                next_coupon: Tick(world.tick.0 + 13),
-            };
-            let handle = world.bonds.insert(bond);
-            world.firms.get_mut(*firm).unwrap().bonds.push(handle);
+            // `coupon_bps` is the most the issuer will pay; zero takes the market price.
+            structure::issue_bond(world, *firm, *principal_cents, *weeks, *coupon_bps)?;
             Ok(())
         }
         CommandIntent::PlaceBondOrder {
@@ -2141,67 +2043,22 @@ fn apply_intent(
             investor,
             qty,
         } => {
-            let entity = world.bonds.get(*bond).ok_or(DomainError::InvalidEntity {
-                handle: bond.0,
-                kind: EntityKind::Bond,
-            })?;
-            let seller = (0..world.outside.investors.len()).find(|index| {
-                entity
-                    .holders
-                    .contains_key(&HolderId::Outside(*index as u32))
-            });
-            let Some(seller) = seller else {
-                return Err(DomainError::InsufficientStock {
-                    product: 0,
-                    required: *qty,
-                    available: 0,
-                });
-            };
-            let seller_id = HolderId::Outside(seller as u32);
-            let available = *entity.holders.get(&seller_id).unwrap_or(&0);
-            if *qty <= 0 || *qty > available {
-                return Err(DomainError::InsufficientStock {
-                    product: 0,
-                    required: *qty,
-                    available,
-                });
-            }
-            if !*investor {
+            if !*investor || actor != INVESTOR_ACTOR {
                 return Err(DomainError::NoAuthority {
                     actor,
                     reason: AuthorityReason::NotOwner,
                 });
             }
-            // Bonds trade dirty: principal plus coupon accrued since the last payment. The
-            // seller receives the accrued share; the buyer's investment basis includes it.
-            let weeks = world.tick.0.saturating_sub(entity.issued.0) % 13;
-            let accrued = round_even_div(
-                *qty as i128 * entity.coupon_bps as i128 * weeks as i128,
-                10_000 * 52,
-            ) as i64;
-            let dirty = qty.saturating_add(accrued);
-            if actor != INVESTOR_ACTOR || world.investor.cash_cents < dirty {
-                return Err(DomainError::InsufficientCash {
-                    entity: 0,
-                    required: dirty,
-                    available: world.investor.cash_cents,
+            structure::trade_bond(world, *bond, *qty, true)
+        }
+        CommandIntent::SellBond { bond, qty } => {
+            if actor != INVESTOR_ACTOR {
+                return Err(DomainError::NoAuthority {
+                    actor,
+                    reason: AuthorityReason::NotOwner,
                 });
             }
-            world.investor.cash_cents -= dirty;
-            let _ = world.investor.book.commit(
-                world.tick,
-                Txn::new()
-                    .credit(Account::Cash, dirty, "bond purchase")
-                    .debit(Account::Investments, dirty, "bond purchase"),
-            );
-            if let Some(holder) = world.outside.investors.get_mut(seller) {
-                holder.capital_cents += dirty;
-            }
-            if let Some(bond) = world.bonds.get_mut(*bond) {
-                *bond.holders.get_mut(&seller_id).unwrap() -= qty;
-                *bond.holders.entry(HolderId::Investor).or_default() += qty;
-            }
-            Ok(())
+            structure::trade_bond(world, *bond, *qty, false)
         }
         CommandIntent::ProposeRestructuring { firm } => {
             require_control(world, actor, *firm)?;
@@ -2820,6 +2677,96 @@ fn apply_intent(
             crate::economy::events_engine::respond(world, dataset, *event, choice)?;
             Ok(())
         }
+        CommandIntent::SetTransferPrice {
+            firm,
+            region,
+            industry,
+            bps,
+        } => {
+            require_control(world, actor, *firm)?;
+            structure::set_transfer(world, dataset, *firm, *region, *industry, *bps)
+        }
+        CommandIntent::CarveOutDivision {
+            firm,
+            region,
+            industry,
+            name,
+        } => {
+            require_control(world, actor, *firm)?;
+            if name.trim().is_empty() || name.len() > 60 {
+                return Err(DomainError::Arithmetic {
+                    detail: ArithmeticFault::OutOfRange,
+                });
+            }
+            structure::carve_out(world, dataset, *firm, *region, *industry, name.clone())?;
+            Ok(())
+        }
+        CommandIntent::ListSubsidiary { firm, stake_bps } => {
+            let parent = structure::controlling_parent(world, *firm)?;
+            require_control(world, actor, parent)?;
+            structure::list_subsidiary(world, *firm, *stake_bps)?;
+            Ok(())
+        }
+        CommandIntent::SpinOffSubsidiary { firm } => {
+            let parent = structure::controlling_parent(world, *firm)?;
+            require_control(world, actor, parent)?;
+            structure::spin_off(world, *firm)
+        }
+        CommandIntent::FormJointVenture {
+            firm,
+            partner,
+            region,
+            recipe,
+            blocks,
+            stake_bps,
+            name,
+        } => {
+            require_control(world, actor, *firm)?;
+            // A partner the actor does not run must be willing: a rival with the cash agrees;
+            // the player's own companies need the player's say.
+            if !crate::economy::events_engine::player_side(world, *partner)
+                && structure::temperament(world, *partner).partnering < 3_000
+            {
+                return Err(DomainError::NoAuthority {
+                    actor: partner.0,
+                    reason: AuthorityReason::NotOwner,
+                });
+            }
+            if name.trim().is_empty() || name.len() > 60 {
+                return Err(DomainError::Arithmetic {
+                    detail: ArithmeticFault::OutOfRange,
+                });
+            }
+            structure::form_jv(
+                world,
+                dataset,
+                *firm,
+                *partner,
+                *region,
+                *recipe,
+                *blocks,
+                *stake_bps,
+                name.clone(),
+            )?;
+            Ok(())
+        }
+        CommandIntent::RespondActivist { campaign, stance } => {
+            if actor != INVESTOR_ACTOR {
+                return Err(DomainError::NoAuthority {
+                    actor,
+                    reason: AuthorityReason::NotOwner,
+                });
+            }
+            structure::respond_campaign(world, dataset, *campaign, *stance)
+        }
+        CommandIntent::BuyOutVenture { venture, firm } => {
+            require_control(world, actor, *firm)?;
+            structure::buyout_jv(world, *venture, *firm)
+        }
+        CommandIntent::ExitVenture { venture, firm } => {
+            require_control(world, actor, *firm)?;
+            structure::exit_jv(world, *venture, *firm)
+        }
     }
 }
 
@@ -2897,6 +2844,162 @@ fn pay_construction_service(
     }
 }
 
+/// A firm with an empty ledger, share register and policies, wages at the region's index. The
+/// caller funds it and issues its shares.
+pub(crate) fn blank_firm(
+    world: &World,
+    dataset: &Dataset,
+    name: String,
+    industry: u8,
+    region: u8,
+) -> Firm {
+    let mut firm = Firm {
+        name,
+        industry,
+        region,
+        archetype: None,
+        book: Default::default(),
+        status: FirmStatus::Operating,
+        shares: crate::state::ShareBook::new(Default::default()),
+        board: crate::state::Board::new(Tick(world.tick.0 + 13)),
+        policies: Policies::default(),
+        inventory: Default::default(),
+        facilities: Vec::new(),
+        loans: Vec::new(),
+        bonds: Vec::new(),
+        insurance: Vec::new(),
+        contracts_buy: Vec::new(),
+        contracts_sell: Vec::new(),
+        grade: Grade::B,
+        past_due_weeks: 0,
+        payout_freeze: false,
+        organisation: Default::default(),
+        union: Default::default(),
+        tech_level: 1,
+        tech_progress_cents: 0,
+        brand_bps: Default::default(),
+        reputation_bps: 0,
+        layoffs: Vec::new(),
+        staff_history: Vec::new(),
+        outside_peak_bps: 0,
+        secondary_industry: None,
+        focus_transition_until: 0,
+        focus_cooldown_until: 0,
+        raid_ready: Default::default(),
+        tax_loss_carry_cents: 0,
+        logistics_strength: 0,
+        policy_requests: Vec::new(),
+        guarantees: Vec::new(),
+        last_strategic_week: 0,
+        merged_into: None,
+        state_owned_since: None,
+        rescued_week: 0,
+        inputs_used: Vec::new(),
+        founding_week: world.tick,
+        bank: None,
+        insurer: None,
+        valuation: Default::default(),
+        reserved_cash_cents: 0,
+        last_week_units_sold: Default::default(),
+        sales_history: Vec::new(),
+        quality_bps: Default::default(),
+        intercompany_inventory: Default::default(),
+        storage: Default::default(),
+    };
+    for tier in 0..3 {
+        firm.policies.wage_offer[tier] = dataset.baseline_weekly_wage_cents[tier]
+            * world.regions[region as usize].wage_index_bps as i64
+            / 10_000;
+    }
+    firm
+}
+
+/// Pay for and start a plant in the firm's division: entry fee, staged payment and the build
+/// queue. The caller has checked authority, region and recipe. Returns the new facility.
+pub(crate) fn commission_plant(
+    world: &mut World,
+    dataset: &Dataset,
+    actor: u64,
+    firm: Handle,
+    region: u8,
+    recipe: u16,
+    blocks: u8,
+) -> DomainResult<Handle> {
+    let quote = sectors::build_cost(world, dataset, firm, region, recipe, blocks);
+    let cost = quote.capex_cents;
+    let fee = quote.entry_fee_cents;
+    let debt = firm_ref(world, firm)?.book.debt();
+    if governance::approval_required(world, firm, debt, cost + fee)
+        && !governance::large_action_authorised(world, firm)
+    {
+        return Err(DomainError::NoAuthority {
+            actor,
+            reason: AuthorityReason::BoardApprovalRequired,
+        });
+    }
+    // Staged payment: the entry fee and the construction service now, the equipment on
+    // delivery (see `complete_construction`).
+    let service = cost * 40 / 100;
+    let equipment = cost - service;
+    let available = firm_ref(world, firm)?.book.cash();
+    if available < service + fee {
+        return Err(DomainError::InsufficientCash {
+            entity: firm.0,
+            required: service + fee,
+            available,
+        });
+    }
+    if fee > 0 {
+        // Opening a division: registration and licensing bought from the outside
+        // legal-services sector, expensed as incurred.
+        if let Some(entity) = world.firms.get_mut(firm) {
+            let _ = entity.book.commit(
+                world.tick,
+                Txn::new().credit(Account::Cash, fee, "sector entry").debit(
+                    Account::OperatingExpense,
+                    fee,
+                    "sector entry",
+                ),
+            );
+        }
+        let _ = world.outside.legal_services_book.commit(
+            world.tick,
+            Txn::new().debit(Account::Cash, fee, "sector entry").credit(
+                Account::Revenue,
+                fee,
+                "sector entry",
+            ),
+        );
+    }
+    spend_firm_cash(world, firm, service, "construction service")?;
+    // Forty percent is construction service bought as the work is commissioned; sixty
+    // percent is equipment, paid for when it is delivered at completion.
+    if let Some(entity) = world.firms.get_mut(firm) {
+        let _ = entity.book.commit(
+            world.tick,
+            Txn::new()
+                .debit(Account::WorkInProgress, service, "construction service")
+                .credit(Account::RestrictedCash, service, "construction service"),
+        );
+    }
+    pay_construction_service(
+        world,
+        dataset,
+        firm,
+        region,
+        service,
+        "construction service",
+    );
+    let mut facility = start_facility(
+        world, dataset, firm, region, recipe, blocks, world.tick, cost,
+    );
+    facility.escrow_cents = 0;
+    facility.equipment_due_cents = equipment;
+    let handle = world.facilities.insert(facility);
+    world.firms.get_mut(firm).unwrap().facilities.push(handle);
+    Ok(handle)
+}
+
 fn industry_index(industry: &str) -> u8 {
     crate::state::INDUSTRY_NAMES
         .iter()
@@ -2916,7 +3019,8 @@ fn start_facility(
     cost: i64,
 ) -> Facility {
     let template = &dataset.recipes[recipe as usize];
-    let mut weeks = template.build_weeks;
+    let (excess, capacity) = sectors::construction_excess(world, firm, blocks);
+    let mut weeks = sectors::stretched_weeks(template.build_weeks, excess, capacity);
     if world.regions[region as usize]
         .policy
         .permit_bonus_until
@@ -3028,6 +3132,7 @@ pub fn preview_issue(world: &World, firm: Handle, qty: i64, price_cents: i64) ->
 mod tests {
     use super::*;
     use crate::economy::seed;
+    use crate::state::Bond;
     use crate::state::{ScenarioKind, ScenarioMode};
 
     fn envelope(world: &World, intent: CommandIntent) -> CommandEnvelope {
@@ -3320,6 +3425,7 @@ mod tests {
         });
         world.tick = Tick(4);
         let cash_before = world.investor.cash_cents;
+        let mark = structure::bond_mark_bps(&world, bond);
         let command = envelope(
             &world,
             CommandIntent::PlaceBondOrder {
@@ -3329,8 +3435,10 @@ mod tests {
             },
         );
         apply(&mut world, &dataset, &command).expect("bond purchase");
-        // 100,000 principal at 6 percent for 4 weeks = 461.5 cents, rounded half even to 462.
-        let expected = 100_000 + 462;
+        // The clean price is par moved by the issuer's yield now against the 6 percent coupon;
+        // 100,000 principal at 6 percent for 4 weeks of accrual = 461.5 cents, rounded half
+        // even to 462.
+        let expected = 100_000 * mark / 10_000 + 462;
         assert_eq!(world.investor.cash_cents, cash_before - expected);
         let stored = world.bonds.get(bond).unwrap();
         assert_eq!(*stored.holders.get(&HolderId::Investor).unwrap(), 100_000);

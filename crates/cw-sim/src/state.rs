@@ -1503,6 +1503,10 @@ pub struct World {
     /// `economy::systemic`.
     #[serde(default)]
     pub systemic: crate::economy::systemic::SystemicState,
+    /// Transfer pricing, reputation, bonds, joint ventures and activists. See
+    /// `economy::structure`.
+    #[serde(default)]
+    pub structure: crate::economy::structure::StructureState,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.

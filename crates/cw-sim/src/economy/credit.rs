@@ -251,9 +251,10 @@ fn service_bonds(world: &mut World, dataset: &Dataset) {
                         .credit(Account::Cash, paid, "bond maturity")
                         .debit(Account::Bonds, paid, "bond maturity"),
                 );
-                distribute_to_holders(world, &bond, paid);
+                distribute_principal(world, handle, &bond, paid);
             }
             if paid < bond.principal_cents {
+                crate::economy::structure::note_bond_default(world);
                 crate::economy::insolvency::defer_expense(
                     world,
                     bond.issuer,
@@ -298,6 +299,55 @@ fn service_bonds(world: &mut World, dataset: &Dataset) {
                 stored.carry = carry_next;
                 stored.next_coupon = Tick(stored.next_coupon.0 + 13);
             }
+        }
+    }
+}
+
+/// Principal returned at maturity. A holder's cost comes off its investment and the difference
+/// from what it paid is its gain or loss, so the principal never shows up as interest.
+fn distribute_principal(world: &mut World, handle: Handle, bond: &Bond, amount: i64) {
+    let total: i64 = bond.holders.values().sum();
+    if total <= 0 {
+        return;
+    }
+    for (holder, qty) in &bond.holders {
+        let share = (amount as i128 * *qty as i128 / total as i128) as i64;
+        if share <= 0 {
+            continue;
+        }
+        let released =
+            crate::economy::structure::release_basis(world, handle, *holder, share, *qty);
+        let released = if matches!(holder, HolderId::Investor) {
+            released
+        } else {
+            share
+        };
+        let gain = share - released;
+        let lines = |memo: &str| {
+            Txn::new()
+                .debit(Account::Cash, share, memo)
+                .credit(Account::Investments, released, memo)
+                .signed(Account::OtherIncome, -gain, memo)
+        };
+        match holder {
+            HolderId::Investor => {
+                world.investor.cash_cents += share;
+                let _ = world
+                    .investor
+                    .book
+                    .commit(world.tick, lines("bond principal"));
+            }
+            HolderId::Firm(h) => {
+                if let Some(firm) = world.firms.get_mut(*h) {
+                    let _ = firm.book.commit(world.tick, lines("bond principal"));
+                }
+            }
+            HolderId::Outside(index) => {
+                if let Some(holder) = world.outside.investors.get_mut(*index as usize) {
+                    holder.capital_cents += share;
+                }
+            }
+            HolderId::Treasury | HolderId::State => {}
         }
     }
 }

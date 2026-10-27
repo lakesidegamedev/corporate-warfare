@@ -182,6 +182,7 @@ private fun picks(store: GameStore, field: FieldDto, pickers: Pickers, firm: ULo
     "my_policy" -> pickers.policies.map { Pick("${it.handle}", "${it.insurer} cover, ${Format.compact(it.limitCents)}") }
     "vote" -> pickers.votes.filter { !it.resolved }.map { Pick("${it.id}", "${it.subject}, closes week ${it.deadline}") }
     "my_deal" -> pickers.deals.map { Pick("${it.handle}", "${it.buyer} for ${it.target} (${it.state})") }
+    "bond", "my_bond", "my_venture", "open_campaign" -> pickers.extra[field.kind].orEmpty().map { Pick(it.value, it.label) }
     else -> emptyList()
 }.let { if (field.encoding == "optional") listOf(Pick("", "None")) + it else it }
 

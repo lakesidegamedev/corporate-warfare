@@ -48,15 +48,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "bd1a01f32aae79fcb0f88741a9f848bcde1980c0fb473edc4164e18e1c1a5b33",
+            "613ecc74dcca0b951390ca437ec6dd4344971436db677a7b4ac64e3427424589",
         ),
         (
             2,
-            "c6c88f68fe412c665b8ae01e1ca8322cf40c55d595fea45266a92da338835f38",
+            "91c20146de7fac1c1d7d6cf0f8c424664d7b2c012e8a17ca229b710fea4d74c4",
         ),
         (
             3,
-            "816679bcf957f58a4dd4c9e1c2f66ecd4e7ef189ce61667797c7e96254fcffca",
+            "37b20e43b2fa3bcd3fb1c4bcdf97376d72e206d9aba9bda5f828b72049a575bc",
         ),
     ];
     for (seed, hash) in pins {
@@ -68,12 +68,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "d0816fdb13c5694643cf1ce121bbd5a052ae2e366104b5a03dd4e922c71e4a79"
+        "d89e41cc47cba239df759efc53ee69dab873df6e6dc98ad5339dfcac30eea30c"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "cad6f485966cac243d51be7c51be057372a79af46eb670f84039ee6379bdbe15"
+        "a8af919afff0b6349c6af42f3e97b1c2632c12e2d53156665a18bcd81e2baed8"
     );
     // A scenario with no content of its own plays on the default dataset.
     let silicon = cw_data::Dataset::load_scenario("silicon-valley-1995").unwrap();

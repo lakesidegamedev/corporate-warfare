@@ -31,7 +31,8 @@ pub fn refresh_valuation(world: &mut World, dataset: &Dataset) {
         let financial = firm.bank.is_some() || firm.insurer.is_some();
         let base = base_value(&firm.book, world.tick, financial);
         let stake_value = stakes_held.get(&handle).copied().unwrap_or(0);
-        let equity = (base.equity_cents + stake_value).max(0);
+        let markdown = crate::economy::structure::markdown_bps(world, handle) as i64;
+        let equity = ((base.equity_cents + stake_value).max(0) * (10_000 - markdown)) / 10_000;
         equity_by_firm.insert(handle, equity);
         let Some(firm) = world.firms.get_mut(handle) else {
             continue;
@@ -778,6 +779,7 @@ pub fn pay_dividend(world: &mut World, firm: Handle, total_cents: i64) -> Domain
             ),
         );
     }
+    crate::economy::structure::note_dividend(world, firm);
     Ok(amount)
 }
 

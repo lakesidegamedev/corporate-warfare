@@ -109,6 +109,37 @@ pub struct GovernmentLine {
     pub pipelines: u32,
 }
 
+/// Corporate structure: groups, transfer pricing, reputation, bonds, ventures and activists.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct StructureLine {
+    pub groups: u32,
+    pub group_links: u32,
+    pub group_lots_moved: i64,
+    /// Links priced away from market, and the largest gap in basis points of market.
+    pub links_off_market: u32,
+    pub squeeze_cents_total: i64,
+    pub tax_shift_cents_total: i64,
+    pub captive_suppliers_marked_down: u32,
+    pub avg_reputation_bps: i32,
+    pub divisions_with_premium: u32,
+    pub bonds_outstanding: u32,
+    pub bond_principal_cents: i64,
+    pub avg_coupon_bps: i32,
+    pub bonds_issued_total: u32,
+    pub bond_defaults_total: u32,
+    pub ventures: u32,
+    pub ventures_formed_total: u32,
+    pub ipos_total: u32,
+    pub spin_offs_total: u32,
+    pub carve_outs_total: u32,
+    pub activist_campaigns_total: u32,
+    pub activist_wins_total: u32,
+    pub activist_open: u32,
+    pub repeat_raids_total: u32,
+    pub blocks_under_construction: i64,
+    pub firms_over_construction_capacity: u32,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct PlayerLine {
     pub cash_cents: i64,
@@ -120,6 +151,9 @@ pub struct PlayerLine {
     pub carrier_lots: i64,
     pub group_lots_shipped: i64,
     pub contract_lots_held: i64,
+    pub bonds_issued: u32,
+    pub reputation_bps: i32,
+    pub group_links: u32,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -135,6 +169,7 @@ pub struct MarketSnapshot {
     pub storage: StorageLine,
     pub logistics: LogisticsLine,
     pub government: GovernmentLine,
+    pub structure: StructureLine,
     pub player: Option<PlayerLine>,
 }
 
@@ -252,6 +287,77 @@ fn logistics_line(world: &cw_sim::state::World, dataset: &cw_data::Dataset) -> L
     }
 }
 
+fn structure_line(world: &cw_sim::state::World) -> StructureLine {
+    use cw_sim::economy::structure as st;
+    let stats = &world.structure.stats;
+    let mut roots = std::collections::BTreeSet::new();
+    for (handle, f) in world.firms.iter() {
+        if f.operative()
+            && let Some(root) = cw_sim::economy::ownership::ultimate_controller(world, handle)
+        {
+            roots.insert(root);
+        }
+    }
+    let reps: Vec<i32> = world.structure.reputation.values().copied().collect();
+    let bonds: Vec<&cw_sim::state::Bond> = world.bonds.iter().map(|(_, b)| b).collect();
+    let over: u32 = world
+        .firms
+        .iter()
+        .filter(|(h, f)| {
+            f.operative() && cw_sim::economy::sectors::construction_excess(world, *h, 0).0 > 0
+        })
+        .count() as u32;
+    StructureLine {
+        groups: roots.len() as u32,
+        group_links: world.structure.links.len() as u32,
+        group_lots_moved: stats.group_lots_moved,
+        links_off_market: world
+            .structure
+            .links
+            .values()
+            .filter(|l| l.price_cents != l.market_cents)
+            .count() as u32,
+        squeeze_cents_total: stats.squeeze_cents,
+        tax_shift_cents_total: stats.tax_shift_cents,
+        captive_suppliers_marked_down: world
+            .structure
+            .captive_weeks
+            .keys()
+            .filter(|f| st::markdown_bps(world, **f) > 0)
+            .count() as u32,
+        avg_reputation_bps: (reps.iter().map(|r| *r as i64).sum::<i64>()
+            / (reps.len().max(1) as i64)) as i32,
+        divisions_with_premium: reps.iter().filter(|r| **r > st::NEUTRAL_REP).count() as u32,
+        bonds_outstanding: bonds.len() as u32,
+        bond_principal_cents: bonds.iter().map(|b| b.principal_cents).sum(),
+        avg_coupon_bps: (bonds.iter().map(|b| b.coupon_bps as i64).sum::<i64>()
+            / (bonds.len().max(1) as i64)) as i32,
+        bonds_issued_total: stats.bonds_issued,
+        bond_defaults_total: stats.bond_defaults,
+        ventures: world.structure.jvs.len() as u32,
+        ventures_formed_total: stats.jvs_formed,
+        ipos_total: stats.ipos,
+        spin_offs_total: stats.spin_offs,
+        carve_outs_total: stats.carve_outs,
+        activist_campaigns_total: stats.activist_events,
+        activist_wins_total: stats.activist_wins,
+        activist_open: world
+            .structure
+            .campaigns
+            .iter()
+            .filter(|c| c.outcome == st::Outcome::Open)
+            .count() as u32,
+        repeat_raids_total: stats.raids_repeat,
+        blocks_under_construction: world
+            .facilities
+            .iter()
+            .filter(|(_, p)| p.status == cw_sim::state::FacilityStatus::Building)
+            .map(|(_, p)| p.blocks as i64)
+            .sum(),
+        firms_over_construction_capacity: over,
+    }
+}
+
 /// True on the weeks a snapshot is due.
 pub fn due(week: u32) -> bool {
     week > 0 && week.is_multiple_of(SNAPSHOT_EVERY_WEEKS)
@@ -365,6 +471,28 @@ impl Session {
                     .filter(|c| cw_sim::economy::ownership::same_group(world, handle, c.holder))
                     .map(|c| c.held as i64)
                     .sum(),
+                bonds_issued: firm.bonds.len() as u32,
+                reputation_bps: {
+                    let divisions: Vec<i32> =
+                        cw_sim::economy::sectors::divisions_of(world, dataset, handle)
+                            .iter()
+                            .map(|d| {
+                                cw_sim::economy::structure::reputation(
+                                    world, handle, d.region, d.industry,
+                                )
+                            })
+                            .collect();
+                    divisions.iter().sum::<i32>() / (divisions.len().max(1) as i32)
+                },
+                group_links: world
+                    .structure
+                    .links
+                    .keys()
+                    .filter(|(b, s, _)| {
+                        cw_sim::economy::ownership::same_group(world, handle, *b)
+                            || cw_sim::economy::ownership::same_group(world, handle, *s)
+                    })
+                    .count() as u32,
             })
         });
         let storage = storage_line(
@@ -388,6 +516,7 @@ impl Session {
             storage,
             logistics: logistics_line(world, dataset),
             government: government_line(world, dataset),
+            structure: structure_line(world),
             player,
         }
     }

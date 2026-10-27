@@ -58,6 +58,31 @@ heading.
   and the reserve also sells when prices rise 10 percent over what it paid or in a supply shock.
   Telemetry snapshots (schema 4) carry law changes, reserve, rescue and incident
   counts.
+- Corporate structure and integration (1.7 preview 4). Companies in one group now supply each other
+  first: the engine keeps standing contracts between divisions that burn what another makes, ahead
+  of any open-market sale. Each supplying division has one transfer price setting, from its cost
+  through the market price (the default) to a markup. Pricing under market in a part-owned company
+  takes value from its minority shareholders and can draw a challenge; profit moves between states'
+  tax bills; a group supplier that keeps losing money is marked down by the market.
+- Each division now has a reputation, built by quality spending and marketing and lost slowly,
+  that earns a price premium and loyal customers in every market. Raids cost reputation as well as
+  plants.
+- Corporate bonds are priced off the central bank's ten-year yield plus a credit spread from
+  leverage, coverage and size, with no grade gate. Buy and sell them on a bond list at the market
+  price.
+- Carve out a division into a subsidiary, list part of a subsidiary on the exchange keeping
+  control, or spin it off to the parent's shareholders. Two groups can co-own a division as a
+  joint venture with stated stakes, split its profit, and buy out or leave after 26 weeks.
+- Activist investors press companies that fall far from their peak, miss board goals twice, stop a
+  dividend or squeeze minority holders. Concede, negotiate or fight; if you do nothing the board
+  answers after four weeks. Alerts appear only when a decision is needed.
+- Rival firms borrow in the bond market, keep transfer prices honest toward minority holders (or
+  tilt them toward the lower-taxed state), float subsidiaries when short of cash and share growth
+  projects in joint ventures. A temperament table is the hook for the character AI.
+- Market telemetry schema 4 reports groups, internal pricing, reputation, bonds, ventures,
+  listings, spin-offs, activists and construction load. A Structure section in Markets on every
+  platform and Command Center actions for every new verb.
+
 - Owned logistics (1.7 preview 3). Freight is now lane capacity. Trucking, rail, pipelines and
   lake and sea shipping carry goods between regions; each mode has its own price, speed, smallest
   load, terminal needs and list of goods it may carry (pipelines liquids and gas only, cold goods
@@ -169,6 +194,14 @@ heading.
   96-seed growth-policy check, runs ending far above the normal range from this spike fell
   from 22 of 96 to 1 of 96 (that one is a genuine profit boom).
 ### Changed
+
+- Raids no longer have a thirteen-week cooldown: repeat raids on the same rival cost forty percent
+  of the budget more for each one still on the record. A raider can take a whole division, but a
+  bigger stake is harder to win; the defender no longer keeps a guaranteed plant.
+- The forty-plant order cap is gone. Past a firm's construction capacity (forty plants plus a tenth
+  of what it runs) building costs more and takes longer, smoothly.
+- Bonds are no longer limited to grade A and B firms or priced by a coupon you type; the field
+  now sets the most you will pay, and zero takes the market price.
 
 - Plastics now use petrochemical feedstock and natural gas liquids, and the chemical plant uses
   feedstock beside fuel. Oil wells make crude oil, not fuel; fuel now comes from refineries.

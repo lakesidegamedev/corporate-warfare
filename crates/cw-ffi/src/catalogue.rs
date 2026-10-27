@@ -15,7 +15,7 @@ pub struct OptionDto {
 /// `kind` tells the app which control to draw and where its options come from:
 /// `my_firm` (a company the player controls, defaulting to the selected one), `any_firm`,
 /// `bank`, `insurer`, `region`, `product`, `recipe`, `sector`, `my_facility`, `my_loan`,
-/// `my_contract`, `my_deal`, `my_policy`, `vote`, `money` (cents), `lots`, `shares`, `bps`
+/// `my_contract`, `my_deal`, `my_policy`, `vote`, `bond`, `my_bond`, `my_venture`, `open_campaign`, `money` (cents), `lots`, `shares`, `bps`
 /// (a percentage in basis points), `weeks`, `count`, `bool`, `choice` and `text`.
 /// `encoding` is how the value goes into the JSON: `number`, `string`, `bool` or `optional`
 /// (a number, or null when left empty).
@@ -419,6 +419,19 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             ],
         ),
         a(
+            "SetTransferPrice",
+            "Supply",
+            "Set a transfer price",
+            "What a division charges the rest of its group. 0 is its cost, 100 percent is the market price (the default, and where it should usually stay) and above that is a markup. Group members buy each other's output before the open market does. Pricing under market in a part-owned company takes value from its minority shareholders and can bring a challenge; the supplier also books less profit, in the state where it is taxed.",
+            "transfer price group intercompany integration tax minority",
+            vec![
+                firm(),
+                f("region", "Region", "region"),
+                f("industry", "Sector", "sector"),
+                f("bps", "Price, 0 cost to 100 market", "bps").range(0, 12_000, 100, 10_000),
+            ],
+        ),
+        a(
             "RaidMarket",
             "Sales",
             "Raid a rival's market",
@@ -588,13 +601,51 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             "IssueBond",
             "Finance",
             "Issue a bond",
-            "Borrow from the market at a fixed coupon for a fixed term.",
-            "debt borrow coupon",
+            "Borrow from the market for a fixed term. The coupon is set by the market: the central bank's ten-year yield plus a credit spread that rises with your debt, thin coverage and the size of the issue. The preview shows the price before you commit.",
+            "debt borrow coupon bond spread yield",
             vec![
                 firm(),
-                money("principal_cents", "Amount").range(10_000_000, 0, 1_000_000, 100_000_000),
-                f("coupon_bps", "Coupon", "bps").range(100, 2_000, 5, 700),
-                f("weeks", "Term", "weeks").range(52, 1_040, 52, 260),
+                money("principal_cents", "Amount").range(25_000_000, 0, 1_000_000, 100_000_000),
+                f("coupon_bps", "Most you will pay", "bps")
+                    .range(0, 2_500, 5, 0)
+                    .help("Zero takes the market price. Set a limit and the issue is refused if the market asks more."),
+                f("weeks", "Term", "weeks").range(26, 780, 13, 260),
+            ],
+        ),
+        a(
+            "PlaceBondOrder",
+            "Finance",
+            "Buy bonds",
+            "Buy a company's bonds from outside investors at the market price plus accrued coupon. Prices move with the issuer's credit and with rates.",
+            "bond buy invest coupon yield",
+            vec![
+                f("bond", "Bond", "bond"),
+                money("qty", "Face value").range(100_000, 0, 100_000, 1_000_000),
+            ],
+        ),
+        a(
+            "SellBond",
+            "Finance",
+            "Sell bonds",
+            "Sell bonds you hold back to outside investors at the market price plus accrued coupon.",
+            "bond sell exit yield",
+            vec![
+                f("bond", "Bond", "my_bond"),
+                money("qty", "Face value").range(100_000, 0, 100_000, 1_000_000),
+            ],
+        ),
+        a(
+            "RespondActivist",
+            "Board",
+            "Answer an activist",
+            "An investor with a stake is pressing a company you run after a falling price, missed goals, a dividend cut or a squeeze of minority holders. Concede and the demand is met in full. Negotiate and half is met for a small fee. Fight and a vote or court decides: the odds follow how well founded the complaint is and how much of the company they hold. Do nothing and the board answers for you in four weeks.",
+            "activist proxy fight shareholder demand dividend divest",
+            vec![
+                f("campaign", "Campaign", "open_campaign"),
+                f("stance", "Answer", "choice").choices(
+                    "number",
+                    &[("0", "Concede"), ("1", "Negotiate"), ("2", "Fight")],
+                ),
             ],
         ),
         a(
@@ -681,6 +732,70 @@ pub fn action_catalogue() -> Vec<ActionDto> {
                 firm(),
                 f("qty", "Shares", "shares").range(1_000, 10_000_000, 1_000, 50_000),
             ],
+        ),
+        a(
+            "ListSubsidiary",
+            "Shares",
+            "List a subsidiary",
+            "Sell part of a subsidiary to outside investors at a small discount to its market price, keeping control. The parent receives the cash. Needs thirteen weeks of results.",
+            "ipo float subsidiary carve sell stake",
+            vec![
+                firm(),
+                f("stake_bps", "Share to float", "bps").range(500, 4_900, 100, 3_000),
+            ],
+        ),
+        a(
+            "SpinOffSubsidiary",
+            "Shares",
+            "Spin off a subsidiary",
+            "Hand a whole subsidiary to the parent's shareholders in proportion to their holdings. The parent no longer owns it.",
+            "spin off demerge distribute subsidiary",
+            vec![firm()],
+        ),
+        a(
+            "CarveOutDivision",
+            "Company",
+            "Carve out a division",
+            "Move one of a company's divisions into a new wholly owned subsidiary with working capital. The company must keep at least one other division.",
+            "carve out subsidiary division separate spin",
+            vec![
+                firm(),
+                f("region", "Region", "region"),
+                f("industry", "Sector", "sector"),
+                f("name", "New company name", "text"),
+            ],
+        ),
+        a(
+            "FormJointVenture",
+            "Company",
+            "Form a joint venture",
+            "Build a division with another group. Each pays capital in proportion to its stake; profit is paid out in the same proportions. The larger stake controls it, an even split leaves it independent. After 26 weeks either partner can buy the other out or leave.",
+            "joint venture partner pipeline refinery share stake",
+            vec![
+                firm(),
+                f("partner", "Partner", "any_firm"),
+                f("region", "Region", "region"),
+                f("recipe", "Strategy", "recipe"),
+                f("blocks", "Plants", "count").range(1, 100, 1, 1),
+                f("stake_bps", "Your stake", "bps").range(2_000, 8_000, 500, 5_000),
+                f("name", "Venture name", "text"),
+            ],
+        ),
+        a(
+            "BuyOutVenture",
+            "Company",
+            "Buy out a venture partner",
+            "Buy the other partner's whole stake in a joint venture at fair value plus a premium of ten percent.",
+            "joint venture buyout acquire partner",
+            vec![f("venture", "Venture", "my_venture"), firm()],
+        ),
+        a(
+            "ExitVenture",
+            "Company",
+            "Leave a joint venture",
+            "Sell your stake. The other partner has first refusal at five percent under fair value; if it cannot pay, outside investors take it at fifteen percent under.",
+            "joint venture exit sell leave",
+            vec![f("venture", "Venture", "my_venture"), firm()],
         ),
         a(
             "PayDividend",

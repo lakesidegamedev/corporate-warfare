@@ -45,7 +45,7 @@ import uniffi.cw_ffi.CommodityDto
 import uniffi.cw_ffi.ProductLineDto
 import uniffi.cw_ffi.StockDto
 
-private enum class Section(val title: String) { Stocks("Stocks"), Commodities("Commodities"), Regions("Regions") }
+private enum class Section(val title: String) { Stocks("Stocks"), Commodities("Commodities"), Regions("Regions"), Structure("Structure") }
 private enum class StockSort(val title: String) { Movers("Top movers"), Size("Largest"), Yours("Yours") }
 
 /** Markets: the corridor's stock exchange, its commodity board, and each region's own board. */
@@ -74,6 +74,7 @@ fun MarketsScreen(store: GameStore) {
             Section.Stocks -> stocks(store, sort, { sort = it }) { stock = it }
             Section.Commodities -> commodities(store) { commodity = it }
             Section.Regions -> regionMarkets(store) { pickingRegion = true }
+            Section.Structure -> item { StructureColumn(store) }
         }
     }
     stock?.let { StockDialog(store, it) { stock = null } }

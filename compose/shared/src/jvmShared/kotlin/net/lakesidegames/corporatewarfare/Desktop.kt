@@ -591,7 +591,7 @@ private fun DesktopMarkets(store: GameStore) {
     var board by remember { mutableStateOf("Stocks") }
     Row(Modifier.fillMaxSize().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
       Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Chips(listOf("Stocks", "Commodities"), board) { board = it }
+        Chips(listOf("Stocks", "Commodities", "Structure"), board) { board = it }
         val index = corridorIndex(store.stocks)
         val sc = listOf(Col("Company", 1.7f), Col("Sector", 1f), Col("Price", 0.8f, true), Col("Week", 0.6f, true), Col("Quarter", 0.7f, true), Col("Market cap", 0.9f, true), Col("Float", 0.55f, true), Col("You hold", 0.75f, true))
         val title = if (index.isNotEmpty()) "Stocks · index ${Format.count(index.last())}" else "Stocks"
@@ -615,6 +615,7 @@ private fun DesktopMarkets(store: GameStore) {
                 }
             }
         }
+        if (board == "Structure") Pane("Corporate structure", Modifier.fillMaxWidth().weight(1f)) { StructureColumn(store) }
         val cc = listOf(Col("Good", 1.5f), Col("Price", 0.8f, true), Col("Week", 0.6f, true), Col("Made", 0.7f, true), Col("Sold", 0.7f, true), Col("Imported", 0.75f, true), Col("Exported", 0.75f, true))
         if (board == "Commodities") Pane("Commodities, per lot", Modifier.fillMaxWidth().weight(1f)) {
             TableHeader(cc)

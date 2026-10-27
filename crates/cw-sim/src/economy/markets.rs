@@ -996,7 +996,12 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
                         price_cents: price.max(1),
                         quality_bps: firm.quality_bps.get(&product).copied().unwrap_or_else(|| {
                             crate::economy::research::quality(firm.tech_level, 0)
-                        }) as i64,
+                        }) as i64
+                            * (10_000
+                                + crate::economy::structure::loyalty_premium_bps(
+                                    world, handle, from, product,
+                                ))
+                            / 10_000,
                         brand_bps: firm
                             .brand_bps
                             .get(&(region_index as u8, product))
@@ -1091,7 +1096,10 @@ fn clear_government(world: &mut World, dataset: &Dataset) {
                         seller: source_id(source),
                         qty,
                         price_cents: price.max(1),
-                        quality_bps: 10_000,
+                        quality_bps: 10_000
+                            + crate::economy::structure::loyalty_premium_bps(
+                                world, handle, from, product,
+                            ),
                         brand_bps: 10_000,
                     });
                     sources.push(source);

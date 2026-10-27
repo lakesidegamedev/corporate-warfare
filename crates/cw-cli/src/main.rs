@@ -288,6 +288,24 @@ fn run(arguments: &[String]) {
     if !dead.is_empty() {
         println!("dissolved: {}", dead.join(", "));
     }
+    {
+        let stats = &session.world.structure.stats;
+        println!(
+            "structure bonds={} bond_defaults={} jvs={} ipos={} spin_offs={} carve_outs={} activists={} activist_wins={} group_lots={} squeeze_cents={} tax_shift_cents={} repeat_raids={}",
+            stats.bonds_issued,
+            stats.bond_defaults,
+            stats.jvs_formed,
+            stats.ipos,
+            stats.spin_offs,
+            stats.carve_outs,
+            stats.activist_events,
+            stats.activist_wins,
+            stats.group_lots_moved,
+            stats.squeeze_cents,
+            stats.tax_shift_cents,
+            stats.raids_repeat
+        );
+    }
     let holdings: Vec<String> = session
         .world
         .firms
