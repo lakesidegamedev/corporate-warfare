@@ -53,16 +53,22 @@ class AppSettings(private val file: File) {
     var tutorialHidden: Boolean = props.getProperty("tutorial.hidden")?.toBoolean() ?: false; private set
     /** Currency id the investor's figures are shown in; empty until the player picks one. */
     var reportingCurrency: String = props.getProperty("reportingCurrency").orEmpty(); private set
+    /** Anonymous market-balance snapshots every five game weeks; on unless the player switches it off. */
+    var analytics by mutableStateOf(props.getProperty("analytics")?.toBoolean() ?: true); private set
     var uiScale by mutableStateOf(props.getProperty("uiScale")?.toFloatOrNull() ?: 1f); private set
     var windowMode by mutableStateOf(enumOr(props.getProperty("windowMode"), WindowMode.Windowed)); private set
     var resolution by mutableStateOf(
         props.getProperty("resolution")?.split("x")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
             ?: (1600 to 900),
     ); private set
+    /** A random id for this install, not tied to any account or device identifier. */
+    val installId: String = props.getProperty("installId")?.takeIf { it.length == 36 }
+        ?: java.util.UUID.randomUUID().toString().also { props.setProperty("installId", it); store() }
 
     fun chooseMapDetail(value: MapDetail) { mapDetail = value; store() }
     fun chooseAnimations(value: Boolean) { animations = value; store() }
     fun chooseAutoUpdate(value: Boolean) { autoUpdate = value; store() }
+    fun chooseAnalytics(value: Boolean) { analytics = value; store() }
     fun chooseTutorial(done: Set<String>, hidden: Boolean) { tutorialDone = done; tutorialHidden = hidden; store() }
     fun chooseReportingCurrency(value: String) { reportingCurrency = value; store() }
     fun chooseUiScale(value: Float) { uiScale = value; store() }
@@ -73,6 +79,7 @@ class AppSettings(private val file: File) {
         props.setProperty("mapDetail", mapDetail.name)
         props.setProperty("animations", animations.toString())
         props.setProperty("autoUpdate", autoUpdate.toString())
+        props.setProperty("analytics", analytics.toString())
         props.setProperty("tutorial.done", tutorialDone.joinToString(","))
         props.setProperty("tutorial.hidden", tutorialHidden.toString())
         props.setProperty("reportingCurrency", reportingCurrency)
@@ -169,6 +176,26 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                         modifier = Modifier.weight(1f),
                     )
                     TextButton(onClick = { Tutorial.restart() }) { Text("Start over", color = Palette.gold) }
+                }
+            }
+        }
+        item {
+            Panel {
+                Eyebrow("Analytics")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Share anonymous market data", color = Palette.primaryText)
+                        Text(
+                            "Every five weeks, the goods made, sold and priced, and how your company is doing, are sent with a random id. No names or account details.",
+                            color = Palette.secondary,
+                            fontSize = 12.sp,
+                        )
+                    }
+                    Switch(
+                        checked = settings.analytics,
+                        onCheckedChange = { settings.chooseAnalytics(it) },
+                        colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
+                    )
                 }
             }
         }

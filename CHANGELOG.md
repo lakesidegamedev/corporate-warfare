@@ -11,6 +11,14 @@ heading.
 
 ## [Unreleased]
 
+### Fixed
+
+- Market snapshots now arrive from Android, Windows and Linux. Until now only the iPhone build sent
+  its anonymous market-balance snapshot; the Compose app had no sender. It now posts one every five
+  game weeks in the background, with a random install id and nothing else about you, and fails
+  silently. A new Analytics switch in Settings turns it off. The iPhone build already sends the
+  current snapshot format, since the snapshot comes straight from the engine.
+
 ## [1.7.0] - 2026-10-27
 
 Lone Star: supply chains you can own and contest, a shipping network, deeper corporate play, rivals with names and memories, and three new playable scenarios: Texas Oil Patch 1981, Silicon Valley 1995 and Ruhr and Rhine 1991 with currencies. Saves from 1.6 do not load in 1.7.0.

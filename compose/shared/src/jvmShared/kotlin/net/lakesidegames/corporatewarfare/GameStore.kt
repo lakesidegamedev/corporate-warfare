@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import java.io.File
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -65,6 +66,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var preferredCurrency: String = ""
     /** Called when the player picks a reporting currency, so the choice can be saved. */
     var onCurrencyChosen: (String) -> Unit = {}
+
+    /**
+     * Receives the market snapshot JSON every five game weeks; null (tests, or analytics off)
+     * means none is built. Called off the UI thread, and must not throw.
+     */
+    var snapshotSink: ((String) -> Unit)? = null
 
     var ready by mutableStateOf(false); private set
     var busy by mutableStateOf(false); private set
@@ -245,6 +252,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         status = "Advanced to week ${result.finalWeek}."
         reload()
         if ((overview?.tick ?: 0u) % 4u == 0u) save()
+        val week = overview?.tick ?: 0u
+        val sink = snapshotSink
+        if (sink != null && Telemetry.due(week)) {
+            val json = withContext(engine) { runCatching { handle.marketSnapshotJson() }.getOrDefault("") }
+            if (json.isNotEmpty()) scope.launch(Dispatchers.IO) { runCatching { sink(json) } }
+        }
     }
 
     fun selectFirm(handle: ULong) = perform {
