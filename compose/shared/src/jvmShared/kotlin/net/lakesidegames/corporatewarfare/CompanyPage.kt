@@ -40,7 +40,11 @@ object FirmLogos {
     fun of(name: String): PixelIcons.Icon = synchronized(cache) {
         cache.getOrPut(name) {
             val logo = firmLogo(name)
-            PixelIcons.Icon(mapOf("p" to logo.plate, "e" to logo.edge, "s" to logo.symbol), logo.rows)
+            val colours = HashMap<String, String>()
+            colours["p"] = logo.plate
+            colours["e"] = logo.edge
+            colours["s"] = logo.symbol
+            PixelIcons.Icon(colours, logo.rows)
         }
     }
 }
