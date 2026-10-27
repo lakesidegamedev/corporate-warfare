@@ -72,6 +72,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     /** The reporting currency the player chose (kept in settings); applied after a career starts or loads. */
     var preferredCurrency: String = ""
+    /** Also stop the clock for warnings (kept in settings); applied before every advance. */
+    var pauseOnWarnings: Boolean = false
     /** Called when the player picks a reporting currency, so the choice can be saved. */
     var onCurrencyChosen: (String) -> Unit = {}
 
@@ -256,7 +258,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         runJob = scope.launch {
             while (isActive) {
                 step()
-                if (overview?.pause != null || events.any { it.mandatory }) break
+                if (overview?.pause != null) break
                 delay(1_000L / speed)
             }
             running = false
@@ -266,7 +268,11 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     private suspend fun step() {
         val handle = session ?: return
-        val result = withContext(engine) { handle.advance(1u) }
+        val policy = if (pauseOnWarnings) "decisions_and_warnings" else "decisions"
+        val result = withContext(engine) {
+            handle.setPausePolicy(policy)
+            handle.advance(1u)
+        }
         status = "Advanced to week ${result.finalWeek}."
         reload()
         if ((overview?.tick ?: 0u) % 4u == 0u) save()

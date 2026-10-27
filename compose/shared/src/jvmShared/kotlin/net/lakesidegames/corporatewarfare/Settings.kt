@@ -55,6 +55,8 @@ class AppSettings(private val file: File) {
     var reportingCurrency: String = props.getProperty("reportingCurrency").orEmpty(); private set
     /** Anonymous market-balance snapshots every five game weeks; on unless the player switches it off. */
     var analytics by mutableStateOf(props.getProperty("analytics")?.toBoolean() ?: true); private set
+    /** Also stop the clock for warnings, not only for decisions that need an answer. */
+    var pauseOnWarnings by mutableStateOf(props.getProperty("pauseOnWarnings")?.toBoolean() ?: false); private set
     var uiScale by mutableStateOf(props.getProperty("uiScale")?.toFloatOrNull() ?: 1f); private set
     var windowMode by mutableStateOf(enumOr(props.getProperty("windowMode"), WindowMode.Windowed)); private set
     var resolution by mutableStateOf(
@@ -71,6 +73,7 @@ class AppSettings(private val file: File) {
     fun chooseAnalytics(value: Boolean) { analytics = value; store() }
     fun chooseTutorial(done: Set<String>, hidden: Boolean) { tutorialDone = done; tutorialHidden = hidden; store() }
     fun chooseReportingCurrency(value: String) { reportingCurrency = value; store() }
+    fun choosePauseOnWarnings(value: Boolean) { pauseOnWarnings = value; store() }
     fun chooseUiScale(value: Float) { uiScale = value; store() }
     fun chooseWindowMode(value: WindowMode) { windowMode = value; store() }
     fun chooseResolution(value: Pair<Int, Int>) { resolution = value; store() }
@@ -83,6 +86,7 @@ class AppSettings(private val file: File) {
         props.setProperty("tutorial.done", tutorialDone.joinToString(","))
         props.setProperty("tutorial.hidden", tutorialHidden.toString())
         props.setProperty("reportingCurrency", reportingCurrency)
+        props.setProperty("pauseOnWarnings", pauseOnWarnings.toString())
         props.setProperty("uiScale", uiScale.toString())
         props.setProperty("windowMode", windowMode.name)
         props.setProperty("resolution", "${resolution.first}x${resolution.second}")
@@ -116,6 +120,17 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                         TextButton(onClick = { store.saveNow() }) { Text("Save now", color = Palette.gold) }
                     }
                     if (store.status.isNotEmpty()) Text(store.status, color = Palette.secondary, fontSize = 12.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Stop for warnings too", color = Palette.primaryText)
+                            Text("Time always stops for a decision that needs your answer. Turn this on to also stop when a company runs short of grace, or workers strike.", color = Palette.secondary, fontSize = 12.sp)
+                        }
+                        Switch(
+                            checked = settings.pauseOnWarnings,
+                            onCheckedChange = { settings.choosePauseOnWarnings(it) },
+                            colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
+                        )
+                    }
                 }
             }
         }

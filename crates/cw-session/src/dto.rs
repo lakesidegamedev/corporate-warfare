@@ -27,9 +27,62 @@ pub struct Overview {
     pub quarter_weeks: u32,
     pub alerts: Vec<Alert>,
     pub pause: Option<String>,
+    /// The plain-text reason for the pause and the one action that resumes play.
+    pub pause_info: Option<PauseInfo>,
     /// One primary recommended next action and the reason for it.
     pub next_action_key: String,
     pub next_action_reason: String,
+}
+
+/// Which pauses stop the clock. Decisions always do: a card that needs an answer, a board vote
+/// or a deal deadline that falls before the next week, and the five-year score sheet.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PausePolicy {
+    /// Stop only for a decision that needs an answer or a milestone sheet.
+    #[default]
+    Decisions,
+    /// Also stop for warnings: grace running out, a first strike, a rejected union counter.
+    DecisionsAndWarnings,
+}
+
+impl PausePolicy {
+    pub fn key(self) -> &'static str {
+        match self {
+            PausePolicy::Decisions => "decisions",
+            PausePolicy::DecisionsAndWarnings => "decisions_and_warnings",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<PausePolicy> {
+        match key {
+            "decisions" => Some(PausePolicy::Decisions),
+            "decisions_and_warnings" => Some(PausePolicy::DecisionsAndWarnings),
+            _ => None,
+        }
+    }
+}
+
+/// Why the clock is stopped and what resumes it. Every pause has one, and `action` always
+/// names something the player can actually do: `answer` opens the card in `event_id`, anything
+/// else is cleared with `dismiss_pause` (the Continue button).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PauseInfo {
+    /// The raw engine reason, for logs and support.
+    pub reason: String,
+    /// `decision`, `deadline`, `warning` or `milestone`.
+    pub kind: String,
+    /// Short headline in plain words.
+    pub title: String,
+    /// One or two sentences on what happened and what to do.
+    pub detail: String,
+    /// `answer` (open the card) or `continue`.
+    pub action: String,
+    /// The button text.
+    pub action_label: String,
+    /// The card to open when `action` is `answer`.
+    pub event_id: Option<u64>,
+    /// The company the pause is about, when there is one.
+    pub firm: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -503,6 +556,14 @@ pub fn events(world: &World, dataset: &Dataset) -> Vec<EventLine> {
         .pending
         .iter()
         .filter(|event| !event.resolved)
+        // A rival's card is the rival's to answer; the player's inbox and alerts never carry it.
+        .filter(|event| {
+            event
+                .subject_firm
+                .filter(|firm| world.firms.contains(*firm))
+                .map(|firm| cw_sim::economy::events_engine::player_side(world, firm))
+                .unwrap_or(true)
+        })
         .filter_map(|event| {
             let card = dataset.event(&event.card)?;
             Some(EventLine {

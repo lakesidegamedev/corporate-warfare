@@ -25,6 +25,7 @@ struct DesktopShell: View {
                         open(.actions)
                     }
                     Rectangle().fill(Theme.stroke).frame(height: 1)
+                    PauseBanner()
                     content
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }

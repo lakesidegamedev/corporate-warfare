@@ -74,6 +74,7 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
     val analytics = settings.analytics
     androidx.compose.runtime.SideEffect {
         store.preferredCurrency = settings.reportingCurrency
+        store.pauseOnWarnings = settings.pauseOnWarnings
         store.onCurrencyChosen = { settings.chooseReportingCurrency(it) }
         val installId = settings.installId
         store.snapshotSink = if (analytics) {
@@ -227,6 +228,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
     ) { padding ->
         // Content stops at the navigation bar: the scaffold's padding keeps it clear.
         Column(Modifier.padding(padding)) {
+            PauseBanner(store, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp))
             TutorialPanel(compact = true, modifier = Modifier.fillMaxWidth())
             Box(Modifier.weight(1f)) {
             when (tab) {
@@ -531,6 +533,47 @@ private fun ChipRow(steps: List<Int>, prefix: String = "", onPick: (Int) -> Unit
     }
 }
 
+/**
+ * Why the clock is stopped and the one button that resumes it: Answer opens the exact card, and
+ * every other pause has Continue. Shown wherever the time controls are, never only in the Inbox.
+ */
+@Composable
+fun PauseBanner(store: GameStore, modifier: Modifier = Modifier) {
+    val info = store.overview?.pauseInfo ?: return
+    var card by remember { mutableStateOf<ULong?>(null) }
+    val event = info.eventId?.let { id -> store.events.firstOrNull { it.id == id } }
+    val answerable = info.action == "answer" && event != null
+    val tint = if (info.kind == "decision") Palette.warning else Palette.gold
+    Column(
+        modifier.clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.10f))
+            .border(1.dp, tint.copy(alpha = 0.25f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PixelIcon("pause", size = 14.dp, tint = tint)
+            Spacer(Modifier.width(8.dp))
+            Text(info.title, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            if (answerable) {
+                GoldButton(info.actionLabel, enabled = !store.busy) { card = event?.id }
+            } else {
+                OutlinedButton(onClick = { store.dismissPause() }, enabled = !store.busy) { Text("Continue", color = Palette.primaryText) }
+            }
+        }
+        Text(info.detail, color = Palette.secondary, fontSize = 12.sp)
+    }
+    val open = card?.let { id -> store.events.firstOrNull { it.id == id } }
+    if (open != null) {
+        AlertDialog(
+            onDismissRequest = { card = null },
+            containerColor = Palette.panel,
+            title = { Text(open.title, color = Palette.primaryText) },
+            text = { DecisionCard(store, open) },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { card = null }) { Text("Later") } },
+        )
+    }
+}
+
 // MARK: Inbox
 
 @Composable
@@ -581,13 +624,6 @@ private fun PortfolioScreen(store: GameStore, onSettings: () -> Unit) {
                     Spacer(Modifier.width(6.dp))
                     Text("Settings", color = Palette.secondary)
                 }
-            }
-        }
-        overview.pause?.let { pause ->
-            item {
-                Callout("Paused: $pause", Palette.warning)
-                Spacer(Modifier.height(6.dp))
-                OutlinedButton(onClick = { store.dismissPause() }) { Text("Continue", color = Palette.primaryText) }
             }
         }
         item {
