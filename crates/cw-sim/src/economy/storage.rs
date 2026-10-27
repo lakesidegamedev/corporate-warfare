@@ -10,8 +10,8 @@
 //!   fee per lot. Goods never vanish for lack of space. The fee goes to other firms with spare
 //!   owned capacity there, pro rata, and the rest to the outside sector.
 //! * Stock beyond the yard also pays a holding cost, a weekly share of its reference value.
-//! * Perishable spoilage (see `production::spoil_perishables`) is halved for the part of a class's
-//!   stock that sits in dedicated owned capacity.
+//! * Perishable spoilage (see `production::spoil_perishables`) is cut by 80 percent for the part of a
+//!   class's stock that sits in dedicated owned capacity.
 //! * Each plant may carry a stock target, weeks of inputs to keep, and a seasonal build that
 //!   buys grain ahead of winter in the harvest quarter.
 //! * A firm may hold goods back from sale (`held`) and queue buy orders on the corridor
@@ -31,8 +31,9 @@ use crate::state::{Facility, FacilityStatus, Firm, World};
 
 /// Weeks of a plant's weekly inputs and outputs its own yard holds, per class.
 pub const YARD_WEEKS: i64 = 6;
-/// Share by which dedicated owned storage cuts spoilage, in basis points.
-pub const PROTECTED_SPOILAGE_CUT_BPS: i64 = 5_000;
+/// Share by which dedicated owned storage cuts spoilage, in basis points. A cold store is the
+/// answer to a perishable glut, so it removes most of the loss, not half of it.
+pub const PROTECTED_SPOILAGE_CUT_BPS: i64 = 8_000;
 /// Extra weeks of seasonal input a plant builds in the harvest quarter.
 pub const SEASON_EXTRA_WEEKS: i64 = 8;
 /// The harvest quarter of the farm season table.
@@ -488,7 +489,7 @@ pub fn close_week(world: &mut World) {
 }
 
 /// The spoilage rate for a good in basis points a week after dedicated owned storage: the part
-/// of a class's stock that sits in owned capacity spoils at half the rate.
+/// of a class's stock that sits in owned capacity spoils at a fifth of the rate.
 pub fn spoilage_bps(base_bps: u32, owned_milli: i64, used_milli: i64) -> i64 {
     if base_bps == 0 {
         return 0;

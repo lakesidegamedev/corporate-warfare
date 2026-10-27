@@ -657,7 +657,7 @@ fn update_facility_result(
 
 /// Perishable goods lose a share of the unsold stock each week, written off at carrying cost.
 /// Spoilage destroys stock, never cash, and the loss is an operating expense. Stock that sits in
-/// the firm's own dedicated storage in that region spoils at half the rate; the milli-lots lost
+/// the firm's own dedicated storage in that region spoils at a fifth of the rate; the milli-lots lost
 /// are recorded on the firm's storage book.
 pub fn spoil_perishables(world: &mut World, dataset: &Dataset) {
     let rates: Vec<(u16, u32)> = dataset
