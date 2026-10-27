@@ -118,6 +118,8 @@ pub struct Session {
     pub world: World,
     pub career_id: u64,
     pub config: ScenarioConfig,
+    /// The custom scenario this career started from, kept in saves.
+    pub custom: Option<cw_data::CustomScenario>,
     log: ReplayLog,
     /// Rival command outcomes for this process. Diagnostic only: never saved or hashed.
     pub ai_log: AiLog,
@@ -211,6 +213,7 @@ impl Session {
             world,
             career_id,
             config,
+            custom: custom.cloned(),
             log,
             ai_log: AiLog::default(),
         })
@@ -998,7 +1001,7 @@ impl Session {
     }
 
     pub fn export_save(&self) -> Result<Vec<u8>, DomainError> {
-        save::encode(&self.world, self.career_id)
+        save::encode_with(&self.world, self.career_id, self.custom.as_ref())
     }
 
     /// Import into a new session. The current session is untouched on failure.
@@ -1009,12 +1012,21 @@ impl Session {
                 requested: bytes.len() as u64,
             });
         }
-        let (world, career_id) = save::decode(bytes)?;
-        let dataset = Dataset::load().map_err(|_| DomainError::InternalFault { diagnostic: 2 })?;
+        let (world, career_id, custom) = save::decode_with(bytes)?;
+        let mut dataset =
+            Dataset::load().map_err(|_| DomainError::InternalFault { diagnostic: 2 })?;
         if world.dataset_hash != dataset.hash {
             return Err(DomainError::InvalidSave {
                 detail: cw_core::error::SaveFault::MalformedPayload,
             });
+        }
+        if let Some(custom) = &custom {
+            if !custom.validate(&dataset).is_empty() {
+                return Err(DomainError::InvalidSave {
+                    detail: cw_core::error::SaveFault::MalformedPayload,
+                });
+            }
+            custom.apply_to(&mut dataset);
         }
         let config = ScenarioConfig {
             seed: world.seed,
@@ -1035,6 +1047,7 @@ impl Session {
             world,
             career_id,
             config,
+            custom,
             log,
             ai_log: AiLog::default(),
         })

@@ -18,7 +18,20 @@ pub const SCHEMA_VERSION: u32 = 1;
 pub const MIN_SCHEMA_VERSION: u32 = 1;
 pub const MAX_BYTES: usize = 64 * 1024 * 1024;
 
+/// Marks the optional custom scenario trailer after the world payload.
+const CUSTOM_MAGIC: &[u8; 4] = b"CUST";
+
 pub fn encode(world: &World, career_id: u64) -> Result<Vec<u8>, DomainError> {
+    encode_with(world, career_id, None)
+}
+
+/// Encode with the custom scenario the career started from, so a reload applies its rivals and
+/// regional levels again. The trailer follows the payload; older readers stop at the payload.
+pub fn encode_with(
+    world: &World,
+    career_id: u64,
+    custom: Option<&cw_data::CustomScenario>,
+) -> Result<Vec<u8>, DomainError> {
     let payload = postcard::to_allocvec(world).map_err(|_| DomainError::InvalidSave {
         detail: SaveFault::MalformedPayload,
     })?;
@@ -40,10 +53,25 @@ pub fn encode(world: &World, career_id: u64) -> Result<Vec<u8>, DomainError> {
     out.extend_from_slice(&(payload.len() as u64).to_le_bytes());
     out.extend_from_slice(&checksum);
     out.extend_from_slice(&payload);
+    if let Some(custom) = custom {
+        let json = serde_json::to_vec(custom).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+        out.extend_from_slice(CUSTOM_MAGIC);
+        out.extend_from_slice(&(json.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &json));
+        out.extend_from_slice(&json);
+    }
     Ok(out)
 }
 
 pub fn decode(bytes: &[u8]) -> Result<(World, u64), DomainError> {
+    decode_with(bytes).map(|(world, career, _)| (world, career))
+}
+
+pub fn decode_with(
+    bytes: &[u8],
+) -> Result<(World, u64, Option<cw_data::CustomScenario>), DomainError> {
     if bytes.len() > MAX_BYTES {
         return Err(DomainError::InvalidSave {
             detail: SaveFault::Oversize,
@@ -97,7 +125,28 @@ pub fn decode(bytes: &[u8]) -> Result<(World, u64), DomainError> {
     let world: World = postcard::from_bytes(payload).map_err(|_| DomainError::InvalidSave {
         detail: SaveFault::MalformedPayload,
     })?;
-    Ok((world, career_id))
+    let rest = &bytes[cursor + declared..];
+    let custom = if rest.len() >= 40 && &rest[..4] == CUSTOM_MAGIC {
+        let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
+        let mut sum = [0u8; 32];
+        sum.copy_from_slice(&rest[8..40]);
+        let json = rest.get(40..40 + length).ok_or(DomainError::InvalidSave {
+            detail: SaveFault::Truncated,
+        })?;
+        if digest(DOMAIN_SAVE, json) != sum {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Checksum,
+            });
+        }
+        Some(
+            serde_json::from_slice(json).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?,
+        )
+    } else {
+        None
+    };
+    Ok((world, career_id, custom))
 }
 
 fn write_string(out: &mut Vec<u8>, value: &str) {

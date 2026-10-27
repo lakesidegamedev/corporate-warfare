@@ -19,10 +19,11 @@ heading.
   (corporate tax, wage floor, merger review, unions). The world price path (historical,
   historical with variance, or random) is saved now and takes effect in a later preview.
   Save, save as, delete, and start a game straight from the editor. Saved scenarios appear in
-  the new-game picker beside the built-in ones on Android, Windows and Linux, and every built-in
+  the new-game picker beside the built-in ones, and every built-in
   scenario card has a Customize button. The editor is on the main menu everywhere.
 - Custom scenarios are stored as versioned JSON files in the game's data folder, checked on
   save with plain-language messages and sane limits (at least three rivals must start).
+  A save made from a custom scenario keeps its rivals and regional levels when it is loaded.
 - A custom 8-bit icon set used everywhere. Navigation, the sidebar and status bar, menus, save,
   load, settings, search, quit, play, pause and the three speeds, next week, map zoom and globe
   buttons, every Command Center category, alerts, buy and sell, movement arrows, close and back

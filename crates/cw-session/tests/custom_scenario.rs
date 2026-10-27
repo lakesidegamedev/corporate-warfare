@@ -52,3 +52,46 @@ fn invalid_custom_scenario_is_refused_with_reasons() {
     let error = Session::create_custom(config(), &custom).err().unwrap();
     assert!(error.contains("Difficulty must be"), "{error}");
 }
+
+#[test]
+fn a_saved_custom_career_reloads_with_its_custom_data() {
+    let data = Dataset::load().unwrap();
+    let mut custom = CustomScenario::standard(&data, "great-lakes-2000", "Reload");
+    custom.rivals[0].enabled = false;
+    custom.rivals[1].size_pct = 200;
+    custom.regions[0].wage_pct = 150;
+    custom.regions[1].demand_pct = 60;
+    let mut original = Session::create_custom(config(), &custom).unwrap();
+    original.advance(8);
+    let bytes = original.export_save().unwrap();
+    let mut loaded = Session::import_save(&bytes).unwrap();
+    assert_eq!(loaded.custom.as_ref(), Some(&custom));
+    assert_eq!(
+        loaded.dataset.regions[0].wage_index_bps,
+        original.dataset.regions[0].wage_index_bps
+    );
+    assert!(loaded.dataset.regions[0].wage_index_bps > data.regions[0].wage_index_bps);
+    assert_eq!(
+        loaded.dataset.regions[1].demand_index_bps as i64,
+        data.regions[1].demand_index_bps as i64 * 60 / 100
+    );
+    assert_eq!(
+        loaded.dataset.seed_firms.len(),
+        original.dataset.seed_firms.len()
+    );
+    assert_eq!(loaded.dataset.seed_firms.len() + 1, data.seed_firms.len());
+    // Both continue identically for a quarter, so nothing falls back to standard data.
+    original.advance(13);
+    loaded.advance(13);
+    assert_eq!(original.canonical_hash(), loaded.canonical_hash());
+    // A second save keeps the overrides, and a plain career still saves without any.
+    let again = Session::import_save(&loaded.export_save().unwrap()).unwrap();
+    assert_eq!(again.custom.as_ref(), Some(&custom));
+    let plain = Session::create(config()).unwrap();
+    assert!(
+        Session::import_save(&plain.export_save().unwrap())
+            .unwrap()
+            .custom
+            .is_none()
+    );
+}

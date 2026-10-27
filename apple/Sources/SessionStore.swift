@@ -19,8 +19,8 @@ actor Engine {
         return handle.overview()
     }
 
-    func startCustom(_ scenario: CustomScenarioDto, guided: Bool, seed: UInt64) throws -> OverviewDto {
-        let handle = try SessionHandle.startCustom(seed: seed, guided: guided, fiveYear: false, scenario: scenario)
+    func startCustom(_ scenario: CustomScenarioDto, guided: Bool, seed: UInt64, fiveYear: Bool) throws -> OverviewDto {
+        let handle = try SessionHandle.startCustom(seed: seed, guided: guided, fiveYear: fiveYear, scenario: scenario)
         session = handle
         return handle.overview()
     }

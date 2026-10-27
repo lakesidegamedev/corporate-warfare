@@ -150,10 +150,10 @@ final class AppStore: ObservableObject {
     }
 
     /// A new career from an edited scenario. Its own difficulty, economy and capital apply.
-    func startCustom(_ scenario: CustomScenarioDto, guided: Bool, seed: UInt64) async {
+    func startCustom(_ scenario: CustomScenarioDto, guided: Bool, seed: UInt64, fiveYear: Bool) async {
         await perform {
             do {
-                let overview = try await self.engine.startCustom(scenario, guided: guided, seed: seed)
+                let overview = try await self.engine.startCustom(scenario, guided: guided, seed: seed, fiveYear: fiveYear)
                 self.tutorial.beginCareer()
                 self.apply(overview)
                 await self.reload()

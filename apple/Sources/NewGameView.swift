@@ -105,6 +105,9 @@ struct NewGameView: View {
     private let catalogue = ScenarioCatalogue.all
     @State private var chosenID: String?
     @State private var customizing: String?
+    @State private var editingCustom: CustomScenarioDto?
+    @State private var customs: [CustomScenarioDto] = []
+    @State private var chosenCustom: CustomScenarioDto?
     @State private var step = 0
     @State private var mode = StartMode.guided
     @State private var level = StartLevel.standard
@@ -130,6 +133,16 @@ struct NewGameView: View {
             bottomBar
         }
         .background(Theme.ink)
+        .onAppear { customs = customScenarioList(dir: ScenarioEditorView.directory) }
+        .sheet(
+            isPresented: Binding(
+                get: { customizing != nil || editingCustom != nil },
+                set: { if !$0 { customizing = nil; editingCustom = nil } }
+            ),
+            onDismiss: { customs = customScenarioList(dir: ScenarioEditorView.directory) }
+        ) {
+            ScenarioEditorView(baseId: customizing, existing: editingCustom).environmentObject(store)
+        }
     }
 
     private var topBar: some View {
@@ -177,9 +190,12 @@ struct NewGameView: View {
             ForEach(catalogue, id: \.id) { scenario in
                 ZStack(alignment: .topLeading) {
                     Button {
-                        if scenario.available { chosenID = scenario.id }
+                        if scenario.available {
+                            chosenID = scenario.id
+                            chosenCustom = nil
+                        }
                     } label: {
-                        ScenarioTile(scenario: scenario, selected: chosen?.id == scenario.id)
+                        ScenarioTile(scenario: scenario, selected: chosenCustom == nil && chosen?.id == scenario.id)
                     }
                     .buttonStyle(.plain)
                     .disabled(!scenario.available)
@@ -200,8 +216,48 @@ struct NewGameView: View {
                 }
             }
         }
-        .sheet(isPresented: Binding(get: { customizing != nil }, set: { if !$0 { customizing = nil } })) {
-            ScenarioEditorView(baseId: customizing).environmentObject(store)
+        if !customs.isEmpty {
+            Text("Your scenarios")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(Theme.primaryText)
+                .padding(.top, 8)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 16, alignment: .top)], spacing: 16) {
+                ForEach(customs, id: \.id) { custom in
+                    let on = chosenCustom?.id == custom.id
+                    ZStack(alignment: .topTrailing) {
+                        Button {
+                            chosenCustom = custom
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(custom.name).font(.headline).foregroundStyle(Theme.primaryText)
+                                Text("Custom · based on \(catalogue.first { $0.id == custom.baseScenarioId }?.name ?? custom.baseScenarioId) · \(custom.difficulty)")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.secondary)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(on ? Theme.gold.opacity(0.14) : Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(on ? Theme.gold : Theme.stroke, lineWidth: on ? 2 : 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            editingCustom = custom
+                        } label: {
+                            PixelLabel("Edit", icon: "pen")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Theme.primaryText)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Theme.panelRaised.opacity(0.92), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(10)
+                    }
+                }
+            }
         }
     }
 
@@ -209,7 +265,17 @@ struct NewGameView: View {
 
     @ViewBuilder
     private var setupStep: some View {
-        if let scenario = chosen {
+        if let custom = chosenCustom {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(custom.name).font(.title3.weight(.bold)).foregroundStyle(Theme.primaryText)
+                Text("Difficulty, economy, capital, rivals and laws come from this scenario. Open the editor to change them.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.secondary)
+            }
+            section("How you start") {
+                OptionGrid(items: StartMode.allCases, selected: mode) { mode = $0 }
+            }
+        } else if let scenario = chosen {
             HStack(spacing: 14) {
                 ScenarioArt(name: scenario.image)
                     .frame(width: 150, height: 150 * 640 / 1200)
@@ -225,6 +291,7 @@ struct NewGameView: View {
         section("How you start") {
             OptionGrid(items: StartMode.allCases, selected: mode) { mode = $0 }
         }
+        if chosenCustom == nil {
         section("Difficulty") {
             OptionGrid(items: StartLevel.allCases, selected: level) {
                 level = $0
@@ -247,6 +314,7 @@ struct NewGameView: View {
             )
             .frame(maxWidth: 760)
         }
+        }
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -267,10 +335,10 @@ struct NewGameView: View {
             Spacer(minLength: 8)
             if step == 0 {
                 primaryButton("Next: setup") { step = 1 }
-                    .disabled(chosen == nil)
+                    .disabled(chosen == nil && chosenCustom == nil)
             } else {
                 primaryButton("Start career") { start() }
-                    .disabled(chosen == nil || store.isBusy)
+                    .disabled((chosen == nil && chosenCustom == nil) || store.isBusy)
             }
         }
         .padding(.horizontal, 16)
@@ -279,6 +347,9 @@ struct NewGameView: View {
     }
 
     private var summary: String {
+        if let custom = chosenCustom {
+            return step == 0 ? "\(custom.name): your scenario" : "\(mode.title) · \(custom.name)"
+        }
         if step == 0 {
             if let scenario = chosen { return "\(scenario.name): \(scenario.tagline)" }
             return "Pick a scenario"
@@ -297,6 +368,11 @@ struct NewGameView: View {
     }
 
     private func start() {
+        if let custom = chosenCustom {
+            let seed = UInt64.random(in: 1...9_999_999)
+            Task { await store.startCustom(custom, guided: mode.guided, seed: seed, fiveYear: mode.fiveYear) }
+            return
+        }
         guard let scenario = chosen else { return }
         let options = NewGameDto(
             seed: UInt64.random(in: 1...9_999_999),

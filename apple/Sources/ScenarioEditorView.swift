@@ -18,6 +18,8 @@ struct ScenarioEditorView: View {
 
     /// Open straight into a built-in scenario, as from its Customize button.
     var baseId: String?
+    /// Open straight into a saved custom scenario.
+    var existing: CustomScenarioDto?
 
     private let ranges = customScenarioRanges()
     private let builtIns = scenarios().filter { $0.available }
@@ -27,9 +29,11 @@ struct ScenarioEditorView: View {
     private static let unions = [("weak", "Weak"), ("standard", "Standard"), ("strong", "Strong")]
     private static let paths = [("historical", "Historical"), ("historical_variance", "Historical with variance"), ("random", "Random")]
 
-    private var directory: String {
+    static var directory: String {
         SaveManager.shared.directory.appendingPathComponent("custom-scenarios", isDirectory: true).path
     }
+
+    private var directory: String { Self.directory }
 
     var body: some View {
         NavigationStack {
@@ -57,7 +61,9 @@ struct ScenarioEditorView: View {
             }
             .onAppear {
                 saved = customScenarioList(dir: directory)
-                if draft == nil, let baseId, let scenario = builtIns.first(where: { $0.id == baseId }) {
+                if draft == nil, let existing {
+                    draft = existing
+                } else if draft == nil, let baseId, let scenario = builtIns.first(where: { $0.id == baseId }) {
                     open(baseId, name: "My \(scenario.name)")
                 }
             }
@@ -336,7 +342,7 @@ struct ScenarioEditorView: View {
                 Button {
                     let seed = UInt64.random(in: 1...9_999_999)
                     Task {
-                        await store.startCustom(d, guided: guided, seed: seed)
+                        await store.startCustom(d, guided: guided, seed: seed, fiveYear: false)
                         if store.errorMessage == nil { dismiss() }
                     }
                 } label: {
