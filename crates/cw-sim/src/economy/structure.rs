@@ -1432,7 +1432,20 @@ pub fn carve_out(
     if book <= 0 {
         return Err(out_of_range());
     }
-    let working = (book / 20).max(10_000_000);
+    // Working capital: a twentieth of book, and half a year of upkeep, rent and payroll.
+    let upkeep: i64 = plants
+        .iter()
+        .filter_map(|h| world.facilities.get(*h))
+        .map(|p| {
+            let r = &dataset.recipes[p.recipe as usize];
+            (r.weekly_maintenance(dataset.maintenance_annual_bps)
+                + dataset.fixture_land_rent_cents_weekly * 2
+                + r.baseline_weekly_payroll(dataset.baseline_weekly_wage_cents))
+                * p.blocks as i64
+                * 26
+        })
+        .sum();
+    let working = (book / 20).max(10_000_000) + upkeep;
     let parent = world.firms.get(firm).ok_or_else(|| firm_missing(firm))?;
     let buffer = weekly_outflow_buffer(world, firm);
     if parent.book.cash() < working + buffer {

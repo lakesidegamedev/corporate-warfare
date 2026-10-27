@@ -209,17 +209,18 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
 
     // Capital-hungry with a big, healthy group: carve the largest division into its own
     // company, which the listing rule above floats once it has a quarter of results.
-    if t.listing >= 6_000
+    if t.listing >= 5_000
         && income > 0
-        && cash < reserve * 2
-        && world.tick.0 >= 78
+        && world.tick.0 >= 52
         && !world.structure.carved.contains_key(&firm)
         && cw_sim::economy::structure::minority_bps(world, firm) == 0
-        && outside_float(world, firm) >= 1_000
+        && outside_float(world, firm) >= 2_500
         && cw_sim::economy::ownership::controlled_by(world, HolderId::Firm(firm)).is_empty()
     {
         let divisions = cw_sim::economy::sectors::divisions_of(world, dataset, firm);
-        if divisions.len() >= 3
+        // A sprawling group (four divisions or more) unlocks value; a smaller one carves only
+        // when short of cash.
+        if divisions.len() >= 4
             && let Some(d) = divisions
                 .iter()
                 .max_by_key(|d| (d.blocks, d.region, d.industry))
@@ -255,7 +256,8 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
                             .is_some_and(|week| f.founding_week.0 >= *week)
                         && f.shares.ipo_done
                         && f.shares.fair_cents > 0
-                        && f.shares.mark_cents * 10 < f.shares.fair_cents * 6
+                        && (f.shares.mark_cents * 10 < f.shares.fair_cents * 6
+                            || world.structure.loss_weeks.get(sub).copied().unwrap_or(0) >= 26)
                 })
             });
         if let Some(sub) = stuck {
@@ -283,7 +285,11 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
     {
         let cost = st::jv_capital(dataset, recipe, 1);
         let spare = cash - reserve * 2;
-        if spare * 3 > cost * 2 && spare < cost * 4 {
+        let goods = dataset
+            .product_index
+            .get(&dataset.recipes[recipe as usize].output)
+            .is_some_and(|p| dataset.products[*p as usize].kind == cw_data::ProductKind::Goods);
+        if goods && spare * 3 > cost * 2 && spare < cost * 4 {
             let home_state = dataset.regions[entity.region as usize].state();
             let partner = world
                 .firms
@@ -296,6 +302,8 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
                         && dataset.regions[f.region as usize].state() == home_state
                         && f.book.cash() > reserve_target(world, *h) * 2 + cost / 2
                         && st::temperament(world, *h).partnering >= 3_000
+                        && (feeds_a_plant(world, dataset, firm, recipe)
+                            || feeds_a_plant(world, dataset, *h, recipe))
                 })
                 .map(|(h, f)| (f.book.cash(), h))
                 .max();
@@ -354,6 +362,22 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
             break;
         }
     }
+}
+
+/// Whether one of the firm's own operating plants burns what the strategy makes: a joint
+/// venture is only worth sharing when its output has a buyer inside the partnership.
+fn feeds_a_plant(world: &World, dataset: &Dataset, firm: Handle, recipe: u16) -> bool {
+    let output = &dataset.recipes[recipe as usize].output;
+    world.firms.get(firm).is_some_and(|f| {
+        f.facilities
+            .iter()
+            .filter_map(|h| world.facilities.get(*h))
+            .any(|p| {
+                dataset.recipes[p.recipe as usize]
+                    .weekly_inputs_lots
+                    .contains_key(output)
+            })
+    })
 }
 
 fn outside_float(world: &World, firm: Handle) -> i32 {
