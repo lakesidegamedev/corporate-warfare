@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Write content/geography/regions.json: economic regions inside the eight playable states.
+"""Write the economic regions of each scenario that has its own geography.
+
+Great Lakes 2000 writes content/geography/regions.json (the original dataset). Texas Oil Patch
+1981 writes content/scenarios/texas-1981/regions.json from 1980 census county populations; see
+the TEXAS section below. Run with no arguments to rebuild both, or name a scenario id.
+
+Great Lakes 2000: economic regions inside the eight playable states.
 
 A region is the economic unit: its own labour pool, wages, household demand, land cost,
 markets and freight lanes. The state is the political layer: conditions, union law and tax
@@ -20,6 +26,7 @@ build dissolves into region shapes.
 import csv
 import json
 import math
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -118,7 +125,7 @@ def clamp(value, low, high):
     return max(low, min(high, value))
 
 
-def main():
+def build_great_lakes():
     counties = list(csv.DictReader(COUNTIES.open()))
     anchors = defaultdict(list)
     for region in REGIONS:
@@ -211,6 +218,184 @@ def main():
         print(f"  {r['code']:7} {r['name']:38} counties {r['counties']:3} pop {r['population_2000']:>10,} "
               f"wage {r['wage_index_bps']:>6} demand {r['demand_index_bps']:>6} land {r['land_index_bps']:>6} "
               f"bb {r['conditions']['broadband_bps']:>5} skill {r['conditions']['skill_bps']:>5}")
+
+
+# ---------------------------------------------------------------------------------------------
+# TEXAS: Texas Oil Patch, 1981 (Texas, Oklahoma and Louisiana)
+#
+# The same method as the Great Lakes build, on 1980 data. County populations are the April 1980
+# census counts. County incomes are NOT 1980 observations: the Census has no county income series
+# for 1980 in a form we can pin, so SAIPE 2000 median household income is used only as a relative
+# index of which counties were richer than their state, then adjusted by hand for the oil boom
+# (BOOM below). State product, pay and union figures are rounded public circa-1981 values used as
+# relative indices. Condition indices and specialisations are authored game estimates.
+# Regions are whole counties joined to the nearest anchor in the same state.
+# ---------------------------------------------------------------------------------------------
+
+TX_COUNTIES = ROOT / "tools/map/data/counties-1980-texas-1981.csv"
+TX_ASSIGNMENT = ROOT / "tools/map/data/county-regions-texas-1981.csv"
+TX_OUT = ROOT / "content/scenarios/texas-1981/regions.json"
+TX_FIPS = {"48": "TX", "40": "OK", "22": "LA"}
+
+# code, name, hub city, GDP $bn (rounded, 1981), average annual pay $ (rounded, 1981),
+# union membership % (rounded)
+TX_STATES = [
+    ("TX", "Texas", "Houston", 190, 16_000, 10.0),
+    ("OK", "Oklahoma", "Oklahoma City", 50, 15_100, 11.0),
+    ("LA", "Louisiana", "New Orleans", 65, 15_600, 13.0),
+]
+TX_HUBS = {"TX": (29.760, -95.370), "OK": (35.468, -97.516), "LA": (29.951, -90.072)}
+
+# power grid, road condition, broadband reach (a 1981 value: almost none), workforce skill,
+# crime, cost of living, land cost
+TX_CONDITIONS = {
+    "TX": (9300, 6400, 600, 4800, 10500, 9000, 8000),
+    "OK": (9400, 6000, 400, 4600, 8500, 8200, 6500),
+    "LA": (9000, 5000, 400, 4000, 11500, 8800, 7000),
+}
+
+TX_SPECIALIZATION = {
+    "TX": ("extraction", "chemical_industries"),
+    "OK": ("extraction", "agriculture"),
+    "LA": ("chemical_industries", "logistics"),
+}
+
+# Region code, name, anchor city, anchor lat, anchor lon.
+TX_REGIONS = [
+    ("TX-HOU", "Houston and the Gulf Coast", "Houston", 29.760, -95.370),
+    ("TX-BPA", "Beaumont and Port Arthur", "Beaumont", 30.080, -94.126),
+    ("TX-DFW", "Dallas and Fort Worth", "Dallas", 32.777, -96.797),
+    ("TX-SAT", "San Antonio", "San Antonio", 29.424, -98.494),
+    ("TX-AUS", "Austin and Central Texas", "Austin", 30.267, -97.743),
+    ("TX-PMB", "Permian Basin", "Midland", 31.997, -102.078),
+    ("TX-CRP", "Corpus Christi and the South Texas Coast", "Corpus Christi", 27.801, -97.396),
+    ("TX-AMA", "Texas Panhandle", "Amarillo", 35.222, -101.831),
+    ("TX-ELP", "El Paso and the Trans-Pecos", "El Paso", 31.761, -106.485),
+    ("TX-TYL", "East Texas", "Tyler", 32.351, -95.301),
+    ("TX-RGV", "Rio Grande Valley", "McAllen", 26.203, -98.230),
+    ("TX-LUB", "Lubbock and the South Plains", "Lubbock", 33.578, -101.855),
+    ("TX-ABI", "Abilene and West Central Texas", "Abilene", 32.449, -99.733),
+    ("OK-OKC", "Oklahoma City", "Oklahoma City", 35.468, -97.516),
+    ("OK-TUL", "Tulsa and Eastern Oklahoma", "Tulsa", 36.154, -95.993),
+    ("OK-CSH", "Cushing and North Central Oklahoma", "Cushing", 35.985, -96.767),
+    ("OK-WES", "Western Oklahoma and the Anadarko Basin", "Woodward", 36.430, -99.390),
+    ("LA-NOL", "New Orleans", "New Orleans", 29.951, -90.072),
+    ("LA-BTR", "Baton Rouge", "Baton Rouge", 30.451, -91.187),
+    ("LA-LCH", "Lake Charles", "Lake Charles", 30.226, -93.217),
+    ("LA-SHV", "Shreveport and North Louisiana", "Shreveport", 32.525, -93.750),
+    ("LA-LAF", "Lafayette and Acadiana", "Lafayette", 30.224, -92.020),
+]
+
+# 1981 oil boom adjustment to a region's wage and demand against what its 2000 income says, in
+# percent. Authored game estimates: the Permian, Houston and Acadiana paid oilfield wages.
+TX_BOOM = {
+    "TX-PMB": 22, "TX-HOU": 12, "TX-BPA": 6, "TX-CRP": 4, "TX-AMA": 4, "TX-ABI": 3,
+    "OK-OKC": 6, "OK-TUL": 6, "OK-CSH": 4, "OK-WES": 8,
+    "LA-LAF": 12, "LA-LCH": 5, "LA-NOL": 3,
+}
+
+
+def build_texas():
+    counties = list(csv.DictReader(TX_COUNTIES.open()))
+    anchors = defaultdict(list)
+    for region in TX_REGIONS:
+        anchors[region[0][:2]].append(region)
+    members = defaultdict(list)
+    TX_ASSIGNMENT.parent.mkdir(parents=True, exist_ok=True)
+    with TX_ASSIGNMENT.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["geoid", "region"])
+        for county in counties:
+            state = TX_FIPS[county["statefp"]]
+            point = (float(county["lat"]), float(county["lon"]))
+            region = min(anchors[state], key=lambda r: (great_circle_km(point, (r[3], r[4])), r[0]))
+            members[region[0]].append(county)
+            writer.writerow([county["geoid"], region[0]])
+
+    def totals(rows):
+        population = sum(int(c["population_1980"]) for c in rows)
+        income = sum(int(c["population_1980"]) * int(c["median_household_income_2000"]) for c in rows)
+        land = sum(int(c["land_km2"]) for c in rows)
+        return population, income, land
+
+    base_gdp = 190  # Texas = 10000
+    base_pay = 15_500
+    state_rows = {code: [c for c in counties if TX_FIPS[c["statefp"]] == code] for code, *_ in TX_STATES}
+    regions = []
+    states = []
+    for code, name, city, gdp, pay, union in TX_STATES:
+        grid, road, broadband, skill, crime, living, land_index = TX_CONDITIONS[code]
+        state_pop, state_income, state_land = totals(state_rows[code])
+        state_mhi = state_income / state_pop
+        state_density = state_pop / state_land
+        state_wage = pay * 10_000 / base_pay
+        state_demand = gdp * 10_000 / base_gdp
+        for rcode, rname, rcity, rlat, rlon in anchors[code]:
+            rows = members[rcode]
+            if not rows:
+                raise SystemExit(f"{rcode} has no counties")
+            rpop, rincome, rland = totals(rows)
+            mhi_ratio = (rincome / rpop) / state_mhi
+            density_ratio = (rpop / rland) / state_density
+            boom = 1 + TX_BOOM.get(rcode, 0) / 100
+            regions.append({
+                "code": rcode,
+                "name": rname,
+                "states": [code],
+                "principal_city": f"{rcity}, {code}",
+                "lat_milli": round(rlat * 1000),
+                "lon_milli": round(rlon * 1000),
+                "population_1980": rpop,
+                "wage_index_bps": round(state_wage * mhi_ratio ** 0.6 * boom),
+                "demand_index_bps": max(1, round(state_demand * rincome / state_income * boom)),
+                "land_index_bps": round(land_index * clamp(density_ratio ** 0.35, 0.55, 1.8)),
+                "opening_organisation_bps": round(union * 100),
+                "conditions": {
+                    "power_grid_bps": grid,
+                    "road_bps": road,
+                    "broadband_bps": round(clamp(broadband * clamp(density_ratio ** 0.25, 0.6, 1.5), 0, 10_000)),
+                    "skill_bps": round(clamp(skill * clamp(mhi_ratio ** 0.5, 0.8, 1.2), 0, 10_000)),
+                    "crime_bps": crime,
+                    "cost_of_living_bps": round(living * clamp(mhi_ratio ** 0.5, 0.85, 1.2)),
+                },
+                "counties": len(rows),
+            })
+        states.append({
+            "code": code, "name": name, "capital_hub": f"{city}, {code}",
+            "population_1980": state_pop, "specialization": list(TX_SPECIALIZATION[code]),
+        })
+    lanes = []
+    for i, a in enumerate(TX_REGIONS):
+        for b in TX_REGIONS[i + 1:]:
+            km = great_circle_km((a[3], a[4]), (b[3], b[4])) * ROAD_FACTOR
+            lanes.append({"a": a[0], "b": b[0], "km": max(1, round(km))})
+    document = {
+        "schema": 3,
+        "classification": "economic regions built from whole counties in Texas, Oklahoma and Louisiana; 1980 census county populations, SAIPE 2000 county income used only as a relative index, rounded public circa-1981 state product, pay and union figures as relative indices, authored condition indices and oil boom adjustments",
+        "vintage": "nominal January 1981 start",
+        "official_source": "US Census Bureau 1980 census county populations (intercensal estimates 1980-1989 base) and SAIPE 2000 median household income; BEA, BLS and union membership figures rounded for indices",
+        "attempts": [],
+        "membership_status": "each region is a set of whole counties joined to the nearest anchor metro in the same state; tools/map/data/county-regions-texas-1981.csv lists the assignment",
+        "notes": "Generated by tools/map/build_regions.py. Condition indices, oil boom adjustments and calibrated demand are game estimates, not observations. Freight lanes are anchor-to-anchor great-circle distances times a 1.25 road factor.",
+        "states": states,
+        "regions": regions,
+        "lanes": lanes,
+    }
+    TX_OUT.parent.mkdir(parents=True, exist_ok=True)
+    TX_OUT.write_text(json.dumps(document, indent=2) + "\n")
+    print(f"wrote {TX_OUT.relative_to(ROOT)}: {len(regions)} regions, {len(lanes)} lanes")
+    for r in regions:
+        print(f"  {r['code']:7} {r['name']:42} counties {r['counties']:3} pop {r['population_1980']:>10,} "
+              f"wage {r['wage_index_bps']:>6} demand {r['demand_index_bps']:>6} land {r['land_index_bps']:>6}")
+
+
+BUILDERS = {"great-lakes-2000": build_great_lakes, "texas-1981": build_texas}
+
+
+def main():
+    wanted = sys.argv[1:] or list(BUILDERS)
+    for scenario in wanted:
+        BUILDERS[scenario]()
 
 
 if __name__ == "__main__":

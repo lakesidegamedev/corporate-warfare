@@ -1,0 +1,85 @@
+{
+  "classification": "authored engineering calibration; NOT real freight rates or rail maps",
+  "public_rail": [
+    "LA-BTR",
+    "LA-LCH",
+    "LA-NOL",
+    "LA-SHV",
+    "OK-OKC",
+    "OK-TUL",
+    "TX-AMA",
+    "TX-AUS",
+    "TX-BPA",
+    "TX-CRP",
+    "TX-DFW",
+    "TX-ELP",
+    "TX-HOU",
+    "TX-SAT",
+    "TX-TYL"
+  ],
+  "public_ports": [
+    "LA-BTR",
+    "LA-LCH",
+    "LA-NOL",
+    "TX-BPA",
+    "TX-CRP",
+    "TX-HOU"
+  ],
+  "sea_systems": [
+    {
+      "id": "gulf_of_mexico",
+      "name": "Gulf of Mexico and the Intracoastal Waterway",
+      "factor_bps": 11500,
+      "ports": [
+        "LA-BTR",
+        "LA-LCH",
+        "LA-NOL",
+        "TX-BPA",
+        "TX-CRP",
+        "TX-HOU"
+      ]
+    }
+  ],
+  "gateway_links": [
+    {
+      "region": "TX-HOU",
+      "gateway": "atlantic",
+      "km": 2100
+    },
+    {
+      "region": "TX-HOU",
+      "gateway": "caribbean",
+      "km": 1500
+    },
+    {
+      "region": "TX-BPA",
+      "gateway": "atlantic",
+      "km": 2000
+    },
+    {
+      "region": "TX-CRP",
+      "gateway": "caribbean",
+      "km": 1400
+    },
+    {
+      "region": "LA-LCH",
+      "gateway": "atlantic",
+      "km": 2000
+    },
+    {
+      "region": "LA-NOL",
+      "gateway": "atlantic",
+      "km": 1900
+    },
+    {
+      "region": "LA-NOL",
+      "gateway": "mississippi",
+      "km": 200
+    },
+    {
+      "region": "LA-BTR",
+      "gateway": "mississippi",
+      "km": 130
+    }
+  ]
+}

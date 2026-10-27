@@ -1,0 +1,31 @@
+{
+  "classification": "authored engineering calibration for the January 1981 start; NOT real observations. Wages are 92 percent of the Great Lakes 2000 level in engine units (1981 real pay against 2000), and prices move against the 2000 base the way 1981 did: crude oil, natural gas and refined fuels dear, power and farm output somewhat dearer, services and manufactures unchanged.",
+  "baseline_weekly_wage_cents": [
+    36800,
+    73600,
+    128800
+  ],
+  "reference_price_cents": {
+    "crude_oil": 22500,
+    "natural_gas": 26000,
+    "ngl": 65000,
+    "gasoline": 44950,
+    "jet_fuel": 47850,
+    "fuel": 43500,
+    "petrochem_feedstock": 36400,
+    "electricity": 138000,
+    "chemicals": 66000,
+    "plastics": 30450,
+    "fertilizers": 24200,
+    "coal": 17600,
+    "food_raw": 11000,
+    "grain": 6600,
+    "livestock": 13200,
+    "food_retail": 18360,
+    "steel": 42000,
+    "ore": 21000,
+    "pig_iron": 33600,
+    "scrap": 18900,
+    "building_materials": 22050
+  }
+}
