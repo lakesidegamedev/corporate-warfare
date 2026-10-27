@@ -348,6 +348,20 @@ impl Facility {
     pub fn is_operating(&self) -> bool {
         self.status == FacilityStatus::Operating
     }
+
+    /// Last week's physical output of one product: the primary output as recorded, or a
+    /// by-product in its fixed yield to the primary. Zero when the plant does not make it.
+    pub fn last_made(&self, dataset: &Dataset, product: &str) -> MilliLots {
+        let recipe = &dataset.recipes[self.recipe as usize];
+        if recipe.output == product {
+            return self.last_output;
+        }
+        let by = recipe.lots_of(product);
+        if by <= 0 || recipe.weekly_output_lots <= 0 {
+            return MilliLots::ZERO;
+        }
+        MilliLots(self.last_output.0 * by / recipe.weekly_output_lots)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

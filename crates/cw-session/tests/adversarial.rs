@@ -991,7 +991,10 @@ fn long_careers_keep_history_bounded_and_lifetime_figures_consistent() {
     // roughly 128 postings a week now that rivals grow to more plants and trade on the corridor
     // exchange. Without pruning the same firm would pass ten thousand by week 110, so this still
     // catches an accidental removal of compaction.
-    const JOURNAL_ENVELOPE: usize = 2_400;
+    // The steel firm now opens with six plants in four regions (1.7 preview 2) and its postings
+    // per week grow with its plants, so the bound moved to 3,600; unpruned it still passes ten
+    // thousand.
+    const JOURNAL_ENVELOPE: usize = 3_600;
 
     let mut session = session(0x00C0_5A7E, ScenarioKind::Founder);
     let mut totals: BTreeMap<u64, (i64, i64)> = BTreeMap::new();

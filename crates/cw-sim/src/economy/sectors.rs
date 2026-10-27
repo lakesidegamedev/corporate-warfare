@@ -134,12 +134,13 @@ pub fn divisions_of(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Divis
 /// construction: they are the capacity the cell will have.
 fn capacity_value(dataset: &Dataset, recipe: u16, blocks: u8) -> i64 {
     let template = &dataset.recipes[recipe as usize];
-    let price = dataset
-        .product_index
-        .get(&template.output)
-        .map(|code| dataset.reference_price(*code))
-        .unwrap_or(0);
-    template.weekly_output_lots * blocks as i64 * price
+    template.output_value(|id| {
+        dataset
+            .product_index
+            .get(id)
+            .map(|code| dataset.reference_price(*code))
+            .unwrap_or(0)
+    }) * blocks as i64
 }
 
 /// Capacity value by firm in one region and sector type, plus the unmet import value.
@@ -172,7 +173,11 @@ pub fn cell(
         .recipes
         .iter()
         .filter(|recipe| industry_index(&recipe.industry) == Some(industry))
-        .filter_map(|recipe| dataset.product_index.get(&recipe.output).copied())
+        .flat_map(|recipe| {
+            recipe
+                .outputs()
+                .filter_map(|(id, _)| dataset.product_index.get(id).copied())
+        })
         .collect();
     let headroom = world
         .gateways
@@ -479,7 +484,13 @@ pub fn raid(
             available: cash,
         });
     }
-    crate::economy::research::buy_advertising(world, attacker, budget_cents, "market raid");
+    crate::economy::research::buy_advertising(
+        world,
+        dataset,
+        attacker,
+        budget_cents,
+        "market raid",
+    );
     if let Some(firm) = world.firms.get_mut(attacker) {
         firm.raid_ready
             .insert((region, industry), world.tick.0 + RAID_COOLDOWN_WEEKS);

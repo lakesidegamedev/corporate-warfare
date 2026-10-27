@@ -161,9 +161,11 @@ price share it in proportion to what each still wants and can pay for; imports a
 resort at equal price. The seller receives its asking price and the buyer pays the freight.
 
 Prices and production follow sell-through. Each week an automatically priced good is cut 5
-percent when stock exceeds four weeks of sales or nothing sold, and raised 2 percent when stock
-is under one week, within half to twice reference and never above the cheapest import (services:
-reference plus 15 percent). Stock a firm keeps as input cover for its own plants does not count
+percent when stock exceeds four weeks of sales (two weeks for a perishable) or nothing sold, and
+raised 2 percent when stock is under one week and the corridor is still importing the good, within
+half to twice reference and never above 95 percent of the cheapest import, so local goods beat
+imports once normal freight is added (services: reference plus 15 percent). With no imports a
+price above reference eases back 1 percent a week instead of staying at the ceiling. Stock a firm keeps as input cover for its own plants does not count
 as unsold. Production is planned plant by plant: each plant's target moves 15 points a week
 toward what its good sold, floor 30 percent, so one product's glut never idles a firm's other
 plants; a service is judged by sold against capacity, and a plant whose good has not sold yet
@@ -241,3 +243,50 @@ zero total requested quantity clears no trade. Zero prior sales uses pinned refe
 price, never division by zero. Missing historical observation is a flagged estimate,
 not zero. Monetary allocation sums settled components once, then splits the resulting
 cents, avoiding independent rounded postings whose debits/credits disagree.
+
+## Product chains and multi-output plants (1.7)
+
+A recipe has one primary output and may list `by_products`, each a fixed number of lots per
+block per week at full capacity. Every product of a plant scales together with the plant's run
+rate, the farm season and supply events, so a refinery never makes gasoline without its diesel.
+Output, price, valuation and planning all read the whole list: pricing and the weekly plan treat
+every by-product as a priced good of the firm, the exchange sells it from stock like any other
+good, gateways carry it (a good with no local buyer still has the outside buyer at reference
+less 15 percent), and AI build and retool value a plant by all its products, counting a plant as
+having room when imports cover three quarters of its output value at reference prices. Nothing a
+plant makes is left without a price or a buyer.
+
+The converted inputs' carrying cost is shared among the products by their value at reference
+prices (joint-cost rule); the primary output takes the rounding remainder, so lot carrying cost
+and the Inventory account stay equal. `unit_cost` for a cost-plus posture uses the same value
+share. A plant whose deposit runs out stops its by-products with the primary.
+
+Chains added in preview 2 (yields and prices are authored game constants, circa 1980 to 2000
+proportions, set by `tools/content/add_chains.py`):
+
+- Oil: wells make crude oil (and a little associated gas); a refinery turns crude into fuel
+  (the road and industrial fuel product, here diesel and heating fuel, so every existing fuel
+  consumer is unchanged), gasoline, jet fuel and petrochemical feedstock. Plastics and chemicals
+  use feedstock; gas processing strips natural gas liquids from natural gas, and plastics use
+  liquids too. Jet fuel feeds aerospace, gasoline feeds delivery fleets; the rest is exported.
+- Iron: a blast furnace makes pig iron from ore and coal with slag sold as building materials;
+  a basic oxygen mill makes steel from pig iron and scrap; an electric arc furnace melts scrap
+  alone. Scrap is a by-product of steel works, component stamping and vehicle assembly. The old
+  ore-to-steel strategy remains.
+- Food: mixed farms grow grain and raise livestock together; food processing turns both into
+  food. Perishable goods (food, groceries, grain, livestock) spoil a percentage of unsold stock
+  each week, written off at carrying cost, and plants buy at most two weeks of a perishable
+  input.
+
+Services are paid to the firms that hold them. A freight bill, an advertising purchase or a
+service input (software, telecom, research, maintenance, freight) pays the corridor's own
+producers first, in proportion to the service stock each holds this week, relieves that stock
+and records the sale; only the remainder goes to the outside sector. Service makers run before
+the plants that use their services within a week, so a service input finds its producer's stock.
+
+Seed firms may open with extra plants (`extra_plants` in `content/firms.json`) so that gas,
+timber, pharmaceuticals, rare earths, building materials and the new chain goods have a local
+producer at the start. A firm runs one strategy per sector in a region, so a firm's plants of
+one sector sit in different regions; the dataset check refuses a roster that breaks this. Seed
+supply contracts deliver from the region of the plant that makes the good, not the firm's
+headquarters.

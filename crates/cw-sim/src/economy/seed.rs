@@ -382,46 +382,74 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
             seed_financial_firm(world, dataset, &mut firm, seed_firm.public, controller);
             continue;
         } else {
-            let recipe = dataset.recipe(&seed_firm.recipe).expect("validated recipe");
             let wage = |tier: usize| {
                 dataset.baseline_weekly_wage_cents[tier]
                     * world.regions[region as usize].wage_index_bps as i64
                     / 10_000
             };
             firm.policies.wage_offer = [wage(0), wage(1), wage(2)];
-            let facility = open_facility(
-                &mut firm,
-                dataset,
+            // The main plant, then any extra opening plants (each in its own region), so goods
+            // that would otherwise be import-only start with a local producer.
+            let mut plants: Vec<(u8, u16, u8)> = vec![(
                 region,
                 dataset.recipe_index[&seed_firm.recipe],
                 seed_firm.blocks,
-                Tick::OPENING,
-            );
+            )];
+            for extra in &seed_firm.extra_plants {
+                plants.push((
+                    world
+                        .region_index(&extra.region)
+                        .expect("validated extra plant region"),
+                    dataset.recipe_index[&extra.recipe],
+                    extra.blocks,
+                ));
+            }
+            let facilities: Vec<Facility> = plants
+                .iter()
+                .map(|(plant_region, recipe_index, blocks)| {
+                    open_facility(
+                        &mut firm,
+                        dataset,
+                        *plant_region,
+                        *recipe_index,
+                        *blocks,
+                        Tick::OPENING,
+                    )
+                })
+                .collect();
             let handle = world.firms.insert(firm);
-            // The firm must own its facility: payroll, rent, maintenance and depreciation are
+            // The firm must own its facilities: payroll, rent, maintenance and depreciation are
             // all posted per owned facility, so an unowned facility would be free capacity.
-            let facility_handle = world
-                .facilities
-                .insert(facility_with_firm(facility, handle));
-            world
-                .firms
-                .get_mut(handle)
-                .unwrap()
-                .facilities
-                .push(facility_handle);
-            let cash = opening_cash(
-                dataset,
-                dataset.recipe_index[&seed_firm.recipe],
-                seed_firm.blocks,
-                &[wage(0), wage(1), wage(2)],
-            ) * seed_firm.cash_pct as i64
-                / 100;
-            let inventory_cost = opening_input_cost(
-                dataset,
-                dataset.recipe_index[&seed_firm.recipe],
-                seed_firm.blocks,
-            );
-            let asset_cost = recipe.capex_cents * seed_firm.blocks as i64;
+            for facility in facilities {
+                let facility_handle = world
+                    .facilities
+                    .insert(facility_with_firm(facility, handle));
+                world
+                    .firms
+                    .get_mut(handle)
+                    .unwrap()
+                    .facilities
+                    .push(facility_handle);
+            }
+            let mut cash = 0i64;
+            let mut inventory_cost = 0i64;
+            let mut asset_cost = 0i64;
+            for (plant_region, recipe_index, blocks) in &plants {
+                let regional_wage = |tier: usize| {
+                    dataset.baseline_weekly_wage_cents[tier]
+                        * world.regions[*plant_region as usize].wage_index_bps as i64
+                        / 10_000
+                };
+                cash += opening_cash(
+                    dataset,
+                    *recipe_index,
+                    *blocks,
+                    &[regional_wage(0), regional_wage(1), regional_wage(2)],
+                ) * seed_firm.cash_pct as i64
+                    / 100;
+                inventory_cost += opening_input_cost(dataset, *recipe_index, *blocks);
+                asset_cost += dataset.recipes[*recipe_index as usize].capex_cents * *blocks as i64;
+            }
             let loan = asset_cost * 30 / 100;
             let capital = asset_cost + inventory_cost + cash - loan;
             world
@@ -923,9 +951,10 @@ fn build_gateways(world: &mut World, dataset: &Dataset) {
             let code = dataset.product_index[id.as_str()];
             *corridor_volume.entry(code).or_default() += qty * facility.blocks as i64;
         }
-        if let Some(code) = dataset.product_index.get(&recipe.output) {
-            *corridor_output.entry(*code).or_default() +=
-                recipe.weekly_output_lots * facility.blocks as i64;
+        for (id, lots) in recipe.outputs() {
+            if let Some(code) = dataset.product_index.get(id) {
+                *corridor_output.entry(*code).or_default() += lots * facility.blocks as i64;
+            }
         }
     }
     for (code, output) in corridor_output {
@@ -941,9 +970,11 @@ fn build_gateways(world: &mut World, dataset: &Dataset) {
             *regional_volume.entry((facility.region, code)).or_default() +=
                 qty * facility.blocks as i64;
         }
-        if let Some(code) = dataset.product_index.get(&recipe.output) {
-            let entry = regional_volume.entry((facility.region, *code)).or_default();
-            *entry = (*entry).max(recipe.weekly_output_lots * facility.blocks as i64);
+        for (id, lots) in recipe.outputs() {
+            if let Some(code) = dataset.product_index.get(id) {
+                let entry = regional_volume.entry((facility.region, *code)).or_default();
+                *entry = (*entry).max(lots * facility.blocks as i64);
+            }
         }
     }
     // The outside market carries one corridor volume per state, as in 1.1.0 when a region was
@@ -995,6 +1026,7 @@ fn build_gateways(world: &mut World, dataset: &Dataset) {
 /// beyond its own region, so vertical chains never meet and every producer starves.
 fn seed_supply_contracts(world: &mut World, dataset: &Dataset) {
     let mut suppliers: BTreeMap<u16, Vec<Handle>> = BTreeMap::new();
+    let mut supplier_region: BTreeMap<(Handle, u16), (i64, u8)> = BTreeMap::new();
     for (handle, firm) in world.firms.iter() {
         if !firm.operative() {
             continue;
@@ -1004,8 +1036,22 @@ fn seed_supply_contracts(world: &mut World, dataset: &Dataset) {
                 continue;
             };
             let recipe = &dataset.recipes[facility.recipe as usize];
-            if let Some(code) = dataset.product_index.get(&recipe.output) {
-                suppliers.entry(*code).or_default().push(handle);
+            for (id, lots) in recipe.outputs() {
+                if let Some(code) = dataset.product_index.get(id) {
+                    let list = suppliers.entry(*code).or_default();
+                    if !list.contains(&handle) {
+                        list.push(handle);
+                    }
+                    // Goods sit where the plant made them, which is not always the firm's
+                    // headquarters: deliver from the region of its largest plant for the good.
+                    let weight = lots * facility.blocks as i64;
+                    let best = supplier_region
+                        .entry((handle, *code))
+                        .or_insert((0, facility.region));
+                    if weight > best.0 {
+                        *best = (weight, facility.region);
+                    }
+                }
             }
         }
     }
@@ -1062,11 +1108,8 @@ fn seed_supply_contracts(world: &mut World, dataset: &Dataset) {
                                 .filter_map(|handle| world.facilities.get(*handle))
                                 .map(|facility| {
                                     let recipe = &dataset.recipes[facility.recipe as usize];
-                                    if recipe.output == dataset.products[product as usize].id {
-                                        recipe.weekly_output_lots * facility.blocks as i64
-                                    } else {
-                                        0
-                                    }
+                                    recipe.lots_of(&dataset.products[product as usize].id)
+                                        * facility.blocks as i64
                                 })
                                 .sum::<i64>()
                         })
@@ -1078,10 +1121,10 @@ fn seed_supply_contracts(world: &mut World, dataset: &Dataset) {
             let total_capacity: i64 = capacities.iter().map(|(_, capacity)| *capacity).sum();
             for (seller, capacity) in capacities {
                 let share = (qty * capacity / total_capacity.max(1)).max(1);
-                let seller_region = world
-                    .firms
-                    .get(seller)
-                    .map(|firm| firm.region)
+                let seller_region = supplier_region
+                    .get(&(seller, product))
+                    .map(|(_, region)| *region)
+                    .or_else(|| world.firms.get(seller).map(|firm| firm.region))
                     .unwrap_or(buyer_region);
                 let contract = crate::state::Contract {
                     buyer,
@@ -1123,11 +1166,13 @@ fn expected_annual_ebitda(world: &World, dataset: &Dataset, firm: Handle) -> i64
         .filter_map(|plant| world.facilities.get(*plant))
         .map(|plant| {
             let recipe = &dataset.recipes[plant.recipe as usize];
-            let revenue = dataset
-                .product_index
-                .get(&recipe.output)
-                .map(|code| recipe.weekly_output_lots * dataset.reference_price(*code))
-                .unwrap_or(0);
+            let revenue = recipe.output_value(|id| {
+                dataset
+                    .product_index
+                    .get(id)
+                    .map(|code| dataset.reference_price(*code))
+                    .unwrap_or(0)
+            });
             let inputs: i64 = recipe
                 .weekly_inputs_lots
                 .iter()

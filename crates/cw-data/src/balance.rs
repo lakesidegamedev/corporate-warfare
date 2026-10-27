@@ -68,6 +68,18 @@ pub struct Product {
     pub name: String,
     pub reference_price_cents: i64,
     pub kind: ProductKind,
+    /// Share of unsold stock that spoils each week, in basis points. Zero for durable goods.
+    #[serde(default)]
+    pub spoilage_bps_weekly: u32,
+}
+
+/// A further product a plant makes alongside its primary output, in a fixed yield: the lots a
+/// single block makes each week at full capacity. It scales with the plant's run rate exactly as
+/// the primary output does, so a refinery never makes gasoline without its diesel.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ByProduct {
+    pub product: String,
+    pub weekly_lots: i64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -79,6 +91,9 @@ pub struct Recipe {
     pub name: String,
     pub output: String,
     pub weekly_output_lots: i64,
+    /// Further products made in a fixed yield alongside `output` (balance schema 2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub by_products: Vec<ByProduct>,
     pub weekly_inputs_lots: BTreeMap<String, i64>,
     pub workers_low_mid_high: [i64; 3],
     pub capex_cents: i64,
@@ -87,6 +102,34 @@ pub struct Recipe {
 }
 
 impl Recipe {
+    /// Every product the plant makes with its weekly lots per block at full capacity, the
+    /// primary output first.
+    pub fn outputs(&self) -> impl Iterator<Item = (&str, i64)> {
+        std::iter::once((self.output.as_str(), self.weekly_output_lots)).chain(
+            self.by_products
+                .iter()
+                .map(|by| (by.product.as_str(), by.weekly_lots)),
+        )
+    }
+
+    /// Weekly lots per block of one product at full capacity, zero when the plant does not make it.
+    pub fn lots_of(&self, product: &str) -> i64 {
+        self.outputs()
+            .filter(|(id, _)| *id == product)
+            .map(|(_, lots)| lots)
+            .sum()
+    }
+
+    /// Whether the plant makes the product, as its primary output or a by-product.
+    pub fn makes(&self, product: &str) -> bool {
+        self.output == product || self.by_products.iter().any(|by| by.product == product)
+    }
+
+    /// Weekly value per block at full capacity of all outputs, priced by `price`.
+    pub fn output_value(&self, price: impl Fn(&str) -> i64) -> i64 {
+        self.outputs().map(|(id, lots)| lots * price(id)).sum()
+    }
+
     /// Extraction from a finite deposit: every extraction strategy except renewable timber.
     pub fn depletes(&self) -> bool {
         self.industry == "extraction" && self.output != "timber"
@@ -128,6 +171,28 @@ pub struct Balance {
     pub financial_businesses: Vec<String>,
     pub maintenance_annual_bps: i32,
     pub fixture_land_rent_cents_weekly: i64,
+}
+
+impl Balance {
+    /// Oldest balance schema the loader still reads. Schema 1 had no by-products and no spoilage;
+    /// both default to none, so a schema 1 file migrates to schema 2 unchanged in meaning.
+    pub const MIN_SCHEMA: u32 = 1;
+    pub const SCHEMA: u32 = 2;
+
+    /// Bring a parsed file up to the current schema, or say why it cannot be read.
+    pub fn migrate(mut self) -> Result<Balance, String> {
+        if self.schema < Self::MIN_SCHEMA || self.schema > Self::SCHEMA {
+            return Err(format!(
+                "balance schema {} is not supported (reads {} to {})",
+                self.schema,
+                Self::MIN_SCHEMA,
+                Self::SCHEMA
+            ));
+        }
+        // Schema 1 to 2 added optional fields only; their defaults are the schema 1 meaning.
+        self.schema = Self::SCHEMA;
+        Ok(self)
+    }
 }
 
 #[cfg(test)]

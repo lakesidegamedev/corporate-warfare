@@ -716,8 +716,7 @@ pub fn product_lines(world: &World, dataset: &Dataset, firm: u64) -> Vec<Product
                 .facilities
                 .iter()
                 .filter_map(|plant| world.facilities.get(*plant))
-                .filter(|plant| dataset.recipes[plant.recipe as usize].output == id)
-                .map(|plant| plant.last_output.lots())
+                .map(|plant| plant.last_made(dataset, &id).lots())
                 .sum();
             let sold: i64 = entity
                 .last_closed_sales()
@@ -814,6 +813,12 @@ pub fn commodity_board(world: &World, dataset: &Dataset) -> Vec<CommodityLine> {
                 .recipes
                 .iter()
                 .find(|recipe| recipe.output == product.id)
+                .or_else(|| {
+                    dataset
+                        .recipes
+                        .iter()
+                        .find(|recipe| recipe.makes(&product.id))
+                })
                 .map(|recipe| recipe.industry.clone())
                 .unwrap_or_else(|| "other".to_owned());
             let price = pricing::corridor_price(world, dataset, code);
@@ -829,8 +834,7 @@ pub fn commodity_board(world: &World, dataset: &Dataset) -> Vec<CommodityLine> {
             let made: i64 = world
                 .facilities
                 .iter()
-                .filter(|(_, f)| dataset.recipes[f.recipe as usize].output == product.id)
-                .map(|(_, f)| f.last_output.lots())
+                .map(|(_, f)| f.last_made(dataset, &product.id).lots())
                 .sum();
             let sold: i64 = world
                 .firms

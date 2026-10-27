@@ -102,7 +102,9 @@ fn reopen(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Pr
             .sum();
         let cost = cw_sim::economy::operations::reopen_cost(plant);
         if block_contribution(world, dataset, firm, plant.recipe, plant.region) > 0
-            && imported * 2 >= template.weekly_output_lots * plant.blocks as i64
+            && (imported * 2 >= template.weekly_output_lots * plant.blocks as i64
+                || (!template.by_products.is_empty()
+                    && room_covers(world, dataset, template, plant.region, 2)))
             && entity.book.cash() - cost >= reserve_target(world, firm)
         {
             proposals.push(Proposal {
@@ -607,9 +609,10 @@ fn demand_limited(world: &World, dataset: &Dataset, firm: Handle) -> bool {
         .filter(|facility| facility.status == FacilityStatus::Operating)
     {
         let recipe = &dataset.recipes[facility.recipe as usize];
-        if let Some(output) = dataset.product_index.get(&recipe.output) {
-            *weekly.entry(*output).or_insert(0) +=
-                recipe.weekly_output_lots * facility.blocks as i64;
+        for (id, lots) in recipe.outputs() {
+            if let Some(output) = dataset.product_index.get(id) {
+                *weekly.entry(*output).or_insert(0) += lots * facility.blocks as i64;
+            }
         }
     }
     // Services keep no stock: there, demand shows as revenue under half of what the plant
@@ -663,16 +666,19 @@ fn structural_contribution(world: &World, dataset: &Dataset, firm: Handle) -> i6
         .map(|facility| {
             let recipe = &dataset.recipes[facility.recipe as usize];
             let blocks = facility.blocks as i64;
-            let Some(output) = dataset.product_index.get(&recipe.output).copied() else {
-                return 0;
-            };
-            let price = entity
-                .policies
-                .prices
-                .get(&output)
-                .copied()
-                .unwrap_or_else(|| dataset.reference_price(output));
-            let revenue = recipe.weekly_output_lots * blocks * price;
+            let revenue: i64 = recipe
+                .outputs()
+                .filter_map(|(id, lots)| {
+                    let output = dataset.product_index.get(id).copied()?;
+                    let price = entity
+                        .policies
+                        .prices
+                        .get(&output)
+                        .copied()
+                        .unwrap_or_else(|| dataset.reference_price(output));
+                    Some(lots * blocks * price)
+                })
+                .sum();
             let inputs: i64 = recipe
                 .weekly_inputs_lots
                 .iter()
@@ -736,6 +742,49 @@ fn room(world: &World, dataset: &Dataset, product: u16, region: u8) -> i64 {
         .sum()
 }
 
+/// Whether imports leave room for a block of a strategy: imports of what it makes cover at least
+/// `fifths` fifths of its output. A plant with by-products counts every product it makes at its
+/// reference value, each capped at the plant's own yield of it, and needs three quarters of that
+/// share, because a by-product with no import can still be exported or used by a sister plant.
+fn room_covers(
+    world: &World,
+    dataset: &Dataset,
+    template: &cw_data::Recipe,
+    region: u8,
+    fifths: i64,
+) -> bool {
+    if template.by_products.is_empty() {
+        let Some(output) = dataset.product_index.get(&template.output).copied() else {
+            return false;
+        };
+        return room(world, dataset, output, region) * 5 >= template.weekly_output_lots * fifths;
+    }
+    let (mut covered, mut total) = (0i128, 0i128);
+    for (id, lots) in template.outputs() {
+        let Some(product) = dataset.product_index.get(id).copied() else {
+            continue;
+        };
+        let price = dataset.reference_price(product) as i128;
+        covered += price * (room(world, dataset, product, region).min(lots)) as i128;
+        total += price * lots as i128;
+    }
+    total > 0 && covered * 5 * 4 >= total * fifths as i128 * 3
+}
+
+/// Full-capacity weekly revenue of one block of a strategy at public prices in a state, every
+/// product it makes counted.
+fn block_revenue(world: &World, dataset: &Dataset, template: &cw_data::Recipe, region: u8) -> i64 {
+    template
+        .outputs()
+        .filter_map(|(id, lots)| {
+            dataset
+                .product_index
+                .get(id)
+                .map(|product| lots * public_price(world, dataset, *product, region))
+        })
+        .sum()
+}
+
 /// Weekly contribution of one block of a strategy in a state at public prices and the firm's
 /// own wage offers, after maintenance and land.
 fn block_contribution(
@@ -749,10 +798,10 @@ fn block_contribution(
         return 0;
     };
     let template = &dataset.recipes[recipe as usize];
-    let Some(output) = dataset.product_index.get(&template.output).copied() else {
+    if !dataset.product_index.contains_key(&template.output) {
         return 0;
-    };
-    let revenue = template.weekly_output_lots * public_price(world, dataset, output, region);
+    }
+    let revenue = block_revenue(world, dataset, template, region);
     let location = cw_sim::economy::sectors::location_factor_bps(
         dataset,
         entity.region,
@@ -810,9 +859,9 @@ fn best_expansion(
         if !sectors.contains(&sector) {
             continue;
         }
-        let Some(output) = dataset.product_index.get(&template.output).copied() else {
+        if !dataset.product_index.contains_key(&template.output) {
             continue;
-        };
+        }
         let fighter = fights(world, entity.archetype);
         for region in 0..world.regions.len() as u8 {
             // An aggressive rival may invade a market the player holds even without unmet
@@ -826,10 +875,7 @@ fn best_expansion(
                     .0
                     .iter()
                     .any(|(holder, _)| player_controlled(world, *holder));
-            if !invading
-                && room(world, dataset, output, region) * 5
-                    < template.weekly_output_lots * room_fifths
-            {
+            if !invading && !room_covers(world, dataset, template, region, room_fifths) {
                 continue;
             }
             // A division runs one strategy: a different one in an existing division would need
@@ -848,17 +894,24 @@ fn best_expansion(
             let financing = cost * world.macro_state.policy_rate_bps as i64 * 3 / 10_000;
             // A good is sold where it is imported: value the output at what it nets there after
             // freight instead of at this state's own quote, so plants go near the demand.
-            let netback = if dataset.products[output as usize].kind == cw_data::ProductKind::Goods {
-                import_netback(world, dataset, output, region)
-                    .map(|net| net - public_price(world, dataset, output, region))
-                    .unwrap_or(0)
-                    * template.weekly_output_lots
-            } else {
-                0
-            };
+            let netback: i64 = template
+                .outputs()
+                .filter_map(|(id, lots)| {
+                    let product = dataset.product_index.get(id).copied()?;
+                    if dataset.products[product as usize].kind != cw_data::ProductKind::Goods {
+                        return None;
+                    }
+                    Some(
+                        import_netback(world, dataset, product, region)
+                            .map(|net| net - public_price(world, dataset, product, region))
+                            .unwrap_or(0)
+                            * lots,
+                    )
+                })
+                .sum();
             let price_war = if invading {
                 // A tenth off the output's price for the fight.
-                template.weekly_output_lots * public_price(world, dataset, output, region) / 10
+                block_revenue(world, dataset, template, region) / 10
             } else {
                 0
             };
@@ -1013,10 +1066,8 @@ fn best_retool(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle
             let Some(next_output) = dataset.product_index.get(&template.output).copied() else {
                 continue;
             };
-            if next_output == output
-                || room(world, dataset, next_output, plant.region) * 5
-                    < template.weekly_output_lots * 4
-            {
+            let _ = next_output;
+            if next_output == output || !room_covers(world, dataset, template, plant.region, 4) {
                 continue;
             }
             let then = block_contribution(world, dataset, firm, index as u16, plant.region)
@@ -1423,6 +1474,57 @@ mod tests {
             .map(|p| format!("{p:?}"))
             .collect();
         assert_eq!(before, after);
+    }
+
+    #[test]
+    fn rivals_plan_and_build_a_multi_output_chain() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 176, ScenarioKind::Founder, ScenarioMode::Sandbox);
+        let chemicals = world
+            .firms
+            .iter()
+            .find(|(handle, firm)| {
+                !player_controlled(&world, *handle)
+                    && cw_sim::state::INDUSTRY_NAMES[firm.industry as usize]
+                        == "chemical_industries"
+            })
+            .map(|(handle, _)| handle)
+            .unwrap();
+        for gateway in &mut world.gateways {
+            gateway.smoothed_import_lots = 0;
+        }
+        // Imports of the refinery's whole slate, none of it alone enough to justify the plant by
+        // its main product's volume, make the refinery the best build: every product counts.
+        let slate = ["fuel", "gasoline", "jet_fuel", "petrochem_feedstock"];
+        for gateway in &mut world.gateways {
+            if slate
+                .iter()
+                .any(|id| dataset.product_index[*id] == gateway.product)
+            {
+                gateway.smoothed_import_lots = 400;
+            }
+        }
+        let refinery = dataset.recipe_index["refinery"];
+        let template = &dataset.recipes[refinery as usize];
+        let region = world.firm(chemicals).unwrap().region;
+        assert!(room_covers(&world, &dataset, template, region, 4));
+        // The plant's revenue counts every product it makes, not the main output alone.
+        let all: i64 = block_revenue(&world, &dataset, template, region);
+        let main_only = template.weekly_output_lots
+            * public_price(&world, &dataset, dataset.product_index["fuel"], region);
+        assert!(
+            all > main_only * 2,
+            "by-products add to the plant's revenue"
+        );
+        let (recipe, _, npv) =
+            best_expansion(&world, &dataset, chemicals, 4).expect("room to build");
+        assert_eq!(dataset.recipes[recipe as usize].id, "refinery");
+        assert!(npv > 0);
+        // With nothing imported, the refinery is not a build.
+        for gateway in &mut world.gateways {
+            gateway.smoothed_import_lots = 0;
+        }
+        assert!(!room_covers(&world, &dataset, template, region, 4));
     }
 
     #[test]

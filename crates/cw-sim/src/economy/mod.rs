@@ -26,6 +26,7 @@ pub mod research;
 pub mod score;
 pub mod sectors;
 pub mod seed;
+pub mod services;
 pub mod unions;
 pub mod valuation;
 pub mod world_prices;

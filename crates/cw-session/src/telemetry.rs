@@ -76,8 +76,7 @@ impl Session {
             let made: i64 = world
                 .facilities
                 .iter()
-                .filter(|(_, f)| dataset.recipes[f.recipe as usize].output == product.id)
-                .map(|(_, f)| f.last_output.lots())
+                .map(|(_, f)| f.last_made(dataset, &product.id).lots())
                 .sum();
             let sold: i64 = world
                 .firms

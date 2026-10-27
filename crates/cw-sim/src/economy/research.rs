@@ -184,7 +184,7 @@ fn spend_marketing(world: &mut World, dataset: &cw_data::Dataset, handle: Handle
                 .and_then(|recipe| dataset.product_code(&recipe.output))
         });
     if media_share > 0 {
-        buy_advertising(world, handle, media_share, "marketing media");
+        buy_advertising(world, dataset, handle, media_share, "marketing media");
     }
     if brand_share > 0
         && let Some(code) = output_code
@@ -197,47 +197,25 @@ fn spend_marketing(world: &mut World, dataset: &cw_data::Dataset, handle: Handle
 /// Buy advertising from the corridor's media firms, split evenly with the remainder to the last
 /// seller so every cent the buyer pays is received, or from the outside gateway when no media
 /// firm operates. The buyer expenses it as incurred.
-pub fn buy_advertising(world: &mut World, buyer: Handle, amount: i64, memo: &str) {
+pub fn buy_advertising(
+    world: &mut World,
+    dataset: &cw_data::Dataset,
+    buyer: Handle,
+    amount: i64,
+    memo: &str,
+) {
     if amount <= 0 {
         return;
     }
-    let media: Vec<Handle> = world
-        .firms
-        .iter()
-        .filter(|(_, candidate)| candidate.industry == 11 && candidate.operative())
-        .map(|(media_handle, _)| media_handle)
-        .collect();
-    if media.is_empty() {
-        let _ = world.outside.gateway_book.commit(
-            world.tick,
-            Txn::new()
-                .debit(Account::Cash, amount, "advertising")
-                .credit(Account::Revenue, amount, "advertising"),
-        );
-    } else {
-        let share = amount / media.len() as i64;
-        let mut remaining = amount;
-        for (index, media_handle) in media.iter().enumerate() {
-            let paid = if index + 1 == media.len() {
-                remaining
-            } else {
-                share
-            };
-            if paid > 0
-                && let Some(media_firm) = world.firms.get_mut(*media_handle)
-            {
-                let _ = media_firm.book.commit(
-                    world.tick,
-                    Txn::new().debit(Account::Cash, paid, "advertising").credit(
-                        Account::Revenue,
-                        paid,
-                        "advertising",
-                    ),
-                );
-            }
-            remaining -= paid;
-        }
-    }
+    let advertising = dataset.product_index["advertising"];
+    crate::economy::services::pay_for_service(
+        world,
+        dataset,
+        Some(buyer),
+        advertising,
+        amount,
+        "advertising",
+    );
     if let Some(firm) = world.firms.get_mut(buyer) {
         let _ = firm.book.commit(
             world.tick,
@@ -404,6 +382,26 @@ mod tests {
             .filter(|(_, candidate)| candidate.industry == 11)
             .map(|(_, candidate)| -candidate.book.balance(cw_core::ledger::Account::Revenue))
             .sum();
+        // Media firms are paid for the advertising they hold this week, so give them some.
+        let advertising = dataset.product_index["advertising"];
+        let media: Vec<_> = world
+            .firms
+            .iter()
+            .filter(|(_, candidate)| candidate.industry == 11)
+            .map(|(handle, _)| handle)
+            .collect();
+        for handle in media {
+            let region = world.firm(handle).unwrap().region;
+            world
+                .firms
+                .get_mut(handle)
+                .unwrap()
+                .stock_lot_mut(advertising, region)
+                .receive(
+                    cw_core::quantity::MilliLots::from_lots(100),
+                    cw_core::money::Cents(0),
+                );
+        }
         let cash_before = world.firm(firm).unwrap().book.cash();
         world
             .firms

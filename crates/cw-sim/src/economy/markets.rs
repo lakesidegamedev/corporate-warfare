@@ -281,7 +281,7 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
                 continue;
             }
             let code = dataset.product_index[product_id];
-            let cover = firm.policies.input_cover_weeks.max(1) as i64;
+            let cover = crate::economy::pricing::cover_weeks(firm, dataset, code);
             let demand = world.demand_ratio_bps(facility.region, Some(code));
             let target = weekly * facility.blocks as i64 * cover * demand / 10_000;
             let have = firm.stock(code, facility.region).whole_lots_floor();
@@ -567,7 +567,13 @@ fn clear_goods_exchange(
                     }
                     let freight =
                         crate::economy::freight::freight_cost(dataset, from, to, qty_lots);
-                    crate::economy::freight::pay_freight(world, buyer, freight, "exchange freight");
+                    crate::economy::freight::pay_freight(
+                        world,
+                        dataset,
+                        buyer,
+                        freight,
+                        "exchange freight",
+                    );
                     if let Some(left) = supply.get_mut(&(seller, from)) {
                         *left -= qty;
                     }
@@ -620,7 +626,7 @@ fn own_input_cover_lots(
     region: u8,
     product: u16,
 ) -> i64 {
-    let cover_weeks = firm.policies.input_cover_weeks.max(1) as i64;
+    let cover_weeks = crate::economy::pricing::cover_weeks(firm, dataset, product);
     let mut need = 0i64;
     for facility_handle in &firm.facilities {
         let Some(facility) = world.facilities.get(*facility_handle) else {

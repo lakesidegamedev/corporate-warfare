@@ -553,6 +553,11 @@ pub struct StrategyDto {
     pub output: String,
     pub output_name: String,
     pub weekly_output_lots: i64,
+    /// Further products the plant makes in a fixed yield beside its main output, per plant.
+    pub by_products: Vec<StrategyInputDto>,
+    /// The by-products as one plain sentence tail, such as "plus 36 lots of Gasoline"; empty when
+    /// the plant makes one product.
+    pub by_products_text: String,
     pub inputs: Vec<StrategyInputDto>,
     pub workers_low: i64,
     pub workers_mid: i64,
@@ -1152,7 +1157,7 @@ pub fn strategies() -> Vec<StrategyDto> {
         .iter()
         .enumerate()
         .map(|(index, recipe)| {
-            let revenue = recipe.weekly_output_lots * price(&recipe.output);
+            let revenue = recipe.output_value(price);
             let inputs: i64 = recipe
                 .weekly_inputs_lots
                 .iter()
@@ -1174,6 +1179,28 @@ pub fn strategies() -> Vec<StrategyDto> {
                 output: recipe.output.clone(),
                 output_name: name(&recipe.output),
                 weekly_output_lots: recipe.weekly_output_lots,
+                by_products: recipe
+                    .by_products
+                    .iter()
+                    .map(|by| StrategyInputDto {
+                        product: by.product.clone(),
+                        product_name: name(&by.product),
+                        lots: by.weekly_lots,
+                    })
+                    .collect(),
+                by_products_text: if recipe.by_products.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "plus {}",
+                        recipe
+                            .by_products
+                            .iter()
+                            .map(|by| format!("{} lots of {}", by.weekly_lots, name(&by.product)))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                },
                 inputs: recipe
                     .weekly_inputs_lots
                     .iter()
@@ -3047,10 +3074,11 @@ mod tests {
         assert!(session.recent_raids().is_empty());
         let plants = session.map_plants();
         // Thirty seeded rivals, of which the bank and the insurer run no plants, plus the
-        // player's own plant.
+        // player's own plant. Six rivals also open with extra plants (thirteen in all) so the
+        // oil, gas, iron and food chains start with local producers.
         assert_eq!(
             plants.iter().filter(|p| !p.player).count(),
-            28,
+            28 + 13,
             "every rival plant is on the map"
         );
         assert!(
@@ -3058,7 +3086,15 @@ mod tests {
             "the player's plant is marked"
         );
         let catalogue = strategies();
-        assert_eq!(catalogue.len(), 53);
+        assert_eq!(catalogue.len(), 60);
+        // A refinery lists its by-products for the build screens.
+        let refinery = catalogue.iter().find(|s| s.id == "refinery").unwrap();
+        assert_eq!(refinery.by_products.len(), 3);
+        assert!(
+            refinery
+                .by_products_text
+                .starts_with("plus 36 lots of Gasoline")
+        );
         assert!(
             catalogue
                 .iter()
