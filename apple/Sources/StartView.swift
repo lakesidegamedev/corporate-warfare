@@ -226,7 +226,7 @@ struct SaveRow: View {
                 Text(isAutosave ? "Autosave" : "Saved game")
                     .font(.body.weight(.semibold))
                     .foregroundStyle(Theme.primaryText)
-                Text("\(ResultBuckets.weekLabel(save.week)) · week \(save.week) · \(save.savedAt.formatted(date: .abbreviated, time: .shortened))")
+                Text("Week \(save.week) · \(save.savedAt.formatted(date: .abbreviated, time: .shortened))")
                     .font(.caption)
                     .foregroundStyle(Theme.secondary)
                 if save.hasLastGood {

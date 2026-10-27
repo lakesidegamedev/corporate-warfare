@@ -316,6 +316,7 @@ final class AppStore: ObservableObject {
 
     func reload() async {
         overview = await engine.overview()
+        if let year = overview?.startYear { ResultBuckets.startYear = Int(year) }
         firms = await engine.firms()
         regions = await engine.regions(selected: selectedRegionCode)
         boards = await engine.regionBoards(firm: selectedFirm ?? overview?.primaryFirm)

@@ -60,7 +60,7 @@
     },
     {
       "id": "rheinische_braunkohle",
-      "name": "Rheinische Braunkohle",
+      "name": "Niederrhein Braunkohle",
       "industry": "extraction",
       "archetype": "cost_leader",
       "region": "DE-RHW",
@@ -80,7 +80,7 @@
     },
     {
       "id": "lorraine_houilleres",
-      "name": "Houilleres de Lorraine",
+      "name": "Houilleres du Saulnois",
       "industry": "extraction",
       "archetype": "consolidator",
       "region": "FR-LOR",
@@ -101,7 +101,7 @@
     },
     {
       "id": "westfalen_energie",
-      "name": "Westfalen Energie AG",
+      "name": "Lippe Energie AG",
       "industry": "energy",
       "archetype": "consolidator",
       "region": "DE-RUH",
@@ -148,7 +148,7 @@
     },
     {
       "id": "rheinfarben_pharma",
-      "name": "Rheinfarben Pharma",
+      "name": "Rheinlack Pharma",
       "industry": "chemical_industries",
       "archetype": "technologist",
       "region": "DE-RHW",
@@ -183,7 +183,7 @@
     },
     {
       "id": "leuna_buna_chemie",
-      "name": "Leuna-Buna Chemie GmbH",
+      "name": "Saale Chemie GmbH",
       "industry": "chemical_industries",
       "archetype": "vulture",
       "region": "DE-OST",
@@ -229,7 +229,7 @@
     },
     {
       "id": "ruhrstahl",
-      "name": "Ruhrstahl AG",
+      "name": "Emschertal Stahl AG",
       "industry": "manufacturing",
       "archetype": "cost_leader",
       "region": "DE-RUH",
@@ -323,7 +323,7 @@
     },
     {
       "id": "neckar_motoren",
-      "name": "Neckar Motoren AG",
+      "name": "Kocher Motoren AG",
       "industry": "manufacturing",
       "archetype": "technologist",
       "region": "DE-STU",
@@ -556,7 +556,7 @@
     },
     {
       "id": "randstad_grocers",
-      "name": "Randstad Grocers",
+      "name": "Vecht Grocers",
       "industry": "retail",
       "archetype": "cost_leader",
       "region": "NL-AMS",
@@ -626,7 +626,7 @@
     },
     {
       "id": "randstad_bank",
-      "name": "Randstad Bank",
+      "name": "Vecht Bank",
       "industry": "financial",
       "archetype": "cost_leader",
       "region": "NL-AMS",
@@ -666,7 +666,7 @@
     },
     {
       "id": "rheinische_presse",
-      "name": "Rheinische Presse",
+      "name": "Ruhrbote Presse",
       "industry": "media",
       "archetype": "brand_builder",
       "region": "DE-RHW",
@@ -687,7 +687,7 @@
     },
     {
       "id": "deutsche_fernnetz",
-      "name": "Deutsche Fernnetz",
+      "name": "Fernnetz Mitteleuropa",
       "industry": "telecommunications",
       "archetype": "cost_leader",
       "region": "DE-RHW",

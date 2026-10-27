@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 pub struct Overview {
     pub tick: u32,
     pub week_label: String,
+    /// Calendar year of week 1 in this scenario, for labelling any week number.
+    pub start_year: i32,
     pub revision: u64,
     /// Investor figures are in the reporting currency.
     pub investor_cash_cents: i64,

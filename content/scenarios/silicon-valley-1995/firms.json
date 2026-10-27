@@ -65,7 +65,7 @@
     },
     {
       "id": "bayshore_microsystems",
-      "name": "Bayshore Microsystems",
+      "name": "Bayshore Silicon",
       "industry": "technology",
       "archetype": "technologist",
       "region": "CA-SJC",
@@ -162,7 +162,7 @@
     },
     {
       "id": "emporium_online",
-      "name": "Emporium Online",
+      "name": "Marketstreet Online",
       "industry": "retail",
       "archetype": "technologist",
       "region": "CA-SJC",
@@ -172,7 +172,7 @@
     },
     {
       "id": "fontana_steel",
-      "name": "Fontana Steel",
+      "name": "Cajon Pass Steel",
       "industry": "manufacturing",
       "archetype": "consolidator",
       "region": "CA-INL",
@@ -238,7 +238,7 @@
     },
     {
       "id": "golden_state_building",
-      "name": "Golden State Building Products",
+      "name": "Yolo Building Products",
       "industry": "manufacturing",
       "archetype": "vulture",
       "region": "CA-SAC",
@@ -248,7 +248,7 @@
     },
     {
       "id": "golden_state_national",
-      "name": "Golden State National",
+      "name": "Santa Clara Savings Bank",
       "industry": "financial",
       "archetype": "cost_leader",
       "region": "CA-LAX",
@@ -258,7 +258,7 @@
     },
     {
       "id": "golden_state_power",
-      "name": "Golden State Power",
+      "name": "Tehachapi Power",
       "industry": "energy",
       "archetype": "cost_leader",
       "region": "CA-SAC",
@@ -276,7 +276,7 @@
     },
     {
       "id": "golden_state_rail",
-      "name": "Golden State Rail",
+      "name": "Donner Pass Rail",
       "industry": "logistics",
       "archetype": "technologist",
       "region": "CA-SAC",
@@ -430,7 +430,7 @@
     },
     {
       "id": "pacific_valley_bank",
-      "name": "Pacific Valley Bank",
+      "name": "Alameda Trust Company",
       "industry": "financial",
       "archetype": "consolidator",
       "region": "CA-SFO",
@@ -568,7 +568,7 @@
     },
     {
       "id": "southland_clinics",
-      "name": "Southland Clinics",
+      "name": "Coastline Clinics",
       "industry": "healthcare",
       "archetype": "technologist",
       "region": "CA-LAX",
@@ -578,7 +578,7 @@
     },
     {
       "id": "southland_markets",
-      "name": "Southland Markets",
+      "name": "Inland Markets",
       "industry": "retail",
       "archetype": "consolidator",
       "region": "CA-LAX",
@@ -589,7 +589,7 @@
     },
     {
       "id": "sun_harvest_orchards",
-      "name": "Sun Harvest Orchards",
+      "name": "Tulare Orchards",
       "industry": "agriculture",
       "archetype": "brand_builder",
       "region": "CA-STM",

@@ -39,6 +39,18 @@ heading.
 - Research is cheaper to start: the first levels cost $40,000, $160,000 and $360,000 instead of
   $100,000, $400,000 and $900,000.
 
+- Every scenario now keeps its own calendar. The status bar, elections, chair terms, seasons,
+  price paths, news, saves and chart axes read from the scenario start year, so Texas 1981 no
+  longer shows "2000 W05" on both the Android and iPhone clients.
+- Seed firms open at a fair share price. Their first quarter of earnings is unobserved, and the
+  opening valuation assumed far more than the firms really earn, so shares such as Gulf Broadcast
+  Network sat at several times fair value and slid for weeks. At week 5 the median price over fair
+  value is now about 1.0 in every scenario (was up to 1.6), and firms priced over twice fair value
+  fell from 17 to 20 of about 50 down to 2 to 8. Saved worlds from 1.7.0 are unaffected.
+- Fictional firm and cast names no longer echo real companies or people (for example
+  Anadarko Gas Partners, Lone Star Rail Freight, Bluebonnet Grocers, Golden State Power,
+  Texoma Power and Light and Joel Rosenthal).
+
 ### Added
 
 - Raid from where you see a rival. Every rival row (region board, map region sheet, dossier and

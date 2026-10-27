@@ -29,7 +29,12 @@ pub fn refresh_valuation(world: &mut World, dataset: &Dataset) {
             continue;
         };
         let financial = firm.bank.is_some() || firm.insurer.is_some();
-        let base = base_value(&firm.book, world.tick, financial);
+        let base = base_value(
+            &firm.book,
+            world.tick,
+            financial,
+            firm.ebitda_prior_weekly_cents,
+        );
         let stake_value = stakes_held.get(&handle).copied().unwrap_or(0);
         let markdown = crate::economy::structure::markdown_bps(world, handle) as i64;
         let equity = ((base.equity_cents + stake_value).max(0) * (10_000 - markdown)) / 10_000;

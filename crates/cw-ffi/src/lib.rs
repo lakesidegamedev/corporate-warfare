@@ -364,6 +364,7 @@ pub struct MarketDto {
 pub struct OverviewDto {
     pub tick: u32,
     pub week_label: String,
+    pub start_year: i32,
     pub revision: u64,
     /// Investor cash and net worth, in the reporting currency.
     pub investor_cash_cents: i64,
@@ -1384,6 +1385,7 @@ fn overview_dto(overview: Overview) -> OverviewDto {
     OverviewDto {
         tick: overview.tick,
         week_label: overview.week_label,
+        start_year: overview.start_year,
         revision: overview.revision,
         investor_cash_cents: overview.investor_cash_cents,
         investor_net_worth_cents: overview.investor_net_worth_cents,

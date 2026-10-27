@@ -597,6 +597,10 @@ pub struct Firm {
     pub bank: Option<BankModel>,
     pub insurer: Option<InsurerModel>,
     pub valuation: FirmValue,
+    /// Weekly EBITDA a seed firm is assumed to earn until its first quarter closes. See
+    /// `valuation::annualised_ebitda_with_prior`.
+    #[serde(default)]
+    pub ebitda_prior_weekly_cents: Option<i64>,
     /// Unspent reservation for submitted orders, released after settlement.
     pub reserved_cash_cents: i64,
     pub last_week_units_sold: BTreeMap<(u8, u16), MilliLots>,
@@ -1390,6 +1394,10 @@ pub struct Investor {
     pub starting_net_worth_cents: i64,
 }
 
+fn default_start_year() -> i32 {
+    cw_core::calendar::START_YEAR
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ScenarioKind {
     Founder,
@@ -1446,6 +1454,9 @@ pub struct World {
     pub revision: u64,
     pub seed: u64,
     pub dataset_hash: String,
+    /// Calendar year of week 1 in the scenario's own history (1981 for Texas).
+    #[serde(default = "default_start_year")]
+    pub start_year: i32,
     pub scenario: ScenarioKind,
     pub mode: ScenarioMode,
     pub difficulty: Difficulty,
@@ -1713,7 +1724,7 @@ impl Default for Politics {
         Politics {
             party: Party::Business,
             since_week: 0,
-            // The first game year's election falls in early November.
+            // Week 45 is early November of the first game year, whatever the scenario's start year.
             next_election: 45,
             approval_bps: 5_000,
             laws: Laws::default(),
