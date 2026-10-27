@@ -71,9 +71,16 @@ val LocalAppSettings = androidx.compose.runtime.staticCompositionLocalOf<AppSett
 fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Updater? = null, onQuit: (() -> Unit)? = null) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     var showSettings by remember { mutableStateOf(false) }
+    val analytics = settings.analytics
     androidx.compose.runtime.SideEffect {
         store.preferredCurrency = settings.reportingCurrency
         store.onCurrencyChosen = { settings.chooseReportingCurrency(it) }
+        val installId = settings.installId
+        store.snapshotSink = if (analytics) {
+            { json -> Telemetry.post(Telemetry.envelope(installId, BuildInfo.VERSION, BuildInfo.CHANNEL, json)) }
+        } else {
+            null
+        }
     }
     androidx.compose.runtime.LaunchedEffect(updater) {
         Tutorial.load(settings)
