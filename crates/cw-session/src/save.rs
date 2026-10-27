@@ -192,7 +192,12 @@ pub fn decode_with(
         })?;
         rest = &rest[40 + length..];
     }
-    if rest.len() >= 40 && &rest[..4] == FREIGHT_MAGIC {
+    if rest.len() >= 4 && &rest[..4] == FREIGHT_MAGIC {
+        if rest.len() < 40 {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Truncated,
+            });
+        }
         let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
         let mut sum = [0u8; 32];
         sum.copy_from_slice(&rest[8..40]);
@@ -305,6 +310,9 @@ mod tests {
         assert_eq!(restored.logistics.dest_week.get(&key), Some(&row));
         assert_eq!(cw_sim::state::canonical_hash(&restored), before);
         // A save from before the trailer existed still loads, with empty figures.
+        for cut in 1..=8 {
+            assert!(decode(&bytes[..bytes.len() - cut]).is_err(), "cut {cut}");
+        }
         let plain = encode(&self::world(), 9).unwrap();
         assert!(decode(&plain).unwrap().0.logistics.dest_last.is_empty());
     }
