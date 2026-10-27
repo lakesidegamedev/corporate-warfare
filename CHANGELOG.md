@@ -35,7 +35,7 @@ heading.
   100 percent in 1 percent steps with the lots a week it gives; pricing against the market runs
   -50 to +50 percent and over cost 0 to 100 percent, each showing the price and margin per lot;
   raid size runs 0.5 to 4 to 1 in tenths; training and quality budgets slide up to a tenth of
-  weekly revenue beside the typed amount.
+  weekly revenue beside the typed amount; a merger remedy divests 1 to 50 percent in half steps.
 
 ### Changed
 

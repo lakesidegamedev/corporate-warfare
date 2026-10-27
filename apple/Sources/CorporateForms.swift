@@ -873,6 +873,7 @@ struct RemedySheet: View {
     let deal: DealDto
     @EnvironmentObject private var store: AppStore
     @State private var divestBps: Int32 = 500
+    @State private var divestPercent: Double = 5
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
 
@@ -902,9 +903,12 @@ struct RemedySheet: View {
             }
         ) {
             Section("Divestiture") {
-                Stepper(value: $divestBps, in: 100...5_000, step: 100) {
-                    Text("Divest \(Format.percentBps(divestBps)) of the combined share")
-                }
+                ValueSlider(
+                    value: $divestPercent,
+                    range: 1...50, step: 0.5, ticks: 49,
+                    label: { String(format: "Divest %.1f%% of the combined share", $0) },
+                    onCommit: { divestBps = Int32(($0 * 100).rounded()) }
+                )
                 Text("A feasible bundle clears the review. If no bundle reaches the thresholds the merger is rejected rather than inventing regulator discretion.")
                     .font(.caption)
                     .fixedSize(horizontal: false, vertical: true)
