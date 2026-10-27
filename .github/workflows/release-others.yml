@@ -16,6 +16,7 @@ env:
   TAG: ${{ github.event.release.tag_name || inputs.tag }}
 jobs:
   android:
+    if: ${{ !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -44,6 +45,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   desktop:
+    if: ${{ !github.event.release.prerelease }}
     strategy:
       fail-fast: false
       matrix:
@@ -77,6 +79,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   mac:
+    if: ${{ !github.event.release.prerelease }}
     runs-on: macos-26
     timeout-minutes: 45
     steps:
