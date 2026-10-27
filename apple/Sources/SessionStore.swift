@@ -13,6 +13,20 @@ actor Engine {
         return handle.overview()
     }
 
+    func start(options: NewGameDto) throws -> OverviewDto {
+        let handle = try SessionHandle.start(options: options)
+        session = handle
+        return handle.overview()
+    }
+
+    func economy() -> EconomyDto? {
+        session?.economy()
+    }
+
+    func research(firm: UInt64) -> ResearchDto? {
+        session?.research(firm: firm)
+    }
+
     func loadSave(_ data: Data) throws -> OverviewDto {
         // The engine builds the new world before the old handle is released, so a failed import
         // leaves the live session exactly as it was.

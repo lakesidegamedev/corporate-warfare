@@ -6,17 +6,29 @@ enum AppTab: Hashable {
 
 struct RootView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var tab: AppTab
+    /// A screen that has no tab on iPhone (research, actions, stats), opened by the tutorial.
+    @State private var presented: GamePage?
 
     init(initialTab: AppTab = .map) {
         _tab = State(initialValue: initialTab)
     }
 
     var body: some View {
+        if sizeClass == .regular {
+            DesktopShell()
+        } else {
+            phone
+        }
+    }
+
+    private var phone: some View {
         VStack(spacing: 0) {
             if let notice = store.recoveryNotice {
                 RecoveryNoticeBanner(text: notice)
             }
+            TutorialPanel(compact: true)
             TabView(selection: $tab) {
                 MapHomeView()
                     .tabItem { PixelLabel("Map", icon: "map") }
@@ -36,6 +48,54 @@ struct RootView: View {
                     .tag(AppTab.portfolio)
             }
             .tint(Theme.gold)
+        }
+        .onAppear { store.tutorial.visited(tab.page) }
+        .onChange(of: tab) { _, next in store.tutorial.visited(next.page) }
+        .onChange(of: store.tutorial.requestedPage) { _, wanted in
+            guard let wanted else { return }
+            store.tutorial.requestedPage = nil
+            show(wanted)
+        }
+        .sheet(item: $presented) { page in
+            NavigationStack {
+                Group {
+                    switch page {
+                    case .research: ResearchView()
+                    case .stats: StatsView()
+                    default: CommandCenterView(onClose: { presented = nil })
+                    }
+                }
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { presented = nil }
+                    }
+                }
+            }
+            .environmentObject(store)
+            .presentationBackground(Theme.ink)
+        }
+    }
+
+    private func show(_ page: GamePage) {
+        switch page {
+        case .map: tab = .map
+        case .office: tab = .office
+        case .markets: tab = .markets
+        case .inbox: tab = .inbox
+        case .portfolio: tab = .portfolio
+        case .research, .stats, .actions: presented = page
+        }
+    }
+}
+
+extension AppTab {
+    var page: GamePage {
+        switch self {
+        case .map: return .map
+        case .office: return .office
+        case .markets: return .markets
+        case .inbox: return .inbox
+        case .portfolio: return .portfolio
         }
     }
 }

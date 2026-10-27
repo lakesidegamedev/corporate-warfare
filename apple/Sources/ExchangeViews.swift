@@ -11,6 +11,7 @@ enum MarketSection: String, CaseIterable, Identifiable {
 /// Markets: the corridor's stock exchange, its commodity board, and each region's own board.
 struct MarketsView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var section: MarketSection
 
     init(initialSection: MarketSection = .stocks) {
@@ -19,6 +20,7 @@ struct MarketsView: View {
 
     var body: some View {
         TabScreen(title: "Markets", subtitle: store.overview?.weekLabel) {
+            EconomyCard(collapsible: sizeClass != .regular)
             Picker("Section", selection: $section) {
                 ForEach(MarketSection.allCases) { option in
                     Text(option.rawValue).tag(option)
@@ -31,6 +33,7 @@ struct MarketsView: View {
             case .regions: RegionMarketsSection()
             }
         }
+        .onAppear { store.tutorial.visited(.markets) }
     }
 }
 

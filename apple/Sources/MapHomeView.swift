@@ -6,6 +6,9 @@ struct MapHomeView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// True inside the iPad and Mac shell, where the status bar replaces the HUD and an outliner
+    /// sits left of the map.
+    var embedded = false
     @State private var layer: MapLayer = .presence
     @State private var selected: String?
     @State private var building: String?
@@ -15,6 +18,12 @@ struct MapHomeView: View {
     var body: some View {
         ZStack(alignment: .top) {
             HStack(spacing: 0) {
+                if embedded {
+                    MapOutliner()
+                        .frame(width: 300)
+                        .background(Theme.panel)
+                        .overlay(alignment: .trailing) { Rectangle().fill(Theme.stroke).frame(width: 1) }
+                }
                 WorldMapView(shading: shading, layer: layer, divisions: divisionMarkers, selected: $selected)
                     .ignoresSafeArea(edges: .bottom)
                 if wide, let code = selected, let board = store.boards.first(where: { $0.code == code }) {
@@ -26,7 +35,7 @@ struct MapHomeView: View {
                 }
             }
             VStack(spacing: 10) {
-                CompanyHUD()
+                if !embedded { CompanyHUD() }
                 LayerChips(layer: $layer)
                 Spacer()
             }
@@ -323,6 +332,71 @@ struct GameMenuButton: View {
         .accessibilityLabel("Menu")
         .sheet(isPresented: $showingSettings) {
             SettingsView().environmentObject(store)
+        }
+    }
+}
+
+/// The desktop map's left column: what needs attention, the board's goal, your divisions and
+/// what rivals did lately.
+struct MapOutliner: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                if let alerts = store.overview?.alerts, !alerts.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Eyebrow(text: "Alerts")
+                        ForEach(alerts, id: \.self) { alert in
+                            CalloutRow(icon: "warning", text: alert, tint: Theme.warning)
+                        }
+                    }
+                }
+                if let objective = store.objective {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Eyebrow(text: "Board goal")
+                        GoalLine(objective: objective)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Eyebrow(text: "Your divisions")
+                    if store.divisions.isEmpty {
+                        Text("No divisions yet. Pick a region with room to build.")
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondary)
+                    }
+                    ForEach(store.divisions) { division in
+                        HStack(spacing: 8) {
+                            SectorBadge(sector: division.industry, size: 24)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("\(Sector.name(division.industry)) in \(division.regionName)")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(Theme.primaryText)
+                                    .lineLimit(1)
+                                Text("\(division.strategyName) · \(division.blocks) plants · \(division.shareBps / 100)% share")
+                                    .font(.caption2)
+                                    .foregroundStyle(Theme.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Eyebrow(text: "Rival moves")
+                    if store.recentRaids.isEmpty {
+                        Text("No raids lately.")
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondary)
+                    }
+                    ForEach(Array(store.recentRaids.prefix(8).enumerated()), id: \.offset) { _, raid in
+                        Text("\(ResultBuckets.weekLabel(raid.week)): \(raid.attacker) \(raid.success ? "took" : "failed to take") \(Sector.name(raid.industry)) in \(raid.region) from \(raid.defender).")
+                            .font(.caption)
+                            .foregroundStyle(Theme.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(14)
         }
     }
 }

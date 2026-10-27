@@ -142,6 +142,7 @@ struct StatsView: View {
         .navigationTitle(firm.map { "\($0.name) stats" } ?? "Stats")
         .navigationBarTitleDisplayMode(.inline)
         .task { await store.loadHistory() }
+        .onAppear { store.tutorial.visited(.stats) }
     }
 
     private var resultsChart: some View {

@@ -29,6 +29,32 @@ struct CEOOfficeView: View {
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .tint(Theme.gold)
+                NavigationLink {
+                    ResearchView().environmentObject(store)
+                } label: {
+                    HStack {
+                        PixelLabel("Research: technology and budgets", icon: "research")
+                            .font(.callout.weight(.semibold))
+                        Spacer()
+                        PixelIcon("chevron_right", size: 12)
+                    }
+                    .padding(12)
+                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .tint(Theme.gold)
+                NavigationLink {
+                    CommandCenterView().environmentObject(store)
+                } label: {
+                    HStack {
+                        PixelLabel("Actions: search every action in the game", icon: "command")
+                            .font(.callout.weight(.semibold))
+                        Spacer()
+                        PixelIcon("chevron_right", size: 12)
+                    }
+                    .padding(12)
+                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .tint(Theme.gold)
                 if let weeks = store.finance?.recentWeeks, !weeks.isEmpty, store.finance?.firm == firm.handle {
                     ProfitDrivers(weeks: weeks)
                 }
@@ -52,6 +78,8 @@ struct CEOOfficeView: View {
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .tint(Theme.gold)
+            } else if store.controlledFirms.isEmpty {
+                FoundCompanyPanel()
             } else {
                 CalloutRow(icon: "office", text: "Choose a company from the portfolio, or found one from the map.")
             }

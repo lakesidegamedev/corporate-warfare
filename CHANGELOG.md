@@ -19,6 +19,26 @@ heading.
   are now hand-drawn pixel icons, the same pixels on Android, Windows, Linux, iPhone, iPad and
   Mac. They replace the stock Material and SF Symbols icons. New tooling checks that every icon
   the apps use exists and that every grid is 16 by 16.
+- iPhone, iPad and Mac reach the 1.6 feature set:
+  - A Command Center with every action in the game, searchable by category, each with a form
+    built from the engine's list (pickers, sliders with an exact amount box, switches), a live
+    preview and Submit. It opens from the CEO Office on iPhone and from the sidebar or the search
+    box on iPad and Mac.
+  - A Research screen with the technology ladder, progress, what the next level buys and research
+    and marketing budgets on sliders.
+  - An economy card on Markets: a fold-out panel on iPhone, a full column on iPad and Mac.
+  - A new-game flow with scenario cards and art, coming-soon scenarios, difficulty, starting
+    economy and starting capital, and a founding screen for starting with no company.
+  - A main menu with a turning globe where each scenario's region glows and is named, and the
+    sector icons flying in under the logo.
+  - A tutorial of eight steps that tick off as you do them, each with a Show me button, docked on
+    iPad and Mac and a slim bar on iPhone. Settings can restart it.
+  - A load game list with Load and a confirmed Delete on each save.
+  - On iPad and Mac, a desktop layout: a sidebar for every screen, a status bar with cash, profit,
+    cash outlook, share price, net worth, the economy and the time controls, and multi-pane screens
+    (map outliner, CEO Office beside results, economy beside stocks and commodities). Command with
+    1 to 8 switches screens, Command K opens the Command Center, Command N plays a week and
+    Command P plays or pauses.
 
 ## [1.6.1] - 2026-10-27
 

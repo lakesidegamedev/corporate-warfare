@@ -1,138 +1,5 @@
 import SwiftUI
 
-struct StartView: View {
-    @EnvironmentObject private var store: AppStore
-    @Environment(\.colorScheme) private var scheme
-    @AppStorage(OnboardingKeys.completed) private var onboardingCompleted = false
-    @State private var mode: GameMode = .guided
-    @State private var showingSettings = false
-    @State private var showingAbout = false
-    @State private var showingSaves = false
-    @State private var export: DiagnosticExport?
-    @State private var chosen: String?
-    private let catalogue = scenarios()
-
-    private var info: EngineInfo { engineInfo() }
-    private var walkthroughTitle: String {
-        onboardingCompleted ? "Replay the guided walkthrough" : "Guided walkthrough"
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    VStack(spacing: 14) {
-                        PixelLogo()
-                            .frame(maxWidth: 300)
-                            .padding(.top, 24)
-                        Text("Build an industrial empire. Outprice, outbuild and buy out your rivals.")
-                            .font(.callout)
-                            .foregroundStyle(Theme.secondary)
-                            .multilineTextAlignment(.center)
-                        HStack(spacing: 6) {
-                            ForEach(Sector.order.prefix(8), id: \.self) { sector in
-                                SectorBadge(sector: sector, size: 26)
-                            }
-                        }
-                        .accessibilityHidden(true)
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    if let latest = store.saves.first {
-                        SectionCard(title: "Continue") {
-                            Button {
-                                Task { await store.resume(latest) }
-                            } label: {
-                                PixelLabel("Resume week \(latest.week)", icon: "refresh")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
-                        }
-                    }
-
-                    SectionCard(title: "New career") {
-                        ForEach(catalogue, id: \.id) { scenario in
-                            Button {
-                                chosen = scenario.id
-                            } label: {
-                                ScenarioCard(scenario: scenario, selected: (chosen ?? catalogue.first?.id) == scenario.id)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        Picker("Mode", selection: $mode) {
-                            ForEach(GameMode.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        Text(mode.note)
-                            .font(.caption)
-                            .foregroundStyle(Theme.secondary)
-                        Button {
-                            let seed = UInt64.random(in: 1...9_999_999)
-                            Task { await store.newCareer(guided: mode.guided, fiveYear: mode.fiveYear, seed: seed) }
-                        } label: {
-                            PixelLabel("Start", icon: "play")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .disabled(store.isBusy)
-                    }
-
-                    if let issue = store.recoveryIssue {
-                        RecoveryCard(issue: issue) {
-                            export = store.makeDiagnostics()
-                        }
-                        .environmentObject(store)
-                    }
-
-                    SectionCard(title: "About this build") {
-                        Text("Engine \(info.version) · interface \(info.interfaceVersion) · rules \(info.rulesVersion)")
-                            .font(.caption.monospaced())
-                            .foregroundStyle(Theme.secondary)
-                        Text("No account, no ads. An anonymous market summary is shared every five weeks unless switched off in Settings. Institutions are simplified game rules, not legal, tax or investment advice.")
-                            .font(.footnote)
-                            .foregroundStyle(Theme.secondary)
-                        Button(walkthroughTitle) {
-                            store.showOnboarding = true
-                        }
-                        .accessibilityHint("Explains the first seven steps and the real action behind each one.")
-                        Button("Saves and recovery") { showingSaves = true }
-                    }
-
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        PixelLabel("Settings", icon: "settings")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-
-                    if let error = store.errorMessage {
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundStyle(Theme.negative)
-                    }
-                }
-                .padding(20)
-                .sheet(item: $export) { item in
-                    DiagnosticExportView(export: item)
-                }
-            }
-            .background(Theme.background(for: scheme))
-            .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingSettings) {
-                SettingsView().environmentObject(store)
-            }
-            .sheet(isPresented: $showingSaves) {
-                SavesView()
-                    .environmentObject(store)
-            }
-        }
-    }
-}
-
 /// Ways to play a scenario.
 enum GameMode: String, CaseIterable, Identifiable {
     case guided, sandbox, scored
@@ -284,6 +151,7 @@ struct SavesView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var export: DiagnosticExport?
+    @State private var confirmDelete: String?
 
     var body: some View {
         NavigationStack {
@@ -301,53 +169,30 @@ struct SavesView: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(store.saves) { save in
-                    Button {
-                        Task {
-                            await store.resume(save)
-                            if store.recoveryIssue == nil {
-                                dismiss()
+                    SaveRow(
+                        save: save,
+                        confirming: confirmDelete == save.id,
+                        onLoad: {
+                            Task {
+                                await store.resume(save)
+                                if store.recoveryIssue == nil { dismiss() }
                             }
-                        }
-                    } label: {
-                        VStack(alignment: .leading) {
-                            HStack {
-                                Text(save.slot).font(.body)
-                                Spacer()
-                                if save.hasLastGood {
-                                    Text("last good")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            Text("Week \(save.week) · \(save.savedAt.formatted(date: .abbreviated, time: .shortened))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .contextMenu {
-                        if save.hasLastGood {
-                            Button {
-                                Task { await store.recover(slot: save.slot) }
-                            } label: {
-                                PixelLabel("Recover last good copy", icon: "history")
-                            }
-                        }
-                        Button(role: .destructive) {
+                        },
+                        onAskDelete: { confirmDelete = save.id },
+                        onCancelDelete: { confirmDelete = nil },
+                        onDelete: {
                             SaveManager.shared.delete(save)
                             store.saves = SaveManager.shared.list()
-                        } label: {
-                            PixelLabel("Delete this slot", icon: "trash")
-                        }
-                    }
-                }
-                .onDelete { offsets in
-                    for index in offsets {
-                        SaveManager.shared.delete(store.saves[index])
-                    }
-                    store.saves = SaveManager.shared.list()
+                            confirmDelete = nil
+                        },
+                        onRecover: save.hasLastGood ? { Task { await store.recover(slot: save.slot) } } : nil
+                    )
+                    .listRowBackground(Theme.panel)
                 }
             }
-            .navigationTitle("Saves")
+            .scrollContentBackground(.hidden)
+            .background(Theme.ink)
+            .navigationTitle("Load game")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
@@ -359,6 +204,62 @@ struct SavesView: View {
         }
         .sheet(item: $export) { item in
             DiagnosticExportView(export: item)
+        }
+    }
+}
+
+/// One save: what it is, when it was written, and Load or Delete with a confirmation.
+struct SaveRow: View {
+    let save: StoredSave
+    let confirming: Bool
+    var onLoad: () -> Void
+    var onAskDelete: () -> Void
+    var onCancelDelete: () -> Void
+    var onDelete: () -> Void
+    var onRecover: (() -> Void)?
+
+    private var isAutosave: Bool { save.slot.hasPrefix("autosave") }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(isAutosave ? "Autosave" : "Saved game")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Theme.primaryText)
+                Text("\(ResultBuckets.weekLabel(save.week)) · week \(save.week) · \(save.savedAt.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondary)
+                if save.hasLastGood {
+                    Text("A last good copy is kept")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.secondary)
+                }
+            }
+            Spacer(minLength: 4)
+            if confirming {
+                Button("Delete", role: .destructive, action: onDelete)
+                    .buttonStyle(.borderless)
+                Button("Keep", action: onCancelDelete)
+                    .buttonStyle(.borderless)
+                    .tint(Theme.secondary)
+            } else {
+                Button("Delete", action: onAskDelete)
+                    .buttonStyle(.borderless)
+                    .tint(Theme.secondary)
+                Button("Load", action: onLoad)
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.gold)
+                    .foregroundStyle(Theme.ink)
+            }
+        }
+        .contextMenu {
+            if let onRecover {
+                Button {
+                    onRecover()
+                } label: {
+                    PixelLabel("Recover last good copy", icon: "history")
+                }
+            }
         }
     }
 }

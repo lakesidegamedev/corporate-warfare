@@ -18,6 +18,12 @@ struct WorldMapFile: Decodable {
         let rings: [[Int]]
     }
 
+    /// The outline of a scenario's whole region, lit up on the main menu globe.
+    struct ScenarioArea: Decodable {
+        let id: String
+        let rings: [[Int]]
+    }
+
     struct RegionArea: Decodable {
         let code: String
         let state: String
@@ -51,6 +57,8 @@ struct WorldMapFile: Decodable {
     let countries: [Country]
     let provinces: [[Int]]?
     let roads: [[Int]]?
+    // The key is `scenario_areas` in the file, so the property keeps that spelling.
+    let scenario_areas: [ScenarioArea]?
     let states: [Area]
     let regions: [RegionArea]
     let counties: [County]
@@ -147,6 +155,8 @@ final class WorldMap {
     let interstates: [GeoRing]
     let cities: [WorldMapFile.City]
     let hubs: [String: GeoPoint]
+    /// Each scenario's outline, for the main menu globe.
+    let scenarioAreas: [(id: String, rings: [GeoRing])]
     /// The scenario's playable states, in degrees: west, south, east, north.
     let playBounds: (west: Double, south: Double, east: Double, north: Double)
 
@@ -168,6 +178,7 @@ final class WorldMap {
             interstates = []
             cities = []
             hubs = [:]
+            scenarioAreas = []
             playBounds = (-90, 37, -74, 46)
             return
         }
@@ -188,6 +199,7 @@ final class WorldMap {
         rivers = file.rivers.flatMap { $0.lines.map(GeoRing.init) }
         interstates = file.interstates.flatMap { $0.lines.map(GeoRing.init) }
         cities = file.cities
+        scenarioAreas = (file.scenario_areas ?? []).map { (id: $0.id, rings: $0.rings.map(GeoRing.init)) }
         hubs = file.hubs.compactMapValues { $0.count == 2 ? GeoPoint(lonDegrees: $0[0] / 10_000, latDegrees: $0[1] / 10_000) : nil }
         var bounds = (west: 180.0, south: 90.0, east: -180.0, north: -90.0)
         for state in file.states where state.play {
