@@ -70,10 +70,36 @@ pub fn reopen_cost(facility: &crate::state::Facility) -> i64 {
 }
 
 pub fn industry_index(name: &str) -> Option<u8> {
-    INDUSTRY_NAMES
-        .iter()
-        .position(|n| *n == name)
-        .map(|i| i as u8)
+    // Same positions as INDUSTRY_NAMES, as a match so the hot paths do not scan strings.
+    Some(match name {
+        "agriculture" => 0,
+        "extraction" => 1,
+        "energy" => 2,
+        "chemical_industries" => 3,
+        "manufacturing" => 4,
+        "construction" => 5,
+        "logistics" => 6,
+        "retail" => 7,
+        "healthcare" => 8,
+        "financial" => 9,
+        "technology" => 10,
+        "media" => 11,
+        "telecommunications" => 12,
+        "real_estate" => 13,
+        "defense" => 14,
+        _ => return None,
+    })
+}
+
+#[cfg(test)]
+mod industry_index_tests {
+    #[test]
+    fn matches_the_name_table() {
+        for (i, name) in super::INDUSTRY_NAMES.iter().enumerate() {
+            assert_eq!(super::industry_index(name), Some(i as u8));
+        }
+        assert_eq!(super::industry_index("nonsense"), None);
+    }
 }
 
 pub fn focus(world: &World, dataset: &Dataset, facility: Handle) -> Focus {

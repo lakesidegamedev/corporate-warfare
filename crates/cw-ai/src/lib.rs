@@ -1743,6 +1743,10 @@ fn best_expansion(
         .chain(entity.secondary_industry)
         .collect();
     let mut best: Option<(i64, u16, u8)> = None;
+    let fighter = fights(world, dataset, firm);
+    // The world does not change while candidates are scored, so each cell is read once.
+    let mut occupants_of: std::collections::BTreeMap<(u8, u8), Vec<Handle>> = Default::default();
+    let mut strategy_of: std::collections::BTreeMap<(u8, u8), Option<u16>> = Default::default();
     for (index, template) in dataset.recipes.iter().enumerate() {
         let Some(sector) = cw_sim::economy::operations::industry_index(&template.industry) else {
             continue;
@@ -1753,7 +1757,6 @@ fn best_expansion(
         let Some(output) = dataset.product_index.get(&template.output).copied() else {
             continue;
         };
-        let fighter = fights(world, dataset, firm);
         for region in 0..world.regions.len() as u8 {
             // Under a production quota new extraction capacity would only sit idle.
             if world.politics.quota_active.contains(&(region, output)) {
@@ -1761,23 +1764,28 @@ fn best_expansion(
             }
             // An aggressive rival may invade a market the player holds even without unmet
             // demand, when it would still profit at prices a tenth lower in the fight to come.
+            let strategy = *strategy_of.entry((region, sector)).or_insert_with(|| {
+                cw_sim::economy::sectors::division_strategy(world, dataset, firm, region, sector)
+            });
             let invading = fighter
-                && cw_sim::economy::sectors::division_strategy(
-                    world, dataset, firm, region, sector,
-                )
-                .is_none()
-                && cw_sim::economy::sectors::cell(world, dataset, region, sector)
-                    .0
+                && strategy.is_none()
+                && occupants_of
+                    .entry((region, sector))
+                    .or_insert_with(|| {
+                        cw_sim::economy::sectors::cell(world, dataset, region, sector)
+                            .0
+                            .into_iter()
+                            .map(|(holder, _)| holder)
+                            .collect()
+                    })
                     .iter()
-                    .any(|(holder, _)| player_controlled(world, *holder));
+                    .any(|holder| player_controlled(world, *holder));
             if !invading && !room_covers(world, dataset, template, region, room_fifths) {
                 continue;
             }
             // A division runs one strategy: a different one in an existing division would need
             // a retool, which `best_retool` weighs separately.
-            if cw_sim::economy::sectors::division_strategy(world, dataset, firm, region, sector)
-                .is_some_and(|strategy| strategy != index as u16)
-            {
+            if strategy.is_some_and(|strategy| strategy != index as u16) {
                 continue;
             }
             // Three years of contribution, less the real build cost (entry fee, founding
@@ -1819,10 +1827,16 @@ fn best_expansion(
             // Aggressive rivals prefer to fight for a market someone already holds, and the
             // player's markets most of all: invading makes the cell contested and raidable.
             if npv > 0 && fighter {
-                let (occupants, _) = cw_sim::economy::sectors::cell(world, dataset, region, sector);
+                let occupants = occupants_of.entry((region, sector)).or_insert_with(|| {
+                    cw_sim::economy::sectors::cell(world, dataset, region, sector)
+                        .0
+                        .into_iter()
+                        .map(|(holder, _)| holder)
+                        .collect()
+                });
                 let rivals: Vec<Handle> = occupants
                     .iter()
-                    .map(|(holder, _)| *holder)
+                    .copied()
                     .filter(|holder| !cw_sim::economy::ownership::same_group(world, *holder, firm))
                     .collect();
                 if !rivals.is_empty() {
