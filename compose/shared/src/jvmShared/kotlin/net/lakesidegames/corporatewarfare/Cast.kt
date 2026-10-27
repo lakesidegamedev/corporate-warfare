@@ -109,6 +109,18 @@ fun DossierBody(d: DossierDto) {
             Text(temperamentNote(ceo.temperament), color = Palette.primaryText, fontSize = 12.sp)
             Text(ceo.background, color = Palette.secondary, fontSize = 12.sp)
         }
+        d.grudges.forEach { line ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PixelIcon("target", size = 12.dp, tint = Palette.negative)
+                Text(line, color = Palette.primaryText, fontSize = 12.sp)
+            }
+        }
+        d.allies.forEach { line ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PixelIcon("people", size = 12.dp, tint = Palette.positive)
+                Text(line, color = Palette.primaryText, fontSize = 12.sp)
+            }
+        }
         if (d.moves.isNotEmpty()) {
             Eyebrow("Recent moves")
             d.moves.take(5).forEach { m ->
@@ -124,7 +136,7 @@ fun DossierSection(store: GameStore, firm: ULong) {
     var dossier by remember(firm) { mutableStateOf<DossierDto?>(null) }
     LaunchedEffect(firm) { store.dossier(firm) { dossier = it } }
     dossier?.let { d ->
-        if (d.ceo != null || d.moves.isNotEmpty()) {
+        if (d.ceo != null || d.moves.isNotEmpty() || d.grudges.isNotEmpty() || d.allies.isNotEmpty()) {
             Eyebrow("Who runs it")
             DossierBody(d)
         }

@@ -1518,6 +1518,9 @@ pub struct World {
     /// `economy::structure`.
     #[serde(default)]
     pub structure: crate::economy::structure::StructureState,
+    /// Grudges, alliances and rival move log. See `economy::rivalry`.
+    #[serde(default)]
+    pub rivalry: crate::economy::rivalry::RivalryState,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.

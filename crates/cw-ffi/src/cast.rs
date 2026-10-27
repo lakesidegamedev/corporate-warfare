@@ -50,6 +50,10 @@ pub struct DossierDto {
     /// The firm's strategic style, from its archetype.
     pub style: String,
     pub moves: Vec<MoveDto>,
+    /// Who the firm holds a grudge against, strongest first, in plain words.
+    pub grudges: Vec<String>,
+    /// Who the firm is friendly with, strongest first, in plain words.
+    pub allies: Vec<String>,
 }
 
 pub fn person_dto(ds: &Dataset, p: u8) -> Option<PersonDto> {
@@ -134,6 +138,39 @@ pub fn posts(world: &World, ds: &Dataset) -> Vec<PostDto> {
     out
 }
 
+fn holder_name(world: &World, holder: cw_sim::state::HolderId) -> String {
+    use cw_sim::state::HolderId;
+    match holder {
+        HolderId::Investor => "you".to_owned(),
+        HolderId::Firm(h) => world
+            .firms
+            .get(h)
+            .map(|f| f.name.clone())
+            .unwrap_or_else(|| "a former rival".to_owned()),
+        _ => "an outside holder".to_owned(),
+    }
+}
+
+fn grudge_reason(cause: cw_sim::economy::rivalry::Cause) -> &'static str {
+    use cw_sim::economy::rivalry::Cause;
+    match cause {
+        Cause::Raid => "lost plants to them",
+        Cause::FailedRaid => "they came after its markets",
+        Cause::LaneLockout => "squeezed out of a freight lane",
+        Cause::HostileBid => "they bid for it uninvited",
+        Cause::Venture => "a venture soured",
+        Cause::Deal => "a deal soured",
+    }
+}
+
+fn ally_reason(cause: cw_sim::economy::rivalry::Cause) -> &'static str {
+    use cw_sim::economy::rivalry::Cause;
+    match cause {
+        Cause::Venture => "partners in a venture",
+        _ => "closed a deal together",
+    }
+}
+
 pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
     let world = &session.world;
     let ds = &session.dataset;
@@ -150,6 +187,12 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
     };
     let mut moves: Vec<MoveDto> = Vec::new();
     for m in world.cast.moves.iter().filter(|m| m.firm == handle) {
+        moves.push(MoveDto {
+            week: m.week,
+            text: m.text.clone(),
+        });
+    }
+    for m in world.rivalry.moves.iter().filter(|m| m.firm == handle) {
         moves.push(MoveDto {
             week: m.week,
             text: m.text.clone(),
@@ -200,8 +243,38 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
         .archetype
         .map(|a| a.key().replace('_', " "))
         .unwrap_or_else(|| "unknown".to_owned());
+    let strength = |score: i32| match score {
+        s if s >= 6_000 => "bitter",
+        s if s >= 3_000 => "strong",
+        _ => "mild",
+    };
+    let grudges = cw_sim::economy::rivalry::grudges_of(world, handle)
+        .into_iter()
+        .map(|(holder, m)| {
+            format!(
+                "{} grudge against {}: {}.",
+                strength(m.score),
+                holder_name(world, holder),
+                grudge_reason(m.cause)
+            )
+        })
+        .take(3)
+        .collect();
+    let allies = cw_sim::economy::rivalry::allies_of(world, handle)
+        .into_iter()
+        .map(|(holder, m)| {
+            format!(
+                "Friendly with {}: {}.",
+                holder_name(world, holder),
+                ally_reason(m.cause)
+            )
+        })
+        .take(3)
+        .collect();
     Some(DossierDto {
         firm,
+        grudges,
+        allies,
         firm_name: entity.name.clone(),
         ceo_weeks: if ceo.is_some() {
             world.tick.0.saturating_sub(since)

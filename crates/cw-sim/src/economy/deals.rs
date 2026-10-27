@@ -150,6 +150,9 @@ pub fn start(
         investor_tendered: false,
     };
     deal.review_required = review_triggered(world, buyer, target);
+    if hostile {
+        crate::economy::rivalry::on_hostile_bid(world, buyer, target);
+    }
     Ok(world.deals.insert(deal))
 }
 
@@ -697,6 +700,11 @@ fn settle_tender(world: &mut World, handle: Handle, deal: &Deal, remedy: bool) {
                 .credit(Account::Revenue, fee, "transaction fee"),
         );
     }
+    if !deal.hostile {
+        for (holder, _, _) in &legs {
+            crate::economy::rivalry::on_deal(world, deal.buyer, *holder);
+        }
+    }
     if world.investor.primary_group == Some(deal.target) && world.investor_holds(deal.target) == 0 {
         world.investor.primary_group = None;
     }
@@ -824,6 +832,9 @@ fn settle_asset_purchase(world: &mut World, handle: Handle, deal: &Deal) {
     if let Some(stored) = world.deals.get_mut(handle) {
         stored.state = DealState::Settled;
         stored.escrow_cents = 0;
+    }
+    if !deal.hostile {
+        crate::economy::rivalry::on_deal(world, deal.buyer, HolderId::Firm(deal.target));
     }
 }
 

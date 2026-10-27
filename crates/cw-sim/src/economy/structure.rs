@@ -982,6 +982,7 @@ pub fn charge_raid_surcharge(world: &mut World, attacker: Handle, amount: i64) {
 
 /// Record a raid: heat for the raider, reputation for both sides.
 pub fn note_raid(world: &mut World, record: &crate::state::RaidRecord, stake_bps: i32) {
+    crate::economy::rivalry::on_raid(world, record);
     let heat_before = heat_now(world, record.attacker, record.defender);
     let tick = world.tick.0;
     let entry = world
@@ -1983,6 +1984,7 @@ pub fn form_jv(
         formed: world.tick.0,
     });
     world.structure.stats.jvs_formed += 1;
+    crate::economy::rivalry::on_venture(world, a, b);
     Ok(jv_handle)
 }
 

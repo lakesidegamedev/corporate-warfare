@@ -31,9 +31,10 @@ final class EngineBridgeTests: XCTestCase {
         // ordinary facilities stopped consuming a nonexistent ore deposit, on 2026-10-27 when the
         // world gained its world price state, and again in 1.7 preview 2 when the product chains
         // and multi-output plants changed the dataset, and in 1.7 preview 4 when the world gained
-        // government laws, the reserve and systemic incidents. This constant needs
+        // government laws, the reserve and systemic incidents, and in 1.7 preview 5 when rivals chose
+        // moves by temperament and the world gained grudges and alliances. This constant needs
         // a fresh simulator run on the Mac runner before R05 is claimed again.
-        XCTAssertEqual(session.canonicalHash(), "21629b336e3919a75599b6de15164bf926ab9326b52f5d670d31352d14da2904")
+        XCTAssertEqual(session.canonicalHash(), "5c231e40dabce2114eea6c5e9e34fea0a8090a274f554f1a8a987a69ba9cc551")
 
         let data = try session.exportSave()
         XCTAssertGreaterThan(data.count, 1_000)

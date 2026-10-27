@@ -700,6 +700,8 @@ impl Session {
             // session-local counter: a resumed save must issue the same ids, and the same
             // revision, as an uninterrupted run. A rejected proposal consumes no sequence,
             // and it is never recorded, so reusing that id is harmless.
+            // Read the move before it changes the world it is read from.
+            let note = cw_ai::note(&self.world, &self.dataset, &proposal);
             let envelope = CommandEnvelope {
                 command_id_high: AI_COMMAND_HIGH,
                 command_id_low: self.world.next_sequence,
@@ -718,6 +720,16 @@ impl Session {
                 .to_owned();
             let command = envelope.intent.key();
             let result = apply(&mut self.world, &self.dataset, &envelope);
+            if let (Ok(_), Some(note)) = (&result, note) {
+                cw_sim::economy::rivalry::record_move(
+                    &mut self.world,
+                    Handle(proposal.actor),
+                    note.temperament,
+                    note.class,
+                    note.text,
+                    note.grudge,
+                );
+            }
             let row = self.ai_log.by_archetype.entry(archetype).or_default();
             match result {
                 Ok(_) => {
@@ -1840,7 +1852,9 @@ mod tests {
         // had been drifting to large negative deposits. The economy is unchanged otherwise. On
         // 2026-10-27 it moved to daca9262... when the world gained its world price state (empty
         // here, as this fixture runs without world prices), and again in 1.7 preview 4 when the
-        // world gained government laws, the reserve and systemic incidents. The Swift constant
+        // world gained government laws, the reserve and systemic incidents, and again in 1.7
+        // preview 5 when rivals chose moves by temperament and the world gained grudges and
+        // alliances. The Swift constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
         // equality again.
@@ -1865,7 +1879,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "21629b336e3919a75599b6de15164bf926ab9326b52f5d670d31352d14da2904"
+            "5c231e40dabce2114eea6c5e9e34fea0a8090a274f554f1a8a987a69ba9cc551"
         );
     }
 

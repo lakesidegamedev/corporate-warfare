@@ -10,6 +10,10 @@
 //! private state: cohort and slot derive from the saved tick and stable handles, so a reloaded
 //! career proposes exactly the same commands.
 
+mod selector;
+
+pub use selector::{Class, style};
+
 use cw_core::ids::Handle;
 use cw_data::{Archetype, Dataset};
 use cw_sim::commands::{BargainingChoice, CommandIntent};
@@ -64,7 +68,7 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
             continue;
         }
         // Aggressive archetypes reconsider strategy every second week, the rest every fourth.
-        let aggressive = fights(world, firm.archetype);
+        let aggressive = fights(world, dataset, handle);
         let due = if aggressive {
             handle.slot() % 2 == cohort % 2
         } else {
@@ -73,13 +77,73 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         if !due {
             continue;
         }
-        strategic(world, dataset, handle, &mut proposals);
-        speculate(world, dataset, handle, &mut proposals);
-        logistics_moves(world, dataset, handle, &mut proposals);
-        structure_moves(world, dataset, handle, &mut proposals);
+        proposals.extend(slot_moves(world, dataset, handle));
     }
     proposals.truncate(WEEKLY_PROPOSALS);
     proposals
+}
+
+/// Everything a firm could do in its strategic slot, ranked by the selector: the strategic
+/// candidates with their projected values, then the speculation, freight, structure and storage
+/// generators, whose own economics decide what is on the table.
+fn slot_moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Proposal> {
+    use selector::{Class, Move};
+    let Some(entity) = world.firms.get(firm) else {
+        return Vec::new();
+    };
+    // A middling firm's yearly turnover sets the scale of moves whose generator has no
+    // projection of its own.
+    let weeks = entity.book.recent_weeks();
+    let turnover: i64 =
+        weeks.iter().map(|w| w.revenue).sum::<i64>() * 52 / weeks.len().max(1) as i64;
+    let scale = (turnover / 20).max(1_000_000);
+    let mut moves: Vec<Move> = Vec::new();
+    let push = |moves: &mut Vec<Move>, class: Option<Class>, ev: i64, proposal: Proposal| {
+        let stance = selector::stance_for(world, firm, &proposal.intent);
+        moves.push(Move {
+            class,
+            ev,
+            stance,
+            proposal,
+        });
+    };
+    for candidate in strategic_candidates(world, dataset, firm) {
+        let class = selector::classify(dataset, &candidate.intent);
+        let proposal = Proposal {
+            actor: firm.0,
+            intent: candidate.intent,
+        };
+        if class.is_some() {
+            push(&mut moves, class, candidate.score.max(1), proposal);
+        } else {
+            moves.push(Move::routine(proposal));
+        }
+    }
+    let mut generated: Vec<Proposal> = Vec::new();
+    speculate(world, dataset, firm, &mut generated);
+    logistics_moves(world, dataset, firm, &mut generated);
+    structure_moves(world, dataset, firm, &mut generated);
+    storage_moves(world, dataset, firm, &mut generated);
+    for proposal in generated {
+        let class = selector::classify(dataset, &proposal.intent);
+        match class {
+            Some(c) => push(&mut moves, Some(c), scale, proposal),
+            None => moves.push(Move::routine(proposal)),
+        }
+    }
+    if let Some(candidate) = supplier_bid(world, dataset, firm) {
+        let proposal = Proposal {
+            actor: firm.0,
+            intent: candidate.intent,
+        };
+        push(
+            &mut moves,
+            Some(Class::Integrate),
+            candidate.score.max(1),
+            proposal,
+        );
+    }
+    selector::choose(world, dataset, firm, moves)
 }
 
 /// Structure verbs a rival uses on its own slot, weighted by its temperament
@@ -92,7 +156,7 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
         return;
     };
     let t = st::temperament(world, dataset, firm);
-    let reserve = reserve_target(world, firm);
+    let reserve = reserve_target(world, dataset, firm);
     let cash = entity.book.cash();
     let weeks = entity.book.recent_weeks();
     let income: i64 = weeks.iter().map(|w| w.net_income).sum();
@@ -300,13 +364,19 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
                         && !player_controlled(world, *h)
                         && !cw_sim::economy::ownership::same_group(world, *h, firm)
                         && dataset.regions[f.region as usize].state() == home_state
-                        && f.book.cash() > reserve_target(world, *h) * 2 + cost / 2
+                        && f.book.cash() > reserve_target(world, dataset, *h) * 2 + cost / 2
+                        && cw_sim::economy::rivalry::grudge(world, firm, *h) < 5_000
                         && st::temperament(world, dataset, *h).partnering >= 3_000
                         && (feeds_a_plant(world, dataset, firm, recipe)
                             || feeds_a_plant(world, dataset, *h, recipe))
                 })
-                .map(|(h, f)| (f.book.cash(), h))
-                .max();
+                .map(|(h, f)| {
+                    // Old partners are asked first, then the richest.
+                    let tie = cw_sim::economy::rivalry::alliance(world, firm, h);
+                    (tie >= 1_000, f.book.cash(), h)
+                })
+                .max()
+                .map(|(_, cash, h)| (cash, h));
             if let Some((_, partner)) = partner {
                 proposals.push(Proposal {
                     actor: firm.0,
@@ -429,7 +499,7 @@ fn speculate(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         return;
     };
     let phase = world.macro_state.cycle.phase;
-    let reserve = reserve_target(world, firm);
+    let reserve = reserve_target(world, dataset, firm);
     let recent_income: i64 = entity
         .book
         .recent_weeks()
@@ -493,9 +563,12 @@ fn speculate(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
             });
             continue;
         }
-        let buy = (level <= 9_000
+        // A speculator acts on a smaller dip and in any phase but a boom.
+        let speculator = selector::style(world, dataset, firm) == cw_data::Temperament::Speculator;
+        let buy = (level <= if speculator { 9_500 } else { 9_000 }
             && trend >= -200
-            && matches!(phase, CyclePhase::Recession | CyclePhase::Recovery))
+            && (matches!(phase, CyclePhase::Recession | CyclePhase::Recovery)
+                || (speculator && phase != CyclePhase::Boom)))
             || (reserve_phase == cw_sim::economy::reserve::Phase::Buying && level <= 9_500);
         if !buy
             || held.0 > 0
@@ -548,7 +621,7 @@ fn logistics_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
     let Some(entity) = world.firms.get(firm) else {
         return;
     };
-    let reserve = reserve_target(world, firm);
+    let reserve = reserve_target(world, dataset, firm);
     let owns_carrier = world
         .logistics
         .carriers
@@ -662,7 +735,7 @@ fn logistics_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
     }
 
     // Common carrier law forbids locking a lane up, so rivals do not try.
-    if fights(world, entity.archetype) && !world.politics.laws.common_carrier {
+    if fights(world, dataset, firm) && !world.politics.laws.common_carrier {
         for (key, lane) in &world.logistics.lanes {
             if lane.fill_bps() < 7_500 || lg::group_share_bps(world, firm, *key) < 2_000 {
                 continue;
@@ -914,7 +987,7 @@ fn reopen(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Pr
             && (imported * 2 >= template.weekly_output_lots * plant.blocks as i64
                 || (!template.by_products.is_empty()
                     && room_covers(world, dataset, template, plant.region, 2)))
-            && entity.book.cash() - cost >= reserve_target(world, firm)
+            && entity.book.cash() - cost >= reserve_target(world, dataset, firm)
         {
             proposals.push(Proposal {
                 actor: firm.0,
@@ -938,32 +1011,34 @@ const RAID_RESPITE_WEEKS: u32 = 26;
 /// markets and reconsider strategy twice as often.
 /// Whether a rival fights for share: on Easy none do, on Hard all do, on Standard the cost
 /// leaders, consolidators and vultures.
-fn fights(world: &World, archetype: Option<Archetype>) -> bool {
+fn fights(world: &World, dataset: &Dataset, firm: Handle) -> bool {
     match world.difficulty {
         cw_data::Difficulty::Easy => false,
         cw_data::Difficulty::Hard => true,
-        cw_data::Difficulty::Standard => archetype.map(aggressive).unwrap_or(false),
+        cw_data::Difficulty::Standard => {
+            let archetype = world.firms.get(firm).and_then(|f| f.archetype);
+            let weights =
+                selector::blended_weights(archetype, selector::style(world, dataset, firm));
+            archetype.is_some() && (weights[0] >= 3 || weights[4] >= 5)
+        }
     }
 }
 
-fn aggressive(archetype: Archetype) -> bool {
-    let weights = archetype.weights();
-    weights[0] >= 3 || weights[4] >= 5
-}
-
 /// Four weeks of mandatory outflow plus principal due over the next thirteen weeks.
-fn reserve_target(world: &World, firm: Handle) -> i64 {
+fn reserve_target(world: &World, dataset: &Dataset, firm: Handle) -> i64 {
     let Some(entity) = world.firms.get(firm) else {
         return 0;
     };
-    cw_sim::economy::insolvency::mandatory_weekly_outflow(world, firm) * 4
+    let base = cw_sim::economy::insolvency::mandatory_weekly_outflow(world, firm) * 4
         + entity
             .loans
             .iter()
             .filter_map(|handle| world.loans.get(*handle))
             .map(|loan| loan.weekly_principal_cents)
             .sum::<i64>()
-            * 13
+            * 13;
+    // The cautious hoard cash: half again on top of the rules' reserve.
+    base * selector::thrift_pct(selector::style(world, dataset, firm)) / 100
 }
 
 fn urgent(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
@@ -1052,7 +1127,7 @@ fn urgent(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Pr
     // counter at the 95 percent floor the union accepts.
     if let BargainState::Demanding { .. } = entity.union.state {
         let demand = entity.union.demand_cents;
-        let affordable = entity.book.cash() > reserve_target(world, firm) + demand;
+        let affordable = entity.book.cash() > reserve_target(world, dataset, firm) + demand;
         proposals.push(Proposal {
             actor: firm.0,
             intent: CommandIntent::RespondBargaining {
@@ -1118,11 +1193,31 @@ pub fn strategic_for(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Prop
 }
 
 fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
+    let mut candidates = strategic_candidates(world, dataset, firm);
+    candidates.sort_by(|a, b| {
+        b.score
+            .cmp(&a.score)
+            .then_with(|| a.intent.key().cmp(b.intent.key()))
+            .then_with(|| a.target.cmp(&b.target))
+    });
+    proposals.extend(
+        candidates
+            .into_iter()
+            .take(STRATEGIC_ACTIONS)
+            .map(|candidate| Proposal {
+                actor: firm.0,
+                intent: candidate.intent,
+            }),
+    );
+}
+
+/// Every scored candidate of the strategic slot, unsorted and uncut.
+fn strategic_candidates(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Candidate> {
     let Some(entity) = world.firms.get(firm) else {
-        return;
+        return Vec::new();
     };
-    let archetype = entity.archetype.unwrap_or(Archetype::CostLeader);
-    let weights = archetype.weights();
+    let style = selector::style(world, dataset, firm);
+    let weights = selector::blended_weights(entity.archetype, style);
     let weeks = entity.book.recent_weeks().len().max(1) as i64;
     let revenue: i64 = entity
         .book
@@ -1131,7 +1226,7 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         .map(|week| week.revenue)
         .sum::<i64>()
         / weeks;
-    let reserve = reserve_target(world, firm);
+    let reserve = reserve_target(world, dataset, firm);
     let mut candidates: Vec<Candidate> = Vec::new();
 
     // Pricing: the shared sell-through rule (cw_sim::economy::pricing), one price per good.
@@ -1195,7 +1290,7 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
     // Three percent of trailing weekly revenue keeps the corridor's studios operating without
     // turning into a hidden subsidy.
     if weights[2] >= 3 || entity.industry == 7 || revenue > 0 {
-        let budget = (revenue * 300 / 10_000).max(10_000);
+        let budget = (revenue * 300 / 10_000 * selector::marketing_pct(style) / 100).max(10_000);
         if entity.book.cash() > reserve + budget * 4 && entity.policies.marketing_budget_cents == 0
         {
             candidates.push(Candidate {
@@ -1250,8 +1345,16 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         && total_blocks < MAX_GROWTH_BLOCKS
         && fully_staffed
         && recent_income > 0
-        && let Some((recipe, region, npv)) =
-            best_expansion(world, dataset, firm, if weights[1] >= 3 { 4 } else { 5 })
+        && let Some((recipe, region, npv)) = best_expansion(
+            world,
+            dataset,
+            firm,
+            match weights[1] {
+                5.. => 3,
+                3..=4 => 4,
+                _ => 5,
+            },
+        )
     {
         let capex = dataset.recipes[recipe as usize].capex_cents;
         if entity.book.cash() > reserve * 2 + capex {
@@ -1312,40 +1415,27 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
     if weights[4] >= 5
         && !bidding
         && let Some(target) = distressed_target(world, firm)
-        && let Some(bid) = acquisition_bid(world, firm, target, reserve)
+        && let Some(bid) = acquisition_bid(world, dataset, firm, target, reserve)
     {
         candidates.push(bid);
     }
 
-    candidates.sort_by(|a, b| {
-        b.score
-            .cmp(&a.score)
-            .then_with(|| a.intent.key().cmp(b.intent.key()))
-            .then_with(|| a.target.cmp(&b.target))
-    });
-    proposals.extend(
-        candidates
-            .into_iter()
-            .take(STRATEGIC_ACTIONS)
-            .map(|candidate| Proposal {
-                actor: firm.0,
-                intent: candidate.intent,
-            }),
-    );
+    candidates
 }
 
 fn acquisition_bid(
     world: &World,
+    dataset: &Dataset,
     buyer: Handle,
     target: Handle,
     reserve: i64,
 ) -> Option<Candidate> {
     let bidder = world.firms.get(buyer)?;
     let entity = world.firms.get(target)?;
-    let weights = bidder
-        .archetype
-        .unwrap_or(Archetype::Consolidator)
-        .weights();
+    let weights = selector::blended_weights(
+        Some(bidder.archetype.unwrap_or(Archetype::Consolidator)),
+        selector::style(world, dataset, buyer),
+    );
     // A vulture anchors on the depressed traded mark; a consolidator on the fair estimate.
     let vulture = bidder.archetype == Some(Archetype::Vulture);
     let mark = if vulture {
@@ -1663,7 +1753,7 @@ fn best_expansion(
         let Some(output) = dataset.product_index.get(&template.output).copied() else {
             continue;
         };
-        let fighter = fights(world, entity.archetype);
+        let fighter = fights(world, dataset, firm);
         for region in 0..world.regions.len() as u8 {
             // Under a production quota new extraction capacity would only sit idle.
             if world.politics.quota_active.contains(&(region, output)) {
@@ -1728,7 +1818,7 @@ fn best_expansion(
                 - financing;
             // Aggressive rivals prefer to fight for a market someone already holds, and the
             // player's markets most of all: invading makes the cell contested and raidable.
-            if npv > 0 && fights(world, entity.archetype) {
+            if npv > 0 && fighter {
                 let (occupants, _) = cw_sim::economy::sectors::cell(world, dataset, region, sector);
                 let rivals: Vec<Handle> = occupants
                     .iter()
@@ -1758,12 +1848,16 @@ fn best_expansion(
 fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, u8, u8, i64, i64)> {
     use cw_sim::economy::sectors;
     let entity = world.firms.get(firm)?;
-    let reserve = reserve_target(world, firm);
+    let reserve = reserve_target(world, dataset, firm);
     let mut best: Option<(i64, Handle, u8, u8, i64)> = None;
     for division in sectors::divisions_of(world, dataset, firm) {
         let (firms, _) = sectors::cell(world, dataset, division.region, division.industry);
         for (rival, _) in firms {
             if rival == firm || cw_sim::economy::ownership::same_group(world, rival, firm) {
+                continue;
+            }
+            // A friend is not raided.
+            if cw_sim::economy::rivalry::alliance(world, firm, rival) >= 5_000 {
                 continue;
             }
             // A company that was raided in the last half year is left to recover first.
@@ -1803,6 +1897,22 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
                 * 156
                 - quote.price_cents;
             let value = gain * quote.chance_bps as i64 / 10_000 - budget - quote.surcharge_cents;
+            // A grudge turns a marginal raid into a worthwhile one, and a raider's appetite for
+            // the fight lets it take a raid that is a little short of paying for itself. Both
+            // are bets on the same public numbers the validator sees; nothing is free.
+            let grudge = cw_sim::economy::rivalry::grudge(world, firm, rival) as i64;
+            let appetite =
+                (selector::weight(selector::style(world, dataset, firm), Class::Raid) - 100).max(0)
+                    * budget
+                    / 400;
+            let spite = if grudge >= 3_000 { budget / 2 } else { 0 };
+            let value = if value > 0 {
+                value * (100 + grudge / 40) / 100
+            } else if value + appetite + spite > 0 {
+                1
+            } else {
+                value
+            };
             if value > 0 && best.map(|(b, ..)| value > b).unwrap_or(true) {
                 best = Some((value, rival, division.region, division.industry, budget));
             }
@@ -1881,6 +1991,304 @@ fn best_retool(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle
     best.map(|(gain, handle, recipe)| (handle, recipe, gain))
 }
 
+/// A rival builds its own storage when the economics clear. The saving is real money only:
+/// the outside fees on stock that overflows its space, four fifths of the spoilage a cold store
+/// would stop, and for a speculator the swing it expects to trade into the space (a tenth of the
+/// value of the stock it can afford, in a class where some good sits under its opening price).
+/// Three years of that (five for a speculator, who keeps stores for the whole cycle) must beat
+/// the build and its financing. Only temperaments that weight storage heavily (the integrator
+/// and the speculator) consider it at all.
+fn storage_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
+    use cw_data::StorageClass;
+    let Some(entity) = world.firms.get(firm) else {
+        return;
+    };
+    let t = selector::style(world, dataset, firm);
+    if selector::weight(t, Class::Storage) < 150 {
+        return;
+    }
+    let weeks = entity.book.recent_weeks();
+    if weeks.len() < 13
+        || weeks.iter().map(|w| w.net_income).sum::<i64>() <= 0
+        || entity.facilities.len() >= 8
+        || entity.facilities.iter().any(|h| {
+            world.facilities.get(*h).is_some_and(|p| {
+                p.status == FacilityStatus::Building
+                    && dataset.recipes[p.recipe as usize].storage_class.is_some()
+            })
+        })
+    {
+        return;
+    }
+    let reserve = reserve_target(world, dataset, firm);
+    let logistics = cw_sim::economy::operations::industry_index("logistics");
+    let spoiled_year = entity.storage.recent(13).spoiled_cents * 4;
+    let speculator = t == cw_data::Temperament::Speculator;
+    let years: i64 = if speculator { 5 } else { 3 };
+    let cash = entity.book.cash();
+    // Every class the firm trades in, with what it overflows today.
+    let mut classes: Vec<(u8, StorageClass, i64)> =
+        cw_sim::economy::storage::uses(world, dataset, entity)
+            .into_iter()
+            .map(|u| (u.region, u.class, u.outside_milli() / 1_000))
+            .collect();
+    if speculator {
+        // Space for a swing can be wanted where nothing overflows yet: its plants' own regions.
+        for handle in &entity.facilities {
+            let Some(plant) = world.facilities.get(*handle) else {
+                continue;
+            };
+            for id in dataset.recipes[plant.recipe as usize]
+                .weekly_inputs_lots
+                .keys()
+            {
+                if let Some(code) = dataset.product_index.get(id)
+                    && let Some(class) = dataset.storage_class_of(*code)
+                    && !classes.iter().any(|c| c.0 == plant.region && c.1 == class)
+                {
+                    classes.push((plant.region, class, 0));
+                }
+            }
+        }
+    }
+    let mut best: Option<(i64, u16, u8)> = None;
+    for (region, class, outside_lots) in classes {
+        let owned = cw_sim::economy::storage::uses(world, dataset, entity)
+            .into_iter()
+            .find(|u| u.region == region && u.class == class)
+            .map(|u| u.owned_milli)
+            .unwrap_or(0);
+        // One store per class and region is enough for a rival.
+        if owned > 0 {
+            continue;
+        }
+        // The swing: the dearest good of this class sitting under its opening price.
+        let swing_good = if speculator && cash > reserve * 4 {
+            dataset
+                .products
+                .iter()
+                .enumerate()
+                .filter(|(i, p)| {
+                    dataset.storage_class_of(*i as u16) == Some(class)
+                        && p.spoilage_bps_weekly < 200
+                        && world
+                            .world_prices
+                            .family_of(*i as u16)
+                            .is_some_and(|f| f.index_bps <= 9_500)
+                })
+                .map(|(i, _)| dataset.reference_price(i as u16).max(1))
+                .max()
+        } else {
+            None
+        };
+        for (index, recipe) in dataset.recipes.iter().enumerate() {
+            if recipe.storage_class != Some(class) {
+                continue;
+            }
+            if let Some(logistics) = logistics
+                && cw_sim::economy::sectors::division_strategy(
+                    world, dataset, firm, region, logistics,
+                )
+                .is_some_and(|s| s != index as u16)
+            {
+                continue;
+            }
+            let cost =
+                cw_sim::economy::sectors::build_cost(world, dataset, firm, region, index as u16, 1)
+                    .total_cents();
+            if cash < reserve * 2 + cost {
+                continue;
+            }
+            let capacity = recipe.storage_lots();
+            let mut yearly = outside_lots.min(capacity) * class.outside_fee_cents() * 52;
+            if class == StorageClass::Cold {
+                yearly += spoiled_year * 80 / 100;
+            }
+            if let Some(price) = swing_good {
+                let affordable = (cash - reserve * 2 - cost).max(0) * 15 / 100 / price;
+                yearly += affordable.min(capacity) * price / 10;
+            }
+            let npv = yearly * years
+                - cost
+                - cost * world.macro_state.policy_rate_bps as i64 * years / 10_000;
+            if npv > 0 && best.as_ref().is_none_or(|b| npv > b.0) {
+                best = Some((npv, index as u16, region));
+            }
+        }
+    }
+    if let Some((_, recipe, region)) = best {
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::BuildFacility {
+                firm,
+                region,
+                recipe,
+                blocks: 1,
+            },
+        });
+    }
+}
+
+/// An integrator buys up its supply chain: the cheapest tradable peer outside its group whose
+/// plants make a good the firm's own plants burn, bid at the usual premium.
+fn supplier_bid(world: &World, dataset: &Dataset, firm: Handle) -> Option<Candidate> {
+    let entity = world.firms.get(firm)?;
+    if selector::weight(selector::style(world, dataset, firm), Class::Integrate) < 150
+        || entity.book.recent_weeks().len() < 13
+        || world
+            .deals
+            .iter()
+            .any(|(_, d)| d.buyer == firm && !d.state.terminal())
+    {
+        return None;
+    }
+    let reserve = reserve_target(world, dataset, firm);
+    let group = cw_sim::economy::deals::competition_group(world, firm);
+    let mut best: Option<(i64, Handle)> = None;
+    for (handle, peer) in world.firms.iter() {
+        if group.contains(&handle)
+            || !peer.operative()
+            || !peer.status.can_trade()
+            || peer.archetype.is_none()
+            || peer.shares.mark_cents <= 0
+            || cw_sim::economy::rivalry::alliance(world, firm, handle) >= 5_000
+            || world
+                .deals
+                .iter()
+                .any(|(_, d)| d.target == handle && !d.state.terminal())
+            || cw_sim::economy::ownership::would_create_cycle(world, firm, handle)
+        {
+            continue;
+        }
+        // The peer must make something the firm burns.
+        let supplies = peer
+            .facilities
+            .iter()
+            .filter_map(|h| world.facilities.get(*h))
+            .filter(|p| p.status == FacilityStatus::Operating)
+            .any(|p| {
+                let output = &dataset.recipes[p.recipe as usize].output;
+                entity
+                    .facilities
+                    .iter()
+                    .filter_map(|h| world.facilities.get(*h))
+                    .any(|own| {
+                        dataset.recipes[own.recipe as usize]
+                            .weekly_inputs_lots
+                            .contains_key(output)
+                    })
+            });
+        if !supplies {
+            continue;
+        }
+        let key = peer.shares.mark_cents.max(1);
+        if best.is_none_or(|(k, h)| (key, handle) < (k, h)) {
+            best = Some((key, handle));
+        }
+    }
+    let (_, target) = best?;
+    acquisition_bid(world, dataset, firm, target, reserve)
+}
+
+/// A move's class, text for the dossier and whether it is aimed at a grudge, for the session to
+/// record once the command is accepted.
+#[derive(Clone, Debug)]
+pub struct MoveNote {
+    pub temperament: &'static str,
+    pub class: &'static str,
+    pub text: Option<String>,
+    pub grudge: bool,
+}
+
+/// Describe a proposal for the move log. None for routine moves, which are not logged.
+pub fn note(world: &World, dataset: &Dataset, proposal: &Proposal) -> Option<MoveNote> {
+    let firm = Handle(proposal.actor);
+    let mut class = selector::classify(dataset, &proposal.intent)?;
+    let stance = selector::stance_for(world, firm, &proposal.intent);
+    let name = |h: Handle| {
+        world
+            .firms
+            .get(h)
+            .map(|f| f.name.clone())
+            .unwrap_or_else(|| "a former rival".to_owned())
+    };
+    let region = |r: u8| {
+        world
+            .regions
+            .get(r as usize)
+            .map(|x| x.name.clone())
+            .unwrap_or_default()
+    };
+    let text = match &proposal.intent {
+        CommandIntent::StartDiligence { target, .. } => {
+            let supplier = world.firms.get(firm).is_some_and(|me| {
+                world.firms.get(*target).is_some_and(|peer| {
+                    peer.facilities
+                        .iter()
+                        .filter_map(|h| world.facilities.get(*h))
+                        .any(|p| {
+                            let out = &dataset.recipes[p.recipe as usize].output;
+                            me.facilities
+                                .iter()
+                                .filter_map(|h| world.facilities.get(*h))
+                                .any(|own| {
+                                    dataset.recipes[own.recipe as usize]
+                                        .weekly_inputs_lots
+                                        .contains_key(out)
+                                })
+                        })
+                })
+            });
+            if supplier {
+                class = Class::Integrate;
+            }
+            Some(if supplier {
+                format!("Bid for its supplier {}.", name(*target))
+            } else {
+                format!("Bid for {}.", name(*target))
+            })
+        }
+        CommandIntent::IssueBond { .. } => Some("Issued bonds.".to_owned()),
+        CommandIntent::FormJointVenture {
+            partner, region: r, ..
+        } => Some(format!(
+            "Formed a venture with {} in {}.",
+            name(*partner),
+            region(*r)
+        )),
+        CommandIntent::ListSubsidiary { .. } => Some("Floated a subsidiary.".to_owned()),
+        CommandIntent::CarveOutDivision { .. } => Some("Carved a division out.".to_owned()),
+        CommandIntent::SpinOffSubsidiary { .. } => Some("Spun off a subsidiary.".to_owned()),
+        CommandIntent::ReserveLane { from, to, .. } => Some(format!(
+            "Reserved freight space between {} and {}.",
+            region(*from),
+            region(*to)
+        )),
+        CommandIntent::BuildFacility {
+            recipe, region: r, ..
+        } => {
+            let id = dataset.recipes.get(*recipe as usize)?.id.replace('_', " ");
+            Some(match class {
+                Class::Storage => format!("Started a {id} in {}.", region(*r)),
+                Class::Carrier => format!("Started a {id} line in {}.", region(*r)),
+                _ => format!("Started building a {id} plant in {}.", region(*r)),
+            })
+        }
+        CommandIntent::BuyToStore { product, .. } => Some(format!(
+            "Started buying {} for storage.",
+            dataset.products[*product as usize].id.replace('_', " ")
+        )),
+        // Raids already appear in the dossier from the raid record.
+        _ => None,
+    };
+    Some(MoveNote {
+        temperament: selector::style(world, dataset, firm).key(),
+        class: class.key(),
+        text,
+        grudge: class.hostile() && stance.grudge >= cw_sim::economy::rivalry::ACTIVE,
+    })
+}
+
 /// The lowest-ID distressed peer outside the buyer's and the player's groups with no bid
 /// already open on it. Distress is public: a quarter of losses, or a traded mark more than 20
 /// percent under the fair estimate. Past-due firms cannot be bid for, so they are excluded.
@@ -1914,7 +2322,14 @@ fn distressed_target(world: &World, buyer: Handle) -> Option<Handle> {
         })
         .map(|(handle, _)| handle)
         .collect();
-    candidates.sort_unstable();
+    // A grudge picks the target; a friend is spared; otherwise the lowest handle.
+    candidates.retain(|h| cw_sim::economy::rivalry::alliance(world, buyer, *h) < 5_000);
+    candidates.sort_by_key(|h| {
+        (
+            std::cmp::Reverse(cw_sim::economy::rivalry::grudge(world, buyer, *h)),
+            *h,
+        )
+    });
     candidates.first().copied()
 }
 
@@ -2706,6 +3121,7 @@ mod tests {
                 alloc.used = alloc.cap * 8 / 10;
             }
             lane.users.push((owner, 150));
+            lane.users.push((other, 150));
         }
         let mut proposals = Vec::new();
         logistics_moves(&world, &dataset, owner, &mut proposals);
@@ -2719,5 +3135,507 @@ mod tests {
         assert!(lots >= 20 && weeks == 13 && mode == 0);
         // The proposal is legal: the validator accepts it.
         assert!(lg::reserve_lane(&mut world, &dataset, owner, a, b, 0, lots, weeks).is_ok());
+        // The shipper that was squeezed out of the lane remembers who did it.
+        assert!(cw_sim::economy::rivalry::grudge(&world, other, owner) > 0);
+        assert_eq!(cw_sim::economy::rivalry::grudge(&world, owner, other), 0);
+        assert_eq!(world.rivalry.stats.grudges_formed, 1);
+    }
+
+    // ----- CEO personality: selector, grudges, storage, integration -----
+
+    fn person_with(dataset: &Dataset, style: cw_data::Temperament) -> u8 {
+        dataset
+            .cast
+            .iter()
+            .position(|p| p.temperament == style && p.can(cw_data::Role::Ceo))
+            .expect("a chief executive of that temperament") as u8
+    }
+
+    fn rival_world(seed_value: u64) -> (World, Dataset, Handle) {
+        let dataset = Dataset::load().unwrap();
+        let world = seed::build(
+            &dataset,
+            seed_value,
+            ScenarioKind::Guided,
+            ScenarioMode::Sandbox,
+        );
+        let rival = world
+            .firms
+            .handles_sorted()
+            .into_iter()
+            .find(|h| {
+                !player_controlled(&world, *h) && world.firms.get(*h).unwrap().archetype.is_some()
+            })
+            .unwrap();
+        (world, dataset, rival)
+    }
+
+    fn fake_move(firm: Handle, class: Class, stance: selector::Stance) -> selector::Move {
+        selector::Move {
+            class: Some(class),
+            ev: 1_000_000_000,
+            stance,
+            proposal: Proposal {
+                actor: firm.0,
+                intent: CommandIntent::RaidMarket {
+                    firm,
+                    target: Handle(1),
+                    region: 0,
+                    industry: 0,
+                    budget_cents: 1,
+                },
+            },
+        }
+    }
+
+    /// How many of 400 weeks a move of this class survives the selector for this temperament.
+    fn survival(
+        world: &mut World,
+        dataset: &Dataset,
+        firm: Handle,
+        style: cw_data::Temperament,
+        class: Class,
+        stance: selector::Stance,
+    ) -> usize {
+        world.firms.get_mut(firm).unwrap().ceo = Some(person_with(dataset, style));
+        (1..=400u32)
+            .filter(|week| {
+                world.tick = cw_core::calendar::Tick(*week);
+                !selector::choose(world, dataset, firm, vec![fake_move(firm, class, stance)])
+                    .is_empty()
+            })
+            .count()
+    }
+
+    #[test]
+    fn temperament_measurably_changes_which_moves_a_firm_makes() {
+        use cw_data::Temperament::*;
+        let (mut world, dataset, firm) = rival_world(5);
+        let none = selector::Stance::default();
+        let raider_raids = survival(&mut world, &dataset, firm, Raider, Class::Raid, none);
+        let cautious_raids = survival(&mut world, &dataset, firm, Cautious, Class::Raid, none);
+        let builder_builds = survival(&mut world, &dataset, firm, Builder, Class::Build, none);
+        let cautious_builds = survival(&mut world, &dataset, firm, Cautious, Class::Build, none);
+        let financier_bonds = survival(&mut world, &dataset, firm, Financier, Class::Bond, none);
+        let builder_bonds = survival(&mut world, &dataset, firm, Builder, Class::Bond, none);
+        let spec_store = survival(
+            &mut world,
+            &dataset,
+            firm,
+            Speculator,
+            Class::Speculate,
+            none,
+        );
+        let raider_store = survival(&mut world, &dataset, firm, Raider, Class::Speculate, none);
+        assert_eq!(raider_raids, 400, "a raider always raids when it can");
+        assert!(
+            cautious_raids < 200,
+            "the cautious mostly refrain: {cautious_raids}"
+        );
+        assert_eq!(builder_builds, 400);
+        assert!(cautious_builds < builder_builds - 60);
+        assert_eq!(financier_bonds, 400);
+        assert!(builder_bonds < 400 || financier_bonds >= builder_bonds);
+        assert_eq!(spec_store, 400);
+        assert!(raider_store < spec_store);
+    }
+
+    #[test]
+    fn a_grudge_sharpens_hostile_moves_and_an_ally_is_spared() {
+        use cw_data::Temperament::*;
+        let (mut world, dataset, firm) = rival_world(5);
+        let calm = selector::Stance::default();
+        let grudge = selector::Stance {
+            grudge: 8_000,
+            ally: 0,
+        };
+        let friend = selector::Stance {
+            grudge: 0,
+            ally: 6_000,
+        };
+        // A cautious firm rarely raids a stranger, far more often one that wronged it.
+        let stranger = survival(&mut world, &dataset, firm, Cautious, Class::Raid, calm);
+        let enemy = survival(&mut world, &dataset, firm, Cautious, Class::Raid, grudge);
+        assert!(enemy > stranger * 2, "{enemy} vs {stranger}");
+        // Nobody raids a friend.
+        assert_eq!(
+            survival(&mut world, &dataset, firm, Raider, Class::Raid, friend),
+            0
+        );
+        // And utility rises with the grudge.
+        world.firms.get_mut(firm).unwrap().ceo = Some(person_with(&dataset, Raider));
+        let u = |s| selector::utility(&world, Raider, &fake_move(firm, Class::Raid, s), firm);
+        assert!(u(grudge) > u(calm));
+        assert!(u(friend) < u(calm));
+        // Partnerships go the other way.
+        let venture = |s| {
+            let mut mv = fake_move(firm, Class::Venture, s);
+            mv.proposal.intent = CommandIntent::ExitVenture {
+                venture: Handle(1),
+                firm,
+            };
+            selector::utility(&world, Raider, &mv, firm)
+        };
+        assert!(venture(friend) > venture(calm));
+        assert_eq!(
+            venture(selector::Stance {
+                grudge: 6_000,
+                ally: 0
+            }),
+            0
+        );
+    }
+
+    #[test]
+    fn difficulty_changes_aggression_and_sharpness_only() {
+        use cw_data::Temperament::*;
+        let (mut world, dataset, firm) = rival_world(5);
+        let none = selector::Stance::default();
+        let mut raids = Vec::new();
+        for d in [
+            cw_data::Difficulty::Easy,
+            cw_data::Difficulty::Standard,
+            cw_data::Difficulty::Hard,
+        ] {
+            world.difficulty = d;
+            raids.push(survival(
+                &mut world,
+                &dataset,
+                firm,
+                Cautious,
+                Class::Raid,
+                none,
+            ));
+            // Peaceful moves are the same on every difficulty.
+            assert!(survival(&mut world, &dataset, firm, Builder, Class::Build, none) == 400);
+        }
+        assert!(raids[0] < raids[1] && raids[1] < raids[2], "{raids:?}");
+        // Sharpness: a keen firm sees a move's value exactly, a blunt one misjudges it.
+        world.firms.get_mut(firm).unwrap().ceo = Some(person_with(&dataset, Builder));
+        let values = |world: &mut World| -> std::collections::BTreeSet<i64> {
+            (1..=60u32)
+                .map(|week| {
+                    world.tick = cw_core::calendar::Tick(week);
+                    selector::utility(world, Builder, &fake_move(firm, Class::Build, none), firm)
+                })
+                .collect()
+        };
+        world.difficulty = cw_data::Difficulty::Hard;
+        assert_eq!(values(&mut world).len(), 1);
+        world.difficulty = cw_data::Difficulty::Easy;
+        assert!(values(&mut world).len() > 10);
+    }
+
+    #[test]
+    fn the_selector_is_deterministic_and_ranks_by_utility() {
+        let (mut world, dataset, firm) = rival_world(5);
+        world.firms.get_mut(firm).unwrap().ceo =
+            Some(person_with(&dataset, cw_data::Temperament::Builder));
+        world.tick = cw_core::calendar::Tick(37);
+        let mut small = fake_move(firm, Class::Build, selector::Stance::default());
+        small.ev = 1_000_000;
+        let mut big = fake_move(firm, Class::Build, selector::Stance::default());
+        big.ev = 900_000_000;
+        big.proposal.intent = CommandIntent::RetoolFacility {
+            facility: Handle(3),
+            recipe: 1,
+        };
+        big.class = Some(Class::Retool);
+        let a = selector::choose(&world, &dataset, firm, vec![small.clone(), big.clone()]);
+        let b = selector::choose(&world, &dataset, firm, vec![big, small]);
+        assert_eq!(a.len(), 2);
+        assert_eq!(
+            a.iter().map(|p| p.intent.key()).collect::<Vec<_>>(),
+            b.iter().map(|p| p.intent.key()).collect::<Vec<_>>()
+        );
+        assert_eq!(a[0].intent.key(), "retool_facility", "bigger value first");
+    }
+
+    #[test]
+    fn temperament_blends_into_the_archetype_weights() {
+        use cw_data::Temperament::*;
+        let w = |a, t| selector::blended_weights(Some(a), t);
+        assert_eq!(w(Archetype::Consolidator, Financier)[4], 5);
+        assert!(
+            w(Archetype::Consolidator, Cautious)[4] < 5,
+            "no bids from the cautious"
+        );
+        assert!(w(Archetype::Vulture, Builder)[4] < 5);
+        assert!(w(Archetype::CostLeader, Builder)[1] >= 3, "builders build");
+        assert!(
+            w(Archetype::CostLeader, Raider)[2] >= 3,
+            "raiders brand and raid"
+        );
+        assert_eq!(selector::thrift_pct(Cautious), 150);
+        assert_eq!(selector::thrift_pct(Raider), 100);
+    }
+
+    fn fund_and_age(world: &mut World, firm: Handle, cash: i64) {
+        let entity = world.firms.get_mut(firm).unwrap();
+        for week in 0..14u32 {
+            let tick = cw_core::calendar::Tick(week);
+            entity
+                .book
+                .commit(
+                    tick,
+                    cw_core::ledger::Txn::new()
+                        .debit(cw_core::ledger::Account::Cash, cash / 14 + 1_000, "test")
+                        .credit(cw_core::ledger::Account::ShareCapital, cash / 14, "test")
+                        .credit(cw_core::ledger::Account::Revenue, 1_000, "test"),
+                )
+                .unwrap();
+            let _ = entity.book.close_week(tick);
+        }
+    }
+
+    #[test]
+    fn a_speculator_builds_a_store_ahead_of_a_swing_and_others_do_not() {
+        use cw_data::Temperament::*;
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 177, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        cw_sim::economy::world_prices::init(
+            &mut world,
+            &dataset,
+            &cw_data::price_paths::PricePathFile::load(),
+            "great-lakes-2000",
+            cw_data::PricePath::Historical,
+            177,
+        );
+        // A rival burning a priced, storable input.
+        let (rival, product) = world
+            .firms
+            .iter()
+            .filter(|(h, f)| !player_controlled(&world, *h) && f.operative())
+            .find_map(|(h, f)| {
+                f.facilities
+                    .iter()
+                    .filter_map(|p| world.facilities.get(*p))
+                    .flat_map(|p| dataset.recipes[p.recipe as usize].weekly_inputs_lots.keys())
+                    .filter_map(|id| dataset.product_index.get(id).copied())
+                    .find(|code| {
+                        world.world_prices.family_of(*code).is_some()
+                            && dataset.products[*code as usize].spoilage_bps_weekly < 200
+                            && dataset.storage_class_of(*code).is_some()
+                    })
+                    .map(|code| (h, code))
+            })
+            .expect("a rival with a priced input");
+        fund_and_age(&mut world, rival, 80_000_000_000);
+        let moves = |world: &World, style| {
+            let mut w = world.clone();
+            w.firms.get_mut(rival).unwrap().ceo = Some(person_with(&dataset, style));
+            let mut out = Vec::new();
+            storage_moves(&w, &dataset, rival, &mut out);
+            out
+        };
+        let is_store = |p: &Proposal| match &p.intent {
+            CommandIntent::BuildFacility { recipe, .. } => {
+                dataset.recipes[*recipe as usize].storage_class.is_some()
+            }
+            _ => false,
+        };
+        // Day-one prices: nothing to swing, nothing overflowing.
+        assert!(!moves(&world, Speculator).iter().any(is_store));
+        let family = world.world_prices.product_family[&product] as usize;
+        world.world_prices.families[family].index_bps = 8_000;
+        let built = moves(&world, Speculator);
+        assert!(
+            built.iter().any(is_store),
+            "a cheap good invites a store: {built:?}"
+        );
+        for style in [Raider, Cautious, Financier, Builder] {
+            assert!(!moves(&world, style).iter().any(is_store), "{style:?}");
+        }
+    }
+
+    #[test]
+    fn an_integrator_bids_for_its_supplier_and_a_raider_does_not() {
+        use cw_data::Temperament::*;
+        let dataset = Dataset::load().unwrap();
+        for seed_value in 1..40u64 {
+            let mut world = seed::build(
+                &dataset,
+                seed_value,
+                ScenarioKind::Guided,
+                ScenarioMode::Sandbox,
+            );
+            let rivals: Vec<Handle> = world
+                .firms
+                .handles_sorted()
+                .into_iter()
+                .filter(|h| {
+                    !player_controlled(&world, *h)
+                        && world.firms.get(*h).unwrap().archetype.is_some()
+                })
+                .collect();
+            let pair = rivals.iter().find_map(|&f| {
+                rivals.iter().find_map(|&g| {
+                    (f != g
+                        && !cw_sim::economy::ownership::same_group(&world, f, g)
+                        && feeds_between(&world, &dataset, g, f))
+                    .then_some((f, g))
+                })
+            });
+            let Some((buyer, supplier)) = pair else {
+                continue;
+            };
+            fund_and_age(&mut world, buyer, 90_000_000_000);
+            world.firms.get_mut(supplier).unwrap().shares.mark_cents = world
+                .firms
+                .get(supplier)
+                .unwrap()
+                .shares
+                .mark_cents
+                .max(1_000);
+            world.firms.get_mut(buyer).unwrap().ceo = Some(person_with(&dataset, Integrator));
+            let Some(bid) = supplier_bid(&world, &dataset, buyer) else {
+                continue;
+            };
+            assert!(matches!(bid.intent, CommandIntent::StartDiligence { .. }));
+            let note = note(
+                &world,
+                &dataset,
+                &Proposal {
+                    actor: buyer.0,
+                    intent: bid.intent,
+                },
+            )
+            .expect("a bid is logged");
+            assert_eq!(note.class, "integrate");
+            assert!(note.text.unwrap().starts_with("Bid for its supplier"));
+            world.firms.get_mut(buyer).unwrap().ceo = Some(person_with(&dataset, Raider));
+            assert!(supplier_bid(&world, &dataset, buyer).is_none());
+            return;
+        }
+        panic!("no buyer and supplier pair in forty worlds");
+    }
+
+    fn feeds_between(world: &World, dataset: &Dataset, supplier: Handle, buyer: Handle) -> bool {
+        let (Some(s), Some(b)) = (world.firms.get(supplier), world.firms.get(buyer)) else {
+            return false;
+        };
+        s.facilities
+            .iter()
+            .filter_map(|h| world.facilities.get(*h))
+            .any(|p| {
+                let out = &dataset.recipes[p.recipe as usize].output;
+                b.facilities
+                    .iter()
+                    .filter_map(|h| world.facilities.get(*h))
+                    .any(|q| {
+                        dataset.recipes[q.recipe as usize]
+                            .weekly_inputs_lots
+                            .contains_key(out)
+                    })
+            })
+    }
+
+    #[test]
+    fn a_grudge_picks_the_bid_target_and_a_friend_is_spared() {
+        let (mut world, dataset, buyer) = rival_world(5);
+        let others: Vec<Handle> = world
+            .firms
+            .handles_sorted()
+            .into_iter()
+            .filter(|h| {
+                *h != buyer
+                    && !player_controlled(&world, *h)
+                    && world.firms.get(*h).unwrap().archetype.is_some()
+                    && !cw_sim::economy::ownership::same_group(&world, buyer, *h)
+            })
+            .collect();
+        for h in &others[..3] {
+            let f = world.firms.get_mut(*h).unwrap();
+            f.shares.fair_cents = 1_000;
+            f.shares.mark_cents = 500;
+        }
+        let (first, last) = (others[0], others[2]);
+        assert_eq!(distressed_target(&world, buyer), Some(first));
+        cw_sim::economy::rivalry::note_grudge(
+            &mut world,
+            buyer,
+            last,
+            6_000,
+            cw_sim::economy::rivalry::Cause::HostileBid,
+        );
+        assert_eq!(
+            distressed_target(&world, buyer),
+            Some(last),
+            "the grudge picks"
+        );
+        cw_sim::economy::rivalry::note_alliance(
+            &mut world,
+            buyer,
+            last,
+            9_000,
+            cw_sim::economy::rivalry::Cause::Venture,
+        );
+        assert_ne!(
+            distressed_target(&world, buyer),
+            Some(last),
+            "a friend is spared"
+        );
+        let _ = &dataset;
+    }
+
+    #[test]
+    fn moves_are_logged_with_text_for_the_dossier_and_routine_ones_are_not() {
+        let (world, dataset, firm) = rival_world(5);
+        let bond = Proposal {
+            actor: firm.0,
+            intent: CommandIntent::IssueBond {
+                firm,
+                principal_cents: 1,
+                coupon_bps: 500,
+                weeks: 260,
+            },
+        };
+        let note_bond = note(&world, &dataset, &bond).expect("logged");
+        assert_eq!(note_bond.class, "bond");
+        assert_eq!(note_bond.text.as_deref(), Some("Issued bonds."));
+        let price = Proposal {
+            actor: firm.0,
+            intent: CommandIntent::SetProductionTarget {
+                firm,
+                target_bps: 5_000,
+            },
+        };
+        assert!(note(&world, &dataset, &price).is_none());
+    }
+
+    #[test]
+    fn a_world_with_grudges_still_reloads_into_the_same_proposals() {
+        let (mut world, dataset, firm) = rival_world(9);
+        let other = world
+            .firms
+            .handles_sorted()
+            .into_iter()
+            .find(|h| *h != firm && world.firms.get(*h).unwrap().archetype.is_some())
+            .unwrap();
+        cw_sim::economy::rivalry::note_grudge(
+            &mut world,
+            firm,
+            other,
+            5_000,
+            cw_sim::economy::rivalry::Cause::Raid,
+        );
+        let bytes = postcard::to_allocvec(&world).unwrap();
+        let back: World = postcard::from_bytes(&bytes).unwrap();
+        for week in [4u32, 5, 6, 7] {
+            let mut a = world.clone();
+            let mut b = back.clone();
+            a.tick = cw_core::calendar::Tick(week);
+            b.tick = cw_core::calendar::Tick(week);
+            let pa: Vec<String> = propose(&a, &dataset)
+                .iter()
+                .map(|p| format!("{:?}", p.intent))
+                .collect();
+            let pb: Vec<String> = propose(&b, &dataset)
+                .iter()
+                .map(|p| format!("{:?}", p.intent))
+                .collect();
+            assert_eq!(pa, pb);
+        }
+        assert_eq!(back.rivalry, world.rivalry);
     }
 }

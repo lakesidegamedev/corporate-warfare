@@ -27,6 +27,7 @@ pub mod production;
 pub mod rescue;
 pub mod research;
 pub mod reserve;
+pub mod rivalry;
 pub mod score;
 pub mod sectors;
 pub mod seed;
