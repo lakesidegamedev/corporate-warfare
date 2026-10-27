@@ -156,7 +156,7 @@ fun RivalLeaderRow(store: GameStore, name: String, firm: ULong, detail: String, 
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.weight(1f).clickable { open = true }, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                PixelLogo(name, size = 22.dp)
+                FirmLogo(name, size = 22.dp)
                 Spacer(Modifier.width(6.dp))
                 Text(name, color = Palette.primaryText, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
                 Spacer(Modifier.width(6.dp))

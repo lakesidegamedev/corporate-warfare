@@ -154,7 +154,7 @@ struct RivalLeaderRow: View {
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
-                        PixelLogo(name: name, size: 22)
+                        FirmLogo(name: name, size: 22)
                         Text(name).font(.callout).foregroundStyle(Theme.primaryText).lineLimit(1)
                         Spacer()
                         Text(detail).font(.caption).foregroundStyle(Theme.secondary)

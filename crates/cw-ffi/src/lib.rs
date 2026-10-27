@@ -4864,7 +4864,9 @@ mod tests {
                     let ceo = page.ceo.expect("every other firm has a chief executive");
                     assert!(ceos.insert(ceo.id.clone()), "{id}: {} shared", ceo.id);
                 }
-                assert!(!page.regions.is_empty() || page.kind != "listed" || page.size_band == "Small");
+                assert!(
+                    !page.regions.is_empty() || page.kind != "listed" || page.size_band == "Small"
+                );
             }
             assert!(kinds[1] > 0, "{id}: {kinds:?}");
         }

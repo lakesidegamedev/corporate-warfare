@@ -204,7 +204,7 @@ private struct StockRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            PixelLogo(name: stock.name, size: 28)
+            FirmLogo(name: stock.name, size: 28)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(stock.name).font(.callout.weight(.medium)).foregroundStyle(Theme.primaryText).lineLimit(1)

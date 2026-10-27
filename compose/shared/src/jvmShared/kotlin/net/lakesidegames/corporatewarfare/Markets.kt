@@ -153,7 +153,7 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
             rows.forEachIndexed { position, line ->
                 if (position > 0) HorizontalDivider(color = Palette.stroke)
                 Row(Modifier.fillMaxWidth().clickable { onOpen(line) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    PixelLogo(line.name, size = 28.dp)
+                    FirmLogo(line.name, size = 28.dp)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(line.name + if (line.controlledByYou) " ★" else "", color = Palette.primaryText, fontWeight = FontWeight.Medium, maxLines = 1)
@@ -298,7 +298,7 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
         containerColor = Palette.panel,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PixelLogo(line.name, size = 32.dp)
+                FirmLogo(line.name, size = 32.dp)
                 Text(line.name)
             }
         },

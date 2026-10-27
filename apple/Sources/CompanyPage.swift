@@ -17,7 +17,7 @@ enum FirmLogos {
 }
 
 /// A firm's logo as exact pixels.
-struct PixelLogo: View {
+struct FirmLogo: View {
     let name: String
     var size: CGFloat = 32
 
@@ -44,7 +44,7 @@ struct FirmLogoButton: View {
     @State private var open = false
 
     var body: some View {
-        Button { open = true } label: { PixelLogo(name: name, size: size) }
+        Button { open = true } label: { FirmLogo(name: name, size: size) }
             .buttonStyle(.plain)
             .accessibilityLabel("\(name) company page")
             .sheet(isPresented: $open) { CompanyPageSheet(firm: firm) }
@@ -60,7 +60,7 @@ struct CompanyPageBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                PixelLogo(name: page.name, size: 56)
+                FirmLogo(name: page.name, size: 56)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(page.name).font(.headline).foregroundStyle(Theme.primaryText)
                     Text("\(Sector.name(page.industry)) · \(page.homeRegion)").font(.caption).foregroundStyle(Theme.secondary)
@@ -188,7 +188,7 @@ struct CompanyPageBody: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
                 Button { onOpenFirm(r.firm) } label: {
                     HStack(spacing: 8) {
-                        PixelLogo(name: r.name, size: 20)
+                        FirmLogo(name: r.name, size: 20)
                         Text("\(r.name): \(r.note)").font(.caption).foregroundStyle(Theme.primaryText)
                     }
                 }

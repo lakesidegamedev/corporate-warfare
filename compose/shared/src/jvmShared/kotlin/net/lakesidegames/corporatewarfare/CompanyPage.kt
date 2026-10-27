@@ -47,7 +47,7 @@ object FirmLogos {
 
 /** A firm's logo as exact pixels. */
 @Composable
-fun PixelLogo(name: String, modifier: Modifier = Modifier, size: Dp = 32.dp) {
+fun FirmLogo(name: String, modifier: Modifier = Modifier, size: Dp = 32.dp) {
     val art = remember(name) { FirmLogos.of(name) }
     Canvas(modifier.size(size).clip(RoundedCornerShape(3.dp))) { drawPixelIcon(art, null) }
 }
@@ -57,7 +57,7 @@ fun PixelLogo(name: String, modifier: Modifier = Modifier, size: Dp = 32.dp) {
 fun CompanyPageBody(store: GameStore, p: CompanyPageDto, onOpenFirm: (ULong) -> Unit, onTrade: (() -> Unit)?) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PixelLogo(p.name, size = 56.dp)
+            FirmLogo(p.name, size = 56.dp)
             Column(Modifier.weight(1f)) {
                 Text(p.name, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text("${Sectors.name(p.industry)} · ${p.homeRegion}", color = Palette.secondary, fontSize = 12.sp)
@@ -173,7 +173,7 @@ private fun LinkedRows(title: String, rows: List<LinkedFirmDto>, onOpen: (ULong)
     Eyebrow(title)
     rows.forEach { r ->
         Row(Modifier.fillMaxWidth().clickable { onOpen(r.firm) }, verticalAlignment = Alignment.CenterVertically) {
-            PixelLogo(r.name, size = 20.dp)
+            FirmLogo(r.name, size = 20.dp)
             Spacer(Modifier.width(8.dp))
             Text("${r.name}: ${r.note}", color = Palette.primaryText, fontSize = 12.sp)
         }
@@ -208,7 +208,7 @@ fun CompanyPageDialog(store: GameStore, firm: ULong, onClose: () -> Unit) {
 fun FirmChip(store: GameStore, name: String, firm: ULong, size: Dp = 20.dp) {
     var open by remember { mutableStateOf(false) }
     Row(Modifier.clickable { open = true }, verticalAlignment = Alignment.CenterVertically) {
-        PixelLogo(name, size = size)
+        FirmLogo(name, size = size)
         Spacer(Modifier.width(6.dp))
         Text(name, color = Palette.primaryText, fontSize = 12.sp)
     }
@@ -219,6 +219,6 @@ fun FirmChip(store: GameStore, name: String, firm: ULong, size: Dp = 20.dp) {
 @Composable
 fun FirmChipLogo(store: GameStore, name: String, firm: ULong, size: Dp = 28.dp) {
     var open by remember { mutableStateOf(false) }
-    PixelLogo(name, Modifier.clickable { open = true }, size)
+    FirmLogo(name, Modifier.clickable { open = true }, size)
     if (open) CompanyPageDialog(store, firm) { open = false }
 }
