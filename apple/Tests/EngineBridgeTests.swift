@@ -32,7 +32,7 @@ final class EngineBridgeTests: XCTestCase {
         // world gained its world price state, and again in 1.7 preview 2 when the product chains
         // and multi-output plants changed the dataset. This constant needs
         // a fresh simulator run on the Mac runner before R05 is claimed again.
-        XCTAssertEqual(session.canonicalHash(), "daca9262f6691f65be29a1f4f89ade4219539631ff766638c5198b21013e61df")
+        XCTAssertEqual(session.canonicalHash(), "c04f6aadf2b605941b3abb60c9e8c7ed58f4420c352c4bc22fd558f3558aad04")
 
         let data = try session.exportSave()
         XCTAssertGreaterThan(data.count, 1_000)

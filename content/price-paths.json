@@ -73,10 +73,12 @@
   "scrap": "steel",
   "food_raw": "grain",
   "grain": "grain",
+  "livestock": "grain",
   "fertilizers": "fertilizer",
   "chemicals": "chemicals",
   "plastics": "chemicals",
   "feedstock": "chemicals",
+  "petrochem_feedstock": "oil",
   "timber": "timber",
   "rare_earth": "rare_earth",
   "building_materials": "building_materials"
