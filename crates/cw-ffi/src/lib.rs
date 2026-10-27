@@ -18,6 +18,7 @@ uniffi::setup_scaffolding!();
 
 mod cast;
 mod catalogue;
+mod company;
 mod custom;
 pub use cast::{
     DossierDto, MoveDto, PersonDto, PostDto, RivalMoveFeedDto, RivalSummaryDto, RivalTagDto,
@@ -1375,6 +1376,27 @@ fn finance_dto(summary: FinanceSummary) -> FinanceDto {
     }
 }
 
+fn stock_dto(line: cw_session::dto::StockLine) -> StockDto {
+    StockDto {
+        firm: line.firm,
+        name: line.name,
+        industry: line.industry,
+        region: line.region,
+        price_cents: line.price_cents,
+        fair_cents: line.fair_cents,
+        change_week_bps: line.change_week_bps,
+        change_quarter_bps: line.change_quarter_bps,
+        history_cents: line.history_cents,
+        shares_issued: line.shares_issued,
+        market_cap_cents: line.market_cap_cents,
+        earnings_cents: line.earnings_cents,
+        earnings_weeks: line.earnings_weeks,
+        your_shares: line.your_shares,
+        float_bps: line.float_bps,
+        controlled_by_you: line.controlled_by_you,
+    }
+}
+
 fn ownership_dto(summary: OwnershipSummary) -> OwnershipDto {
     OwnershipDto {
         firm: summary.firm,
@@ -1920,6 +1942,8 @@ pub struct NewsDto {
     pub text: String,
     /// The cast member the item is about, for the portrait beside it.
     pub person: Option<String>,
+    /// The company the item names, for a tap through to its page.
+    pub firm: Option<u64>,
 }
 
 /// The laws in force or announced.
@@ -3410,24 +3434,7 @@ impl SessionHandle {
         let session = self.lock();
         cw_session::dto::stock_board(&session.world)
             .into_iter()
-            .map(|line| StockDto {
-                firm: line.firm,
-                name: line.name,
-                industry: line.industry,
-                region: line.region,
-                price_cents: line.price_cents,
-                fair_cents: line.fair_cents,
-                change_week_bps: line.change_week_bps,
-                change_quarter_bps: line.change_quarter_bps,
-                history_cents: line.history_cents,
-                shares_issued: line.shares_issued,
-                market_cap_cents: line.market_cap_cents,
-                earnings_cents: line.earnings_cents,
-                earnings_weeks: line.earnings_weeks,
-                your_shares: line.your_shares,
-                float_bps: line.float_bps,
-                controlled_by_you: line.controlled_by_you,
-            })
+            .map(stock_dto)
             .collect()
     }
 
@@ -3584,6 +3591,12 @@ impl SessionHandle {
         cast::dossier(&self.lock(), firm)
     }
 
+    /// A company's full page: who runs it, how big it is and, by what the investor may see, its
+    /// shares, accounts, plants, holders, structure, recent moves and news.
+    pub fn company_page(&self, firm: u64) -> Option<company::CompanyPageDto> {
+        company::page(&self.lock(), firm)
+    }
+
     /// The economy, central bank and government.
     pub fn economy(&self) -> EconomyDto {
         let session = self.lock();
@@ -3660,6 +3673,7 @@ impl SessionHandle {
                         .person
                         .and_then(|p| session.dataset.cast.get(p as usize))
                         .map(|p| p.id.clone()),
+                    firm: company::firm_named(&session.world, &n.text),
                 })
                 .collect(),
             reserve: cw_sim::economy::reserve::strategic_goods(&session.dataset)
@@ -4803,5 +4817,50 @@ mod tests {
             price(&career.products(), "Crude oil"),
             price(&texas, "Crude oil")
         );
+    }
+
+    /// Every firm has a face, a name and a logo, and a page shows only what the investor may know.
+    #[test]
+    fn every_firm_has_a_ceo_a_logo_and_a_page_that_follows_the_information_rules() {
+        for id in ["texas-1981", "silicon-valley-1995", "ruhr-rhine-1991"] {
+            let session = SessionHandle::start(NewGameDto {
+                seed: 11,
+                scenario_id: id.to_owned(),
+                guided: true,
+                five_year: false,
+                difficulty: "standard".to_owned(),
+                economy: "historic".to_owned(),
+                starting_capital_cents: None,
+                price_path: String::new(),
+            })
+            .unwrap();
+            session.advance(3);
+            let (mut ceos, mut kinds) = (std::collections::BTreeSet::new(), [0u32; 3]);
+            for firm in session.firms() {
+                let page = session.company_page(firm.handle).expect("page");
+                assert!(!page.rows_empty_logo(), "{id} {}", firm.name);
+                match page.kind.as_str() {
+                    "yours" => {
+                        kinds[0] += 1;
+                        assert!(page.finance.is_some() && page.ceo_is_you);
+                    }
+                    "listed" => {
+                        kinds[1] += 1;
+                        assert!(page.stock.is_some() && page.finance.is_some());
+                    }
+                    _ => {
+                        kinds[2] += 1;
+                        assert!(page.stock.is_none() && page.finance.is_none());
+                        assert!(page.holders.is_empty() && page.divisions.is_empty());
+                    }
+                }
+                if page.kind != "yours" {
+                    let ceo = page.ceo.expect("every other firm has a chief executive");
+                    assert!(ceos.insert(ceo.id.clone()), "{id}: {} shared", ceo.id);
+                }
+                assert!(!page.regions.is_empty() || page.kind == "private");
+            }
+            assert!(kinds[1] > 0 && kinds[2] > 0, "{id}: {kinds:?}");
+        }
     }
 }

@@ -15,6 +15,7 @@ pub mod events;
 pub mod firms;
 pub mod geography;
 pub mod logistics;
+pub mod logo;
 pub mod price_paths;
 
 use std::collections::BTreeMap;

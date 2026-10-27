@@ -173,10 +173,9 @@ fn ally_reason(cause: cw_sim::economy::rivalry::Cause) -> &'static str {
 
 pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
     let world = &session.world;
-    let ds = &session.dataset;
     let handle = Handle(firm);
     let entity = world.firms.get(handle)?;
-    let ceo = entity.ceo.and_then(|p| person_dto(ds, p));
+    let ceo = crate::company::resolved_ceo(session, handle);
     let since = world.cast.appointed.get(&handle).copied().unwrap_or(0);
     let name_of = |h: Handle| {
         world

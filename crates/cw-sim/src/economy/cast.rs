@@ -71,7 +71,7 @@ fn fit(ds: &Dataset, scenario_id: &str, person: PersonId) -> i32 {
 }
 
 /// How well a temperament suits a firm archetype: 2 best, 1 good, 0 neutral.
-fn temperament_match(archetype: Archetype, temperament: Temperament) -> i32 {
+pub fn temperament_match(archetype: Archetype, temperament: Temperament) -> i32 {
     use Archetype::*;
     use Temperament::*;
     let (first, second) = match archetype {
