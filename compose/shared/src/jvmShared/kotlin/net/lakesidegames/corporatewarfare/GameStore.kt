@@ -219,6 +219,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         if (receipt.accepted) {
             error = null
             status = "Accepted."
+            Tutorial.sent(json.substringAfter("{\"").substringBefore("\""))
         } else {
             error = Messages.rejection(receipt.errorKey ?: "error.internal_fault", receipt.errorDetail ?: "")
         }

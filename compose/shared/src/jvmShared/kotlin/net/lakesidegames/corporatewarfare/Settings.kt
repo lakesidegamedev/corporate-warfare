@@ -49,6 +49,8 @@ class AppSettings(private val file: File) {
     var mapDetail by mutableStateOf(enumOr(props.getProperty("mapDetail"), MapDetail.High)); private set
     var animations by mutableStateOf(props.getProperty("animations")?.toBoolean() ?: true); private set
     var autoUpdate by mutableStateOf(props.getProperty("autoUpdate")?.toBoolean() ?: true); private set
+    var tutorialDone: Set<String> = props.getProperty("tutorial.done")?.split(',')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet(); private set
+    var tutorialHidden: Boolean = props.getProperty("tutorial.hidden")?.toBoolean() ?: false; private set
     var uiScale by mutableStateOf(props.getProperty("uiScale")?.toFloatOrNull() ?: 1f); private set
     var windowMode by mutableStateOf(enumOr(props.getProperty("windowMode"), WindowMode.Windowed)); private set
     var resolution by mutableStateOf(
@@ -59,6 +61,7 @@ class AppSettings(private val file: File) {
     fun chooseMapDetail(value: MapDetail) { mapDetail = value; store() }
     fun chooseAnimations(value: Boolean) { animations = value; store() }
     fun chooseAutoUpdate(value: Boolean) { autoUpdate = value; store() }
+    fun chooseTutorial(done: Set<String>, hidden: Boolean) { tutorialDone = done; tutorialHidden = hidden; store() }
     fun chooseUiScale(value: Float) { uiScale = value; store() }
     fun chooseWindowMode(value: WindowMode) { windowMode = value; store() }
     fun chooseResolution(value: Pair<Int, Int>) { resolution = value; store() }
@@ -67,6 +70,8 @@ class AppSettings(private val file: File) {
         props.setProperty("mapDetail", mapDetail.name)
         props.setProperty("animations", animations.toString())
         props.setProperty("autoUpdate", autoUpdate.toString())
+        props.setProperty("tutorial.done", tutorialDone.joinToString(","))
+        props.setProperty("tutorial.hidden", tutorialHidden.toString())
         props.setProperty("uiScale", uiScale.toString())
         props.setProperty("windowMode", windowMode.name)
         props.setProperty("resolution", "${resolution.first}x${resolution.second}")
@@ -136,6 +141,19 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                         if (settings.windowMode != WindowMode.Windowed) settings.chooseWindowMode(WindowMode.Windowed)
                     }
                     Text("Resolution sets the window size; full screen uses the whole display.", color = Palette.secondary, fontSize = 12.sp)
+                }
+            }
+        }
+        item {
+            Panel {
+                Eyebrow("Tutorial")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (Tutorial.finished) "Tutorial complete" else "${Tutorial.done.size} of ${Tutorial.steps.size} steps done",
+                        color = Palette.primaryText,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { Tutorial.restart() }) { Text("Start over", color = Palette.gold) }
                 }
             }
         }

@@ -80,7 +80,11 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
     val density = androidx.compose.ui.platform.LocalDensity.current
     var showSettings by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(updater) {
+        Tutorial.load(settings)
         if (updater != null && settings.autoUpdate) updater.check()
+    }
+    androidx.compose.runtime.LaunchedEffect(store.overview?.tick) {
+        store.overview?.tick?.let { Tutorial.week(it) }
     }
     androidx.compose.runtime.CompositionLocalProvider(
         LocalAppSettings provides settings,
@@ -149,6 +153,39 @@ fun GoldButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = t
 private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
     var tab by remember { mutableStateOf(Tab.Map) }
     var menu by remember { mutableStateOf(false) }
+    // Full screens opened over the tabs: actions, research, stats.
+    var overlay by remember { mutableStateOf<String?>(null) }
+    fun open(page: String) {
+        Tutorial.visited(page)
+        when (page) {
+            "map" -> { overlay = null; tab = Tab.Map }
+            "office" -> { overlay = null; tab = Tab.Office }
+            "markets" -> { overlay = null; tab = Tab.Markets }
+            "inbox" -> { overlay = null; tab = Tab.Inbox }
+            "portfolio" -> { overlay = null; tab = Tab.Portfolio }
+            else -> overlay = page
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(Tutorial.requestedPage) {
+        val wanted = Tutorial.requestedPage ?: return@LaunchedEffect
+        open(wanted)
+        Tutorial.requestedPage = null
+    }
+    overlay?.let { page ->
+        Column(Modifier.fillMaxSize().background(Palette.ink)) {
+            Row(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { overlay = null }) { Text("‹ Back", color = Palette.gold) }
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                when (page) {
+                    "actions" -> CommandCenterScreen(store)
+                    "research" -> ResearchScreen(store)
+                    else -> StatsScreen(store) { overlay = null }
+                }
+            }
+        }
+        return
+    }
     Scaffold(
         containerColor = Palette.ink,
         bottomBar = {
@@ -156,7 +193,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
                 Tab.entries.forEach { item ->
                     NavigationBarItem(
                         selected = tab == item,
-                        onClick = { tab = item },
+                        onClick = { open(item.name.lowercase()) },
                         icon = {
                             val due = store.events.count { it.mandatory }
                             if (item == Tab.Inbox && due > 0) {
@@ -186,13 +223,16 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
         },
     ) { padding ->
         // Content stops at the navigation bar: the scaffold's padding keeps it clear.
-        Box(Modifier.padding(padding)) {
+        Column(Modifier.padding(padding)) {
+            TutorialPanel(compact = true, modifier = Modifier.fillMaxWidth())
+            Box(Modifier.weight(1f)) {
             when (tab) {
                 Tab.Map -> MapScreen(store)
-                Tab.Office -> OfficeScreen(store)
+                Tab.Office -> OfficeScreen(store, ::open)
                 Tab.Markets -> MarketsScreen(store)
                 Tab.Inbox -> InboxScreen(store)
                 Tab.Portfolio -> PortfolioScreen(store, onSettings)
+            }
             }
         }
     }
@@ -227,7 +267,7 @@ internal fun TabList(content: LazyListScope.() -> Unit) {
 // MARK: CEO Office
 
 @Composable
-private fun OfficeScreen(store: GameStore) {
+private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
     val firm = store.selectedFirmDto
     var editing by remember { mutableStateOf<ProductLineDto?>(null) }
     var stats by remember { mutableStateOf(false) }
@@ -238,7 +278,13 @@ private fun OfficeScreen(store: GameStore) {
     TabList {
         item {
             ScreenHeader("CEO Office", store.overview?.weekLabel) {
-                if (firm != null) GoldButton("Stats") { stats = true }
+                if (firm != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(onClick = { onOpen("research") }) { Text("Research", color = Palette.primaryText, fontSize = 12.sp) }
+                        OutlinedButton(onClick = { onOpen("stats") }) { Text("Stats", color = Palette.primaryText, fontSize = 12.sp) }
+                        GoldButton("Actions") { onOpen("actions") }
+                    }
+                }
             }
         }
         if (firm == null) {

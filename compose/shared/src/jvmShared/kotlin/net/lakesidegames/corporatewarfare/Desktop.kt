@@ -1,6 +1,35 @@
 package net.lakesidegames.corporatewarfare
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.CandlestickChart
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +44,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -47,84 +77,190 @@ import uniffi.cw_ffi.StockDto
 /** Windows at least this wide get the desktop layout instead of the phone tabs. */
 val DesktopBreakpoint: Dp = 1000.dp
 
-private enum class Page(val title: String, val glyph: String) {
-    Map("Map", "◍"),
-    Office("CEO Office", "▣"),
-    Markets("Markets", "▤"),
-    Stats("Stats", "▥"),
-    Inbox("Inbox", "✉"),
-    Portfolio("Portfolio", "◈"),
+private enum class Page(val id: String, val title: String, val icon: ImageVector, val group: String, val key: String) {
+    Map("map", "Map", Icons.Filled.Public, "Play", "F1"),
+    Office("office", "CEO Office", Icons.Filled.Business, "Company", "F2"),
+    Research("research", "Research", Icons.Filled.Science, "Company", "F3"),
+    Stats("stats", "Stats", Icons.Filled.Insights, "Company", "F4"),
+    Markets("markets", "Markets", Icons.Filled.CandlestickChart, "World", "F5"),
+    Actions("actions", "Actions", Icons.Filled.Bolt, "World", "Ctrl K"),
+    Inbox("inbox", "Inbox", Icons.Filled.Inbox, "World", "F6"),
+    Portfolio("portfolio", "Portfolio", Icons.Filled.AccountBalance, "You", "F7"),
 }
 
 /**
- * The desktop shell: a sidebar for every screen, a status bar with the company's figures and the
- * time controls always in view, and dense multi-pane screens built from tables.
+ * The desktop shell: a sidebar for every screen, a status bar with the company, the economy and
+ * the time controls always in view, keyboard shortcuts, and dense multi-pane screens.
  */
 @Composable
 fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
     var page by remember { mutableStateOf(Page.entries[startPage]) }
-    Row(Modifier.fillMaxSize().background(Palette.ink)) {
-        Sidebar(store, page, { page = it }, onSettings)
-        Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.stroke))
-        Column(Modifier.weight(1f).fillMaxHeight()) {
-            StatusBar(store)
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                when (page) {
-                    Page.Map -> DesktopMap(store)
-                    Page.Office -> DesktopOffice(store)
-                    Page.Markets -> DesktopMarkets(store)
-                    Page.Stats -> DesktopStats(store)
-                    Page.Inbox -> DesktopInbox(store)
-                    Page.Portfolio -> DesktopPortfolio(store)
+    var query by remember { mutableStateOf("") }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    fun open(next: Page) {
+        page = next
+        Tutorial.visited(next.id)
+    }
+    // "Show me" in the tutorial opens the page its step needs.
+    LaunchedEffect(Tutorial.requestedPage) {
+        val wanted = Tutorial.requestedPage ?: return@LaunchedEffect
+        Page.entries.firstOrNull { it.id == wanted }?.let(::open)
+        Tutorial.requestedPage = null
+    }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    LaunchedEffect(page) { Tutorial.visited(page.id) }
+    Box(
+        Modifier.fillMaxSize().background(Palette.ink).focusRequester(focus).focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when {
+                    event.isCtrlPressed && event.key == Key.K -> { open(Page.Actions); true }
+                    event.key == Key.Spacebar && page != Page.Actions -> { store.playAt(if (store.running) 0 else store.speed.coerceAtLeast(1)); true }
+                    event.key == Key.N && page != Page.Actions -> { if (!store.busy && !store.running) store.advance(); true }
+                    event.key == Key.One && page != Page.Actions -> { store.playAt(1); true }
+                    event.key == Key.Two && page != Page.Actions -> { store.playAt(2); true }
+                    event.key == Key.Three && page != Page.Actions -> { store.playAt(4); true }
+                    event.key == Key.F1 -> { open(Page.Map); true }
+                    event.key == Key.F2 -> { open(Page.Office); true }
+                    event.key == Key.F3 -> { open(Page.Research); true }
+                    event.key == Key.F4 -> { open(Page.Stats); true }
+                    event.key == Key.F5 -> { open(Page.Markets); true }
+                    event.key == Key.F6 -> { open(Page.Inbox); true }
+                    event.key == Key.F7 -> { open(Page.Portfolio); true }
+                    else -> false
                 }
+            },
+    ) {
+        Row(Modifier.fillMaxSize()) {
+            Sidebar(store, page, ::open, onSettings)
+            Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.stroke))
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                StatusBar(store) { text ->
+                    query = text
+                    open(Page.Actions)
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    when (page) {
+                        Page.Map -> DesktopMap(store)
+                        Page.Office -> DesktopOffice(store) { open(it) }
+                        Page.Research -> Box(Modifier.fillMaxSize().padding(10.dp)) { ResearchScreen(store) }
+                        Page.Markets -> DesktopMarkets(store)
+                        Page.Actions -> key(query) { CommandCenterScreen(store, initialQuery = query) }
+                        Page.Stats -> DesktopStats(store)
+                        Page.Inbox -> DesktopInbox(store)
+                        Page.Portfolio -> DesktopPortfolio(store)
+                    }
+                }
+            }
+        }
+        TutorialPanel(compact = false, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).width(360.dp))
+    }
+}
+
+@Composable
+private fun Sidebar(store: GameStore, page: Page, onPage: (Page) -> Unit, onSettings: () -> Unit) {
+    Column(Modifier.width(206.dp).fillMaxHeight().background(Palette.panel).padding(vertical = 14.dp)) {
+        Box(Modifier.fillMaxWidth().padding(bottom = 10.dp), contentAlignment = Alignment.Center) { LogoArt(Modifier.width(112.dp)) }
+        CompanySwitcher(store)
+        var group = ""
+        Page.entries.forEach { item ->
+            if (item.group != group) {
+                group = item.group
+                Text(
+                    group.uppercase(), color = Palette.secondary.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.sp, modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp),
+                )
+            }
+            val due = if (item == Page.Inbox) store.events.count { it.mandatory } else 0
+            SidebarItem(item.icon, item.title, item.key, page == item, badge = due) { onPage(item) }
+        }
+        Spacer(Modifier.weight(1f))
+        SidebarItem(Icons.Filled.Save, "Save", "", false) { store.saveNow() }
+        SidebarItem(Icons.Filled.Settings, "Settings", "", false, onClick = onSettings)
+        SidebarItem(Icons.Filled.Logout, "Main menu", "", false) { store.exitToMenu() }
+    }
+}
+
+/** Which company the screens act on; a list of the companies you control. */
+@Composable
+private fun CompanySwitcher(store: GameStore) {
+    var open by remember { mutableStateOf(false) }
+    val firm = store.selectedFirmDto
+    val controlled = store.firms.filter { it.controlled }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.panelRaised)
+                .clickable(enabled = controlled.size > 1) { open = !open }.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            firm?.let { SectorBadge(it.industry, 22) }
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(firm?.name ?: "No company yet", color = Palette.primaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(firm?.let { "${Sectors.name(it.industry)} · ${it.region}" } ?: "Found one in the CEO Office", color = Palette.secondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (controlled.size > 1) Text(if (open) "▴" else "▾", color = Palette.secondary, fontSize = 12.sp)
+        }
+        if (open) {
+            controlled.forEach { f ->
+                Text(
+                    f.name, color = if (f.handle == store.selectedFirm) Palette.gold else Palette.primaryText, fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth().clickable { store.selectFirm(f.handle); open = false }.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun Sidebar(store: GameStore, page: Page, onPage: (Page) -> Unit, onSettings: () -> Unit) {
-    Column(Modifier.width(188.dp).fillMaxHeight().background(Palette.panel).padding(vertical = 12.dp)) {
-        LogoArt(Modifier.width(120.dp).padding(start = 16.dp, bottom = 12.dp))
-        Page.entries.forEach { item ->
-            val due = if (item == Page.Inbox) store.events.count { it.mandatory } else 0
-            SidebarItem(item.glyph, item.title, page == item, badge = due) { onPage(item) }
-        }
-        Spacer(Modifier.weight(1f))
-        SidebarItem("⤓", "Save", false) { store.saveNow() }
-        SidebarItem("⚙", "Settings", false, onClick = onSettings)
-        SidebarItem("⏏", "Main menu", false) { store.exitToMenu() }
-    }
-}
-
-@Composable
-private fun SidebarItem(glyph: String, title: String, selected: Boolean, badge: Int = 0, onClick: () -> Unit) {
+private fun SidebarItem(icon: ImageVector, title: String, shortcut: String, selected: Boolean, badge: Int = 0, onClick: () -> Unit) {
+    val hover = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val hovered by hover.collectIsHoveredAsState()
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp).clip(RoundedCornerShape(8.dp))
-            .background(if (selected) Palette.panelRaised else Color.Transparent)
-            .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 8.dp),
+            .background(if (selected) Palette.panelRaised else if (hovered) Palette.panelRaised.copy(alpha = 0.5f) else Color.Transparent)
+            .hoverable(hover).pointerHoverIcon(PointerIcon.Hand)
+            .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(glyph, color = if (selected) Palette.gold else Palette.secondary, fontSize = 14.sp, modifier = Modifier.width(22.dp))
+        if (selected) Box(Modifier.width(3.dp).height(18.dp).clip(RoundedCornerShape(2.dp)).background(Palette.gold))
+        Spacer(Modifier.width(if (selected) 7.dp else 10.dp))
+        Icon(icon, null, tint = if (selected) Palette.gold else Palette.secondary, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
         Text(title, color = if (selected) Palette.primaryText else Palette.secondary, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.weight(1f))
         if (badge > 0) SignalPill("$badge", Palette.warning)
+        else if (hovered && shortcut.isNotEmpty()) Text(shortcut, color = Palette.secondary.copy(alpha = 0.7f), fontSize = 10.sp)
     }
 }
 
-/** Company figures across the top and the time controls, always expanded. */
+private fun phaseTint(phase: String): Color = when (phase) {
+    "recession" -> Palette.negative
+    "boom" -> Palette.gold
+    "slowdown" -> Palette.warning
+    "recovery" -> Palette.positive
+    else -> Color(0xFF42A5F5)
+}
+
+/** The company, the economy and the time controls, always in view, with action search. */
 @Composable
-private fun StatusBar(store: GameStore) {
+private fun StatusBar(store: GameStore, onSearch: (String) -> Unit) {
     val overview = store.overview
-    val firm = store.selectedFirmDto
+    val economy = store.economy
     Row(
         Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(22.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Column(Modifier.width(220.dp)) {
-            Text(overview?.weekLabel ?: "", color = Palette.secondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            Text(firm?.name ?: overview?.primaryName ?: "No company", color = Palette.primaryText, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column {
+            Text(overview?.weekLabel ?: "", color = Palette.primaryText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            if (economy != null) {
+                Text(
+                    economy.phase.replaceFirstChar { it.uppercase() },
+                    color = Palette.ink, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clip(CircleShape).background(phaseTint(economy.phase)).padding(horizontal = 7.dp, vertical = 1.dp),
+                )
+            }
         }
         val profit = overview?.quarterNetIncomeCents ?: 0
         val weeks = overview?.quarterWeeks?.toInt() ?: 0
@@ -132,9 +268,39 @@ private fun StatusBar(store: GameStore) {
         Figure(if (weeks >= 13) "Profit, quarter" else "Profit, $weeks wk", Format.compact(profit), if (profit >= 0) Palette.positive else Palette.negative)
         val outlook = (overview?.forecastFourWeekCents ?: 0) - (overview?.firmCashCents ?: 0)
         Figure("Cash in 4 wk", Format.compact(overview?.forecastFourWeekCents ?: 0), if (outlook >= 0) Palette.primaryText else Palette.negative)
-        firm?.let { Figure("Share price", Format.price(it.markCents)) }
         Figure("Net worth", Format.compact(overview?.investorNetWorthCents ?: 0))
+        if (economy != null) {
+            Figure("Rate", "%.2f%%".format(economy.policyRateBps / 100.0))
+            Figure("Inflation", "%.1f%%".format(economy.inflationBps / 100.0), if (economy.inflationBps > economy.targetInflationBps + 100) Palette.warning else Palette.primaryText)
+        }
         Spacer(Modifier.weight(1f))
+        var text by remember { mutableStateOf("") }
+        androidx.compose.foundation.text.BasicTextField(
+            text, { text = it },
+            singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(color = Palette.primaryText, fontSize = 13.sp),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.gold),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { onSearch(text) }),
+            modifier = Modifier.width(220.dp).onPreviewKeyEvent { e ->
+                if (e.type == KeyEventType.KeyDown && e.key == Key.Enter) { onSearch(text); true } else false
+            },
+            decorationBox = { inner ->
+                Row(
+                    Modifier.clip(RoundedCornerShape(9.dp)).background(Palette.ink).border(1.dp, Palette.stroke, RoundedCornerShape(9.dp))
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Search, null, tint = Palette.secondary, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Box(Modifier.weight(1f)) {
+                        if (text.isEmpty()) Text("Search actions", color = Palette.secondary, fontSize = 13.sp)
+                        inner()
+                    }
+                    Text("Ctrl K", color = Palette.secondary.copy(alpha = 0.6f), fontSize = 10.sp)
+                }
+            },
+        )
         GoldButton("Next week", enabled = !store.busy && !store.running) { store.advance() }
         SpeedControl(store)
     }
@@ -168,10 +334,14 @@ private fun TableHeader(cols: List<Col>) {
 
 @Composable
 private fun TableRow(index: Int, selected: Boolean = false, onClick: (() -> Unit)? = null, content: @Composable RowScope.() -> Unit) {
+    val hover = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val hovered by hover.collectIsHoveredAsState()
     val base = if (index % 2 == 1) Palette.panelRaised.copy(alpha = 0.35f) else Color.Transparent
     Row(
-        Modifier.fillMaxWidth().background(if (selected) Palette.gold.copy(alpha = 0.14f) else base)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+        Modifier.fillMaxWidth()
+            .background(if (selected) Palette.gold.copy(alpha = 0.14f) else if (hovered && onClick != null) Palette.gold.copy(alpha = 0.06f) else base)
+            .hoverable(hover)
+            .then(if (onClick != null) Modifier.pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         content = content,
@@ -330,11 +500,11 @@ private fun RegionBoardDetail(store: GameStore, board: RegionBoardDto) {
 
 /** Figures in a strip, then results, pricing and divisions side by side. */
 @Composable
-private fun DesktopOffice(store: GameStore) {
+private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
     val firm = store.selectedFirmDto
     var editing by remember { mutableStateOf<ProductLineDto?>(null) }
     if (firm == null) {
-        Box(Modifier.padding(24.dp)) { Callout("Choose a company from the portfolio.") }
+        Box(Modifier.fillMaxSize().padding(16.dp)) { FoundCompanyPanel(store) }
         return
     }
     Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -353,6 +523,10 @@ private fun DesktopOffice(store: GameStore) {
             Figure("Share price", Format.price(firm.markCents))
             Figure("Plants", "${firm.facilities}")
             Figure("Your votes", "%.1f%%".format(firm.investorVotesBps / 100.0))
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(onClick = { onOpen(Page.Research) }) { Text("Research", color = Palette.primaryText) }
+            OutlinedButton(onClick = { onOpen(Page.Stats) }) { Text("Stats", color = Palette.primaryText) }
+            GoldButton("Actions") { onOpen(Page.Actions) }
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(0.9f).fillMaxHeight().verticalScroll(rememberScrollState())) {
@@ -371,7 +545,7 @@ private fun DesktopOffice(store: GameStore) {
                     }
                 }
             }
-            val pc = listOf(Col("Product", 1.5f), Col("Price", 0.8f, true), Col("Posture", 1f), Col("Cost", 0.8f, true), Col("Margin", 0.8f, true), Col("Made", 0.6f, true), Col("Sold", 0.6f, true), Col("Stock", 0.6f, true))
+            val pc = listOf(Col("Product", 1.5f), Col("Price", 0.8f, true), Col("Posture", 1f), Col("Cost", 0.8f, true), Col("Margin", 0.8f, true), Col("Made", 0.6f, true), Col("Sold", 0.6f, true), Col("Stock", 0.75f, true))
             Pane("Pricing: click a product to change its posture", Modifier.weight(1.4f).fillMaxHeight()) {
                 TableHeader(pc)
                 store.productLines.forEachIndexed { i, line ->
@@ -389,7 +563,7 @@ private fun DesktopOffice(store: GameStore) {
                     }
                 }
             }
-            val dc = listOf(Col("Division", 1.6f), Col("Strategy", 1.2f), Col("Plants", 0.5f, true), Col("Share", 0.6f, true))
+            val dc = listOf(Col("Division", 1.6f), Col("Strategy", 1.2f), Col("Plants", 0.6f, true), Col("Share", 0.6f, true))
             Pane("Divisions", Modifier.weight(1.1f).fillMaxHeight()) {
                 TableHeader(dc)
                 store.divisions.forEachIndexed { i, d ->
@@ -439,6 +613,9 @@ private fun DesktopMarkets(store: GameStore) {
             }
         }
         val cc = listOf(Col("Good", 1.5f), Col("Price", 0.8f, true), Col("Week", 0.6f, true), Col("Made", 0.7f, true), Col("Sold", 0.7f, true), Col("Imported", 0.75f, true), Col("Exported", 0.75f, true))
+        Column(Modifier.width(400.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
+            EconomyCard(store, collapsible = false)
+        }
         Pane("Commodities, per lot", Modifier.weight(1f).fillMaxHeight()) {
             TableHeader(cc)
             val ordered = store.commodities.sortedWith(compareBy({ (Sectors.order + "other").indexOf(it.sector).let { i -> if (i < 0) 99 else i } }, { it.name }))
