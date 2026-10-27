@@ -1770,6 +1770,7 @@ pub fn reserve_lane(
     if world.logistics.reservations.len() > 32 {
         world.logistics.reservations.remove(0);
     }
+    crate::economy::rivalry::on_lane_reserved(world, firm, key);
     Ok(id)
 }
 

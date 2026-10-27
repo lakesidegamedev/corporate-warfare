@@ -148,6 +148,22 @@ pub struct CastLine {
     pub named_ceos: u32,
 }
 
+/// Rival personalities at work: moves made by temperament and by class, grudges and alliances
+/// formed, and how many rivals hold a grudge now. Counts only, never names.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct RivalryLine {
+    pub grudges_formed: u32,
+    pub alliances_formed: u32,
+    pub grudges_active: u32,
+    pub alliances_active: u32,
+    /// Moves aimed at a group the mover held a grudge against.
+    pub grudge_moves: u32,
+    pub moves_by_temperament: std::collections::BTreeMap<String, u32>,
+    pub moves_by_class: std::collections::BTreeMap<String, u32>,
+    /// Rivals by the temperament that runs them right now.
+    pub rivals_by_temperament: std::collections::BTreeMap<String, u32>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct PlayerLine {
     pub cash_cents: i64,
@@ -179,6 +195,7 @@ pub struct MarketSnapshot {
     pub government: GovernmentLine,
     pub structure: StructureLine,
     pub cast: CastLine,
+    pub rivalry: RivalryLine,
     pub player: Option<PlayerLine>,
 }
 
@@ -530,8 +547,42 @@ impl Session {
                 ceo_turnovers: world.cast.turnovers,
                 named_ceos: world.firms.iter().filter(|(_, f)| f.ceo.is_some()).count() as u32,
             },
+            rivalry: rivalry_line(world, dataset),
             player,
         }
+    }
+}
+
+fn rivalry_line(world: &cw_sim::state::World, dataset: &cw_data::Dataset) -> RivalryLine {
+    use cw_sim::economy::rivalry::ACTIVE;
+    let stats = &world.rivalry.stats;
+    let mut rivals_by_temperament = std::collections::BTreeMap::new();
+    for (handle, firm) in world.firms.iter() {
+        if firm.archetype.is_some() && firm.operative() {
+            *rivals_by_temperament
+                .entry(cw_ai::style(world, dataset, handle).key().to_owned())
+                .or_insert(0) += 1;
+        }
+    }
+    RivalryLine {
+        grudges_formed: stats.grudges_formed,
+        alliances_formed: stats.alliances_formed,
+        grudges_active: world
+            .rivalry
+            .grudges
+            .values()
+            .filter(|m| m.score >= ACTIVE)
+            .count() as u32,
+        alliances_active: world
+            .rivalry
+            .alliances
+            .values()
+            .filter(|m| m.score >= ACTIVE)
+            .count() as u32,
+        grudge_moves: stats.grudge_moves,
+        moves_by_temperament: stats.moves_by_temperament.clone(),
+        moves_by_class: stats.moves_by_class.clone(),
+        rivals_by_temperament,
     }
 }
 

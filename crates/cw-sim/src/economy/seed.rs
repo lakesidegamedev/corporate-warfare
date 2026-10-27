@@ -183,6 +183,7 @@ pub fn build_with(
         logistics: Default::default(),
         systemic: Default::default(),
         structure: Default::default(),
+        rivalry: Default::default(),
     };
 
     // Outside gateway capital is finite but real: exports are paid from it, imports add to it.

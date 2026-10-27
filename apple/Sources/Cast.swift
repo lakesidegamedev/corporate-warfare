@@ -92,6 +92,18 @@ struct DossierBody: View {
                 Text("\(dossier.firmName) is run by its management. Style: \(dossier.style).")
                     .font(.caption).foregroundStyle(Theme.secondary)
             }
+            ForEach(Array(dossier.grudges.enumerated()), id: \.offset) { _, line in
+                HStack(alignment: .top, spacing: 6) {
+                    PixelIcon("target", size: 12).foregroundStyle(Theme.negative)
+                    Text(line).font(.caption).foregroundStyle(Theme.primaryText)
+                }
+            }
+            ForEach(Array(dossier.allies.enumerated()), id: \.offset) { _, line in
+                HStack(alignment: .top, spacing: 6) {
+                    PixelIcon("people", size: 12).foregroundStyle(Theme.positive)
+                    Text(line).font(.caption).foregroundStyle(Theme.primaryText)
+                }
+            }
             if !dossier.moves.isEmpty {
                 Eyebrow(text: "Recent moves")
                 ForEach(Array(dossier.moves.prefix(5).enumerated()), id: \.offset) { _, move in
@@ -112,7 +124,7 @@ struct DossierSection: View {
 
     var body: some View {
         Group {
-            if let dossier, dossier.ceo != nil || !dossier.moves.isEmpty {
+            if let dossier, dossier.ceo != nil || !dossier.moves.isEmpty || !dossier.grudges.isEmpty || !dossier.allies.isEmpty {
                 Panel(padding: 12) {
                     VStack(alignment: .leading, spacing: 8) {
                         Eyebrow(text: "Who runs it")

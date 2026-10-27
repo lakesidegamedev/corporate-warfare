@@ -38,7 +38,8 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// Great Lakes 2000 plays exactly as it did before scenarios had their own data. These were
 /// recorded on the engine before the change and must never move because of Texas content.
 /// Repinned when the character cast joined the dataset and the engine began naming chairs and
-/// chief executives from it.
+/// chief executives from it, and again when rivals began choosing moves by temperament with
+/// grudges and alliances (1.7 preview 5).
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -50,15 +51,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "fba0787b20ddeb2510d04062155f162dfaaa1fd3410a896ac8e25e20b792d794",
+            "c721f8c955e8bae2aa3f6de03902b09cbe00be6300b76c5628442fcbe57c6879",
         ),
         (
             2,
-            "8d7c91ae4dc1b250642d365c5084698b8e8350a2d585da94e1a10f0c96a2da48",
+            "e383da998edf4fa03df798c86d8180dd32a5b50a20e9aa328bc203e08d838926",
         ),
         (
             3,
-            "1f267d06d108dc4641cb44579c06ef5d05f86f540108d8892b449cd1f1665abc",
+            "a004a5ad0e4bd4c8105bcbaa47b24bb0de3d9b29ddc0d9cbbd572f3c869695ed",
         ),
     ];
     for (seed, hash) in pins {
@@ -70,12 +71,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "faddda8adffdef6bbff358d0a0394d7878200ce7f310150015a697024c17c4b2"
+        "0e834ba94439688d74cb9b104e625c92539fadc516a0c83ecbdfaaa14a5c6be2"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "ac180b862d07794f14dfff634b295c969b009bd963c49a2abb558c3388be07ea"
+        "809cf8379852f661de45c4e9e8da738f9d9c470bc270d40d1203c52e1b0672a5"
     );
     // A scenario with no content of its own plays on the default dataset.
     let ruhr = cw_data::Dataset::load_scenario("ruhr-rhine-1991").unwrap();

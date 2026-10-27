@@ -35,4 +35,8 @@ economic ownership.
 
 **Temperament**: How a rival's chief executive tends to play: integrator, raider, financier, speculator, builder or cautious.
 
+**Grudge**: A rival group's memory of a raid, lane lockout or hostile bid against it. It makes the group likelier to strike back at whoever did it and fades over about a year.
+
+**Ally**: A group tied to another by a joint venture or a friendly deal. Allies are not raided or bid for and are asked first to share a project.
+
 **Gateway**: An outside-economy trading source or destination with finite priced capacity.

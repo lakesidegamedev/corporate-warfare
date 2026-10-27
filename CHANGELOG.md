@@ -31,6 +31,21 @@ heading.
 
 ### Added
 
+- Rival personalities (1.7 preview 5). Each rival now plays the way its chief executive's
+  temperament says, across building, raids, bids, freight, storage, speculation, bonds, listings
+  and joint ventures. Integrators buy up their suppliers and build their own stores, raiders
+  raid, take lanes and spend more on marketing, financiers bid, float and borrow, speculators
+  stockpile ahead of swings, builders build and the cautious sit on a bigger cash cushion and
+  rarely start fights. Rivals without a named chief play their archetype's habit. A rival you
+  raid, bid for or squeeze out of a freight lane holds a grudge and comes after you, and
+  grudges fade over about a year. Joint venture partners and the two sides of a friendly deal
+  become allies: allies are never raided or bid for and are the first asked to share a project.
+  A rival's dossier now lists its grudges, its friends and the moves it has made lately.
+  Difficulty changes only how sharp and how aggressive rivals are. Rivals with a speculator or
+  integrator temperament now build their own warehouses, tank farms, silos and cold stores
+  when the fees, spoilage or an expected price swing pay for one. The market snapshot gains
+  per-temperament move counts and grudges and alliances formed.
+
 - A character cast (1.7 preview 5). Twelve fictional people, each with a pixel portrait, an age,
   a home town, a background and a temperament, now fill the named posts in the game. The central
   bank chair is always one of them and the chair's leaning toward high or low rates comes from
