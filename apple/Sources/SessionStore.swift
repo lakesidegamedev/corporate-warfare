@@ -28,6 +28,10 @@ actor Engine {
         return handle.overview()
     }
 
+    func companyPage(firm: UInt64) -> CompanyPageDto? {
+        session?.companyPage(firm: firm)
+    }
+
     func dossier(firm: UInt64) -> DossierDto? {
         session?.dossier(firm: firm)
     }

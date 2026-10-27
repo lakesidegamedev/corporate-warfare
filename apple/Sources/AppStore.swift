@@ -677,6 +677,11 @@ final class AppStore: ObservableObject {
         ]))
     }
 
+    /// A company's full page, with what the investor may see of it.
+    func companyPage(_ firm: UInt64) async -> CompanyPageDto? {
+        await engine.companyPage(firm: firm)
+    }
+
     /// A company's chief executive and recent moves.
     func dossier(_ firm: UInt64) async -> DossierDto? {
         await engine.dossier(firm: firm)

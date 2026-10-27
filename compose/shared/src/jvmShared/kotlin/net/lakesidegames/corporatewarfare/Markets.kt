@@ -153,7 +153,7 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
             rows.forEachIndexed { position, line ->
                 if (position > 0) HorizontalDivider(color = Palette.stroke)
                 Row(Modifier.fillMaxWidth().clickable { onOpen(line) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SectorBadge(line.industry, 26)
+                    PixelLogo(line.name, size = 28.dp)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(line.name + if (line.controlledByYou) " ★" else "", color = Palette.primaryText, fontWeight = FontWeight.Medium, maxLines = 1)
@@ -286,7 +286,8 @@ internal fun RegionPicker(store: GameStore, onClose: () -> Unit) {
 
 /** One stock: valuation, your position, and an order ticket. */
 @Composable
-internal fun StockDialog(store: GameStore, line: StockDto, onClose: () -> Unit) {
+internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = true, onClose: () -> Unit) {
+    var page by remember { mutableStateOf(false) }
     var buy by remember { mutableStateOf(true) }
     var quantity by remember { mutableStateOf("1000") }
     var limit by remember { mutableStateOf("") }
@@ -295,7 +296,12 @@ internal fun StockDialog(store: GameStore, line: StockDto, onClose: () -> Unit) 
     AlertDialog(
         onDismissRequest = onClose,
         containerColor = Palette.panel,
-        title = { Text(line.name) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PixelLogo(line.name, size = 32.dp)
+                Text(line.name)
+            }
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatGroup(
@@ -313,6 +319,7 @@ internal fun StockDialog(store: GameStore, line: StockDto, onClose: () -> Unit) 
                     Sparkline(line.historyCents, changeTint(line.changeQuarterBps), Modifier.fillMaxWidth().height(90.dp))
                 }
                 DossierSection(store, line.firm)
+                if (showPage) TextButton(onClick = { page = true }) { Text("Open company page") }
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     SegmentedButton(selected = buy, onClick = { buy = true }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Buy") }
                     SegmentedButton(selected = !buy, onClick = { buy = false }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Sell") }
@@ -336,6 +343,7 @@ internal fun StockDialog(store: GameStore, line: StockDto, onClose: () -> Unit) 
         },
         dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
     )
+    if (page) CompanyPageDialog(store, line.firm) { page = false }
 }
 
 @Composable

@@ -386,6 +386,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         scope.launch { onResult(withContext(engine) { handle.dossier(firm) }) }
     }
 
+    /** A company's full page, with what the investor may see of it. */
+    fun companyPage(firm: ULong, onResult: (uniffi.cw_ffi.CompanyPageDto?) -> Unit) {
+        val handle = session ?: return
+        scope.launch { onResult(withContext(engine) { handle.companyPage(firm) }) }
+    }
+
     /** A rival's chief, temperament and any grudge or tie with the selected company. */
     fun rivalTag(firm: ULong, onResult: (RivalTagDto?) -> Unit) {
         val handle = session ?: return

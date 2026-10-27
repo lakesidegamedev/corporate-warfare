@@ -13,6 +13,12 @@ heading.
 
 ### Added
 
+- Company pages. Tap any company in the stock list, the stock dialog, a rival's dossier, a region board or a news item to open its page. Listed companies show the share price chart, valuation, a financial summary, divisions and plants by region, holders, subsidiaries and joint ventures, recent moves, grudges and friends, news and Buy and Sell. Private companies show only what is public: name, logo, chief executive, sector, regions, size band and public moves. Your own companies show everything.
+- Every company has a logo, drawn in 8-bit pixels from its name from a fixed set of plain shapes (stars, arrows, wheat, drops, gears, towers, waves, monograms), the same on every platform. A tool refuses any symbol that looks like a banned shape.
+- Every company has a chief executive with a face. Firms outside the twelve-person cast get a generated, fictional chief with a portrait, name, temperament and background, shown in the stock dialog.
+
+### Added
+
 - Division detail. Tapping a division on the map, in the region board's "Your divisions here",
   in the CEO Office or on the company page opens a detail view with its weekly financials
   (revenue, each cost line, operating profit, margin, a revenue trend, capital invested and

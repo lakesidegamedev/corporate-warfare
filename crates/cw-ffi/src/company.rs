@@ -182,13 +182,13 @@ pub(crate) fn resolved_ceo(session: &Session, firm: Handle) -> Option<PersonDto>
 }
 
 /// The firm a line of news names, longest name first.
-pub(crate) fn firm_named(world: &World, text: &str) -> Option<u64> {
+pub(crate) fn firm_named(world: &World, text: &str) -> Option<(u64, String)> {
     world
         .firms
         .iter()
         .filter(|(_, f)| f.name.len() >= 4 && text.contains(f.name.as_str()))
         .max_by_key(|(h, f)| (f.name.len(), std::cmp::Reverse(h.0)))
-        .map(|(h, _)| h.0)
+        .map(|(h, f)| (h.0, f.name.clone()))
 }
 
 fn size_band(blocks: u32) -> &'static str {
@@ -215,7 +215,7 @@ pub(crate) fn page(session: &Session, firm: u64) -> Option<CompanyPageDto> {
     } else {
         "private"
     };
-    let full = yours || listed;
+    let full = yours || session.can_inspect(firm);
     let dossier: DossierDto = crate::cast::dossier(session, firm)?;
     let divisions = sectors::divisions_of(world, dataset, handle);
     let mut regions: Vec<RegionPresenceDto> = Vec::new();
@@ -330,6 +330,7 @@ pub(crate) fn page(session: &Session, firm: u64) -> Option<CompanyPageDto> {
                 .and_then(|p| dataset.cast.get(p as usize))
                 .map(|p| p.id.clone()),
             firm: Some(firm),
+            firm_name: Some(entity.name.clone()),
         })
         .collect();
     Some(CompanyPageDto {

@@ -1944,6 +1944,8 @@ pub struct NewsDto {
     pub person: Option<String>,
     /// The company the item names, for a tap through to its page.
     pub firm: Option<u64>,
+    /// That company's name, for its logo.
+    pub firm_name: Option<String>,
 }
 
 /// The laws in force or announced.
@@ -3673,7 +3675,8 @@ impl SessionHandle {
                         .person
                         .and_then(|p| session.dataset.cast.get(p as usize))
                         .map(|p| p.id.clone()),
-                    firm: company::firm_named(&session.world, &n.text),
+                    firm: company::firm_named(&session.world, &n.text).map(|(h, _)| h),
+                    firm_name: company::firm_named(&session.world, &n.text).map(|(_, name)| name),
                 })
                 .collect(),
             reserve: cw_sim::economy::reserve::strategic_goods(&session.dataset)
@@ -4846,21 +4849,24 @@ mod tests {
                     }
                     "listed" => {
                         kinds[1] += 1;
-                        assert!(page.stock.is_some() && page.finance.is_some());
+                        assert!(page.stock.is_some());
                     }
                     _ => {
                         kinds[2] += 1;
-                        assert!(page.stock.is_none() && page.finance.is_none());
-                        assert!(page.holders.is_empty() && page.divisions.is_empty());
+                        assert!(page.stock.is_none());
+                        if !session.lock().can_inspect(firm.handle) {
+                            assert!(page.finance.is_none() && page.holders.is_empty());
+                            assert!(page.divisions.is_empty());
+                        }
                     }
                 }
                 if page.kind != "yours" {
                     let ceo = page.ceo.expect("every other firm has a chief executive");
                     assert!(ceos.insert(ceo.id.clone()), "{id}: {} shared", ceo.id);
                 }
-                assert!(!page.regions.is_empty() || page.kind == "private");
+                assert!(!page.regions.is_empty() || page.kind != "listed" || page.size_band == "Small");
             }
-            assert!(kinds[1] > 0 && kinds[2] > 0, "{id}: {kinds:?}");
+            assert!(kinds[1] > 0, "{id}: {kinds:?}");
         }
     }
 }

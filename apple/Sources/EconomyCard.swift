@@ -386,6 +386,7 @@ struct EconomyCard: View {
             ForEach(Array(e.news.prefix(5).enumerated()), id: \.offset) { _, item in
                 HStack(spacing: 8) {
                     if let person = item.person { PixelPortrait(person: person, size: 28) }
+                    if let firm = item.firm, let name = item.firmName { FirmLogoButton(name: name, firm: firm) }
                     Text("\(ResultBuckets.weekLabel(item.week)): \(item.text)")
                         .font(.caption)
                         .foregroundStyle(Theme.secondary)
