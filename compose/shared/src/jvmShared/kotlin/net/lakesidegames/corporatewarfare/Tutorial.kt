@@ -116,7 +116,7 @@ object Tutorial {
     fun suggestedResearchCents(cashCents: Long): Long = maxOf(50_000L, (cashCents / 2_000 + 25_000) / 50_000 * 50_000)
 
     /** The research step's live advice: the suggested budget, what it costs a week and what the next level buys. */
-    fun researchHint(cashCents: Long, research: ResearchDto): String {
+    fun researchHint(cashCents: Long, research: uniffi.cw_ffi.ResearchDto): String {
         if (research.level >= research.maxLevel) return "Your company is at the top technology level."
         val budget = suggestedResearchCents(cashCents)
         val remaining = (research.nextThresholdCents - research.progressCents).coerceAtLeast(0)
