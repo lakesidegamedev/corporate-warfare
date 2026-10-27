@@ -14,6 +14,8 @@ struct ActionPickers {
     var policies: [InsuranceDto] = []
     var votes: [BoardVoteDto] = []
     var deals: [DealDto] = []
+    /// Options the engine lists itself: bonds, ventures and open activist campaigns.
+    var extra: [String: [PickDto]] = [:]
 }
 
 /// Engine notes give money as "N cents"; show it in dollars.
@@ -376,6 +378,8 @@ struct ActionFormView: View {
             }
         case "my_deal":
             list = pickers.deals.map { Pick(value: String($0.handle), label: "\($0.buyer) for \($0.target) (\($0.state))") }
+        case "bond", "my_bond", "my_venture", "open_campaign":
+            list = (pickers.extra[field.kind] ?? []).map { Pick(value: $0.value, label: $0.label) }
         default:
             list = []
         }

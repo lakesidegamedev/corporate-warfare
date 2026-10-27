@@ -181,6 +181,7 @@ pub fn build_with(
         politics: crate::state::Politics::default(),
         logistics: Default::default(),
         systemic: Default::default(),
+        structure: Default::default(),
     };
 
     // Outside gateway capital is finite but real: exports are paid from it, imports add to it.

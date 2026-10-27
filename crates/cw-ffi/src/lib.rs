@@ -840,6 +840,137 @@ pub struct BuildQuoteDto {
     pub locked_strategy_name: Option<String>,
 }
 
+/// A standing supply link inside a group: one supplier, one buyer, one product.
+#[derive(uniffi::Record)]
+pub struct TransferLinkDto {
+    pub buyer: u64,
+    pub buyer_name: String,
+    pub seller: u64,
+    pub seller_name: String,
+    pub product: String,
+    pub lots_weekly: i64,
+    pub cost_cents: i64,
+    pub market_cents: i64,
+    pub price_cents: i64,
+    /// The supplier division's setting: 0 at cost, 10,000 at market, up to 12,000.
+    pub setting_bps: i32,
+    pub region_index: u32,
+    pub industry_index: u32,
+    /// Share of the supplier held outside the controlling group, basis points.
+    pub supplier_minority_bps: i32,
+    pub buyer_minority_bps: i32,
+    /// How far the market marks the supplier down for persistent losses, basis points.
+    pub markdown_bps: i32,
+    /// Value moved off the supplier's minority holders over the past year, cents.
+    pub squeeze_cents: i64,
+    pub mine: bool,
+}
+
+/// A division's reputation and what it earns.
+#[derive(uniffi::Record)]
+pub struct ReputationDto {
+    pub firm: u64,
+    pub firm_name: String,
+    pub region: String,
+    pub industry: String,
+    pub reputation_bps: i32,
+    /// Price tolerance the reputation earns in the market, basis points of perceived quality.
+    pub premium_bps: i32,
+}
+
+#[derive(uniffi::Record)]
+pub struct BondLineDto {
+    pub bond: u64,
+    pub issuer: u64,
+    pub issuer_name: String,
+    pub principal_cents: i64,
+    pub coupon_bps: i32,
+    pub weeks_left: u32,
+    pub mark_bps: i64,
+    pub yield_bps: i64,
+    pub spread_now_bps: i32,
+    pub available: i64,
+    pub held: i64,
+    pub mine: bool,
+}
+
+#[derive(uniffi::Record)]
+pub struct BondQuoteDto {
+    pub base_bps: i32,
+    pub spread_bps: i32,
+    pub coupon_bps: i32,
+    pub leverage_bps: i32,
+    pub coverage_bps: i32,
+    pub rating: String,
+    pub max_principal_cents: i64,
+}
+
+#[derive(uniffi::Record)]
+pub struct VentureDto {
+    pub venture: u64,
+    pub name: String,
+    pub a: u64,
+    pub a_name: String,
+    pub b: u64,
+    pub b_name: String,
+    pub stake_a_bps: i32,
+    pub stake_b_bps: i32,
+    pub formed: u32,
+    pub open_to_exit: bool,
+    pub equity_cents: i64,
+    pub mine: bool,
+}
+
+#[derive(uniffi::Record)]
+pub struct CampaignDto {
+    pub id: u32,
+    pub firm: u64,
+    pub firm_name: String,
+    pub reason: String,
+    pub demand: String,
+    pub outcome: String,
+    pub justification_bps: i32,
+    pub stake_bps: i32,
+    /// The activist's chance of winning a fight, basis points.
+    pub chance_bps: i32,
+    pub amount_cents: i64,
+    pub deadline: u32,
+    pub mine: bool,
+}
+
+#[derive(uniffi::Record)]
+pub struct StructureStatsDto {
+    pub bonds_issued: u32,
+    pub ventures_formed: u32,
+    pub ipos: u32,
+    pub spin_offs: u32,
+    pub carve_outs: u32,
+    pub activist_campaigns: u32,
+    pub activist_wins: u32,
+    pub squeeze_cents: i64,
+    pub tax_shift_cents: i64,
+    pub repeat_raids: u32,
+}
+
+#[derive(uniffi::Record)]
+pub struct StructureViewDto {
+    pub links: Vec<TransferLinkDto>,
+    pub reputations: Vec<ReputationDto>,
+    pub bonds: Vec<BondLineDto>,
+    pub ventures: Vec<VentureDto>,
+    pub campaigns: Vec<CampaignDto>,
+    pub stats: StructureStatsDto,
+    /// The central bank's ten-year yield bonds are priced off, basis points.
+    pub ten_year_bps: i32,
+}
+
+/// One option for a Command Center picker that the engine alone can list.
+#[derive(uniffi::Record)]
+pub struct PickDto {
+    pub value: String,
+    pub label: String,
+}
+
 /// A rival division the selected firm can raid.
 #[derive(uniffi::Record)]
 pub struct RaidOptionDto {
@@ -862,6 +993,10 @@ pub struct RaidQuoteDto {
     pub chance_bps: i32,
     pub blocks_at_stake: u32,
     pub price_cents: i64,
+    /// Share of the rival's division at stake, basis points. A bigger stake is harder to win.
+    pub stake_bps: i32,
+    /// Extra legal and retaliation cost of raiding the same rival again soon.
+    pub surcharge_cents: i64,
 }
 
 #[derive(uniffi::Record)]
@@ -966,6 +1101,22 @@ fn alert_text(alert: cw_session::Alert) -> String {
         ),
         "alert.carrier_hike" => format!(
             "{}: carriers raised their rate by a fifth in four weeks. Another mode or your own carrier may pay.",
+            alert.subject
+        ),
+        "alert.activist" => format!(
+            "{}: an activist investor has made demands. Open Structure to concede, negotiate or fight; if you do nothing the board answers in four weeks.",
+            alert.subject
+        ),
+        "alert.squeeze" => format!(
+            "{}: pricing inside the group is taking value from minority shareholders and may draw a challenge. Move its transfer price toward market.",
+            alert.subject
+        ),
+        "alert.captive_markdown" => format!(
+            "{}: the market is marking this supplier down after months of losses. Raise its transfer price or fix its costs.",
+            alert.subject
+        ),
+        "alert.bond_due" => format!(
+            "{}: a bond falls due within a quarter and cash does not cover it yet.",
             alert.subject
         ),
         "alert.lane_reserved" => format!(
@@ -1355,6 +1506,10 @@ fn objective_copy(
     }
 }
 
+fn pct_text(bps: i64) -> String {
+    format!("{}.{:02}%", bps / 100, (bps % 100).abs())
+}
+
 fn raid_quote_dto(quote: cw_sim::economy::sectors::RaidQuote) -> RaidQuoteDto {
     RaidQuoteDto {
         attack_cents: quote.attack_cents,
@@ -1362,6 +1517,8 @@ fn raid_quote_dto(quote: cw_sim::economy::sectors::RaidQuote) -> RaidQuoteDto {
         chance_bps: quote.chance_bps,
         blocks_at_stake: quote.blocks_at_stake as u32,
         price_cents: quote.price_cents,
+        stake_bps: quote.stake_bps,
+        surcharge_cents: quote.surcharge_cents,
     }
 }
 
@@ -2057,6 +2214,247 @@ impl SessionHandle {
             .collect()
     }
 
+    /// Groups, transfer prices, reputation, bonds, ventures and activist campaigns in one view.
+    pub fn structure_view(&self) -> StructureViewDto {
+        use cw_sim::economy::structure as st;
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let mine =
+            |firm: cw_core::ids::Handle| cw_sim::economy::events_engine::player_side(world, firm);
+        let name = |firm: cw_core::ids::Handle| {
+            world
+                .firms
+                .get(firm)
+                .map(|f| f.name.clone())
+                .unwrap_or_default()
+        };
+        let links = world
+            .structure
+            .links
+            .iter()
+            .filter_map(|((buyer, seller, product), link)| {
+                let contract = world.contracts.get(link.contract)?;
+                Some(TransferLinkDto {
+                    buyer: buyer.0,
+                    buyer_name: name(*buyer),
+                    seller: seller.0,
+                    seller_name: name(*seller),
+                    product: dataset.products[*product as usize].id.clone(),
+                    lots_weekly: contract.quantity_weekly.lots(),
+                    cost_cents: link.cost_cents,
+                    market_cents: link.market_cents,
+                    price_cents: link.price_cents,
+                    setting_bps: st::transfer_bps(world, *seller, link.region, link.industry),
+                    region_index: link.region as u32,
+                    industry_index: link.industry as u32,
+                    supplier_minority_bps: st::minority_bps(world, *seller),
+                    buyer_minority_bps: st::minority_bps(world, *buyer),
+                    markdown_bps: st::markdown_bps(world, *seller),
+                    squeeze_cents: world.structure.squeeze.get(seller).copied().unwrap_or(0),
+                    mine: mine(*seller) || mine(*buyer),
+                })
+            })
+            .collect();
+        let mut reputations: Vec<ReputationDto> = world
+            .structure
+            .reputation
+            .iter()
+            .filter(|((firm, _, _), _)| mine(*firm))
+            .map(|((firm, region, industry), rep)| {
+                let premium = if *rep >= st::NEUTRAL_REP {
+                    (*rep - st::NEUTRAL_REP) * 1_500 / (10_000 - st::NEUTRAL_REP)
+                } else {
+                    -(st::NEUTRAL_REP - *rep) * 500 / st::NEUTRAL_REP
+                };
+                ReputationDto {
+                    firm: firm.0,
+                    firm_name: name(*firm),
+                    region: dataset.regions[*region as usize].code.clone(),
+                    industry: cw_sim::state::INDUSTRY_NAMES[*industry as usize].to_owned(),
+                    reputation_bps: *rep,
+                    premium_bps: premium,
+                }
+            })
+            .collect();
+        reputations.sort_by_key(|r| std::cmp::Reverse(r.reputation_bps));
+        let bonds = st::bond_board(world)
+            .into_iter()
+            .map(|line| BondLineDto {
+                bond: line.bond.0,
+                issuer: line.issuer.0,
+                issuer_name: name(line.issuer),
+                principal_cents: line.principal_cents,
+                coupon_bps: line.coupon_bps,
+                weeks_left: line.weeks_left,
+                mark_bps: line.mark_bps,
+                yield_bps: line.yield_bps,
+                spread_now_bps: line.spread_now_bps,
+                available: line.outside_qty,
+                held: line.investor_qty,
+                mine: mine(line.issuer),
+            })
+            .collect();
+        let ventures = world
+            .structure
+            .jvs
+            .iter()
+            .filter_map(|j| {
+                let f = world.firms.get(j.firm)?;
+                Some(VentureDto {
+                    venture: j.firm.0,
+                    name: f.name.clone(),
+                    a: j.a.0,
+                    a_name: name(j.a),
+                    b: j.b.0,
+                    b_name: name(j.b),
+                    stake_a_bps: f.shares.vote_bps(cw_sim::state::HolderId::Firm(j.a)),
+                    stake_b_bps: f.shares.vote_bps(cw_sim::state::HolderId::Firm(j.b)),
+                    formed: j.formed,
+                    open_to_exit: world.tick.0 >= j.formed + st::JV_LOCKUP_WEEKS,
+                    equity_cents: f.valuation.equity_cents,
+                    mine: mine(j.a) || mine(j.b),
+                })
+            })
+            .collect();
+        let campaigns = world
+            .structure
+            .campaigns
+            .iter()
+            .rev()
+            .take(16)
+            .map(|c| CampaignDto {
+                id: c.id,
+                firm: c.target.0,
+                firm_name: name(c.target),
+                reason: c.reason.key().to_owned(),
+                demand: c.demand.key().to_owned(),
+                outcome: c.outcome.key().to_owned(),
+                justification_bps: c.justification_bps,
+                stake_bps: c.stake_bps,
+                chance_bps: st::activist_chance_bps(world, c),
+                amount_cents: c.amount_cents,
+                deadline: c.deadline,
+                mine: mine(c.target),
+            })
+            .collect();
+        let stats = &world.structure.stats;
+        StructureViewDto {
+            links,
+            reputations,
+            bonds,
+            ventures,
+            campaigns,
+            stats: StructureStatsDto {
+                bonds_issued: stats.bonds_issued,
+                ventures_formed: stats.jvs_formed,
+                ipos: stats.ipos,
+                spin_offs: stats.spin_offs,
+                carve_outs: stats.carve_outs,
+                activist_campaigns: stats.activist_events,
+                activist_wins: stats.activist_wins,
+                squeeze_cents: stats.squeeze_cents,
+                tax_shift_cents: stats.tax_shift_cents,
+                repeat_raids: stats.raids_repeat,
+            },
+            ten_year_bps: cw_sim::economy::macro_cycle::ten_year_yield_bps(world),
+        }
+    }
+
+    /// What a bond would cost to issue now: the base yield, the credit spread and the figures
+    /// behind it.
+    pub fn bond_quote(&self, firm: u64, principal_cents: i64, weeks: u32) -> BondQuoteDto {
+        let session = self.lock();
+        let q = cw_sim::economy::structure::bond_quote(
+            &session.world,
+            cw_core::ids::Handle(firm),
+            principal_cents,
+            weeks,
+        );
+        BondQuoteDto {
+            base_bps: q.base_bps,
+            spread_bps: q.spread_bps,
+            coupon_bps: q.coupon_bps,
+            leverage_bps: q.leverage_bps,
+            coverage_bps: q.coverage_bps,
+            rating: q.rating.to_string(),
+            max_principal_cents: q.max_principal_cents,
+        }
+    }
+
+    /// Options for Command Center pickers the engine lists itself: `bond`, `my_bond`,
+    /// `my_venture`, `open_campaign`.
+    pub fn structure_picks(&self, kind: String) -> Vec<PickDto> {
+        use cw_sim::economy::structure as st;
+        let session = self.lock();
+        let world = &session.world;
+        let mine =
+            |firm: cw_core::ids::Handle| cw_sim::economy::events_engine::player_side(world, firm);
+        let name = |firm: cw_core::ids::Handle| {
+            world
+                .firms
+                .get(firm)
+                .map(|f| f.name.clone())
+                .unwrap_or_default()
+        };
+        match kind.as_str() {
+            "bond" => st::bond_board(world)
+                .into_iter()
+                .filter(|l| l.outside_qty > 0)
+                .map(|l| PickDto {
+                    value: l.bond.0.to_string(),
+                    label: format!(
+                        "{}: {} coupon, {} weeks, price {}",
+                        name(l.issuer),
+                        pct_text(l.coupon_bps as i64),
+                        l.weeks_left,
+                        pct_text(l.mark_bps)
+                    ),
+                })
+                .collect(),
+            "my_bond" => st::bond_board(world)
+                .into_iter()
+                .filter(|l| l.investor_qty > 0)
+                .map(|l| PickDto {
+                    value: l.bond.0.to_string(),
+                    label: format!(
+                        "{}: {} held, {} coupon, price {}",
+                        name(l.issuer),
+                        l.investor_qty,
+                        pct_text(l.coupon_bps as i64),
+                        pct_text(l.mark_bps)
+                    ),
+                })
+                .collect(),
+            "my_venture" => world
+                .structure
+                .jvs
+                .iter()
+                .filter(|j| mine(j.a) || mine(j.b))
+                .map(|j| PickDto {
+                    value: j.firm.0.to_string(),
+                    label: format!("{} ({} and {})", name(j.firm), name(j.a), name(j.b)),
+                })
+                .collect(),
+            "open_campaign" => world
+                .structure
+                .campaigns
+                .iter()
+                .filter(|c| c.outcome == st::Outcome::Open && mine(c.target))
+                .map(|c| PickDto {
+                    value: c.id.to_string(),
+                    label: format!(
+                        "{}: {} wants {}",
+                        name(c.target),
+                        c.reason.key().replace('_', " "),
+                        c.demand.key()
+                    ),
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
     /// Every lane with capacity or traffic this week, busiest first.
     pub fn lanes(&self) -> Vec<LaneDto> {
         use cw_sim::economy::logistics as lg;
@@ -2386,9 +2784,9 @@ impl SessionHandle {
         let world = &session.world;
         let dataset = &session.dataset;
         let handle = cw_core::ids::Handle(firm);
-        let Some(entity) = world.firms.get(handle) else {
+        if world.firms.get(handle).is_none() {
             return Vec::new();
-        };
+        }
         let mut out = Vec::new();
         for d in sectors::divisions_of(world, dataset, handle) {
             let (firms, _) = sectors::cell(world, dataset, d.region, d.industry);
@@ -2402,7 +2800,7 @@ impl SessionHandle {
                         .filter_map(|h| world.facilities.get(*h))
                         .map(|p| p.blocks as u32)
                         .sum();
-                if rival_blocks < 2 {
+                if rival_blocks < 1 {
                     continue;
                 }
                 let probe =
@@ -2423,11 +2821,8 @@ impl SessionHandle {
                     industry: cw_sim::state::INDUSTRY_NAMES[d.industry as usize].to_owned(),
                     industry_index: d.industry as u32,
                     rival_blocks,
-                    ready_week: entity
-                        .raid_ready
-                        .get(&(d.region, d.industry))
-                        .copied()
-                        .unwrap_or(0),
+                    // No cooldown any more: repeat raids on a rival cost more instead.
+                    ready_week: 0,
                     suggested_budget_cents: budget,
                     quote: raid_quote_dto(quote),
                 });

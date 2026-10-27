@@ -5,6 +5,7 @@ enum MarketSection: String, CaseIterable, Identifiable {
     case stocks = "Stocks"
     case commodities = "Commodities"
     case regions = "Regions"
+    case structure = "Structure"
     var id: String { rawValue }
 }
 
@@ -31,6 +32,7 @@ struct MarketsView: View {
             case .stocks: StocksSection()
             case .commodities: CommoditiesSection()
             case .regions: RegionMarketsSection()
+            case .structure: StructureSection()
             }
         }
         .onAppear { store.tutorial.visited(.markets) }

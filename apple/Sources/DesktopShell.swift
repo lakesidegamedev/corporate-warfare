@@ -341,6 +341,7 @@ private struct DesktopMarkets: View {
     private enum Mode: String, CaseIterable, Identifiable {
         case exchange = "Exchange"
         case regions = "Regions"
+        case structure = "Structure"
         var id: String { rawValue }
     }
 
@@ -362,7 +363,7 @@ private struct DesktopMarkets: View {
                     ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 240)
+                .frame(width: 330)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -375,6 +376,13 @@ private struct DesktopMarkets: View {
                     ScrollView { CommoditiesSection().padding(.bottom, 24) }
                 }
                 .padding(.horizontal, 16)
+            case .structure:
+                ScrollView {
+                    StructureSection()
+                        .padding(16)
+                        .frame(maxWidth: 900)
+                        .frame(maxWidth: .infinity)
+                }
             case .regions:
                 ScrollView {
                     RegionMarketsSection()

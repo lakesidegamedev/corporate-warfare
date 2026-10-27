@@ -186,7 +186,9 @@ fn a_division_runs_one_strategy_and_retools_together() {
 
 /// Cash across every firm's book plus the outside media and gateway accounts.
 fn firm_cash(world: &World) -> i64 {
-    world.firms.iter().map(|(_, f)| f.book.cash()).sum::<i64>() + world.outside.gateway_book.cash()
+    world.firms.iter().map(|(_, f)| f.book.cash()).sum::<i64>()
+        + world.outside.gateway_book.cash()
+        + world.outside.legal_services_book.cash()
 }
 
 #[test]
@@ -257,9 +259,15 @@ fn a_market_raid_prices_its_stake_and_conserves_blocks_and_money() {
         defence * 2,
     );
     assert_eq!(quote.defence_cents, defence);
-    // Two-to-one: 20 percent of five blocks is one block; chance 2/3; price half its book.
+    // Two-to-one: a quarter of the division is at stake, one block of five; the base chance is
+    // two thirds, scaled down by the stake (one fifth of the division costs 17 percent of it).
     assert_eq!(quote.blocks_at_stake, 1);
-    assert_eq!(quote.chance_bps, 6_666);
+    assert_eq!(quote.stake_bps, 2_000);
+    assert_eq!(quote.chance_bps, 5_532);
+    assert_eq!(
+        quote.surcharge_cents, 0,
+        "a first raid on a rival carries no surcharge"
+    );
     assert_eq!(quote.price_cents, 10_000_000 / 5 / 2);
 
     let blocks = |world: &World, firm: Handle| -> i64 {
@@ -291,14 +299,13 @@ fn a_market_raid_prices_its_stake_and_conserves_blocks_and_money() {
             blocks(&world, attacker) + blocks(&world, defender),
             total_blocks
         );
-        assert!(blocks(&world, defender) >= 1, "the defender keeps a block");
         if record.success {
             successes += 1;
-            assert_eq!(record.blocks, 1);
+            assert!(record.blocks >= 1);
         }
-        // The cell is locked for thirteen weeks after a raid.
-        let again = sectors::raid(
-            &mut world,
+        // No cooldown: raiding the same rival again is allowed, but it costs more each time.
+        let again = sectors::raid_quote(
+            &world,
             &dataset,
             attacker,
             defender,
@@ -306,7 +313,11 @@ fn a_market_raid_prices_its_stake_and_conserves_blocks_and_money() {
             industry,
             defence * 2,
         );
-        assert!(format!("{again:?}").contains("raid_cooldown"));
+        assert_eq!(
+            again.surcharge_cents,
+            defence * 2 * 4_000 / 10_000,
+            "a second raid in the quarter pays forty percent of its budget again"
+        );
         world.tick.0 += 13;
         if blocks(&world, defender) < 2 {
             break;

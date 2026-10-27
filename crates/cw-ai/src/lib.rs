@@ -76,9 +76,232 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         strategic(world, dataset, handle, &mut proposals);
         speculate(world, dataset, handle, &mut proposals);
         logistics_moves(world, dataset, handle, &mut proposals);
+        structure_moves(world, dataset, handle, &mut proposals);
     }
     proposals.truncate(WEEKLY_PROPOSALS);
     proposals
+}
+
+/// Structure verbs a rival uses on its own slot, weighted by its temperament
+/// (`cw_sim::economy::structure::temperament`): borrow in the bond market when growth needs
+/// cash, keep transfer prices honest toward minority holders or tilt them toward the lower-taxed
+/// state, float a subsidiary when short of cash, and share a project too big to fund alone.
+fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
+    use cw_sim::economy::structure as st;
+    let Some(entity) = world.firms.get(firm) else {
+        return;
+    };
+    let t = st::temperament(world, firm);
+    let reserve = reserve_target(world, firm);
+    let cash = entity.book.cash();
+    let weeks = entity.book.recent_weeks();
+    let income: i64 = weeks.iter().map(|w| w.net_income).sum();
+
+    // Bonds: a profitable firm with thin cash and an open growth case borrows long and cheaply
+    // when the price is sane. One issue at a time.
+    if t.leverage >= 4_000
+        && entity.bonds.is_empty()
+        && weeks.len() >= 13
+        && income > 0
+        && cash < reserve * 3
+        && entity.facilities.len() < 6
+        && best_expansion(world, dataset, firm, 4).is_some_and(|(_, _, npv)| npv > 0)
+    {
+        let equity = entity.book.total_equity().max(0);
+        let principal = (equity / 10).max(st::MIN_BOND_CENTS);
+        let quote = st::bond_quote(world, firm, principal, 260);
+        if quote.spread_bps <= 500
+            && quote.coverage_bps >= 40_000
+            && quote.leverage_bps <= 4_000
+            && income > principal / 4
+            && principal <= quote.max_principal_cents
+        {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::IssueBond {
+                    firm,
+                    principal_cents: principal,
+                    coupon_bps: quote.coupon_bps + 25,
+                    weeks: 260,
+                },
+            });
+        }
+    }
+
+    // Transfer prices: the group's suppliers.
+    let mut seen: std::collections::BTreeSet<(u8, u8)> = Default::default();
+    for ((buyer, seller, _), link) in &world.structure.links {
+        if *seller != firm || !seen.insert((link.region, link.industry)) {
+            continue;
+        }
+        let current = st::transfer_bps(world, firm, link.region, link.industry);
+        let minority = st::minority_bps(world, *seller).max(st::minority_bps(world, *buyer));
+        let squeeze_year = world.structure.squeeze.get(seller).copied().unwrap_or(0)
+            + world.structure.squeeze.get(buyer).copied().unwrap_or(0);
+        let equity = entity.valuation.equity_cents.max(1);
+        let want = if minority > 0 {
+            // Never lean on minority holders; step back once the squeeze shows.
+            if squeeze_year * 100 / equity >= 2 || current != st::TRANSFER_MARKET_BPS {
+                st::TRANSFER_MARKET_BPS
+            } else {
+                current
+            }
+        } else {
+            let gap = st::tax_rate_bps(world, *buyer) - st::tax_rate_bps(world, *seller);
+            if t.tax_shifting >= 6_500 && gap >= 200 {
+                11_000
+            } else if t.tax_shifting >= 6_500 && gap <= -200 {
+                9_000
+            } else {
+                st::TRANSFER_MARKET_BPS
+            }
+        };
+        if want != current {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::SetTransferPrice {
+                    firm,
+                    region: link.region,
+                    industry: link.industry,
+                    bps: want,
+                },
+            });
+        }
+    }
+
+    // Listing: short of cash with a seasoned subsidiary worth floating.
+    if t.listing >= 4_500 && cash < reserve * 2 && !entity.payout_freeze {
+        let candidate = cw_sim::economy::ownership::controlled_by(world, HolderId::Firm(firm))
+            .into_iter()
+            .find(|sub| {
+                world.firms.get(*sub).is_some_and(|f| {
+                    f.operative()
+                        && !f.shares.ipo_done
+                        && f.shares.statement_weeks >= 13
+                        && f.book.total_equity() > 0
+                        && f.valuation.equity_cents > 1_000_000_000
+                })
+            });
+        if let Some(sub) = candidate {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::ListSubsidiary {
+                    firm: sub,
+                    stake_bps: 3_000,
+                },
+            });
+        }
+    }
+
+    // Joint venture: a growth project that costs more than half of what the firm can spend,
+    // shared with a wealthier rival in the same state.
+    let in_venture = world
+        .structure
+        .jvs
+        .iter()
+        .any(|j| j.a == firm || j.b == firm);
+    if t.partnering >= 6_000
+        && !in_venture
+        && weeks.len() >= 13
+        && income > 0
+        && world.tick.0 >= 52
+        && let Some((recipe, region, npv)) = best_expansion(world, dataset, firm, 4)
+        && npv > 0
+    {
+        let cost = st::jv_capital(dataset, recipe, 1);
+        let spare = cash - reserve * 2;
+        if spare * 3 > cost * 2 && spare < cost * 4 {
+            let home_state = dataset.regions[entity.region as usize].state();
+            let partner = world
+                .firms
+                .iter()
+                .filter(|(h, f)| {
+                    *h != firm
+                        && f.operative()
+                        && !player_controlled(world, *h)
+                        && !cw_sim::economy::ownership::same_group(world, *h, firm)
+                        && dataset.regions[f.region as usize].state() == home_state
+                        && f.book.cash() > reserve_target(world, *h) * 2 + cost / 2
+                        && st::temperament(world, *h).partnering >= 3_000
+                })
+                .map(|(h, f)| (f.book.cash(), h))
+                .max();
+            if let Some((_, partner)) = partner {
+                proposals.push(Proposal {
+                    actor: firm.0,
+                    intent: CommandIntent::FormJointVenture {
+                        firm,
+                        partner,
+                        region,
+                        recipe,
+                        blocks: 1,
+                        stake_bps: 5_000,
+                        name: format!("{} Ventures {}", entity.name, world.tick.0),
+                    },
+                });
+            }
+        }
+    }
+
+    // A partner that wants out and a partner that can afford it: a quiet buyout after the lockup.
+    for venture in &world.structure.jvs {
+        if (venture.a != firm && venture.b != firm)
+            || world.tick.0 < venture.formed + st::JV_LOCKUP_WEEKS + 26
+        {
+            continue;
+        }
+        let other = if venture.a == firm {
+            venture.b
+        } else {
+            venture.a
+        };
+        let loss = trailing_income(world, venture.firm) < 0;
+        if t.partnering >= 6_000
+            && !loss
+            && cash > reserve * 3 + cost_of_stake(world, venture.firm, other)
+            && !player_controlled(world, other)
+        {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::BuyOutVenture {
+                    venture: venture.firm,
+                    firm,
+                },
+            });
+            break;
+        }
+        if loss && trailing_income(world, firm) < 0 && cash < reserve {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::ExitVenture {
+                    venture: venture.firm,
+                    firm,
+                },
+            });
+            break;
+        }
+    }
+}
+
+fn trailing_income(world: &World, firm: Handle) -> i64 {
+    world
+        .firms
+        .get(firm)
+        .map(|f| f.book.recent_weeks().iter().map(|w| w.net_income).sum())
+        .unwrap_or(0)
+}
+
+fn cost_of_stake(world: &World, venture: Handle, partner: Handle) -> i64 {
+    world
+        .firms
+        .get(venture)
+        .map(|f| {
+            f.shares.qty(HolderId::Firm(partner))
+                * f.shares.fair_cents.max(f.shares.mark_cents).max(1)
+                * 11_000
+                / 10_000
+        })
+        .unwrap_or(i64::MAX / 4)
 }
 
 /// Goods bought into store when the world price is low and recovering are released when it is high
@@ -911,6 +1134,7 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
     if weights[1] >= 2
         && entity.book.recent_weeks().len() >= 13
         && entity.facilities.len() < 4
+        && !world.structure.jvs.iter().any(|j| j.firm == firm)
         && total_blocks < MAX_GROWTH_BLOCKS
         && fully_staffed
         && recent_income > 0
@@ -1425,14 +1649,6 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
     let reserve = reserve_target(world, firm);
     let mut best: Option<(i64, Handle, u8, u8, i64)> = None;
     for division in sectors::divisions_of(world, dataset, firm) {
-        let ready = entity
-            .raid_ready
-            .get(&(division.region, division.industry))
-            .copied()
-            .unwrap_or(0);
-        if world.tick.0 < ready {
-            continue;
-        }
         let (firms, _) = sectors::cell(world, dataset, division.region, division.industry);
         for (rival, _) in firms {
             if rival == firm || cw_sim::economy::ownership::same_group(world, rival, firm) {
@@ -1466,7 +1682,7 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
                 budget,
             );
             if quote.blocks_at_stake == 0
-                || entity.book.cash() < reserve + budget + quote.price_cents
+                || entity.book.cash() < reserve + budget + quote.price_cents + quote.surcharge_cents
             {
                 continue;
             }
@@ -1474,7 +1690,7 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
                 * quote.blocks_at_stake as i64
                 * 156
                 - quote.price_cents;
-            let value = gain * quote.chance_bps as i64 / 10_000 - budget;
+            let value = gain * quote.chance_bps as i64 / 10_000 - budget - quote.surcharge_cents;
             if value > 0 && best.map(|(b, ..)| value > b).unwrap_or(true) {
                 best = Some((value, rival, division.region, division.industry, budget));
             }

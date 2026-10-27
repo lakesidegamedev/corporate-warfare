@@ -457,21 +457,33 @@ impl Session {
                 ],
             ),
             CommandIntent::IssueBond {
+                firm,
                 principal_cents,
                 coupon_bps,
                 weeks,
-                ..
             } => {
                 let fee = round_even_div(*principal_cents as i128 * 200, 10_000) as i64;
-                cash_preview(
-                    revision,
-                    principal_cents - fee,
-                    vec![
-                        format!("bond issue fee {fee} cents (2 percent)"),
-                        format!("coupon {coupon_bps} basis points"),
-                        format!("matures in {weeks} weeks"),
-                    ],
-                )
+                let quote = cw_sim::economy::structure::bond_quote(
+                    &self.world,
+                    *firm,
+                    *principal_cents,
+                    *weeks,
+                );
+                let mut assumptions = vec![
+                    format!("bond issue fee {fee} cents (2 percent)"),
+                    format!(
+                        "coupon {} basis points: the ten-year yield {} plus a credit spread of {} for leverage, coverage and size",
+                        quote.coupon_bps, quote.base_bps, quote.spread_bps
+                    ),
+                    format!("matures in {weeks} weeks"),
+                ];
+                if *coupon_bps > 0 && quote.coupon_bps > *coupon_bps {
+                    assumptions.push(format!(
+                        "refused: the market price {} is above your limit {}",
+                        quote.coupon_bps, coupon_bps
+                    ));
+                }
+                cash_preview(revision, principal_cents - fee, assumptions)
             }
             CommandIntent::DepositFunds { amount_cents, .. } => cash_preview(
                 revision,
@@ -789,6 +801,7 @@ impl Session {
         }
         logistics_alerts(world, &self.dataset, &mut alerts);
         government_alerts(world, &self.dataset, &mut alerts);
+        structure_alerts(world, &mut alerts);
         for event in dto::events(world, &self.dataset) {
             if event.mandatory {
                 alerts.push(Alert {
@@ -1196,6 +1209,72 @@ fn empty_ownership(handle: u64) -> OwnershipSummary {
         board_seats: std::array::from_fn(|_| None),
         next_meeting: 0,
         ceo: String::new(),
+    }
+}
+
+/// Structure alerts, only when they need a decision or cost real money: an activist campaign
+/// against one of the investor's companies, transfer pricing that is squeezing minority
+/// holders enough to draw a challenge, a supplier the market is marking down, and a bond
+/// falling due that the company cannot yet cover.
+fn structure_alerts(world: &cw_sim::state::World, alerts: &mut Vec<Alert>) {
+    use cw_sim::economy::structure as st;
+    let mine =
+        |firm: cw_core::ids::Handle| cw_sim::economy::events_engine::player_side(world, firm);
+    let name = |firm: cw_core::ids::Handle| {
+        world
+            .firms
+            .get(firm)
+            .map(|f| f.name.clone())
+            .unwrap_or_default()
+    };
+    for c in &world.structure.campaigns {
+        if c.outcome == st::Outcome::Open && mine(c.target) {
+            alerts.push(Alert {
+                key: "alert.activist".to_owned(),
+                subject: name(c.target),
+                severity: 2,
+            });
+        }
+    }
+    for (firm, squeeze) in &world.structure.squeeze {
+        let equity = world
+            .firms
+            .get(*firm)
+            .map(|f| f.valuation.equity_cents)
+            .unwrap_or(0)
+            .max(1);
+        if mine(*firm) && squeeze * 10_000 / equity >= 200 && st::minority_bps(world, *firm) > 0 {
+            alerts.push(Alert {
+                key: "alert.squeeze".to_owned(),
+                subject: name(*firm),
+                severity: 1,
+            });
+        }
+    }
+    for (firm, weeks) in &world.structure.captive_weeks {
+        if mine(*firm) && *weeks >= 26 {
+            alerts.push(Alert {
+                key: "alert.captive_markdown".to_owned(),
+                subject: name(*firm),
+                severity: 1,
+            });
+        }
+    }
+    for (_, bond) in world.bonds.iter() {
+        let left = bond.maturity.0.saturating_sub(world.tick.0);
+        if mine(bond.issuer)
+            && left <= 13
+            && world
+                .firms
+                .get(bond.issuer)
+                .is_some_and(|f| f.book.cash() < bond.principal_cents * 12 / 10)
+        {
+            alerts.push(Alert {
+                key: "alert.bond_due".to_owned(),
+                subject: name(bond.issuer),
+                severity: 3,
+            });
+        }
     }
 }
 

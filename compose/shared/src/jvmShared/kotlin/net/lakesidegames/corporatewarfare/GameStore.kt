@@ -47,6 +47,8 @@ data class Pickers(
     val policies: List<uniffi.cw_ffi.InsuranceDto> = emptyList(),
     val votes: List<uniffi.cw_ffi.BoardVoteDto> = emptyList(),
     val deals: List<uniffi.cw_ffi.DealDto> = emptyList(),
+    /** Options the engine lists itself: bonds, ventures and open activist campaigns. */
+    val extra: Map<String, List<uniffi.cw_ffi.PickDto>> = emptyMap(),
 )
 
 /** One market row for the selected region: a product and its local market, if traded. */
@@ -93,6 +95,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var lanes by mutableStateOf<List<LaneDto>>(emptyList()); private set
     var laneContracts by mutableStateOf<List<LaneContractDto>>(emptyList()); private set
     var freight by mutableStateOf<FreightSummaryDto?>(null); private set
+    /** Groups, transfer prices, reputation, bonds, ventures and activists. */
+    var structure by mutableStateOf<uniffi.cw_ffi.StructureViewDto?>(null); private set
     val strategyCatalogue: List<StrategyDto> by lazy { strategies() }
     /** Every player action with its form, in Command Center order. */
     val actions: List<uniffi.cw_ffi.ActionDto> by lazy { uniffi.cw_ffi.actionCatalogue() }
@@ -341,6 +345,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                     policies = firm?.let { handle.insurance(it) } ?: emptyList(),
                     votes = firm?.let { handle.boardVotes(it) } ?: emptyList(),
                     deals = handle.deals(),
+                    extra = listOf("bond", "my_bond", "my_venture", "open_campaign").associateWith { handle.structurePicks(it) },
                 )
             }
             onResult(result)
@@ -409,6 +414,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 firm?.let { handle.heldStock(it) } ?: emptyList<HeldStockDto>(),
                 firm?.let { handle.storageSummary(it) },
                 handle.lanes(), handle.laneContracts(), handle.freightSummary(),
+                handle.structureView(),
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
@@ -434,6 +440,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 lanes = parts[18] as List<LaneDto>
                 laneContracts = parts[19] as List<LaneContractDto>
                 freight = parts[20] as FreightSummaryDto?
+                structure = parts[21] as uniffi.cw_ffi.StructureViewDto
             }
         }
         loadMarkets()

@@ -16,8 +16,10 @@ use cw_data::Dataset;
 use crate::economy::operations::industry_index;
 use crate::state::{FacilityStatus, RaidRecord, World};
 
-/// The most plants one build order may add.
-pub const MAX_BLOCKS_PER_ORDER: u8 = 40;
+/// The most blocks one build order may add. Past `FAST_BLOCKS` in flight, cost and lead time rise.
+pub const MAX_BLOCKS_PER_ORDER: u8 = u8::MAX;
+/// Blocks a firm can have under construction at once before building gets dearer and slower.
+pub const FAST_BLOCKS: i64 = 40;
 
 /// Paid once to the outside legal-services sector when a firm opens a division.
 pub const ENTRY_FEE_CENTS: i64 = 10_000_000;
@@ -241,6 +243,63 @@ pub fn dominance_multiplier_bps(share_bps: i64, rivals: usize) -> i64 {
     10_000 + (DOMINANCE_MAX_BPS - 10_000) * ramp / 10_000 * rival_scale / 10_000
 }
 
+/// Blocks a firm can have under construction at once at the normal price and speed: forty, and
+/// a tenth of the blocks it already runs. Past it the firm competes with itself for crews and
+/// building materials, so cost and lead time rise smoothly instead of the order being refused.
+pub fn construction_capacity_blocks(world: &World, firm: Handle) -> i64 {
+    let running: i64 = world
+        .firms
+        .get(firm)
+        .map(|entity| {
+            entity
+                .facilities
+                .iter()
+                .filter_map(|handle| world.facilities.get(*handle))
+                .filter(|plant| plant.status != FacilityStatus::Building)
+                .map(|plant| plant.blocks as i64)
+                .sum()
+        })
+        .unwrap_or(0);
+    (FAST_BLOCKS + running / 10).min(400)
+}
+
+/// Blocks the firm already has under construction.
+pub fn blocks_in_construction(world: &World, firm: Handle) -> i64 {
+    world
+        .firms
+        .get(firm)
+        .map(|entity| {
+            entity
+                .facilities
+                .iter()
+                .filter_map(|handle| world.facilities.get(*handle))
+                .filter(|plant| plant.status == FacilityStatus::Building)
+                .map(|plant| plant.blocks as i64)
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
+/// Blocks over the firm's construction capacity if it orders `new_blocks` now, and the capacity.
+pub fn construction_excess(world: &World, firm: Handle, new_blocks: u8) -> (i64, i64) {
+    let capacity = construction_capacity_blocks(world, firm).max(1);
+    let load = blocks_in_construction(world, firm) + new_blocks as i64;
+    ((load - capacity).max(0), capacity)
+}
+
+/// Cost multiplier for building past capacity: fifty percent more for every capacity's worth of
+/// excess blocks, at most two and a half times.
+pub fn rush_bps(excess: i64, capacity: i64) -> i64 {
+    10_000 + (5_000 * excess / capacity.max(1)).min(15_000)
+}
+
+/// Build weeks with materials and crews stretched: another full build time for every capacity's
+/// worth of excess blocks, at most three times the base.
+pub fn stretched_weeks(base_weeks: u32, excess: i64, capacity: i64) -> u32 {
+    let extra = (base_weeks as i64 * excess / capacity.max(1)).min(base_weeks as i64 * 2);
+    base_weeks + extra as u32
+}
+
 /// What a build costs and why.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BuildCost {
@@ -251,6 +310,8 @@ pub struct BuildCost {
     pub opens_division: bool,
     pub dominance_bps: i64,
     pub share_after_bps: i64,
+    /// Cost multiplier for ordering past construction capacity, basis points (10,000 is none).
+    pub rush_bps: i64,
 }
 
 impl BuildCost {
@@ -283,8 +344,11 @@ pub fn build_cost(
     } else {
         dominance_bps(world, dataset, firm, region, industry, added)
     };
+    let (excess, capacity) = construction_excess(world, firm, blocks);
+    let rush = rush_bps(excess, capacity);
     BuildCost {
-        capex_cents: (base as i128 * dominance as i128 / 10_000) as i64,
+        capex_cents: (base as i128 * dominance as i128 / 10_000 * rush as i128 / 10_000) as i64,
+        rush_bps: rush,
         entry_fee_cents: if opens { ENTRY_FEE_CENTS } else { 0 },
         opens_division: opens,
         dominance_bps: dominance,
@@ -331,12 +395,14 @@ pub fn location_input_bps(world: &World, dataset: &Dataset, facility: Handle) ->
     )
 }
 
-/// Weeks before a firm may raid the same cell again.
-pub const RAID_COOLDOWN_WEEKS: u32 = 13;
-/// Share of the defender's blocks at stake: 1 percent at even strength, rising to 20 percent at
-/// a two-to-one advantage.
+/// Share of the defender's blocks at stake: 1 percent at even strength, rising smoothly to the
+/// whole division at a five-to-one advantage. The defender keeps no guaranteed plant; instead a
+/// bigger stake is harder to win (see `RAID_STAKE_DRAG_BPS`).
 pub const RAID_STAKE_MIN_BPS: i64 = 100;
-pub const RAID_STAKE_MAX_BPS: i64 = 2_000;
+pub const RAID_STAKE_MAX_BPS: i64 = 10_000;
+/// How much of the base success chance a whole-division stake costs the raider, basis points.
+/// The chance is scaled by one minus this share of the stake.
+pub const RAID_STAKE_DRAG_BPS: i64 = 8_500;
 /// A defender's floor strength: five percent of its division's quarterly output value.
 pub const RAID_DEFENCE_FLOOR_BPS: i64 = 500;
 /// The attacker buys captured capacity at half its book value.
@@ -351,6 +417,10 @@ pub struct RaidQuote {
     pub chance_bps: i32,
     pub blocks_at_stake: u8,
     pub price_cents: i64,
+    /// Share of the defender's division at stake, basis points.
+    pub stake_bps: i32,
+    /// Legal and retaliation costs of raiding the same rival again soon, on top of the budget.
+    pub surcharge_cents: i64,
 }
 
 fn division_blocks_and_book(world: &World, plants: &[Handle]) -> (i64, i64) {
@@ -394,22 +464,32 @@ pub fn raid_quote(
     let advantage_bps = attack as i128 * 10_000 / defence as i128;
     let stake_bps = RAID_STAKE_MIN_BPS
         + (RAID_STAKE_MAX_BPS - RAID_STAKE_MIN_BPS)
-            * (advantage_bps as i64 - 10_000).clamp(0, 10_000)
-            / 10_000;
-    // The defender always keeps at least one block.
-    let at_stake = (blocks * stake_bps / 10_000).max(1).min(blocks - 1).max(0);
+            * (advantage_bps as i64 - 10_000).clamp(0, 40_000)
+            / 40_000;
+    let at_stake = (blocks * stake_bps / 10_000).max(1).min(blocks).max(0);
     let price = if blocks > 0 {
         book * at_stake / blocks * RAID_PRICE_BPS / 10_000
     } else {
         0
     };
-    let chance = (attack as i128 * 10_000 / (attack as i128 + defence as i128)) as i32;
+    let base_chance = attack as i128 * 10_000 / (attack as i128 + defence as i128);
+    let taken_bps = if blocks > 0 {
+        at_stake * 10_000 / blocks
+    } else {
+        0
+    };
+    let chance = (base_chance * (10_000 - taken_bps as i128 * RAID_STAKE_DRAG_BPS as i128 / 10_000)
+        / 10_000) as i32;
+    let surcharge =
+        crate::economy::structure::raid_surcharge(world, attacker, defender, budget_cents);
     RaidQuote {
         attack_cents: attack,
         defence_cents: defence,
         chance_bps: chance.clamp(500, 9_500),
         blocks_at_stake: at_stake.clamp(0, u8::MAX as i64) as u8,
         price_cents: price,
+        stake_bps: taken_bps.clamp(0, 10_000) as i32,
+        surcharge_cents: surcharge,
     }
 }
 
@@ -444,19 +524,8 @@ pub fn raid(
             actual: "no_division",
         });
     };
-    let ready = world
-        .firms
-        .get(attacker)
-        .and_then(|firm| firm.raid_ready.get(&(region, industry)).copied())
-        .unwrap_or(0);
-    if world.tick.0 < ready {
-        return Err(E::WrongPhase {
-            expected: "raid_cooldown",
-            actual: "cooling_down",
-        });
-    }
     let defending = division_plants(world, dataset, defender, region, industry);
-    if division_blocks_and_book(world, &defending).0 < 2 {
+    if division_blocks_and_book(world, &defending).0 < 1 {
         return Err(E::WrongPhase {
             expected: "rival_division",
             actual: "too_small",
@@ -476,7 +545,7 @@ pub fn raid(
         .get(attacker)
         .map(|f| f.book.cash())
         .unwrap_or(0);
-    let needed = budget_cents + quote.price_cents;
+    let needed = budget_cents + quote.price_cents + quote.surcharge_cents;
     if cash < needed {
         return Err(E::InsufficientCash {
             entity: attacker.0,
@@ -491,10 +560,7 @@ pub fn raid(
         budget_cents,
         "market raid",
     );
-    if let Some(firm) = world.firms.get_mut(attacker) {
-        firm.raid_ready
-            .insert((region, industry), world.tick.0 + RAID_COOLDOWN_WEEKS);
-    }
+    crate::economy::structure::charge_raid_surcharge(world, attacker, quote.surcharge_cents);
     let mut rng = cw_core::rng::Rng::entity_stream(
         world.seed ^ ((world.tick.0 as u64) << 32) ^ ((region as u64) << 8) ^ industry as u64,
         cw_core::rng::TAG_RAID,
@@ -543,6 +609,7 @@ pub fn raid(
         record.blocks = taken;
         record.price_cents = price;
     }
+    crate::economy::structure::note_raid(world, &record, quote.stake_bps);
     world.raids.push(record.clone());
     if world.raids.len() > RAID_LOG {
         world.raids.remove(0);
@@ -564,7 +631,7 @@ fn take_blocks(
         .collect();
     order.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     let total: i64 = order.iter().map(|(blocks, _)| *blocks as i64).sum();
-    let mut remaining = (wanted as i64).min(total - 1).max(0);
+    let mut remaining = (wanted as i64).min(total).max(0);
     let (mut taken, mut capex, mut depreciation) = (0u8, 0i64, 0i64);
     for (_, handle) in order {
         if remaining == 0 {

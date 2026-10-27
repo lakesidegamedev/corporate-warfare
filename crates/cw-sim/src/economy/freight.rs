@@ -214,6 +214,7 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
         };
         let goods_value = deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0;
         let margin = goods_value.saturating_sub(carrying).max(0);
+        crate::economy::structure::note_delivery(world, handle, deliverable, price);
         let freight = quoted(
             world,
             dataset,

@@ -77,6 +77,23 @@ actor Engine {
         session?.freightSummary()
     }
 
+    func structureView() -> StructureViewDto? {
+        session?.structureView()
+    }
+
+    func structurePicks(kind: String) -> [PickDto] {
+        session?.structurePicks(kind: kind) ?? []
+    }
+
+    /// Options the engine lists itself for Command Center pickers, by picker kind.
+    func structurePickMap() -> [String: [PickDto]] {
+        var map: [String: [PickDto]] = [:]
+        for kind in ["bond", "my_bond", "my_venture", "open_campaign"] {
+            map[kind] = structurePicks(kind: kind)
+        }
+        return map
+    }
+
     func mapDivisions() -> [MapDivisionDto] {
         session?.mapDivisions() ?? []
     }

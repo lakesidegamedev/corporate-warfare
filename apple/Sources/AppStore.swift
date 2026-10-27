@@ -19,6 +19,8 @@ final class AppStore: ObservableObject {
     /// Freight lanes this week, lane contracts, and the corridor's freight at a glance.
     @Published var lanes: [LaneDto] = []
     @Published var laneContracts: [LaneContractDto] = []
+    /// Groups, transfer prices, reputation, bonds, ventures and activists.
+    @Published var structure: StructureViewDto?
     @Published var freight: FreightSummaryDto?
     @Published var raidTargets: [RaidOptionDto] = []
     @Published var recentRaids: [RaidRecordDto] = []
@@ -339,6 +341,7 @@ final class AppStore: ObservableObject {
             lanes = await engine.lanes()
             laneContracts = await engine.laneContracts()
             freight = await engine.freightSummary()
+            structure = await engine.structureView()
             raidTargets = await engine.raidTargets(firm: selectedFirm)
             research = await engine.research(firm: selectedFirm)
         } else {
@@ -349,6 +352,7 @@ final class AppStore: ObservableObject {
             lanes = []
             laneContracts = []
             freight = nil
+            structure = nil
             raidTargets = []
             facilities = []
             finance = nil
@@ -973,14 +977,15 @@ final class AppStore: ObservableObject {
     /// in the Command Center forms.
     func pickers(firm: UInt64?) async -> ActionPickers {
         guard let firm else {
-            return ActionPickers(deals: await engine.deals())
+            return ActionPickers(deals: await engine.deals(), extra: await engine.structurePickMap())
         }
         return ActionPickers(
             loans: await engine.loans(firm: firm),
             contracts: await engine.contracts(firm: firm),
             policies: await engine.insurance(firm: firm),
             votes: await engine.boardVotes(firm: firm),
-            deals: await engine.deals()
+            deals: await engine.deals(),
+            extra: await engine.structurePickMap()
         )
     }
 

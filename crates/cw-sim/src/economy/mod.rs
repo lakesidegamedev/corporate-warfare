@@ -31,6 +31,7 @@ pub mod sectors;
 pub mod seed;
 pub mod services;
 pub mod storage;
+pub mod structure;
 pub mod systemic;
 pub mod unions;
 pub mod valuation;
