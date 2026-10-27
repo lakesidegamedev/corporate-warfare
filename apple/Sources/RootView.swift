@@ -19,20 +19,20 @@ struct RootView: View {
             }
             TabView(selection: $tab) {
                 MapHomeView()
-                    .tabItem { Label("Map", systemImage: "map.fill") }
+                    .tabItem { PixelLabel("Map", icon: "map") }
                     .tag(AppTab.map)
                 CEOOfficeView()
-                    .tabItem { Label("CEO Office", systemImage: "building.2.fill") }
+                    .tabItem { PixelLabel("CEO Office", icon: "office") }
                     .tag(AppTab.office)
                 MarketsView()
-                    .tabItem { Label("Markets", systemImage: "chart.bar.xaxis") }
+                    .tabItem { PixelLabel("Markets", icon: "markets") }
                     .tag(AppTab.markets)
                 InboxView()
-                    .tabItem { Label("Inbox", systemImage: "tray.full.fill") }
+                    .tabItem { PixelLabel("Inbox", icon: "inbox") }
                     .badge(store.events.filter { $0.mandatory }.count)
                     .tag(AppTab.inbox)
                 OverviewView()
-                    .tabItem { Label("Portfolio", systemImage: "building.columns.fill") }
+                    .tabItem { PixelLabel("Portfolio", icon: "portfolio") }
                     .tag(AppTab.portfolio)
             }
             .tint(Theme.gold)
@@ -49,7 +49,7 @@ struct RecoveryNoticeBanner: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "clock.arrow.circlepath")
+            PixelIcon("history")
                 .font(.footnote)
                 .foregroundStyle(Theme.warning)
             Text(text)
@@ -60,8 +60,7 @@ struct RecoveryNoticeBanner: View {
             Button {
                 store.dismissRecoveryNotice()
             } label: {
-                Image(systemName: "xmark")
-                    .font(.caption2)
+                PixelIcon("close", size: 12)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss recovery notice")
@@ -78,8 +77,7 @@ struct ContextChip: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "building.2")
-                .font(.caption)
+            PixelIcon("office", size: 12)
             Text(store.selectedFirmDto?.name ?? "No company selected")
                 .font(.caption.weight(.medium))
                 .lineLimit(1)
@@ -107,7 +105,7 @@ struct RunControls: View {
             Button {
                 Task { await store.advance(weeks: 1) }
             } label: {
-                Label("Next week", systemImage: "forward.frame")
+                PixelLabel("Next week", icon: "next_week")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -125,7 +123,7 @@ struct SpeedControl: View {
     @EnvironmentObject private var store: AppStore
     var compact = false
 
-    private let speeds: [(Double, String)] = [(0, "pause.fill"), (1, "1x"), (2, "2x"), (4, "4x")]
+    private let speeds: [(Double, String)] = [(0, "pause"), (1, "speed1"), (2, "speed2"), (4, "speed3")]
 
     var body: some View {
         HStack(spacing: 2) {
@@ -134,20 +132,13 @@ struct SpeedControl: View {
                 Button {
                     store.setSpeed(speed)
                 } label: {
-                    Group {
-                        if speed == 0 {
-                            Image(systemName: label)
-                        } else {
-                            Text(label).monospacedDigit()
-                        }
-                    }
-                    .font((compact ? Font.caption : Font.callout).weight(.bold))
+                    PixelIcon(label, size: compact ? 16 : 20)
                     .frame(minWidth: compact ? 30 : 38, minHeight: compact ? 28 : 36)
                     .foregroundStyle(selected ? Theme.ink : Theme.primaryText)
                     .background(selected ? Theme.gold : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(speed == 0 ? "Pause" : "Speed \(label)")
+                .accessibilityLabel(speed == 0 ? "Pause" : "Speed \(Int(speed)) times")
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }

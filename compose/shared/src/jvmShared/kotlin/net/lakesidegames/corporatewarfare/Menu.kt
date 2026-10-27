@@ -311,7 +311,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                 Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = { if (step == 0) onBack() else step = 0 }) { Text("‹ Back", color = Palette.secondary) }
+                TextButton(onClick = { if (step == 0) onBack() else step = 0 }) { BackLabel("Back", Palette.secondary) }
                 Spacer(Modifier.width(8.dp))
                 Text("New game", color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 StepDot(1, "Scenario", step == 0)

@@ -70,7 +70,7 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
             PhasePill(e.phase)
             Spacer(Modifier.weight(1f))
             Text("Rate ${pct(e.policyRateBps, 2)} · inflation ${pct(e.inflationBps)}", color = Palette.secondary, fontSize = 12.sp)
-            if (collapsible) Text(if (open) "  ▴" else "  ▾", color = Palette.secondary)
+            if (collapsible) PixelIcon(if (open) "chevron_up" else "chevron_down", size = 12.dp, tint = Palette.secondary, modifier = Modifier.padding(start = 6.dp))
         }
         if (!open) return@Panel
         StatGroup(

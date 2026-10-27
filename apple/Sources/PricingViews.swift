@@ -81,7 +81,7 @@ private struct PricingRow: View {
             if let sold = PostureText.soldShare(line) {
                 SignalPill(text: "\(sold)%", tint: sold >= 95 ? Theme.positive : sold >= 70 ? Theme.gold : Theme.negative)
             }
-            Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(Theme.secondary)
+            PixelIcon("chevron_right", size: 12).foregroundStyle(Theme.secondary)
         }
         .padding(.vertical, 8)
         .contentShape(Rectangle())
@@ -167,7 +167,7 @@ struct PostureSheet: View {
                         }
                     }
                     if let applied {
-                        Label(applied, systemImage: "checkmark.circle.fill")
+                        PixelLabel(applied, icon: "check_circle")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Theme.positive)
                     }
@@ -214,7 +214,7 @@ struct PostureSheet: View {
             Task { await action() }
         } label: {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                PixelIcon(selected ? "check_circle" : "circle")
                     .foregroundStyle(selected ? Theme.gold : Theme.secondary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.callout.weight(.semibold)).foregroundStyle(Theme.primaryText)

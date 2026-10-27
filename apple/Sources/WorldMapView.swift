@@ -9,12 +9,12 @@ enum MapLayer: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var symbol: String {
+    var icon: String {
         switch self {
-        case .presence: return "building.2.fill"
-        case .room: return "arrow.down.right.and.arrow.up.left.circle.fill"
-        case .wages: return "dollarsign.circle.fill"
-        case .skill: return "graduationcap.fill"
+        case .presence: return "layer_presence"
+        case .room: return "layer_room"
+        case .wages: return "layer_wages"
+        case .skill: return "layer_skill"
         }
     }
 
@@ -133,7 +133,7 @@ struct WorldMapView: View {
             Divider().frame(width: 36).overlay(Theme.stroke)
             mapButton("minus", label: "Zoom out") { fly(from: current, to: current.zoomed(by: 1 / 1.8)) }
             Divider().frame(width: 36).overlay(Theme.stroke)
-            mapButton(current.zoom > MapCamera.flatStart ? "globe.americas.fill" : "scope",
+            mapButton(current.zoom > MapCamera.flatStart ? "globe" : "scope",
                       label: current.zoom > MapCamera.flatStart ? "Show the whole globe" : "Show the scenario") {
                 let target = current.zoom > MapCamera.flatStart
                     ? MapCamera(lon: current.lon, lat: current.lat, zoom: 1)
@@ -145,10 +145,9 @@ struct WorldMapView: View {
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.stroke))
     }
 
-    private func mapButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+    private func mapButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
+            PixelIcon(icon, size: 24)
                 .foregroundStyle(Theme.primaryText)
                 .frame(width: 40, height: 40)
         }
@@ -280,9 +279,12 @@ struct WorldMapView: View {
                 context.fill(Path(ellipseIn: rect.insetBy(dx: -2, dy: -2)), with: .color(Theme.ink))
                 context.fill(Path(ellipseIn: rect), with: .color(Sector.color(division.sector)))
                 context.stroke(Path(ellipseIn: rect.insetBy(dx: -1.5, dy: -1.5)), with: .color(Theme.gold), lineWidth: 2)
-                var symbol = context.resolve(Image(systemName: Sector.symbol(division.sector)))
-                symbol.shading = .color(Theme.ink)
-                context.draw(symbol, in: rect.insetBy(dx: 5, dy: 5))
+                if let art = SectorIcons.all[division.sector] {
+                    PixelIcons.draw(
+                        rows: art.rows, palette: art.palette, gridSize: art.rows.count,
+                        in: &context, rect: rect.insetBy(dx: 5, dy: 5), tint: Theme.ink
+                    )
+                }
                 let badge = CGRect(x: rect.maxX - 7, y: rect.minY - 5, width: 14, height: 14)
                 context.fill(Path(ellipseIn: badge), with: .color(Theme.gold))
                 context.draw(

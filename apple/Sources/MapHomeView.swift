@@ -183,7 +183,7 @@ struct TimeBar: View {
                 Button {
                     Task { await store.advance(weeks: 1) }
                 } label: {
-                    Image(systemName: "forward.frame.fill")
+                    PixelIcon("next_week")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.gold)
@@ -196,9 +196,9 @@ struct TimeBar: View {
                 withAnimation(.easeOut(duration: 0.15)) { open.toggle() }
             } label: {
                 HStack(spacing: 4) {
-                    Image(systemName: store.runSpeed > 0 ? "play.fill" : "pause.fill")
+                    PixelIcon(store.runSpeed > 0 ? "play" : "pause")
                     if store.runSpeed > 0 { Text("\(Int(store.runSpeed))x").monospacedDigit() }
-                    Image(systemName: open ? "chevron.right" : "chevron.left").font(.caption2.weight(.bold))
+                    PixelIcon(open ? "chevron_right" : "chevron_left", size: 12)
                 }
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Theme.primaryText)
@@ -249,7 +249,7 @@ struct LayerChips: View {
                     Button {
                         layer = option
                     } label: {
-                        Label(option.rawValue, systemImage: option.symbol)
+                        PixelLabel(option.rawValue, icon: option.icon)
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
@@ -272,7 +272,7 @@ struct GoalLine: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "target").font(.caption).foregroundStyle(Theme.gold)
+            PixelIcon("target", size: 14).foregroundStyle(Theme.gold)
             Text(objective.title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.primaryText)
@@ -301,22 +301,21 @@ struct GameMenuButton: View {
             Button {
                 Task { await store.manualSave() }
             } label: {
-                Label("Save now", systemImage: "square.and.arrow.down")
+                PixelLabel("Save now", icon: "save")
             }
             Button {
                 showingSettings = true
             } label: {
-                Label("Settings", systemImage: "gearshape")
+                PixelLabel("Settings", icon: "settings")
             }
             Divider()
             Button {
                 Task { await store.exitToMenu() }
             } label: {
-                Label("Save and exit to main menu", systemImage: "rectangle.portrait.and.arrow.right")
+                PixelLabel("Save and exit to main menu", icon: "quit")
             }
         } label: {
-            Image(systemName: "line.3.horizontal")
-                .font(.caption.weight(.bold))
+            PixelIcon("menu", size: 12)
                 .foregroundStyle(Theme.primaryText)
                 .frame(width: 30, height: 30)
                 .background(Theme.panelRaised, in: Circle())

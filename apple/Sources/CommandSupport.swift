@@ -152,7 +152,7 @@ struct PreviewCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let blocked = preview.blockedKey {
-                Label(Remedy.title(for: blocked), systemImage: "exclamationmark.octagon.fill")
+                PixelLabel(Remedy.title(for: blocked), icon: "blocked")
                     .font(.callout.weight(.medium))
                     .foregroundStyle(Theme.negative)
                 Text(Remedy.text(for: blocked))
@@ -191,7 +191,7 @@ struct RejectionNotice: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label(rejection.title, systemImage: "exclamationmark.triangle.fill")
+            PixelLabel(rejection.title, icon: "warning")
                 .font(.callout.weight(.medium))
                 .foregroundStyle(Theme.negative)
             Text(rejection.remedy)
@@ -289,7 +289,7 @@ struct CommandSheet<Fields: View>: View {
                     if accepted { dismiss() }
                 }
             } label: {
-                Label(submitTitle, systemImage: "checkmark.seal")
+                PixelLabel(submitTitle, icon: "check")
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 44)
             }
@@ -307,7 +307,7 @@ struct CommandSheet<Fields: View>: View {
 struct CompanyLink<Destination: View>: View {
     let title: String
     let detail: String
-    let systemImage: String
+    let icon: String
     @ViewBuilder var destination: Destination
     @Environment(\.colorScheme) private var scheme
 
@@ -316,7 +316,7 @@ struct CompanyLink<Destination: View>: View {
             destination
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Image(systemName: systemImage)
+                PixelIcon(icon)
                     .frame(width: 24, height: 24, alignment: .center)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
@@ -329,8 +329,7 @@ struct CompanyLink<Destination: View>: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.caption)
+                PixelIcon("chevron_right", size: 12)
                     .foregroundStyle(Theme.secondaryText(for: scheme))
                     .accessibilityHidden(true)
             }
@@ -398,13 +397,13 @@ struct ConfirmCommandSheet: View {
 /// A full-width 44pt action row used inside section cards.
 struct ActionButton: View {
     let title: String
-    let systemImage: String
+    let icon: String
     var role: ButtonRole? = nil
     let action: () -> Void
 
     var body: some View {
         Button(role: role, action: action) {
-            Label(title, systemImage: systemImage)
+            PixelLabel(title, icon: icon)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 44)
         }

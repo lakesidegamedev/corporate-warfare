@@ -72,7 +72,7 @@ struct RegionMarketsSection: View {
             }
             filterBar
             if groups.isEmpty {
-                CalloutRow(symbol: "line.3.horizontal.decrease.circle", text: "No goods match this filter in \(state?.name ?? "this region").", tint: Theme.secondary)
+                CalloutRow(icon: "filter", text: "No goods match this filter in \(state?.name ?? "this region").", tint: Theme.secondary)
             }
             ForEach(groups) { group in
                 Panel(padding: 12) {
@@ -127,7 +127,7 @@ struct RegionMarketsSection: View {
                 Text(state?.name ?? "Region")
                     .font(.callout.weight(.semibold))
                     .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down").font(.caption2.weight(.bold))
+                PixelIcon("sort", size: 12)
             }
             .foregroundStyle(Theme.primaryText)
             .padding(.horizontal, 12)
@@ -257,7 +257,7 @@ private struct BoardRow: View {
                             .foregroundStyle(Theme.primaryText)
                             .lineLimit(1)
                         if yours {
-                            Image(systemName: "star.fill").font(.caption2).foregroundStyle(Theme.gold)
+                            PixelIcon("star", size: 12).foregroundStyle(Theme.gold)
                                 .accessibilityLabel("You make this")
                         }
                         if let label = signal.label, signal != .steady {

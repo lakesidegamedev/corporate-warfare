@@ -43,7 +43,7 @@ struct StartView: View {
                             Button {
                                 Task { await store.resume(latest) }
                             } label: {
-                                Label("Resume week \(latest.week)", systemImage: "arrow.clockwise")
+                                PixelLabel("Resume week \(latest.week)", icon: "refresh")
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.borderedProminent)
@@ -71,7 +71,7 @@ struct StartView: View {
                             let seed = UInt64.random(in: 1...9_999_999)
                             Task { await store.newCareer(guided: mode.guided, fiveYear: mode.fiveYear, seed: seed) }
                         } label: {
-                            Label("Start", systemImage: "play.fill")
+                            PixelLabel("Start", icon: "play")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
@@ -103,7 +103,7 @@ struct StartView: View {
                     Button {
                         showingSettings = true
                     } label: {
-                        Label("Settings", systemImage: "gearshape")
+                        PixelLabel("Settings", icon: "settings")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -168,7 +168,7 @@ struct ScenarioCard: View {
                     .foregroundStyle(Theme.primaryText)
                 Spacer()
                 if selected {
-                    Image(systemName: "checkmark.circle.fill")
+                    PixelIcon("check_circle")
                         .foregroundStyle(Theme.gold)
                 }
             }
@@ -220,7 +220,7 @@ struct RecoveryCard: View {
                 Button {
                     Task { await store.recoverLastGood() }
                 } label: {
-                    Label("Recover last good save", systemImage: "clock.arrow.circlepath")
+                    PixelLabel("Recover last good save", icon: "history")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -257,7 +257,7 @@ struct DiagnosticExportView: View {
                         .foregroundStyle(Theme.secondaryText(for: scheme))
                         .textSelection(.enabled)
                     ShareLink(item: export.url) {
-                        Label("Share diagnostics file", systemImage: "square.and.arrow.up")
+                        PixelLabel("Share diagnostics file", icon: "share")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -329,14 +329,14 @@ struct SavesView: View {
                             Button {
                                 Task { await store.recover(slot: save.slot) }
                             } label: {
-                                Label("Recover last good copy", systemImage: "clock.arrow.circlepath")
+                                PixelLabel("Recover last good copy", icon: "history")
                             }
                         }
                         Button(role: .destructive) {
                             SaveManager.shared.delete(save)
                             store.saves = SaveManager.shared.list()
                         } label: {
-                            Label("Delete this slot", systemImage: "trash")
+                            PixelLabel("Delete this slot", icon: "trash")
                         }
                     }
                 }

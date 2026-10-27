@@ -168,7 +168,7 @@ struct StocksSection: View {
                 }
             }
             if rows.isEmpty {
-                CalloutRow(symbol: "chart.line.uptrend.xyaxis", text: "You hold no shares yet. Open any company to buy.", tint: Theme.secondary)
+                CalloutRow(icon: "trend_up", text: "You hold no shares yet. Open any company to buy.", tint: Theme.secondary)
             } else {
                 Panel(padding: 12) {
                     VStack(spacing: 0) {
@@ -204,7 +204,7 @@ private struct StockRow: View {
                 HStack(spacing: 4) {
                     Text(stock.name).font(.callout.weight(.medium)).foregroundStyle(Theme.primaryText).lineLimit(1)
                     if stock.controlledByYou {
-                        Image(systemName: "star.fill").font(.caption2).foregroundStyle(Theme.gold)
+                        PixelIcon("star", size: 12).foregroundStyle(Theme.gold)
                     }
                 }
                 Text("\(Sector.name(stock.industry)) · cap \(Format.moneyCompact(stock.marketCapCents))")
@@ -401,7 +401,7 @@ private struct CommodityRow: View {
             HStack(spacing: 8) {
                 Text(line.name).font(.callout.weight(.medium)).foregroundStyle(Theme.primaryText).lineLimit(1)
                 if line.yours {
-                    Image(systemName: "star.fill").font(.caption2).foregroundStyle(Theme.gold)
+                    PixelIcon("star", size: 12).foregroundStyle(Theme.gold)
                 }
                 Spacer(minLength: 6)
                 Sparkline(values: line.historyCents, tint: Change.tint(line.changeQuarterBps))
@@ -465,7 +465,7 @@ private struct CommoditySheet: View {
                         Button {
                             pricing = mine
                         } label: {
-                            Label("Your price: \(Format.money(mine.priceCents)) · \(PostureText.label(mine))", systemImage: "tag")
+                            PixelLabel("Your price: \(Format.money(mine.priceCents)) · \(PostureText.label(mine))", icon: "tag")
                                 .font(.callout.weight(.semibold))
                                 .frame(maxWidth: .infinity)
                         }

@@ -97,14 +97,18 @@ fun CommandCenterScreen(store: GameStore, initialQuery: String = "", onClose: ((
                 )
                 FlowRow(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Chip("All", category == null) { category = null }
-                    all.map { it.category }.distinct().forEach { c -> Chip(c, category == c) { category = if (category == c) null else c } }
+                    all.map { it.category }.distinct().forEach { c -> Chip(c, category == c, categoryIcon(c)) { category = if (category == c) null else c } }
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     matches.groupBy { it.category }.forEach { (group, actions) ->
-                        Text(
-                            group.uppercase() + "  ${actions.size}", color = Palette.secondary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 0.8.sp, modifier = Modifier.padding(start = 14.dp, top = 10.dp, bottom = 4.dp),
-                        )
+                        Row(Modifier.padding(start = 14.dp, top = 10.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            PixelIcon(categoryIcon(group), size = 14.dp)
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                group.uppercase() + "  ${actions.size}", color = Palette.secondary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.8.sp,
+                            )
+                        }
                         actions.forEach { action ->
                             val on = chosen?.command == action.command
                             Column(
@@ -136,13 +140,20 @@ fun CommandCenterScreen(store: GameStore, initialQuery: String = "", onClose: ((
 }
 
 @Composable
-private fun Chip(text: String, on: Boolean, onClick: () -> Unit) {
-    Text(
-        text, color = if (on) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clip(CircleShape).background(if (on) Palette.gold else Palette.panelRaised).clickable(onClick = onClick)
+private fun Chip(text: String, on: Boolean, icon: String? = null, onClick: () -> Unit) {
+    Row(
+        Modifier.clip(CircleShape).background(if (on) Palette.gold else Palette.panelRaised).clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 4.dp),
-    )
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        if (icon != null) PixelIcon(icon, size = 14.dp)
+        Text(text, color = if (on) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
 }
+
+/** The pixel icon for a Command Center category. */
+internal fun categoryIcon(category: String): String = "cat_" + category.lowercase().replace(' ', '_')
 
 @Composable
 private fun fieldColors() = OutlinedTextFieldDefaults.colors(
@@ -236,7 +247,11 @@ private fun ActionForm(store: GameStore, action: ActionDto, modifier: Modifier, 
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (onBack != null) TextButton(onClick = onBack) { Text("‹ Actions", color = Palette.secondary) }
+            if (onBack != null) TextButton(onClick = onBack) {
+                PixelIcon("back", size = 14.dp, tint = Palette.secondary)
+                Spacer(Modifier.width(6.dp))
+                Text("Actions", color = Palette.secondary)
+            }
             Column(Modifier.weight(1f)) {
                 Eyebrow(action.category)
                 Text(action.title, color = Palette.primaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -260,7 +275,12 @@ private fun ActionForm(store: GameStore, action: ActionDto, modifier: Modifier, 
                     } else {
                         Text("No immediate cash change.", color = Palette.primaryText, fontSize = 13.sp)
                     }
-                    p.warnings.forEach { Text("⚠ ${dollars(it)}", color = Palette.warning, fontSize = 12.sp) }
+                    p.warnings.forEach {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            PixelIcon("warning", size = 14.dp)
+                            Text(dollars(it), color = Palette.warning, fontSize = 12.sp)
+                        }
+                    }
                     p.assumptions.forEach { Text("· ${dollars(it)}", color = Palette.secondary, fontSize = 12.sp) }
                 }
             }
@@ -317,7 +337,7 @@ private fun Dropdown(options: List<Pick>, selected: String, onPick: (String) -> 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(label, color = if (selected.isEmpty() && options.none { it.value.isEmpty() }) Palette.secondary else Palette.primaryText, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("▾", color = Palette.secondary)
+            PixelIcon("chevron_down", size = 14.dp, tint = Palette.secondary)
         }
         DropdownMenu(open, { open = false }, Modifier.heightIn(max = 420.dp).background(Palette.panelRaised)) {
             options.forEach { option ->

@@ -46,7 +46,7 @@ struct DealsView: View {
                         .font(.caption)
                         .foregroundStyle(Theme.secondaryText(for: scheme))
                         .fixedSize(horizontal: false, vertical: true)
-                    ActionButton(title: "Start diligence", systemImage: "magnifyingglass") {
+                    ActionButton(title: "Start diligence", icon: "search") {
                         showingStart = true
                     }
                 }
@@ -151,13 +151,13 @@ struct BankingView: View {
                         .font(.caption)
                         .foregroundStyle(Theme.secondaryText(for: scheme))
                         .fixedSize(horizontal: false, vertical: true)
-                    ActionButton(title: "Deposit funds", systemImage: "arrow.down.to.line") {
+                    ActionButton(title: "Deposit funds", icon: "arrow_down") {
                         showingDeposit = true
                     }
-                    ActionButton(title: "Withdraw funds", systemImage: "arrow.up.to.line") {
+                    ActionButton(title: "Withdraw funds", icon: "arrow_up") {
                         showingWithdraw = true
                     }
-                    ActionButton(title: "Approve a loan from the bank", systemImage: "checkmark.circle") {
+                    ActionButton(title: "Approve a loan from the bank", icon: "check_circle") {
                         showingApprove = true
                     }
                 }
@@ -169,20 +169,20 @@ struct BankingView: View {
                         DetailRow(title: "Loans outstanding", value: Format.money(bank.loansCents))
                         DetailRow(title: "Equity", value: Format.money(bank.equityCents))
                         DetailRow(title: "Deposit rate", value: Format.percentBps(bank.depositRateBps))
-                        Label(
+                        PixelLabel(
                             bank.liquidityOk ? "Liquidity meets 20% of deposits" : "Liquidity below 20% of deposits",
-                            systemImage: bank.liquidityOk ? "checkmark.seal" : "exclamationmark.triangle.fill"
+                            icon: bank.liquidityOk ? "check" : "warning"
                         )
                         .font(.caption)
                         .foregroundStyle(bank.liquidityOk ? Theme.positive : Theme.warning)
-                        Label(
+                        PixelLabel(
                             bank.capitalOk ? "Capital meets 12% of risk-weighted loans" : "Capital below 12% of risk-weighted loans",
-                            systemImage: bank.capitalOk ? "checkmark.seal" : "exclamationmark.triangle.fill"
+                            icon: bank.capitalOk ? "check" : "warning"
                         )
                         .font(.caption)
                         .foregroundStyle(bank.capitalOk ? Theme.positive : Theme.warning)
                         if bank.handle == store.selectedFirm {
-                            ActionButton(title: "Set this bank's deposit rate", systemImage: "percent") {
+                            ActionButton(title: "Set this bank's deposit rate", icon: "percent") {
                                 showingRate = true
                             }
                         }
@@ -256,7 +256,7 @@ struct InsuranceView: View {
                             .padding(.vertical, 4)
                         }
                     }
-                    ActionButton(title: "Quote and bind cover", systemImage: "umbrella") {
+                    ActionButton(title: "Quote and bind cover", icon: "umbrella") {
                         showingQuote = true
                     }
                 }
@@ -267,15 +267,15 @@ struct InsuranceView: View {
                         DetailRow(title: "Equity", value: Format.money(insurer.equityCents))
                         DetailRow(title: "Cover in force", value: Format.money(insurer.coverageCents))
                         DetailRow(title: "Mode", value: insurer.specialist ? "Specialist concentration" : "Standard concentration")
-                        Label(
+                        PixelLabel(
                             insurer.liquidityOk ? "Cash covers two weeks of overhead plus 5% of cover" : "Cash below the underwriting liquidity test",
-                            systemImage: insurer.liquidityOk ? "checkmark.seal" : "exclamationmark.triangle.fill"
+                            icon: insurer.liquidityOk ? "check" : "warning"
                         )
                         .font(.caption)
                         .foregroundStyle(insurer.liquidityOk ? Theme.positive : Theme.warning)
-                        Label(
+                        PixelLabel(
                             insurer.capitalOk ? "Capital covers 10% of cover" : "Capital below the underwriting capital test",
-                            systemImage: insurer.capitalOk ? "checkmark.seal" : "exclamationmark.triangle.fill"
+                            icon: insurer.capitalOk ? "check" : "warning"
                         )
                         .font(.caption)
                         .foregroundStyle(insurer.capitalOk ? Theme.positive : Theme.warning)
@@ -344,7 +344,7 @@ struct LabourView: View {
                     }
                     SectionCard(title: "Respond") {
                         if labour.state == "demanding" || labour.state == "striking" {
-                            ActionButton(title: "Accept the demand", systemImage: "hand.thumbsup") {
+                            ActionButton(title: "Accept the demand", icon: "thumb_up") {
                                 confirm = ConfirmRequest(
                                     title: "Accept the demand",
                                     actorName: firm.name,
@@ -357,10 +357,10 @@ struct LabourView: View {
                                     ])
                                 )
                             }
-                            ActionButton(title: "Counter with an offer", systemImage: "arrow.left.arrow.right") {
+                            ActionButton(title: "Counter with an offer", icon: "swap") {
                                 showingCounter = true
                             }
-                            ActionButton(title: "Reject the demand", systemImage: "hand.thumbsdown", role: .destructive) {
+                            ActionButton(title: "Reject the demand", icon: "thumb_down", role: .destructive) {
                                 confirm = ConfirmRequest(
                                     title: "Reject the demand",
                                     actorName: firm.name,
@@ -376,7 +376,7 @@ struct LabourView: View {
                         } else {
                             EmptyNote(text: "No open bargaining. Organisation rises when pay lags the region and falls when it leads. A demand can form every 52 weeks.")
                         }
-                        ActionButton(title: "Propose a settlement", systemImage: "signature") {
+                        ActionButton(title: "Propose a settlement", icon: "pen") {
                             showingSettlement = true
                         }
                     }
@@ -415,7 +415,7 @@ struct PolicyView: View {
                             .font(.caption)
                             .foregroundStyle(Theme.secondaryText(for: scheme))
                             .fixedSize(horizontal: false, vertical: true)
-                        ActionButton(title: "File a lobby request", systemImage: "envelope.badge") {
+                        ActionButton(title: "File a lobby request", icon: "mail") {
                             showingRequest = true
                         }
                     }
@@ -493,7 +493,7 @@ struct RecoveryView: View {
                             .foregroundStyle(recovery.eligible ? Theme.text(for: scheme) : Theme.secondaryText(for: scheme))
                             .fixedSize(horizontal: false, vertical: true)
                         if recovery.eligible {
-                            ActionButton(title: "Accept the management contract", systemImage: "briefcase") {
+                            ActionButton(title: "Accept the management contract", icon: "briefcase") {
                                 confirm = ConfirmRequest(
                                     title: "Management contract",
                                     actorName: "You, the investor",
@@ -516,7 +516,7 @@ struct RecoveryView: View {
                             .font(.caption)
                             .foregroundStyle(Theme.secondaryText(for: scheme))
                             .fixedSize(horizontal: false, vertical: true)
-                        ActionButton(title: "Found a new firm", systemImage: "building.2.crop.circle") {
+                        ActionButton(title: "Found a new firm", icon: "office") {
                             showingFound = true
                         }
                     }

@@ -49,7 +49,7 @@ struct BuildFlowView: View {
                         Button {
                             if strategy != nil { strategy = nil; preview = nil; quote = nil } else { sector = nil }
                         } label: {
-                            Label("Back", systemImage: "chevron.left")
+                            PixelLabel("Back", icon: "chevron_left")
                         }
                     }
                 }
@@ -198,10 +198,10 @@ struct BuildFlowView: View {
                         Eyebrow(text: "Engine preview")
                         figureRow("Cash change", Format.signedMoney(preview.cashChangeCents))
                         ForEach(preview.warnings, id: \.self) { warning in
-                            Label(warning, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(Theme.warning)
+                            PixelLabel(warning, icon: "warning").font(.caption).foregroundStyle(Theme.warning)
                         }
                         if let blocked = preview.blockedKey {
-                            Label(CommandRejection(key: blocked, detail: preview.blockedDetail ?? "").message, systemImage: "xmark.octagon.fill")
+                            PixelLabel(CommandRejection(key: blocked, detail: preview.blockedDetail ?? "").message, icon: "blocked")
                                 .font(.caption).foregroundStyle(Theme.negative)
                         }
                     }
@@ -213,7 +213,7 @@ struct BuildFlowView: View {
             Button {
                 Task { await build(strategy) }
             } label: {
-                Label("Start construction", systemImage: "hammer.fill")
+                PixelLabel("Start construction", icon: "hammer")
                     .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
             }
             .buttonStyle(.borderedProminent)

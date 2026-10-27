@@ -30,67 +30,67 @@ struct CompanyView: View {
                     CompanyLink(
                         title: "Finance",
                         detail: "Statements, dividend, issuance, buyback, IPO, loans and bonds",
-                        systemImage: "banknote"
+                        icon: "cash"
                     ) { FinanceView() }
 
                     CompanyLink(
                         title: "Ownership",
                         detail: "Cap table, board seats, meetings, votes, share orders and tenders",
-                        systemImage: "person.3"
+                        icon: "people"
                     ) { OwnershipView() }
 
                     CompanyLink(
                         title: "Facilities",
                         detail: "Capacity, output, staffing and the production target",
-                        systemImage: "hammer"
+                        icon: "hammer"
                     ) { FacilitiesView() }
 
                     CompanyLink(
                         title: "Supply",
                         detail: "Contracts, deliveries and spot purchases",
-                        systemImage: "shippingbox"
+                        icon: "box"
                     ) { SupplyView() }
 
                     CompanyLink(
                         title: "Deals and rivals",
                         detail: "Diligence, tender funding, remedies, merger and withdrawal",
-                        systemImage: "arrow.triangle.branch"
+                        icon: "branch"
                     ) { DealsView() }
 
                     CompanyLink(
                         title: "Banking",
                         detail: "Deposits, withdrawals, loan approvals, liquidity and capital",
-                        systemImage: "building.columns"
+                        icon: "bank"
                     ) { BankingView() }
 
                     CompanyLink(
                         title: "Insurance",
                         detail: "Quote, bind, cancel and specialist underwriting",
-                        systemImage: "umbrella"
+                        icon: "umbrella"
                     ) { InsuranceView() }
 
                     CompanyLink(
                         title: "Labour",
                         detail: "Bargaining, counter-offers, settlement and strike state",
-                        systemImage: "person.2"
+                        icon: "people"
                     ) { LabourView() }
 
                     CompanyLink(
                         title: "Policy",
                         detail: "Permit, training and tax requests with fee and cooldown",
-                        systemImage: "checkmark.seal"
+                        icon: "check"
                     ) { PolicyView() }
 
                     CompanyLink(
                         title: "Group",
                         detail: "Subsidiaries, control percentages and the primary group",
-                        systemImage: "square.stack.3d.up"
+                        icon: "stack"
                     ) { GroupView() }
 
                     CompanyLink(
                         title: "Recovery",
                         detail: "Management contract and founding a new firm",
-                        systemImage: "arrow.triangle.2.circlepath"
+                        icon: "refresh"
                     ) { RecoveryView() }
 
                     if let error = store.errorMessage {
