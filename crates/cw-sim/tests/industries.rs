@@ -1038,9 +1038,22 @@ fn logistics_carriers_earn_freight_and_delivery_waits_for_the_lane_lead_time() {
         );
     }
     tick::advance(&mut world, &dataset);
+    // The delivery lands this week. Whatever the buyer then sold or exported out of the region
+    // the same week counts as delivered too: the outside buyer takes surplus when it has cash.
+    assert!(
+        world.shipments.iter().all(|s| s.product != product),
+        "the shipment arrived"
+    );
+    let sold_on = world
+        .firm(buyer)
+        .unwrap()
+        .sales_history
+        .last()
+        .and_then(|week| week.get(&(to_region, product)).copied())
+        .unwrap_or(0);
     assert_eq!(
-        world.firm(buyer).unwrap().stock(product, to_region).0,
-        buyer_stock_before.0 + quantity.0,
+        world.firm(buyer).unwrap().stock(product, to_region).lots() + sold_on,
+        buyer_stock_before.lots() + quantity.lots(),
         "delivered after the lane lead time"
     );
     assert_invariants(&world);

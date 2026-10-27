@@ -14,7 +14,7 @@ use cw_core::ledger::{Ledger, Txn};
 use cw_core::money::{Bps, Cents};
 use cw_core::quantity::MilliLots;
 use cw_core::rng::Rng;
-use cw_data::{Dataset, Difficulty};
+use cw_data::Dataset;
 
 use crate::state::*;
 
@@ -53,8 +53,28 @@ fn industry_index(industry: &str) -> u8 {
         .expect("validated industry") as u8
 }
 
-/// Build the opening world.
+/// Build the opening world with the standard options.
 pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: ScenarioMode) -> World {
+    build_with(
+        dataset,
+        seed,
+        scenario,
+        mode,
+        &crate::state::StartOptions::default(),
+    )
+}
+
+/// Build the opening world for the new-game screen's difficulty, economy and capital.
+pub fn build_with(
+    dataset: &Dataset,
+    seed: u64,
+    scenario: ScenarioKind,
+    mode: ScenarioMode,
+    options: &crate::state::StartOptions,
+) -> World {
+    let capital = options.capital();
+    let (cycle, opening_rate, opening_inflation) =
+        crate::state::Cycle::for_start(options.economy, BASE_POLICY_RATE_BPS);
     let mut world = World {
         tick: Tick::OPENING,
         revision: 0,
@@ -62,10 +82,10 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
         dataset_hash: dataset.hash.clone(),
         scenario,
         mode,
-        difficulty: Difficulty::Standard,
+        difficulty: options.difficulty,
         investor: Investor {
             name: "Investor".to_owned(),
-            cash_cents: Difficulty::Standard.starting_capital_cents(),
+            cash_cents: capital,
             book: Ledger::default(),
             personal_loans_cents: 0,
             primary_group: None,
@@ -75,7 +95,7 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
             assisted_score: false,
             career_losses_cents: 0,
             realised_gains_cents: 0,
-            starting_net_worth_cents: Difficulty::Standard.starting_capital_cents(),
+            starting_net_worth_cents: capital,
         },
         firms: Default::default(),
         facilities: Default::default(),
@@ -124,13 +144,14 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
             gateway_floor_cents: 0,
         },
         macro_state: MacroState {
-            policy_rate_bps: BASE_POLICY_RATE_BPS,
-            inflation_bps: 200,
-            real_growth_bps: 200,
+            policy_rate_bps: opening_rate,
+            inflation_bps: opening_inflation,
+            real_growth_bps: 300,
             tech_frontier: 2,
             price_index_bps: 10_000,
             regime: None,
             rng: Rng::stream(seed, cw_core::rng::TAG_MACRO),
+            cycle,
         },
         events: EventState {
             pending: Vec::new(),
@@ -156,6 +177,7 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
         objective_history: Vec::new(),
         price_history: Vec::new(),
         firm_history: BTreeMap::new(),
+        politics: crate::state::Politics::default(),
     };
 
     // Outside gateway capital is finite but real: exports are paid from it, imports add to it.
@@ -807,7 +829,6 @@ fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
     firm.shares.statement_weeks = 0;
     firm.board.ceo = Some(CeoRef::Investor);
     world.investor.primary_group = Some(handle);
-    world.investor.starting_net_worth_cents = Difficulty::Standard.starting_capital_cents();
     let _ = seed;
 }
 

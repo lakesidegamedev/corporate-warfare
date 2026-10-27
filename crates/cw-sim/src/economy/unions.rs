@@ -37,10 +37,11 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
             .copied()
             .unwrap_or(world.regions[region as usize].organisation_bps);
         let mut organisation = entry;
+        let (rise, decay) = world.politics.laws.unions.drift_bps();
         if wage * 100 < prevailing * 90 {
-            organisation += 25;
+            organisation += rise;
         } else {
-            organisation = (organisation - 5).max(500);
+            organisation = (organisation - decay).max(500);
         }
         // Union drive card: organisation crosses half the workforce this week.
         if entry < 5_000 && organisation >= 5_000 {

@@ -59,7 +59,7 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         // as the player's automatic production (cw_sim::economy::pricing::plan).
         reopen(world, dataset, handle, &mut proposals);
         // Aggressive archetypes reconsider strategy every second week, the rest every fourth.
-        let aggressive = firm.archetype.map(aggressive).unwrap_or(false);
+        let aggressive = fights(world, firm.archetype);
         let due = if aggressive {
             handle.slot() % 2 == cohort % 2
         } else {
@@ -125,6 +125,16 @@ const RAID_RESPITE_WEEKS: u32 = 26;
 
 /// Cost leaders, consolidators and vultures fight for markets: they undercut, invade occupied
 /// markets and reconsider strategy twice as often.
+/// Whether a rival fights for share: on Easy none do, on Hard all do, on Standard the cost
+/// leaders, consolidators and vultures.
+fn fights(world: &World, archetype: Option<Archetype>) -> bool {
+    match world.difficulty {
+        cw_data::Difficulty::Easy => false,
+        cw_data::Difficulty::Hard => true,
+        cw_data::Difficulty::Standard => archetype.map(aggressive).unwrap_or(false),
+    }
+}
+
 fn aggressive(archetype: Archetype) -> bool {
     let weights = archetype.weights();
     weights[0] >= 3 || weights[4] >= 5
@@ -803,7 +813,7 @@ fn best_expansion(
         let Some(output) = dataset.product_index.get(&template.output).copied() else {
             continue;
         };
-        let fighter = entity.archetype.map(aggressive).unwrap_or(false);
+        let fighter = fights(world, entity.archetype);
         for region in 0..world.regions.len() as u8 {
             // An aggressive rival may invade a market the player holds even without unmet
             // demand, when it would still profit at prices a tenth lower in the fight to come.
@@ -860,7 +870,7 @@ fn best_expansion(
                 - financing;
             // Aggressive rivals prefer to fight for a market someone already holds, and the
             // player's markets most of all: invading makes the cell contested and raidable.
-            if npv > 0 && entity.archetype.map(aggressive).unwrap_or(false) {
+            if npv > 0 && fights(world, entity.archetype) {
                 let (occupants, _) = cw_sim::economy::sectors::cell(world, dataset, region, sector);
                 let rivals: Vec<Handle> = occupants
                     .iter()

@@ -81,6 +81,8 @@ pub(crate) fn config(seed: u64, guided: bool, five_year: bool) -> ScenarioConfig
         },
         dataset_hash: String::new(),
         difficulty: cw_data::Difficulty::Standard,
+        economy_start: Default::default(),
+        starting_capital_cents: None,
     }
 }
 

@@ -11,7 +11,6 @@ use cw_core::calendar::Tick;
 use cw_core::error::{DomainError, DomainResult, EntityKind};
 use cw_core::ids::Handle;
 use cw_core::ledger::{Account, Txn};
-use cw_core::money::round_even_div;
 use cw_core::rng::{Rng, TAG_RESEARCH};
 use cw_data::Dataset;
 
@@ -27,21 +26,7 @@ pub fn quarter_check(world: &mut World, dataset: &Dataset) {
     }
     world.events.last_quarter_check = world.tick.0;
 
-    // One macro impulse, using the dedicated macro stream.
-    let impulse = {
-        let choices = [-100i32, -50, 0, 0, 0, 50, 100];
-        let index = world.macro_state.rng.uniform_below(choices.len() as u64) as usize;
-        choices[index]
-    };
-    world.macro_state.policy_rate_bps =
-        (world.macro_state.policy_rate_bps + impulse).clamp(100, 1_500);
-    // Nominal reference price index grows at the annual inflation rate with a carried remainder.
-    let growth = round_even_div(
-        world.macro_state.price_index_bps as i128 * world.macro_state.inflation_bps as i128,
-        10_000 * 52,
-    ) as i64;
-    world.macro_state.price_index_bps += growth.max(1);
-
+    // Rates, inflation and the cycle run weekly in `macro_cycle`; the quarter only draws shocks.
     // Clear active regimes at expiry.
     if let Some((kind, until)) = world.macro_state.regime
         && world.tick.0 >= until.0
@@ -108,40 +93,28 @@ pub fn player_side(world: &World, firm: Handle) -> bool {
         == Some(crate::state::HolderId::Investor)
 }
 
-/// One macro regime per quarter at most, from the macro stream, only when none is active. The
-/// regime applies at once; the card tells the player and offers only their own response.
+/// A fuel shock at most once a quarter, from the macro stream, only when no regime is active.
+/// Booms and recessions come from the business cycle in `macro_cycle`, which opens their cards.
 fn macro_draw(world: &mut World, dataset: &Dataset) {
     if world.macro_state.regime.is_some() {
         return;
     }
-    if world.macro_state.rng.uniform_below(10_000) >= 1_000 {
+    if world.macro_state.rng.uniform_below(10_000) >= 330 {
         return;
     }
-    let cards = ["demand_boom", "fuel_spike", "recession"];
-    let card = cards[world.macro_state.rng.uniform_below(cards.len() as u64) as usize];
-    match card {
-        "recession" => {
-            world.macro_state.regime = Some((RegimeKind::Recession, Tick(world.tick.0 + 26)));
-            apply_demand_regime(world, -1_000);
-        }
-        "demand_boom" => {
-            world.macro_state.regime = Some((RegimeKind::Boom, Tick(world.tick.0 + 26)));
-            apply_demand_regime(world, 1_000);
-        }
-        _ => {
-            // Fuel supply falls a fifth for thirteen weeks, which lifts the executable fuel
-            // price through the normal market rather than by decree.
-            world.macro_state.regime = Some((RegimeKind::FuelShock, Tick(world.tick.0 + 13)));
-            let fuel = dataset.product_index["fuel"];
-            for region in &mut world.regions {
-                region.supply_modifiers.push((
-                    "fuel_shock".to_owned(),
-                    Some(fuel),
-                    -2_000,
-                    Tick(world.tick.0 + 13),
-                ));
-            }
-        }
+    let card = "fuel_spike";
+    // Fuel supply falls a fifth for thirteen weeks, which lifts the executable fuel price
+    // through the normal market rather than by decree, and adds to inflation.
+    world.macro_state.regime = Some((RegimeKind::FuelShock, Tick(world.tick.0 + 13)));
+    world.macro_state.inflation_bps += 40;
+    let fuel = dataset.product_index["fuel"];
+    for region in &mut world.regions {
+        region.supply_modifiers.push((
+            "fuel_shock".to_owned(),
+            Some(fuel),
+            -2_000,
+            Tick(world.tick.0 + 13),
+        ));
     }
     let subject = world
         .investor
@@ -1087,17 +1060,6 @@ fn apply(
         }
     }
     Ok(())
-}
-
-fn apply_demand_regime(world: &mut World, delta_bps: i32) {
-    for region in &mut world.regions {
-        region.demand_modifiers.push((
-            "macro_regime".to_owned(),
-            None,
-            delta_bps,
-            Tick(world.tick.0 + 26),
-        ));
-    }
 }
 
 fn pay_operating(world: &mut World, firm: Handle, amount: i64, memo: &str) {

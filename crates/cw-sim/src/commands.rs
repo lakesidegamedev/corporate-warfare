@@ -1884,7 +1884,9 @@ fn apply_intent(
                 });
             }
             let grade = firm_ref(world, *firm)?.grade;
-            let rate = world.macro_state.policy_rate_bps + grade.spread_bps();
+            let rate = world.macro_state.policy_rate_bps
+                + crate::economy::macro_cycle::lending_premium_bps(world)
+                + grade.spread_bps();
             let lender_index = (0..world.outside.lenders.len())
                 .find(|index| world.outside.lenders[*index].capital_cents >= *amount_cents)
                 .ok_or(DomainError::InsufficientCash {
@@ -1932,8 +1934,9 @@ fn apply_intent(
                     detail: ArithmeticFault::OutOfRange,
                 });
             }
-            let quoted =
-                world.macro_state.policy_rate_bps + firm_ref(world, *firm)?.grade.spread_bps();
+            let quoted = world.macro_state.policy_rate_bps
+                + crate::economy::macro_cycle::lending_premium_bps(world)
+                + firm_ref(world, *firm)?.grade.spread_bps();
             if *rate_bps < quoted {
                 return Err(DomainError::SolvencyRestriction {
                     entity: firm.0,
@@ -2881,8 +2884,9 @@ mod tests {
         let dataset = Dataset::load().unwrap();
         let mut world = seed::build(&dataset, 143, ScenarioKind::Guided, ScenarioMode::Sandbox);
         let firm = world.investor.primary_group.unwrap();
-        let quoted =
-            world.macro_state.policy_rate_bps + world.firm(firm).unwrap().grade.spread_bps();
+        let quoted = world.macro_state.policy_rate_bps
+            + crate::economy::macro_cycle::lending_premium_bps(&world)
+            + world.firm(firm).unwrap().grade.spread_bps();
         let capacity = crate::economy::credit::secured_capacity(&world, firm)
             + crate::economy::credit::unsecured_capacity(&world, firm);
         let attempt = |world: &World, amount: i64, rate: i32, weeks: u32| {

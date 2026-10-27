@@ -40,6 +40,10 @@ pub struct ScenarioConfig {
     pub mode: ScenarioMode,
     pub dataset_hash: String,
     pub difficulty: Difficulty,
+    #[serde(default)]
+    pub economy_start: cw_sim::state::EconomyStart,
+    #[serde(default)]
+    pub starting_capital_cents: Option<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -142,8 +146,18 @@ impl Session {
                 detail: cw_core::error::SaveFault::MalformedPayload,
             });
         }
-        let world =
-            cw_sim::economy::seed::build(&dataset, config.seed, config.scenario, config.mode);
+        let options = cw_sim::state::StartOptions {
+            difficulty: config.difficulty,
+            economy: config.economy_start,
+            capital_cents: config.starting_capital_cents,
+        };
+        let world = cw_sim::economy::seed::build_with(
+            &dataset,
+            config.seed,
+            config.scenario,
+            config.mode,
+            &options,
+        );
         let career_id = cw_core::rng::scramble(config.seed) & 0x00FF_FFFF_FFFF_FFFF;
         let log = ReplayLog {
             config: config.clone(),
@@ -481,7 +495,7 @@ impl Session {
                 recipe,
                 ..
             } => {
-                let fee = Difficulty::Standard.formation_fee_cents();
+                let fee = self.world.difficulty.formation_fee_cents();
                 let capex = self
                     .dataset
                     .recipes
@@ -966,6 +980,8 @@ impl Session {
             mode: world.mode,
             dataset_hash: world.dataset_hash.clone(),
             difficulty: world.difficulty,
+            economy_start: Default::default(),
+            starting_capital_cents: None,
         };
         let log = ReplayLog {
             config: config.clone(),
@@ -1094,6 +1110,8 @@ mod tests {
             mode: ScenarioMode::FiveYear,
             dataset_hash: String::new(),
             difficulty: Difficulty::Standard,
+            economy_start: Default::default(),
+            starting_capital_cents: None,
         }
     }
 
@@ -1385,7 +1403,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "7ac5cf0eca604b36b400db192437699236f1e4ae00fe57c1c305a7c2fe4d3bd8"
+            "d8110ee72106255a605a2e9c1ebafc1b61b1ed9ce1b96e41128425f37f9ca064"
         );
     }
 

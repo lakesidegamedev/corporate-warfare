@@ -1020,7 +1020,230 @@ pub struct MacroState {
     pub price_index_bps: i64,
     pub regime: Option<(RegimeKind, Tick)>,
     pub rng: Rng,
+    /// The business cycle and the central bank. See `economy::macro_cycle`.
+    #[serde(default)]
+    pub cycle: Cycle,
 }
+
+/// How the economy stands on day one.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EconomyStart {
+    /// As the scenario's year really was: for 2000, a late boom on stretched credit.
+    #[default]
+    Historic,
+    /// On trend, inflation at target, little credit built up.
+    Calm,
+    /// Running hot with credit piling up: strong demand now, a bust likely later.
+    Boom,
+    /// Already in a downturn: weak demand, cheap money, a recovery ahead.
+    Downturn,
+}
+
+impl EconomyStart {
+    pub const fn key(self) -> &'static str {
+        match self {
+            EconomyStart::Historic => "historic",
+            EconomyStart::Calm => "calm",
+            EconomyStart::Boom => "boom",
+            EconomyStart::Downturn => "downturn",
+        }
+    }
+
+    pub fn from_key(key: &str) -> EconomyStart {
+        match key {
+            "calm" => EconomyStart::Calm,
+            "boom" => EconomyStart::Boom,
+            "downturn" => EconomyStart::Downturn,
+            _ => EconomyStart::Historic,
+        }
+    }
+}
+
+/// Choices made on the new-game screen.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StartOptions {
+    pub difficulty: cw_data::Difficulty,
+    pub economy: EconomyStart,
+    /// Starting capital in place of the difficulty's, if the player set one.
+    pub capital_cents: Option<i64>,
+}
+
+impl StartOptions {
+    pub fn capital(&self) -> i64 {
+        self.capital_cents
+            .unwrap_or_else(|| self.difficulty.starting_capital_cents())
+    }
+}
+
+/// Where the economy is in its cycle, for the player and for event cards.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CyclePhase {
+    #[default]
+    Expansion,
+    Boom,
+    Slowdown,
+    Recession,
+    Recovery,
+}
+
+impl CyclePhase {
+    pub const fn key(self) -> &'static str {
+        match self {
+            CyclePhase::Expansion => "expansion",
+            CyclePhase::Boom => "boom",
+            CyclePhase::Slowdown => "slowdown",
+            CyclePhase::Recession => "recession",
+            CyclePhase::Recovery => "recovery",
+        }
+    }
+}
+
+/// One week of the economy's closing figures, kept for the charts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MacroPoint {
+    pub week: u32,
+    pub gdp_index: i64,
+    pub output_gap_bps: i32,
+    pub inflation_bps: i32,
+    pub policy_rate_bps: i32,
+    pub phase: CyclePhase,
+}
+
+/// The business cycle: output against its trend, the credit build-up that makes busts likely,
+/// expected inflation, and the central bank's meeting calendar.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Cycle {
+    /// Output against its trend: +150 is 1.5 percent above potential.
+    pub output_gap_bps: i32,
+    /// Weekly push on the gap, carried from week to week.
+    pub momentum_bps: i32,
+    /// Trend real growth a year.
+    pub potential_growth_bps: i32,
+    /// Real output and its trend, 1,000,000 at the start.
+    pub gdp_index: i64,
+    pub potential_index: i64,
+    /// Credit built up in good times; the higher it runs the likelier a bust.
+    pub credit_bps: i32,
+    /// Lingering drag after a bust while borrowers pay debt down.
+    pub deleveraging_bps: i32,
+    pub expected_inflation_bps: i32,
+    pub target_inflation_bps: i32,
+    /// The real policy rate that neither pushes nor pulls on the economy.
+    pub neutral_real_bps: i32,
+    pub next_meeting: u32,
+    /// The last decision in basis points: positive is a rise.
+    pub last_decision_bps: i32,
+    pub phase: CyclePhase,
+    pub history: Vec<MacroPoint>,
+    /// Who chairs the central bank, and the bank's recent decisions, newest last.
+    #[serde(default)]
+    pub chair: CentralBanker,
+    #[serde(default)]
+    pub decisions: Vec<RateDecision>,
+}
+
+/// The central bank chair: a stance from dovish (-100) to hawkish (+100) and a four-year term.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CentralBanker {
+    pub name: String,
+    pub stance: i32,
+    pub appointed_week: u32,
+    pub term_ends: u32,
+}
+
+impl Default for CentralBanker {
+    fn default() -> Self {
+        CentralBanker {
+            name: "Alan Whitcombe".to_owned(),
+            stance: 35,
+            appointed_week: 0,
+            term_ends: 130,
+        }
+    }
+}
+
+impl CentralBanker {
+    pub fn stance_label(&self) -> &'static str {
+        match self.stance {
+            s if s >= 50 => "hawkish",
+            s if s >= 15 => "leaning hawkish",
+            s if s > -15 => "centrist",
+            s if s > -50 => "leaning dovish",
+            _ => "dovish",
+        }
+    }
+}
+
+/// One central bank meeting.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RateDecision {
+    pub week: u32,
+    pub change_bps: i32,
+    pub rate_bps: i32,
+    pub reason: String,
+}
+
+impl Cycle {
+    /// The opening cycle for a chosen starting economy.
+    pub fn for_start(start: EconomyStart, policy_rate_bps: i32) -> (Cycle, i32, i32) {
+        let mut c = Cycle::default();
+        let (rate, inflation) = match start {
+            EconomyStart::Historic => (policy_rate_bps, 300),
+            EconomyStart::Calm => {
+                c.output_gap_bps = 0;
+                c.credit_bps = 150;
+                c.expected_inflation_bps = 200;
+                c.phase = CyclePhase::Expansion;
+                (425, 200)
+            }
+            EconomyStart::Boom => {
+                c.output_gap_bps = 350;
+                c.momentum_bps = 20;
+                c.credit_bps = 800;
+                c.expected_inflation_bps = 280;
+                c.phase = CyclePhase::Boom;
+                (550, 320)
+            }
+            EconomyStart::Downturn => {
+                c.output_gap_bps = -300;
+                c.momentum_bps = -15;
+                c.credit_bps = 100;
+                c.deleveraging_bps = 300;
+                c.expected_inflation_bps = 150;
+                c.phase = CyclePhase::Recession;
+                (300, 120)
+            }
+        };
+        c.gdp_index = c.potential_index * (10_000 + c.output_gap_bps as i64) / 10_000;
+        (c, rate, inflation)
+    }
+}
+
+impl Default for Cycle {
+    fn default() -> Self {
+        Cycle {
+            output_gap_bps: 150,
+            momentum_bps: 0,
+            potential_growth_bps: 300,
+            gdp_index: 1_015_000,
+            potential_index: 1_000_000,
+            credit_bps: 600,
+            deleveraging_bps: 0,
+            expected_inflation_bps: 250,
+            target_inflation_bps: 200,
+            neutral_real_bps: 200,
+            next_meeting: 6,
+            last_decision_bps: 0,
+            phase: CyclePhase::Boom,
+            history: Vec::new(),
+            chair: CentralBanker::default(),
+            decisions: Vec::new(),
+        }
+    }
+}
+
+/// Weeks of economy history kept: five years.
+pub const MACRO_HISTORY_WEEKS: usize = 260;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PendingEvent {
@@ -1226,6 +1449,126 @@ pub struct World {
     /// five years. Presentation history for the stats screens; no rule reads it.
     #[serde(default)]
     pub firm_history: BTreeMap<Handle, Vec<PeriodClose>>,
+    /// The governing party, the next election and the laws it sets. See `economy::politics`.
+    #[serde(default)]
+    pub politics: Politics,
+}
+
+/// Who governs. The two parties differ on tax, the wage floor, merger review and unions.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Party {
+    #[default]
+    Business,
+    Labour,
+}
+
+impl Party {
+    pub const fn key(self) -> &'static str {
+        match self {
+            Party::Business => "business",
+            Party::Labour => "labour",
+        }
+    }
+
+    pub const fn other(self) -> Party {
+        match self {
+            Party::Business => Party::Labour,
+            Party::Labour => Party::Business,
+        }
+    }
+}
+
+/// How easily workplaces organise.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UnionLaw {
+    Weak,
+    #[default]
+    Standard,
+    Strong,
+}
+
+impl UnionLaw {
+    pub const fn key(self) -> &'static str {
+        match self {
+            UnionLaw::Weak => "weak",
+            UnionLaw::Standard => "standard",
+            UnionLaw::Strong => "strong",
+        }
+    }
+
+    /// Weekly organisation rise where pay is under the market, and decay where it is not.
+    pub const fn drift_bps(self) -> (i32, i32) {
+        match self {
+            UnionLaw::Weak => (15, 8),
+            UnionLaw::Standard => (25, 5),
+            UnionLaw::Strong => (40, 3),
+        }
+    }
+}
+
+/// The laws companies live under.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Laws {
+    /// Tax on quarterly profit.
+    pub corporate_tax_bps: i32,
+    /// Floor on low-skill weekly wages, in cents.
+    pub wage_floor_cents: i64,
+    /// Combined regional share at which a merger goes to review.
+    pub merger_review_bps: i64,
+    pub unions: UnionLaw,
+}
+
+impl Default for Laws {
+    fn default() -> Self {
+        Laws {
+            corporate_tax_bps: 2_500,
+            wage_floor_cents: 34_000,
+            merger_review_bps: 3_500,
+            unions: UnionLaw::Standard,
+        }
+    }
+}
+
+/// A law change announced now and in force from `effective`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LawChange {
+    pub announced: u32,
+    pub effective: u32,
+    pub laws: Laws,
+}
+
+/// One line of political news.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PoliticalNews {
+    pub week: u32,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Politics {
+    pub party: Party,
+    pub since_week: u32,
+    pub next_election: u32,
+    /// The governing party's approval, 0 to 10,000.
+    pub approval_bps: i32,
+    pub laws: Laws,
+    pub pending: Option<LawChange>,
+    pub news: Vec<PoliticalNews>,
+}
+
+impl Default for Politics {
+    fn default() -> Self {
+        Politics {
+            party: Party::Business,
+            since_week: 0,
+            // The first game year's election falls in early November.
+            next_election: 45,
+            approval_bps: 5_000,
+            laws: Laws::default(),
+            pending: None,
+            news: Vec::new(),
+        }
+    }
 }
 
 /// Four weeks of one firm's results, with balances and share price at the period's close.

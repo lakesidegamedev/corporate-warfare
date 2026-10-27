@@ -15,6 +15,8 @@ fn main() {
         mode: cw_sim::state::ScenarioMode::Sandbox,
         dataset_hash: String::new(),
         difficulty: cw_data::Difficulty::Standard,
+        economy_start: Default::default(),
+        starting_capital_cents: None,
     };
     let mut session = cw_session::Session::create(config).unwrap();
     let goods = [

@@ -46,6 +46,27 @@ heading.
 - The Windows installer adds a Start menu entry and a desktop shortcut and lets you choose the
   install folder.
 
+- A real business cycle. Output runs above or below its trend with momentum; good times and
+  cheap money build up credit, and the more credit the likelier a bust, which leaves borrowers
+  paying debt down for months. Inflation rises when the economy runs hot. Household demand,
+  loan rates and the nominal drift of wages and import prices all follow the cycle. Booms and
+  recessions now come from the economy instead of random cards.
+- A central bank that meets every six weeks and moves its rate in quarter points toward its
+  inflation target. Its chair has a stance from dovish to hawkish that tilts every decision;
+  at the end of a four-year term the government reappoints the chair or names a new one. Each
+  meeting records its decision and reason. A prime lending rate and a ten-year bond yield
+  follow from the policy rate.
+- Government and laws. Two parties, an election every four years from November 2000 decided by
+  the economy, and a programme that takes effect a quarter after a change of government:
+  corporate tax, a low-skill wage floor, the share at which a merger is reviewed, and union law.
+- Difficulty: Easy ($8M, rivals never attack your markets), Standard ($5M) and Hard ($3M, every
+  rival fights for share), a starting economy (as in 2000, calm, boom or downturn) and a custom
+  starting capital.
+- Three future scenarios shown on the scenario picker: Texas Oil Patch 1981, Silicon Valley
+  1995 and Ruhr and Rhine 1991, with art for every scenario.
+- An action catalogue in the engine describing every player action once, so every platform can
+  list and offer all of them.
+
 ### Changed
 
 - Pricing against the market now allows -50 to +50 percent (was -20 to +20). Prices still stay
