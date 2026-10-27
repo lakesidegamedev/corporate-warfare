@@ -234,6 +234,7 @@ private struct DesktopStatusBar: View {
         let weeks = Int(overview?.quarterWeeks ?? 0)
         let cash = overview?.firmCashCents ?? 0
         let forecast = overview?.forecastFourWeekCents ?? 0
+        let primary = overview?.primaryCurrency ?? ""
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 20) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -242,13 +243,13 @@ private struct DesktopStatusBar: View {
                         .foregroundStyle(Theme.primaryText)
                     if let economy = store.economy { PhasePill(phase: economy.phase) }
                 }
-                figure("Company cash", Format.moneyCompact(cash))
-                figure(weeks >= 13 ? "Profit, quarter" : "Profit, \(weeks) wk", Format.moneyCompact(profit),
+                figure("Company cash", Format.moneyCompact(cash, currency: primary))
+                figure(weeks >= 13 ? "Profit, quarter" : "Profit, \(weeks) wk", Format.moneyCompact(profit, currency: primary),
                        tone: profit >= 0 ? Theme.positive : Theme.negative)
-                figure("Cash in 4 wk", Format.moneyCompact(forecast),
+                figure("Cash in 4 wk", Format.moneyCompact(forecast, currency: primary),
                        tone: forecast - cash >= 0 ? Theme.primaryText : Theme.negative)
                 if let firm = store.selectedFirmDto {
-                    figure("Share price", Format.price(firm.markCents))
+                    figure("Share price", Format.price(firm.markCents, currency: Format.numeraire))
                 }
                 figure("Net worth", Format.moneyCompact(overview?.investorNetWorthCents ?? 0))
                 if let economy = store.economy {

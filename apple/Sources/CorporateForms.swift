@@ -483,7 +483,7 @@ struct BondSheet: View {
                     .accessibilityLabel("Weeks to maturity")
                 if let firm {
                     DetailRow(title: "Grade", value: firm.grade)
-                    DetailRow(title: "Equity", value: Format.money(firm.equityCents))
+                    DetailRow(title: "Equity", value: Format.money(firm.equityCents, currency: firm.currency))
                 }
             }
         }
@@ -682,7 +682,7 @@ struct ShareOrderSheet: View {
                     .keyboardType(.decimalPad)
                     .accessibilityLabel("Limit price per share in dollars")
                 if let firm {
-                    DetailRow(title: "Traded mark", value: Format.money(firm.markCents))
+                    DetailRow(title: "Traded mark", value: Format.money(firm.markCents, currency: Format.numeraire))
                     DetailRow(title: "Your votes", value: Format.percentBps(firm.investorVotesBps))
                 }
             }
@@ -830,7 +830,7 @@ struct StartDiligenceSheet: View {
                 }
                 if let targetFirm {
                     DetailRow(title: "Region", value: targetFirm.region)
-                    DetailRow(title: "Traded mark", value: Format.money(targetFirm.markCents))
+                    DetailRow(title: "Traded mark", value: Format.money(targetFirm.markCents, currency: Format.numeraire))
                     DetailRow(title: "Status", value: targetFirm.status.replacingOccurrences(of: "_", with: " "))
                 }
                 Picker("Deal kind", selection: $kind) {

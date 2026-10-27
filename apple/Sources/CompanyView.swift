@@ -14,7 +14,7 @@ struct CompanyView: View {
                         SectionCard(title: firm.name) {
                             DetailRow(title: "Industry", value: firm.industry)
                             DetailRow(title: "Region", value: firm.region)
-                            DetailRow(title: "Legal cash", value: Format.money(firm.cashCents))
+                            DetailRow(title: "Legal cash", value: Format.money(firm.cashCents, currency: firm.currency))
                             DetailRow(title: "Your votes", value: Format.percentBps(firm.investorVotesBps))
                             if let parent = store.actingThroughParent {
                                 DetailRow(title: "Operating authority", value: parent.name)

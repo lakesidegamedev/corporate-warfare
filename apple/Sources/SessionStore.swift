@@ -10,23 +10,39 @@ actor Engine {
     func start(seed: UInt64, guided: Bool, fiveYear: Bool) throws -> OverviewDto {
         let handle = try SessionHandle(seed: seed, guided: guided, fiveYear: fiveYear)
         session = handle
+        applyReportingPreference(handle)
         return handle.overview()
     }
 
     func start(options: NewGameDto) throws -> OverviewDto {
         let handle = try SessionHandle.start(options: options)
         session = handle
+        applyReportingPreference(handle)
         return handle.overview()
     }
 
     func startCustom(_ scenario: CustomScenarioDto, guided: Bool, seed: UInt64, fiveYear: Bool) throws -> OverviewDto {
         let handle = try SessionHandle.startCustom(seed: seed, guided: guided, fiveYear: fiveYear, scenario: scenario)
         session = handle
+        applyReportingPreference(handle)
         return handle.overview()
     }
 
     func dossier(firm: UInt64) -> DossierDto? {
         session?.dossier(firm: firm)
+    }
+
+    /// The reporting currency chosen in Settings, kept per install. Scenarios with one money
+    /// ignore it, and an id the scenario does not have is refused by the engine.
+    static let reportingCurrencyKey = "reportingCurrency"
+
+    private func applyReportingPreference(_ handle: SessionHandle) {
+        guard let id = UserDefaults.standard.string(forKey: Engine.reportingCurrencyKey), !id.isEmpty else { return }
+        _ = handle.setReportingCurrency(id: id)
+    }
+
+    func setReportingCurrency(_ id: String) -> Bool {
+        session?.setReportingCurrency(id: id) ?? false
     }
 
     func economy() -> EconomyDto? {
@@ -42,6 +58,7 @@ actor Engine {
         // leaves the live session exactly as it was.
         let handle = try importSave(bytes: data)
         session = handle
+        applyReportingPreference(handle)
         return handle.overview()
     }
 

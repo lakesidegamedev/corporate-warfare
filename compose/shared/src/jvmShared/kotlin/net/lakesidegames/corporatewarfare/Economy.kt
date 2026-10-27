@@ -31,7 +31,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import uniffi.cw_ffi.CurrencyDto
 import uniffi.cw_ffi.EconomyDto
+import uniffi.cw_ffi.FxDto
 import uniffi.cw_ffi.LawsDto
 
 internal fun economyPhaseTint(phase: String): Color = when (phase) {
@@ -96,6 +98,8 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
             else -> "Borrowing is moderate." to Palette.secondary
         }
         Text(credit.first, color = credit.second, fontSize = 12.sp)
+
+        e.fx?.let { FxSection(store, it) }
 
         if (e.worldPrices.isNotEmpty()) {
             Eyebrow("World prices")
@@ -170,6 +174,86 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
                 }
             }
         }
+    }
+}
+
+/** Exchange rates against the reporting currency, each central bank and peg, and booked exchange results. */
+@Composable
+private fun FxSection(store: GameStore, fx: FxDto) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        PixelIcon("swap", size = 14.dp, tint = Palette.secondary)
+        Spacer(Modifier.width(6.dp))
+        Eyebrow("Currencies")
+    }
+    fx.currencies.forEach { c -> CurrencyRow(c, c.id == fx.reporting, c.symbol) }
+    Text("Rates are what one unit buys in ${fx.reporting}.", color = Palette.secondary, fontSize = 11.sp)
+    if (fx.gainsCents != 0L || fx.lossesCents != 0L || fx.openForeignSalesCents != 0L) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PixelIcon("coin", size = 14.dp, tint = Palette.secondary)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "Exchange results: gains ${Format.money(fx.gainsCents, fx.reporting)}, losses ${Format.money(fx.lossesCents, fx.reporting)}, " +
+                    "foreign sales not yet collected ${Format.money(fx.openForeignSalesCents, fx.reporting)}",
+                color = Palette.secondary, fontSize = 12.sp,
+            )
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        PixelIcon("coin", size = 14.dp, tint = Palette.gold)
+        Spacer(Modifier.width(6.dp))
+        Text("Show my figures in", color = Palette.primaryText, fontSize = 12.sp)
+    }
+    CurrencyChoices(store, fx)
+}
+
+@Composable
+private fun CurrencyRow(c: CurrencyDto, isReporting: Boolean, symbol: String) {
+    val trend = c.trendBps / 100.0
+    val trendColor = if (trend > 0.05) Palette.positive else if (trend < -0.05) Palette.negative else Palette.secondary
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("$symbol ${c.name} · ${c.country}", color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                if (isReporting) {
+                    Text("Reporting currency", color = Palette.gold, fontSize = 12.sp)
+                } else {
+                    Text(Format.rate(c.valuePpm), color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text("%+.1f%% over 13 wk".format(trend), color = trendColor, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+            Text("${c.centralBank}: rate ${pct(c.policyRateBps, 2)}, inflation ${pct(c.inflationBps)}", color = Palette.secondary, fontSize = 12.sp)
+            if (!isReporting) {
+                val (text, color) = pegStatus(c)
+                Text(text, color = color, fontSize = 12.sp)
+            }
+        }
+        if (!isReporting && c.historyPpm.size >= 2) Sparkline(c.historyPpm, trendColor)
+    }
+}
+
+private fun pegStatus(c: CurrencyDto): Pair<String, Color> {
+    if (!c.pegged) return "Floating" to Palette.secondary
+    val crisis = c.crisisWeek
+    if (crisis != null) return "Band widened in ${ResultBuckets.weekLabel(crisis.toInt())}, now plus or minus ${pct(c.bandBps)}" to Palette.warning
+    if (c.bandBps <= 0) return "Pegged" to Palette.secondary
+    val used = (kotlin.math.abs(c.strainBps) * 100 / c.bandBps).coerceIn(0, 100)
+    val color = if (used >= 75) Palette.negative else if (used >= 50) Palette.warning else Palette.secondary
+    return "Pegged, plus or minus ${pct(c.bandBps)}: $used% of the way to the edge" to color
+}
+
+/** A 52 week line of one rate, scaled to its own range. */
+@Composable
+private fun Sparkline(values: List<Long>, color: Color) {
+    Canvas(Modifier.width(96.dp).height(30.dp)) {
+        val low = values.min()
+        val span = (values.max() - low).coerceAtLeast(1L).toFloat()
+        val step = size.width / (values.size - 1)
+        val path = Path()
+        values.forEachIndexed { i, v ->
+            val y = size.height * (1f - (v - low) / span)
+            if (i == 0) path.moveTo(0f, y) else path.lineTo(i * step, y)
+        }
+        drawPath(path, color, style = Stroke(2f))
     }
 }
 

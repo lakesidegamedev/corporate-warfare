@@ -250,10 +250,10 @@ private fun StatusBar(store: GameStore, onSearch: (String) -> Unit) {
         }
         val profit = overview?.quarterNetIncomeCents ?: 0
         val weeks = overview?.quarterWeeks?.toInt() ?: 0
-        Figure("Company cash", Format.compact(overview?.firmCashCents ?: 0))
-        Figure(if (weeks >= 13) "Profit, quarter" else "Profit, $weeks wk", Format.compact(profit), if (profit >= 0) Palette.positive else Palette.negative)
+        Figure("Company cash", Format.compact(overview?.firmCashCents ?: 0, overview?.primaryCurrency.orEmpty()))
+        Figure(if (weeks >= 13) "Profit, quarter" else "Profit, $weeks wk", Format.compact(profit, overview?.primaryCurrency.orEmpty()), if (profit >= 0) Palette.positive else Palette.negative)
         val outlook = (overview?.forecastFourWeekCents ?: 0) - (overview?.firmCashCents ?: 0)
-        Figure("Cash in 4 wk", Format.compact(overview?.forecastFourWeekCents ?: 0), if (outlook >= 0) Palette.primaryText else Palette.negative)
+        Figure("Cash in 4 wk", Format.compact(overview?.forecastFourWeekCents ?: 0, overview?.primaryCurrency.orEmpty()), if (outlook >= 0) Palette.primaryText else Palette.negative)
         Figure("Net worth", Format.compact(overview?.investorNetWorthCents ?: 0))
         if (economy != null) {
             Figure("Rate", "%.2f%%".format(economy.policyRateBps / 100.0))
@@ -523,10 +523,10 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
                 Text(firm.name, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1)
                 Text("${Sectors.name(firm.industry)} · HQ ${firm.region} · Credit ${firm.grade}", color = Palette.secondary, fontSize = 12.sp, maxLines = 1)
             }
-            Figure("Company cash", Format.compact(firm.cashCents))
-            Figure("Equity", Format.compact(firm.equityCents))
-            Figure("Fair value", Format.compact(firm.fairValueCents))
-            Figure("Share price", Format.price(firm.markCents))
+            Figure("Company cash", Format.compact(firm.cashCents, firm.currency))
+            Figure("Equity", Format.compact(firm.equityCents, firm.currency))
+            Figure("Fair value", Format.compact(firm.fairValueCents, Format.numeraire))
+            Figure("Share price", Format.price(firm.markCents, Format.numeraire))
             Figure("Plants", "${firm.facilities}")
             Figure("Your votes", "%.1f%%".format(firm.investorVotesBps / 100.0))
             Spacer(Modifier.weight(1f))
@@ -765,8 +765,8 @@ private fun DesktopPortfolio(store: GameStore) {
         ) {
             Figure("Net worth", Format.compact(overview.investorNetWorthCents))
             Figure("Your cash", Format.compact(overview.investorCashCents))
-            Figure("Company cash", Format.compact(overview.firmCashCents))
-            Figure("Cash in 4 wk", Format.compact(overview.forecastFourWeekCents))
+            Figure("Company cash", Format.compact(overview.firmCashCents, overview.primaryCurrency))
+            Figure("Cash in 4 wk", Format.compact(overview.forecastFourWeekCents, overview.primaryCurrency))
             Spacer(Modifier.weight(1f))
             overview.pause?.let { OutlinedButton(onClick = { store.dismissPause() }) { Text("Continue past: $it", color = Palette.primaryText, fontSize = 12.sp) } }
         }
@@ -778,10 +778,10 @@ private fun DesktopPortfolio(store: GameStore) {
                     Cell(f.name, fc[0], bold = true)
                     Cell(Sectors.name(f.industry), fc[1], Palette.secondary)
                     Cell(f.region, fc[2], Palette.secondary)
-                    Cell(Format.compact(f.cashCents), fc[3])
-                    Cell(Format.compact(f.equityCents), fc[4])
-                    Cell(Format.compact(f.fairValueCents), fc[5])
-                    Cell(Format.price(f.markCents), fc[6])
+                    Cell(Format.compact(f.cashCents, f.currency), fc[3])
+                    Cell(Format.compact(f.equityCents, f.currency), fc[4])
+                    Cell(Format.compact(f.fairValueCents, Format.numeraire), fc[5])
+                    Cell(Format.price(f.markCents, Format.numeraire), fc[6])
                     Cell("${f.facilities}", fc[7])
                     Cell("%.0f%%".format(f.investorVotesBps / 100.0), fc[8], Palette.gold)
                     Cell(f.grade, fc[9])

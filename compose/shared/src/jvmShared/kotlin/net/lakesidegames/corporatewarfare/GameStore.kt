@@ -61,6 +61,11 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     private var session: SessionHandle? = null
     private var runJob: Job? = null
 
+    /** The reporting currency the player chose (kept in settings); applied after a career starts or loads. */
+    var preferredCurrency: String = ""
+    /** Called when the player picks a reporting currency, so the choice can be saved. */
+    var onCurrencyChosen: (String) -> Unit = {}
+
     var ready by mutableStateOf(false); private set
     var busy by mutableStateOf(false); private set
     var running by mutableStateOf(false); private set
@@ -118,7 +123,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     fun newCareer(seed: Long, guided: Boolean, fiveYear: Boolean = false) = perform {
         val handle = withContext(engine) { SessionHandle(seed.toULong(), guided, fiveYear) }
         session = handle
-        selectedFirm = withContext(engine) { handle.overview().primaryFirm }
+        selectedFirm = withContext(engine) {
+            if (preferredCurrency.isNotEmpty()) handle.setReportingCurrency(preferredCurrency)
+            handle.overview().primaryFirm
+        }
         reload()
         ready = true
     }
@@ -127,7 +135,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     fun startCareer(options: uniffi.cw_ffi.NewGameDto) = perform {
         val handle = withContext(engine) { SessionHandle.start(options) }
         session = handle
-        selectedFirm = withContext(engine) { handle.overview().primaryFirm }
+        selectedFirm = withContext(engine) {
+            if (preferredCurrency.isNotEmpty()) handle.setReportingCurrency(preferredCurrency)
+            handle.overview().primaryFirm
+        }
         reload()
         ready = true
     }
@@ -140,7 +151,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         val seed = (System.nanoTime() % 9_999_999).toULong()
         val handle = withContext(engine) { SessionHandle.startCustom(seed, guided, fiveYear, scenario) }
         session = handle
-        selectedFirm = withContext(engine) { handle.overview().primaryFirm }
+        selectedFirm = withContext(engine) {
+            if (preferredCurrency.isNotEmpty()) handle.setReportingCurrency(preferredCurrency)
+            handle.overview().primaryFirm
+        }
         reload()
         ready = true
     }
@@ -150,7 +164,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         val bytes = withContext(engine) { file.readBytes() }
         val handle = withContext(engine) { importSave(bytes) }
         session = handle
-        selectedFirm = withContext(engine) { handle.overview().primaryFirm }
+        selectedFirm = withContext(engine) {
+            if (preferredCurrency.isNotEmpty()) handle.setReportingCurrency(preferredCurrency)
+            handle.overview().primaryFirm
+        }
         reload()
         ready = true
     }
@@ -160,9 +177,23 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         val bytes = withContext(engine) { latest.readBytes() }
         val handle = withContext(engine) { importSave(bytes) }
         session = handle
-        selectedFirm = withContext(engine) { handle.overview().primaryFirm }
+        selectedFirm = withContext(engine) {
+            if (preferredCurrency.isNotEmpty()) handle.setReportingCurrency(preferredCurrency)
+            handle.overview().primaryFirm
+        }
         reload()
         ready = true
+    }
+
+    /** Show the investor's figures in another of the scenario's currencies. */
+    fun chooseReportingCurrency(id: String) = perform {
+        val handle = session ?: return@perform
+        val changed = withContext(engine) { handle.setReportingCurrency(id) }
+        if (changed) {
+            preferredCurrency = id
+            onCurrencyChosen(id)
+            reload()
+        }
     }
 
     fun advance() = perform { step() }
@@ -446,6 +477,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 ownership = parts[12] as OwnershipDto?
                 recentRaids = parts[13] as List<RaidRecordDto>
                 economy = parts[14] as uniffi.cw_ffi.EconomyDto
+                val fx = economy?.fx
+                if (fx == null) Format.reset()
+                else Format.configure(fx.reportingSymbol, fx.currencies.associate { it.id to it.symbol }, fx.currencies.firstOrNull()?.id.orEmpty())
                 research = parts[15] as uniffi.cw_ffi.ResearchDto?
                 held = parts[16] as List<HeldStockDto>
                 storageSummary = parts[17] as StorageSummaryDto?

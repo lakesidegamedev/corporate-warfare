@@ -71,6 +71,10 @@ val LocalAppSettings = androidx.compose.runtime.staticCompositionLocalOf<AppSett
 fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Updater? = null, onQuit: (() -> Unit)? = null) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     var showSettings by remember { mutableStateOf(false) }
+    androidx.compose.runtime.SideEffect {
+        store.preferredCurrency = settings.reportingCurrency
+        store.onCurrencyChosen = { settings.chooseReportingCurrency(it) }
+    }
     androidx.compose.runtime.LaunchedEffect(updater) {
         Tutorial.load(settings)
         if (updater != null && settings.autoUpdate) updater.check()
@@ -291,7 +295,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
                     Text(firm.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, maxLines = 1)
                     Text("${Sectors.name(firm.industry)} · HQ ${firm.region} · Credit ${firm.grade}", color = Palette.secondary, fontSize = 12.sp, maxLines = 1)
                 }
-                Text("${Format.price(firm.markCents)}/share", color = Palette.secondary, fontSize = 12.sp)
+                Text("${Format.price(firm.markCents, Format.numeraire)}/share", color = Palette.secondary, fontSize = 12.sp)
             }
         }
         item {
@@ -299,13 +303,13 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
             val quarter = if (overview?.primaryFirm == firm.handle) overview.quarterNetIncomeCents else null
             val weeks = overview?.quarterWeeks?.toInt() ?: 0
             StatGroup(
-                Stat("Company cash", Format.compact(firm.cashCents)),
+                Stat("Company cash", Format.compact(firm.cashCents, firm.currency)),
                 listOfNotNull(
                     quarter?.let {
-                        Stat(if (weeks >= 13) "Profit, quarter" else "Profit, $weeks wk", Format.compact(it), if (it >= 0) Palette.positive else Palette.negative)
+                        Stat(if (weeks >= 13) "Profit, quarter" else "Profit, $weeks wk", Format.compact(it, firm.currency), if (it >= 0) Palette.positive else Palette.negative)
                     },
-                    Stat("Equity", Format.compact(firm.equityCents)),
-                    Stat("Fair value", Format.compact(firm.fairValueCents)),
+                    Stat("Equity", Format.compact(firm.equityCents, firm.currency)),
+                    Stat("Fair value", Format.compact(firm.fairValueCents, Format.numeraire)),
                     Stat("Plants", "${firm.facilities}"),
                     Stat("Your votes", "%.1f%%".format(firm.investorVotesBps / 100.0)),
                 ),
@@ -548,10 +552,10 @@ private fun PortfolioScreen(store: GameStore, onSettings: () -> Unit) {
                 Stat("Net worth", Format.compact(overview.investorNetWorthCents), note = "holdings at fair value plus cash"),
                 listOf(
                     Stat("Your cash", Format.compact(overview.investorCashCents)),
-                    Stat("Company cash", Format.compact(overview.firmCashCents)),
+                    Stat("Company cash", Format.compact(overview.firmCashCents, overview.primaryCurrency)),
                     Stat(
                         if (weeks >= 13) "Profit, quarter" else "Profit, $weeks wk",
-                        Format.compact(overview.quarterNetIncomeCents),
+                        Format.compact(overview.quarterNetIncomeCents, overview.primaryCurrency),
                         if (overview.quarterNetIncomeCents >= 0) Palette.positive else Palette.negative,
                     ),
                 ),
@@ -560,7 +564,7 @@ private fun PortfolioScreen(store: GameStore, onSettings: () -> Unit) {
         item {
             val outlook = overview.forecastFourWeekCents - overview.firmCashCents
             Panel {
-                Text("Company cash in four weeks: ${Format.compact(overview.forecastFourWeekCents)}", color = Palette.primaryText, fontWeight = FontWeight.Medium)
+                Text("Company cash in four weeks: ${Format.compact(overview.forecastFourWeekCents, overview.primaryCurrency)}", color = Palette.primaryText, fontWeight = FontWeight.Medium)
                 Text("${Format.signed(outlook)} after payroll and loan principal due", color = if (outlook >= 0) Palette.secondary else Palette.negative, fontSize = 12.sp)
             }
         }
@@ -576,7 +580,7 @@ private fun PortfolioScreen(store: GameStore, onSettings: () -> Unit) {
                             Text(firm.name + if (firm.handle == store.selectedFirm) "  ✓" else "", color = Palette.primaryText, fontWeight = FontWeight.Medium)
                             Text("${Sectors.name(firm.industry)} · ${firm.region}", color = Palette.secondary, fontSize = 12.sp)
                         }
-                        Text(Format.compact(firm.cashCents), color = Palette.primaryText)
+                        Text(Format.compact(firm.cashCents, firm.currency), color = Palette.primaryText)
                     }
                 }
             }
