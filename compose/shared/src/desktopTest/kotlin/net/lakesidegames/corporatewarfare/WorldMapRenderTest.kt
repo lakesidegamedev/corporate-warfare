@@ -52,4 +52,28 @@ class WorldMapRenderTest {
             assertEquals("OH-CEN", hit, "tapping Columbus at zoom ${camera.zoom}")
         }
     }
+
+    @Test
+    fun eachScenarioShowsItsOwnRegionsAndFraming() {
+        val lakes = assertNotNull(WorldMap.forScenario("great-lakes-2000"))
+        val texas = assertNotNull(WorldMap.forScenario("texas-1981"), "the Texas map loads")
+        assertEquals(31, lakes.regions.size)
+        assertEquals(22, texas.regions.size, "Texas, Oklahoma and Louisiana regions load")
+        assertTrue(texas.regions.none { it.code.startsWith("OH-") }, "no Great Lakes region on the Texas map")
+        assertEquals(listOf("LA", "OK", "TX"), texas.playStates.map { it.code }.sorted())
+        // The engine's region codes pick the scenario: a Texas career gets the Texas map.
+        assertEquals("texas-1981", WorldMap.forRegions(listOf("TX-HOU", "TX-DFW"))?.scenarioId)
+        assertEquals("great-lakes-2000", WorldMap.forRegions(listOf("OH-CEN"))?.scenarioId)
+        // The Texas camera frames Texas, not Ohio.
+        val camera = MapCamera.scenario(androidx.compose.ui.geometry.Size(1200f, 800f), texas)
+        assertTrue(camera.lon < -90 && camera.lon > -105 && camera.lat in 28.0..36.0, "framed on ${camera.lon}, ${camera.lat}")
+        // A tap on Houston selects the Houston region.
+        val size = androidx.compose.ui.geometry.Size(1200f, 800f)
+        val projection = MapProjection(camera, size)
+        val tap = assertNotNull(projection.project(assertNotNull(texas.anchor("TX-HOU"))))
+        assertEquals("TX-HOU", texas.regions.firstOrNull { projection.contains(it.rings, tap) }?.code)
+        for (region in texas.regions) {
+            assertNotNull(texas.anchor(region.code), "${region.code} has a hub")
+        }
+    }
 }
