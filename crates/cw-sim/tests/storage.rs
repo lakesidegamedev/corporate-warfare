@@ -248,7 +248,7 @@ fn a_firm_with_room_in_its_yard_pays_nothing() {
 }
 
 #[test]
-fn spoilage_is_halved_inside_owned_cold_storage_and_recorded() {
+fn spoilage_is_cut_hard_inside_owned_cold_storage_and_recorded() {
     let (mut world, dataset) = world(1105);
     let food = dataset.product_index["food_raw"];
     let (firm, other, region) = two_firms(&world);
@@ -274,9 +274,9 @@ fn spoilage_is_halved_inside_owned_cold_storage_and_recorded() {
     production::spoil_perishables(&mut world, &dataset);
     let lost_owner = world.firm(firm).unwrap().storage.last.spoiled_milli;
     let lost_other = world.firm(other).unwrap().storage.last.spoiled_milli;
-    // Food spoils 4 percent a week: 40 lots in the open, 20 in a cold store.
+    // Food spoils 4 percent a week: 40 lots in the open, 8 in a cold store.
     assert_eq!(lost_other, 40_000);
-    assert_eq!(lost_owner, 20_000);
+    assert_eq!(lost_owner, 8_000);
     assert_eq!(
         total_before - pair(&world),
         lost_owner + lost_other,

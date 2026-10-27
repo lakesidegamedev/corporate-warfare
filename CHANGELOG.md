@@ -11,6 +11,18 @@ heading.
 
 ## [Unreleased]
 
+### Fixed
+
+- Rival oil firms now build refineries when the corridor imports fuel. The build test counted
+  gasoline and jet fuel, which the corridor never imports, as missing room, so no rival ever
+  built one while fuel imports ran at six times local output. Only the main product decides
+  whether there is room; the by-products still count toward whether the plant pays. Over three
+  years fuel imports fall from 86 to 72 percent of supply, and to about 61 percent at five years.
+- Perishables spoil far less in your own cold store or silo: the loss falls by 80 percent for
+  the part of the stock that fits in the space you own, up from half. The large food stock in
+  the corridor is mostly the grocers' two weeks of input cover, which rots at the full rate
+  without a cold store.
+
 ### Added
 
 - Storage (1.7 preview 2). Goods now take up space. Every plant has a working yard, six weeks of
@@ -19,7 +31,7 @@ heading.
   strategies you can build, with capex, a crew and a build time like any plant: Warehouse, Tank
   Farm (liquids and gas), Grain Silo (grain and bulk) and Cold Store (food, livestock and
   pharmaceuticals). Other firms' overflow fees are paid to storage owners with spare room.
-  Perishables spoil at half the rate inside your own cold store or silo. Stock beyond the yard
+  Perishables spoil at a fifth of the rate inside your own cold store or silo. Stock beyond the yard
   also pays a small holding cost. Each division has a stock target, one slider for weeks of
   inputs to keep, and grain is bought ahead in the harvest quarter by default, so the harvest
   glut no longer forces a fire sale. Buy to store lets you (and rivals) buy a good on the

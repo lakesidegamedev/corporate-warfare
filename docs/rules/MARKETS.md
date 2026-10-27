@@ -253,7 +253,8 @@ Output, price, valuation and planning all read the whole list: pricing and the w
 every by-product as a priced good of the firm, the exchange sells it from stock like any other
 good, gateways carry it (a good with no local buyer still has the outside buyer at reference
 less 15 percent), and AI build and retool value a plant by all its products, counting a plant as
-having room when imports cover three quarters of its output value at reference prices. Nothing a
+having room when imports cover its primary output (a by-product nobody imports is still sold, so it
+never hides the room: a refinery is built when the corridor imports fuel). Nothing a
 plant makes is left without a price or a buyer.
 
 The converted inputs' carrying cost is shared among the products by their value at reference
@@ -316,7 +317,7 @@ At each week's close, before spoilage, for every firm and cell:
 2. Stock above the yard (inside owned storage or outside) pays a holding cost: the share of each
    lot's reference value given by the good's `holding_bps_weekly`. It goes to the outside sector.
 3. A firm pays what its cash covers; it never goes negative from storage.
-4. Spoilage (see Product chains) uses the good's weekly rate, halved for the share of a class's
+4. Spoilage (see Product chains) uses the good's weekly rate, cut by 80 percent (a cold store removes most of the loss) for the share of a class's
    stock that fits in owned storage in that region. Lost stock is written off at carrying cost as
    an operating expense, and its milli-lots are recorded on the firm's storage book.
 

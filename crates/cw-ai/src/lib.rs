@@ -850,9 +850,12 @@ fn room(world: &World, dataset: &Dataset, product: u16, region: u8) -> i64 {
 }
 
 /// Whether imports leave room for a block of a strategy: imports of what it makes cover at least
-/// `fifths` fifths of its output. A plant with by-products counts every product it makes at its
-/// reference value, each capped at the plant's own yield of it, and needs three quarters of that
-/// share, because a by-product with no import can still be exported or used by a sister plant.
+/// `fifths` fifths of its primary output. By-products do not enter the test: a by-product with no
+/// import is still sold to the exchange, a sister plant or the outside buyer, so only the primary
+/// good decides whether the corridor is short of what the plant is for. (Counting them diluted a
+/// refinery's room to under half, because gasoline and jet fuel are made at home and never
+/// imported, so no rival ever built one while fuel imports ran at six times local output.) Value
+/// of the by-products still counts in `block_revenue`, so the build must pay.
 fn room_covers(
     world: &World,
     dataset: &Dataset,
@@ -860,22 +863,10 @@ fn room_covers(
     region: u8,
     fifths: i64,
 ) -> bool {
-    if template.by_products.is_empty() {
-        let Some(output) = dataset.product_index.get(&template.output).copied() else {
-            return false;
-        };
-        return room(world, dataset, output, region) * 5 >= template.weekly_output_lots * fifths;
-    }
-    let (mut covered, mut total) = (0i128, 0i128);
-    for (id, lots) in template.outputs() {
-        let Some(product) = dataset.product_index.get(id).copied() else {
-            continue;
-        };
-        let price = dataset.reference_price(product) as i128;
-        covered += price * (room(world, dataset, product, region).min(lots)) as i128;
-        total += price * lots as i128;
-    }
-    total > 0 && covered * 5 * 4 >= total * fifths as i128 * 3
+    let Some(output) = dataset.product_index.get(&template.output).copied() else {
+        return false;
+    };
+    room(world, dataset, output, region) * 5 >= template.weekly_output_lots * fifths
 }
 
 /// Full-capacity weekly revenue of one block of a strategy at public prices in a state, every
@@ -1736,6 +1727,16 @@ mod tests {
             gateway.smoothed_import_lots = 0;
         }
         assert!(!room_covers(&world, &dataset, template, region, 4));
+        // Fuel alone imported (gasoline and jet fuel are made at home and never imported) is
+        // room for the plant, at the cautious five fifths as well.
+        let fuel = dataset.product_index["fuel"];
+        for gateway in &mut world.gateways {
+            if gateway.product == fuel {
+                gateway.smoothed_import_lots = 400;
+            }
+        }
+        assert!(room_covers(&world, &dataset, template, region, 4));
+        assert!(room_covers(&world, &dataset, template, region, 5));
     }
 
     #[test]
