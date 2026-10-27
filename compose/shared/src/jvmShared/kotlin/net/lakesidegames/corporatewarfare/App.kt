@@ -62,7 +62,7 @@ import uniffi.cw_ffi.ProductLineDto
 
 private enum class Tab(val title: String, val icon: ImageVector) {
     Map("Map", Icons.Filled.Map),
-    Office("CEO Office", Icons.Filled.Business),
+    Office("Office", Icons.Filled.Business),
     Markets("Markets", Icons.Filled.BarChart),
     Inbox("Inbox", Icons.Filled.Inbox),
     Portfolio("Portfolio", Icons.Filled.AccountBalance),
@@ -288,7 +288,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
             }
         }
         if (firm == null) {
-            item { FoundCompanyPanel(store) }
+            item { FoundCompanyPanel(store, scroll = false) }
             return@TabList
         }
         item {

@@ -151,16 +151,38 @@ object Tutorial {
     }
 }
 
-/** The current step: docked in a corner on desktop, a slim bar on phones. */
+/** The current step: docked in a corner on desktop, a single slim row on phones. */
 @Composable
 fun TutorialPanel(compact: Boolean, modifier: Modifier = Modifier) {
     val step = Tutorial.current ?: return
     if (Tutorial.hidden) return
     val number = Tutorial.steps.indexOf(step) + 1
-    val shape = RoundedCornerShape(if (compact) 0.dp else 14.dp)
+    if (compact) {
+        Row(
+            modifier.background(Palette.panelRaised).padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(20.dp).clip(CircleShape).background(Palette.gold), contentAlignment = Alignment.Center) {
+                Text("$number", color = Palette.ink, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            }
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(step.title, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                Text(step.what, color = Palette.secondary, fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+            Text(
+                "Show me", color = Palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Palette.gold)
+                    .clickable { Tutorial.requestedPage = step.page }.padding(horizontal = 10.dp, vertical = 5.dp),
+            )
+            TextButton(onClick = { Tutorial.hide() }) { Text("✕", color = Palette.secondary, fontSize = 13.sp) }
+        }
+        return
+    }
+    val shape = RoundedCornerShape(14.dp)
     Column(
         modifier.clip(shape).background(Palette.panelRaised).border(1.dp, Palette.gold.copy(alpha = 0.6f), shape)
-            .padding(horizontal = 14.dp, vertical = if (compact) 8.dp else 12.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -172,9 +194,8 @@ fun TutorialPanel(compact: Boolean, modifier: Modifier = Modifier) {
             Text("$number of ${Tutorial.steps.size}", color = Palette.secondary, fontSize = 11.sp)
         }
         Text(step.what, color = Palette.primaryText, fontSize = 13.sp)
-        if (!compact) Text(step.why, color = Palette.secondary, fontSize = 12.sp)
+        Text(step.why, color = Palette.secondary, fontSize = 12.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Progress dots.
             Tutorial.steps.forEach { s ->
                 Box(
                     Modifier.padding(end = 4.dp).size(7.dp).clip(CircleShape)
@@ -184,15 +205,10 @@ fun TutorialPanel(compact: Boolean, modifier: Modifier = Modifier) {
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { Tutorial.hide() }) { Text("Hide", color = Palette.secondary, fontSize = 12.sp) }
             Text(
-                "Show me",
-                color = Palette.ink,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
+                "Show me", color = Palette.ink, fontWeight = FontWeight.Bold, fontSize = 13.sp,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Palette.gold)
-                    .clickable { Tutorial.requestedPage = step.page }
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .clickable { Tutorial.requestedPage = step.page }.padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }
-        if (!compact) Spacer(Modifier.height(2.dp).fillMaxWidth())
     }
 }

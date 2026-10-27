@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -93,7 +94,7 @@ fun WorldMapView(store: GameStore, layer: MapLayer, selected: String?, onSelect:
         fly(if (now.zoom > MapCamera.FLAT_START) now.copy(zoom = 1.0) else MapCamera.scenario(viewSize, map ?: return))
     }
 
-    Box(modifier.background(Palette.ink)) {
+    Box(modifier.clipToBounds().background(Palette.ink)) {
         if (map == null) {
             Text("The map file is missing from this build.", color = Palette.secondary, modifier = Modifier.padding(24.dp))
         } else {
@@ -324,7 +325,7 @@ private fun MapHud(store: GameStore) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Eyebrow(overview?.weekLabel ?: "")
-                Text(overview?.primaryName ?: "No company yet", color = Palette.primaryText, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(overview?.primaryName?.takeIf { it.isNotBlank() } ?: "No company yet", color = Palette.primaryText, fontWeight = FontWeight.SemiBold, maxLines = 1)
             }
             TimeBar(store)
         }

@@ -11,6 +11,20 @@ heading.
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-10-27
+
+Android and desktop fixes from the first tester reports.
+
+### Fixed
+
+- The CEO Office crashed the moment it opened on phones when you had not founded a company yet:
+  the founding screen tried to scroll inside the Office's own scrolling list.
+- A large empty band above the map's top bar on phones: the map drew over the tutorial bar
+  above it. The map now stays inside its own area and the phone tutorial bar is one slim row.
+- The map's top bar showed a blank line instead of "No company yet" before you found one.
+- The Office tab label wrapped onto two lines on phones; it now reads Office.
+- Region cards on the founding screen sit two to a row on phones instead of one.
+
 ## [1.6.0] - 2026-10-27
 
 A real economy and a real game shell: business cycles, a central bank with rotating chairs,
@@ -541,7 +555,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.1...v1.4.0

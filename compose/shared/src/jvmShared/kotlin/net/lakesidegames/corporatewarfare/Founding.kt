@@ -46,7 +46,7 @@ private val SuggestedNames = listOf(
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-fun FoundCompanyPanel(store: GameStore) {
+fun FoundCompanyPanel(store: GameStore, scroll: Boolean = true) {
     val cash = store.overview?.investorCashCents ?: 0
     var name by remember { mutableStateOf(SuggestedNames[(cash % SuggestedNames.size).toInt().coerceAtLeast(0)]) }
     var region by remember { mutableStateOf(store.boards.maxByOrNull { b -> b.room.sumOf { it.importLots * it.importPriceCents } }?.index) }
@@ -67,9 +67,10 @@ fun FoundCompanyPanel(store: GameStore) {
         delay(300)
         store.preview(json) { preview = it }
     }
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    Box(if (scroll) Modifier.fillMaxSize() else Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         Column(
-            Modifier.widthIn(max = 1000.dp).fillMaxWidth().verticalScroll(rememberScrollState()),
+            // Inside a scrolling list (the phone Office) the list scrolls; nesting a second scroll crashes.
+            Modifier.widthIn(max = 1000.dp).fillMaxWidth().then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text("Found your company", color = Palette.primaryText, fontSize = 24.sp, fontWeight = FontWeight.Bold)
@@ -92,7 +93,7 @@ fun FoundCompanyPanel(store: GameStore) {
                         val on = b.index == region
                         val room = b.room.sumOf { it.importLots * it.importPriceCents }
                         Column(
-                            Modifier.width(210.dp).clip(RoundedCornerShape(10.dp)).background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.ink)
+                            Modifier.fillMaxWidth(0.48f).widthIn(max = 230.dp).clip(RoundedCornerShape(10.dp)).background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.ink)
                                 .border(if (on) 2.dp else 1.dp, if (on) Palette.gold else Palette.stroke, RoundedCornerShape(10.dp))
                                 .clickable { region = b.index }.padding(10.dp),
                         ) {
