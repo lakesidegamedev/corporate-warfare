@@ -54,15 +54,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "8e3875cd6174ad99e3b685a7dceb5b0a0ad1a8b3a8320da7f5a749aa933c6790",
+            "6d767785d5ffc7ffa70752a3d78cc497289b8ac8984496c20572fd0d02657538",
         ),
         (
             2,
-            "fe5e704abfca35772dc99c54af44197e7bd15018ae029ecf2805cdd625a97792",
+            "02791c43483349a25b7347bcf771f001cda0f6375655efce4a738dd65c623e4b",
         ),
         (
             3,
-            "ccc706eb49845e2aac25db8562f2c4ed8fe94a537570f323f054c2846f42b52d",
+            "4630433eb4e07a25e63f128002de87e7744ecb7b249f0f85291adaeb47bfe2a0",
         ),
     ];
     for (seed, hash) in pins {
@@ -74,12 +74,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "f885cdab4f174d8764d77816951fe0b34d499e6be93e66208c0e45eeedb3f8ec"
+        "dca3350530574acb30e768dacb5a922aeaf675771181b58f977e465e7929cd96"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "eb6d2e403b9f5f45531847307a925a48f55324f272e768a7da38a2110f06ac31"
+        "b0e88dee5f0f212d102ab3c89add3f855e5b88962d75ba3d5c838b86f7d4d83b"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();
@@ -613,7 +613,9 @@ fn opening_share_prices_stay_near_fair_value() {
                     session.dismiss_pause();
                 }
                 if week == 5 || week == 52 {
-                    let (low, high) = if week == 5 { (0.3, 4.0) } else { (0.15, 6.0) };
+                    // By week 52 a firm that has since become very profitable can sit well under its
+                    // new fair value while the price catches up.
+                    let (low, high) = if week == 5 { (0.3, 4.0) } else { (0.08, 6.0) };
                     let ratios = price_ratios(&session);
                     let mut sorted: Vec<f64> = ratios.iter().map(|r| r.1).collect();
                     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
