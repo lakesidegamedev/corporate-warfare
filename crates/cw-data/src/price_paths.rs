@@ -19,6 +19,10 @@ pub struct FamilyInfo {
     pub weight: u32,
     /// How strongly the business cycle tilts this family, in percent.
     pub cyclical_pct: u32,
+    /// A family only some scenarios have: it joins a game only when the scenario authors a path
+    /// for it, so scenarios that predate it play exactly as they did.
+    #[serde(default)]
+    pub listed_only: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -98,5 +102,26 @@ mod tests {
         let oil = &file.scenarios["texas-1981"].families["oil"];
         let low = oil.iter().map(|a| a[1]).min().unwrap();
         assert!((30..=45).contains(&low), "oil trough index {low}");
+    }
+
+    #[test]
+    fn silicon_valley_chips_peak_in_1995_spike_in_2000_and_bust_after() {
+        let file = PricePathFile::load();
+        assert!(file.families["electronics"].listed_only);
+        assert_eq!(file.products["components"], "electronics");
+        let chips = &file.scenarios["silicon-valley-1995"].families["electronics"];
+        let at = |quarter: i32| {
+            chips
+                .iter()
+                .find(|a| a[0] == quarter)
+                .map(|a| a[1])
+                .unwrap()
+        };
+        // Quarter 20 is the start of 2000: a spike off the 1998 trough, then the 2001 bust.
+        assert!(at(20) > at(16), "2000 spike");
+        assert!(at(26) < at(20) * 3 / 4, "2001 bust");
+        // Oil and grain stay modest next to the chip swings.
+        let oil = &file.scenarios["silicon-valley-1995"].families["oil"];
+        assert!(oil.iter().all(|a| (60..=250).contains(&a[1])));
     }
 }

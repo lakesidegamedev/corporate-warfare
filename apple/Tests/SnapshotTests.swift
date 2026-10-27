@@ -34,6 +34,8 @@ final class SnapshotTests: XCTestCase {
         XCTAssertEqual(WorldMap.shared.regions.count, 31, "the bundled map decodes its regions")
         XCTAssertEqual(WorldMap.forScenario("texas-1981").regions.count, 22, "the bundled map decodes the Texas regions")
         XCTAssertEqual(WorldMap.forRegions(["TX-HOU"]).regions.count, 22, "Texas region codes pick the Texas map")
+        XCTAssertEqual(WorldMap.forScenario("silicon-valley-1995").regions.count, 16, "the bundled map decodes the California regions")
+        XCTAssertEqual(WorldMap.forRegions(["CA-SJC"]).regions.count, 16, "California region codes pick the California map")
         XCTAssertEqual(WorldMap.forRegions(store.boards.map(\.code)).regions.count, 31, "a Great Lakes career keeps its map")
         XCTAssertFalse(store.mapDivisions.isEmpty, "the player's division is on the map")
         XCTAssertGreaterThanOrEqual(store.stocks.count, 20, "the stock board lists the corridor's companies")

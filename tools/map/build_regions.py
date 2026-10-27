@@ -3,7 +3,9 @@
 
 Great Lakes 2000 writes content/geography/regions.json (the original dataset). Texas Oil Patch
 1981 writes content/scenarios/texas-1981/regions.json from 1980 census county populations; see
-the TEXAS section below. Run with no arguments to rebuild both, or name a scenario id.
+the TEXAS section below. Silicon Valley 1995 writes content/scenarios/silicon-valley-1995/
+regions.json from July 1995 county estimates; see the CALIFORNIA section. Run with no arguments to
+rebuild all, or name a scenario id.
 
 Great Lakes 2000: economic regions inside the eight playable states.
 
@@ -389,7 +391,173 @@ def build_texas():
               f"wage {r['wage_index_bps']:>6} demand {r['demand_index_bps']:>6} land {r['land_index_bps']:>6}")
 
 
-BUILDERS = {"great-lakes-2000": build_great_lakes, "texas-1981": build_texas}
+# ---------------------------------------------------------------------------------------------
+# CALIFORNIA: Silicon Valley, 1995
+#
+# The same method on July 1995 county population estimates (Census CO-99-8, the revised 1990s
+# series). As in the Texas build, SAIPE 2000 county income is used only as a relative index of
+# which counties were richer than the state, then adjusted by hand (CA_ADJUST) because the 2000
+# figures carry the dot-com peak and the 1995 Bay Area was less far ahead. State product, pay and
+# union figures are rounded public circa-1995 values used as relative indices. Condition indices
+# and specialisations are authored game estimates. California is one state, so its regions are
+# whole counties joined to the nearest anchor, except for the few counties whose Census interior
+# point sits far from where its people live (CA_OVERRIDE).
+# ---------------------------------------------------------------------------------------------
+
+CA_COUNTIES = ROOT / "tools/map/data/counties-1995-silicon-valley-1995.csv"
+CA_ASSIGNMENT = ROOT / "tools/map/data/county-regions-silicon-valley-1995.csv"
+CA_OUT = ROOT / "content/scenarios/silicon-valley-1995/regions.json"
+CA_FIPS = {"06": "CA"}
+
+# code, name, hub city, GDP $bn (rounded, 1995), average annual pay $ (rounded, 1995),
+# union membership % (rounded)
+CA_STATES = [("CA", "California", "Sacramento", 930, 31_600, 18.0)]
+
+# power grid (1990s Californian reliability was good), road condition, broadband reach (a 1995
+# value: dial-up and early ISDN), workforce skill, crime, cost of living, land cost
+CA_CONDITIONS = {"CA": (9100, 5200, 900, 6200, 11500, 12500, 10000)}
+
+CA_SPECIALIZATION = {"CA": ("technology", "agriculture")}
+
+CA_REGIONS = [
+    ("CA-SJC", "San Jose and Silicon Valley", "San Jose", 37.339, -121.894),
+    ("CA-SFO", "San Francisco", "San Francisco", 37.775, -122.419),
+    ("CA-OAK", "Oakland and the East Bay", "Oakland", 37.805, -122.272),
+    ("CA-SMT", "San Mateo and the Peninsula", "San Mateo", 37.563, -122.325),
+    ("CA-MAR", "Marin and the North Bay", "San Rafael", 37.974, -122.531),
+    ("CA-SAC", "Sacramento", "Sacramento", 38.582, -121.494),
+    ("CA-STM", "Stockton and Modesto", "Modesto", 37.639, -120.997),
+    ("CA-FRS", "Fresno and the Central San Joaquin", "Fresno", 36.737, -119.787),
+    ("CA-BAK", "Bakersfield and the Southern San Joaquin", "Bakersfield", 35.373, -119.019),
+    ("CA-LAX", "Los Angeles", "Los Angeles", 34.052, -118.244),
+    ("CA-ORA", "Orange County", "Santa Ana", 33.746, -117.868),
+    ("CA-INL", "Inland Empire", "Riverside", 33.953, -117.396),
+    ("CA-SDG", "San Diego", "San Diego", 32.716, -117.161),
+    ("CA-CCS", "Monterey and the Central Coast", "Salinas", 36.678, -121.655),
+    ("CA-SBA", "Santa Barbara, Ventura and San Luis Obispo", "Santa Barbara", 34.421, -119.698),
+    ("CA-RDD", "Redding and the North State", "Redding", 40.587, -122.392),
+]
+
+# County GEOID to region where the Census interior point would put it with the wrong anchor.
+CA_OVERRIDE = {
+    "06075": "CA-SFO",  # San Francisco: the interior point sits on the Farallon Islands
+    "06081": "CA-SMT",  # San Mateo
+    "06085": "CA-SJC",  # Santa Clara: the interior point is in the hills south of San Jose
+    "06001": "CA-OAK",  # Alameda: the interior point is at Livermore, a commute from both
+    "06013": "CA-OAK",  # Contra Costa
+    "06041": "CA-MAR",  # Marin
+    "06095": "CA-MAR",  # Solano joins the North Bay
+    "06087": "CA-SJC",  # Santa Cruz
+    "06025": "CA-SDG",  # Imperial
+    "06037": "CA-LAX",  # Los Angeles: the interior point is in the San Gabriel Mountains
+    "06059": "CA-ORA",  # Orange
+    "06073": "CA-SDG",  # San Diego
+    "06065": "CA-INL",  # Riverside
+    "06071": "CA-INL",  # San Bernardino
+    "06111": "CA-SBA",  # Ventura
+}
+
+# Adjustment to a region's wage and demand against what its 2000 income says, in percent.
+# Authored game estimates: the 2000 figures carry the dot-com peak, and the 1995 Los Angeles
+# basin was still shedding Cold War aerospace jobs.
+CA_ADJUST = {
+    "CA-SJC": -6, "CA-SFO": -6, "CA-SMT": -5, "CA-OAK": -2, "CA-MAR": -3,
+    "CA-LAX": -3, "CA-ORA": -2,
+}
+
+
+def build_california():
+    counties = list(csv.DictReader(CA_COUNTIES.open()))
+    members = defaultdict(list)
+    CA_ASSIGNMENT.parent.mkdir(parents=True, exist_ok=True)
+    with CA_ASSIGNMENT.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["geoid", "region"])
+        for county in counties:
+            point = (float(county["lat"]), float(county["lon"]))
+            region = CA_OVERRIDE.get(county["geoid"]) or min(
+                (r for r in CA_REGIONS), key=lambda r: (great_circle_km(point, (r[3], r[4])), r[0]))[0]
+            members[region].append(county)
+            writer.writerow([county["geoid"], region])
+
+    def totals(rows):
+        population = sum(int(c["population_1995"]) for c in rows)
+        income = sum(int(c["population_1995"]) * int(c["median_household_income_2000"]) for c in rows)
+        land = sum(int(c["land_km2"]) for c in rows)
+        return population, income, land
+
+    base_gdp = 400  # demand units: the same per-person scale as Great Lakes 2000 and Texas
+    base_pay = 29_800  # roughly the 1995 national average, so California opens a little above 10000
+    regions = []
+    states = []
+    for code, name, city, gdp, pay, union in CA_STATES:
+        grid, road, broadband, skill, crime, living, land_index = CA_CONDITIONS[code]
+        state_pop, state_income, state_land = totals(counties)
+        state_mhi = state_income / state_pop
+        state_density = state_pop / state_land
+        state_wage = pay * 10_000 / base_pay
+        state_demand = gdp * 10_000 / base_gdp
+        for rcode, rname, rcity, rlat, rlon in CA_REGIONS:
+            rows = members[rcode]
+            if not rows:
+                raise SystemExit(f"{rcode} has no counties")
+            rpop, rincome, rland = totals(rows)
+            mhi_ratio = (rincome / rpop) / state_mhi
+            density_ratio = (rpop / rland) / state_density
+            adjust = 1 + CA_ADJUST.get(rcode, 0) / 100
+            regions.append({
+                "code": rcode,
+                "name": rname,
+                "states": [code],
+                "principal_city": f"{rcity}, {code}",
+                "lat_milli": round(rlat * 1000),
+                "lon_milli": round(rlon * 1000),
+                "population_1995": rpop,
+                "wage_index_bps": round(state_wage * mhi_ratio ** 0.6 * adjust),
+                "demand_index_bps": max(1, round(state_demand * rincome / state_income * adjust)),
+                "land_index_bps": round(land_index * clamp(density_ratio ** 0.35, 0.55, 1.8)),
+                "opening_organisation_bps": round(union * 100),
+                "conditions": {
+                    "power_grid_bps": grid,
+                    "road_bps": road,
+                    "broadband_bps": round(clamp(broadband * clamp(density_ratio ** 0.25, 0.6, 2.5), 0, 10_000)),
+                    "skill_bps": round(clamp(skill * clamp(mhi_ratio ** 0.5, 0.8, 1.25), 0, 10_000)),
+                    "crime_bps": crime,
+                    "cost_of_living_bps": round(living * clamp(mhi_ratio ** 0.5, 0.85, 1.25)),
+                },
+                "counties": len(rows),
+            })
+        states.append({
+            "code": code, "name": name, "capital_hub": f"{city}, {code}",
+            "population_1995": state_pop, "specialization": list(CA_SPECIALIZATION[code]),
+        })
+    lanes = []
+    for i, a in enumerate(CA_REGIONS):
+        for b in CA_REGIONS[i + 1:]:
+            km = great_circle_km((a[3], a[4]), (b[3], b[4])) * ROAD_FACTOR
+            lanes.append({"a": a[0], "b": b[0], "km": max(1, round(km))})
+    document = {
+        "schema": 3,
+        "classification": "economic regions built from whole California counties; July 1995 county population estimates, SAIPE 2000 county income used only as a relative index, rounded public circa-1995 state product, pay and union figures as relative indices, authored condition indices and dot-com adjustments",
+        "vintage": "nominal January 1995 start",
+        "official_source": "US Census Bureau county population estimates July 1, 1995 (CO-99-8 annual time series, revised March 2000) and SAIPE 2000 median household income; BEA, BLS and union membership figures rounded for indices",
+        "attempts": [],
+        "membership_status": "each region is a set of whole counties joined to the nearest anchor metro, with a short list of overrides for counties whose Census interior point is far from their people; tools/map/data/county-regions-silicon-valley-1995.csv lists the assignment",
+        "notes": "Generated by tools/map/build_regions.py. Condition indices, 1995 adjustments and calibrated demand are game estimates, not observations. Freight lanes are anchor-to-anchor great-circle distances times a 1.25 road factor.",
+        "states": states,
+        "regions": regions,
+        "lanes": lanes,
+    }
+    CA_OUT.parent.mkdir(parents=True, exist_ok=True)
+    CA_OUT.write_text(json.dumps(document, indent=2) + "\n")
+    print(f"wrote {CA_OUT.relative_to(ROOT)}: {len(regions)} regions, {len(lanes)} lanes")
+    for r in regions:
+        print(f"  {r['code']:7} {r['name']:44} counties {r['counties']:3} pop {r['population_1995']:>10,} "
+              f"wage {r['wage_index_bps']:>6} demand {r['demand_index_bps']:>6} land {r['land_index_bps']:>6} "
+              f"bb {r['conditions']['broadband_bps']:>5} skill {r['conditions']['skill_bps']:>5}")
+
+
+BUILDERS = {"great-lakes-2000": build_great_lakes, "texas-1981": build_texas, "silicon-valley-1995": build_california}
 
 
 def main():

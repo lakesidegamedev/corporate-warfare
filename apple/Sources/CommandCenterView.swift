@@ -4,7 +4,6 @@ import SwiftUI
 /// new screens. Built once, read by the Command Center.
 enum ActionCatalogue {
     static let all: [ActionDto] = actionCatalogue()
-    static let productList: [ProductDto] = products()
 }
 
 /// Loans, contracts, policies and votes of one company and every open deal, for form pickers.
@@ -348,7 +347,7 @@ struct ActionFormView: View {
             list = store.boards.sorted { $0.index < $1.index }
                 .map { Pick(value: String($0.index), label: "\($0.name), \($0.stateCode)") }
         case "product":
-            list = ActionCatalogue.productList.filter { $0.referencePriceCents > 0 }
+            list = store.productCatalogue.filter { $0.referencePriceCents > 0 }
                 .map { Pick(value: String($0.index), label: $0.name) }
         case "recipe":
             list = store.strategyCatalogue.map { Pick(value: String($0.index), label: "\($0.name) (\(Sector.name($0.industry)))") }

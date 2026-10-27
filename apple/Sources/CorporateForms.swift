@@ -368,7 +368,7 @@ struct QualityBudgetSheet: View {
     @State private var amountText = ""
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
-    private let catalogue = products()
+    private var catalogue: [ProductDto] { store.productCatalogue }
 
     private var firm: FirmDto? { store.selectedFirmDto }
     private var amount: Int64? { parseDollarsToCents(amountText) }

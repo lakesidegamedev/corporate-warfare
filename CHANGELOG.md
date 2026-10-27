@@ -13,6 +13,12 @@ heading.
 
 ### Fixed
 
+- Build forms, the Command Center and the market list quoted Great Lakes reference prices in every
+  scenario, so a Texas or California career saw the wrong margins and prices. The catalogues now
+  come from the career's own scenario on Android, desktop and Apple, and reload when a different
+  career starts.
+- Region boards showed no population in scenarios sized from a census other than 2000; they now
+  show the scenario's own count, and no longer label it 2000.
 - Rival oil firms now build refineries when the corridor imports fuel. The build test counted
   gasoline and jet fuel, which the corridor never imports, as missing room, so no rival ever
   built one while fuel imports ran at six times local output. Only the main product decides
@@ -43,6 +49,22 @@ heading.
   from before because posts are now drawn from the cast; saves from earlier previews load with
   unnamed rival management.
 
+- Silicon Valley, 1995 is playable (1.7 preview 7). Sixteen economic regions built from whole
+  California counties (San Jose and Silicon Valley, San Francisco, Oakland and the East Bay, San
+  Mateo, Marin and the North Bay, Sacramento, Stockton and Modesto, Fresno, Bakersfield, Los
+  Angeles, Orange County, the Inland Empire, San Diego, Monterey, Santa Barbara and Ventura, and
+  Redding), sized from the July 1995 Census estimates. Fifty-six rival firms cover chips and
+  hardware, software, telecoms, defence and aerospace, studios, farms, banks and venture-style
+  financiers, retail and construction, and the Bakersfield pipeline to Los Angeles and Oakland
+  exist on day one. Five ports (Oakland, Los Angeles, San Diego, Stockton, Santa Barbara) share a
+  Pacific sea system with gateway legs to Asia and the Pacific and the Panama route. Wages are a
+  little lower than 2000, oil and gas are cheaper and chips dearer, and world prices follow a
+  1995 to 2005 path with variance by default: the memory chip slide, the 2000 spike and the
+  2001 to 2002 tech bust, with oil and grain moving modestly. You start with a chip and hardware
+  maker in San Jose. The California map draws on the globe and the corridor map on Android,
+  desktop and Apple; the Great Lakes and Texas map layers are byte for byte unchanged. Price
+  families can now belong to one scenario only (the chips and electronics family), so older
+  scenarios play exactly as before.
 - Texas Oil Patch, 1981 is playable (1.7 preview 6). It has its own map and its own start:
   twenty-two economic regions built from whole counties across Texas, Oklahoma and Louisiana
   (Houston, Beaumont and Port Arthur, Dallas and Fort Worth, San Antonio, Austin, the Permian

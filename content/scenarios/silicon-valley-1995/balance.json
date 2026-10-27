@@ -1,0 +1,34 @@
+{
+  "classification": "authored engineering calibration for the January 1995 start; NOT real observations. Wages are 94 percent of the Great Lakes 2000 level in engine units (1995 real pay against 2000), and prices move against the 2000 base the way 1995 did: crude oil, natural gas and refined fuels cheaper, chips and hardware dearer (they deflate every year), software and telecom a little dearer, farm output and manufactures roughly unchanged.",
+  "baseline_weekly_wage_cents": [
+    37600,
+    75200,
+    131600
+  ],
+  "reference_price_cents": {
+    "crude_oil": 10500,
+    "natural_gas": 11000,
+    "ngl": 36000,
+    "gasoline": 26350,
+    "jet_fuel": 26400,
+    "fuel": 24600,
+    "petrochem_feedstock": 22100,
+    "electricity": 114000,
+    "chemicals": 58200,
+    "plastics": 27550,
+    "fertilizers": 20900,
+    "coal": 16800,
+    "food_raw": 10000,
+    "grain": 6300,
+    "livestock": 12000,
+    "food_retail": 17000,
+    "steel": 38000,
+    "ore": 19000,
+    "pig_iron": 30400,
+    "scrap": 18000,
+    "building_materials": 20400,
+    "components": 118000,
+    "software": 53000,
+    "telecom": 11000
+  }
+}

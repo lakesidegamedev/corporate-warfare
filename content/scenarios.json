@@ -40,12 +40,12 @@
       "summary": "The web arrives. Chips, software and telecoms race for capital as valuations climb toward the dot-com peak and the crash after it.",
       "center_lon_milli": -119500,
       "center_lat_milli": 37200,
-      "available": false,
+      "available": true,
       "region": "California, United States",
       "image": "scenario-silicon-valley-1995",
       "currency": "US dollar",
       "tagline": "Ride the dot-com boom and live through the crash.",
-      "default_price_path": "historical"
+      "default_price_path": "historical_variance"
     },
     {
       "id": "ruhr-rhine-1991",

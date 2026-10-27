@@ -57,7 +57,7 @@ pub struct ScenarioContent {
 }
 
 /// Every scenario that has its own dataset. A scenario not listed here uses the default one.
-pub const SCENARIO_CONTENT: [ScenarioContent; 2] = [
+pub const SCENARIO_CONTENT: [ScenarioContent; 3] = [
     ScenarioContent {
         id: DEFAULT_SCENARIO,
         geography_json: GEOGRAPHY_JSON,
@@ -79,6 +79,19 @@ pub const SCENARIO_CONTENT: [ScenarioContent; 2] = [
         )),
         player_region: "TX-PMB",
         player_recipe: "oil_wells",
+    },
+    ScenarioContent {
+        id: "silicon-valley-1995",
+        geography_json: include_str!("../../../content/scenarios/silicon-valley-1995/regions.json"),
+        firms_json: include_str!("../../../content/scenarios/silicon-valley-1995/firms.json"),
+        logistics_json: Some(include_str!(
+            "../../../content/scenarios/silicon-valley-1995/logistics.json"
+        )),
+        balance_json: Some(include_str!(
+            "../../../content/scenarios/silicon-valley-1995/balance.json"
+        )),
+        player_region: "CA-SJC",
+        player_recipe: "hardware_maker",
     },
 ];
 

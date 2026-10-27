@@ -1,0 +1,79 @@
+{
+  "classification": "authored engineering calibration; NOT real freight rates or rail maps",
+  "public_rail": [
+    "CA-BAK",
+    "CA-FRS",
+    "CA-INL",
+    "CA-LAX",
+    "CA-OAK",
+    "CA-ORA",
+    "CA-RDD",
+    "CA-SAC",
+    "CA-SDG",
+    "CA-SJC",
+    "CA-STM"
+  ],
+  "public_ports": [
+    "CA-LAX",
+    "CA-OAK",
+    "CA-SBA",
+    "CA-SDG",
+    "CA-STM"
+  ],
+  "sea_systems": [
+    {
+      "id": "california_coast",
+      "name": "California coast and the Pacific lanes",
+      "factor_bps": 11000,
+      "ports": [
+        "CA-LAX",
+        "CA-OAK",
+        "CA-SBA",
+        "CA-SDG",
+        "CA-STM"
+      ]
+    }
+  ],
+  "gateway_links": [
+    {
+      "region": "CA-OAK",
+      "gateway": "asia_pacific",
+      "km": 8800
+    },
+    {
+      "region": "CA-OAK",
+      "gateway": "pacific",
+      "km": 900
+    },
+    {
+      "region": "CA-LAX",
+      "gateway": "asia_pacific",
+      "km": 9400
+    },
+    {
+      "region": "CA-LAX",
+      "gateway": "pacific",
+      "km": 800
+    },
+    {
+      "region": "CA-LAX",
+      "gateway": "panama",
+      "km": 5600
+    },
+    {
+      "region": "CA-SDG",
+      "gateway": "asia_pacific",
+      "km": 9700
+    },
+    {
+      "region": "CA-SDG",
+      "gateway": "panama",
+      "km": 5200
+    },
+    {
+      "region": "CA-STM",
+      "gateway": "pacific",
+      "km": 1000
+    }
+  ]
+}

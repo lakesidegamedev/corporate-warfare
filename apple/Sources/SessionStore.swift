@@ -61,6 +61,23 @@ actor Engine {
         session?.regionBoards(firm: firm) ?? []
     }
 
+    /// The scenario this career plays in, and the catalogues priced for it.
+    func scenarioId() -> String {
+        session?.scenarioId() ?? ""
+    }
+
+    func strategies() -> [StrategyDto] {
+        session?.strategies() ?? []
+    }
+
+    func recipes() -> [RecipeDto] {
+        session?.recipes() ?? []
+    }
+
+    func products() -> [ProductDto] {
+        session?.products() ?? []
+    }
+
     func divisions(firm: UInt64) -> [DivisionDto] {
         session?.divisions(firm: firm) ?? []
     }

@@ -175,7 +175,7 @@ struct RegionBoardView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Eyebrow(text: board.stateName)
                 Text(board.name).font(.title2.weight(.bold)).foregroundStyle(Theme.primaryText)
-                Text("Hub \(board.hubCity) · \(board.population2000.formatted()) people (2000)")
+                Text("Hub \(board.hubCity) · \(board.population2000.formatted()) people")
                     .font(.caption).foregroundStyle(Theme.secondary)
                 if !board.specialization.isEmpty {
                     HStack(spacing: 6) {

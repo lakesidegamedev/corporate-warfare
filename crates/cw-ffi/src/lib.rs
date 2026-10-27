@@ -1415,10 +1415,26 @@ pub fn scenarios() -> Vec<ScenarioDto> {
         .collect()
 }
 
+/// The products, priced for the default scenario. A career should ask its own session instead
+/// (`SessionHandle::products`) or name its scenario (`products_for`): reference prices differ by
+/// scenario.
 #[uniffi::export]
 pub fn products() -> Vec<ProductDto> {
-    match cw_data::Dataset::load() {
-        Ok(dataset) => dataset
+    products_for(cw_data::DEFAULT_SCENARIO.to_owned())
+}
+
+/// The products with one scenario's reference prices.
+#[uniffi::export]
+pub fn products_for(scenario_id: String) -> Vec<ProductDto> {
+    match cw_data::Dataset::load_scenario(&scenario_id) {
+        Ok(dataset) => product_dtos(&dataset),
+        Err(_) => Vec::new(),
+    }
+}
+
+fn product_dtos(dataset: &cw_data::Dataset) -> Vec<ProductDto> {
+    {
+        dataset
             .products
             .iter()
             .enumerate()
@@ -1435,16 +1451,28 @@ pub fn products() -> Vec<ProductDto> {
                 holding_bps_weekly: product.holding_bps_weekly,
                 spoilage_bps_weekly: product.spoilage_bps_weekly,
             })
-            .collect(),
-        Err(_) => Vec::new(),
+            .collect()
     }
 }
 
 /// Facility templates with their capex and build time, for build and founder forms.
 #[uniffi::export]
 pub fn recipes() -> Vec<RecipeDto> {
-    match cw_data::Dataset::load() {
-        Ok(dataset) => dataset
+    recipes_for(cw_data::DEFAULT_SCENARIO.to_owned())
+}
+
+/// Facility templates of one scenario.
+#[uniffi::export]
+pub fn recipes_for(scenario_id: String) -> Vec<RecipeDto> {
+    match cw_data::Dataset::load_scenario(&scenario_id) {
+        Ok(dataset) => recipe_dtos(&dataset),
+        Err(_) => Vec::new(),
+    }
+}
+
+fn recipe_dtos(dataset: &cw_data::Dataset) -> Vec<RecipeDto> {
+    {
+        dataset
             .recipes
             .iter()
             .enumerate()
@@ -1461,8 +1489,7 @@ pub fn recipes() -> Vec<RecipeDto> {
                     .map(|c| c.key().to_owned())
                     .unwrap_or_default(),
             })
-            .collect(),
-        Err(_) => Vec::new(),
+            .collect()
     }
 }
 
@@ -1552,9 +1579,19 @@ pub fn freight_modes() -> Vec<FreightModeDto> {
 
 #[uniffi::export]
 pub fn strategies() -> Vec<StrategyDto> {
-    let Ok(dataset) = cw_data::Dataset::load() else {
-        return Vec::new();
-    };
+    strategies_for(cw_data::DEFAULT_SCENARIO.to_owned())
+}
+
+/// The strategy catalogue with one scenario's prices and wages.
+#[uniffi::export]
+pub fn strategies_for(scenario_id: String) -> Vec<StrategyDto> {
+    match cw_data::Dataset::load_scenario(&scenario_id) {
+        Ok(dataset) => strategy_dtos(&dataset),
+        Err(_) => Vec::new(),
+    }
+}
+
+fn strategy_dtos(dataset: &cw_data::Dataset) -> Vec<StrategyDto> {
     let price = |id: &str| {
         dataset
             .product_index
@@ -1954,6 +1991,26 @@ impl SessionHandle {
         overview_dto(self.lock().overview())
     }
 
+    /// The scenario this career plays in.
+    pub fn scenario_id(&self) -> String {
+        self.lock().dataset.scenario_id.clone()
+    }
+
+    /// The products with this career's reference prices.
+    pub fn products(&self) -> Vec<ProductDto> {
+        product_dtos(&self.lock().dataset)
+    }
+
+    /// The facility templates of this career's scenario.
+    pub fn recipes(&self) -> Vec<RecipeDto> {
+        recipe_dtos(&self.lock().dataset)
+    }
+
+    /// The strategy catalogue with this career's prices and wages.
+    pub fn strategies(&self) -> Vec<StrategyDto> {
+        strategy_dtos(&self.lock().dataset)
+    }
+
     pub fn advance(&self, weeks: u32) -> AdvanceDto {
         let result = self.lock().advance(weeks);
         AdvanceDto {
@@ -2116,7 +2173,7 @@ impl SessionHandle {
                     specialization: state.map(|s| s.specialization.clone()).unwrap_or_default(),
                     hub_city: region.principal_city.clone(),
                     land_index_bps: region.land_index_bps,
-                    population_2000: region.population_2000,
+                    population_2000: region.population(),
                     wage_index_bps: region.wage_index_bps,
                     demand_index_bps: region.demand_index_bps,
                     power_grid_bps: c.power_grid_bps,
@@ -4191,5 +4248,50 @@ mod tests {
         let ops = session.firm_ops(firm).expect("ops for the player's firm");
         // Sprawl is a smooth curve now; this is where it reaches one percent of revenue.
         assert_eq!(ops.sprawl_threshold, 24);
+    }
+
+    #[test]
+    fn the_catalogues_carry_the_prices_of_the_scenario_they_are_asked_for() {
+        let price = |list: &[ProductDto], name: &str| {
+            list.iter()
+                .find(|p| p.name == name)
+                .map(|p| p.reference_price_cents)
+                .unwrap()
+        };
+        let lakes = products_for("great-lakes-2000".to_owned());
+        let texas = products_for("texas-1981".to_owned());
+        let valley = products_for("silicon-valley-1995".to_owned());
+        assert_eq!(products().len(), lakes.len());
+        assert!(price(&texas, "Crude oil") > price(&lakes, "Crude oil"));
+        assert!(price(&valley, "Crude oil") < price(&lakes, "Crude oil"));
+        // The margin the build form quotes follows the same prices.
+        let margin = |list: &[StrategyDto]| {
+            list.iter()
+                .find(|s| s.id == "oil_wells")
+                .unwrap()
+                .reference_margin_bps
+        };
+        assert_ne!(
+            margin(&strategies_for("texas-1981".to_owned())),
+            margin(&strategies())
+        );
+        assert_eq!(recipes_for("texas-1981".to_owned()).len(), recipes().len());
+        // A running career reads its own scenario.
+        let career = SessionHandle::start(NewGameDto {
+            seed: 3,
+            scenario_id: "texas-1981".to_owned(),
+            guided: true,
+            five_year: false,
+            difficulty: "standard".to_owned(),
+            economy: "historic".to_owned(),
+            starting_capital_cents: None,
+            price_path: String::new(),
+        })
+        .unwrap();
+        assert_eq!(career.scenario_id(), "texas-1981");
+        assert_eq!(
+            price(&career.products(), "Crude oil"),
+            price(&texas, "Crude oil")
+        );
     }
 }

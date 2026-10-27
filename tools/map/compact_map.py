@@ -20,8 +20,9 @@ FIPS = {"17": "IL", "18": "IN", "21": "KY", "26": "MI", "36": "NY", "39": "OH", 
 SCENARIOS = {
     "great-lakes-2000": PLAY,
     "texas-1981": ["LA", "OK", "TX"],
+    "silicon-valley-1995": ["CA"],
 }
-SCENARIO_FIPS = {"texas-1981": {"48": "TX", "40": "OK", "22": "LA"}}
+SCENARIO_FIPS = {"texas-1981": {"48": "TX", "40": "OK", "22": "LA"}, "silicon-valley-1995": {"06": "CA"}}
 SCALE = 10_000
 # Spacing in the old 10000-unit corridor box was about 190 m a unit; one unit is about 18 here.
 UNIT = 18
