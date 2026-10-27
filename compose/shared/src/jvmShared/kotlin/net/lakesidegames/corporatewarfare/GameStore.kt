@@ -17,6 +17,7 @@ import uniffi.cw_ffi.CommodityDto
 import uniffi.cw_ffi.DivisionDto
 import uniffi.cw_ffi.OwnershipDto
 import uniffi.cw_ffi.PeriodDto
+import uniffi.cw_ffi.RaidRecordDto
 import uniffi.cw_ffi.MapDivisionDto
 import uniffi.cw_ffi.StockDto
 import uniffi.cw_ffi.StrategyDto
@@ -67,6 +68,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     /** The selected company's four-week results, oldest first, up to five years. */
     var history by mutableStateOf<List<PeriodDto>>(emptyList()); private set
     var ownership by mutableStateOf<OwnershipDto?>(null); private set
+    /** Recent raids anywhere, newest first, for the rival-activity feed. */
+    var recentRaids by mutableStateOf<List<RaidRecordDto>>(emptyList()); private set
     var commodities by mutableStateOf<List<CommodityDto>>(emptyList()); private set
     var mapDivisions by mutableStateOf<List<MapDivisionDto>>(emptyList()); private set
     val strategyCatalogue: List<StrategyDto> by lazy { strategies() }
@@ -233,6 +236,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 overviewNow, firmsNow, eventsNow, boardsNow, financeNow, linesNow, facilitiesNow, divisionsNow,
                 handle.stockBoard(), handle.commodityBoard(), handle.mapDivisions(),
                 firm?.let { handle.history(it) } ?: emptyList<PeriodDto>(), firm?.let { handle.ownership(it) },
+                handle.recentRaids(),
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
@@ -250,6 +254,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 mapDivisions = parts[10] as List<MapDivisionDto>
                 history = parts[11] as List<PeriodDto>
                 ownership = parts[12] as OwnershipDto?
+                recentRaids = parts[13] as List<RaidRecordDto>
             }
         }
         loadMarkets()

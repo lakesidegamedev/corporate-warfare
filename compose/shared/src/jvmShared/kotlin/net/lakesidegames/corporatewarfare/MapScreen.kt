@@ -55,15 +55,15 @@ import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 
-private enum class MapLayer(val title: String) { Presence("Your divisions"), Room("Room to build"), Wages("Wages") }
+enum class MapLayer(val title: String) { Presence("Your divisions"), Room("Room to build"), Wages("Wages") }
 
-/** The world map: a globe when zoomed out that flattens onto the scenario as you zoom in. */
+/**
+ * The world map with its own camera and zoom buttons: a globe when zoomed out that flattens onto
+ * the scenario as you zoom in. Tapping a region reports it through [onSelect].
+ */
 @Composable
-fun MapScreen(store: GameStore) {
+fun WorldMapView(store: GameStore, layer: MapLayer, selected: String?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
     val map = WorldMap.shared
-    var layer by remember { mutableStateOf(MapLayer.Presence) }
-    var selected by remember { mutableStateOf<String?>(null) }
-    var building by remember { mutableStateOf<RegionBoardDto?>(null) }
     var camera by remember { mutableStateOf<MapCamera?>(null) }
     var viewSize by remember { mutableStateOf(Size.Zero) }
     val scope = rememberCoroutineScope()
@@ -93,7 +93,7 @@ fun MapScreen(store: GameStore) {
         fly(if (now.zoom > MapCamera.FLAT_START) now.copy(zoom = 1.0) else MapCamera.scenario(viewSize, map ?: return))
     }
 
-    Box(Modifier.fillMaxSize().background(Palette.ink)) {
+    Box(modifier.background(Palette.ink)) {
         if (map == null) {
             Text("The map file is missing from this build.", color = Palette.secondary, modifier = Modifier.padding(24.dp))
         } else {
@@ -131,7 +131,7 @@ fun MapScreen(store: GameStore) {
                                 val now = current() ?: return@detectTapGestures
                                 val projection = MapProjection(now, viewSize)
                                 val hit = map.regions.firstOrNull { projection.contains(it.rings, tap) }?.code
-                                selected = if (hit == selected) null else hit
+                                onSelect(if (hit == selected) null else hit)
                             },
                         )
                     },
@@ -149,6 +149,17 @@ fun MapScreen(store: GameStore) {
                 MapButton(if (zoomedIn) "◍" else "◎") { toggleGlobe() }
             }
         }
+    }
+}
+
+/** The phone map: the world map with the company HUD and layer chips over it. */
+@Composable
+fun MapScreen(store: GameStore) {
+    var layer by remember { mutableStateOf(MapLayer.Presence) }
+    var selected by remember { mutableStateOf<String?>(null) }
+    var building by remember { mutableStateOf<RegionBoardDto?>(null) }
+    Box(Modifier.fillMaxSize().background(Palette.ink)) {
+        WorldMapView(store, layer, selected, { selected = it }, Modifier.fillMaxSize())
 
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             MapHud(store)
@@ -277,14 +288,14 @@ private fun MapButton(symbol: String, onClick: () -> Unit) {
     }
 }
 
-private fun layerTint(layer: MapLayer): Color = when (layer) {
+internal fun layerTint(layer: MapLayer): Color = when (layer) {
     MapLayer.Presence -> Palette.gold
     MapLayer.Room -> Palette.positive
     MapLayer.Wages -> Color(0xFF42A5F5)
 }
 
 /** 0..1 intensity per region for the active layer. */
-private fun shading(store: GameStore, layer: MapLayer): Map<String, Double> = when (layer) {
+internal fun shading(store: GameStore, layer: MapLayer): Map<String, Double> = when (layer) {
     MapLayer.Presence -> {
         val plants = store.mapDivisions.groupBy { it.region }.mapValues { (_, items) -> items.sumOf { it.blocks.toInt() }.toDouble() }
         val top = plants.values.maxOrNull() ?: 1.0
@@ -331,7 +342,7 @@ private fun MapHud(store: GameStore) {
 }
 
 @Composable
-private fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () -> Unit, onClose: () -> Unit) {
+internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () -> Unit, onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
         containerColor = Palette.panel,

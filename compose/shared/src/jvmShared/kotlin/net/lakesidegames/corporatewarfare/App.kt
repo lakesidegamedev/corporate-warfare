@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -85,8 +86,15 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, onQuit: (() -> 
         CorporateWarfareTheme {
             Box(Modifier.fillMaxSize().background(Palette.ink)) {
                 when {
-                    showSettings -> SettingsScreen(store, settings, desktop = onQuit != null) { showSettings = false }
-                    store.ready -> MainScreen(store, onSettings = { showSettings = true })
+                    showSettings -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                        Box(Modifier.widthIn(max = 820.dp)) {
+                            SettingsScreen(store, settings, desktop = onQuit != null) { showSettings = false }
+                        }
+                    }
+                    store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+                        if (maxWidth >= DesktopBreakpoint) DesktopShell(store, onSettings = { showSettings = true })
+                        else MainScreen(store, onSettings = { showSettings = true })
+                    }
                     else -> StartScreen(store, onSettings = { showSettings = true }, onQuit = onQuit)
                 }
             store.error?.let { message ->
@@ -384,7 +392,7 @@ private fun OfficeScreen(store: GameStore) {
 }
 
 @Composable
-private fun ProfitDrivers(weeks: List<uniffi.cw_ffi.WeekDto>) {
+internal fun ProfitDrivers(weeks: List<uniffi.cw_ffi.WeekDto>) {
     val revenue = weeks.sumOf { it.revenueCents }
     val net = weeks.sumOf { it.netIncomeCents }
     val costs = listOf(
@@ -416,7 +424,7 @@ private fun ProfitDrivers(weeks: List<uniffi.cw_ffi.WeekDto>) {
     }
 }
 
-private fun postureLabel(line: ProductLineDto): String = when (line.mode) {
+internal fun postureLabel(line: ProductLineDto): String = when (line.mode) {
     "market" -> if (line.postureBps == 0) "At market" else "%+d%% vs market".format(line.postureBps / 100)
     "cost_plus" -> "Cost +${line.postureBps / 100}%"
     "fixed" -> "Fixed price"
@@ -424,7 +432,7 @@ private fun postureLabel(line: ProductLineDto): String = when (line.mode) {
 }
 
 @Composable
-private fun PricingRow(line: ProductLineDto, onClick: () -> Unit) {
+internal fun PricingRow(line: ProductLineDto, onClick: () -> Unit) {
     val perLot = line.priceCents - line.unitCostCents
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -444,7 +452,7 @@ private fun PricingRow(line: ProductLineDto, onClick: () -> Unit) {
 
 /** Automatic pricing, a step against the market, or a markup over the company's own cost. */
 @Composable
-private fun PostureDialog(store: GameStore, line: ProductLineDto, onDismiss: () -> Unit) {
+internal fun PostureDialog(store: GameStore, line: ProductLineDto, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Palette.panel,
@@ -506,7 +514,7 @@ private fun InboxScreen(store: GameStore) {
 }
 
 @Composable
-private fun DecisionCard(store: GameStore, event: EventDto) {
+internal fun DecisionCard(store: GameStore, event: EventDto) {
     Panel {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(event.title, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

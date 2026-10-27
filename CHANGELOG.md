@@ -22,6 +22,14 @@ heading.
   animations, and interface size on Android and desktop) and, on desktop, window mode
   (windowed, maximized, full screen) and resolution.
 
+- A desktop layout for wide windows (Windows, Linux and large tablets) instead of the stretched
+  phone screens: a sidebar for every screen, a status bar with cash, profit, cash outlook, share
+  price, net worth and the time controls always in view, and dense multi-pane screens. The map
+  sits between an outliner (alerts, your divisions, rival moves) and the selected region's board;
+  the CEO Office shows results, a pricing table and divisions side by side; Markets shows the full
+  stock and commodity tables together; Stats runs in two columns; Inbox lists decisions beside the
+  open one; Portfolio tables your companies and your shareholdings.
+
 ### Changed
 
 - Desktop opens at 1600 x 900 instead of a phone-shaped window, and the map is the first tab on
