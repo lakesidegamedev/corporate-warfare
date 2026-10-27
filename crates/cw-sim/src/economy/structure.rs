@@ -238,7 +238,7 @@ pub struct StructureState {
 // Temperament hooks
 // ---------------------------------------------------------------------------------------------
 
-/// Weights that steer how a rival uses the structure verbs. A character-driven AI replaces
+/// Weights that steer how a rival uses the structure verbs. The character cast drives
 /// `temperament`; the rules below only read this table. All in basis points around 10,000 as
 /// "typical" except where noted.
 #[derive(Clone, Copy, Debug)]
@@ -267,9 +267,75 @@ impl Default for Temperament {
     }
 }
 
-/// The weight table for a firm. Today derived from the rival archetype; a later preview swaps in
-/// the CEO's temperament here.
-pub fn temperament(world: &World, firm: Handle) -> Temperament {
+/// How each cast temperament plays the structure verbs.
+fn cast_profile(style: cw_data::Temperament) -> Temperament {
+    use cw_data::Temperament as Style;
+    let base = Temperament::default();
+    match style {
+        Style::Integrator => Temperament {
+            partnering: 7_500,
+            listing: 4_000,
+            tax_shifting: 4_500,
+            resistance: 6_000,
+            ..base
+        },
+        Style::Raider => Temperament {
+            tax_shifting: 7_500,
+            leverage: 7_500,
+            partnering: 3_500,
+            resistance: 8_000,
+            ..base
+        },
+        Style::Financier => Temperament {
+            tax_shifting: 6_500,
+            leverage: 8_500,
+            listing: 7_500,
+            partnering: 6_000,
+            ..base
+        },
+        Style::Speculator => Temperament {
+            leverage: 7_000,
+            listing: 6_500,
+            partnering: 6_500,
+            resistance: 4_000,
+            ..base
+        },
+        Style::Builder => Temperament {
+            tax_shifting: 4_000,
+            leverage: 3_500,
+            listing: 3_500,
+            partnering: 5_500,
+            resistance: 6_500,
+        },
+        Style::Cautious => Temperament {
+            tax_shifting: 3_500,
+            leverage: 2_500,
+            listing: 4_500,
+            resistance: 3_000,
+            ..base
+        },
+    }
+}
+
+/// The weight table for a firm: the rival archetype's habits, pulled three parts in four toward
+/// its chief executive's temperament when the firm has a named one from the cast.
+pub fn temperament(world: &World, dataset: &Dataset, firm: Handle) -> Temperament {
+    let habit = archetype_temperament(world, firm);
+    let Some(style) = crate::economy::cast::temperament(world, dataset, firm) else {
+        return habit;
+    };
+    let person = cast_profile(style);
+    let blend = |habit: i32, person: i32| (habit + 3 * person) / 4;
+    Temperament {
+        tax_shifting: blend(habit.tax_shifting, person.tax_shifting),
+        leverage: blend(habit.leverage, person.leverage),
+        listing: blend(habit.listing, person.listing),
+        partnering: blend(habit.partnering, person.partnering),
+        resistance: blend(habit.resistance, person.resistance),
+    }
+}
+
+fn archetype_temperament(world: &World, firm: Handle) -> Temperament {
     use cw_data::Archetype::*;
     let base = Temperament::default();
     match world.firms.get(firm).and_then(|f| f.archetype) {
@@ -2388,8 +2454,8 @@ pub fn activist_chance_bps(world: &World, c: &Campaign) -> i32 {
 }
 
 /// A rival's answer, from its temperament.
-pub fn ai_stance(world: &World, c: &Campaign) -> Stance {
-    let t = temperament(world, c.target);
+pub fn ai_stance(world: &World, dataset: &Dataset, c: &Campaign) -> Stance {
+    let t = temperament(world, dataset, c.target);
     let j = c.justification_bps;
     if j >= 9_000 - t.resistance / 10 {
         Stance::Concede
@@ -2488,6 +2554,19 @@ fn apply_demand(world: &mut World, dataset: &Dataset, c: &Campaign, scale_pct: i
                 .map(|f| f.valuation.equity_cents)
                 .unwrap_or(0);
             fee(world, firm, equity / 1_000, "chief executive severance");
+            // The named chief executive goes too, when the firm has one.
+            let mut rng = cw_core::rng::Rng::entity_stream(
+                world.seed,
+                0x4143_5449_5645_4345,
+                Handle(firm.0 ^ (world.tick.0 as u64) << 40),
+            );
+            crate::economy::cast::replace(
+                world,
+                dataset,
+                firm,
+                "after an activist campaign",
+                &mut rng,
+            );
         }
         Demand::Restitution => {
             let amount = c.amount_cents * scale_pct / 100;
@@ -2643,7 +2722,7 @@ fn settle_campaigns(world: &mut World, dataset: &Dataset) {
             }
             continue;
         }
-        let stance = ai_stance(world, &c);
+        let stance = ai_stance(world, dataset, &c);
         resolve_campaign(world, dataset, c.id, stance, false);
     }
 }

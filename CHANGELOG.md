@@ -36,7 +36,10 @@ heading.
   change is reported in the news. Open a rival's stock page, or a region board, to read its
   dossier: portrait, name, temperament, background and recent moves. The economy card shows the
   chair, the leaders and the governors with portraits, and news items about a person show theirs.
-  Market snapshots gain a count of chief executive turnovers. Great Lakes worlds play differently
+  A chief executive's temperament now steers how the rival uses bond borrowing, transfer pricing,
+  listings, joint ventures and activist defence, and an activist campaign that forces out the
+  chief executive replaces the named person too. Market snapshots gain a count of chief executive
+  turnovers. Great Lakes worlds play differently
   from before because posts are now drawn from the cast; saves from earlier previews load with
   unnamed rival management.
 

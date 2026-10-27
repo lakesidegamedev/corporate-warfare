@@ -91,7 +91,7 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
     let Some(entity) = world.firms.get(firm) else {
         return;
     };
-    let t = st::temperament(world, firm);
+    let t = st::temperament(world, dataset, firm);
     let reserve = reserve_target(world, firm);
     let cash = entity.book.cash();
     let weeks = entity.book.recent_weeks();
@@ -301,7 +301,7 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
                         && !cw_sim::economy::ownership::same_group(world, *h, firm)
                         && dataset.regions[f.region as usize].state() == home_state
                         && f.book.cash() > reserve_target(world, *h) * 2 + cost / 2
-                        && st::temperament(world, *h).partnering >= 3_000
+                        && st::temperament(world, dataset, *h).partnering >= 3_000
                         && (feeds_a_plant(world, dataset, firm, recipe)
                             || feeds_a_plant(world, dataset, *h, recipe))
                 })

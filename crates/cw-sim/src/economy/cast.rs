@@ -339,9 +339,9 @@ fn review(world: &mut World, ds: &Dataset, firm: Handle) {
     let Some(f) = world.firms.get(firm) else {
         return;
     };
-    let Some(old) = f.ceo else {
+    if f.ceo.is_none() {
         return;
-    };
+    }
     if !matches!(f.status, FirmStatus::Operating | FirmStatus::PastDue { .. }) {
         return;
     }
@@ -370,6 +370,29 @@ fn review(world: &mut World, ds: &Dataset, firm: Handle) {
     if !rng.chance_bps(TURNOVER_BPS) {
         return;
     }
+    replace(
+        world,
+        ds,
+        firm,
+        &format!(
+            "after {} weeks of losses",
+            LOSS_PERIODS as u32 * crate::state::PERIOD_WEEKS
+        ),
+        &mut rng,
+    );
+}
+
+/// Replace a firm's chief executive with a free person, preferring a different temperament, and
+/// report it. Used by the board's own review and by an activist demand. Returns whether anyone
+/// was replaced.
+pub fn replace(world: &mut World, ds: &Dataset, firm: Handle, reason: &str, rng: &mut Rng) -> bool {
+    let week = world.tick.0;
+    let Some(f) = world.firms.get(firm) else {
+        return false;
+    };
+    let Some(old) = f.ceo else {
+        return false;
+    };
     let archetype = f.archetype;
     let old_temperament = ds.cast[old as usize].temperament;
     let scenario_id = world.cast.scenario_id.clone();
@@ -388,9 +411,9 @@ fn review(world: &mut World, ds: &Dataset, firm: Handle) {
                     0
                 }
         },
-        &mut rng,
+        rng,
     ) else {
-        return;
+        return false;
     };
     let name = world
         .firms
@@ -398,11 +421,8 @@ fn review(world: &mut World, ds: &Dataset, firm: Handle) {
         .map(|f| f.name.clone())
         .unwrap_or_default();
     let text = format!(
-        "{} replaces {} as chief executive of {} after {} weeks of losses.",
-        ds.cast[new as usize].name,
-        ds.cast[old as usize].name,
-        name,
-        LOSS_PERIODS as u32 * crate::state::PERIOD_WEEKS
+        "{} replaces {} as chief executive of {} {}.",
+        ds.cast[new as usize].name, ds.cast[old as usize].name, name, reason
     );
     if let Some(f) = world.firms.get_mut(firm) {
         f.ceo = Some(new);
@@ -423,6 +443,7 @@ fn review(world: &mut World, ds: &Dataset, firm: Handle) {
         text,
         person: Some(new),
     });
+    true
 }
 
 #[cfg(test)]
@@ -538,6 +559,32 @@ mod tests {
             review(&mut w, &ds, firm);
         }
         assert_eq!(ceo(&w, firm), Some(old));
+    }
+
+    #[test]
+    fn the_chief_executive_steers_the_structure_weights() {
+        let (mut w, ds) = world(7, "great-lakes-2000");
+        let firm = w
+            .firms
+            .handles_sorted()
+            .into_iter()
+            .find(|h| w.firms.get(*h).is_some_and(|f| f.ceo.is_some()))
+            .unwrap();
+        let person_of = |style: Temperament| {
+            ds.cast
+                .iter()
+                .position(|p| p.temperament == style && p.can(Role::Ceo))
+                .unwrap() as PersonId
+        };
+        w.firms.get_mut(firm).unwrap().ceo = Some(person_of(Temperament::Financier));
+        let financier = crate::economy::structure::temperament(&w, &ds, firm);
+        w.firms.get_mut(firm).unwrap().ceo = Some(person_of(Temperament::Cautious));
+        let cautious = crate::economy::structure::temperament(&w, &ds, firm);
+        assert!(financier.leverage > cautious.leverage + 3_000);
+        assert!(financier.resistance > cautious.resistance);
+        w.firms.get_mut(firm).unwrap().ceo = None;
+        let habit = crate::economy::structure::temperament(&w, &ds, firm);
+        assert_ne!(habit.leverage, financier.leverage);
     }
 
     #[test]

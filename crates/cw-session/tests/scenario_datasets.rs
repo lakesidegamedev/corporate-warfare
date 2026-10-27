@@ -37,26 +37,28 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 
 /// Great Lakes 2000 plays exactly as it did before scenarios had their own data. These were
 /// recorded on the engine before the change and must never move because of Texas content.
+/// Repinned when the character cast joined the dataset and the engine began naming chairs and
+/// chief executives from it.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
     assert_eq!(data.scenario_id, "great-lakes-2000");
     assert_eq!(
         data.hash,
-        "39b08bb5ef4e0785333729d93f3a3377034cf7dc3d8175428bfcc5c827b1b941"
+        "519ebc7d1c7319f75d000d688822a9b707c90f06218f9e6ebd5af793713edcd7"
     );
     let pins = [
         (
             1u64,
-            "613ecc74dcca0b951390ca437ec6dd4344971436db677a7b4ac64e3427424589",
+            "fba0787b20ddeb2510d04062155f162dfaaa1fd3410a896ac8e25e20b792d794",
         ),
         (
             2,
-            "91c20146de7fac1c1d7d6cf0f8c424664d7b2c012e8a17ca229b710fea4d74c4",
+            "8d7c91ae4dc1b250642d365c5084698b8e8350a2d585da94e1a10f0c96a2da48",
         ),
         (
             3,
-            "37b20e43b2fa3bcd3fb1c4bcdf97376d72e206d9aba9bda5f828b72049a575bc",
+            "1f267d06d108dc4641cb44579c06ef5d05f86f540108d8892b449cd1f1665abc",
         ),
     ];
     for (seed, hash) in pins {
@@ -68,12 +70,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "d89e41cc47cba239df759efc53ee69dab873df6e6dc98ad5339dfcac30eea30c"
+        "faddda8adffdef6bbff358d0a0394d7878200ce7f310150015a697024c17c4b2"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "a8af919afff0b6349c6af42f3e97b1c2632c12e2d53156665a18bcd81e2baed8"
+        "ac180b862d07794f14dfff634b295c969b009bd963c49a2abb558c3388be07ea"
     );
     // A scenario with no content of its own plays on the default dataset.
     let silicon = cw_data::Dataset::load_scenario("silicon-valley-1995").unwrap();

@@ -138,6 +138,8 @@ pub struct StructureLine {
     pub repeat_raids_total: u32,
     pub blocks_under_construction: i64,
     pub firms_over_construction_capacity: u32,
+}
+
 /// The character cast at work: rival chief executives replaced after long losses, and how many
 /// rivals have a named chief executive. Counts only, never names.
 #[derive(Clone, Debug, Default, Serialize)]
