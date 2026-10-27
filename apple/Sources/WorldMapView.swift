@@ -43,6 +43,8 @@ struct DivisionMarker: Identifiable {
 /// the caller.
 struct WorldMapView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(GraphicsKeys.mapDetail) private var detailLevel = MapDetailLevel.high.rawValue
+    @AppStorage(GraphicsKeys.animations) private var animations = true
     let shading: [String: Double]
     let layer: MapLayer
     let divisions: [DivisionMarker]
@@ -157,7 +159,7 @@ struct WorldMapView: View {
     /// Animates the camera to a target, easing in and out, about 60 frames a second.
     private func fly(from start: MapCamera, to target: MapCamera) {
         flight?.cancel()
-        if reduceMotion {
+        if reduceMotion || !animations {
             camera = target
             return
         }
@@ -190,17 +192,17 @@ struct WorldMapView: View {
             for ring in country.rings { p.addPolygon(ring, to: &land) }
         }
         context.fill(land, with: .color(WorldMapView.outsideLand), style: FillStyle(eoFill: true))
-        let provinces = min(max((camera.zoom - 1.4) / 1.2, 0), 1)
+        let provinces = detailLevel == 0 ? 0 : min(max((camera.zoom - 1.4) / 1.2, 0), 1)
         if provinces > 0 {
             context.stroke(p.lines(map.provinces), with: .color(WorldMapView.outsideBorder.opacity(0.7 * provinces)), lineWidth: 0.5)
         }
-        let roads = min(max((camera.zoom - 2.4) / 1.6, 0), 1)
+        let roads = detailLevel < 2 ? 0 : min(max((camera.zoom - 2.4) / 1.6, 0), 1)
         if roads > 0 {
             context.stroke(p.lines(map.roads), with: .color(WorldMapView.outsideRoad.opacity(0.6 * roads)), lineWidth: 0.8)
         }
         context.stroke(land, with: .color(WorldMapView.outsideBorder), lineWidth: 0.8)
 
-        let detail = min(max((camera.zoom - 7) / 5, 0), 1)
+        let detail = detailLevel < 2 ? 0 : min(max((camera.zoom - 7) / 5, 0), 1)
         let regionPaths = map.regions.map { (code: $0.code, path: p.path($0.rings)) }
         for region in regionPaths {
             context.fill(region.path, with: .color(Theme.land))

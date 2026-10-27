@@ -11,6 +11,22 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- A main menu on every platform. The game opens on it instead of jumping into the last save:
+  Continue, New game with a scenario and a mode (guided, sandbox or five-year score), Settings
+  and, on desktop, Quit.
+- Exit to the main menu from a running career. The in-game menu (the map HUD on iPhone and Mac,
+  the Menu tab on Android and desktop) saves, opens Settings or saves and returns to the menu.
+- A full Settings page, also from the main menu: graphics (map detail low, medium or high,
+  animations, and interface size on Android and desktop) and, on desktop, window mode
+  (windowed, maximized, full screen) and resolution.
+
+### Changed
+
+- Desktop opens at 1600 x 900 instead of a phone-shaped window, and the map is the first tab on
+  Android and desktop.
+
 ## [1.5.0] - 2026-10-27
 
 The whole world on a globe, scenarios, a Stats screen, tougher rivals and a new look. Saves from

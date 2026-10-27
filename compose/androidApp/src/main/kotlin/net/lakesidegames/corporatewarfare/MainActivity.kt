@@ -14,7 +14,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             val scope = rememberCoroutineScope()
             val store = remember { GameStore(filesDir, scope) }
-            CorporateWarfareApp(store)
+            val settings = remember { AppSettings(java.io.File(filesDir, "settings.properties")) }
+            CorporateWarfareApp(store, settings)
         }
     }
 }

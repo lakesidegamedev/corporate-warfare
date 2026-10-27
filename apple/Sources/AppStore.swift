@@ -85,6 +85,21 @@ final class AppStore: ObservableObject {
         firms.filter { $0.controlled }
     }
 
+    func refreshSaves() {
+        saves = saveManager.list()
+    }
+
+    /// Stop time, save, and return to the main menu. The menu's Continue resumes this save.
+    func exitToMenu() async {
+        stopRunLoop()
+        if let overview, sessionReady {
+            await save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
+        }
+        saves = saveManager.list()
+        sessionReady = false
+        statusLine = ""
+    }
+
     func restoreLatestIfAvailable() async {
         saves = saveManager.list()
         guard let latest = saves.first else { return }

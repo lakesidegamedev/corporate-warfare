@@ -69,11 +69,16 @@ fun MapScreen(store: GameStore) {
     val scope = rememberCoroutineScope()
     var flight by remember { mutableStateOf<Job?>(null) }
     val measurer = rememberTextMeasurer()
+    val appSettings = LocalAppSettings.current
 
     fun current(): MapCamera? = camera ?: map?.let { if (viewSize.width > 0) MapCamera.scenario(viewSize, it) else null }
     fun fly(target: MapCamera) {
         val start = current() ?: return
         flight?.cancel()
+        if (appSettings?.animations == false) {
+            camera = target
+            return
+        }
         flight = scope.launch {
             val frames = 42
             for (frame in 1..frames) {
@@ -131,7 +136,7 @@ fun MapScreen(store: GameStore) {
                         )
                     },
             ) {
-                drawWorldMap(map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shading, selected, store.mapDivisions, measurer)
+                drawWorldMap(map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shading, selected, store.mapDivisions, measurer, appSettings?.mapDetail ?: MapDetail.High)
             }
             Column(
                 Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 24.dp)
@@ -180,6 +185,7 @@ internal fun DrawScope.drawWorldMap(
     selected: String?,
     divisions: List<MapDivisionDto>,
     measurer: TextMeasurer,
+    detailLevel: MapDetail = MapDetail.High,
 ) {
     val p = MapProjection(cam, size)
     val t = p.t
@@ -193,12 +199,12 @@ internal fun DrawScope.drawWorldMap(
     val land = Path().apply { fillType = PathFillType.EvenOdd }
     map.countries.forEach { p.addPolygons(it.rings, land) }
     drawPath(land, OutsideLand)
-    val provinces = ((cam.zoom - 1.4) / 1.2).coerceIn(0.0, 1.0).toFloat()
+    val provinces = if (detailLevel == MapDetail.Low) 0f else ((cam.zoom - 1.4) / 1.2).coerceIn(0.0, 1.0).toFloat()
     if (provinces > 0) drawPath(p.lines(map.provinces), OutsideBorder.copy(alpha = 0.7f * provinces), style = Stroke(0.5f))
-    val roads = ((cam.zoom - 2.4) / 1.6).coerceIn(0.0, 1.0).toFloat()
+    val roads = if (detailLevel != MapDetail.High) 0f else ((cam.zoom - 2.4) / 1.6).coerceIn(0.0, 1.0).toFloat()
     if (roads > 0) drawPath(p.lines(map.roads), OutsideRoad.copy(alpha = 0.6f * roads), style = Stroke(0.8f))
     drawPath(land, OutsideBorder, style = Stroke(0.8f))
-    val detail = ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
+    val detail = if (detailLevel != MapDetail.High) 0f else ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
     val regionPaths = map.regions.map { it.code to p.polygons(it.rings) }
     regionPaths.forEach { (code, path) ->
         drawPath(path, Color(0xFF2B3B4A))

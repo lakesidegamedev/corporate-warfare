@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.AlertDialog
@@ -66,12 +67,28 @@ private enum class Tab(val title: String, val icon: ImageVector) {
     Portfolio("Portfolio", Icons.Filled.AccountBalance),
 }
 
-/** The whole app: the start screen until a career is open, then the five tabs. */
+/** Settings that live outside a career, for any screen that needs them. */
+val LocalAppSettings = androidx.compose.runtime.staticCompositionLocalOf<AppSettings?> { null }
+
+/**
+ * The whole app: the main menu until a career is open, then the five tabs. [onQuit] is set on
+ * desktop, where the menu offers Quit and the settings page offers the window options.
+ */
 @Composable
-fun CorporateWarfareApp(store: GameStore) {
-    CorporateWarfareTheme {
-        Box(Modifier.fillMaxSize().background(Palette.ink)) {
-            if (store.ready) MainScreen(store) else StartScreen(store)
+fun CorporateWarfareApp(store: GameStore, settings: AppSettings, onQuit: (() -> Unit)? = null) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var showSettings by remember { mutableStateOf(false) }
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalAppSettings provides settings,
+        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density * settings.uiScale, density.fontScale),
+    ) {
+        CorporateWarfareTheme {
+            Box(Modifier.fillMaxSize().background(Palette.ink)) {
+                when {
+                    showSettings -> SettingsScreen(store, settings, desktop = onQuit != null) { showSettings = false }
+                    store.ready -> MainScreen(store, onSettings = { showSettings = true })
+                    else -> StartScreen(store, onSettings = { showSettings = true }, onQuit = onQuit)
+                }
             store.error?.let { message ->
                 AlertDialog(
                     onDismissRequest = { store.error = null },
@@ -81,12 +98,24 @@ fun CorporateWarfareApp(store: GameStore) {
                     containerColor = Palette.panel,
                 )
             }
+            }
         }
     }
 }
 
+/** Ways to play a scenario. */
+private enum class GameMode(val title: String, val note: String, val guided: Boolean, val fiveYear: Boolean) {
+    Guided("Guided start", "Take over 60% of a running company, with the walkthrough.", true, false),
+    Sandbox("Sandbox", "Start with cash and found your own company. No end date.", false, false),
+    Scored("Five-year score", "Guided start, scored at the end of year five.", true, true),
+}
+
+/** The main menu: continue, a new game by scenario and mode, settings and, on desktop, quit. */
 @Composable
-private fun StartScreen(store: GameStore) {
+private fun StartScreen(store: GameStore, onSettings: () -> Unit, onQuit: (() -> Unit)?) {
+    val catalogue = remember { scenarios() }
+    var chosen by remember { mutableStateOf(catalogue.firstOrNull()?.id) }
+    var mode by remember { mutableStateOf(GameMode.Guided) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -105,16 +134,42 @@ private fun StartScreen(store: GameStore) {
             Sectors.order.take(8).forEach { SectorBadge(it, 26) }
         }
         Spacer(Modifier.height(24.dp))
-        scenarios().forEach { scenario -> ScenarioCard(scenario, selected = true, modifier = Modifier.width(420.dp)) }
-        Spacer(Modifier.height(20.dp))
-        if (store.hasAutosave) {
-            GoldButton("Continue career", Modifier.width(260.dp), enabled = !store.busy) { store.continueCareer() }
-            Spacer(Modifier.height(10.dp))
-        }
-        GoldButton("New guided career", Modifier.width(260.dp), enabled = !store.busy) { store.newCareer(System.nanoTime() % 9_999_999, guided = true) }
-        Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = { store.newCareer(System.nanoTime() % 9_999_999, guided = false) }, enabled = !store.busy, modifier = Modifier.width(260.dp)) {
-            Text("New sandbox career", color = Palette.primaryText)
+        Column(Modifier.width(440.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (store.hasAutosave) {
+                GoldButton("Continue career", Modifier.fillMaxWidth(), enabled = !store.busy) { store.continueCareer() }
+            }
+            Panel {
+                Eyebrow("New game")
+                Text("Scenario", color = Palette.primaryText, fontWeight = FontWeight.SemiBold)
+                catalogue.forEach { scenario ->
+                    ScenarioCard(scenario, selected = chosen == scenario.id, modifier = Modifier.fillMaxWidth().clickable { chosen = scenario.id })
+                }
+                Text("Mode", color = Palette.primaryText, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GameMode.entries.forEach { option ->
+                        Text(
+                            option.title,
+                            color = if (mode == option) Palette.ink else Palette.primaryText,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(if (mode == option) Palette.gold else Palette.panelRaised)
+                                .clickable { mode = option }
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                        )
+                    }
+                }
+                Text(mode.note, color = Palette.secondary, fontSize = 12.sp)
+                GoldButton("Start", Modifier.fillMaxWidth(), enabled = !store.busy && chosen != null) {
+                    store.newCareer(System.nanoTime() % 9_999_999, guided = mode.guided, fiveYear = mode.fiveYear)
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onSettings, modifier = Modifier.weight(1f)) { Text("Settings", color = Palette.primaryText) }
+                if (onQuit != null) {
+                    OutlinedButton(onClick = onQuit, modifier = Modifier.weight(1f)) { Text("Quit", color = Palette.primaryText) }
+                }
+            }
         }
     }
 }
@@ -166,8 +221,9 @@ fun GoldButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = t
 }
 
 @Composable
-private fun MainScreen(store: GameStore) {
-    var tab by remember { mutableStateOf(Tab.Office) }
+private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
+    var tab by remember { mutableStateOf(Tab.Map) }
+    var menu by remember { mutableStateOf(false) }
     Scaffold(
         containerColor = Palette.ink,
         bottomBar = {
@@ -194,6 +250,13 @@ private fun MainScreen(store: GameStore) {
                         ),
                     )
                 }
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { menu = true },
+                    icon = { Icon(Icons.Filled.Menu, "Menu") },
+                    label = { Text("Menu", fontSize = 11.sp) },
+                    colors = NavigationBarItemDefaults.colors(unselectedIconColor = Palette.secondary, unselectedTextColor = Palette.secondary),
+                )
             }
         },
     ) { padding ->
@@ -204,9 +267,25 @@ private fun MainScreen(store: GameStore) {
                 Tab.Office -> OfficeScreen(store)
                 Tab.Markets -> MarketsScreen(store)
                 Tab.Inbox -> InboxScreen(store)
-                Tab.Portfolio -> PortfolioScreen(store)
+                Tab.Portfolio -> PortfolioScreen(store, onSettings)
             }
         }
+    }
+    if (menu) {
+        AlertDialog(
+            onDismissRequest = { menu = false },
+            containerColor = Palette.panel,
+            title = { Text("Menu") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    GoldButton("Resume", Modifier.fillMaxWidth()) { menu = false }
+                    OutlinedButton(onClick = { store.saveNow(); menu = false }, modifier = Modifier.fillMaxWidth()) { Text("Save now", color = Palette.primaryText) }
+                    OutlinedButton(onClick = { menu = false; onSettings() }, modifier = Modifier.fillMaxWidth()) { Text("Settings", color = Palette.primaryText) }
+                    OutlinedButton(onClick = { menu = false; store.exitToMenu() }, modifier = Modifier.fillMaxWidth()) { Text("Save and exit to main menu", color = Palette.primaryText) }
+                }
+            },
+            confirmButton = {},
+        )
     }
 }
 
@@ -445,13 +524,12 @@ private fun DecisionCard(store: GameStore, event: EventDto) {
 // MARK: Portfolio
 
 @Composable
-private fun PortfolioScreen(store: GameStore) {
+private fun PortfolioScreen(store: GameStore, onSettings: () -> Unit) {
     val overview = store.overview ?: return
-    var settings by remember { mutableStateOf(false) }
     TabList {
         item {
             ScreenHeader("Portfolio", overview.weekLabel) {
-                TextButton(onClick = { settings = true }) { Text("⚙ Settings", color = Palette.secondary) }
+                TextButton(onClick = onSettings) { Text("⚙ Settings", color = Palette.secondary) }
             }
         }
         overview.pause?.let { pause ->
@@ -501,7 +579,6 @@ private fun PortfolioScreen(store: GameStore) {
             }
         }
     }
-    if (settings) SettingsDialog(store) { settings = false }
 }
 
 @Composable
@@ -538,26 +615,3 @@ fun SpeedControl(store: GameStore) {
     }
 }
 
-/** Game settings: saving and the version. Company business stays on the other tabs. */
-@Composable
-private fun SettingsDialog(store: GameStore, onClose: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onClose,
-        containerColor = Palette.panel,
-        title = { Text("Settings") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Save", color = Palette.primaryText)
-                        Text("The game also saves itself every four weeks.", color = Palette.secondary, fontSize = 12.sp)
-                    }
-                    TextButton(onClick = { store.saveNow() }) { Text("Save now", color = Palette.gold) }
-                }
-                if (store.status.isNotEmpty()) Text(store.status, color = Palette.secondary, fontSize = 12.sp)
-                Text("Institutions are simplified game rules, not legal, tax or investment advice.", color = Palette.secondary, fontSize = 11.sp)
-            }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text("Done") } },
-    )
-}

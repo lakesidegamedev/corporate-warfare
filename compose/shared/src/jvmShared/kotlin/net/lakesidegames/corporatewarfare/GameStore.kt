@@ -78,8 +78,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     private val autosave get() = File(saveDir, "autosave.cwsave")
 
-    fun newCareer(seed: Long, guided: Boolean) = perform {
-        val handle = withContext(engine) { SessionHandle(seed.toULong(), guided, false) }
+    fun newCareer(seed: Long, guided: Boolean, fiveYear: Boolean = false) = perform {
+        val handle = withContext(engine) { SessionHandle(seed.toULong(), guided, fiveYear) }
         session = handle
         selectedFirm = withContext(engine) { handle.overview().primaryFirm }
         reload()
@@ -96,6 +96,19 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     }
 
     fun advance() = perform { step() }
+
+    /** Save, stop time and close the career; the main menu offers it again under Continue. */
+    fun exitToMenu() = perform {
+        runJob?.cancel()
+        runJob = null
+        running = false
+        save()
+        session = null
+        ready = false
+        overview = null
+        selectedFirm = null
+        status = ""
+    }
 
     fun toggleRun() = playAt(if (runJob == null) 1 else 0)
 
