@@ -411,6 +411,6 @@ mod tests {
             .err()
             .unwrap();
         assert!(err.to_string().contains("Demand in"), "{err}");
-        assert!(custom_scenario_default("silicon-valley-1995".into(), "T".into()).is_err());
+        assert!(custom_scenario_default("ruhr-rhine-1991".into(), "T".into()).is_err());
     }
 }

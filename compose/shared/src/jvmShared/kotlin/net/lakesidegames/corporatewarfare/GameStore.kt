@@ -26,7 +26,6 @@ import uniffi.cw_ffi.RaidRecordDto
 import uniffi.cw_ffi.MapDivisionDto
 import uniffi.cw_ffi.StockDto
 import uniffi.cw_ffi.StrategyDto
-import uniffi.cw_ffi.strategies
 import uniffi.cw_ffi.EventDto
 import uniffi.cw_ffi.FacilityDto
 import uniffi.cw_ffi.FinanceDto
@@ -38,7 +37,6 @@ import uniffi.cw_ffi.ProductLineDto
 import uniffi.cw_ffi.RegionBoardDto
 import uniffi.cw_ffi.SessionHandle
 import uniffi.cw_ffi.importSave
-import uniffi.cw_ffi.products
 
 /** What a form's pickers can choose from, loaded for one company when a form opens. */
 data class Pickers(
@@ -97,10 +95,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var freight by mutableStateOf<FreightSummaryDto?>(null); private set
     /** Groups, transfer prices, reputation, bonds, ventures and activists. */
     var structure by mutableStateOf<uniffi.cw_ffi.StructureViewDto?>(null); private set
-    val strategyCatalogue: List<StrategyDto> by lazy { strategies() }
+    /** The strategies and products with the prices of the career's own scenario, loaded with it. */
+    var strategyCatalogue by mutableStateOf<List<StrategyDto>>(emptyList()); private set
     /** Every player action with its form, in Command Center order. */
     val actions: List<uniffi.cw_ffi.ActionDto> by lazy { uniffi.cw_ffi.actionCatalogue() }
-    val productCatalogue: List<ProductDto> by lazy { products() }
+    var productCatalogue by mutableStateOf<List<ProductDto>>(emptyList()); private set
+    private var catalogueOf: SessionHandle? = null
     /** The economy, central bank and government. */
     var economy by mutableStateOf<uniffi.cw_ffi.EconomyDto?>(null); private set
     /** The selected company's research position. */
@@ -402,6 +402,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     private suspend fun reload() {
         val handle = session ?: return
         val firm = selectedFirm
+        if (catalogueOf !== handle) {
+            val (strategiesNow, productsNow) = withContext(engine) { handle.strategies() to handle.products() }
+            strategyCatalogue = strategiesNow
+            productCatalogue = productsNow
+            catalogueOf = handle
+        }
         withContext(engine) {
             val overviewNow = handle.overview()
             val firmsNow = handle.firms()
@@ -460,7 +466,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         marketRegion = code
         val board = boards.firstOrNull { it.code == code } ?: return
         marketRows = withContext(engine) {
-            products().map { product -> MarketRow(product, handle.market(board.index, product.index)) }
+            handle.products().map { product -> MarketRow(product, handle.market(board.index, product.index)) }
         }
     }
 

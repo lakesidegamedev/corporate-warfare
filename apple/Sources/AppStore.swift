@@ -28,6 +28,10 @@ final class AppStore: ObservableObject {
     @Published var objective: ObjectiveDto?
     @Published var objectiveHistory: [ObjectiveResultDto] = []
     @Published var strategyCatalogue: [StrategyDto] = []
+    /// Products with the reference prices of the career's own scenario.
+    @Published var productCatalogue: [ProductDto] = []
+    /// The scenario the catalogues above were loaded for.
+    private var catalogueScenario = ""
     @Published var firmOps: FirmOpsDto?
     @Published var facilities: [FacilityDto] = []
     @Published var finance: FinanceDto?
@@ -308,8 +312,12 @@ final class AppStore: ObservableObject {
         recentRaids = await engine.recentRaids()
         objective = await engine.objective()
         objectiveHistory = await engine.objectiveHistory()
-        if strategyCatalogue.isEmpty {
-            strategyCatalogue = strategies()
+        let scenario = await engine.scenarioId()
+        if strategyCatalogue.isEmpty || productCatalogue.isEmpty || scenario != catalogueScenario {
+            strategyCatalogue = await engine.strategies()
+            recipeOptions = await engine.recipes()
+            productCatalogue = await engine.products()
+            catalogueScenario = scenario
         }
         events = await engine.events()
         economy = await engine.economy()
@@ -320,9 +328,6 @@ final class AppStore: ObservableObject {
         institutions = await engine.institutions()
         recovery = await engine.recovery()
         fundingBuyers = await engine.fundingBuyers()
-        if recipeOptions.isEmpty {
-            recipeOptions = recipes()
-        }
         if let selectedFirm {
             facilities = await engine.facilities(firm: selectedFirm)
             finance = await engine.finance(firm: selectedFirm)
@@ -391,7 +396,7 @@ final class AppStore: ObservableObject {
         let code = marketRegionCode
         let regionIndex = regions.first { $0.code == code }?.index ?? regions.first?.index ?? 0
         var rows: [MarketRow] = []
-        for product in products() {
+        for product in productCatalogue {
             let market = await engine.market(region: regionIndex, product: product.index)
             rows.append(MarketRow(product: product, market: market))
         }

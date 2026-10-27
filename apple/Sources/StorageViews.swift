@@ -85,7 +85,7 @@ struct StoreGoodPanel: View {
     @State private var limit: Double = 100
     @State private var rejection: CommandRejection?
 
-    private var info: ProductDto? { ActionCatalogue.productList.first { $0.index == line.product } }
+    private var info: ProductDto? { store.productCatalogue.first { $0.index == line.product } }
 
     private struct Place: Hashable {
         let code: String

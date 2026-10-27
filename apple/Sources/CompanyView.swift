@@ -155,7 +155,7 @@ struct PriceSheet: View {
         ) {
             Section("Order") {
                 Picker("Product", selection: $product) {
-                    ForEach(products(), id: \.index) { item in
+                    ForEach(store.productCatalogue, id: \.index) { item in
                         Text("\(item.name) · ref \(Format.money(item.referencePriceCents))")
                             .tag(item.index)
                     }
