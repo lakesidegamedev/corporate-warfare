@@ -11,6 +11,11 @@ heading.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-27
+
+The whole world on a globe, scenarios, a Stats screen, tougher rivals and a new look. Saves from
+1.4.0 do not load in 1.5.0: the engine now keeps five years of company history.
+
 ### Added
 
 - A new 8-bit Corporate Warfare logo: a gold C beside a W drawn as a stock line that runs green
@@ -437,7 +442,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.2.0...v1.3.0

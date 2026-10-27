@@ -6,7 +6,7 @@ final class EngineBridgeTests: XCTestCase {
     func testGeneratedBindingsLoadTheRustLibrary() {
         let info = engineInfo()
         XCTAssertEqual(info.interfaceVersion, 1)
-        XCTAssertEqual(info.version, "1.4.0")
+        XCTAssertEqual(info.version, "1.5.0")
         XCTAssertEqual(info.datasetHash.count, 64)
     }
 
