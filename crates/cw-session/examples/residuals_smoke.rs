@@ -98,17 +98,34 @@ fn main() {
     let weeks: u32 = args.next().and_then(|v| v.parse().ok()).unwrap_or(156);
     let mut handles = Vec::new();
     for chunk in 0..6u64 {
-        handles.push(std::thread::Builder::new().stack_size(64 << 20).spawn(move || {
-            (1..=seeds).filter(|s| s % 6 == chunk).map(|s| (s, run(s, weeks))).collect::<Vec<_>>()
-        }).unwrap());
+        handles.push(
+            std::thread::Builder::new()
+                .stack_size(64 << 20)
+                .spawn(move || {
+                    (1..=seeds)
+                        .filter(|s| s % 6 == chunk)
+                        .map(|s| (s, run(s, weeks)))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap(),
+        );
     }
-    let mut rows: Vec<(u64, Row)> = handles.into_iter().flat_map(|h| h.join().unwrap()).collect();
+    let mut rows: Vec<(u64, Row)> = handles
+        .into_iter()
+        .flat_map(|h| h.join().unwrap())
+        .collect();
     rows.sort_by_key(|r| r.0);
     for (s, r) in &rows {
         println!(
             "seed {s}: food {} grain {} fuel_import/wk {} fuel_made/wk {} refineries {} (rival {}) networth ${} dissolved {}",
-            r.food_stock, r.grain_stock, r.fuel_import, r.fuel_made, r.refineries,
-            r.rival_refineries, r.net_worth / 100, r.dissolved
+            r.food_stock,
+            r.grain_stock,
+            r.fuel_import,
+            r.fuel_made,
+            r.refineries,
+            r.rival_refineries,
+            r.net_worth / 100,
+            r.dissolved
         );
     }
     let n = rows.len() as i64;
