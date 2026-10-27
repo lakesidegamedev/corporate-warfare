@@ -239,6 +239,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
             }
         }
     }
+    DivisionDetailHost(store)
     if (menu) {
         AlertDialog(
             onDismissRequest = { menu = false },
@@ -343,7 +344,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
             items(store.divisions.size) { index ->
                 val division = store.divisions[index]
                 Panel {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.clickable { store.showDivision(division) }, verticalAlignment = Alignment.CenterVertically) {
                         SectorBadge(division.industry, 28)
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
@@ -351,6 +352,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
                             Text("${division.strategyName} · ${division.blocks} plants", color = Palette.secondary, fontSize = 12.sp)
                         }
                         Text("${division.shareBps / 100}% share", color = Palette.gold, fontSize = 13.sp)
+                        Text("Details", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
                     }
                     DivisionStock(store, division)
                     DivisionShipping(store, division)

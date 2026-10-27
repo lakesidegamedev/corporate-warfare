@@ -11,6 +11,19 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- Division detail. Tapping a division on the map, in the region board's "Your divisions here",
+  in the CEO Office or on the company page opens a detail view with its weekly financials
+  (revenue, each cost line, operating profit, margin, a revenue trend, capital invested and
+  book value), operating strategy (what the recipe does, pricing posture, transfer price,
+  shipping and stock target), inputs (weekly need, source, price, stock and weeks of cover),
+  outputs including by-products (made, sold, stored, price and buyers), plants (status,
+  utilisation, age, staffing) and labour (workers by tier, wage against the region, payroll,
+  union state, shortages). Pricing, transfer price, stock target, shipping and wage offers can
+  be changed from it. Results are estimated from the plants' last week and your closed sales at
+  today's asking prices. The report is read only and does not change world state or hashes.
+
 ### Fixed
 
 - Market snapshots now arrive from Android, Windows and Linux. Until now only the iPhone build sent

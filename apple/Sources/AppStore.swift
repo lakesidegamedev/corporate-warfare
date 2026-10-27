@@ -14,6 +14,8 @@ final class AppStore: ObservableObject {
     @Published var mapPlants: [MapPlantDto] = []
     @Published var mapDivisions: [MapDivisionDto] = []
     @Published var divisions: [DivisionDto] = []
+    /// The division whose detail sheet is open, from the map, a region board, the CEO Office or the company page.
+    @Published var openDivision: DivisionDto?
     /// Goods the selected company holds back from sale, with any open buy orders.
     @Published var held: [HeldStockDto] = []
     /// Freight lanes this week, lane contracts, and the corridor's freight at a glance.
@@ -776,6 +778,12 @@ final class AppStore: ObservableObject {
     }
 
     /// Submit one intent and return its typed rejection, or nil when accepted.
+    /// The engine's detail report for one division of the selected company.
+    func divisionDetail(_ division: DivisionDto) async -> DivisionDetailDto? {
+        guard let firm = selectedFirm ?? overview?.primaryFirm else { return nil }
+        return await engine.divisionDetail(firm: firm, region: division.region, industry: division.industry)
+    }
+
     func submit(_ json: String, actor: UInt64? = nil) async -> CommandRejection? {
         guard sessionReady else {
             return CommandRejection(key: "error.internal_fault", detail: "")

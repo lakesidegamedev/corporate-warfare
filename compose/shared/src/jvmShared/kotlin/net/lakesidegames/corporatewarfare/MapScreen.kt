@@ -388,7 +388,13 @@ internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () ->
                 val ours = store.divisions.filter { it.region == board.code }
                 if (ours.isNotEmpty()) {
                     Eyebrow("Your divisions here")
-                    ours.forEach { Text("${Sectors.name(it.industry)} · ${it.strategyName} · ${it.blocks} plants · ${it.shareBps / 100}% share", color = Palette.primaryText, fontSize = 13.sp) }
+                    ours.forEach {
+                        Text(
+                            "${Sectors.name(it.industry)} · ${it.strategyName} · ${it.blocks} plants · ${it.shareBps / 100}% share",
+                            color = Palette.primaryText, fontSize = 13.sp,
+                            modifier = Modifier.clickable { store.showDivision(it) },
+                        )
+                    }
                 }
                 val rivalLeaders = board.sectors.filter { it.leaderFirm != 0uL && it.leaderFirm != store.selectedFirm && it.ownBlocks == 0u }
                 if (rivalLeaders.isNotEmpty()) {

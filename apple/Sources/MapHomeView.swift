@@ -378,6 +378,7 @@ struct MapOutliner: View {
                             .foregroundStyle(Theme.secondary)
                     }
                     ForEach(store.divisions) { division in
+                        Button { store.openDivision = division } label: {
                         HStack(spacing: 8) {
                             SectorBadge(sector: division.industry, size: 24)
                             VStack(alignment: .leading, spacing: 1) {
@@ -390,7 +391,11 @@ struct MapOutliner: View {
                                     .foregroundStyle(Theme.secondary)
                                     .lineLimit(1)
                             }
+                            Spacer(minLength: 0)
                         }
+                        .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 VStack(alignment: .leading, spacing: 6) {

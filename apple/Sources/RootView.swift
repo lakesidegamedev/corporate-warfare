@@ -49,6 +49,9 @@ struct RootView: View {
             }
             .tint(Theme.gold)
         }
+        .sheet(item: $store.openDivision) { division in
+            DivisionDetailSheet(division: division).environmentObject(store)
+        }
         .onAppear { store.tutorial.visited(tab.page) }
         .onChange(of: tab) { _, next in store.tutorial.visited(next.page) }
         .onChange(of: store.tutorial.requestedPage) { _, wanted in

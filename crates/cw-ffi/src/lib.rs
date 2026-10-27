@@ -809,6 +809,104 @@ pub struct DivisionDto {
     pub serves: Vec<String>,
 }
 
+/// One cost line of a division, weekly.
+#[derive(uniffi::Record)]
+pub struct DivisionCostDto {
+    /// materials, wages, maintenance, land or depreciation.
+    pub key: String,
+    pub cents: i64,
+}
+
+/// One input of a division: what it needs, where it comes from and how long the stock lasts.
+#[derive(uniffi::Record)]
+pub struct DivisionInputDto {
+    pub product: u32,
+    pub product_name: String,
+    pub need_milli: i64,
+    pub used_milli: i64,
+    pub source: String,
+    pub price_cents: i64,
+    pub stock_milli: i64,
+    pub cover_weeks_x100: i64,
+    pub store_class: String,
+}
+
+/// One product a division makes, a by-product included.
+#[derive(uniffi::Record)]
+pub struct DivisionOutputDto {
+    pub product: u32,
+    pub product_name: String,
+    pub by_product: bool,
+    pub made_milli: i64,
+    pub sold_milli: i64,
+    pub stored_milli: i64,
+    pub price_cents: i64,
+    pub market_cents: i64,
+    /// Sister companies buying it under a group supply link; empty means the open market.
+    pub buyers: Vec<String>,
+    pub store_class: String,
+}
+
+/// One plant of a division.
+#[derive(uniffi::Record)]
+pub struct DivisionPlantDto {
+    pub handle: u64,
+    pub blocks: u32,
+    pub status: String,
+    pub utilisation_bps: i32,
+    pub age_weeks: u32,
+    pub staff_bps: i32,
+    pub inputs_short: bool,
+    pub capex_cents: i64,
+    pub book_cents: i64,
+}
+
+/// One labour tier of a division, lowest skill first.
+#[derive(uniffi::Record)]
+pub struct DivisionTierDto {
+    pub employed: i64,
+    pub needed: i64,
+    pub wage_cents: i64,
+    pub regional_wage_cents: i64,
+    pub payroll_cents: i64,
+}
+
+/// Everything the division detail view shows, computed by the engine. Results are estimated
+/// from the plants' last week and the firm's closed sales at today's asking prices.
+#[derive(uniffi::Record)]
+pub struct DivisionDetailDto {
+    pub firm: u64,
+    pub region: String,
+    pub region_index: u32,
+    pub industry: String,
+    pub industry_index: u32,
+    pub strategy_name: String,
+    pub meaning: String,
+    pub revenue_cents: i64,
+    pub costs: Vec<DivisionCostDto>,
+    pub operating_profit_cents: i64,
+    pub margin_bps: i32,
+    pub revenue_trend: Vec<i64>,
+    pub capex_cents: i64,
+    pub book_cents: i64,
+    /// auto, manual, market or cost_plus, with its basis points, for the main product.
+    pub price_mode: String,
+    pub price_bps: i32,
+    pub primary_product: u32,
+    pub transfer_bps: i32,
+    pub has_group_buyers: bool,
+    pub stock_weeks: i32,
+    pub stock_weeks_effective: i32,
+    pub inputs: Vec<DivisionInputDto>,
+    pub outputs: Vec<DivisionOutputDto>,
+    pub plants: Vec<DivisionPlantDto>,
+    pub tiers: Vec<DivisionTierDto>,
+    /// none, balloting, demanding or striking.
+    pub union_state: String,
+    pub union_organisation_bps: i32,
+    pub shortage: bool,
+}
+
 /// The board's quarterly objective for the player's primary company.
 #[derive(uniffi::Record)]
 pub struct ObjectiveDto {
@@ -2434,6 +2532,126 @@ impl SessionHandle {
                 }
             })
             .collect()
+    }
+
+    /// The detail view of one division: financials, strategy, inputs, outputs, plants, labour.
+    pub fn division_detail(
+        &self,
+        firm: u64,
+        region: String,
+        industry: String,
+    ) -> Option<DivisionDetailDto> {
+        use cw_sim::economy::division_report;
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let handle = cw_core::ids::Handle(firm);
+        let region_index = dataset.regions.iter().position(|r| r.code == region)? as u8;
+        let industry_index = cw_sim::economy::operations::industry_index(&industry)?;
+        let r = division_report::report(world, dataset, handle, region_index, industry_index)?;
+        let strategy = cw_sim::economy::sectors::division_strategy(
+            world,
+            dataset,
+            handle,
+            region_index,
+            industry_index,
+        )?;
+        let recipe = &dataset.recipes[strategy as usize];
+        let name = |code: u16| dataset.products[code as usize].name.clone();
+        Some(DivisionDetailDto {
+            firm,
+            region,
+            region_index: region_index as u32,
+            industry,
+            industry_index: industry_index as u32,
+            strategy_name: if recipe.name.is_empty() {
+                recipe.id.clone()
+            } else {
+                recipe.name.clone()
+            },
+            meaning: r.meaning,
+            revenue_cents: r.revenue_cents,
+            costs: r
+                .costs
+                .into_iter()
+                .map(|c| DivisionCostDto {
+                    key: c.key.to_owned(),
+                    cents: c.cents,
+                })
+                .collect(),
+            operating_profit_cents: r.operating_profit_cents,
+            margin_bps: r.margin_bps,
+            revenue_trend: r.revenue_trend,
+            capex_cents: r.capex_cents,
+            book_cents: r.book_cents,
+            price_mode: r.price_mode.to_owned(),
+            price_bps: r.price_bps,
+            primary_product: r.primary_product as u32,
+            transfer_bps: r.transfer_bps,
+            has_group_buyers: r.has_group_buyers,
+            stock_weeks: r.stock_weeks,
+            stock_weeks_effective: r.stock_weeks_effective,
+            inputs: r
+                .inputs
+                .into_iter()
+                .map(|i| DivisionInputDto {
+                    product: i.product as u32,
+                    product_name: name(i.product),
+                    need_milli: i.need_milli,
+                    used_milli: i.used_milli,
+                    source: i.source,
+                    price_cents: i.price_cents,
+                    stock_milli: i.stock_milli,
+                    cover_weeks_x100: i.cover_weeks_x100,
+                    store_class: i.store_class.to_owned(),
+                })
+                .collect(),
+            outputs: r
+                .outputs
+                .into_iter()
+                .map(|o| DivisionOutputDto {
+                    product: o.product as u32,
+                    product_name: name(o.product),
+                    by_product: o.by_product,
+                    made_milli: o.made_milli,
+                    sold_milli: o.sold_milli,
+                    stored_milli: o.stored_milli,
+                    price_cents: o.price_cents,
+                    market_cents: o.market_cents,
+                    buyers: o.buyers,
+                    store_class: o.store_class.to_owned(),
+                })
+                .collect(),
+            plants: r
+                .plants
+                .into_iter()
+                .map(|p| DivisionPlantDto {
+                    handle: p.handle.0,
+                    blocks: p.blocks,
+                    status: p.status.to_owned(),
+                    utilisation_bps: p.utilisation_bps,
+                    age_weeks: p.age_weeks,
+                    staff_bps: p.staff_bps,
+                    inputs_short: p.inputs_short,
+                    capex_cents: p.capex_cents,
+                    book_cents: p.book_cents,
+                })
+                .collect(),
+            tiers: r
+                .tiers
+                .iter()
+                .map(|t| DivisionTierDto {
+                    employed: t.employed,
+                    needed: t.needed,
+                    wage_cents: t.wage_cents,
+                    regional_wage_cents: t.regional_wage_cents,
+                    payroll_cents: t.payroll_cents,
+                })
+                .collect(),
+            union_state: r.union_state.to_owned(),
+            union_organisation_bps: r.union_organisation_bps,
+            shortage: r.shortage,
+        })
     }
 
     /// Groups, transfer prices, reputation, bonds, ventures and activist campaigns in one view.

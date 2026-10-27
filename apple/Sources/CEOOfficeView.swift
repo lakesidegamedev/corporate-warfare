@@ -292,6 +292,10 @@ struct CEOOfficeView: View {
                     if division.retooling {
                         PixelLabel("Retooling", icon: "settings").font(.caption).foregroundStyle(Theme.warning)
                     }
+                    Button("Details") { store.openDivision = division }
+                        .font(.caption.weight(.semibold))
+                        .buttonStyle(.bordered)
+                        .tint(Theme.gold)
                     Spacer()
                     if let first = plants.first {
                         Button("Retool division") { retooling = first }
