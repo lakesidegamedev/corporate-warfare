@@ -417,11 +417,6 @@ internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () ->
                     Eyebrow("Your storage here")
                     StorageLines(board.storage)
                 }
-                val rivalLeaders = board.sectors.filter { it.leaderFirm != 0uL && it.leaderFirm != store.selectedFirm && it.ownBlocks == 0u }
-                if (rivalLeaders.isNotEmpty()) {
-                    Eyebrow("Rivals here")
-                    rivalLeaders.forEach { RivalLeaderRow(store, it.leader, it.leaderFirm, "${Sectors.name(it.industry)} · ${it.leaderShareBps / 100}%") }
-                }
                 val ours = store.divisions.filter { it.region == board.code }
                 if (ours.isNotEmpty()) {
                     Eyebrow("Your divisions here")
