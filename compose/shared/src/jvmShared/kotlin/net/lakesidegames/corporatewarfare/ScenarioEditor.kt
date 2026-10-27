@@ -153,7 +153,7 @@ internal fun ScenarioEditorScreen(store: GameStore, baseId: String?, existing: C
                             Chips(Economies, d.economy) { draft = d.copy(economy = it) }
                             Text("World price path", color = Palette.secondary, fontSize = 12.sp)
                             Chips(Paths, d.pricePath) { draft = d.copy(pricePath = it) }
-                            Text("The price path is saved now and takes effect in a later preview.", color = Palette.secondary, fontSize = 11.sp)
+                            Text("How oil, steel, grain and other world prices move. Historical is fixed to the real dates; variance shifts the timing and depth with the game seed; random stays neutral.", color = Palette.secondary, fontSize = 11.sp)
                         }
                         Panel {
                             Eyebrow("Starting capital")

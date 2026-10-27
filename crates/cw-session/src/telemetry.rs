@@ -178,6 +178,7 @@ mod tests {
             difficulty: cw_data::Difficulty::Standard,
             economy_start: Default::default(),
             starting_capital_cents: None,
+            prices: Default::default(),
         })
         .unwrap();
         session.advance(5);

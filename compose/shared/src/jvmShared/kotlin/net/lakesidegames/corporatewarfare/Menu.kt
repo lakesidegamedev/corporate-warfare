@@ -294,6 +294,12 @@ private enum class Economy(val key: String, val title: String, val note: String)
     Downturn("downturn", "Downturn", "Already in recession with cheap money: weak demand now, a recovery ahead."),
 }
 
+private enum class PricePath(val key: String, val title: String, val note: String) {
+    Historical("historical", "Historical", "Oil, steel, grain and the rest follow the real path of the period, on the real dates."),
+    Variance("historical_variance", "Historical with variance", "The same shape as history, with the timing and depth of each swing shifted by your game's seed."),
+    Random("random", "Random", "Neutral prices that drift around where they began. Busts come only from the business cycle."),
+}
+
 private fun capitalOf(level: Level) = when (level) {
     Level.Easy -> 8_000_000.0
     Level.Standard -> 5_000_000.0
@@ -319,6 +325,8 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
     var mode by remember { mutableStateOf(Mode.Guided) }
     var level by remember { mutableStateOf(Level.Standard) }
     var economy by remember { mutableStateOf(Economy.Historic) }
+    // Null means the scenario's own default.
+    var pricePathPick by remember { mutableStateOf<PricePath?>(null) }
     var capital by remember { mutableStateOf(capitalOf(Level.Standard)) }
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
@@ -352,6 +360,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                                         if (scenario.available) {
                                             chosen = scenario
                                             chosenCustom = null
+                                            pricePathPick = null
                                         }
                                     }
                                 }
@@ -418,6 +427,11 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                         Section("The economy on day one") {
                             Options(Economy.entries, economy, { it.title }, { it.note }, wide) { economy = it }
                         }
+                        Section("World commodity prices") {
+                            val fallback = PricePath.entries.firstOrNull { it.key == scenario?.defaultPricePath } ?: PricePath.Historical
+                            val picked = pricePathPick ?: fallback
+                            Options(PricePath.entries, picked, { it.title + if (it == fallback) " (scenario default)" else "" }, { it.note }, wide) { pricePathPick = it }
+                        }
                         Section("Starting capital") {
                             ValueSlider(
                                 capital, { capital = it }, 1_000_000.0..20_000_000.0, 250_000.0,
@@ -462,6 +476,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                                 difficulty = level.key,
                                 economy = economy.key,
                                 startingCapitalCents = (capital * 100).toLong(),
+                                pricePath = pricePathPick?.key ?: "",
                             ),
                         )
                     }

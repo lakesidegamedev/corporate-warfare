@@ -1,0 +1,336 @@
+{
+ "schema": 1,
+ "note": "World commodity price paths. Each scenario lists anchor points per price family as [quarters since the first day of the start year, index]. 100 is the price level on day one, so the opening gateway prices are the standard ones. Weeks are 13 to a quarter and the engine interpolates linearly between anchors, holding the last value after the final anchor. Values are relative indices shaped like the period, not claims of exact market history. A price family may cover many products: the products table maps a product id to its family, and ids that do not exist in the current content are ignored, so new products join a family by adding one line. Families a scenario does not list follow the neutral random walk. A scenario missing from this file runs every family that way.",
+ "families": {
+  "oil": {
+   "label": "Oil and fuel",
+   "weight": 30,
+   "cyclical_pct": 100
+  },
+  "natural_gas": {
+   "label": "Natural gas",
+   "weight": 10,
+   "cyclical_pct": 80
+  },
+  "coal": {
+   "label": "Coal",
+   "weight": 5,
+   "cyclical_pct": 60
+  },
+  "ore": {
+   "label": "Iron ore and metals",
+   "weight": 10,
+   "cyclical_pct": 100
+  },
+  "steel": {
+   "label": "Steel",
+   "weight": 10,
+   "cyclical_pct": 80
+  },
+  "grain": {
+   "label": "Grain and farm output",
+   "weight": 15,
+   "cyclical_pct": 25
+  },
+  "fertilizer": {
+   "label": "Fertilizer",
+   "weight": 5,
+   "cyclical_pct": 40
+  },
+  "chemicals": {
+   "label": "Chemicals and plastics",
+   "weight": 5,
+   "cyclical_pct": 70
+  },
+  "timber": {
+   "label": "Timber",
+   "weight": 4,
+   "cyclical_pct": 70
+  },
+  "rare_earth": {
+   "label": "Rare earths",
+   "weight": 2,
+   "cyclical_pct": 40
+  },
+  "building_materials": {
+   "label": "Building materials",
+   "weight": 4,
+   "cyclical_pct": 90
+  }
+ },
+ "products": {
+  "fuel": "oil",
+  "crude_oil": "oil",
+  "gasoline": "oil",
+  "diesel": "oil",
+  "jet_fuel": "oil",
+  "natural_gas": "natural_gas",
+  "ngl": "natural_gas",
+  "coal": "coal",
+  "ore": "ore",
+  "pig_iron": "ore",
+  "steel": "steel",
+  "scrap": "steel",
+  "food_raw": "grain",
+  "grain": "grain",
+  "fertilizers": "fertilizer",
+  "chemicals": "chemicals",
+  "plastics": "chemicals",
+  "feedstock": "chemicals",
+  "timber": "timber",
+  "rare_earth": "rare_earth",
+  "building_materials": "building_materials"
+ },
+ "scenarios": {
+  "great-lakes-2000": {
+   "note": "2000 to 2011: the 2000 to 2008 commodity climb, the 2008 collapse and the partial recovery.",
+   "families": {
+    "oil": [
+     [0, 100],
+     [4, 85],
+     [8, 80],
+     [12, 105],
+     [16, 125],
+     [20, 165],
+     [24, 210],
+     [28, 215],
+     [32, 310],
+     [34, 440],
+     [35, 340],
+     [36, 170],
+     [38, 215],
+     [40, 255],
+     [44, 300]
+    ],
+    "natural_gas": [
+     [0, 100],
+     [4, 150],
+     [8, 100],
+     [12, 170],
+     [16, 180],
+     [20, 230],
+     [24, 250],
+     [28, 200],
+     [32, 320],
+     [34, 350],
+     [36, 150],
+     [40, 190],
+     [44, 170]
+    ],
+    "coal": [
+     [0, 100],
+     [8, 100],
+     [16, 115],
+     [24, 150],
+     [32, 230],
+     [34, 300],
+     [36, 180],
+     [40, 180],
+     [44, 200]
+    ],
+    "ore": [
+     [0, 100],
+     [8, 95],
+     [16, 120],
+     [20, 160],
+     [24, 220],
+     [28, 260],
+     [32, 320],
+     [34, 380],
+     [36, 200],
+     [40, 330],
+     [44, 420]
+    ],
+    "steel": [
+     [0, 100],
+     [4, 90],
+     [8, 85],
+     [12, 100],
+     [16, 150],
+     [20, 150],
+     [24, 145],
+     [28, 160],
+     [32, 215],
+     [34, 260],
+     [36, 140],
+     [40, 150],
+     [44, 170]
+    ],
+    "grain": [
+     [0, 100],
+     [8, 100],
+     [12, 115],
+     [16, 110],
+     [20, 105],
+     [24, 125],
+     [28, 170],
+     [32, 240],
+     [34, 230],
+     [36, 160],
+     [40, 170],
+     [44, 250]
+    ],
+    "fertilizer": [
+     [0, 100],
+     [8, 95],
+     [16, 120],
+     [24, 150],
+     [28, 190],
+     [32, 320],
+     [34, 380],
+     [36, 200],
+     [40, 150],
+     [44, 180]
+    ],
+    "chemicals": [
+     [0, 100],
+     [8, 95],
+     [16, 115],
+     [24, 150],
+     [32, 190],
+     [34, 200],
+     [36, 140],
+     [40, 170],
+     [44, 185]
+    ],
+    "timber": [
+     [0, 100],
+     [8, 95],
+     [16, 105],
+     [20, 115],
+     [24, 100],
+     [28, 80],
+     [32, 65],
+     [36, 55],
+     [40, 70],
+     [44, 70]
+    ],
+    "rare_earth": [
+     [0, 100],
+     [16, 90],
+     [24, 110],
+     [32, 130],
+     [36, 100],
+     [40, 210],
+     [44, 350]
+    ],
+    "building_materials": [
+     [0, 100],
+     [8, 105],
+     [16, 125],
+     [24, 150],
+     [28, 155],
+     [32, 140],
+     [36, 105],
+     [40, 100],
+     [44, 105]
+    ]
+   }
+  },
+  "texas-1981": {
+   "note": "1981 to 1988: oil near its peak, a long slide, and the 1986 price collapse.",
+   "families": {
+    "oil": [
+     [0, 100],
+     [2, 103],
+     [4, 95],
+     [6, 90],
+     [8, 82],
+     [12, 78],
+     [16, 77],
+     [19, 72],
+     [20, 60],
+     [21, 40],
+     [22, 36],
+     [23, 42],
+     [24, 48],
+     [28, 55]
+    ],
+    "natural_gas": [
+     [0, 100],
+     [4, 110],
+     [8, 100],
+     [12, 95],
+     [16, 85],
+     [20, 60],
+     [22, 50],
+     [24, 55],
+     [28, 60]
+    ],
+    "coal": [
+     [0, 100],
+     [8, 100],
+     [16, 95],
+     [24, 85],
+     [28, 85]
+    ],
+    "ore": [
+     [0, 100],
+     [8, 85],
+     [16, 85],
+     [24, 80],
+     [28, 85]
+    ],
+    "steel": [
+     [0, 100],
+     [4, 95],
+     [8, 85],
+     [12, 85],
+     [16, 85],
+     [24, 80],
+     [28, 85]
+    ],
+    "grain": [
+     [0, 100],
+     [4, 90],
+     [8, 95],
+     [12, 85],
+     [16, 70],
+     [20, 60],
+     [22, 55],
+     [24, 60],
+     [28, 70]
+    ],
+    "fertilizer": [
+     [0, 100],
+     [8, 95],
+     [16, 85],
+     [24, 70],
+     [28, 75]
+    ],
+    "chemicals": [
+     [0, 100],
+     [8, 90],
+     [16, 90],
+     [20, 80],
+     [24, 85],
+     [28, 90]
+    ],
+    "timber": [
+     [0, 100],
+     [4, 80],
+     [8, 100],
+     [12, 115],
+     [16, 110],
+     [24, 120],
+     [28, 120]
+    ],
+    "rare_earth": [
+     [0, 100],
+     [12, 80],
+     [24, 70],
+     [28, 70]
+    ],
+    "building_materials": [
+     [0, 100],
+     [4, 85],
+     [8, 100],
+     [12, 115],
+     [16, 120],
+     [24, 115],
+     [28, 115]
+    ]
+   }
+  }
+ }
+}

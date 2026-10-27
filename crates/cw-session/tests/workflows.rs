@@ -25,6 +25,7 @@ impl Driver {
             difficulty: cw_data::Difficulty::Standard,
             economy_start: Default::default(),
             starting_capital_cents: None,
+            prices: Default::default(),
         };
         Driver {
             session: Session::create(config).unwrap(),
@@ -395,6 +396,7 @@ fn weekly_cost_lines_reconcile_to_ebit_and_the_quarter_sums_net_income() {
         difficulty: cw_data::Difficulty::Standard,
         economy_start: Default::default(),
         starting_capital_cents: None,
+        prices: Default::default(),
     })
     .unwrap();
     for _ in 0..20 {
@@ -446,6 +448,7 @@ fn closing_prices_keep_a_year_and_the_boards_read_their_movement_from_them() {
         difficulty: cw_data::Difficulty::Standard,
         economy_start: Default::default(),
         starting_capital_cents: None,
+        prices: Default::default(),
     })
     .unwrap();
     for _ in 0..60 {

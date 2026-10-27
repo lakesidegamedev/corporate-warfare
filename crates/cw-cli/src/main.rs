@@ -83,6 +83,7 @@ pub(crate) fn config(seed: u64, guided: bool, five_year: bool) -> ScenarioConfig
         difficulty: cw_data::Difficulty::Standard,
         economy_start: Default::default(),
         starting_capital_cents: None,
+        prices: Default::default(),
     }
 }
 
@@ -107,6 +108,33 @@ fn scenario_flags(arguments: &[String]) -> (bool, bool) {
     // The score pause only exists in five-year mode; sandbox continues past week 260.
     let five_year = !arguments.iter().any(|argument| argument == "--sandbox");
     (guided, five_year)
+}
+
+/// `--prices off|default|historical|historical_variance|random`. Off is the pre-1.7 behaviour
+/// (no world commodity prices); the others use the Great Lakes 2000 scenario. Default takes the
+/// scenario's own mode.
+fn prices_flag(arguments: &[String]) -> cw_session::PriceSetup {
+    let name = flag(arguments, "--prices").unwrap_or_else(|| "default".to_owned());
+    let scenario_id = "great-lakes-2000".to_owned();
+    match name.as_str() {
+        "off" => cw_session::PriceSetup::default(),
+        "default" => cw_session::PriceSetup {
+            scenario_id,
+            path: None,
+        },
+        other => match cw_data::PricePath::from_key(other) {
+            Some(path) => cw_session::PriceSetup {
+                scenario_id,
+                path: Some(path),
+            },
+            None => {
+                eprintln!(
+                    "unknown prices {other}; use off, default, historical, historical_variance or random"
+                );
+                std::process::exit(2);
+            }
+        },
+    }
 }
 
 fn policy_flag(arguments: &[String]) -> ReferencePolicy {
@@ -188,7 +216,9 @@ fn run(arguments: &[String]) {
     let (guided, five_year) = scenario_flags(arguments);
     let policy = policy_flag(arguments);
     let verbose = arguments.iter().any(|argument| argument == "--verbose");
-    let mut session = match Session::create(config(seed, guided, five_year)) {
+    let mut scenario = config(seed, guided, five_year);
+    scenario.prices = prices_flag(arguments);
+    let mut session = match Session::create(scenario) {
         Ok(session) => session,
         Err(error) => {
             eprintln!("session failed: {:?}", error);

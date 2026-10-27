@@ -11,6 +11,7 @@ fn main() {
         difficulty: cw_data::Difficulty::Standard,
         economy_start: Default::default(),
         starting_capital_cents: None,
+        prices: Default::default(),
     };
     let mut session = cw_session::Session::create(config).unwrap();
     for week in 0..=260u32 {

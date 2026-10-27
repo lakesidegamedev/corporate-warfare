@@ -13,6 +13,7 @@ fn config() -> ScenarioConfig {
         difficulty: cw_data::Difficulty::Standard,
         economy_start: Default::default(),
         starting_capital_cents: None,
+        prices: Default::default(),
     }
 }
 

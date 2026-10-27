@@ -348,6 +348,7 @@ impl SessionHandle {
             difficulty: cw_data::Difficulty::Standard,
             economy_start: Default::default(),
             starting_capital_cents: None,
+            prices: Default::default(),
         };
         let session = Session::create_custom(config, &model)
             .map_err(|detail| invalid(detail.split("; ").map(str::to_owned).collect()))?;

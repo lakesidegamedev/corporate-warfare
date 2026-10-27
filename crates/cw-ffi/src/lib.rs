@@ -1003,6 +1003,8 @@ pub struct ScenarioDto {
     pub image: String,
     pub currency: String,
     pub tagline: String,
+    /// The scenario's default world price path: "historical", "historical_variance" or "random".
+    pub default_price_path: String,
 }
 
 /// The scenarios a new career can start in, in display order.
@@ -1014,6 +1016,7 @@ pub fn scenarios() -> Vec<ScenarioDto> {
     cw_data::scenarios()
         .into_iter()
         .map(|scenario| ScenarioDto {
+            default_price_path: scenario.price_path().key().to_owned(),
             id: scenario.id,
             name: scenario.name,
             country: scenario.country,
@@ -1292,6 +1295,23 @@ pub struct EconomyDto {
     pub pending_laws: Option<LawsDto>,
     pub pending_effective_week: u32,
     pub news: Vec<NewsDto>,
+    /// How world commodity prices move: off, historical, historical_variance or random.
+    pub price_path: String,
+    /// The outside world's price levels the gateways follow, one per product family.
+    pub world_prices: Vec<WorldPriceDto>,
+}
+
+/// One world commodity price family: where it stands against day one and where it is heading.
+#[derive(uniffi::Record)]
+pub struct WorldPriceDto {
+    pub family: String,
+    pub label: String,
+    /// Level against the first day of the game, 10,000 meaning unchanged.
+    pub index_bps: i32,
+    /// Change over the last 13 weeks, in basis points of the earlier level.
+    pub trend_bps: i32,
+    /// Ids of the products whose import and export prices follow this family.
+    pub products: Vec<String>,
 }
 
 /// One company's research: technology level, progress to the next and what it buys.
@@ -1337,6 +1357,9 @@ pub struct NewGameDto {
     pub economy: String,
     /// Starting capital in cents, or none for the difficulty's.
     pub starting_capital_cents: Option<i64>,
+    /// How world commodity prices move: "historical", "historical_variance" or "random".
+    /// Empty takes the scenario's default.
+    pub price_path: String,
 }
 
 #[uniffi::export]
@@ -1360,6 +1383,10 @@ impl SessionHandle {
             difficulty: cw_data::Difficulty::from_key(&options.difficulty),
             economy_start: cw_sim::state::EconomyStart::from_key(&options.economy),
             starting_capital_cents: options.starting_capital_cents.filter(|c| *c > 0),
+            prices: cw_session::PriceSetup {
+                scenario_id: options.scenario_id.clone(),
+                path: cw_data::PricePath::from_key(&options.price_path),
+            },
         };
         let session = Session::create(config)?;
         Ok(Arc::new(SessionHandle {
@@ -1367,6 +1394,8 @@ impl SessionHandle {
         }))
     }
 
+    /// The engine fixture constructor: no world commodity prices. Games started from the
+    /// new-game screen use `start`.
     #[uniffi::constructor]
     pub fn new(seed: u64, guided: bool, five_year: bool) -> Result<Arc<SessionHandle>, FfiError> {
         let config = cw_session::ScenarioConfig {
@@ -1385,6 +1414,7 @@ impl SessionHandle {
             difficulty: cw_data::Difficulty::Standard,
             economy_start: Default::default(),
             starting_capital_cents: None,
+            prices: Default::default(),
         };
         let session = Session::create(config)?;
         Ok(Arc::new(SessionHandle {
@@ -2046,6 +2076,27 @@ impl SessionHandle {
                 .map(|n| NewsDto {
                     week: n.week,
                     text: n.text.clone(),
+                })
+                .collect(),
+            price_path: world.world_prices.mode.key().to_owned(),
+            world_prices: world
+                .world_prices
+                .families
+                .iter()
+                .enumerate()
+                .map(|(index, family)| WorldPriceDto {
+                    family: family.key.clone(),
+                    label: family.label.clone(),
+                    index_bps: family.index_bps,
+                    trend_bps: family.trend_bps(),
+                    products: world
+                        .world_prices
+                        .product_family
+                        .iter()
+                        .filter(|(_, f)| **f as usize == index)
+                        .filter_map(|(code, _)| session.dataset.products.get(*code as usize))
+                        .map(|product| product.id.clone())
+                        .collect(),
                 })
                 .collect(),
         }

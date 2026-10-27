@@ -14,7 +14,8 @@
       "region": "Great Lakes and Ohio Valley, United States",
       "image": "scenario-great-lakes-2000",
       "currency": "US dollar",
-      "tagline": "Steel, autos and farms at the turn of the century, on stretched credit."
+      "tagline": "Steel, autos and farms at the turn of the century, on stretched credit.",
+      "default_price_path": "historical"
     },
     {
       "id": "texas-1981",
@@ -28,7 +29,8 @@
       "region": "Texas, Oklahoma and Louisiana, United States",
       "image": "scenario-texas-1981",
       "currency": "US dollar",
-      "tagline": "Boom, bust and the savings-and-loan crisis."
+      "tagline": "Boom, bust and the savings-and-loan crisis.",
+      "default_price_path": "historical_variance"
     },
     {
       "id": "silicon-valley-1995",
@@ -42,7 +44,8 @@
       "region": "California, United States",
       "image": "scenario-silicon-valley-1995",
       "currency": "US dollar",
-      "tagline": "Ride the dot-com boom and live through the crash."
+      "tagline": "Ride the dot-com boom and live through the crash.",
+      "default_price_path": "historical"
     },
     {
       "id": "ruhr-rhine-1991",
@@ -56,7 +59,8 @@
       "region": "Germany",
       "image": "scenario-ruhr-rhine-1991",
       "currency": "Deutsche Mark",
-      "tagline": "Reunification, the D-Mark and a hawkish central bank."
+      "tagline": "Reunification, the D-Mark and a hawkish central bank.",
+      "default_price_path": "historical"
     }
   ]
 }

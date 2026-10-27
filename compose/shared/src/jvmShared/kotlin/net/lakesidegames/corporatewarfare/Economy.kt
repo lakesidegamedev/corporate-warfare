@@ -97,6 +97,31 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
         }
         Text(credit.first, color = credit.second, fontSize = 12.sp)
 
+        if (e.worldPrices.isNotEmpty()) {
+            Eyebrow("World prices")
+            Text(
+                when (e.pricePath) {
+                    "historical" -> "Outside prices follow the real path of the period. They set what gateways charge to import and pay to export."
+                    "historical_variance" -> "Outside prices are shaped like the period, with their own timing and depth. They set what gateways charge to import and pay to export."
+                    else -> "Outside prices drift around where they began. They set what gateways charge to import and pay to export."
+                },
+                color = Palette.secondary, fontSize = 12.sp,
+            )
+            e.worldPrices.forEach { w ->
+                val level = (w.indexBps - 10_000) / 100.0
+                val trend = w.trendBps / 100.0
+                Row {
+                    Text(w.label, color = Palette.primaryText, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    Text("%+.0f%% since day one".format(level), color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.width(150.dp))
+                    Text(
+                        if (trend > 0.5) "up %.0f%% this quarter".format(trend) else if (trend < -0.5) "down %.0f%% this quarter".format(-trend) else "steady",
+                        color = if (trend > 0.5) Palette.warning else if (trend < -0.5) Palette.positive else Palette.secondary,
+                        fontSize = 12.sp, modifier = Modifier.width(150.dp),
+                    )
+                }
+            }
+        }
+
         Eyebrow("Central bank")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(e.chairName, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
