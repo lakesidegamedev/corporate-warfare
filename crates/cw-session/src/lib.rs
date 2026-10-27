@@ -832,6 +832,7 @@ impl Session {
                     key: "alert.past_due".to_owned(),
                     subject: firm.name.clone(),
                     severity: 3,
+                    detail: String::new(),
                 });
             }
             if firm.payout_freeze {
@@ -839,6 +840,7 @@ impl Session {
                     key: "alert.payout_frozen".to_owned(),
                     subject: firm.name.clone(),
                     severity: 2,
+                    detail: String::new(),
                 });
             }
             storage_alerts(world, &self.dataset, firm, &mut alerts);
@@ -852,6 +854,7 @@ impl Session {
                     key: "alert.decision".to_owned(),
                     subject: event.title,
                     severity: 2,
+                    detail: String::new(),
                 });
             }
         }
@@ -1289,6 +1292,7 @@ fn structure_alerts(world: &cw_sim::state::World, alerts: &mut Vec<Alert>) {
                 key: "alert.activist".to_owned(),
                 subject: name(c.target),
                 severity: 2,
+                detail: String::new(),
             });
         }
     }
@@ -1304,6 +1308,7 @@ fn structure_alerts(world: &cw_sim::state::World, alerts: &mut Vec<Alert>) {
                 key: "alert.squeeze".to_owned(),
                 subject: name(*firm),
                 severity: 1,
+                detail: String::new(),
             });
         }
     }
@@ -1313,6 +1318,7 @@ fn structure_alerts(world: &cw_sim::state::World, alerts: &mut Vec<Alert>) {
                 key: "alert.captive_markdown".to_owned(),
                 subject: name(*firm),
                 severity: 1,
+                detail: String::new(),
             });
         }
     }
@@ -1329,6 +1335,7 @@ fn structure_alerts(world: &cw_sim::state::World, alerts: &mut Vec<Alert>) {
                 key: "alert.bond_due".to_owned(),
                 subject: name(bond.issuer),
                 severity: 3,
+                detail: String::new(),
             });
         }
     }
@@ -1374,21 +1381,46 @@ fn logistics_alerts(
         if !depends {
             continue;
         }
+        let label = lane_label(dataset, *key);
+        let mine_lots: i32 = st
+            .lanes
+            .get(key)
+            .map(|lane| {
+                lane.users
+                    .iter()
+                    .filter(|(f, _)| mine(*f))
+                    .map(|(_, lots)| *lots)
+                    .sum()
+            })
+            .unwrap_or(0);
         if stat.hot_weeks >= lg::SUSTAINED_WEEKS {
+            let outside = if stat.moved > 0 {
+                stat.outside as i64 * 100 / stat.moved as i64
+            } else {
+                0
+            };
             alerts.push(Alert {
                 key: "alert.lane_congested".to_owned(),
-                subject: lane_label(dataset, *key),
+                subject: label.clone(),
                 severity: 1,
+                detail: format!(
+                    "{label} has been full for {} weeks and {outside}% of its freight goes to outside carriers at a premium. Your group moves about {mine_lots} lots a week on it. Open the Freight map, tap the lane and reserve lots to lock a price, or build a carrier for it.",
+                    stat.hot_weeks
+                ),
             });
         }
         if stat.mult_hist.len() >= 5 {
             let now = *stat.mult_hist.last().unwrap_or(&0) as i64;
             let before = stat.mult_hist[stat.mult_hist.len() - 5] as i64;
             if before > 0 && now * 10_000 >= before * (10_000 + lg::HIKE_BPS as i64) {
+                let rise = (now * 100 / before) - 100;
                 alerts.push(Alert {
                     key: "alert.carrier_hike".to_owned(),
-                    subject: lane_label(dataset, *key),
+                    subject: label.clone(),
                     severity: 1,
+                    detail: format!(
+                        "{label}: carriers raised the rate {rise}% in four weeks. Your group moves about {mine_lots} lots a week on it. Open the division's Shipping panel to try another mode, or reserve the lane on the Freight map to lock today's price."
+                    ),
                 });
             }
         }
@@ -1403,10 +1435,15 @@ fn logistics_alerts(
                 .any(|(firm, last)| mine(*firm) && world.tick.0.saturating_sub(*last) <= 4)
         });
         if affected {
+            let label = lane_label(dataset, reservation.key);
             alerts.push(Alert {
                 key: "alert.lane_reserved".to_owned(),
-                subject: lane_label(dataset, reservation.key),
+                subject: label.clone(),
                 severity: 2,
+                detail: format!(
+                    "{label}: a rival reserved {} lots, which are now closed to you. Open the Freight map, tap the lane and reserve what you need before it fills.",
+                    reservation.lots
+                ),
             });
         }
     }
@@ -1464,6 +1501,7 @@ fn government_alerts(
                 }
                 .to_owned(),
                 severity: 1,
+                detail: String::new(),
             });
         }
         if mine
@@ -1484,6 +1522,7 @@ fn government_alerts(
                 }
                 .to_owned(),
                 severity: 1,
+                detail: String::new(),
             });
         }
     }
@@ -1506,6 +1545,7 @@ fn government_alerts(
                     p.laws.quota_bps / 100
                 ),
                 severity: 1,
+                detail: String::new(),
             });
         }
     }
@@ -1530,6 +1570,7 @@ fn government_alerts(
                     dataset.products[product as usize].name.to_lowercase()
                 ),
                 severity: sev,
+                detail: String::new(),
             });
         }
     }
@@ -1548,6 +1589,7 @@ fn government_alerts(
                 key: "alert.state_rescue".to_owned(),
                 subject: format!("{name} received a state rescue loan."),
                 severity: 2,
+                detail: String::new(),
             });
         }
         for incident in systemic::touching(world, *firm, 4) {
@@ -1555,6 +1597,7 @@ fn government_alerts(
                 key: "alert.incident".to_owned(),
                 subject: incident.text.clone(),
                 severity: 2,
+                detail: String::new(),
             });
         }
     }
@@ -1587,6 +1630,7 @@ fn storage_alerts(
             key: "alert.storage_fees".to_owned(),
             subject: firm.name.clone(),
             severity: 1,
+            detail: String::new(),
         });
     }
     if recent.spoiled_cents >= FLOOR_CENTS && recent.spoiled_cents * 100 >= revenue_4w.max(1) * 2 {
@@ -1594,6 +1638,7 @@ fn storage_alerts(
             key: "alert.spoilage".to_owned(),
             subject: firm.name.clone(),
             severity: 1,
+            detail: String::new(),
         });
     }
     let full = cw_sim::economy::storage::uses(world, dataset, firm)
@@ -1604,6 +1649,7 @@ fn storage_alerts(
             key: "alert.storage_full".to_owned(),
             subject: firm.name.clone(),
             severity: 1,
+            detail: String::new(),
         });
     }
 }

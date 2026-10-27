@@ -63,7 +63,10 @@ enum class MapLayer(val title: String) { Presence("Your divisions"), Room("Room 
  * the scenario as you zoom in. Tapping a region reports it through [onSelect].
  */
 @Composable
-fun WorldMapView(store: GameStore, layer: MapLayer, selected: String?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
+fun WorldMapView(
+    store: GameStore, layer: MapLayer, selected: String?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier,
+    pickedLane: String? = null, onLane: ((String?) -> Unit)? = null,
+) {
     val map = WorldMap.forRegions(store.boards.map { it.code })
     var camera by remember(map) { mutableStateOf<MapCamera?>(null) }
     var viewSize by remember { mutableStateOf(Size.Zero) }
@@ -125,12 +128,20 @@ fun WorldMapView(store: GameStore, layer: MapLayer, selected: String?, onSelect:
                             }
                         }
                     }
-                    .pointerInput(Unit) {
+                    .pointerInput(layer, pickedLane, selected) {
                         detectTapGestures(
                             onDoubleTap = { toggleGlobe() },
                             onTap = { tap ->
                                 val now = current() ?: return@detectTapGestures
                                 val projection = MapProjection(now, viewSize)
+                                if (layer == MapLayer.Freight && onLane != null) {
+                                    val lane = laneAt(map, projection, store.lanes, tap)
+                                    if (lane != null) {
+                                        onLane(if (laneKey(lane) == pickedLane) null else laneKey(lane))
+                                        return@detectTapGestures
+                                    }
+                                    onLane(null)
+                                }
                                 val hit = map.regions.firstOrNull { projection.contains(it.rings, tap) }?.code
                                 onSelect(if (hit == selected) null else hit)
                             },
@@ -139,7 +150,7 @@ fun WorldMapView(store: GameStore, layer: MapLayer, selected: String?, onSelect:
             ) {
                 drawWorldMap(
                     map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shading, selected, store.mapDivisions, measurer,
-                    appSettings?.mapDetail ?: MapDetail.High, lanes = if (layer == MapLayer.Freight) store.lanes else emptyList(),
+                    appSettings?.mapDetail ?: MapDetail.High, lanes = if (layer == MapLayer.Freight) store.lanes else emptyList(), pickedLane = pickedLane,
                 )
             }
             Column(
@@ -161,9 +172,10 @@ fun WorldMapView(store: GameStore, layer: MapLayer, selected: String?, onSelect:
 fun MapScreen(store: GameStore) {
     var layer by remember { mutableStateOf(MapLayer.Presence) }
     var selected by remember { mutableStateOf<String?>(null) }
+    var pickedLane by remember { mutableStateOf<String?>(null) }
     var building by remember { mutableStateOf<RegionBoardDto?>(null) }
     Box(Modifier.fillMaxSize().background(Palette.ink)) {
-        WorldMapView(store, layer, selected, { selected = it }, Modifier.fillMaxSize())
+        WorldMapView(store, layer, selected, { selected = it }, Modifier.fillMaxSize(), pickedLane, { pickedLane = it })
 
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             MapHud(store)
@@ -188,7 +200,7 @@ fun MapScreen(store: GameStore) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             Column(
                 Modifier.fillMaxWidth().padding(8.dp).clip(RoundedCornerShape(14.dp)).background(Palette.panel.copy(alpha = 0.96f)),
-            ) { FreightPanel(store, selected) }
+            ) { FreightPanel(store, selected, pickedLane, { pickedLane = it }) }
         }
     }
 
@@ -211,6 +223,7 @@ internal fun DrawScope.drawWorldMap(
     detailLevel: MapDetail = MapDetail.High,
     space: Boolean = true,
     lanes: List<uniffi.cw_ffi.LaneDto> = emptyList(),
+    pickedLane: String? = null,
 ) {
     val p = MapProjection(cam, size)
     val t = p.t
@@ -254,7 +267,7 @@ internal fun DrawScope.drawWorldMap(
         drawCircle(Color(0xFF16354F).copy(alpha = (0.9 * (1 - t)).toFloat()), radius = p.r.toFloat(), center = center, style = Stroke(1.5f))
         drawCircle(Color(0xFF16354F).copy(alpha = (0.3 * (1 - t)).toFloat()), radius = p.r.toFloat() + 4f, center = center, style = Stroke(6f))
     }
-    if (lanes.isNotEmpty()) drawLanes(map, p, lanes, selected)
+    if (lanes.isNotEmpty()) drawLanes(map, p, lanes, selected, pickedLane)
     if (cam.zoom > 3) {
         // Cities, then division markers, a fixed size on screen.
         val close = cam.zoom > 14

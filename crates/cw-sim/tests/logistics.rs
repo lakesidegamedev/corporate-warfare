@@ -878,3 +878,129 @@ fn estimates_for_pairing_rank_by_distance_and_mode() {
     assert!(cold >= dry);
     let _ = Cents::ZERO;
 }
+
+#[test]
+fn the_shipping_summary_splits_what_was_paid_and_prices_policies_before_they_are_chosen() {
+    let (mut w, dataset) = world(5);
+    let (owner, shipper) = two_firms(&w);
+    let (a, b) = (region(&dataset, "OH-CEN"), region(&dataset, "OH-NW"));
+    add_plant(&mut w, &dataset, owner, a, "carrier");
+    lg::begin_week(&mut w, &dataset);
+    // Enough to fill the lane and spill to outside carriers.
+    let booked = lg::book(
+        &mut w,
+        &dataset,
+        shipper,
+        steel(&dataset),
+        a,
+        b,
+        MilliLots::from_lots(4_000),
+        "test freight",
+    );
+    // Nothing is reported until the week closes.
+    assert_eq!(
+        lg::shipping_summary(&w, &dataset, shipper, Some(b)).cents,
+        0
+    );
+    lg::begin_week(&mut w, &dataset);
+    let sum = lg::shipping_summary(&w, &dataset, shipper, Some(b));
+    assert_eq!(
+        sum.cents, booked.cents,
+        "the summary is what the shipper paid"
+    );
+    assert_eq!(
+        sum.own_cents + sum.other_cents + sum.outside_cents,
+        sum.cents,
+        "own, other firms and outside carriers add up to the bill"
+    );
+    assert!(sum.outside_cents > 0, "the lane spilled: {sum:?}");
+    assert_eq!(sum.lots, 4_000);
+    assert!(
+        sum.outside_lots > 0 && sum.outside_lots <= sum.lots,
+        "{sum:?}"
+    );
+    // Outside carriers charge 125 percent against 65 percent at cost: 48 percent of their bill
+    // is premium over what the same lots cost on own carriers.
+    let l = &dataset.logistics;
+    assert_eq!(
+        sum.outside_extra_cents,
+        sum.outside_cents - sum.outside_cents * l.own_cost_bps / l.outside_premium_bps
+    );
+    assert_eq!(sum.lanes.len(), 1);
+    assert_eq!(sum.lanes[0].cents, sum.cents);
+    // All of it went to outside carriers, so building a carrier on the lane is suggested with a
+    // payback: the premium saved each week against what the blocks cost.
+    match sum.suggestion {
+        Some(lg::Suggestion::Build {
+            weekly_saving_cents,
+            upfront_cents,
+            payback_weeks,
+            ..
+        }) => {
+            assert_eq!(weekly_saving_cents, sum.outside_extra_cents);
+            assert_eq!(
+                payback_weeks,
+                (upfront_cents + weekly_saving_cents - 1) / weekly_saving_cents
+            );
+        }
+        other => panic!("expected a build suggestion, got {other:?}"),
+    }
+    // Another region shows nothing; the firm total matches while no fees are owed.
+    assert_eq!(
+        lg::shipping_summary(&w, &dataset, shipper, Some(a)).cents,
+        0
+    );
+    assert_eq!(
+        lg::shipping_summary(&w, &dataset, shipper, None).cents,
+        booked.cents
+    );
+
+    // Pricing a policy books nothing and leaves cash alone.
+    let cash_before = cash(&w, shipper);
+    let cheapest =
+        lg::estimate_policy(&mut w, &dataset, shipper, b, ShipPolicy::default()).unwrap();
+    let fastest = lg::estimate_policy(
+        &mut w,
+        &dataset,
+        shipper,
+        b,
+        ShipPolicy {
+            kind: ShipKind::Fastest,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        cheapest.0 > 0 && cheapest.0 <= fastest.0,
+        "cheapest is never dearer"
+    );
+    assert_eq!(cash(&w, shipper), cash_before);
+    assert!(lg::estimate_policy(&mut w, &dataset, shipper, a, ShipPolicy::default()).is_none());
+}
+
+#[test]
+fn a_reserve_quote_is_the_fee_the_contract_then_charges() {
+    let (mut w, dataset) = world(5);
+    let (owner, shipper) = two_firms(&w);
+    let (a, b) = (region(&dataset, "OH-CEN"), region(&dataset, "OH-NW"));
+    add_plant(&mut w, &dataset, owner, a, "carrier");
+    lg::begin_week(&mut w, &dataset);
+    let key = LaneKey::new(a, b, TRUCK);
+    let quote = lg::reserve_quote(&w, &dataset, shipper, key, 50, 13).unwrap();
+    assert_eq!(quote.weekly_fee_cents, quote.fee_per_lot_cents * 50);
+    assert_eq!(quote.total_cents, quote.weekly_fee_cents * 13);
+    assert!(
+        quote.fee_per_lot_cents < quote.spot_per_lot_cents,
+        "a commitment discount"
+    );
+    let id = lg::reserve_lane(&mut w, &dataset, shipper, a, b, TRUCK, 50, 13).unwrap();
+    let contract = w.logistics.contracts.iter().find(|c| c.id == id).unwrap();
+    assert_eq!(contract.fee_per_lot_cents, quote.fee_per_lot_cents);
+    // A lane with no capacity cannot be quoted.
+    let empty = LaneKey::new(
+        region(&dataset, "OH-SE"),
+        region(&dataset, "NY-NYC"),
+        PIPELINE,
+    );
+    assert!(lg::reserve_quote(&w, &dataset, shipper, empty, 50, 13).is_none());
+}

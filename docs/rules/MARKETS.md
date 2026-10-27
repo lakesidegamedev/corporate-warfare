@@ -403,6 +403,17 @@ its own group's carriers. The fee is paid to the lane's carriers every week at t
 or not the lots are used; a holder that cannot pay loses the contract. Reserved lots are not for
 sale to anyone else, so a busy lane pushes rivals onto dearer routes.
 
+**Reading freight (1.7.1).** For each firm and destination region the engine keeps the week's freight
+bill (split into own carriers and contracts, other firms' carriers and outside carriers), the loads,
+the lanes used and the goods shipped. It is a read-out of the week just closed and is not saved with
+the world. A division's Shipping summary shows the bill, the premium paid to outside carriers (their
+price less what the same loads cost on own carriers), the three costliest lanes and the policy in
+words. It prices each policy and preferred mode by routing last week's shipments again at today's
+lane prices without booking anything. The suggestion is either a build (carrier plants for the
+outside loads on the costliest outside lane, payback is their cost over the weekly premium saved,
+shown only within five years) or a reservation of the loads the group moved on a busy lane that
+nets a saving at last week's volume. A reservation quote is the fee `reserve_lane` would charge.
+
 **Alerts** are sent only for lanes the player ships on: a lane full for four weeks, a carrier rate
 hike of a fifth over four weeks, a rival reserving the lane.
 

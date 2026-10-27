@@ -363,6 +363,18 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         submit(CommandJson.command("SetShippingPolicy", *fields.toTypedArray()))
     }
 
+    /** One division's (or, with [facility] zero, the whole company's) freight for the week just closed, with policies priced. */
+    fun shipping(firm: ULong, facility: ULong, onResult: (uniffi.cw_ffi.ShippingSummaryDto?) -> Unit) {
+        val handle = session ?: return
+        scope.launch { onResult(withContext(engine) { handle.shippingSummary(firm, facility) }) }
+    }
+
+    /** What a lane reservation would cost and save, before any command is sent. */
+    fun reserveQuote(lane: LaneDto, lots: Int, weeks: Int, onResult: (uniffi.cw_ffi.ReserveQuoteDto?) -> Unit) {
+        val handle = session ?: return
+        scope.launch { onResult(withContext(engine) { handle.reserveQuote(lane.a, lane.b, lane.mode, lots, weeks.toUInt()) }) }
+    }
+
     /** Reserve [lots] a week on a lane for [weeks] at the lane's rate, locked for the term. */
     fun reserveLane(from: String, to: String, mode: UInt, lots: Int, weeks: Int) {
         val firm = selectedFirm ?: return

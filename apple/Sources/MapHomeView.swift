@@ -11,6 +11,7 @@ struct MapHomeView: View {
     var embedded = false
     @State private var layer: MapLayer = .presence
     @State private var selected: String?
+    @State private var pickedLane: String?
     @State private var building: String?
 
     private var wide: Bool { sizeClass == .regular }
@@ -24,7 +25,7 @@ struct MapHomeView: View {
                         .background(Theme.panel)
                         .overlay(alignment: .trailing) { Rectangle().fill(Theme.stroke).frame(width: 1) }
                 }
-                WorldMapView(shading: shading, layer: layer, divisions: divisionMarkers, lanes: layer == .freight ? store.lanes : [], regionCodes: store.boards.map(\.code), selected: $selected)
+                WorldMapView(shading: shading, layer: layer, divisions: divisionMarkers, lanes: layer == .freight ? store.lanes : [], pickedLane: pickedLane, onLane: { pickedLane = $0 }, regionCodes: store.boards.map(\.code), selected: $selected)
                     .ignoresSafeArea(edges: .bottom)
                 if wide, let code = selected, let board = store.boards.first(where: { $0.code == code }) {
                     RegionBoardView(board: board, onBuild: { building = code }, onClose: { selected = nil })
@@ -37,7 +38,7 @@ struct MapHomeView: View {
             if layer == .freight {
                 VStack {
                     Spacer()
-                    FreightPanelView(focus: selected)
+                    FreightPanelView(focus: selected, picked: $pickedLane)
                         .frame(maxHeight: 300)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 56)

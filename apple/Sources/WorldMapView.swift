@@ -52,6 +52,9 @@ struct WorldMapView: View {
     let layer: MapLayer
     let divisions: [DivisionMarker]
     var lanes: [LaneDto] = []
+    /// The lane picked on the Freight layer, and what to do when a lane is tapped.
+    var pickedLane: String?
+    var onLane: ((String?) -> Void)?
     /// The career's region codes, which say which scenario's map to draw.
     var regionCodes: [String] = []
     @Binding var selected: String?
@@ -115,6 +118,13 @@ struct WorldMapView: View {
             }
             .onTapGesture(coordinateSpace: .local) { location in
                 let projection = MapProjection(camera: current, size: size)
+                if layer == .freight, let onLane {
+                    if let lane = laneAt(location, projection: projection) {
+                        onLane(lane.id == pickedLane ? nil : lane.id)
+                        return
+                    }
+                    onLane(nil)
+                }
                 let hit = map.regions.first { projection.contains($0.rings, location) }?.code
                 selected = hit == selected ? nil : hit
             }
@@ -254,10 +264,37 @@ struct WorldMapView: View {
         }
     }
 
-    /// The busiest lanes between region anchors: wider with more traffic, coloured by congestion,
-    /// dashed for sea.
+    private var busiestLanes: [LaneDto] {
+        Array(lanes.sorted { ($0.capacityLots + $0.outsideLots) > ($1.capacityLots + $1.outsideLots) }.prefix(90))
+    }
+
+    /// The lane drawn nearest a tap, within a finger's width.
+    private func laneAt(_ tap: CGPoint, projection p: MapProjection) -> LaneDto? {
+        var best: LaneDto?
+        var bestDistance: CGFloat = 22
+        for lane in busiestLanes {
+            guard let from = map.anchor(of: lane.a), let to = map.anchor(of: lane.b) else { continue }
+            let (a, visibleA) = p.project(from)
+            let (b, visibleB) = p.project(to)
+            guard visibleA, visibleB else { continue }
+            let dx = b.x - a.x
+            let dy = b.y - a.y
+            let len2 = dx * dx + dy * dy
+            let t = len2 <= 0 ? 0 : min(max(((tap.x - a.x) * dx + (tap.y - a.y) * dy) / len2, 0), 1)
+            let d = hypot(tap.x - (a.x + t * dx), tap.y - (a.y + t * dy))
+            if d < bestDistance {
+                bestDistance = d
+                best = lane
+            }
+        }
+        return best
+    }
+
+    /// The busiest lanes between region anchors: thicker with more freight, coloured by how full
+    /// they are, dashed for sea. Lanes the player owns or ships on get a gold edge; the lane
+    /// picked for the panel gets a white one.
     private func drawLanes(in context: inout GraphicsContext, projection p: MapProjection) {
-        let busiest = lanes.sorted { ($0.capacityLots + $0.outsideLots) > ($1.capacityLots + $1.outsideLots) }.prefix(90)
+        let busiest = busiestLanes
         let top = CGFloat(max(busiest.map { Int($0.capacityLots + $0.outsideLots) }.max() ?? 1, 1))
         for lane in busiest {
             guard let from = map.anchor(of: lane.a), let to = map.anchor(of: lane.b) else { continue }
@@ -268,11 +305,15 @@ struct WorldMapView: View {
             path.move(to: a)
             path.addLine(to: b)
             let weight = CGFloat(lane.capacityLots + lane.outsideLots) / top
-            let dim = (selected != nil && lane.a != selected && lane.b != selected) ? 0.35 : 0.9
-            context.stroke(
-                path, with: .color(laneColor(lane).opacity(dim)),
-                style: StrokeStyle(lineWidth: 1.5 + 5 * weight, lineCap: .round, dash: lane.modeId == "sea" ? [12, 9] : [])
-            )
+            let dim = (selected != nil && lane.a != selected && lane.b != selected && pickedLane == nil) ? 0.35 : 0.9
+            let width = 1.5 + 5 * weight
+            let dash: [CGFloat] = lane.modeId == "sea" ? [12, 9] : []
+            if lane.id == pickedLane {
+                context.stroke(path, with: .color(.white.opacity(0.9)), style: StrokeStyle(lineWidth: width + 7, lineCap: .round, dash: dash))
+            } else if laneIsMine(lane) {
+                context.stroke(path, with: .color(Theme.gold.opacity(0.75)), style: StrokeStyle(lineWidth: width + 4, lineCap: .round, dash: dash))
+            }
+            context.stroke(path, with: .color(laneColor(lane).opacity(dim)), style: StrokeStyle(lineWidth: width, lineCap: .round, dash: dash))
         }
     }
 

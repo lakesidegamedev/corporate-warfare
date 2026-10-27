@@ -60,6 +60,9 @@ struct CEOOfficeView: View {
                     ProfitDrivers(weeks: weeks)
                 }
                 PricingPanel()
+                if !store.divisions.isEmpty {
+                    Panel { DivisionShipping() }
+                }
                 boardPanel
                 plantsPanel
                 focusPanel

@@ -546,6 +546,95 @@ pub struct FreightSummaryDto {
     pub congested_lanes: u32,
 }
 
+/// One lane a division or firm ships on, for its Shipping section.
+#[derive(uniffi::Record)]
+pub struct ShippingLaneDto {
+    pub a: String,
+    pub b: String,
+    pub a_name: String,
+    pub b_name: String,
+    pub mode: u32,
+    pub mode_id: String,
+    pub mode_name: String,
+    pub lots: i64,
+    pub cents: i64,
+    /// Lots on this lane that went to outside carriers at a premium.
+    pub outside_lots: i64,
+    pub fill_bps: i32,
+    pub congested: bool,
+}
+
+/// One shipping policy choice with its plain-English line and what it would have cost the
+/// division's last week of shipments at today's prices.
+#[derive(uniffi::Record)]
+pub struct PolicyOptionDto {
+    /// The policy kind (0 to 3), or the mode index with -1 meaning any.
+    pub id: i32,
+    pub label: String,
+    pub blurb: String,
+    pub selected: bool,
+    pub has_estimate: bool,
+    pub weekly_cents: i64,
+    /// Change against the current choice in basis points; negative is cheaper.
+    pub change_bps: i32,
+    pub outside_lots: i64,
+}
+
+/// What the engine suggests doing about freight spend, with a quoted payback.
+#[derive(uniffi::Record)]
+pub struct ShippingSuggestionDto {
+    /// build or reserve.
+    pub kind: String,
+    pub headline: String,
+    pub a: String,
+    pub b: String,
+    pub mode: u32,
+    pub lots: i64,
+    pub upfront_cents: i64,
+    pub weekly_saving_cents: i64,
+    /// Zero when the suggestion has no payback (a reservation has no upfront cost).
+    pub payback_weeks: i64,
+}
+
+/// Freight for the week just closed: for one division (goods arriving in its region) or for the
+/// whole company with its lane contract fees.
+#[derive(uniffi::Record)]
+pub struct ShippingSummaryDto {
+    pub has_data: bool,
+    pub weekly_cents: i64,
+    pub own_cents: i64,
+    pub other_cents: i64,
+    pub outside_cents: i64,
+    pub fee_cents: i64,
+    /// What outside carriers charged beyond what the same lots cost on own carriers.
+    pub outside_extra_cents: i64,
+    pub lots: i64,
+    pub outside_lots: i64,
+    pub cents_per_lot: i64,
+    pub own_share_bps: i32,
+    pub other_share_bps: i32,
+    pub outside_share_bps: i32,
+    pub policy_text: String,
+    pub lanes: Vec<ShippingLaneDto>,
+    /// Empty for the whole company: each division picks its own.
+    pub kinds: Vec<PolicyOptionDto>,
+    pub modes: Vec<PolicyOptionDto>,
+    pub suggestion: Option<ShippingSuggestionDto>,
+}
+
+/// A lane reservation priced before it is made.
+#[derive(uniffi::Record)]
+pub struct ReserveQuoteDto {
+    pub ok: bool,
+    pub fee_cents_per_lot: i64,
+    pub spot_cents_per_lot: i64,
+    pub weekly_fee_cents: i64,
+    pub total_cents: i64,
+    pub expected_use_lots: i32,
+    pub weekly_net_cents: i64,
+    pub max_lots: i64,
+}
+
 #[derive(uniffi::Record)]
 pub struct RecipeDto {
     pub index: u32,
@@ -1214,6 +1303,9 @@ fn storage_cells(
 
 /// Player-facing text for an overview alert key; unknown keys pass through unchanged.
 fn alert_text(alert: cw_session::Alert) -> String {
+    if !alert.detail.is_empty() {
+        return alert.detail;
+    }
     match alert.key.as_str() {
         "alert.storage_full" => format!("{}: storage is nearly full.", alert.subject),
         "alert.storage_fees" => format!(
@@ -3042,6 +3134,287 @@ impl SessionHandle {
         }
     }
 
+    /// Freight for the week just closed, for one division (`facility` is one of its plants) or,
+    /// with `facility` zero, for a whole firm including its lane contract fees. Policy choices
+    /// are priced against the division's last week of shipments at today's lane prices.
+    pub fn shipping_summary(&self, firm: u64, facility: u64) -> ShippingSummaryDto {
+        use cw_sim::economy::logistics as lg;
+        let mut guard = self.lock();
+        let session = &mut *guard;
+        let world = &mut session.world;
+        let ds = &session.dataset;
+        let mut firm = cw_core::ids::Handle(firm);
+        let mut region: Option<u8> = None;
+        let mut policy: Option<lg::ShipPolicy> = None;
+        if facility != 0
+            && let Some(plant) = world.facilities.get(cw_core::ids::Handle(facility))
+        {
+            firm = plant.firm;
+            region = Some(plant.region);
+            policy = Some(plant.ship);
+        }
+        let sum = lg::shipping_summary(world, ds, firm, region);
+        let total = (sum.own_cents + sum.other_cents + sum.outside_cents).max(1);
+        let name = |r: u8| ds.regions[r as usize].name.clone();
+        let mode_lower = |m: u8| ds.logistics.modes[m as usize].name.to_lowercase();
+        let lanes: Vec<ShippingLaneDto> = sum
+            .lanes
+            .iter()
+            .map(|l| ShippingLaneDto {
+                a: ds.regions[l.key.a as usize].code.clone(),
+                b: ds.regions[l.key.b as usize].code.clone(),
+                a_name: name(l.key.a),
+                b_name: name(l.key.b),
+                mode: l.key.mode as u32,
+                mode_id: ds.logistics.modes[l.key.mode as usize].id.clone(),
+                mode_name: ds.logistics.modes[l.key.mode as usize].name.clone(),
+                lots: l.lots,
+                cents: l.cents,
+                outside_lots: l.outside_lots,
+                fill_bps: l.fill_bps,
+                congested: l.hot_weeks >= lg::SUSTAINED_WEEKS || l.fill_bps >= lg::CONGESTED_BPS,
+            })
+            .collect();
+        let policy_text = match policy {
+            None => "Each division picks its own route. Open a division to change it.".to_owned(),
+            Some(p) => {
+                let mut text = format!("{} route", p.kind.label());
+                let top_mode = sum
+                    .mode_lots
+                    .iter()
+                    .enumerate()
+                    .filter(|(m, l)| **l > 0 && *m < ds.logistics.modes.len())
+                    .max_by_key(|(m, l)| (**l, std::cmp::Reverse(*m)))
+                    .map(|(m, _)| m as u8);
+                match (top_mode, sum.lanes.first()) {
+                    (Some(m), Some(l)) => {
+                        text += &format!(
+                            ": mostly {}, mainly {} to {}",
+                            mode_lower(m),
+                            name(l.key.a),
+                            name(l.key.b)
+                        )
+                    }
+                    _ => text += ": nothing was shipped in last week",
+                }
+                if let Some(m) = p.mode
+                    && (m as usize) < ds.logistics.modes.len()
+                {
+                    text += &format!(". Prefers {} when a route allows it", mode_lower(m));
+                }
+                text + "."
+            }
+        };
+        let kind_blurbs = [
+            "Takes the lowest price each week, even when it is slower.",
+            "Takes the quickest trip, even when it costs more.",
+            "Fills your own carriers first, then pays others. Cheap when you own trucks, rail or ships.",
+            "Avoids full lanes and outside carriers, so prices and delivery times hold steady.",
+        ];
+        let mut kinds: Vec<PolicyOptionDto> = Vec::new();
+        let mut modes: Vec<PolicyOptionDto> = Vec::new();
+        if let (Some(r), Some(current)) = (region, policy) {
+            let base = lg::estimate_policy(world, ds, firm, r, current);
+            let change = |est: Option<(i64, i64)>| -> (bool, i64, i32, i64) {
+                match (est, base) {
+                    (Some((c, o)), Some((b, _))) => {
+                        let bps = if b > 0 {
+                            ((c - b) * 10_000 / b) as i32
+                        } else {
+                            0
+                        };
+                        (true, c, bps, o)
+                    }
+                    _ => (false, 0, 0, 0),
+                }
+            };
+            for code in 0..4u8 {
+                let kind = lg::ShipKind::from_code(code).unwrap_or_default();
+                let est =
+                    lg::estimate_policy(world, ds, firm, r, lg::ShipPolicy { kind, ..current });
+                let (has, cents, bps, outside) = change(est);
+                kinds.push(PolicyOptionDto {
+                    id: code as i32,
+                    label: kind.label().to_owned(),
+                    blurb: kind_blurbs[code as usize].to_owned(),
+                    selected: current.kind == kind,
+                    has_estimate: has,
+                    weekly_cents: cents,
+                    change_bps: bps,
+                    outside_lots: outside,
+                });
+            }
+            let est = lg::estimate_policy(
+                world,
+                ds,
+                firm,
+                r,
+                lg::ShipPolicy {
+                    mode: None,
+                    ..current
+                },
+            );
+            let (has, cents, bps, outside) = change(est);
+            modes.push(PolicyOptionDto {
+                id: -1,
+                label: "Any".to_owned(),
+                blurb: "No preference: the policy above decides.".to_owned(),
+                selected: current.mode.is_none(),
+                has_estimate: has,
+                weekly_cents: cents,
+                change_bps: bps,
+                outside_lots: outside,
+            });
+            for m in 0..ds.logistics.modes.len().min(4) as u8 {
+                let def = &ds.logistics.modes[m as usize];
+                let est = lg::estimate_policy(
+                    world,
+                    ds,
+                    firm,
+                    r,
+                    lg::ShipPolicy {
+                        mode: Some(m),
+                        ..current
+                    },
+                );
+                let (has, cents, bps, outside) = change(est);
+                modes.push(PolicyOptionDto {
+                    id: m as i32,
+                    label: if def.id == "sea" {
+                        "Ship".to_owned()
+                    } else {
+                        def.name.clone()
+                    },
+                    blurb: format!(
+                        "Uses {} whenever a route allows it, even if another mode is cheaper.",
+                        def.name.to_lowercase()
+                    ),
+                    selected: current.mode == Some(m),
+                    has_estimate: has,
+                    weekly_cents: cents,
+                    change_bps: bps,
+                    outside_lots: outside,
+                });
+            }
+        }
+        let suggestion = sum.suggestion.as_ref().map(|s| match s {
+            lg::Suggestion::Build {
+                key,
+                recipe,
+                blocks,
+                upfront_cents,
+                weekly_saving_cents,
+                payback_weeks,
+            } => ShippingSuggestionDto {
+                kind: "build".to_owned(),
+                headline: format!(
+                    "Build {} {} for {} to {}",
+                    blocks,
+                    ds.recipes[*recipe as usize].name.to_lowercase(),
+                    name(key.a),
+                    name(key.b)
+                ),
+                a: ds.regions[key.a as usize].code.clone(),
+                b: ds.regions[key.b as usize].code.clone(),
+                mode: key.mode as u32,
+                lots: *blocks,
+                upfront_cents: *upfront_cents,
+                weekly_saving_cents: *weekly_saving_cents,
+                payback_weeks: *payback_weeks,
+            },
+            lg::Suggestion::Reserve {
+                key,
+                lots,
+                weekly_saving_cents,
+                ..
+            } => ShippingSuggestionDto {
+                kind: "reserve".to_owned(),
+                headline: format!(
+                    "Reserve {} loads on {} to {} by {}",
+                    lots,
+                    name(key.a),
+                    name(key.b),
+                    mode_lower(key.mode)
+                ),
+                a: ds.regions[key.a as usize].code.clone(),
+                b: ds.regions[key.b as usize].code.clone(),
+                mode: key.mode as u32,
+                lots: *lots as i64,
+                upfront_cents: 0,
+                weekly_saving_cents: *weekly_saving_cents,
+                payback_weeks: 0,
+            },
+        });
+        ShippingSummaryDto {
+            has_data: sum.lots > 0 || sum.fee_cents > 0,
+            weekly_cents: sum.cents,
+            own_cents: sum.own_cents,
+            other_cents: sum.other_cents,
+            outside_cents: sum.outside_cents,
+            fee_cents: sum.fee_cents,
+            outside_extra_cents: sum.outside_extra_cents,
+            lots: sum.lots,
+            outside_lots: sum.outside_lots,
+            cents_per_lot: (sum.cents - sum.fee_cents) / sum.lots.max(1),
+            own_share_bps: (sum.own_cents * 10_000 / total) as i32,
+            other_share_bps: (sum.other_cents * 10_000 / total) as i32,
+            outside_share_bps: (sum.outside_cents * 10_000 / total) as i32,
+            policy_text,
+            lanes,
+            kinds,
+            modes,
+            suggestion,
+        }
+    }
+
+    /// What reserving lots on a lane for a number of weeks would cost and save the player's
+    /// group, before any command is sent.
+    pub fn reserve_quote(
+        &self,
+        a: String,
+        b: String,
+        mode: u32,
+        lots: i32,
+        weeks: u32,
+    ) -> ReserveQuoteDto {
+        use cw_sim::economy::logistics as lg;
+        let session = self.lock();
+        let world = &session.world;
+        let ds = &session.dataset;
+        let none = ReserveQuoteDto {
+            ok: false,
+            fee_cents_per_lot: 0,
+            spot_cents_per_lot: 0,
+            weekly_fee_cents: 0,
+            total_cents: 0,
+            expected_use_lots: 0,
+            weekly_net_cents: 0,
+            max_lots: 0,
+        };
+        let index = |code: &str| ds.regions.iter().position(|r| r.code == code);
+        let (Some(ai), Some(bi), Some(firm)) = (index(&a), index(&b), world.investor.primary_group)
+        else {
+            return none;
+        };
+        if mode as usize >= ds.logistics.modes.len() {
+            return none;
+        }
+        let key = lg::LaneKey::new(ai as u8, bi as u8, mode as u8);
+        match lg::reserve_quote(world, ds, firm, key, lots, weeks) {
+            Some(q) => ReserveQuoteDto {
+                ok: true,
+                fee_cents_per_lot: q.fee_per_lot_cents,
+                spot_cents_per_lot: q.spot_per_lot_cents,
+                weekly_fee_cents: q.weekly_fee_cents,
+                total_cents: q.total_cents,
+                expected_use_lots: q.expected_use_lots,
+                weekly_net_cents: q.weekly_net_cents,
+                max_lots: q.max_lots,
+            },
+            None => none,
+        }
+    }
+
     /// A firm's storage in every region where it holds stock or owns space.
     pub fn storage_cells(&self, firm: u64) -> Vec<StorageCellDto> {
         let session = self.lock();
@@ -4444,6 +4817,39 @@ mod tests {
         }
         let own = session.raid_check(me, me, "ZZZ".to_owned(), "retail".to_owned());
         assert!(!own.raidable);
+    }
+
+    #[test]
+    fn shipping_summaries_and_reserve_quotes_cross_the_boundary() {
+        let session = SessionHandle::new(181, true, true).unwrap();
+        session.advance(8);
+        let firm = session.overview().primary_firm.expect("a primary company");
+        // The whole company, then each division by one of its plants.
+        let company = session.shipping_summary(firm, 0);
+        assert!(company.kinds.is_empty() && company.modes.is_empty());
+        assert_eq!(
+            company.own_share_bps + company.other_share_bps + company.outside_share_bps > 0,
+            company.weekly_cents - company.fee_cents > 0
+        );
+        for division in session.divisions(firm) {
+            let summary = session.shipping_summary(firm, division.plants[0]);
+            assert_eq!(summary.kinds.len(), 4);
+            assert_eq!(summary.modes.len(), 5);
+            assert_eq!(summary.kinds.iter().filter(|k| k.selected).count(), 1);
+            assert_eq!(summary.modes.iter().filter(|k| k.selected).count(), 1);
+            assert!(summary.policy_text.contains("route"));
+        }
+        // A quote for a lane that exists is the engine's, and an unknown lane is not ok.
+        if let Some(lane) = session.lanes().into_iter().find(|l| l.capacity_lots > 0) {
+            let quote = session.reserve_quote(lane.a.clone(), lane.b.clone(), lane.mode, 10, 13);
+            assert!(quote.ok);
+            assert_eq!(quote.total_cents, quote.weekly_fee_cents * 13);
+        }
+        assert!(
+            !session
+                .reserve_quote("none".into(), "nada".into(), 0, 10, 13)
+                .ok
+        );
     }
 
     #[test]

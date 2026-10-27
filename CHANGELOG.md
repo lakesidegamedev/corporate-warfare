@@ -49,6 +49,23 @@ heading.
   raided in the first weeks, before any marketing or defence could exist, and the game paused.
   Later raids are unchanged.
 
+### Changed
+
+- Freight you can read at a glance (1.7.1). Every division and the CEO Office now have a
+  Shipping section in plain words: what the freight bill is each week and per load, how much of
+  it went to your own carriers, other firms' carriers and outside carriers (with the premium the
+  outside carriers cost you), the three lanes you use most and whether they are congested, your
+  route policy in a sentence such as "Cheapest route: mostly truck, mainly Columbus to Chicago",
+  and one suggestion with a quoted payback when it matters: build carrier plants on a lane where
+  outside carriers take a lot of your money, or reserve loads on a busy lane. The route policy
+  picker explains each choice in a line and shows what this division's last week of freight would
+  have cost under it, before you pick. On the map, the Freight layer has a legend, lanes you own
+  or ship on carry a gold edge, and tapping a lane opens a simple panel with its room, price,
+  owners, your share and a reservation with its quote (price, weekly cost, expected saving).
+  Freight alerts now say what is happening on the lane in figures and what to do about it. The
+  screens call a lot of goods a load. Summaries are worked out by the engine; they add no
+  mechanics and do not change saved games.
+
 ## [1.7.0] - 2026-10-27
 
 Lone Star: supply chains you can own and contest, a shipping network, deeper corporate play, rivals with names and memories, and three new playable scenarios: Texas Oil Patch 1981, Silicon Valley 1995 and Ruhr and Rhine 1991 with currencies. Saves from 1.6 do not load in 1.7.0.
