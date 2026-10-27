@@ -8,6 +8,7 @@
 //! calibration until a provenance-traceable crosswalk is recovered.
 
 pub mod balance;
+pub mod custom;
 pub mod events;
 pub mod firms;
 pub mod geography;
@@ -18,6 +19,7 @@ use cw_core::hash::{CanonicalHasher, DOMAIN_STATE};
 use serde::{Deserialize, Serialize};
 
 pub use balance::{Balance, Product, ProductKind, Recipe};
+pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetting};
 pub use events::EventCard;
 pub use firms::{Archetype, SeedFirm};
 pub use geography::{Conditions, Geography, Lane, Region, StateInfo};

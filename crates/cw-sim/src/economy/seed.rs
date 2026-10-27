@@ -413,7 +413,8 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
                 dataset.recipe_index[&seed_firm.recipe],
                 seed_firm.blocks,
                 &[wage(0), wage(1), wage(2)],
-            );
+            ) * seed_firm.cash_pct as i64
+                / 100;
             let inventory_cost = opening_input_cost(
                 dataset,
                 dataset.recipe_index[&seed_firm.recipe],

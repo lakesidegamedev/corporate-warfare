@@ -55,6 +55,13 @@ pub struct SeedFirm {
     /// One to four operating template blocks.
     pub blocks: u8,
     pub public: bool,
+    /// Opening cash as a percentage of the standard amount. Custom scenarios change it.
+    #[serde(default = "full_percent")]
+    pub cash_pct: u16,
+}
+
+fn full_percent() -> u16 {
+    100
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

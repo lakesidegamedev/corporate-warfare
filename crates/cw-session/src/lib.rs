@@ -140,7 +140,34 @@ pub struct ArchetypeActions {
 
 impl Session {
     pub fn create(config: ScenarioConfig) -> Result<Session, DomainError> {
-        let dataset = Dataset::load().map_err(|_| DomainError::InternalFault { diagnostic: 1 })?;
+        Self::create_with(config, None)
+    }
+
+    /// A career from a custom scenario. Its difficulty, economy and capital replace the
+    /// config's; its rivals, regional levels and opening laws shape the starting world. The
+    /// scenario is validated first and refused with a plain-words reason if it cannot be played.
+    pub fn create_custom(
+        mut config: ScenarioConfig,
+        custom: &cw_data::CustomScenario,
+    ) -> Result<Session, String> {
+        let dataset =
+            Dataset::load().map_err(|_| "The game data could not be loaded".to_owned())?;
+        let errors = custom.validate(&dataset);
+        if !errors.is_empty() {
+            return Err(errors.join("; "));
+        }
+        config.difficulty = Difficulty::from_key(&custom.difficulty);
+        config.economy_start = cw_sim::state::EconomyStart::from_key(&custom.economy);
+        config.starting_capital_cents = custom.starting_capital_cents;
+        Self::create_with(config, Some(custom)).map_err(|e| format!("{e:?}"))
+    }
+
+    fn create_with(
+        config: ScenarioConfig,
+        custom: Option<&cw_data::CustomScenario>,
+    ) -> Result<Session, DomainError> {
+        let mut dataset =
+            Dataset::load().map_err(|_| DomainError::InternalFault { diagnostic: 1 })?;
         if !config.dataset_hash.is_empty() && config.dataset_hash != dataset.hash {
             return Err(DomainError::InvalidSave {
                 detail: cw_core::error::SaveFault::MalformedPayload,
@@ -151,13 +178,28 @@ impl Session {
             economy: config.economy_start,
             capital_cents: config.starting_capital_cents,
         };
-        let world = cw_sim::economy::seed::build_with(
+        if let Some(custom) = custom {
+            custom.apply_to(&mut dataset);
+        }
+        let mut world = cw_sim::economy::seed::build_with(
             &dataset,
             config.seed,
             config.scenario,
             config.mode,
             &options,
         );
+        if let Some(laws) = custom.and_then(|c| c.laws.as_ref()) {
+            world.politics.laws = cw_sim::state::Laws {
+                corporate_tax_bps: laws.corporate_tax_bps,
+                wage_floor_cents: laws.wage_floor_cents,
+                merger_review_bps: laws.merger_review_bps,
+                unions: match laws.unions.as_str() {
+                    "weak" => cw_sim::state::UnionLaw::Weak,
+                    "strong" => cw_sim::state::UnionLaw::Strong,
+                    _ => cw_sim::state::UnionLaw::Standard,
+                },
+            };
+        }
         let career_id = cw_core::rng::scramble(config.seed) & 0x00FF_FFFF_FFFF_FFFF;
         let log = ReplayLog {
             config: config.clone(),
