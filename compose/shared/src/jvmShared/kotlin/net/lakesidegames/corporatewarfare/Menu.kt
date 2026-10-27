@@ -145,6 +145,11 @@ fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
 internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> Unit, onQuit: (() -> Unit)?) {
     var setup by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    if (editing) {
+        ScenarioEditorScreen(store, baseId = null, existing = null, onBack = { editing = false })
+        return
+    }
     if (loading) {
         LoadGameScreen(store) { loading = false }
         return
@@ -180,6 +185,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
             }
             MenuButton("New game", primary = !store.hasAutosave) { setup = true }
             if (store.hasAutosave) MenuButton("Load game") { loading = true }
+            MenuButton("Scenario editor") { editing = true }
             MenuButton("Settings", onClick = onSettings)
             if (onQuit != null) MenuButton("Quit", onClick = onQuit)
             Spacer(Modifier.height(6.dp))
@@ -299,6 +305,16 @@ private fun capitalOf(level: Level) = when (level) {
 internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> Unit) {
     val catalogue = remember { scenarios() }
     var chosen by remember { mutableStateOf(catalogue.firstOrNull { it.available }) }
+    var customs by remember { mutableStateOf(uniffi.cw_ffi.customScenarioList(store.customDir)) }
+    var chosenCustom by remember { mutableStateOf<uniffi.cw_ffi.CustomScenarioDto?>(null) }
+    var customizing by remember { mutableStateOf<Pair<String, uniffi.cw_ffi.CustomScenarioDto?>?>(null) }
+    customizing?.let { (base, existing) ->
+        ScenarioEditorScreen(store, baseId = base, existing = existing, onBack = {
+            customs = uniffi.cw_ffi.customScenarioList(store.customDir)
+            customizing = null
+        })
+        return
+    }
     var step by remember { mutableStateOf(startStep) }
     var mode by remember { mutableStateOf(Mode.Guided) }
     var level by remember { mutableStateOf(Level.Standard) }
@@ -329,12 +345,52 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                         catalogue.chunked(columns).forEach { row ->
                             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                 row.forEach { scenario ->
-                                    ScenarioTile(scenario, selected = chosen?.id == scenario.id, modifier = Modifier.weight(1f)) {
-                                        if (scenario.available) chosen = scenario
+                                    ScenarioTile(
+                                        scenario, selected = chosenCustom == null && chosen?.id == scenario.id, modifier = Modifier.weight(1f),
+                                        onCustomize = { customizing = scenario.id to null },
+                                    ) {
+                                        if (scenario.available) {
+                                            chosen = scenario
+                                            chosenCustom = null
+                                        }
                                     }
                                 }
                                 repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                             }
+                        }
+                        if (customs.isNotEmpty()) {
+                            Spacer(Modifier.height(4.dp))
+                            Text("Your scenarios", color = Palette.primaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                customs.forEach { custom ->
+                                    val on = chosenCustom?.id == custom.id
+                                    val shape = RoundedCornerShape(12.dp)
+                                    Column(
+                                        Modifier.width(if (wide) 380.dp else 320.dp).clip(shape)
+                                            .background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.panel)
+                                            .border(if (on) 2.dp else 1.dp, if (on) Palette.gold else Palette.stroke, shape)
+                                            .clickable { chosenCustom = custom }.padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(custom.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                        val base = catalogue.firstOrNull { it.id == custom.baseScenarioId }?.name ?: custom.baseScenarioId
+                                        Text("Custom · based on $base · ${custom.difficulty}", color = Palette.secondary, fontSize = 12.sp)
+                                        TextButton(onClick = { customizing = custom.baseScenarioId to custom }) {
+                                            Text("Edit", color = Palette.gold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if (chosenCustom != null) {
+                        val custom = chosenCustom!!
+                        Text(custom.name, color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Difficulty, economy, capital, rivals and laws come from this scenario. Open the editor to change them.",
+                            color = Palette.secondary, fontSize = 13.sp,
+                        )
+                        Section("How you start") {
+                            Options(Mode.entries, mode, { it.title }, { it.note }, wide) { mode = it }
                         }
                     } else {
                         val scenario = chosen
@@ -383,7 +439,8 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
             ) {
                 val scenario = chosen
                 Text(
-                    if (step == 0) scenario?.let { "${it.name}: ${it.tagline}" } ?: "Pick a scenario"
+                    if (step == 0) chosenCustom?.let { "${it.name}: your scenario" } ?: scenario?.let { "${it.name}: ${it.tagline}" } ?: "Pick a scenario"
+                    else if (chosenCustom != null) "${mode.title} · ${chosenCustom!!.name}"
                     else "${mode.title} · ${level.title} · ${economy.title} economy · ${Format.compact((capital * 100).toLong())}",
                     color = Palette.secondary,
                     fontSize = 13.sp,
@@ -391,9 +448,10 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                     maxLines = 2,
                 )
                 if (step == 0) {
-                    GoldButton("Next: setup", enabled = scenario != null) { step = 1 }
+                    GoldButton("Next: setup", enabled = scenario != null || chosenCustom != null) { step = 1 }
                 } else {
-                    GoldButton("Start career", enabled = scenario != null && !store.busy) {
+                    GoldButton("Start career", enabled = (scenario != null || chosenCustom != null) && !store.busy) {
+                        chosenCustom?.let { store.startCustom(it, mode.guided, mode.fiveYear); return@GoldButton }
                         val pick = scenario ?: return@GoldButton
                         store.startCareer(
                             NewGameDto(
@@ -456,7 +514,7 @@ private fun <T> Options(items: List<T>, selected: T, title: (T) -> String, note:
 
 /** One scenario: its art, name, region, year and currency, or a coming-soon card. */
 @Composable
-private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Modifier, onCustomize: (() -> Unit)? = null, onClick: () -> Unit) {
     val shape = RoundedCornerShape(14.dp)
     Column(
         modifier.clip(shape).background(Palette.panel)
@@ -481,6 +539,18 @@ private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Mod
             Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
                 Text(scenario.name, color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text("${scenario.region} · ${scenario.startYear}", color = Palette.secondary, fontSize = 12.sp)
+            }
+            if (scenario.available && onCustomize != null) {
+                Text(
+                    "Customize",
+                    color = Palette.primaryText,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.TopStart).padding(12.dp).clip(CircleShape)
+                        .background(Palette.panelRaised.copy(alpha = 0.9f))
+                        .clickable(onClick = onCustomize)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
             }
             Text(
                 if (scenario.available) "Play" else "Coming soon",

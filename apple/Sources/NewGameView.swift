@@ -104,6 +104,7 @@ struct NewGameView: View {
 
     private let catalogue = ScenarioCatalogue.all
     @State private var chosenID: String?
+    @State private var customizing: String?
     @State private var step = 0
     @State private var mode = StartMode.guided
     @State private var level = StartLevel.standard
@@ -174,14 +175,33 @@ struct NewGameView: View {
             .foregroundStyle(Theme.primaryText)
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 16, alignment: .top)], spacing: 16) {
             ForEach(catalogue, id: \.id) { scenario in
-                Button {
-                    if scenario.available { chosenID = scenario.id }
-                } label: {
-                    ScenarioTile(scenario: scenario, selected: chosen?.id == scenario.id)
+                ZStack(alignment: .topLeading) {
+                    Button {
+                        if scenario.available { chosenID = scenario.id }
+                    } label: {
+                        ScenarioTile(scenario: scenario, selected: chosen?.id == scenario.id)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!scenario.available)
+                    if scenario.available {
+                        Button {
+                            customizing = scenario.id
+                        } label: {
+                            PixelLabel("Customize", icon: "sliders")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Theme.primaryText)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Theme.panelRaised.opacity(0.92), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(12)
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(!scenario.available)
             }
+        }
+        .sheet(isPresented: Binding(get: { customizing != nil }, set: { if !$0 { customizing = nil } })) {
+            ScenarioEditorView(baseId: customizing).environmentObject(store)
         }
     }
 

@@ -19,6 +19,12 @@ actor Engine {
         return handle.overview()
     }
 
+    func startCustom(_ scenario: CustomScenarioDto, guided: Bool, seed: UInt64) throws -> OverviewDto {
+        let handle = try SessionHandle.startCustom(seed: seed, guided: guided, fiveYear: false, scenario: scenario)
+        session = handle
+        return handle.overview()
+    }
+
     func economy() -> EconomyDto? {
         session?.economy()
     }
