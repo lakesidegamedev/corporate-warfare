@@ -39,7 +39,7 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// recorded on the engine before the change and must never move because of Texas content.
 /// Repinned when the character cast joined the dataset and the engine began naming chairs and
 /// chief executives from it, and again when rivals began choosing moves by temperament with
-/// grudges and alliances (1.7 preview 5).
+/// grudges and alliances (1.7 preview 5), and again in 1.7.1 when new divisions gained a raid grace period.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -51,15 +51,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "c721f8c955e8bae2aa3f6de03902b09cbe00be6300b76c5628442fcbe57c6879",
+            "e445cb039252a16ca6925a74292b19f064e1d4319468eb389636cc2fc75d19c7",
         ),
         (
             2,
-            "e383da998edf4fa03df798c86d8180dd32a5b50a20e9aa328bc203e08d838926",
+            "bac53c2d7e508767ef5a4cd165a060d8d99dc2e0fe5b3dfc33225bdd179e8218",
         ),
         (
             3,
-            "a004a5ad0e4bd4c8105bcbaa47b24bb0de3d9b29ddc0d9cbbd572f3c869695ed",
+            "a47e198119e0a7e4296f200332a36f2b9884b1e6ff42af22974e1cd7906a4aec",
         ),
     ];
     for (seed, hash) in pins {
@@ -71,12 +71,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "0e834ba94439688d74cb9b104e625c92539fadc516a0c83ecbdfaaa14a5c6be2"
+        "90d966101fa33db9561767757e1837f9a45e140522898990091c977994b6224a"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "809cf8379852f661de45c4e9e8da738f9d9c470bc270d40d1203c52e1b0672a5"
+        "1ac21627f81cc117362b3bdfb424530e760979043861a359508a653e8d6a09ed"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();

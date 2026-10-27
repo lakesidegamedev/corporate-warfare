@@ -276,6 +276,24 @@ fn a_market_raid_prices_its_stake_and_conserves_blocks_and_money() {
             .map(|h| world.facilities.get(*h).unwrap().blocks as i64)
             .sum()
     };
+    // A division inside its opening grace cannot be raided; once the weeks pass it can.
+    let refused = sectors::raid(
+        &mut world,
+        &dataset,
+        attacker,
+        defender,
+        region,
+        industry,
+        defence * 2,
+    );
+    assert!(matches!(
+        refused,
+        Err(cw_core::error::DomainError::WrongPhase {
+            actual: "opening_grace",
+            ..
+        })
+    ));
+    world.tick.0 += sectors::RAID_GRACE_WEEKS;
     let total_blocks = blocks(&world, attacker) + blocks(&world, defender);
     let mut successes = 0;
     for attempt in 0..30 {

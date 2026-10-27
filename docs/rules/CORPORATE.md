@@ -256,6 +256,10 @@ defender's blocks at even strength to the whole division at five to one. The def
 guaranteed plant; instead the success chance is the attack-over-total chance times one minus
 85 percent of the stake share, so a whole-division raid succeeds at a fifth of the base chance.
 
+**Opening grace (1.7.1).** A division cannot be raided until 26 weeks after its oldest plant was
+started. That covers a new game's starting divisions and any division opened later; a raid
+against a division inside the window is refused, and rival AI does not attempt one.
+
 **Construction capacity.** A firm builds at normal cost and speed while the blocks under
 construction, including a new order, stay within 40 plus a tenth of the blocks it already runs
 (at most 400). Each capacity's worth of excess adds fifty percent to capex (at most 2.5 times) and

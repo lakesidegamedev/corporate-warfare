@@ -31,6 +31,11 @@ heading.
   temperament behind each move and raid. A compact Rivals card in the CEO Office lists the groups
   with a grudge against you, your allies and who you can raid now with the quoted chance.
 
+- Fair opening: rivals can no longer raid a new company or a newly opened division for its
+  first 26 weeks. In Texas Oil Patch 1981 (and the other scenarios) the player's divisions were
+  raided in the first weeks, before any marketing or defence could exist, and the game paused.
+  Later raids are unchanged.
+
 ## [1.7.0] - 2026-10-27
 
 Lone Star: supply chains you can own and contest, a shipping network, deeper corporate play, rivals with names and memories, and three new playable scenarios: Texas Oil Patch 1981, Silicon Valley 1995 and Ruhr and Rhine 1991 with currencies. Saves from 1.6 do not load in 1.7.0.

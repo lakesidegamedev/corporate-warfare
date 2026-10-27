@@ -407,7 +407,28 @@ pub const RAID_STAKE_DRAG_BPS: i64 = 8_500;
 pub const RAID_DEFENCE_FLOOR_BPS: i64 = 500;
 /// The attacker buys captured capacity at half its book value.
 pub const RAID_PRICE_BPS: i64 = 5_000;
+/// A division cannot be raided until this many weeks after its first plant was started, which
+/// covers the opening of a game and any division opened later. A new company has no standing
+/// marketing and a tiny book, so without it the first rival in the cell wins by default.
+pub const RAID_GRACE_WEEKS: u32 = 26;
 const RAID_LOG: usize = 64;
+
+/// The first week a division can be raided: its oldest plant's start plus the grace period.
+pub fn raid_open_tick(
+    world: &World,
+    dataset: &Dataset,
+    defender: Handle,
+    region: u8,
+    industry: u8,
+) -> u32 {
+    division_plants(world, dataset, defender, region, industry)
+        .iter()
+        .filter_map(|h| world.facilities.get(*h))
+        .map(|plant| plant.started.0)
+        .min()
+        .unwrap_or(0)
+        + RAID_GRACE_WEEKS
+}
 
 /// What a raid would risk, for previews and the AI.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -524,6 +545,12 @@ pub fn raid(
             actual: "no_division",
         });
     };
+    if world.tick.0 < raid_open_tick(world, dataset, defender, region, industry) {
+        return Err(E::WrongPhase {
+            expected: "established_division",
+            actual: "opening_grace",
+        });
+    }
     let defending = division_plants(world, dataset, defender, region, industry);
     if division_blocks_and_book(world, &defending).0 < 1 {
         return Err(E::WrongPhase {
