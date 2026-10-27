@@ -1,6 +1,10 @@
 # Current checkpoint
 
-Date: 2026-10-27. Released: **1.6.1** (Android and desktop fixes: Office crash, map gap). Before that **1.6.0**, business cycle, central bank, government and laws, globe menu, scenarios, difficulty, Command Center, research, economy card, desktop layout, sliders, load game, tutorial and in-game updates. Before that **1.5.0**, whole-world globe map, scenario cards, Stats screen with five-year history, aggressive rivals, new logo and icons, speed control. Before that **1.4.0**, stock exchange and commodity board, valuation fix, and
+Date: 2026-10-27. Released: **1.7.0 "Lone Star"**: deeper product chains with multi-output plants, world commodity price paths, storage and speculation, owned logistics with lanes, routing and lane contracts, vertical integration and transfer pricing, brand reputation, bonds, joint ventures, spin-offs and listings, activists, logistics laws, strategic reserve and state rescues, systemic network events, a named character cast with CEO personality rivals, grudges and alliances, pixel icons, an in-app scenario editor, iPhone/iPad/Mac parity, and playable Texas Oil Patch 1981, Silicon Valley 1995 and Ruhr and Rhine 1991 with currencies (PRs #97 to #112). Saves from 1.6 do not load. Kanban: 254816.
+
+Open after 1.7.0 (planned for 1.7.1): loosen the currency limits (firms build only in their own currency's regions; only lead-currency firms hold stakes, issue bonds or get state support); more cast members per scenario so rival CEOs are named; rivals rarely build storage; Easy-mode rival takeovers run high; first on-device check of the 1.7 Apple UI; the owner's UI refinement handoff.
+
+Before that: **1.6.1** (Android and desktop fixes: Office crash, map gap). Before that **1.6.0**, business cycle, central bank, government and laws, globe menu, scenarios, difficulty, Command Center, research, economy card, desktop layout, sliders, load game, tutorial and in-game updates. Before that **1.5.0**, whole-world globe map, scenario cards, Stats screen with five-year history, aggressive rivals, new logo and icons, speed control. Before that **1.4.0**, stock exchange and commodity board, valuation fix, and
 the first Android, Windows, Linux and Mac (Catalyst) builds (PRs #88, #89, #90). Kanban: 254808.
 Saves from 1.3.1 load.
 

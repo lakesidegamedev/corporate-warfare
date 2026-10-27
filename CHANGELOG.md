@@ -11,23 +11,9 @@ heading.
 
 ## [Unreleased]
 
-### Fixed
+## [1.7.0] - 2026-10-27
 
-- Build forms, the Command Center and the market list quoted Great Lakes reference prices in every
-  scenario, so a Texas or California career saw the wrong margins and prices. The catalogues now
-  come from the career's own scenario on Android, desktop and Apple, and reload when a different
-  career starts.
-- Region boards showed no population in scenarios sized from a census other than 2000; they now
-  show the scenario's own count, and no longer label it 2000.
-- Rival oil firms now build refineries when the corridor imports fuel. The build test counted
-  gasoline and jet fuel, which the corridor never imports, as missing room, so no rival ever
-  built one while fuel imports ran at six times local output. Only the main product decides
-  whether there is room; the by-products still count toward whether the plant pays. Over three
-  years fuel imports fall from 86 to 72 percent of supply, and to about 61 percent at five years.
-- Perishables spoil far less in your own cold store or silo: the loss falls by 80 percent for
-  the part of the stock that fits in the space you own, up from half. The large food stock in
-  the corridor is mostly the grocers' two weeks of input cover, which rots at the full rate
-  without a cold store.
+Lone Star: supply chains you can own and contest, a shipping network, deeper corporate play, rivals with names and memories, and three new playable scenarios: Texas Oil Patch 1981, Silicon Valley 1995 and Ruhr and Rhine 1991 with currencies. Saves from 1.6 do not load in 1.7.0.
 
 ### Added
 
@@ -263,15 +249,6 @@ heading.
     1 to 8 switches screens, Command K opens the Command Center, Command N plays a week and
     Command P plays or pauses.
 
-### Fixed
-
-- A company's share value no longer jumps when another company buys into it. The valuation
-  added the buyer's whole equity to the company being bought, so a rival taking half of your
-  company multiplied its fair value per share about six times with cash and income unchanged,
-  and selling shares into that spike produced false profits. The buyer's value now gains its
-  stake in the company it holds, which is how look-through value was meant to work. In a
-  96-seed growth-policy check, runs ending far above the normal range from this spike fell
-  from 22 of 96 to 1 of 96 (that one is a genuine profit boom).
 ### Changed
 
 - Raids no longer have a thirteen-week cooldown: repeat raids on the same rival cost forty percent
@@ -294,7 +271,37 @@ heading.
   versions do not load.
 - The data format moved to schema 2 (by-products and spoilage). Schema 1 files still read.
 
+- Sprawl overhead no longer jumps at 15 divisions. It grows smoothly with division count, and
+  owning logistics divisions takes part of it off on top of logistics strength.
+- Freight capacity per block, the freight reference price and the two seeded carriers were
+  recalibrated so a carrier earns its keep from lane use. Crossroads Carriers and Oaken Freight
+  Lines now survive nearly every seed instead of failing in most.
+
 ### Fixed
+
+- Build forms, the Command Center and the market list quoted Great Lakes reference prices in every
+  scenario, so a Texas or California career saw the wrong margins and prices. The catalogues now
+  come from the career's own scenario on Android, desktop and Apple, and reload when a different
+  career starts.
+- Region boards showed no population in scenarios sized from a census other than 2000; they now
+  show the scenario's own count, and no longer label it 2000.
+- Rival oil firms now build refineries when the corridor imports fuel. The build test counted
+  gasoline and jet fuel, which the corridor never imports, as missing room, so no rival ever
+  built one while fuel imports ran at six times local output. Only the main product decides
+  whether there is room; the by-products still count toward whether the plant pays. Over three
+  years fuel imports fall from 86 to 72 percent of supply, and to about 61 percent at five years.
+- Perishables spoil far less in your own cold store or silo: the loss falls by 80 percent for
+  the part of the stock that fits in the space you own, up from half. The large food stock in
+  the corridor is mostly the grocers' two weeks of input cover, which rots at the full rate
+  without a cold store.
+
+- A company's share value no longer jumps when another company buys into it. The valuation
+  added the buyer's whole equity to the company being bought, so a rival taking half of your
+  company multiplied its fair value per share about six times with cash and income unchanged,
+  and selling shares into that spike produced false profits. The buyer's value now gains its
+  stake in the company it holds, which is how look-through value was meant to work. In a
+  96-seed growth-policy check, runs ending far above the normal range from this spike fell
+  from 22 of 96 to 1 of 96 (that one is a genuine profit boom).
 
 - Freight and advertising were made but never sold, so their plants were cut back to the
   minimum. Freight bills, advertising purchases and service inputs (software, telecom, research,
@@ -306,14 +313,6 @@ heading.
   elsewhere, which could strip a plant's own inputs; they now deliver from the plant's region.
 - Stock of food sat unsold in storage at twelve thousand lots; spoilage and shorter perishable
   cover bring it down.
-
-### Changed
-
-- Sprawl overhead no longer jumps at 15 divisions. It grows smoothly with division count, and
-  owning logistics divisions takes part of it off on top of logistics strength.
-- Freight capacity per block, the freight reference price and the two seeded carriers were
-  recalibrated so a carrier earns its keep from lane use. Crossroads Carriers and Oaken Freight
-  Lines now survive nearly every seed instead of failing in most.
 
 ## [1.6.1] - 2026-10-27
 
@@ -859,7 +858,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.6.1...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.4.0...v1.5.0
