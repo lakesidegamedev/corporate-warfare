@@ -1,5 +1,6 @@
 package net.lakesidegames.corporatewarfare
 
+import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
@@ -128,18 +129,8 @@ fun LogoArt(modifier: Modifier) {
     val file = PixelLogo.file ?: return
     androidx.compose.foundation.Canvas(modifier.aspectRatio(file.width.toFloat() / file.height)) {
         val cell = minOf(size.width / file.width, size.height / file.height)
-        file.rows.forEachIndexed { y, row ->
-            row.forEachIndexed { x, character ->
-                val hex = if (character == '.') null else file.palette[character.toString()]
-                if (hex != null) {
-                    drawRect(
-                        SectorIcons.color(hex),
-                        topLeft = androidx.compose.ui.geometry.Offset(x * cell, y * cell),
-                        size = androidx.compose.ui.geometry.Size(cell + 0.5f, cell + 0.5f),
-                    )
-                }
-            }
-        }
+        val art = PixelBitmaps.of(file, file.rows) { character -> file.palette[character.toString()]?.let { SectorIcons.color(it) } }
+        drawPixelBitmap(art, width = (file.width * cell).roundToInt(), height = (file.height * cell).roundToInt())
     }
 }
 

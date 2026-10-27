@@ -76,11 +76,48 @@ enum PixelIcons {
         return image
     }
 
-    /// Canvas renderer: fills each pixel of a grid as an exact rectangle, in one tint or the grid's own colours.
+    /// Pixel art in its own colours as a bitmap, built once per `key` and reused by every draw.
+    static func bitmap(key: String, rows: [String], palette: [String: String]) -> CGImage? {
+        let cacheKey = key as NSString
+        if let hit = cache.object(forKey: cacheKey) { return hit }
+        let height = rows.count
+        let width = rows.map { $0.count }.max() ?? 0
+        guard width > 0, height > 0 else { return nil }
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        for (y, row) in rows.enumerated() {
+            for (x, ch) in row.enumerated() where ch != "." {
+                guard let hex = palette[String(ch)] else { continue }
+                let (r, g, b) = rgb(hex)
+                let i = (y * width + x) * 4
+                bytes[i] = r; bytes[i + 1] = g; bytes[i + 2] = b; bytes[i + 3] = 255
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(bytes) as CFData),
+              let image = CGImage(
+                width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent
+              ) else { return nil }
+        cache.setObject(image, forKey: cacheKey)
+        return image
+    }
+
+    /// Draws a cached bitmap into `rect` with hard pixel edges.
+    static func drawBitmap(_ image: CGImage, in context: inout GraphicsContext, rect: CGRect) {
+        context.draw(Image(decorative: image, scale: 1).interpolation(.none), in: rect)
+    }
+
+    /// Canvas renderer: the grid's own colours from a cached bitmap, or one tint filled pixel by pixel.
     static func draw(
         rows: [String], palette: [String: String], gridSize: Int,
-        in context: inout GraphicsContext, rect: CGRect, tint: Color? = nil
+        in context: inout GraphicsContext, rect: CGRect, tint: Color? = nil, key: String? = nil
     ) {
+        if tint == nil, let key, let image = bitmap(key: key, rows: rows, palette: palette) {
+            let side = min(rect.width, rect.height)
+            drawBitmap(image, in: &context, rect: CGRect(x: rect.minX, y: rect.minY, width: side, height: side))
+            return
+        }
         let cell = min(rect.width, rect.height) / CGFloat(gridSize)
         for (y, row) in rows.enumerated() {
             for (x, ch) in row.enumerated() where ch != "." {

@@ -149,13 +149,9 @@ struct PixelLogo: View {
             guard let file else { return }
             let cell = min(canvas.width / CGFloat(file.width), canvas.height / CGFloat(file.height))
             let origin = CGPoint(x: (canvas.width - cell * CGFloat(file.width)) / 2, y: (canvas.height - cell * CGFloat(file.height)) / 2)
-            for (y, row) in file.rows.enumerated() {
-                for (x, character) in row.enumerated() where character != "." {
-                    guard let hex = file.palette[String(character)] else { continue }
-                    let rect = CGRect(x: origin.x + CGFloat(x) * cell, y: origin.y + CGFloat(y) * cell, width: cell + 0.5, height: cell + 0.5)
-                    context.fill(Path(rect), with: .color(SectorIcons.color(hex)))
-                }
-            }
+            guard let image = PixelIcons.bitmap(key: "logo", rows: file.rows, palette: file.palette) else { return }
+            var context = context
+            PixelIcons.drawBitmap(image, in: &context, rect: CGRect(x: origin.x, y: origin.y, width: cell * CGFloat(file.width), height: cell * CGFloat(file.height)))
         }
         .aspectRatio(CGFloat(file?.width ?? 64) / CGFloat(file?.height ?? 58), contentMode: .fit)
         .accessibilityLabel("Corporate Warfare")
@@ -172,14 +168,9 @@ struct SectorBadge: View {
             guard let icon = SectorIcons.all[sector] else { return }
             let inset = canvas.width * 0.12
             let cell = (canvas.width - inset * 2) / 12
-            for (y, row) in icon.rows.enumerated() {
-                for (x, character) in row.enumerated() where character != "." {
-                    guard let hex = icon.palette[String(character)] else { continue }
-                    // Whole-pixel cells, slightly overlapping, so the art stays crisp at any size.
-                    let rect = CGRect(x: inset + CGFloat(x) * cell, y: inset + CGFloat(y) * cell, width: cell + 0.5, height: cell + 0.5)
-                    context.fill(Path(rect), with: .color(SectorIcons.color(hex)))
-                }
-            }
+            guard let image = PixelIcons.bitmap(key: "sector|\(sector)", rows: icon.rows, palette: icon.palette) else { return }
+            var context = context
+            PixelIcons.drawBitmap(image, in: &context, rect: CGRect(x: inset, y: inset, width: cell * 12, height: cell * 12))
         }
         .frame(width: size, height: size)
         .background(Theme.ink, in: RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
