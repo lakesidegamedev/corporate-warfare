@@ -8,9 +8,16 @@ plugins {
 val uploadKeystore = providers.environmentVariable("CW_ANDROID_KEYSTORE_FILE").orNull
 val uploadPassword = providers.environmentVariable("CW_ANDROID_KEY_PASSWORD").orNull
 // One version for every platform: the workspace version in the root Cargo.toml.
-val gameVersion = rootProject.file("../Cargo.toml").readLines()
+val cargoVersion = rootProject.file("../Cargo.toml").readLines()
     .first { it.startsWith("version = ") }.substringAfter('"').substringBefore('"')
-val gameVersionCode = gameVersion.split('.').map(String::toInt).let { (major, minor, patch) -> major * 10_000 + minor * 100 + patch }
+// Preview builds (-Pcw.channel=preview -Pcw.preview=N) sit just below the release they lead to,
+// as in shared/build.gradle.kts.
+val previewNumber = if (findProperty("cw.channel") == "preview") (findProperty("cw.preview") as String?)?.toInt() ?: 0 else 0
+val baseVersion = (findProperty("cw.version") as String?) ?: cargoVersion
+val gameVersion = if (previewNumber > 0) "$baseVersion-preview.$previewNumber" else baseVersion
+val gameVersionCode = baseVersion.split('.').map(String::toInt).let { (major, minor, patch) ->
+    if (previewNumber > 0) major * 10_000 + (minor - 1) * 100 + 90 + previewNumber else major * 10_000 + minor * 100 + patch
+}
 
 android {
     namespace = "net.lakesidegames.corporatewarfare"

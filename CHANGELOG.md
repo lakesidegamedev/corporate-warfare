@@ -43,6 +43,8 @@ heading.
   release list; when a newer version is out the main menu shows it with its notes. On Windows
   "Update now" downloads the installer with a progress bar, installs it and reopens the game;
   Linux, Mac and Android open the download.
+- Tester previews: preview builds show as 1.6.0-preview.N, follow pre-releases in the updater so
+  each preview offers the next one and then the final release, and install over each other.
 - The Windows installer adds a Start menu entry and a desktop shortcut and lets you choose the
   install folder.
 

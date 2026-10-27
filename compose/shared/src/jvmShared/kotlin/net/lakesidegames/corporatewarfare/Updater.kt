@@ -60,7 +60,10 @@ sealed interface UpdateStatus {
 class Updater(private val platform: UpdatePlatform, private val scope: CoroutineScope, private val cacheDir: File) {
     var status by mutableStateOf<UpdateStatus>(UpdateStatus.Idle); private set
 
-    val current: String = runCatching { uniffi.cw_ffi.engineInfo().version }.getOrDefault("0.0.0")
+    val current: String = BuildInfo.VERSION
+
+    /** Preview builds follow pre-releases too; stable builds only full releases. */
+    private val preview = BuildInfo.CHANNEL == "preview"
 
     fun check() {
         if (status is UpdateStatus.Checking || status is UpdateStatus.Downloading) return
@@ -100,7 +103,7 @@ class Updater(private val platform: UpdatePlatform, private val scope: Coroutine
     fun openPage(release: Release) = platform.open(release.page)
 
     private fun latest(): Release? {
-        val connection = (URL(FEED).openConnection() as HttpURLConnection).apply {
+        val connection = (URL(if (preview) LIST else FEED).openConnection() as HttpURLConnection).apply {
             connectTimeout = 6_000
             readTimeout = 6_000
             setRequestProperty("Accept", "application/vnd.github+json")
@@ -108,8 +111,16 @@ class Updater(private val platform: UpdatePlatform, private val scope: Coroutine
         }
         try {
             if (connection.responseCode != 200) return null
-            val release = json.decodeFromString(GitHubRelease.serializer(), connection.inputStream.bufferedReader().readText())
-            if (release.draft || release.prerelease) return null
+            val text = connection.inputStream.bufferedReader().readText()
+            val release = if (preview) {
+                json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(GitHubRelease.serializer()), text)
+                    .filter { !it.draft }
+                    .maxWithOrNull { a, b -> compare(a.tag.removePrefix("v"), b.tag.removePrefix("v")) }
+                    ?: return null
+            } else {
+                json.decodeFromString(GitHubRelease.serializer(), text)
+            }
+            if (release.draft || (release.prerelease && !preview)) return null
             val suffix = platform.installerSuffix
             val asset = suffix?.let { s -> release.assets.firstOrNull { it.name.endsWith(s, ignoreCase = true) } }
             return Release(
@@ -159,15 +170,23 @@ class Updater(private val platform: UpdatePlatform, private val scope: Coroutine
 
     companion object {
         const val FEED = "https://api.github.com/repos/lakesidegamedev/corporate-warfare/releases/latest"
+        const val LIST = "https://api.github.com/repos/lakesidegamedev/corporate-warfare/releases?per_page=30"
         private val json = Json { ignoreUnknownKeys = true }
 
-        /** True when [candidate] is a later MAJOR.MINOR.PATCH than [installed]. */
-        fun isNewer(candidate: String, installed: String): Boolean {
-            fun parts(v: String) = v.split('.', '-').take(3).map { it.toIntOrNull() ?: 0 } + List(3) { 0 }
-            val a = parts(candidate)
-            val b = parts(installed)
-            for (i in 0 until 3) if (a[i] != b[i]) return a[i] > b[i]
-            return false
+        /** True when [candidate] is later than [installed]: MAJOR.MINOR.PATCH, then a release beats
+         * its previews and preview.3 beats preview.2. */
+        fun isNewer(candidate: String, installed: String): Boolean = compare(candidate, installed) > 0
+
+        fun compare(a: String, b: String): Int {
+            fun parts(v: String): List<Int> {
+                val core = v.substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 } + List(3) { 0 }
+                val pre = if ('-' in v) v.substringAfterLast('.').toIntOrNull() ?: 0 else Int.MAX_VALUE
+                return core.take(3) + pre
+            }
+            val x = parts(a)
+            val y = parts(b)
+            for (i in 0 until 4) if (x[i] != y[i]) return x[i].compareTo(y[i])
+            return 0
         }
     }
 }

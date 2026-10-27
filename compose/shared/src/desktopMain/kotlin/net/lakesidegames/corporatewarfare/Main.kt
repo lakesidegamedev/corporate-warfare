@@ -157,7 +157,7 @@ private fun Splash(progress: Float, stage: String) {
             Text(stage, color = Palette.secondary, fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
             Text(
-                "Version " + runCatching { uniffi.cw_ffi.engineInfo().version }.getOrDefault(""),
+                "Version " + BuildInfo.VERSION,
                 color = Palette.secondary.copy(alpha = 0.6f),
                 fontSize = 11.sp,
                 modifier = Modifier.fillMaxWidth(),

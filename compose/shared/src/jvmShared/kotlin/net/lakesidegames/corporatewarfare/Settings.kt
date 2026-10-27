@@ -162,7 +162,7 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
             Panel {
                 Eyebrow("About")
                 val info = uniffi.cw_ffi.engineInfo()
-                Text("Corporate Warfare ${info.version}", color = Palette.secondary, fontSize = 12.sp)
+                Text("Corporate Warfare ${BuildInfo.VERSION} · engine ${info.version}", color = Palette.secondary, fontSize = 12.sp)
                 Text("Institutions are simplified game rules, not legal, tax or investment advice.", color = Palette.secondary, fontSize = 11.sp)
             }
         }
