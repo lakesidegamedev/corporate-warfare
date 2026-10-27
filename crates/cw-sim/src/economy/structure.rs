@@ -215,6 +215,18 @@ pub struct StructureState {
     pub next_campaign: u32,
     pub last_activist: BTreeMap<Handle, u32>,
     pub peak_mark: BTreeMap<Handle, i64>,
+    /// Consecutive weeks a firm's mark has sat 40 percent or more under its peak.
+    #[serde(default)]
+    pub weak_price_weeks: BTreeMap<Handle, u16>,
+    /// Consecutive weeks a firm has lost money.
+    #[serde(default)]
+    pub loss_weeks: BTreeMap<Handle, u16>,
+    /// Consecutive weeks a firm has made money.
+    #[serde(default)]
+    pub profit_weeks: BTreeMap<Handle, u16>,
+    /// When a firm last carved a division out.
+    #[serde(default)]
+    pub carved: BTreeMap<Handle, u32>,
     pub dividend_quarters: BTreeMap<Handle, u16>,
     pub last_dividend: BTreeMap<Handle, u32>,
     pub bond_basis: BTreeMap<(Handle, HolderId), i64>,
@@ -1491,6 +1503,7 @@ pub fn carve_out(
             .insert((child_handle, region, industry), rep);
     }
     ownership::invalidate(world, firm);
+    world.structure.carved.insert(firm, world.tick.0);
     world.structure.stats.carve_outs += 1;
     Ok(child_handle)
 }
@@ -2170,9 +2183,20 @@ fn grievance(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Reason, 
     let peak = world.structure.peak_mark.get(&firm).copied().unwrap_or(0);
     if peak > 0 && f.shares.mark_cents > 0 {
         let fall = 10_000 - f.shares.mark_cents * 10_000 / peak;
-        // A price off its peak only counts when the company is also losing money.
-        if fall >= 4_000 && trailing_net_income(world, firm) < 0 {
-            consider(Reason::FallingPrice, (fall * 2).clamp(0, 10_000) as i32, 0);
+        // Only a long slump counts: half a year far under the peak while losing money.
+        let weak = world
+            .structure
+            .weak_price_weeks
+            .get(&firm)
+            .copied()
+            .unwrap_or(0);
+        let losing = world.structure.loss_weeks.get(&firm).copied().unwrap_or(0);
+        if fall >= 5_500 && weak >= 39 && losing >= 52 && world.tick.0 >= 78 {
+            consider(
+                Reason::FallingPrice,
+                (fall * 12 / 10).clamp(0, 10_000) as i32,
+                0,
+            );
         }
     }
     // Two missed board goals in a row, for the player's primary company.
@@ -2214,8 +2238,8 @@ fn grievance(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Reason, 
         .get(&firm)
         .copied()
         .unwrap_or(0);
-    if quarters >= 2
-        && world.tick.0.saturating_sub(last) >= 20
+    if quarters >= 3
+        && world.tick.0.saturating_sub(last) >= 26
         && f.book.cash() > weekly_outflow_buffer(world, firm) * 2
         && !f.payout_freeze
     {
@@ -2354,9 +2378,9 @@ pub fn activist_chance_bps(world: &World, c: &Campaign) -> i32 {
 pub fn ai_stance(world: &World, c: &Campaign) -> Stance {
     let t = temperament(world, c.target);
     let j = c.justification_bps;
-    if j >= 7_500 - t.resistance / 5 {
+    if j >= 9_000 - t.resistance / 10 {
         Stance::Concede
-    } else if j >= 3_000 + t.resistance / 2 {
+    } else if j >= 7_000 + t.resistance / 5 {
         Stance::Compromise
     } else {
         Stance::Fight
@@ -2649,7 +2673,36 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
     for (handle, mark) in marks {
         let peak = world.structure.peak_mark.entry(handle).or_insert(mark);
         *peak = mark.max(*peak - *peak / 200);
+        let weak = mark > 0 && mark * 100 <= *peak * 45;
+        let weeks = world.structure.weak_price_weeks.entry(handle).or_default();
+        *weeks = if weak { weeks.saturating_add(1) } else { 0 };
+        let lost = world
+            .firms
+            .get(handle)
+            .and_then(|f| f.book.recent_weeks().last().map(|w| w.net_income < 0))
+            .unwrap_or(false);
+        let losing = world.structure.loss_weeks.entry(handle).or_default();
+        *losing = if lost { losing.saturating_add(1) } else { 0 };
+        let gained = world
+            .firms
+            .get(handle)
+            .and_then(|f| f.book.recent_weeks().last().map(|w| w.net_income > 0))
+            .unwrap_or(false);
+        let profit = world.structure.profit_weeks.entry(handle).or_default();
+        *profit = if gained { profit.saturating_add(1) } else { 0 };
     }
+    world
+        .structure
+        .profit_weeks
+        .retain(|h, w| *w > 0 && world.firms.contains(*h));
+    world
+        .structure
+        .weak_price_weeks
+        .retain(|h, w| *w > 0 && world.firms.contains(*h));
+    world
+        .structure
+        .loss_weeks
+        .retain(|h, w| *w > 0 && world.firms.contains(*h));
     world
         .structure
         .peak_mark

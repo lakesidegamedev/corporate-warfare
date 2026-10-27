@@ -114,6 +114,16 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
             && quote.coverage_bps >= 40_000
             && quote.leverage_bps <= 4_000
             && income > principal / 4
+            && world
+                .structure
+                .profit_weeks
+                .get(&firm)
+                .copied()
+                .unwrap_or(0)
+                >= 39
+            && entity.book.debt() + principal
+                <= weeks.iter().map(|w| w.ebitda()).sum::<i64>() * 52 / (weeks.len().max(1) as i64)
+                    * 3
             && principal <= quote.max_principal_cents
         {
             proposals.push(Proposal {
@@ -170,7 +180,11 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
     }
 
     // Listing: short of cash with a seasoned subsidiary worth floating.
-    if t.listing >= 4_500 && cash < reserve * 2 && !entity.payout_freeze {
+    let carved_at = world.structure.carved.get(&firm).copied();
+    if t.listing >= 4_500
+        && (cash < reserve * 2 || carved_at.is_some_and(|week| world.tick.0 >= week + 26))
+        && !entity.payout_freeze
+    {
         let candidate = cw_sim::economy::ownership::controlled_by(world, HolderId::Firm(firm))
             .into_iter()
             .find(|sub| {
@@ -179,7 +193,7 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
                         && !f.shares.ipo_done
                         && f.shares.statement_weeks >= 13
                         && f.book.total_equity() > 0
-                        && f.valuation.equity_cents > 1_000_000_000
+                        && f.valuation.equity_cents > 300_000_000
                 })
             });
         if let Some(sub) = candidate {
@@ -189,6 +203,65 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
                     firm: sub,
                     stake_bps: 3_000,
                 },
+            });
+        }
+    }
+
+    // Capital-hungry with a big, healthy group: carve the largest division into its own
+    // company, which the listing rule above floats once it has a quarter of results.
+    if t.listing >= 6_000
+        && income > 0
+        && cash < reserve * 2
+        && world.tick.0 >= 78
+        && !world.structure.carved.contains_key(&firm)
+        && cw_sim::economy::structure::minority_bps(world, firm) == 0
+        && outside_float(world, firm) >= 1_000
+        && cw_sim::economy::ownership::controlled_by(world, HolderId::Firm(firm)).is_empty()
+    {
+        let divisions = cw_sim::economy::sectors::divisions_of(world, dataset, firm);
+        if divisions.len() >= 3
+            && let Some(d) = divisions
+                .iter()
+                .max_by_key(|d| (d.blocks, d.region, d.industry))
+        {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::CarveOutDivision {
+                    firm,
+                    region: d.region,
+                    industry: d.industry,
+                    name: format!(
+                        "{} {}",
+                        entity.name,
+                        cw_sim::state::INDUSTRY_NAMES[d.industry as usize]
+                    ),
+                },
+            });
+        }
+    }
+
+    // Unlock value: a listed subsidiary the market prices under four fifths of its fair value is
+    // handed to the parent's shareholders, who can hold it directly.
+    if t.listing >= 4_500 && cw_sim::economy::structure::minority_bps(world, firm) >= 1_000 {
+        let stuck = cw_sim::economy::ownership::controlled_by(world, HolderId::Firm(firm))
+            .into_iter()
+            .find(|sub| {
+                world.firms.get(*sub).is_some_and(|f| {
+                    f.operative()
+                        && world
+                            .structure
+                            .carved
+                            .get(&firm)
+                            .is_some_and(|week| f.founding_week.0 >= *week)
+                        && f.shares.ipo_done
+                        && f.shares.fair_cents > 0
+                        && f.shares.mark_cents * 10 < f.shares.fair_cents * 6
+                })
+            });
+        if let Some(sub) = stuck {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::SpinOffSubsidiary { firm: sub },
             });
         }
     }
@@ -281,6 +354,21 @@ fn structure_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
             break;
         }
     }
+}
+
+fn outside_float(world: &World, firm: Handle) -> i32 {
+    world
+        .firms
+        .get(firm)
+        .map(|f| {
+            f.shares
+                .holders
+                .keys()
+                .filter(|h| h.is_external())
+                .map(|h| f.shares.vote_bps(*h))
+                .sum()
+        })
+        .unwrap_or(0)
 }
 
 fn trailing_income(world: &World, firm: Handle) -> i64 {
