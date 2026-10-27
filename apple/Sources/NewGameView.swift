@@ -136,7 +136,7 @@ struct NewGameView: View {
             Button {
                 if step == 0 { onBack() } else { step = 0 }
             } label: {
-                Label("Back", systemImage: "chevron.left").font(.callout)
+                PixelLabel("Back", icon: "chevron_left").font(.callout)
             }
             .tint(Theme.secondary)
             Text("New game")

@@ -123,7 +123,7 @@ private struct DesktopSidebar: View {
                             .padding(.bottom, 4)
                         ForEach(GamePage.allCases.filter { $0.group == group }) { item in
                             SidebarItem(
-                                symbol: item.symbol,
+                                icon: item.icon,
                                 title: item.title,
                                 selected: page == item,
                                 badge: item == .inbox ? store.events.filter { $0.mandatory }.count : 0
@@ -133,11 +133,11 @@ private struct DesktopSidebar: View {
                 }
             }
             Spacer(minLength: 0)
-            SidebarItem(symbol: "square.and.arrow.down", title: "Save", selected: false, badge: 0) {
+            SidebarItem(icon: "save", title: "Save", selected: false, badge: 0) {
                 Task { await store.manualSave() }
             }
-            SidebarItem(symbol: "gearshape.fill", title: "Settings", selected: false, badge: 0, action: onSettings)
-            SidebarItem(symbol: "rectangle.portrait.and.arrow.right", title: "Main menu", selected: false, badge: 0) {
+            SidebarItem(icon: "settings", title: "Settings", selected: false, badge: 0, action: onSettings)
+            SidebarItem(icon: "quit", title: "Main menu", selected: false, badge: 0) {
                 Task { await store.exitToMenu() }
             }
         }
@@ -147,7 +147,7 @@ private struct DesktopSidebar: View {
 }
 
 private struct SidebarItem: View {
-    let symbol: String
+    let icon: String
     let title: String
     let selected: Bool
     let badge: Int
@@ -159,8 +159,7 @@ private struct SidebarItem: View {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(selected ? Theme.gold : Color.clear)
                     .frame(width: 3, height: 18)
-                Image(systemName: symbol)
-                    .font(.system(size: 14, weight: .semibold))
+                PixelIcon(icon, size: 16)
                     .foregroundStyle(selected ? Theme.gold : Theme.secondary)
                     .frame(width: 20)
                 Text(title)
@@ -207,8 +206,7 @@ private struct CompanySwitcher: View {
                 }
                 Spacer(minLength: 2)
                 if controlled.count > 1 {
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption2)
+                    PixelIcon("sort", size: 12)
                         .foregroundStyle(Theme.secondary)
                 }
             }
@@ -293,7 +291,7 @@ private struct DesktopStatusBar: View {
 
     private var searchField: some View {
         HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").font(.footnote).foregroundStyle(Theme.secondary)
+            PixelIcon("search", size: 14).foregroundStyle(Theme.secondary)
             TextField("Search actions", text: $text)
                 .textFieldStyle(.plain)
                 .font(.footnote)

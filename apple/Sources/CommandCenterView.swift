@@ -75,11 +75,15 @@ struct ChipFlow: Layout {
 struct ChoiceChip: View {
     let text: String
     let on: Bool
+    var icon: String?
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(text)
+            HStack(spacing: 5) {
+                if let icon { PixelIcon(icon, size: 12) }
+                Text(text)
+            }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(on ? Theme.ink : Theme.primaryText)
                 .padding(.horizontal, 10)
@@ -187,7 +191,7 @@ struct CommandCenterView: View {
             ChipFlow(spacing: 5) {
                 ChoiceChip(text: "All", on: category == nil) { category = nil }
                 ForEach(categories, id: \.self) { name in
-                    ChoiceChip(text: name, on: category == name) { category = category == name ? nil : name }
+                    ChoiceChip(text: name, on: category == name, icon: categoryIcon(name)) { category = category == name ? nil : name }
                 }
             }
             .padding(12)
@@ -226,15 +230,19 @@ struct CommandCenterView: View {
         return Button {
             chosen = action.command
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(action.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(on ? Theme.gold : Theme.primaryText)
-                Text(action.summary)
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+            HStack(alignment: .top, spacing: 10) {
+                PixelIcon(categoryIcon(action.category))
+                    .foregroundStyle(on ? Theme.gold : Theme.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(action.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(on ? Theme.gold : Theme.primaryText)
+                    Text(action.summary)
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
@@ -398,7 +406,7 @@ struct ActionFormView: View {
                         Button {
                             onBack()
                         } label: {
-                            Label("Actions", systemImage: "chevron.left")
+                            PixelLabel("Actions", icon: "chevron_left")
                                 .font(.callout)
                         }
                         .tint(Theme.gold)
@@ -459,7 +467,7 @@ struct ActionFormView: View {
                             .font(.footnote).foregroundStyle(Theme.primaryText)
                     }
                     ForEach(Array(preview.warnings.enumerated()), id: \.offset) { _, line in
-                        Label(dollarsText(line), systemImage: "exclamationmark.triangle")
+                        PixelLabel(dollarsText(line), icon: "warning")
                             .font(.caption).foregroundStyle(Theme.warning)
                     }
                     ForEach(Array(preview.assumptions.enumerated()), id: \.offset) { _, line in

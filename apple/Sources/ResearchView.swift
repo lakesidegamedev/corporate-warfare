@@ -37,7 +37,7 @@ struct ResearchView: View {
                         Text(rejection.message).font(.callout).foregroundStyle(Theme.negative)
                     }
                 } else {
-                    CalloutRow(symbol: "flask", text: "Found or take over a company to research.", tint: Theme.secondary)
+                    CalloutRow(icon: "research", text: "Found or take over a company to research.", tint: Theme.secondary)
                 }
             }
             .padding(16)

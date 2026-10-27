@@ -74,8 +74,7 @@ struct EconomyCard: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             if collapsible {
-                Image(systemName: open ? "chevron.up" : "chevron.down")
-                    .font(.caption.weight(.bold))
+                PixelIcon(open ? "chevron_up" : "chevron_down", size: 12)
                     .foregroundStyle(Theme.secondary)
             }
         }

@@ -20,16 +20,16 @@ enum GamePage: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
+    var icon: String {
         switch self {
-        case .map: return "map.fill"
-        case .office: return "building.2.fill"
-        case .research: return "flask.fill"
-        case .stats: return "chart.xyaxis.line"
-        case .markets: return "chart.bar.xaxis"
-        case .actions: return "bolt.fill"
-        case .inbox: return "tray.full.fill"
-        case .portfolio: return "building.columns.fill"
+        case .map: return "map"
+        case .office: return "office"
+        case .research: return "research"
+        case .stats: return "stats"
+        case .markets: return "markets"
+        case .actions: return "command"
+        case .inbox: return "inbox"
+        case .portfolio: return "portfolio"
         }
     }
 

@@ -33,10 +33,10 @@ struct CEOOfficeView: View {
                     ResearchView().environmentObject(store)
                 } label: {
                     HStack {
-                        Label("Research: technology and budgets", systemImage: "flask.fill")
+                        PixelLabel("Research: technology and budgets", icon: "research")
                             .font(.callout.weight(.semibold))
                         Spacer()
-                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                        PixelIcon("chevron_right", size: 12)
                     }
                     .padding(12)
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -46,10 +46,10 @@ struct CEOOfficeView: View {
                     CommandCenterView().environmentObject(store)
                 } label: {
                     HStack {
-                        Label("Actions: search every action in the game", systemImage: "bolt.fill")
+                        PixelLabel("Actions: search every action in the game", icon: "command")
                             .font(.callout.weight(.semibold))
                         Spacer()
-                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                        PixelIcon("chevron_right", size: 12)
                     }
                     .padding(12)
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

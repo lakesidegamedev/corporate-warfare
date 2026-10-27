@@ -348,7 +348,7 @@ struct MapOutliner: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Eyebrow(text: "Alerts")
                         ForEach(alerts, id: \.self) { alert in
-                            CalloutRow(symbol: "exclamationmark.triangle.fill", text: alert, tint: Theme.warning)
+                            CalloutRow(icon: "warning", text: alert, tint: Theme.warning)
                         }
                     }
                 }
