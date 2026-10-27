@@ -26,6 +26,32 @@ pub const BALANCE_JSON: &str = include_str!("../../../content/initial-balance.js
 pub const GEOGRAPHY_JSON: &str = include_str!("../../../content/geography/regions.json");
 pub const EVENTS_JSON: &str = include_str!("../../../content/events/events.json");
 pub const FIRMS_JSON: &str = include_str!("../../../content/firms.json");
+/// Scenario catalogue for the start screen. Presentation only: not part of the dataset hash.
+pub const SCENARIOS_JSON: &str = include_str!("../../../content/scenarios.json");
+
+/// One playable scenario as listed on the start screen.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct Scenario {
+    pub id: String,
+    pub name: String,
+    pub country: String,
+    pub start_year: u32,
+    pub summary: String,
+    pub center_lon_milli: i32,
+    pub center_lat_milli: i32,
+}
+
+#[derive(Deserialize)]
+struct ScenarioFile {
+    scenarios: Vec<Scenario>,
+}
+
+/// The bundled scenarios, in display order.
+pub fn scenarios() -> Vec<Scenario> {
+    serde_json::from_str::<ScenarioFile>(SCENARIOS_JSON)
+        .map(|file| file.scenarios)
+        .unwrap_or_default()
+}
 
 /// Every industry required for release. Financial is served by the bank and insurer models.
 pub const INDUSTRIES: [&str; 15] = [
@@ -466,6 +492,16 @@ impl Difficulty {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_scenario_catalogue_lists_the_first_scenario() {
+        let scenarios = scenarios();
+        assert!(!scenarios.is_empty(), "content/scenarios.json parses");
+        let first = &scenarios[0];
+        assert_eq!(first.id, "great-lakes-2000");
+        assert_eq!(first.start_year, 2000);
+        assert!(first.summary.len() > 20);
+    }
 
     #[test]
     fn pinned_dataset_loads_and_validates() {

@@ -18,6 +18,8 @@ heading.
   and Linux and leads the redesigned start screen, with a row of the new 8-bit sector icons.
 - 8-bit icons for all fifteen sectors, shared by every platform.
 - A speed control: pause, 1x, 2x and 4x (one tick is one week; 1x is a week a second).
+- Scenarios on the start screen. A new career starts from a scenario card that shows the
+  country, starting year, number of regions and the situation; Great Lakes, 2000 is the first.
 - The whole world on the map. Zoomed out it is a globe you can spin; zooming in flattens it
   smoothly onto the scenario, where counties, roads and rivers fade in. Double-tap, or the
   globe button, flies between the two. Zoom buttons on every platform and the mouse wheel on

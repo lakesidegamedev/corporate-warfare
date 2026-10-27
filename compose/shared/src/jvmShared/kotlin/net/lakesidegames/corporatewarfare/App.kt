@@ -1,6 +1,10 @@
 package net.lakesidegames.corporatewarfare
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +54,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uniffi.cw_ffi.EventDto
+import uniffi.cw_ffi.ScenarioDto
+import uniffi.cw_ffi.scenarios
 import uniffi.cw_ffi.ProductLineDto
 
 private enum class Tab(val title: String, val icon: ImageVector) {
@@ -82,7 +88,7 @@ fun CorporateWarfareApp(store: GameStore) {
 @Composable
 private fun StartScreen(store: GameStore) {
     Column(
-        Modifier.fillMaxSize().padding(24.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -98,7 +104,9 @@ private fun StartScreen(store: GameStore) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Sectors.order.take(8).forEach { SectorBadge(it, 26) }
         }
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(24.dp))
+        scenarios().forEach { scenario -> ScenarioCard(scenario, selected = true, modifier = Modifier.width(420.dp)) }
+        Spacer(Modifier.height(20.dp))
         if (store.hasAutosave) {
             GoldButton("Continue career", Modifier.width(260.dp), enabled = !store.busy) { store.continueCareer() }
             Spacer(Modifier.height(10.dp))
@@ -108,6 +116,21 @@ private fun StartScreen(store: GameStore) {
         OutlinedButton(onClick = { store.newCareer(System.nanoTime() % 9_999_999, guided = false) }, enabled = !store.busy, modifier = Modifier.width(260.dp)) {
             Text("New sandbox career", color = Palette.primaryText)
         }
+    }
+}
+
+/** One scenario on the start screen: where and when it starts, and what the player is up against. */
+@Composable
+private fun ScenarioCard(scenario: ScenarioDto, selected: Boolean, modifier: Modifier = Modifier) {
+    Column(
+        modifier.clip(RoundedCornerShape(12.dp)).background(Palette.panel)
+            .border(if (selected) 2.dp else 1.dp, if (selected) Palette.gold else Palette.stroke, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(scenario.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+        Text("${scenario.country} · starts ${scenario.startYear} · ${scenario.regionCount} regions", color = Palette.secondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(scenario.summary, color = Palette.secondary, fontSize = 13.sp)
     }
 }
 

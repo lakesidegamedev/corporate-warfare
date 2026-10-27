@@ -961,6 +961,39 @@ pub fn engine_info() -> EngineInfo {
     }
 }
 
+#[derive(uniffi::Record)]
+pub struct ScenarioDto {
+    pub id: String,
+    pub name: String,
+    pub country: String,
+    pub start_year: u32,
+    pub summary: String,
+    pub center_lon_milli: i32,
+    pub center_lat_milli: i32,
+    pub region_count: u32,
+}
+
+/// The scenarios a new career can start in, in display order.
+#[uniffi::export]
+pub fn scenarios() -> Vec<ScenarioDto> {
+    let regions = cw_data::Dataset::load()
+        .map(|dataset| dataset.regions.len() as u32)
+        .unwrap_or_default();
+    cw_data::scenarios()
+        .into_iter()
+        .map(|scenario| ScenarioDto {
+            id: scenario.id,
+            name: scenario.name,
+            country: scenario.country,
+            start_year: scenario.start_year,
+            summary: scenario.summary,
+            center_lon_milli: scenario.center_lon_milli,
+            center_lat_milli: scenario.center_lat_milli,
+            region_count: regions,
+        })
+        .collect()
+}
+
 #[uniffi::export]
 pub fn products() -> Vec<ProductDto> {
     match cw_data::Dataset::load() {

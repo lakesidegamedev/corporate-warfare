@@ -9,6 +9,8 @@ struct StartView: View {
     @State private var showingAbout = false
     @State private var showingSaves = false
     @State private var export: DiagnosticExport?
+    @State private var chosen: String?
+    private let catalogue = scenarios()
 
     private var info: EngineInfo { engineInfo() }
     private var walkthroughTitle: String {
@@ -37,6 +39,14 @@ struct StartView: View {
                     .frame(maxWidth: .infinity)
 
                     SectionCard(title: "New career") {
+                        ForEach(catalogue, id: \.id) { scenario in
+                            Button {
+                                chosen = scenario.id
+                            } label: {
+                                ScenarioCard(scenario: scenario, selected: (chosen ?? catalogue.first?.id) == scenario.id)
+                            }
+                            .buttonStyle(.plain)
+                        }
                         Toggle("Guided start (60% of a running firm)", isOn: $guided)
                         Toggle("Five-year scored scenario", isOn: $fiveYear)
                         Button {
@@ -103,6 +113,43 @@ struct StartView: View {
                     .environmentObject(store)
             }
         }
+    }
+}
+
+/// One scenario on the start screen: where and when it starts, and what the player is up against.
+struct ScenarioCard: View {
+    let scenario: ScenarioDto
+    let selected: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(scenario.name)
+                    .font(.headline)
+                    .foregroundStyle(Theme.primaryText)
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Theme.gold)
+                }
+            }
+            Text("\(scenario.country) · starts \(String(scenario.startYear)) · \(scenario.regionCount) regions")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.secondary)
+            Text(scenario.summary)
+                .font(.footnote)
+                .foregroundStyle(Theme.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.ink.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(selected ? Theme.gold : Theme.stroke, lineWidth: selected ? 2 : 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
     }
 }
 
