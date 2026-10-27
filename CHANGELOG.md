@@ -64,6 +64,16 @@ heading.
     1 to 8 switches screens, Command K opens the Command Center, Command N plays a week and
     Command P plays or pauses.
 
+### Fixed
+
+- A company's share value no longer jumps when another company buys into it. The valuation
+  added the buyer's whole equity to the company being bought, so a rival taking half of your
+  company multiplied its fair value per share about six times with cash and income unchanged,
+  and selling shares into that spike produced false profits. The buyer's value now gains its
+  stake in the company it holds, which is how look-through value was meant to work. In a
+  96-seed growth-policy check, runs ending far above the normal range from this spike fell
+  from 22 of 96 to 1 of 96 (that one is a genuine profit boom).
+
 ## [1.6.1] - 2026-10-27
 
 Android and desktop fixes from the first tester reports.
