@@ -1,0 +1,21 @@
+{
+  "requirement": "R41",
+  "result": "pass",
+  "commit": "852b1b9c16e35e8db873d24537c772b814f85b0b",
+  "procedure": "Created the App Store Connect app record for Corporate Warfare (Apple ID 6826923645, bundle net.lakesidegames.corporatewarfare, SKU corporatewarfare) under LAKESIDE GAME DEVELOPMENT LLC, registered the bundle ID, and created the internal TestFlight group Internal (automatic distribution, tester rainfordmason@gmail.com). Set the four appstore environment secrets on lakesidegamedev/corporate-warfare and dispatched the Release workflow from main, run 40238053516, with version 1.0.0, build 1, confirm UPLOAD. The workflow archived with automatic signing, verified the archive and the exported IPA, uploaded via altool, and its bounded processing check printed state VALID with internal_build_state IN_BETA_TESTING. Independently re-verified through the App Store Connect API: build 2d6371b7-9edb-440e-8ab0-27366e5beabc has processingState VALID, appears in the Internal group's builds, and the group contains the intended tester.",
+  "artifacts": [
+    ".github/workflows/release.yml",
+    "apple/RELEASE.md",
+    "apple/scripts/verify-archive.sh",
+    "apple/scripts/verify-ipa.sh"
+  ],
+  "limitations": "Internal TestFlight availability only; the build has not been installed on a real iPhone, which is R42. TestFlight builds expire 90 days after upload (about 2027-01-23). The Paid Apps Agreement is not in place and EU trader (DSA) status has not been provided; neither blocks internal TestFlight, both matter for public sale.",
+  "verified_at": "2026-10-25",
+  "verifier": "Ella (Muse), from GitHub Actions run 40238053516 logs and the App Store Connect API",
+  "build": "1",
+  "apple_status": "VALID",
+  "apple_build_id": "2d6371b7-9edb-440e-8ab0-27366e5beabc",
+  "app_id": "6826923645",
+  "release_run": "40238053516",
+  "internal_group": "Internal"
+}
