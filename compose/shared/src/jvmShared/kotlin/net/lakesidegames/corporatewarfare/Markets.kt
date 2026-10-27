@@ -117,7 +117,7 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
             Panel {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Eyebrow("Corridor index")
+                        Eyebrow("Market index")
                         Text(Format.count(last), color = Palette.primaryText, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                         Text("${changeText(week)} this week · ${store.stocks.size} companies", color = changeTint(week), fontSize = 12.sp)
                     }
@@ -172,7 +172,7 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
 private fun LazyListScope.commodities(store: GameStore, onOpen: (CommodityDto) -> Unit) {
     item {
         Text(
-            "Corridor prices per lot: the median asking price of the companies that make each good, or the import price where nobody does.",
+            "Market prices per lot: the median asking price of the companies that make each good, or the import price where nobody does.",
             color = Palette.secondary,
             fontSize = 12.sp,
         )
@@ -345,7 +345,7 @@ private fun CommodityDialog(store: GameStore, line: CommodityDto, onClose: () ->
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatGroup(
-                    Stat("Corridor price per lot", Format.money(line.priceCents), note = "${changeText(line.changeWeekBps)} this week"),
+                    Stat("Market price per lot", Format.money(line.priceCents), note = "${changeText(line.changeWeekBps)} this week"),
                     listOf(
                         Stat("Quarter", changeText(line.changeQuarterBps), changeTint(line.changeQuarterBps)),
                         Stat("Reference", Format.money(line.referenceCents)),

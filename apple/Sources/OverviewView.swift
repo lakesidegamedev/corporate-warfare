@@ -39,7 +39,7 @@ struct OverviewView: View {
                     .foregroundStyle(Theme.secondary)
                 groupPanel
             } else {
-                ProgressView("Opening the corridor…")
+                ProgressView("Opening your world…")
             }
         }
         .sheet(isPresented: $showingSettings) {
