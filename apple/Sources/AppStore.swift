@@ -26,6 +26,8 @@ final class AppStore: ObservableObject {
     @Published var commodities: [CommodityDto] = []
     @Published var stocks: [StockDto] = []
     @Published var ownership: OwnershipDto?
+    /// The selected company's four-week results, loaded when the stats screen opens.
+    @Published var history: [PeriodDto] = []
     @Published var contracts: [ContractDto] = []
     @Published var loans: [LoanDto] = []
     @Published var insurance: [InsuranceDto] = []
@@ -259,6 +261,7 @@ final class AppStore: ObservableObject {
             finance = await engine.finance(firm: selectedFirm)
             productLines = await engine.productLines(firm: selectedFirm)
             ownership = await engine.ownership(firm: selectedFirm)
+            history = await engine.history(firm: selectedFirm)
             contracts = await engine.contracts(firm: selectedFirm)
             loans = await engine.loans(firm: selectedFirm)
             insurance = await engine.insurance(firm: selectedFirm)
@@ -276,6 +279,7 @@ final class AppStore: ObservableObject {
             finance = nil
             productLines = []
             ownership = nil
+            history = []
             contracts = []
             loans = []
             insurance = []
@@ -293,6 +297,14 @@ final class AppStore: ObservableObject {
         selectedRegionCode
             ?? selectedFirmDto.flatMap { firm in boards.first { $0.name == firm.region }?.code }
             ?? boards.first?.code
+    }
+
+    func loadHistory() async {
+        if let selectedFirm {
+            history = await engine.history(firm: selectedFirm)
+        } else {
+            history = []
+        }
     }
 
     func loadMarkets() async {

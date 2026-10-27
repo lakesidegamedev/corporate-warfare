@@ -1222,7 +1222,38 @@ pub struct World {
     /// Weekly closing prices of every good and share, oldest first, at most a year.
     #[serde(default)]
     pub price_history: Vec<PricePoint>,
+    /// Each firm's results in four-week periods with closing balances, oldest first, at most
+    /// five years. Presentation history for the stats screens; no rule reads it.
+    #[serde(default)]
+    pub firm_history: BTreeMap<Handle, Vec<PeriodClose>>,
 }
+
+/// Four weeks of one firm's results, with balances and share price at the period's close.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PeriodClose {
+    pub first_week: u32,
+    pub weeks: u32,
+    pub revenue: i64,
+    pub cost_of_goods: i64,
+    pub wages: i64,
+    pub operating_expense: i64,
+    pub depreciation: i64,
+    pub net_interest: i64,
+    pub tax: i64,
+    pub other: i64,
+    pub net_income: i64,
+    pub cash: i64,
+    pub assets: i64,
+    pub liabilities: i64,
+    pub equity: i64,
+    pub share_price_cents: i64,
+    pub shares_issued: i64,
+}
+
+/// Weeks in one history period.
+pub const PERIOD_WEEKS: u32 = 4;
+/// History periods kept per firm: five years.
+pub const HISTORY_PERIODS: usize = 65;
 
 /// One week's closing prices: each good's corridor price and each firm's share price.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

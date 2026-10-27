@@ -226,8 +226,17 @@ internal fun TabList(content: LazyListScope.() -> Unit) {
 private fun OfficeScreen(store: GameStore) {
     val firm = store.selectedFirmDto
     var editing by remember { mutableStateOf<ProductLineDto?>(null) }
+    var stats by remember { mutableStateOf(false) }
+    if (stats) {
+        StatsScreen(store) { stats = false }
+        return
+    }
     TabList {
-        item { ScreenHeader("CEO Office", store.overview?.weekLabel) }
+        item {
+            ScreenHeader("CEO Office", store.overview?.weekLabel) {
+                if (firm != null) GoldButton("Stats") { stats = true }
+            }
+        }
         if (firm == null) {
             item { Callout("Choose a company from the portfolio.") }
             return@TabList

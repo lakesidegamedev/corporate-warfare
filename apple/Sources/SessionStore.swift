@@ -105,6 +105,10 @@ actor Engine {
         session?.stockBoard() ?? []
     }
 
+    func history(firm: UInt64) -> [PeriodDto] {
+        session?.history(firm: firm) ?? []
+    }
+
     func ownership(firm: UInt64) -> OwnershipDto? {
         session?.ownership(firm: firm)
     }
