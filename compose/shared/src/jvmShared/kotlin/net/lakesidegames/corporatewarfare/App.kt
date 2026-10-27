@@ -323,6 +323,9 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
                 ),
             )
         }
+        if (store.cfoAdvice.isNotEmpty()) {
+            item { CfoPanel(store, firm.currency) }
+        }
         item { RivalsCard(store) }
         store.finance?.takeIf { it.firm == firm.handle && it.recentWeeks.isNotEmpty() }?.let { finance ->
             item { ProfitDrivers(finance.recentWeeks) }
@@ -376,6 +379,28 @@ internal fun ProductionTarget(store: GameStore) {
             detail = { "About ${Format.count((capacity * it / 100).toLong())} of ${Format.count(capacity)} lots a week. Lower targets save inputs and wages when stock piles up." },
             onCommit = { store.setTarget((it * 100).toInt()) },
         )
+    }
+}
+
+/** The CFO: up to three reasons profit is down, each with one button. Shown only when the company is losing money. */
+@Composable
+internal fun CfoPanel(store: GameStore, currency: String) {
+    Panel {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PixelIcon("warning", size = 14.dp, tint = Palette.warning)
+            Spacer(Modifier.width(8.dp))
+            Eyebrow("Your CFO: why profit is down")
+        }
+        store.cfoAdvice.forEach { item ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(item.headline, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text("-${Format.compact(item.weeklyCents, currency)} a week", color = Palette.negative, fontSize = 12.sp)
+                }
+                Text(item.detail, color = Palette.secondary, fontSize = 12.sp)
+                OutlinedButton(onClick = { store.applyAdvice(item) }) { Text(item.actionLabel, color = Palette.primaryText) }
+            }
+        }
     }
 }
 

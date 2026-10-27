@@ -54,6 +54,8 @@ final class AppStore: ObservableObject {
     @Published var economy: EconomyDto?
     /// The selected company's technology position.
     @Published var research: ResearchDto?
+    /// What the CFO says is costing the selected company money. Empty when it is not losing money.
+    @Published var cfoAdvice: [CfoAdviceDto] = []
     @Published var groupTree: [GroupNodeDto] = []
     @Published var boardVotes: [BoardVoteDto] = []
     @Published var institutions: [InstitutionDto] = []
@@ -363,8 +365,10 @@ final class AppStore: ObservableObject {
             raidTargets = await engine.raidTargets(firm: selectedFirm)
             rivals = await engine.rivals(firm: selectedFirm)
             research = await engine.research(firm: selectedFirm)
+            cfoAdvice = await engine.cfoAdvice(firm: selectedFirm)
         } else {
             research = nil
+            cfoAdvice = []
             firmOps = nil
             divisions = []
             held = []
@@ -808,6 +812,15 @@ final class AppStore: ObservableObject {
     }
 
     /// Investor-only commands always act as the investor, never through a subsidiary board.
+    /// Press a CFO button: send its commands in order, stopping at the first the engine refuses.
+    func applyAdvice(_ advice: CfoAdviceDto) async -> CommandRejection? {
+        for json in advice.commands {
+            if let rejection = await submit(json) { return rejection }
+        }
+        statusLine = "Done: \(advice.actionLabel.lowercased())."
+        return nil
+    }
+
     func submitAsInvestor(_ json: String) async -> CommandRejection? {
         await submit(json, actor: 0)
     }

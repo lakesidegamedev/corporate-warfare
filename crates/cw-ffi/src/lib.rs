@@ -2114,6 +2114,19 @@ pub struct WorldPriceDto {
 }
 
 /// One company's research: technology level, progress to the next and what it buys.
+/// One thing the CFO says is costing the company money, with a button that fixes it.
+#[derive(uniffi::Record)]
+pub struct CfoAdviceDto {
+    pub key: String,
+    pub headline: String,
+    pub detail: String,
+    /// Weekly cost in the company's currency cents.
+    pub weekly_cents: i64,
+    pub action_label: String,
+    /// Command intents as JSON; the button submits them in order.
+    pub commands: Vec<String>,
+}
+
 #[derive(uniffi::Record)]
 pub struct ResearchDto {
     pub firm: u64,
@@ -3726,6 +3739,22 @@ impl SessionHandle {
     /// Choose the currency the investor's figures are shown in. False for an unknown id.
     pub fn set_reporting_currency(&self, id: String) -> bool {
         self.lock().set_reporting_currency(&id)
+    }
+
+    /// The CFO's top reasons profit is down. Empty unless the company is losing money.
+    pub fn cfo_advice(&self, firm: u64) -> Vec<CfoAdviceDto> {
+        let session = self.lock();
+        cw_session::cfo::advice(&session.world, &session.dataset, firm)
+            .into_iter()
+            .map(|item| CfoAdviceDto {
+                key: item.key,
+                headline: item.headline,
+                detail: item.detail,
+                weekly_cents: item.weekly_cents,
+                action_label: item.action_label,
+                commands: item.commands,
+            })
+            .collect()
     }
 
     /// A company's research position.

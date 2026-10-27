@@ -31,6 +31,13 @@ heading.
   game weeks in the background, with a random install id and nothing else about you, and fails
   silently. A new Analytics switch in Settings turns it off. The iPhone build already sends the
   current snapshot format, since the snapshot comes straight from the engine.
+- A new plant no longer pays a full crew for the whole build. Crews are hired in the last four
+  weeks before a plant opens, so it opens staffed without half a year of idle wages. A hardware
+  plant in Silicon Valley cost about $11,000 a week for 24 weeks before making anything.
+- Research no longer burns cash at the technology frontier. A company that already has the best
+  level it is allowed to buy stops spending its research budget until the frontier moves.
+- Research is cheaper to start: the first levels cost $40,000, $160,000 and $360,000 instead of
+  $100,000, $400,000 and $900,000.
 
 ### Added
 
@@ -48,6 +55,11 @@ heading.
   first 26 weeks. In Texas Oil Patch 1981 (and the other scenarios) the player's divisions were
   raided in the first weeks, before any marketing or defence could exist, and the game paused.
   Later raids are unchanged.
+- The CFO. When a company has lost money over the last four weeks, the CEO Office now shows up
+  to three reasons, biggest first, in plain English with what each costs a week and one button
+  that fixes it: pause research, stop marketing, stop training, stop quality spending, price a
+  good above what it costs to make, or let the plants plan production again. A company that is
+  making money sees nothing.
 
 ## [1.7.0] - 2026-10-27
 

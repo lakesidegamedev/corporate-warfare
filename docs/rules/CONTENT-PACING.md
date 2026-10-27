@@ -78,8 +78,8 @@ quarters recovery. Booms raise 10 percent similarly. Permit only one macro regim
 at a time; no compounding unbounded pile of multipliers. National history is not scripted
 as factual replication of 2000 onward. Crisis events explain the alternate-history model.
 
-R&D spend accumulates progress; level threshold = $100,000 * (level+1)^2, capped at
-frontier+1. At threshold, deterministic success draw 7500 BPS once, failure retains
+R&D spend accumulates progress; level threshold = $40,000 * (level+1)^2, capped at
+frontier+1. A firm already at the cap spends nothing on research until the frontier moves. At threshold, deterministic success draw 7500 BPS once, failure retains
 half progress and costs remain spent. Tech level max 20, per-level efficiency improvement
 2 percent additive, floor input/labour intensity 60 percent baseline. Brand spend to
 regional/product stock: +round(spend / baseline_weekly_category_spend *10000) BPS,

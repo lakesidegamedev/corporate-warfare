@@ -53,6 +53,10 @@ actor Engine {
         session?.research(firm: firm)
     }
 
+    func cfoAdvice(firm: UInt64) -> [CfoAdviceDto] {
+        session?.cfoAdvice(firm: firm) ?? []
+    }
+
     func loadSave(_ data: Data) throws -> OverviewDto {
         // The engine builds the new world before the old handle is released, so a failed import
         // leaves the live session exactly as it was.

@@ -548,6 +548,10 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(0.9f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                if (store.cfoAdvice.isNotEmpty()) {
+                    CfoPanel(store, firm.currency)
+                    Spacer(Modifier.height(10.dp))
+                }
                 RivalsCard(store)
                 Spacer(Modifier.height(10.dp))
                 store.finance?.takeIf { it.firm == firm.handle && it.recentWeeks.isNotEmpty() }?.let { ProfitDrivers(it.recentWeeks) }

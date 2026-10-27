@@ -670,6 +670,49 @@ struct ProfitDrivers: View {
     }
 }
 
+/// The CFO: up to three reasons profit is down, each with one button. Shown only when the
+/// company is losing money; the engine decides what matters.
+struct CfoPanel: View {
+    @EnvironmentObject private var store: AppStore
+    let currency: String
+    @Binding var rejection: CommandRejection?
+
+    var body: some View {
+        Panel(padding: 12) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    PixelIcon("warning", size: 14).foregroundStyle(Theme.warning)
+                    Eyebrow(text: "Your CFO: why profit is down")
+                }
+                ForEach(store.cfoAdvice, id: \.key) { item in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(item.headline)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Theme.primaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 8)
+                            Text("-\(Format.moneyCompact(item.weeklyCents, currency: currency)) a week")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(Theme.negative)
+                        }
+                        Text(item.detail)
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button(item.actionLabel) {
+                            Task { rejection = await store.applyAdvice(item) }
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(Theme.gold)
+                        .accessibilityHint(item.detail)
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Value slider
 
 /// A fine-grained control for one number: a custom track with tick marks and a filled run from

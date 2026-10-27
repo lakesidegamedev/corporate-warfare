@@ -60,10 +60,10 @@ fn assert_books(world: &World) {
 
 #[test]
 fn research_thresholds_are_squared_and_monotone() {
-    assert_eq!(research::threshold(0), 10_000_000);
-    assert_eq!(research::threshold(1), 40_000_000);
-    assert_eq!(research::threshold(2), 90_000_000);
-    assert_eq!(research::threshold(4), 250_000_000);
+    assert_eq!(research::threshold(0), 4_000_000);
+    assert_eq!(research::threshold(1), 16_000_000);
+    assert_eq!(research::threshold(2), 36_000_000);
+    assert_eq!(research::threshold(4), 100_000_000);
     for level in 1..research::MAX_TECH_LEVEL {
         assert!(
             research::threshold(level + 1) > research::threshold(level),
@@ -208,9 +208,9 @@ fn research_stops_at_the_frontier_and_the_level_ceiling() {
         "capped research does not bank progress"
     );
     assert_eq!(
-        cash_before - world.firm(firm).unwrap().book.cash(),
-        50_000_000,
-        "the failed spend still costs money"
+        cash_before,
+        world.firm(firm).unwrap().book.cash(),
+        "a firm at the cap keeps its research cash"
     );
 
     // The absolute ceiling is 20 even with an unbounded frontier.

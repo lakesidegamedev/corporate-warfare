@@ -39,7 +39,8 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// recorded on the engine before the change and must never move because of Texas content.
 /// Repinned when the character cast joined the dataset and the engine began naming chairs and
 /// chief executives from it, and again when rivals began choosing moves by temperament with
-/// grudges and alliances (1.7 preview 5), and again in 1.7.1 when new divisions gained a raid grace period.
+/// grudges and alliances (1.7 preview 5), and again in 1.7.1 when new divisions gained a raid grace period, and when a plant under construction
+/// stopped hiring its crew until the last four weeks and research stopped spending at the frontier.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -51,15 +52,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "e445cb039252a16ca6925a74292b19f064e1d4319468eb389636cc2fc75d19c7",
+            "e7d28ac571f561ac3cd1f541943b999cb2d9deac1a5be858d835e887d647db48",
         ),
         (
             2,
-            "bac53c2d7e508767ef5a4cd165a060d8d99dc2e0fe5b3dfc33225bdd179e8218",
+            "ff90ce38ae3199be570b1aa2928a41a70ae1b5e4d43813edfd7450b7156cf115",
         ),
         (
             3,
-            "a47e198119e0a7e4296f200332a36f2b9884b1e6ff42af22974e1cd7906a4aec",
+            "fe1d201c7b6fc774cbc2ac17c44dc12771ddc4a6eef75634c20e4012b2d5a9cd",
         ),
     ];
     for (seed, hash) in pins {
@@ -71,12 +72,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "90d966101fa33db9561767757e1837f9a45e140522898990091c977994b6224a"
+        "11e8b31680af9056fb5a4a9ddc73b886a3cff05578b8ac46033a23e4bcf51368"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "1ac21627f81cc117362b3bdfb424530e760979043861a359508a653e8d6a09ed"
+        "07abed35746973c3e52d6e728698ac1387294768f117b65d10beae171bf88d97"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();
