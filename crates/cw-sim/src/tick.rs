@@ -41,64 +41,64 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     }
 
     // Phase 1: expiries, deliveries, construction and governance.
-    crate::economy::logistics::begin_week(world, dataset);
-    crate::economy::structure::sync_supply(world, dataset);
-    crate::economy::freight::settle(world, dataset);
-    crate::economy::procurement::ensure_contracts(world, dataset);
-    crate::economy::procurement::settle(world, dataset);
-    complete_construction(world, dataset);
-    crate::economy::deals::weekly(world);
-    crate::economy::governance::weekly(world, dataset);
+    crate::ph!("logistics::begin_week", crate::economy::logistics::begin_week(world, dataset));
+    crate::ph!("structure::sync_supply", crate::economy::structure::sync_supply(world, dataset));
+    crate::ph!("freight::settle", crate::economy::freight::settle(world, dataset));
+    crate::ph!("procurement::ensure_contracts", crate::economy::procurement::ensure_contracts(world, dataset));
+    crate::ph!("procurement::settle", crate::economy::procurement::settle(world, dataset));
+    crate::ph!("complete_construction", complete_construction(world, dataset));
+    crate::ph!("deals::weekly", crate::economy::deals::weekly(world));
+    crate::ph!("governance::weekly", crate::economy::governance::weekly(world, dataset));
 
     // Phase 3: labour and payroll.
     for region in &mut world.regions {
         region.paid_named_wages_cents = 0;
     }
-    crate::economy::labour::clear(world, dataset);
+    crate::ph!("labour::clear", crate::economy::labour::clear(world, dataset));
 
     // Phase 4: utilities and production.
-    crate::economy::production::produce(world, dataset);
+    crate::ph!("production::produce", crate::economy::production::produce(world, dataset));
 
     // Phase 5: markets.
-    crate::economy::markets::clear_week(world, dataset);
+    crate::ph!("markets::clear_week", crate::economy::markets::clear_week(world, dataset));
 
     // Phase 7: expenses, debt service, claims and defaults.
-    settle_expenses(world, dataset);
-    crate::economy::operations::weekly(world, dataset);
-    crate::economy::credit::service(world, dataset);
-    crate::economy::banking::weekly(world);
-    crate::economy::insurance::weekly(world);
-    let solvency = crate::economy::insolvency::settle(world, dataset);
+    crate::ph!("settle_expenses", settle_expenses(world, dataset));
+    crate::ph!("operations::weekly", crate::economy::operations::weekly(world, dataset));
+    crate::ph!("credit::service", crate::economy::credit::service(world, dataset));
+    crate::ph!("banking::weekly", crate::economy::banking::weekly(world));
+    crate::ph!("insurance::weekly", crate::economy::insurance::weekly(world));
+    let solvency = crate::ph!("insolvency::settle", crate::economy::insolvency::settle(world, dataset));
 
     // Phase 8: organisation, policy, research, valuation, exchange and events.
-    crate::economy::unions::weekly(world, dataset);
-    crate::economy::policy::weekly(world);
-    crate::economy::research::weekly(world, dataset);
-    crate::economy::production::expire_services(world, dataset);
-    crate::economy::storage::weekly(world, dataset);
-    crate::economy::production::spoil_perishables(world, dataset);
-    crate::economy::storage::close_week(world);
-    crate::economy::equity::refresh_valuation(world, dataset);
-    crate::economy::equity::clear_exchange(world, dataset);
-    crate::economy::structure::weekly(world, dataset);
-    crate::economy::rivalry::weekly(world);
-    crate::economy::world_prices::weekly(world);
-    crate::economy::macro_cycle::weekly(world, dataset);
-    crate::economy::fx::weekly(world, dataset);
-    crate::economy::reserve::weekly(world, dataset);
-    crate::economy::politics::weekly(world, dataset);
-    crate::economy::cast::weekly(world, dataset);
-    crate::economy::rescue::weekly(world, dataset);
-    crate::economy::systemic::weekly(world, dataset);
-    crate::economy::events_engine::quarter_check(world, dataset);
-    crate::economy::events_engine::state_triggers(world, dataset);
-    crate::economy::events_engine::auto_resolve(world, dataset);
-    crate::economy::events_engine::expire_optional(world, dataset);
-    crate::economy::events_engine::retire_stale_mandatory(world, dataset);
+    crate::ph!("unions::weekly", crate::economy::unions::weekly(world, dataset));
+    crate::ph!("policy::weekly", crate::economy::policy::weekly(world));
+    crate::ph!("research::weekly", crate::economy::research::weekly(world, dataset));
+    crate::ph!("production::expire_services", crate::economy::production::expire_services(world, dataset));
+    crate::ph!("storage::weekly", crate::economy::storage::weekly(world, dataset));
+    crate::ph!("production::spoil_perishables", crate::economy::production::spoil_perishables(world, dataset));
+    crate::ph!("storage::close_week", crate::economy::storage::close_week(world));
+    crate::ph!("equity::refresh_valuation", crate::economy::equity::refresh_valuation(world, dataset));
+    crate::ph!("equity::clear_exchange", crate::economy::equity::clear_exchange(world, dataset));
+    crate::ph!("structure::weekly", crate::economy::structure::weekly(world, dataset));
+    crate::ph!("rivalry::weekly", crate::economy::rivalry::weekly(world));
+    crate::ph!("world_prices::weekly", crate::economy::world_prices::weekly(world));
+    crate::ph!("macro_cycle::weekly", crate::economy::macro_cycle::weekly(world, dataset));
+    crate::ph!("fx::weekly", crate::economy::fx::weekly(world, dataset));
+    crate::ph!("reserve::weekly", crate::economy::reserve::weekly(world, dataset));
+    crate::ph!("politics::weekly", crate::economy::politics::weekly(world, dataset));
+    crate::ph!("cast::weekly", crate::economy::cast::weekly(world, dataset));
+    crate::ph!("rescue::weekly", crate::economy::rescue::weekly(world, dataset));
+    crate::ph!("systemic::weekly", crate::economy::systemic::weekly(world, dataset));
+    crate::ph!("events_engine::quarter_check", crate::economy::events_engine::quarter_check(world, dataset));
+    crate::ph!("events_engine::state_triggers", crate::economy::events_engine::state_triggers(world, dataset));
+    crate::ph!("events_engine::auto_resolve", crate::economy::events_engine::auto_resolve(world, dataset));
+    crate::ph!("events_engine::expire_optional", crate::economy::events_engine::expire_optional(world, dataset));
+    crate::ph!("events_engine::retire_stale_mandatory", crate::economy::events_engine::retire_stale_mandatory(world, dataset));
     world.clear_construction_orders();
-    refresh_household_income(world, dataset);
-    crate::economy::fiscal::close_week(world);
-    apply_macro_price_drift(world, dataset);
+    crate::ph!("refresh_household_income", refresh_household_income(world, dataset));
+    crate::ph!("fiscal::close_week", crate::economy::fiscal::close_week(world));
+    crate::ph!("apply_macro_price_drift", apply_macro_price_drift(world, dataset));
 
     // Close books and sales history, then track resilience.
     let handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
@@ -128,11 +128,11 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     if world.pending_pause.is_none() {
         world.pending_pause = pause_reason(world);
     }
-    crate::economy::pricing::weekly(world, dataset);
-    crate::economy::pricing::record_closing_prices(world, dataset);
-    crate::economy::history::record_week(world);
-    crate::economy::objectives::weekly(world, dataset);
-    crate::economy::score::update(world, dataset);
+    crate::ph!("pricing::weekly", crate::economy::pricing::weekly(world, dataset));
+    crate::ph!("pricing::record_closing_prices", crate::economy::pricing::record_closing_prices(world, dataset));
+    crate::ph!("history::record_week", crate::economy::history::record_week(world));
+    crate::ph!("objectives::weekly", crate::economy::objectives::weekly(world, dataset));
+    crate::ph!("score::update", crate::economy::score::update(world, dataset));
     WeekOutcome {
         week: world.tick,
         pause: world.pending_pause.clone(),
