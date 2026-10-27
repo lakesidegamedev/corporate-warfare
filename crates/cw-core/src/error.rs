@@ -65,6 +65,8 @@ pub enum AuthorityReason {
     PayoutFrozen,
     BoardApprovalRequired,
     OutsideLimit,
+    /// The two parties keep books in different currencies and this arrangement needs one.
+    OtherCurrency,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

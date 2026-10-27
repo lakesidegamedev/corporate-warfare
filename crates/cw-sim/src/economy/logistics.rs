@@ -773,7 +773,14 @@ fn apply_contracts(world: &mut World, ds: &Dataset) {
                 alloc.carrier
             };
             let km = leg_km(ds, contract.key.a, contract.key.b, contract.key.mode) as i64;
-            credit_carrier(world, ds, carrier, cents.0, lots.0 * km);
+            credit_carrier(
+                world,
+                ds,
+                carrier,
+                cents.0,
+                lots.0 * km,
+                crate::economy::fx::currency_of(world, holder),
+            );
         }
         world.logistics.totals.cents += fee;
         contract.held = held;
@@ -1442,7 +1449,14 @@ pub fn book(
                     if let Some(c) = world.logistics.carriers.get_mut(carrier as usize) {
                         c.used_lot_km += part.lots * km;
                     }
-                    credit_carrier(world, ds, carrier, cents, part.lots * km);
+                    credit_carrier(
+                        world,
+                        ds,
+                        carrier,
+                        cents,
+                        part.lots * km,
+                        crate::economy::fx::currency_of(world, payer),
+                    );
                 }
                 PartKind::Outside => {
                     if let Some(lane) = world.logistics.lanes.get_mut(&key) {
@@ -1467,11 +1481,16 @@ pub fn book(
         }
     }
     if outside_cents > 0 {
+        let received = world.fx.convert(
+            outside_cents,
+            crate::economy::fx::currency_of(world, payer),
+            0,
+        );
         let _ = world.outside.gateway_book.commit(
             world.tick,
-            Txn::new().debit(Account::Cash, outside_cents, memo).credit(
+            Txn::new().debit(Account::Cash, received, memo).credit(
                 Account::Revenue,
-                outside_cents,
+                received,
                 memo,
             ),
         );
@@ -1488,7 +1507,14 @@ pub fn book(
 
 /// Pay a carrier for lots it moved: revenue now, and the freight stock it made for the purpose is
 /// relieved at cost. A carrier that has gone is replaced by the outside sector.
-fn credit_carrier(world: &mut World, ds: &Dataset, carrier: u16, cents: i64, lot_km: i64) {
+fn credit_carrier(
+    world: &mut World,
+    ds: &Dataset,
+    carrier: u16,
+    cents: i64,
+    lot_km: i64,
+    payer_currency: u8,
+) {
     if cents <= 0 && lot_km <= 0 {
         return;
     }
@@ -1500,6 +1526,7 @@ fn credit_carrier(world: &mut World, ds: &Dataset, carrier: u16, cents: i64, lot
     let alive = world.firms.get(c.firm).is_some_and(|f| f.operative());
     if !alive {
         if cents > 0 {
+            let cents = world.fx.convert(cents, payer_currency, 0);
             let _ = world.outside.gateway_book.commit(
                 tick,
                 Txn::new().debit(Account::Cash, cents, "freight").credit(
@@ -1511,6 +1538,12 @@ fn credit_carrier(world: &mut World, ds: &Dataset, carrier: u16, cents: i64, lot
         }
         return;
     }
+    // The payer paid in its money; the carrier is paid in its own.
+    let cents = world.fx.convert(
+        cents,
+        payer_currency,
+        crate::economy::fx::currency_of(world, c.firm),
+    );
     let Some(firm) = world.firms.get_mut(c.firm) else {
         return;
     };

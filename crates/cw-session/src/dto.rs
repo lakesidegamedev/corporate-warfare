@@ -9,8 +9,13 @@ pub struct Overview {
     pub tick: u32,
     pub week_label: String,
     pub revision: u64,
+    /// Investor figures are in the reporting currency.
     pub investor_cash_cents: i64,
     pub investor_net_worth_cents: i64,
+    /// The reporting currency id, empty when the scenario has one money.
+    pub reporting_currency: String,
+    /// The currency the primary company's figures are in, empty when the scenario has one money.
+    pub primary_currency: String,
     pub primary_firm: Option<u64>,
     pub primary_name: String,
     pub firm_cash_cents: i64,
@@ -40,6 +45,9 @@ pub struct FirmSummary {
     pub name: String,
     pub industry: String,
     pub region: String,
+    /// The currency of cash and equity; empty when the scenario has one money. Fair value and
+    /// the share mark are quoted in the numeraire.
+    pub currency: String,
     pub cash_cents: i64,
     pub equity_cents: i64,
     pub fair_value_cents: i64,
@@ -267,6 +275,7 @@ pub fn firm_summary(
         name: firm.name.clone(),
         industry: cw_sim::state::INDUSTRY_NAMES[firm.industry as usize].to_owned(),
         region: world.regions[firm.region as usize].name.clone(),
+        currency: currency_id(world, _dataset, handle),
         cash_cents: if inspect { firm.book.cash() } else { 0 },
         equity_cents: if inspect { firm.book.total_equity() } else { 0 },
         fair_value_cents: firm.shares.fair_cents * firm.shares.eligible_votes(),
@@ -956,4 +965,154 @@ pub fn stock_board(world: &World) -> Vec<StockLine> {
             }
         })
         .collect()
+}
+
+/// The currency id a firm keeps its books in; empty when the scenario has one money.
+pub fn currency_id(world: &World, dataset: &Dataset, handle: u64) -> String {
+    if !world.fx.active {
+        return String::new();
+    }
+    let index = cw_sim::economy::fx::currency_of(world, cw_core::ids::Handle(handle)) as usize;
+    dataset
+        .currencies
+        .as_ref()
+        .and_then(|set| set.currencies.get(index))
+        .map(|def| def.id.clone())
+        .unwrap_or_default()
+}
+
+/// One currency as the economy card shows it, against the reporting currency.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CurrencyView {
+    pub id: String,
+    pub name: String,
+    pub symbol: String,
+    pub country: String,
+    pub central_bank: String,
+    /// What one unit is worth in the reporting currency, in millionths.
+    pub value_ppm: i64,
+    /// Change over the last 13 weeks, in basis points.
+    pub trend_bps: i32,
+    pub policy_rate_bps: i32,
+    pub inflation_bps: i32,
+    pub pegged: bool,
+    /// Half width of the peg band now, in basis points; zero for a float.
+    pub band_bps: i32,
+    /// How hard the market is pushing on the peg, in basis points.
+    pub strain_bps: i32,
+    pub crisis_week: Option<u32>,
+    /// Weekly value in the reporting currency, millionths, oldest first, up to 52 weeks.
+    pub history_ppm: Vec<i64>,
+}
+
+/// The foreign exchange picture for the economy card.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FxView {
+    pub reporting: String,
+    pub reporting_symbol: String,
+    pub currencies: Vec<CurrencyView>,
+    /// Foreign exchange gains and losses booked by the investor's companies, in the reporting
+    /// currency, and the foreign sales still waiting to be collected.
+    pub gains_cents: i64,
+    pub losses_cents: i64,
+    pub open_foreign_sales_cents: i64,
+}
+
+pub fn fx_view(world: &World, dataset: &Dataset, reporting: u8) -> Option<FxView> {
+    if !world.fx.active {
+        return None;
+    }
+    let set = dataset.currencies.as_ref()?;
+    let fx = &world.fx;
+    let rep_history = |back: usize| -> i64 {
+        if reporting == 0 {
+            return cw_sim::economy::fx::PPM;
+        }
+        let history = &fx.currencies[reporting as usize].history;
+        history
+            .len()
+            .checked_sub(back + 1)
+            .and_then(|i| history.get(i))
+            .copied()
+            .unwrap_or(cw_sim::economy::fx::PPM)
+    };
+    let currencies = set
+        .currencies
+        .iter()
+        .enumerate()
+        .map(|(index, def)| {
+            let st = &fx.currencies[index];
+            let relative = |value: i64, back: usize| -> i64 {
+                cw_core::money::round_even_div(
+                    value as i128 * cw_sim::economy::fx::PPM as i128,
+                    rep_history(back).max(1) as i128,
+                ) as i64
+            };
+            let len = st.history.len();
+            let history_ppm: Vec<i64> = (0..len.min(52))
+                .rev()
+                .map(|back| {
+                    let value = if index == 0 {
+                        cw_sim::economy::fx::PPM
+                    } else {
+                        st.history[len - 1 - back]
+                    };
+                    relative(value, back)
+                })
+                .collect();
+            let now = history_ppm
+                .last()
+                .copied()
+                .unwrap_or(cw_sim::economy::fx::PPM);
+            let then = history_ppm
+                .len()
+                .checked_sub(14)
+                .and_then(|i| history_ppm.get(i))
+                .copied()
+                .unwrap_or(history_ppm.first().copied().unwrap_or(now));
+            CurrencyView {
+                id: def.id.clone(),
+                name: def.name.clone(),
+                symbol: def.symbol.clone(),
+                country: def.country.clone(),
+                central_bank: def.central_bank.clone(),
+                value_ppm: fx.rate_ppm(index as u8, reporting),
+                trend_bps: if then > 0 {
+                    ((now - then) * 10_000 / then) as i32
+                } else {
+                    0
+                },
+                policy_rate_bps: st.policy_rate_bps,
+                inflation_bps: st.inflation_bps,
+                pegged: def.peg.is_some(),
+                band_bps: st.band_bps,
+                strain_bps: st.strain_bps,
+                crisis_week: st.crisis_week,
+                history_ppm,
+            }
+        })
+        .collect();
+    let (mut gains, mut losses) = (0i64, 0i64);
+    for handle in world.investor_firms() {
+        if let Some(pnl) = fx.pnl.get(&handle) {
+            let own = cw_sim::economy::fx::currency_of(world, handle);
+            gains += fx.convert(pnl.gains, own, reporting);
+            losses += fx.convert(pnl.losses, own, reporting);
+        }
+    }
+    let mut open = 0i64;
+    for r in &fx.receivables {
+        if world.investor_firms().contains(&r.seller) {
+            open += fx.convert(r.booked, r.to, reporting);
+        }
+    }
+    let reporting_def = set.currencies.get(reporting as usize)?;
+    Some(FxView {
+        reporting: reporting_def.id.clone(),
+        reporting_symbol: reporting_def.symbol.clone(),
+        currencies,
+        gains_cents: gains,
+        losses_cents: losses,
+        open_foreign_sales_cents: open,
+    })
 }

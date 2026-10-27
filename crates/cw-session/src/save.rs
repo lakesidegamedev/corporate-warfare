@@ -20,6 +20,9 @@ pub const MAX_BYTES: usize = 64 * 1024 * 1024;
 
 /// Marks the optional custom scenario trailer after the world payload.
 const CUSTOM_MAGIC: &[u8; 4] = b"CUST";
+/// Marks the currency trailer of a world with more than one money, after the custom trailer.
+/// A world with one money writes nothing, so its save is byte for byte what it always was.
+const FX_MAGIC: &[u8; 4] = b"FXST";
 
 pub fn encode(world: &World, career_id: u64) -> Result<Vec<u8>, DomainError> {
     encode_with(world, career_id, None)
@@ -61,6 +64,15 @@ pub fn encode_with(
         out.extend_from_slice(&(json.len() as u32).to_le_bytes());
         out.extend_from_slice(&digest(DOMAIN_SAVE, &json));
         out.extend_from_slice(&json);
+    }
+    if world.fx.active {
+        let bytes = postcard::to_allocvec(&world.fx).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+        out.extend_from_slice(FX_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
     }
     Ok(out)
 }
@@ -122,10 +134,11 @@ pub fn decode_with(
             detail: SaveFault::Checksum,
         });
     }
-    let world: World = postcard::from_bytes(payload).map_err(|_| DomainError::InvalidSave {
+    let mut world: World = postcard::from_bytes(payload).map_err(|_| DomainError::InvalidSave {
         detail: SaveFault::MalformedPayload,
     })?;
-    let rest = &bytes[cursor + declared..];
+    let mut rest = &bytes[cursor + declared..];
+    let mut custom_end = 0usize;
     let custom = if rest.len() >= 40 && &rest[..4] == CUSTOM_MAGIC {
         let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
         let mut sum = [0u8; 32];
@@ -138,6 +151,7 @@ pub fn decode_with(
                 detail: SaveFault::Checksum,
             });
         }
+        custom_end = 40 + length;
         Some(
             serde_json::from_slice(json).map_err(|_| DomainError::InvalidSave {
                 detail: SaveFault::MalformedPayload,
@@ -146,6 +160,23 @@ pub fn decode_with(
     } else {
         None
     };
+    rest = &rest[custom_end..];
+    if rest.len() >= 40 && &rest[..4] == FX_MAGIC {
+        let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
+        let mut sum = [0u8; 32];
+        sum.copy_from_slice(&rest[8..40]);
+        let body = rest.get(40..40 + length).ok_or(DomainError::InvalidSave {
+            detail: SaveFault::Truncated,
+        })?;
+        if digest(DOMAIN_SAVE, body) != sum {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Checksum,
+            });
+        }
+        world.fx = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+    }
     Ok((world, career_id, custom))
 }
 

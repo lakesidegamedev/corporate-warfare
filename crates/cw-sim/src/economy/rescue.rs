@@ -123,7 +123,11 @@ fn news(world: &mut World, text: String) {
 /// should leave it alone.
 pub fn try_rescue(world: &mut World, ds: &Dataset, firm: Handle) -> bool {
     let law = world.politics.laws.rescue;
-    if law == Rescue::None || !is_strategic(world, ds, firm) {
+    // Only the lead country's state keeps a rescue fund; its books are in the numeraire.
+    if law == Rescue::None
+        || !crate::economy::fx::in_numeraire(world, ds, firm)
+        || !is_strategic(world, ds, firm)
+    {
         return false;
     }
     let Some(entity) = world.firms.get(firm) else {

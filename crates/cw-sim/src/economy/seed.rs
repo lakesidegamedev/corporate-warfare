@@ -184,7 +184,18 @@ pub fn build_with(
         systemic: Default::default(),
         structure: Default::default(),
         rivalry: Default::default(),
+        fx: crate::economy::fx::init(dataset, seed),
     };
+
+    // A scenario's anchor central bank may open with a hawk or a dove in the chair.
+    if let Some(stance) = dataset
+        .currencies
+        .as_ref()
+        .and_then(|set| set.currencies.first())
+        .and_then(|def| def.chair_stance)
+    {
+        world.macro_state.cycle.chair.stance = stance.clamp(-100, 100);
+    }
 
     // Outside gateway capital is finite but real: exports are paid from it, imports add to it.
     // The outside economy is large next to the corridor; weekly pacing in `clear_week` keeps

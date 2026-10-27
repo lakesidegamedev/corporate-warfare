@@ -1,0 +1,116 @@
+{
+  "classification": "authored engineering calibration; NOT real freight rates, rail maps or canal charts. Gateway names are outside sea legs: the North Sea, the Atlantic via the Channel, the Baltic and the Mediterranean (by the Rhone-Rhine route).",
+  "public_rail": [
+    "BE-ANT",
+    "BE-LIE",
+    "DE-HAM",
+    "DE-HAN",
+    "DE-MUC",
+    "DE-OST",
+    "DE-RHM",
+    "DE-RHW",
+    "DE-RLP",
+    "DE-RUH",
+    "DE-SAA",
+    "DE-STU",
+    "FR-ALS",
+    "FR-LOR",
+    "LU-LUX",
+    "NL-AMS",
+    "NL-LIM",
+    "NL-ROT"
+  ],
+  "public_ports": [
+    "BE-ANT",
+    "BE-LIE",
+    "DE-HAM",
+    "DE-RHM",
+    "DE-RHW",
+    "DE-RLP",
+    "DE-RUH",
+    "FR-ALS",
+    "NL-AMS",
+    "NL-ROT"
+  ],
+  "sea_systems": [
+    {
+      "id": "rhine_waterways",
+      "name": "Rhine, Meuse and the inland waterways",
+      "factor_bps": 11000,
+      "ports": [
+        "BE-ANT",
+        "BE-LIE",
+        "DE-RHM",
+        "DE-RHW",
+        "DE-RLP",
+        "DE-RUH",
+        "FR-ALS",
+        "NL-AMS",
+        "NL-ROT"
+      ]
+    },
+    {
+      "id": "north_sea",
+      "name": "North Sea and the Channel ports",
+      "factor_bps": 12000,
+      "ports": [
+        "BE-ANT",
+        "DE-HAM",
+        "NL-AMS",
+        "NL-ROT"
+      ]
+    }
+  ],
+  "gateway_links": [
+    {
+      "region": "NL-ROT",
+      "gateway": "north_sea",
+      "km": 60
+    },
+    {
+      "region": "NL-ROT",
+      "gateway": "atlantic",
+      "km": 450
+    },
+    {
+      "region": "NL-ROT",
+      "gateway": "mediterranean",
+      "km": 3300
+    },
+    {
+      "region": "BE-ANT",
+      "gateway": "north_sea",
+      "km": 120
+    },
+    {
+      "region": "BE-ANT",
+      "gateway": "atlantic",
+      "km": 500
+    },
+    {
+      "region": "NL-AMS",
+      "gateway": "north_sea",
+      "km": 40
+    },
+    {
+      "region": "DE-HAM",
+      "gateway": "north_sea",
+      "km": 150
+    },
+    {
+      "region": "DE-HAM",
+      "gateway": "baltic",
+      "km": 400
+    },
+    {
+      "region": "DE-HAM",
+      "gateway": "atlantic",
+      "km": 900
+    },
+    {
+      "region": "FR-ALS",
+      "gateway": "mediterranean",
+      "km": 900
+    }
+  ]
+}

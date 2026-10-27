@@ -1,0 +1,750 @@
+{
+  "schema": 1,
+  "classification": "authored game content; fictional firms, no real brands, logos or claims about real companies",
+  "note": "The Rhine economy in early 1991: coal and steel in structural decline in the Ruhr, Saar, Wallonia, Lorraine and Luxembourg, chemicals along the Rhine, autos and engineering in the south, banks and insurers in Frankfurt, Luxembourg and the Randstad, state-owned and Treuhand-held industry in the east, and the logistics that tie it together. Every firm keeps its plants in regions that use its own country's money; carriers may pin the lanes they open on across a border, so the Rotterdam and Antwerp pipelines to the Ruhr exist from day one. At least two named firms per industry.",
+  "firms": [
+    {
+      "id": "muensterland_hoefe",
+      "name": "Muensterland Farms",
+      "industry": "agriculture",
+      "archetype": "consolidator",
+      "region": "DE-RHW",
+      "recipe": "mixed_farm",
+      "blocks": 10,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "food_processing",
+          "region": "DE-HAN",
+          "blocks": 3
+        }
+      ]
+    },
+    {
+      "id": "westland_kassen",
+      "name": "Westland Glasshouse Growers",
+      "industry": "agriculture",
+      "archetype": "technologist",
+      "region": "NL-ROT",
+      "recipe": "farm_precision",
+      "blocks": 8,
+      "public": false
+    },
+    {
+      "id": "altmark_agrar",
+      "name": "Altmark Agrar Holding",
+      "industry": "agriculture",
+      "archetype": "vulture",
+      "region": "DE-OST",
+      "recipe": "farm_industrial",
+      "blocks": 14,
+      "public": false,
+      "cash_pct": 60
+    },
+    {
+      "id": "emscher_kohle",
+      "name": "Emscher Kohle AG",
+      "industry": "extraction",
+      "archetype": "consolidator",
+      "region": "DE-RUH",
+      "recipe": "coal_mine",
+      "blocks": 12,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "coal_mine",
+          "region": "DE-SAA",
+          "blocks": 4
+        }
+      ]
+    },
+    {
+      "id": "rheinische_braunkohle",
+      "name": "Rheinische Braunkohle",
+      "industry": "extraction",
+      "archetype": "cost_leader",
+      "region": "DE-RHW",
+      "recipe": "coal_mine",
+      "blocks": 10,
+      "public": true
+    },
+    {
+      "id": "meuse_charbonnages",
+      "name": "Meuse Charbonnages",
+      "industry": "extraction",
+      "archetype": "vulture",
+      "region": "BE-LIE",
+      "recipe": "coal_mine",
+      "blocks": 6,
+      "public": false
+    },
+    {
+      "id": "lorraine_houilleres",
+      "name": "Houilleres de Lorraine",
+      "industry": "extraction",
+      "archetype": "consolidator",
+      "region": "FR-LOR",
+      "recipe": "coal_mine",
+      "blocks": 7,
+      "public": true
+    },
+    {
+      "id": "noordgas",
+      "name": "Noordgas Maatschappij",
+      "industry": "extraction",
+      "archetype": "cost_leader",
+      "region": "NL-AMS",
+      "recipe": "gas_wells",
+      "blocks": 12,
+      "public": true,
+      "cash_pct": 200
+    },
+    {
+      "id": "westfalen_energie",
+      "name": "Westfalen Energie AG",
+      "industry": "energy",
+      "archetype": "consolidator",
+      "region": "DE-RUH",
+      "recipe": "generator_coal",
+      "blocks": 6,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "generator_nuclear",
+          "region": "DE-HAN",
+          "blocks": 3
+        }
+      ],
+      "cash_pct": 300
+    },
+    {
+      "id": "lorraine_electricite",
+      "name": "Lorraine Electricite",
+      "industry": "energy",
+      "archetype": "technologist",
+      "region": "FR-LOR",
+      "recipe": "generator_nuclear",
+      "blocks": 4,
+      "public": true,
+      "cash_pct": 200
+    },
+    {
+      "id": "pfalz_chemie",
+      "name": "Pfalz Chemie AG",
+      "industry": "chemical_industries",
+      "archetype": "brand_builder",
+      "region": "DE-RLP",
+      "recipe": "chemical_plant",
+      "blocks": 14,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "plastics_plant",
+          "region": "DE-RUH",
+          "blocks": 4
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "rheinfarben_pharma",
+      "name": "Rheinfarben Pharma",
+      "industry": "chemical_industries",
+      "archetype": "technologist",
+      "region": "DE-RHW",
+      "recipe": "pharma_plant",
+      "blocks": 8,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "chemical_plant",
+          "region": "DE-RUH",
+          "blocks": 5
+        }
+      ]
+    },
+    {
+      "id": "hanse_mineraloel",
+      "name": "Hanse Mineraloel",
+      "industry": "chemical_industries",
+      "archetype": "cost_leader",
+      "region": "DE-HAM",
+      "recipe": "refinery",
+      "blocks": 10,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "refinery",
+          "region": "DE-RHW",
+          "blocks": 6
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "leuna_buna_chemie",
+      "name": "Leuna-Buna Chemie GmbH",
+      "industry": "chemical_industries",
+      "archetype": "vulture",
+      "region": "DE-OST",
+      "recipe": "chemical_plant",
+      "blocks": 8,
+      "public": false,
+      "cash_pct": 60
+    },
+    {
+      "id": "delta_raffinaderij",
+      "name": "Delta Raffinaderij",
+      "industry": "chemical_industries",
+      "archetype": "consolidator",
+      "region": "NL-ROT",
+      "recipe": "refinery",
+      "blocks": 14,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "gas_processing",
+          "region": "NL-AMS",
+          "blocks": 4
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "scheldt_petrochemie",
+      "name": "Scheldt Petrochemie",
+      "industry": "chemical_industries",
+      "archetype": "brand_builder",
+      "region": "BE-ANT",
+      "recipe": "chemical_plant",
+      "blocks": 10,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "plastics_plant",
+          "region": "BE-LIE",
+          "blocks": 3
+        }
+      ]
+    },
+    {
+      "id": "ruhrstahl",
+      "name": "Ruhrstahl AG",
+      "industry": "manufacturing",
+      "archetype": "cost_leader",
+      "region": "DE-RUH",
+      "recipe": "steel_mill",
+      "blocks": 12,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "blast_furnace",
+          "region": "DE-SAA",
+          "blocks": 6
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "minett_aciers",
+      "name": "Minett Aciers",
+      "industry": "manufacturing",
+      "archetype": "consolidator",
+      "region": "LU-LUX",
+      "recipe": "blast_furnace",
+      "blocks": 8,
+      "public": true
+    },
+    {
+      "id": "sambre_meuse_acier",
+      "name": "Sambre-Meuse Acier",
+      "industry": "manufacturing",
+      "archetype": "vulture",
+      "region": "BE-LIE",
+      "recipe": "steel_mill",
+      "blocks": 9,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "electric_arc",
+          "region": "BE-ANT",
+          "blocks": 3
+        }
+      ]
+    },
+    {
+      "id": "moselle_aciers",
+      "name": "Moselle Aciers",
+      "industry": "manufacturing",
+      "archetype": "cost_leader",
+      "region": "FR-LOR",
+      "recipe": "blast_furnace",
+      "blocks": 8,
+      "public": true
+    },
+    {
+      "id": "noordzee_staal",
+      "name": "Noordzee Staal",
+      "industry": "manufacturing",
+      "archetype": "technologist",
+      "region": "NL-AMS",
+      "recipe": "steel_mill",
+      "blocks": 9,
+      "public": true
+    },
+    {
+      "id": "oderland_stahl",
+      "name": "Oderland Stahl GmbH",
+      "industry": "manufacturing",
+      "archetype": "vulture",
+      "region": "DE-OST",
+      "recipe": "steel_mill",
+      "blocks": 7,
+      "public": false,
+      "cash_pct": 60
+    },
+    {
+      "id": "weser_fahrzeugwerke",
+      "name": "Weser Fahrzeugwerke",
+      "industry": "manufacturing",
+      "archetype": "brand_builder",
+      "region": "DE-HAN",
+      "recipe": "vehicle_assembly",
+      "blocks": 14,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "component_works",
+          "region": "DE-OST",
+          "blocks": 3
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "neckar_motoren",
+      "name": "Neckar Motoren AG",
+      "industry": "manufacturing",
+      "archetype": "technologist",
+      "region": "DE-STU",
+      "recipe": "vehicle_assembly",
+      "blocks": 12,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "component_works",
+          "region": "DE-MUC",
+          "blocks": 3
+        }
+      ]
+    },
+    {
+      "id": "alsace_automobile",
+      "name": "Alsace Automobile",
+      "industry": "manufacturing",
+      "archetype": "cost_leader",
+      "region": "FR-ALS",
+      "recipe": "vehicle_assembly",
+      "blocks": 8,
+      "public": true
+    },
+    {
+      "id": "ruhr_maschinenbau",
+      "name": "Ruhr Maschinenbau",
+      "industry": "manufacturing",
+      "archetype": "consolidator",
+      "region": "DE-RUH",
+      "recipe": "assembly",
+      "blocks": 8,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "metal_works",
+          "region": "DE-RHW",
+          "blocks": 4
+        }
+      ]
+    },
+    {
+      "id": "rhein_bau",
+      "name": "Rhein-Bau AG",
+      "industry": "construction",
+      "archetype": "consolidator",
+      "region": "DE-RHW",
+      "recipe": "contractor",
+      "blocks": 8,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "infrastructure",
+          "region": "DE-RUH",
+          "blocks": 4
+        }
+      ]
+    },
+    {
+      "id": "aufbau_ost",
+      "name": "Aufbau Ost GmbH",
+      "industry": "construction",
+      "archetype": "vulture",
+      "region": "DE-OST",
+      "recipe": "infrastructure",
+      "blocks": 6,
+      "public": false,
+      "cash_pct": 60
+    },
+    {
+      "id": "rhine_delta_pipelines",
+      "name": "Rhine Delta Pipelines",
+      "industry": "logistics",
+      "archetype": "consolidator",
+      "region": "NL-ROT",
+      "recipe": "pipeline",
+      "blocks": 1,
+      "public": true,
+      "serves": [
+        "DE-RUH"
+      ],
+      "extra_plants": [
+        {
+          "recipe": "tank_farm",
+          "region": "NL-AMS",
+          "blocks": 1
+        }
+      ],
+      "cash_pct": 900
+    },
+    {
+      "id": "scheldt_product_lines",
+      "name": "Scheldt Product Lines",
+      "industry": "logistics",
+      "archetype": "cost_leader",
+      "region": "BE-ANT",
+      "recipe": "pipeline",
+      "blocks": 1,
+      "public": false,
+      "serves": [
+        "DE-RUH"
+      ],
+      "extra_plants": [
+        {
+          "recipe": "pipeline",
+          "region": "BE-LIE",
+          "blocks": 1,
+          "serves": [
+            "BE-ANT"
+          ]
+        }
+      ],
+      "cash_pct": 900
+    },
+    {
+      "id": "rheinland_produktenleitung",
+      "name": "Rheinland Produktenleitung",
+      "industry": "logistics",
+      "archetype": "technologist",
+      "region": "DE-RHW",
+      "recipe": "pipeline",
+      "blocks": 1,
+      "public": false,
+      "serves": [
+        "DE-RHM"
+      ],
+      "extra_plants": [
+        {
+          "recipe": "pipeline",
+          "region": "DE-RUH",
+          "blocks": 1,
+          "serves": [
+            "DE-RHW"
+          ]
+        },
+        {
+          "recipe": "tank_farm",
+          "region": "DE-RHM",
+          "blocks": 1
+        }
+      ],
+      "cash_pct": 900
+    },
+    {
+      "id": "niederrhein_schiffahrt",
+      "name": "Niederrhein Schiffahrt",
+      "industry": "logistics",
+      "archetype": "brand_builder",
+      "region": "DE-RUH",
+      "recipe": "shipping",
+      "blocks": 1,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "port",
+          "region": "DE-RHW",
+          "blocks": 1
+        },
+        {
+          "recipe": "shipping",
+          "region": "DE-RLP",
+          "blocks": 1
+        }
+      ],
+      "cash_pct": 900
+    },
+    {
+      "id": "eisenbahn_fracht",
+      "name": "Eisenbahn Fracht AG",
+      "industry": "logistics",
+      "archetype": "technologist",
+      "region": "DE-RHM",
+      "recipe": "freight_rail",
+      "blocks": 4,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "rail_terminal",
+          "region": "DE-RUH",
+          "blocks": 2
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "hanse_hafenbetriebe",
+      "name": "Hanse Hafenbetriebe",
+      "industry": "logistics",
+      "archetype": "consolidator",
+      "region": "DE-HAM",
+      "recipe": "port",
+      "blocks": 1,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "rail_terminal",
+          "region": "DE-HAN",
+          "blocks": 1
+        }
+      ],
+      "cash_pct": 900
+    },
+    {
+      "id": "maasmond_terminals",
+      "name": "Maasmond Terminals",
+      "industry": "logistics",
+      "archetype": "vulture",
+      "region": "NL-ROT",
+      "recipe": "port",
+      "blocks": 1,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "shipping",
+          "region": "NL-AMS",
+          "blocks": 1
+        }
+      ],
+      "cash_pct": 900
+    },
+    {
+      "id": "rhein_kaufhaus",
+      "name": "Rhein Kaufhaus",
+      "industry": "retail",
+      "archetype": "consolidator",
+      "region": "DE-RUH",
+      "recipe": "goods_store",
+      "blocks": 8,
+      "public": true
+    },
+    {
+      "id": "randstad_grocers",
+      "name": "Randstad Grocers",
+      "industry": "retail",
+      "archetype": "cost_leader",
+      "region": "NL-AMS",
+      "recipe": "grocer",
+      "blocks": 8,
+      "public": true
+    },
+    {
+      "id": "alsace_hypermarche",
+      "name": "Alsace Hypermarche",
+      "industry": "retail",
+      "archetype": "brand_builder",
+      "region": "FR-ALS",
+      "recipe": "grocer",
+      "blocks": 6,
+      "public": false
+    },
+    {
+      "id": "rhein_klinikum",
+      "name": "Rhein Klinikum",
+      "industry": "healthcare",
+      "archetype": "brand_builder",
+      "region": "DE-RHW",
+      "recipe": "hospital",
+      "blocks": 5,
+      "public": true
+    },
+    {
+      "id": "brabant_zorg",
+      "name": "Brabant Zorg",
+      "industry": "healthcare",
+      "archetype": "technologist",
+      "region": "NL-LIM",
+      "recipe": "long_term_care",
+      "blocks": 5,
+      "public": false
+    },
+    {
+      "id": "rhein_ruhr_bank",
+      "name": "Rhein-Ruhr Bank",
+      "industry": "financial",
+      "archetype": "consolidator",
+      "region": "DE-RUH",
+      "recipe": "bank",
+      "blocks": 1,
+      "public": true
+    },
+    {
+      "id": "mainmetropole_bank",
+      "name": "Mainmetropole Bank",
+      "industry": "financial",
+      "archetype": "brand_builder",
+      "region": "DE-RHM",
+      "recipe": "bank",
+      "blocks": 1,
+      "public": true
+    },
+    {
+      "id": "grand_duche_banque",
+      "name": "Grand-Duche Banque",
+      "industry": "financial",
+      "archetype": "vulture",
+      "region": "LU-LUX",
+      "recipe": "bank",
+      "blocks": 1,
+      "public": true
+    },
+    {
+      "id": "randstad_bank",
+      "name": "Randstad Bank",
+      "industry": "financial",
+      "archetype": "cost_leader",
+      "region": "NL-AMS",
+      "recipe": "bank",
+      "blocks": 1,
+      "public": false
+    },
+    {
+      "id": "isar_rueck",
+      "name": "Isar Ruck Versicherung",
+      "industry": "financial",
+      "archetype": "technologist",
+      "region": "DE-MUC",
+      "recipe": "property_insurer",
+      "blocks": 1,
+      "public": true
+    },
+    {
+      "id": "brabant_elektronik",
+      "name": "Brabant Elektronik",
+      "industry": "technology",
+      "archetype": "technologist",
+      "region": "NL-LIM",
+      "recipe": "hardware_maker",
+      "blocks": 6,
+      "public": true
+    },
+    {
+      "id": "isar_software",
+      "name": "Isar Software",
+      "industry": "technology",
+      "archetype": "vulture",
+      "region": "DE-MUC",
+      "recipe": "software_studio",
+      "blocks": 5,
+      "public": false
+    },
+    {
+      "id": "rheinische_presse",
+      "name": "Rheinische Presse",
+      "industry": "media",
+      "archetype": "brand_builder",
+      "region": "DE-RHW",
+      "recipe": "publishing",
+      "blocks": 5,
+      "public": true,
+      "cash_pct": 200
+    },
+    {
+      "id": "hanse_rundfunk",
+      "name": "Hanse Rundfunk",
+      "industry": "media",
+      "archetype": "consolidator",
+      "region": "DE-HAM",
+      "recipe": "media_studio",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "deutsche_fernnetz",
+      "name": "Deutsche Fernnetz",
+      "industry": "telecommunications",
+      "archetype": "cost_leader",
+      "region": "DE-RHW",
+      "recipe": "network",
+      "blocks": 8,
+      "public": true
+    },
+    {
+      "id": "rhein_kabel",
+      "name": "Rhein Kabel",
+      "industry": "telecommunications",
+      "archetype": "technologist",
+      "region": "DE-RUH",
+      "recipe": "broadband",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "rhein_wohnungsbau",
+      "name": "Rhein Wohnungsbau",
+      "industry": "real_estate",
+      "archetype": "consolidator",
+      "region": "DE-RUH",
+      "recipe": "residential",
+      "blocks": 5,
+      "public": true
+    },
+    {
+      "id": "ost_immobilien",
+      "name": "Ost Immobilien Treuhand",
+      "industry": "real_estate",
+      "archetype": "vulture",
+      "region": "DE-OST",
+      "recipe": "rental_property",
+      "blocks": 4,
+      "public": false,
+      "cash_pct": 60
+    },
+    {
+      "id": "isar_luftfahrt",
+      "name": "Isar Luftfahrt",
+      "industry": "defense",
+      "archetype": "technologist",
+      "region": "DE-MUC",
+      "recipe": "aerospace",
+      "blocks": 4,
+      "public": true
+    },
+    {
+      "id": "ardennes_ordnance",
+      "name": "Ardennes Ordnance",
+      "industry": "defense",
+      "archetype": "vulture",
+      "region": "BE-LIE",
+      "recipe": "munitions",
+      "blocks": 3,
+      "public": false
+    }
+  ]
+}

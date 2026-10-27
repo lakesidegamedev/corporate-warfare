@@ -1521,6 +1521,12 @@ pub struct World {
     /// Grudges, alliances and rival move log. See `economy::rivalry`.
     #[serde(default)]
     pub rivalry: crate::economy::rivalry::RivalryState,
+    /// Exchange rates, foreign sales awaiting collection and recorded foreign exchange gains.
+    /// Not part of the world's postcard encoding, so a world with one money encodes and hashes
+    /// exactly as it did before currencies: a world with several saves it in its own trailer
+    /// and `canonical_hash` folds it in. See `economy::fx`.
+    #[serde(skip)]
+    pub fx: crate::economy::fx::FxState,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.
@@ -1903,7 +1909,13 @@ impl World {
 /// ordered, and no floats are stored. The hash covers authoritative state only.
 pub fn canonical_hash(world: &World) -> String {
     match postcard::to_allocvec(world) {
-        Ok(bytes) => {
+        Ok(mut bytes) => {
+            if world.fx.active {
+                match postcard::to_allocvec(&world.fx) {
+                    Ok(fx) => bytes.extend_from_slice(&fx),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
             cw_core::hash::hex(&cw_core::hash::digest(cw_core::hash::DOMAIN_STATE, &bytes))
         }
         Err(_) => String::from("unhashable"),

@@ -83,7 +83,7 @@ impl PriceMode {
         }
     }
 
-    fn follows_history(self) -> bool {
+    pub fn follows_history(self) -> bool {
         matches!(self, PriceMode::Historical | PriceMode::HistoricalVariance)
     }
 }

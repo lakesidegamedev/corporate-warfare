@@ -263,6 +263,10 @@ pub fn weekly(world: &mut World, ds: &Dataset) {
             if want <= 0 {
                 break;
             }
+            // The reserve buys from the lead country's firms; its books are in the numeraire.
+            if !crate::economy::fx::in_numeraire(world, ds, handle) {
+                continue;
+            }
             let free = crate::economy::pricing::free_stock(world, ds, handle, product);
             if free <= 0 {
                 continue;

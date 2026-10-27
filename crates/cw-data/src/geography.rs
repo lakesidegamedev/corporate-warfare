@@ -24,6 +24,9 @@ pub struct StateInfo {
     /// July 1995 resident population estimate (Silicon Valley 1995).
     #[serde(default)]
     pub population_1995: i64,
+    /// Resident population circa 1991, a game estimate (Ruhr and Rhine 1991).
+    #[serde(default)]
+    pub population_1990: i64,
     /// Primary then secondary specialized sector type.
     #[serde(default)]
     pub specialization: Vec<String>,
@@ -35,6 +38,9 @@ pub struct Region {
     pub name: String,
     pub states: Vec<String>,
     pub principal_city: String,
+    /// The country the region is in, for scenarios with more than one money.
+    #[serde(default)]
+    pub country: String,
     pub lat_milli: i32,
     pub lon_milli: i32,
     /// Engineering calibration: relative wage level, 10000 = corridor baseline.
@@ -54,6 +60,9 @@ pub struct Region {
     /// July 1995 resident population estimate, for display (Silicon Valley 1995).
     #[serde(default)]
     pub population_1995: i64,
+    /// Resident population circa 1991, a game estimate, for display (Ruhr and Rhine 1991).
+    #[serde(default)]
+    pub population_1990: i64,
     /// Authored condition indices that shape costs and productivity in the state.
     #[serde(default)]
     pub conditions: Conditions,
@@ -65,6 +74,7 @@ impl StateInfo {
         self.population_2000
             .max(self.population_1980)
             .max(self.population_1995)
+            .max(self.population_1990)
     }
 }
 
@@ -74,6 +84,7 @@ impl Region {
         self.population_2000
             .max(self.population_1980)
             .max(self.population_1995)
+            .max(self.population_1990)
     }
 
     /// The state this region belongs to.

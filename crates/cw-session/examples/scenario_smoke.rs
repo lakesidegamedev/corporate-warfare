@@ -73,6 +73,9 @@ fn main() {
     let mut not_operating: BTreeMap<String, i64> = BTreeMap::new();
     let (mut investor_cash_start, mut investor_cash_end) = (0i64, 0i64);
     let (mut group_cash_end, mut group_alive) = (0i64, 0i64);
+    // Currency scenarios: rates at the end, band crises, foreign trade and recorded results.
+    let mut fx_lines: Vec<String> = Vec::new();
+    let (mut fx_gains, mut fx_losses, mut fx_crises, mut fx_inflow) = (0i64, 0i64, 0i64, 0i64);
     for seed in 1..=seeds {
         let config = cw_session::ScenarioConfig {
             seed,
@@ -140,6 +143,28 @@ fn main() {
             group_alive += 1;
             group_cash_end += group.book.cash();
         }
+        if session.world.fx.active {
+            let set = session.dataset.currencies.as_ref().unwrap();
+            let rates: Vec<String> = set
+                .currencies
+                .iter()
+                .zip(&session.world.fx.currencies)
+                .map(|(def, st)| format!("{} {:.4}", def.id, st.value_ppm as f64 / 1e6))
+                .collect();
+            fx_lines.push(format!("seed {seed}: {}", rates.join(", ")));
+            fx_crises += session.world.fx.crises.len() as i64;
+            for pnl in session.world.fx.pnl.values() {
+                fx_gains += pnl.gains;
+                fx_losses += pnl.losses;
+            }
+            fx_inflow += session
+                .world
+                .fx
+                .currencies
+                .iter()
+                .map(|c| c.inflow)
+                .sum::<i64>();
+        }
         pipelines += session
             .world
             .logistics
@@ -194,4 +219,13 @@ fn main() {
         "lots moved truck/rail/pipeline/sea: {lots_by_mode:?}; outside overflow {outside_by_mode:?}"
     );
     println!("pipeline carriers at the end, all seeds: {pipelines}");
+    if !fx_lines.is_empty() {
+        println!("exchange rates at the end (units of DEM per unit):");
+        for line in &fx_lines {
+            println!("  {line}");
+        }
+        println!(
+            "band crises across seeds: {fx_crises}; cross-currency payments {fx_inflow}; recorded fx gains {fx_gains} and losses {fx_losses} (own-currency cents, summed)"
+        );
+    }
 }

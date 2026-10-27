@@ -45,6 +45,10 @@ pub fn ensure_contracts(world: &mut World, dataset: &Dataset) {
         if capacity <= 0 {
             continue;
         }
+        // The state buys from its own country's suppliers.
+        if !crate::economy::fx::in_numeraire(world, dataset, supplier) {
+            continue;
+        }
         let has_active = world.procurements.iter().any(|(_, existing)| {
             existing.supplier == supplier
                 && existing.region == region

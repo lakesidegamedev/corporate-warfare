@@ -84,6 +84,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::economy::rivalry::weekly(world);
     crate::economy::world_prices::weekly(world);
     crate::economy::macro_cycle::weekly(world, dataset);
+    crate::economy::fx::weekly(world, dataset);
     crate::economy::reserve::weekly(world, dataset);
     crate::economy::politics::weekly(world, dataset);
     crate::economy::cast::weekly(world, dataset);
@@ -352,11 +353,11 @@ fn settle_expenses(world: &mut World, dataset: &Dataset) {
                     ),
             );
         }
-        accrue_tax(world, handle);
+        accrue_tax(world, dataset, handle);
     }
 }
 
-fn accrue_tax(world: &mut World, firm: Handle) {
+fn accrue_tax(world: &mut World, dataset: &Dataset, firm: Handle) {
     let Some(entity) = world.firms.get(firm) else {
         return;
     };
@@ -434,6 +435,8 @@ fn accrue_tax(world: &mut World, firm: Handle) {
                         "tax payment",
                     ),
                 );
+                // The state's books are in the numeraire.
+                let paid = crate::economy::fx::firm_to_numeraire(world, dataset, firm, paid);
                 let _ = world.government.book.commit(
                     world.tick,
                     Txn::new().debit(Account::Cash, paid, "tax receipt").credit(
@@ -467,13 +470,19 @@ fn refresh_household_income(world: &mut World, dataset: &Dataset) {
         let earned = income;
         let labour_tax = earned * crate::economy::fiscal::LABOUR_TAX_BPS / 10_000;
         if labour_tax > 0 {
+            let receipt = crate::economy::fx::region_to_numeraire(
+                world,
+                dataset,
+                region_index as u8,
+                labour_tax,
+            );
             let _ = world.government.book.commit(
                 world.tick,
                 Txn::new()
-                    .debit(Account::Cash, labour_tax, "labour income tax")
-                    .credit(Account::Revenue, labour_tax, "labour income tax"),
+                    .debit(Account::Cash, receipt, "labour income tax")
+                    .credit(Account::Revenue, receipt, "labour income tax"),
             );
-            crate::economy::fiscal::record(world, labour_tax);
+            crate::economy::fiscal::record(world, receipt);
         }
         let mut income = earned - labour_tax;
         // Background transfer support for the unemployed, paid only from the treasury. The
@@ -486,18 +495,30 @@ fn refresh_household_income(world: &mut World, dataset: &Dataset) {
                 .max(0);
             need += unemployed * world.regions[region_index].background_wage_cents[tier] * 30 / 100;
         }
-        let support = need
+        // The treasury is in the numeraire; households live on the region's money.
+        let region_currency = crate::economy::fx::region_currency(dataset, region_index as u8);
+        let need_numeraire = world.fx.convert(need, region_currency, 0);
+        let support_numeraire = need_numeraire
             .min(world.government.book.cash().max(0))
             .min(world.government.training_budget_cents.max(0));
-        if support > 0 {
+        let support = if support_numeraire == need_numeraire {
+            need
+        } else {
+            world.fx.convert(support_numeraire, 0, region_currency)
+        };
+        if support_numeraire > 0 {
             let _ = world.government.book.commit(
                 world.tick,
                 Txn::new()
-                    .credit(Account::Cash, support, "transfer support")
-                    .debit(Account::OperatingExpense, support, "transfer support"),
+                    .credit(Account::Cash, support_numeraire, "transfer support")
+                    .debit(
+                        Account::OperatingExpense,
+                        support_numeraire,
+                        "transfer support",
+                    ),
             );
             income += support;
-            world.government.training_budget_cents -= support;
+            world.government.training_budget_cents -= support_numeraire;
         }
         world.government.unpaid_transfer_need_cents = world
             .government
@@ -555,7 +576,7 @@ mod tests {
         // A quarter losing $1,000 a week: at the quarter end it joins the carry, untaxed.
         close_weeks(&mut world, -100_000);
         world.tick = Tick(13);
-        accrue_tax(&mut world, firm);
+        accrue_tax(&mut world, &dataset, firm);
         assert_eq!(
             world.firms.get(firm).unwrap().tax_loss_carry_cents,
             1_300_000
@@ -565,7 +586,7 @@ mod tests {
         // at 25 percent, accrued a thirteenth a week: 26,000 * 0.25 / 13 = $500.
         close_weeks(&mut world, 300_000);
         world.tick = Tick(14);
-        accrue_tax(&mut world, firm);
+        accrue_tax(&mut world, &dataset, firm);
         assert_eq!(payable(&world) - before, -50_000);
     }
 
