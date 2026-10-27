@@ -699,7 +699,7 @@ final class AppStore: ObservableObject {
 
     /// What a lane reservation would cost and save, before any command is sent.
     func reserveQuote(lane: LaneDto, lots: Int32, weeks: UInt32) async -> ReserveQuoteDto? {
-        await engine.reserveQuote(lane: lane, lots: lots, weeks: weeks)
+        await engine.reserveQuote(a: lane.a, b: lane.b, mode: lane.mode, lots: lots, weeks: weeks)
     }
 
     func buildQuote(region: UInt32, recipe: UInt32, blocks: UInt32) async -> BuildQuoteDto? {

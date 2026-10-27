@@ -277,11 +277,20 @@ struct WageSheet: View {
 
 struct BuildSheet: View {
     @EnvironmentObject private var store: AppStore
-    @State private var region: UInt32 = 0
-    @State private var recipe: UInt32 = 0
-    @State private var blocks: UInt32 = 1
+    @State private var region: UInt32
+    @State private var recipe: UInt32
+    @State private var blocks: UInt32
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
+    /// Set when a freight suggestion hands over its build: keep its region and template.
+    private let prefilled: Bool
+
+    init(region: UInt32? = nil, recipe: UInt32? = nil, blocks: UInt32 = 1) {
+        _region = State(initialValue: region ?? 0)
+        _recipe = State(initialValue: recipe ?? 0)
+        _blocks = State(initialValue: min(max(blocks, 1), 20))
+        prefilled = region != nil && recipe != nil
+    }
 
     private var firm: FirmDto? { store.selectedFirmDto }
     private var template: RecipeDto? {
@@ -328,6 +337,7 @@ struct BuildSheet: View {
             }
         }
         .onAppear {
+            if prefilled { return }
             if recipe == 0, let first = store.recipeOptions.first {
                 recipe = first.index
             }

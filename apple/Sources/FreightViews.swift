@@ -233,6 +233,17 @@ private struct LaneDetail: View {
     }
 }
 
+/// A build suggestion handed to the build sheet.
+private struct BuildHandoff: Identifiable {
+    let suggestion: ShippingSuggestionDto
+    var id: String { "\(suggestion.a)-\(suggestion.b)-\(suggestion.mode)-\(suggestion.recipe)" }
+    init(_ suggestion: ShippingSuggestionDto) { self.suggestion = suggestion }
+}
+
+extension BuildHandoff: Equatable {
+    static func == (l: BuildHandoff, r: BuildHandoff) -> Bool { l.id == r.id }
+}
+
 /// A division's Shipping panel: its freight bill in plain words, then the route policy picker.
 /// Pass nil for the whole company (the CEO Office).
 struct DivisionShipping: View {
@@ -240,6 +251,7 @@ struct DivisionShipping: View {
     let division: DivisionDto?
     @State private var summary: ShippingSummaryDto?
     @State private var rejection: CommandRejection?
+    @State private var building: ShippingSuggestionDto?
 
     init(division: DivisionDto? = nil) { self.division = division }
 
@@ -270,6 +282,14 @@ struct DivisionShipping: View {
             .task(id: "\(plant ?? 0)-\(store.selectedFirm ?? 0)-\(store.overview?.revision ?? 0)") {
                 guard !isCarrier else { return }
                 summary = await store.shipping(facility: plant ?? 0)
+            }
+            .sheet(item: Binding(get: { building.map(BuildHandoff.init) }, set: { if $0 == nil { building = nil } })) { handoff in
+                BuildSheet(
+                    region: store.regions.first { $0.code == handoff.suggestion.a }?.index,
+                    recipe: handoff.suggestion.recipe,
+                    blocks: UInt32(clamping: handoff.suggestion.lots)
+                )
+                .environmentObject(store)
             }
         }
     }
@@ -373,6 +393,16 @@ struct DivisionShipping: View {
             ? "\(s.headline). It costs \(store.freightMoney(s.upfrontCents)) and saves about \(store.freightMoney(s.weeklySavingCents)) a week, so it pays back in \(s.paybackWeeks) weeks."
             : "\(s.headline). At last week's volume it saves about \(store.freightMoney(s.weeklySavingCents)) a week with no upfront cost."
         CalloutRow(icon: "lane", text: line)
+        if s.kind == "build", store.selectedFirm != nil {
+            Button {
+                building = s
+            } label: {
+                PixelLabel("Review this build", icon: "lane").font(.callout.weight(.semibold)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.gold)
+            .foregroundStyle(Theme.ink)
+        }
         if s.kind == "reserve", store.selectedFirm != nil {
             Button {
                 Task { rejection = await reserve(s) }

@@ -242,7 +242,7 @@ pub struct Reservation {
 pub const FEE_ROW: u8 = u8::MAX;
 
 /// One lane's part of a destination's freight week.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LaneUse {
     pub key: LaneKey,
     pub lots: i64,
@@ -253,7 +253,7 @@ pub struct LaneUse {
 
 /// A shipment pattern: lots of one good from one region, kept so a policy can be priced before it
 /// is chosen.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Sample {
     pub from: u8,
     pub product: u16,
@@ -261,9 +261,9 @@ pub struct Sample {
 }
 
 /// What a firm paid to bring goods into one region in a week, read back for the Shipping panels.
-/// Not saved: it is rebuilt from the shipments of the week in progress, so it never touches the
-/// authoritative state.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// Not part of the hashed world state. The save file carries it in its own trailer so the panels
+/// are filled after a load, and a save without the trailer simply starts empty.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DestFreight {
     pub cents: i64,
     pub own_cents: i64,

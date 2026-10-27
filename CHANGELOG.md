@@ -63,8 +63,11 @@ heading.
   or ship on carry a gold edge, and tapping a lane opens a simple panel with its room, price,
   owners, your share and a reservation with its quote (price, weekly cost, expected saving).
   Freight alerts now say what is happening on the lane in figures and what to do about it. The
-  screens call a lot of goods a load. Summaries are worked out by the engine; they add no
-  mechanics and do not change saved games.
+  screens call a lot of goods a load. A build suggestion has a Review this build button that
+  opens the build dialog already filled in with the region, plant type and number of plants.
+  Summaries are worked out by the engine; they add no mechanics. The Shipping figures are now
+  kept in the save file, so they are still there after you load a game instead of staying empty
+  until the next week closes (older saves load as before and fill in at the next week).
 
 ## [1.7.0] - 2026-10-27
 

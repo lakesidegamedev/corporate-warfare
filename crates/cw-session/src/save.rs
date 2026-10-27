@@ -23,6 +23,10 @@ const CUSTOM_MAGIC: &[u8; 4] = b"CUST";
 /// Marks the currency trailer of a world with more than one money, after the custom trailer.
 /// A world with one money writes nothing, so its save is byte for byte what it always was.
 const FX_MAGIC: &[u8; 4] = b"FXST";
+/// Marks the freight read-out trailer, last in the file: the Shipping figures of the closed week
+/// and the week in progress. Outside the hashed world, so a save without it loads with empty
+/// figures and no hash moves.
+const FREIGHT_MAGIC: &[u8; 4] = b"FRTS";
 
 pub fn encode(world: &World, career_id: u64) -> Result<Vec<u8>, DomainError> {
     encode_with(world, career_id, None)
@@ -70,6 +74,16 @@ pub fn encode_with(
             detail: SaveFault::MalformedPayload,
         })?;
         out.extend_from_slice(FX_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    let freight = (&world.logistics.dest_last, &world.logistics.dest_week);
+    if !freight.0.is_empty() || !freight.1.is_empty() {
+        let bytes = postcard::to_allocvec(&freight).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+        out.extend_from_slice(FREIGHT_MAGIC);
         out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
         out.extend_from_slice(&bytes);
@@ -176,6 +190,24 @@ pub fn decode_with(
         world.fx = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
             detail: SaveFault::MalformedPayload,
         })?;
+        rest = &rest[40 + length..];
+    }
+    if rest.len() >= 40 && &rest[..4] == FREIGHT_MAGIC {
+        let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
+        let mut sum = [0u8; 32];
+        sum.copy_from_slice(&rest[8..40]);
+        let body = rest.get(40..40 + length).ok_or(DomainError::InvalidSave {
+            detail: SaveFault::Truncated,
+        })?;
+        if digest(DOMAIN_SAVE, body) != sum {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Checksum,
+            });
+        }
+        (world.logistics.dest_last, world.logistics.dest_week) = postcard::from_bytes(body)
+            .map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
     }
     Ok((world, career_id, custom))
 }
@@ -252,6 +284,29 @@ mod tests {
             cw_sim::state::canonical_hash(&world),
             cw_sim::state::canonical_hash(&restored)
         );
+    }
+
+    #[test]
+    fn the_freight_read_out_survives_a_save_without_moving_the_hash() {
+        let mut world = world();
+        let before = cw_sim::state::canonical_hash(&world);
+        let key = (cw_core::ids::Handle::new(3, 1), 2u8);
+        let row = cw_sim::economy::logistics::DestFreight {
+            cents: 12_345,
+            lots: 7,
+            ..Default::default()
+        };
+        world.logistics.dest_last.insert(key, row.clone());
+        world.logistics.dest_week.insert(key, row.clone());
+        assert_eq!(cw_sim::state::canonical_hash(&world), before);
+        let bytes = encode(&world, 9).unwrap();
+        let (restored, _) = decode(&bytes).unwrap();
+        assert_eq!(restored.logistics.dest_last.get(&key), Some(&row));
+        assert_eq!(restored.logistics.dest_week.get(&key), Some(&row));
+        assert_eq!(cw_sim::state::canonical_hash(&restored), before);
+        // A save from before the trailer existed still loads, with empty figures.
+        let plain = encode(&self::world(), 9).unwrap();
+        assert!(decode(&plain).unwrap().0.logistics.dest_last.is_empty());
     }
 
     #[test]

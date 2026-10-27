@@ -589,6 +589,9 @@ pub struct ShippingSuggestionDto {
     pub a: String,
     pub b: String,
     pub mode: u32,
+    /// The strategy (recipe) index to build, so the build dialog can open prefilled. Zero for a
+    /// reservation.
+    pub recipe: u32,
     pub lots: i64,
     pub upfront_cents: i64,
     pub weekly_saving_cents: i64,
@@ -3317,6 +3320,7 @@ impl SessionHandle {
                 a: ds.regions[key.a as usize].code.clone(),
                 b: ds.regions[key.b as usize].code.clone(),
                 mode: key.mode as u32,
+                recipe: *recipe as u32,
                 lots: *blocks,
                 upfront_cents: *upfront_cents,
                 weekly_saving_cents: *weekly_saving_cents,
@@ -3339,6 +3343,7 @@ impl SessionHandle {
                 a: ds.regions[key.a as usize].code.clone(),
                 b: ds.regions[key.b as usize].code.clone(),
                 mode: key.mode as u32,
+                recipe: 0,
                 lots: *lots as i64,
                 upfront_cents: 0,
                 weekly_saving_cents: *weekly_saving_cents,

@@ -35,6 +35,7 @@ import uniffi.cw_ffi.DivisionDto
 import uniffi.cw_ffi.LaneDto
 import uniffi.cw_ffi.PolicyOptionDto
 import uniffi.cw_ffi.ReserveQuoteDto
+import uniffi.cw_ffi.ShippingSuggestionDto
 import uniffi.cw_ffi.ShippingSummaryDto
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -197,6 +198,11 @@ internal fun ShippingSection(store: GameStore, division: DivisionDto?) {
     if (division != null && plant == null) return
     val carrier = division != null && division.carrierMode.isNotEmpty()
     val summary = if (carrier) null else rememberShipping(store, plant)
+    var building by remember { mutableStateOf<ShippingSuggestionDto?>(null) }
+    building?.let { s ->
+        val board = store.boards.firstOrNull { it.code == s.a }
+        if (board != null) BuildDialog(store, board, initialRecipe = s.recipe.toInt(), initialBlocks = s.lots.toInt()) { building = null }
+    }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             PixelIcon("lane", size = 12.dp, tint = Palette.secondary, modifier = Modifier.padding(end = 6.dp))
@@ -255,6 +261,12 @@ internal fun ShippingSection(store: GameStore, division: DivisionDto?) {
                 "${s.headline}. At last week's volume it saves about ${firmMoney(store, s.weeklySavingCents)} a week with no upfront cost."
             }
             Callout(line, Palette.gold)
+            if (s.kind == "build" && store.selectedFirm != null) {
+                Row(Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.weight(1f))
+                    GoldButton("Review this build", Modifier.padding(top = 2.dp)) { building = s }
+                }
+            }
             if (s.kind == "reserve" && store.selectedFirm != null) {
                 Row(Modifier.fillMaxWidth()) {
                     Spacer(Modifier.weight(1f))
