@@ -53,6 +53,7 @@ struct EconomyCard: View {
                         figures(e)
                         history(e)
                         credit(e)
+                        if !e.worldPrices.isEmpty { worldPrices(e) }
                         centralBank(e)
                         government(e)
                         if !e.news.isEmpty { news(e) }
@@ -181,6 +182,39 @@ struct EconomyCard: View {
             line = ("Borrowing is moderate.", Theme.secondary)
         }
         return Text(line.0).font(.caption).foregroundStyle(line.1)
+    }
+
+    private func worldPrices(_ e: EconomyDto) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Eyebrow(text: "World prices")
+            Text(worldPriceNote(e.pricePath))
+                .font(.caption)
+                .foregroundStyle(Theme.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(Array(e.worldPrices.enumerated()), id: \.offset) { _, price in
+                let level = Double(price.indexBps - 10_000) / 100
+                let trend = Double(price.trendBps) / 100
+                HStack {
+                    Text(price.label).font(.caption).foregroundStyle(Theme.primaryText)
+                    Spacer()
+                    Text(String(format: "%+.0f%% since day one", level))
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondary)
+                    Text(trend > 0.5 ? String(format: "up %.0f%%", trend) : trend < -0.5 ? String(format: "down %.0f%%", -trend) : "steady")
+                        .font(.caption)
+                        .foregroundStyle(trend > 0.5 ? Theme.warning : trend < -0.5 ? Theme.positive : Theme.secondary)
+                        .frame(width: 70, alignment: .trailing)
+                }
+            }
+        }
+    }
+
+    private func worldPriceNote(_ path: String) -> String {
+        switch path {
+        case "historical": return "Outside prices follow the real path of the period. They set what gateways charge to import and pay to export. Change over the last quarter shown at right."
+        case "historical_variance": return "Outside prices are shaped like the period, with their own timing and depth. They set what gateways charge to import and pay to export. Change over the last quarter shown at right."
+        default: return "Outside prices drift around where they began. They set what gateways charge to import and pay to export. Change over the last quarter shown at right."
+        }
     }
 
     private func centralBank(_ e: EconomyDto) -> some View {

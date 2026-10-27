@@ -44,6 +44,18 @@ pub struct ScenarioConfig {
     pub economy_start: cw_sim::state::EconomyStart,
     #[serde(default)]
     pub starting_capital_cents: Option<i64>,
+    /// Which scenario's world price paths to use, and how they move.
+    #[serde(default)]
+    pub prices: PriceSetup,
+}
+
+/// World commodity price setup for a new career. An empty scenario id means no world prices
+/// (used by engine tests); a scenario with no authored paths runs the neutral random walk.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PriceSetup {
+    pub scenario_id: String,
+    /// None takes the scenario's default mode.
+    pub path: Option<cw_data::PricePath>,
 }
 
 #[derive(Clone, Debug)]
@@ -161,6 +173,10 @@ impl Session {
         config.difficulty = Difficulty::from_key(&custom.difficulty);
         config.economy_start = cw_sim::state::EconomyStart::from_key(&custom.economy);
         config.starting_capital_cents = custom.starting_capital_cents;
+        config.prices = PriceSetup {
+            scenario_id: custom.base_scenario_id.clone(),
+            path: Some(custom.price_path),
+        };
         Self::create_with(config, Some(custom)).map_err(|e| format!("{e:?}"))
     }
 
@@ -190,6 +206,24 @@ impl Session {
             config.mode,
             &options,
         );
+        if !config.prices.scenario_id.is_empty() {
+            let id = &config.prices.scenario_id;
+            let path = config.prices.path.unwrap_or_else(|| {
+                cw_data::scenarios()
+                    .iter()
+                    .find(|scenario| &scenario.id == id)
+                    .map(|scenario| scenario.price_path())
+                    .unwrap_or_default()
+            });
+            cw_sim::economy::world_prices::init(
+                &mut world,
+                &dataset,
+                &cw_data::price_paths::PricePathFile::load(),
+                id,
+                path,
+                config.seed,
+            );
+        }
         if let Some(laws) = custom.and_then(|c| c.laws.as_ref()) {
             world.politics.laws = cw_sim::state::Laws {
                 corporate_tax_bps: laws.corporate_tax_bps,
@@ -1036,6 +1070,7 @@ impl Session {
             difficulty: world.difficulty,
             economy_start: Default::default(),
             starting_capital_cents: None,
+            prices: Default::default(),
         };
         let log = ReplayLog {
             config: config.clone(),
@@ -1167,6 +1202,7 @@ mod tests {
             difficulty: Difficulty::Standard,
             economy_start: Default::default(),
             starting_capital_cents: None,
+            prices: Default::default(),
         }
     }
 
@@ -1434,9 +1470,11 @@ mod tests {
         // session-local counter and started using the persisted `world.next_sequence`. It moved
         // again to 3ef82f5... when `production` stopped subtracting weekly output from every
         // facility's `deposit_remaining`, which is only stocked for ore mines; ordinary plants
-        // had been drifting to large negative deposits. The economy is unchanged otherwise; the
-        // Swift constant must be updated in the same change and re-verified on the Mac runner
-        // before R05 claims cross-platform equality again.
+        // had been drifting to large negative deposits. The economy is unchanged otherwise. On
+        // 2026-10-27 it moved to daca9262... when the world gained its world price state (empty
+        // here, as this fixture runs without world prices). The Swift constant must be updated
+        // in the same change and re-verified on the Mac runner before R05 claims cross-platform
+        // equality again.
         let mut session = Session::create(config(42)).unwrap();
         let primary = session.world.investor.primary_group.unwrap();
         let price = session.dataset.reference_price(0);
@@ -1458,7 +1496,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "d8110ee72106255a605a2e9c1ebafc1b61b1ed9ce1b96e41128425f37f9ca064"
+            "daca9262f6691f65be29a1f4f89ade4219539631ff766638c5198b21013e61df"
         );
     }
 

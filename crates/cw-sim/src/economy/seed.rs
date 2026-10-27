@@ -120,6 +120,7 @@ pub fn build_with(
             pending_procurement: BTreeMap::new(),
         },
         gateways: Vec::new(),
+        world_prices: Default::default(),
         exchange: Exchange::default(),
         outside: OutsideSectors {
             lenders: OUTSIDE_LENDERS

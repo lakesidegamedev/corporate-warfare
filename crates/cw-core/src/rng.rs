@@ -22,6 +22,7 @@ pub const TAG_EXCHANGE: u64 = 8;
 pub const TAG_DEALS: u64 = 9;
 pub const TAG_POLICY: u64 = 10;
 pub const TAG_RAID: u64 = 11;
+pub const TAG_PRICES: u64 = 12;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rng {

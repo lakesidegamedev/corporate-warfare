@@ -13,11 +13,24 @@ heading.
 
 ### Added
 
+- World commodity price paths, in every scenario. Oil, natural gas, coal, ore, steel, grain,
+  fertilizer, chemicals, timber, rare earths and building materials now have an outside-world
+  price that moves every week and sets what gateways charge to import and pay to export. The
+  new-game screen offers three paths on every platform: Historical (the real shape, on the real
+  dates), Historical with variance (the same shape with the timing and depth of each swing
+  shifted by your game's seed), and Random (neutral prices that drift around where they began;
+  busts come only from the business cycle). Each scenario sets a default. Great Lakes 2000 has
+  its 2000 to 2008 oil and metals climb and the 2008 collapse; Texas 1981 has oil falling from
+  its peak to the 1986 collapse. A collapse in world prices feeds the business cycle as a demand
+  shock, and the cycle tilts prices a little in return, without counting the same swing twice.
+  The Markets economy card lists each price family against day one and its change over the last
+  quarter. The editor's price path field now takes effect. Price data is in
+  `content/price-paths.json`, keyed by product family, so new products join a family with one line.
 - Scenario editor, on every platform. Take any built-in scenario and change its numbers:
   starting capital, difficulty, the opening economy, which rival firms start and how big and
   cash-rich they are, wage and demand levels in each region, and the laws in force in week one
-  (corporate tax, wage floor, merger review, unions). The world price path (historical,
-  historical with variance, or random) is saved now and takes effect in a later preview.
+  (corporate tax, wage floor, merger review, unions) and the world price path (historical,
+  historical with variance, or random).
   Save, save as, delete, and start a game straight from the editor. Saved scenarios appear in
   the new-game picker beside the built-in ones, and every built-in
   scenario card has a Customize button. The editor is on the main menu everywhere.

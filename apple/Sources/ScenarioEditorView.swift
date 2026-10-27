@@ -168,7 +168,7 @@ struct ScenarioEditorView: View {
                 ForEach(Self.paths, id: \.0) { Text($0.1).tag($0.0) }
             }
             .pickerStyle(.menu)
-            Text("The price path is saved now and takes effect in a later preview.")
+            Text("How oil, steel, grain and other world prices move. Historical is fixed to the real dates; variance shifts the timing and depth with the game seed; random stays neutral.")
                 .font(.caption2)
                 .foregroundStyle(Theme.secondary)
         }

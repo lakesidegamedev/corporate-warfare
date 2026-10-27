@@ -1414,6 +1414,9 @@ pub struct World {
     pub regions: Vec<RegionState>,
     pub government: Government,
     pub gateways: Vec<Gateway>,
+    /// The outside world's commodity price paths. See `economy::world_prices`.
+    #[serde(default)]
+    pub world_prices: crate::economy::world_prices::WorldPrices,
     pub exchange: Exchange,
     pub outside: OutsideSectors,
     pub macro_state: MacroState,

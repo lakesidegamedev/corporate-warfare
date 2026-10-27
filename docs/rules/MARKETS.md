@@ -120,8 +120,9 @@ ratio. If no prior sale, use reference price. Existing budgets still limit purch
 Unspent category budgets return to household savings, not another automatic purchase loop.
 R&D/brand can redistribute seller demand; neither creates household cash.
 
-A gateway quotes finite buy and sell offers at reference index +/-15 percent plus
-freight. Each state's weekly gateway capacity per product = the larger of the corridor's
+A gateway quotes finite buy and sell offers at the outside world's price +/-15 percent plus
+freight. The outside price is the reference index scaled by the product's world price level
+(see World commodity prices below) and by inflation. Each state's weekly gateway capacity per product = the larger of the corridor's
 weekly input demand and weekly output for that product at seed, floor 100 lots, so a
 shortage can be filled and a producing region's surplus has a buyer. Gateways record the
 lots they import and export each week and keep a smoothed import average; that average is
@@ -184,6 +185,52 @@ state, and settlement removes it from where it sits. Background public works buy
 of construction a week per state, split across the state's regions by demand. A region's
 gateway carries one corridor volume per state split by the region's demand share, never below
 what its own plants trade. Corporate tax losses carry forward against later quarters' profit.
+
+## World commodity prices (1.7.0)
+
+Every scenario feeds the outside world's prices into gateway import and export prices. Products
+belong to price families (oil, natural gas, coal, ore, steel, grain, fertilizer, chemicals,
+timber, rare earths, building materials); the products table in `content/price-paths.json`
+maps a product id to its family, and ids missing from the current content are ignored, so a
+new product joins a family with one line. Products with no family keep their opening gateway
+prices apart from inflation.
+
+Each family has an index, 10,000 basis points on day one, recomputed every week before the
+business cycle runs. Both of a gateway's prices are scaled by the ratio of this week's index to
+last week's, the same way inflation scales them, so the +/-15 percent spread and the finite
+capacity are unchanged. An index never leaves 20 to 800 percent of its day-one level.
+
+The new-game screen offers three modes; the scenario sets the default (Great Lakes 2000 is
+historical, Texas 1981 is historical with variance). A custom scenario carries its own choice.
+
+- Historical: the scenario's anchor points, `[quarter, index]` with 100 meaning day one, linearly
+  interpolated by week (13 weeks to a quarter) and held flat after the last anchor. The same
+  every game.
+- Historical with variance: the same anchors with the whole path shifted in time by a shared
+  offset of up to 20 weeks plus up to 10 weeks per family, each swing's depth scaled to 60 to
+  140 percent of history, and an autocorrelated weekly noise of about one percent, all drawn
+  from the game's seed on a stream of its own (per family, so adding a family does not change
+  another's draws). The path is rescaled so day one is exactly 10,000.
+- Random: a neutral mean-reverting walk, `x += (10,000 - x) / 32 + shock`, shock uniform to
+  plus or minus 2.5 to 4.5 percent per family, held between 50 and 200 percent. No drift and no
+  scripted busts; busts come from the business cycle.
+
+A family with no anchors in a historical game, or a scenario missing from the file, runs random.
+
+Interaction with the business cycle, without counting a shock twice:
+
+1. In the two historical modes a weekly change in the weighted world index (family `weight`s
+   in the file) adds 8 percent of itself to the cycle's momentum, limited to -15..+10 a week.
+   A commodity collapse is a world demand shock. Random mode feeds nothing.
+2. A shadow copy of the cycle's momentum and gap dynamics tracks how much output gap those
+   pushes explain.
+3. The cycle tilts every family by 30 percent of the output gap that is neither explained by
+   the shadow nor present on day one, times the family's `cyclical_pct`. A 5 percent
+   unexplained downturn lowers oil about 1.5 percent and grain about 0.4 percent.
+
+State (anchors, drawn parameters, noise, shadow gap and the trailing 13 weeks of index) is saved
+with the world. The economy card shows each family's level against day one and its change over
+the last quarter.
 
 ## Denominator and zero-state rules
 

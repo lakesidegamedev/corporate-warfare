@@ -97,6 +97,27 @@ private enum StartEconomy: String, CaseIterable, WizardOption {
     }
 }
 
+private enum StartPricePath: String, CaseIterable, WizardOption {
+    case historical
+    case historicalVariance = "historical_variance"
+    case random
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .historical: return "Historical"
+        case .historicalVariance: return "Historical with variance"
+        case .random: return "Random"
+        }
+    }
+    var note: String {
+        switch self {
+        case .historical: return "Oil, steel, grain and the rest follow the real path of the period, on the real dates."
+        case .historicalVariance: return "The same shape as history, with the timing and depth of each swing shifted by your game's seed."
+        case .random: return "Neutral prices that drift around where they began. Busts come only from the business cycle."
+        }
+    }
+}
+
 /// Scenario, then the career's terms, then start.
 struct NewGameView: View {
     @EnvironmentObject private var store: AppStore
@@ -112,11 +133,17 @@ struct NewGameView: View {
     @State private var mode = StartMode.guided
     @State private var level = StartLevel.standard
     @State private var economy = StartEconomy.historic
+    /// Nil means the scenario's own default.
+    @State private var pricePathPick: StartPricePath?
     @State private var capital: Double = StartLevel.standard.capital
 
     private var chosen: ScenarioDto? {
         if let chosenID, let hit = catalogue.first(where: { $0.id == chosenID }) { return hit }
         return catalogue.first { $0.available }
+    }
+
+    private var pricePath: StartPricePath {
+        pricePathPick ?? StartPricePath(rawValue: chosen?.defaultPricePath ?? "") ?? .historical
     }
 
     var body: some View {
@@ -192,6 +219,7 @@ struct NewGameView: View {
                     Button {
                         if scenario.available {
                             chosenID = scenario.id
+                            pricePathPick = nil
                             chosenCustom = nil
                         }
                     } label: {
@@ -301,6 +329,14 @@ struct NewGameView: View {
         section("The economy on day one") {
             OptionGrid(items: StartEconomy.allCases, selected: economy) { economy = $0 }
         }
+        section("World commodity prices") {
+            OptionGrid(items: StartPricePath.allCases, selected: pricePath) { pricePathPick = $0 }
+            if let fallback = StartPricePath(rawValue: chosen?.defaultPricePath ?? "") {
+                Text("This scenario's default is \(fallback.title.lowercased()).")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.secondary)
+            }
+        }
         section("Starting capital") {
             ValueSlider(
                 value: $capital,
@@ -381,7 +417,8 @@ struct NewGameView: View {
             fiveYear: mode.fiveYear,
             difficulty: level.rawValue,
             economy: economy.rawValue,
-            startingCapitalCents: Int64((capital * 100).rounded())
+            startingCapitalCents: Int64((capital * 100).rounded()),
+            pricePath: pricePathPick?.rawValue ?? ""
         )
         Task { await store.startCareer(options) }
     }

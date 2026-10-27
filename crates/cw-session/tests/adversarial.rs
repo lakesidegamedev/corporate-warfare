@@ -29,6 +29,7 @@ fn config(seed: u64, scenario: ScenarioKind) -> ScenarioConfig {
         difficulty: Difficulty::Standard,
         economy_start: Default::default(),
         starting_capital_cents: None,
+        prices: Default::default(),
     }
 }
 

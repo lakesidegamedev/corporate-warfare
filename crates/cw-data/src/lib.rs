@@ -12,6 +12,7 @@ pub mod custom;
 pub mod events;
 pub mod firms;
 pub mod geography;
+pub mod price_paths;
 
 use std::collections::BTreeMap;
 
@@ -53,6 +54,17 @@ pub struct Scenario {
     pub currency: String,
     #[serde(default)]
     pub tagline: String,
+    /// How world commodity prices move unless the player picks otherwise: "historical",
+    /// "historical_variance" or "random".
+    #[serde(default)]
+    pub default_price_path: String,
+}
+
+impl Scenario {
+    /// The scenario's default world price path mode.
+    pub fn price_path(&self) -> PricePath {
+        PricePath::from_key(&self.default_price_path).unwrap_or(PricePath::Historical)
+    }
 }
 
 #[derive(Deserialize)]
