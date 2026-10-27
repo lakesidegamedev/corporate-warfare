@@ -26,6 +26,22 @@ heading.
   The Markets economy card lists each price family against day one and its change over the last
   quarter. The editor's price path field now takes effect. Price data is in
   `content/price-paths.json`, keyed by product family, so new products join a family with one line.
+- Deeper product chains (1.7 preview 2). Plants can now make several products at once in a fixed
+  split, and nothing a plant makes is left without a price or a buyer. Oil is a real chain:
+  wells pump crude oil, and a refinery turns it into fuel, gasoline, jet fuel and petrochemical
+  feedstock. Gas processing strips natural gas liquids from natural gas. Iron is a chain too: a
+  blast furnace makes pig iron (its slag is sold as building materials), a basic oxygen mill
+  makes steel from pig iron and scrap, and an electric arc furnace melts scrap alone; scrap comes
+  out of steel works, component stamping and vehicle assembly. Mixed farms grow grain and raise
+  livestock, and food processing turns both into food. Nine new goods: crude oil, gasoline, jet
+  fuel, petrochemical feedstock, natural gas liquids, pig iron, steel scrap, grain and livestock.
+  Seven new plant strategies, each with realistic circa 1980 to 2000 yields, and the build
+  screens list a plant's by-products.
+- Rivals plan and build the new chains with the same rules as you: a plant is valued on
+  everything it makes, and a refinery counts as a good site when the corridor imports its fuel,
+  gasoline, jet fuel or feedstock.
+- Food, groceries, grain and livestock now spoil a few percent of unsold stock each week, and
+  plants buy no more than two weeks of a perishable input.
 - Scenario editor, on every platform. Take any built-in scenario and change its numbers:
   starting capital, difficulty, the opening economy, which rival firms start and how big and
   cash-rich they are, wage and demand levels in each region, and the laws in force in week one
@@ -73,6 +89,32 @@ heading.
   stake in the company it holds, which is how look-through value was meant to work. In a
   96-seed growth-policy check, runs ending far above the normal range from this spike fell
   from 22 of 96 to 1 of 96 (that one is a genuine profit boom).
+### Changed
+
+- Plastics now use petrochemical feedstock and natural gas liquids, and the chemical plant uses
+  feedstock beside fuel. Oil wells make crude oil, not fuel; fuel now comes from refineries.
+- Automatic prices: a good sells out and rises only while the corridor is still importing it,
+  and eases back toward the reference price when local supply already covers demand, instead of
+  sitting at the ceiling. The ceiling is 95 percent of the cheapest import, so local goods win
+  once normal freight is added.
+- Gas, timber, pharmaceuticals, rare earths and building materials start with local producers,
+  and so do the new chains: several rival firms open with an extra plant in another region.
+  Starting saves and the cross-platform test hash change with the new content; saves from earlier
+  versions do not load.
+- The data format moved to schema 2 (by-products and spoilage). Schema 1 files still read.
+
+### Fixed
+
+- Freight and advertising were made but never sold, so their plants were cut back to the
+  minimum. Freight bills, advertising purchases and service inputs (software, telecom, research,
+  maintenance, freight) are now paid to the firms that hold that service this week, in
+  proportion to the stock they hold, and only the remainder goes to the outside sector.
+- Fuel the corridor made while it imported fuel: asking the full import price put the delivered
+  price above imports. Local sellers now stay under the import price.
+- Seed supply contracts delivered from a firm's headquarters region even when the plant sat
+  elsewhere, which could strip a plant's own inputs; they now deliver from the plant's region.
+- Stock of food sat unsold in storage at twelve thousand lots; spoilage and shorter perishable
+  cover bring it down.
 
 ## [1.6.1] - 2026-10-27
 

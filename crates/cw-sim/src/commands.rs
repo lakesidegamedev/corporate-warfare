@@ -1463,12 +1463,11 @@ fn apply_intent(
                     world
                         .facilities
                         .get(*facility)
-                        .and_then(|f| {
-                            dataset
-                                .product_index
-                                .get(&dataset.recipes[f.recipe as usize].output)
+                        .map(|f| {
+                            dataset.recipes[f.recipe as usize]
+                                .outputs()
+                                .any(|(id, _)| dataset.product_index.get(id) == Some(product))
                         })
-                        .map(|code| code == product)
                         .unwrap_or(false)
                 })
             };
@@ -1551,7 +1550,13 @@ fn apply_intent(
                     }
                     if freight > 0 {
                         release_firm_cash(world, *firm, freight, "spot freight release");
-                        crate::economy::freight::pay_freight(world, *firm, freight, "spot freight");
+                        crate::economy::freight::pay_freight(
+                            world,
+                            dataset,
+                            *firm,
+                            freight,
+                            "spot freight",
+                        );
                     }
                     world.shipments.push(crate::state::Shipment {
                         seller,

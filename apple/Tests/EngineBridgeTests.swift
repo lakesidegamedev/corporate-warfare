@@ -28,8 +28,9 @@ final class EngineBridgeTests: XCTestCase {
         // `the_cross_platform_fixture_hash_is_pinned`. Equal hashes on Linux and iOS are the
         // cross-platform determinism evidence for this fixture. The value moved on 2026-10-25
         // when rival command ids began using the persisted sequence counter, and again when
-        // ordinary facilities stopped consuming a nonexistent ore deposit, and on 2026-10-27 when the
-        // world gained its world price state. This constant needs
+        // ordinary facilities stopped consuming a nonexistent ore deposit, on 2026-10-27 when the
+        // world gained its world price state, and again in 1.7 preview 2 when the product chains
+        // and multi-output plants changed the dataset. This constant needs
         // a fresh simulator run on the Mac runner before R05 is claimed again.
         XCTAssertEqual(session.canonicalHash(), "daca9262f6691f65be29a1f4f89ade4219539631ff766638c5198b21013e61df")
 

@@ -205,7 +205,7 @@ mod tests {
         let (firms, facilities, _) = counts(&stress);
         assert!((900..=1_100).contains(&firms), "firms {firms}");
         assert!(
-            (8_000..=11_000).contains(&facilities),
+            (8_000..=14_000).contains(&facilities),
             "facilities {facilities}"
         );
         assert!(outside_capital(&stress) > 0);

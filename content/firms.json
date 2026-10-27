@@ -11,7 +11,19 @@
       "region": "OH-NW",
       "recipe": "farm_industrial",
       "blocks": 15,
-      "public": false
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "mixed_farm",
+          "region": "IN-CEN",
+          "blocks": 4
+        },
+        {
+          "recipe": "food_processing",
+          "region": "OH-NW",
+          "blocks": 2
+        }
+      ]
     },
     {
       "id": "prairie_line_farms",
@@ -31,7 +43,14 @@
       "region": "MI-NOR",
       "recipe": "mine",
       "blocks": 5,
-      "public": true
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "timber_forestry",
+          "region": "MI-MID",
+          "blocks": 3
+        }
+      ]
     },
     {
       "id": "black_shale",
@@ -41,7 +60,29 @@
       "region": "WV-SOU",
       "recipe": "coal_mine",
       "blocks": 10,
-      "public": false
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "gas_wells",
+          "region": "WV-NOR",
+          "blocks": 4
+        },
+        {
+          "recipe": "oil_wells",
+          "region": "OH-SE",
+          "blocks": 3
+        },
+        {
+          "recipe": "gas_processing",
+          "region": "WV-NOR",
+          "blocks": 2
+        },
+        {
+          "recipe": "rare_earth_mine",
+          "region": "KY-EAS",
+          "blocks": 2
+        }
+      ]
     },
     {
       "id": "lake_erie_power",
@@ -71,7 +112,14 @@
       "region": "OH-CEN",
       "recipe": "chemical_plant",
       "blocks": 10,
-      "public": true
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "refinery",
+          "region": "OH-NW",
+          "blocks": 2
+        }
+      ]
     },
     {
       "id": "allegheny_polymers",
@@ -81,7 +129,14 @@
       "region": "PA-WES",
       "recipe": "plastics_plant",
       "blocks": 5,
-      "public": false
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "pharma_plant",
+          "region": "PA-PHL",
+          "blocks": 2
+        }
+      ]
     },
     {
       "id": "cuyahoga_metal",
@@ -91,7 +146,29 @@
       "region": "OH-NE",
       "recipe": "metal_works",
       "blocks": 13,
-      "public": true
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "blast_furnace",
+          "region": "PA-WES",
+          "blocks": 2
+        },
+        {
+          "recipe": "steel_mill",
+          "region": "PA-CEN",
+          "blocks": 2
+        },
+        {
+          "recipe": "electric_arc",
+          "region": "IN-NW",
+          "blocks": 1
+        },
+        {
+          "recipe": "building_products",
+          "region": "OH-CEN",
+          "blocks": 3
+        }
+      ]
     },
     {
       "id": "miami_components",

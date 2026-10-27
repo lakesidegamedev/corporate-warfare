@@ -58,6 +58,18 @@ pub struct SeedFirm {
     /// Opening cash as a percentage of the standard amount. Custom scenarios change it.
     #[serde(default = "full_percent")]
     pub cash_pct: u16,
+    /// Further plants the firm opens with beside its main one, each in its own region. They give
+    /// goods that would otherwise be import-only a local producer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_plants: Vec<ExtraPlant>,
+}
+
+/// One additional opening plant of a seed firm.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExtraPlant {
+    pub recipe: String,
+    pub region: String,
+    pub blocks: u8,
 }
 
 fn full_percent() -> u16 {

@@ -17,7 +17,8 @@ use cw_data::Dataset;
 
 use crate::state::World;
 
-/// Goods a firm's plants make.
+/// Goods a firm's plants make, by-products included: a by-product is priced and sold like any
+/// other good, so nothing a plant makes sits without a price.
 pub fn outputs(world: &World, dataset: &Dataset, firm: Handle) -> BTreeSet<u16> {
     let Some(entity) = world.firms.get(firm) else {
         return BTreeSet::new();
@@ -26,12 +27,8 @@ pub fn outputs(world: &World, dataset: &Dataset, firm: Handle) -> BTreeSet<u16> 
         .facilities
         .iter()
         .filter_map(|handle| world.facilities.get(*handle))
-        .filter_map(|plant| {
-            dataset
-                .product_index
-                .get(&dataset.recipes[plant.recipe as usize].output)
-                .copied()
-        })
+        .flat_map(|plant| dataset.recipes[plant.recipe as usize].outputs())
+        .filter_map(|(id, _)| dataset.product_index.get(id).copied())
         .collect()
 }
 
@@ -80,7 +77,38 @@ pub fn free_stock(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
                 * plant.blocks as i64
         })
         .sum();
-    (held - weekly_need * entity.policies.input_cover_weeks.max(1) as i64).max(0)
+    (held - weekly_need * cover_weeks(entity, dataset, product)).max(0)
+}
+
+/// Weeks of sales a firm may hold of a good before it counts as a glut. Perishables spoil each
+/// week they sit, so they count as a glut sooner.
+pub fn glut_weeks(dataset: &Dataset, product: u16) -> i64 {
+    if dataset.products[product as usize].spoilage_bps_weekly >= 200 {
+        2
+    } else {
+        4
+    }
+}
+
+/// Weeks of a plant's need a firm keeps on hand as input cover. Perishable inputs are bought for
+/// at most two weeks, since stock that sits spoils.
+pub fn cover_weeks(firm: &crate::state::Firm, dataset: &Dataset, product: u16) -> i64 {
+    let weeks = firm.policies.input_cover_weeks.max(1) as i64;
+    if dataset.products[product as usize].spoilage_bps_weekly >= 200 {
+        weeks.min(2)
+    } else {
+        weeks
+    }
+}
+
+/// Lots of a good the corridor imported through the gateways last week.
+fn imported_last_week(world: &World, product: u16) -> i64 {
+    world
+        .gateways
+        .iter()
+        .filter(|gateway| gateway.product == product)
+        .map(|gateway| gateway.last_import_lots)
+        .sum()
 }
 
 /// The price the sell-through rule sets this week for one good.
@@ -98,11 +126,21 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
     let sold = weekly_sold(world, firm, product);
     let stock = free_stock(world, dataset, firm, product);
     let mut target = price;
-    if (sold == 0 && stock > 0) || stock > sold * 4 {
+    if (sold == 0 && stock > 0) || stock > sold * glut_weeks(dataset, product) {
         target = price * 95 / 100;
     } else if stock < sold {
-        target = price * 102 / 100;
+        // Selling out only lifts the price while the corridor is still importing the good: with
+        // no imports, local supply already covers demand, so a price above reference eases back
+        // by a percent a week instead of climbing to the import ceiling and staying there.
+        if imported_last_week(world, product) > 0 || price < reference {
+            target = price * 102 / 100;
+        } else if price > reference {
+            target = price * 99 / 100;
+        }
     }
+    // A local seller stays five percent under the cheapest import, so its goods still beat
+    // imports once freight over a normal haul is added; asking the full import price made the
+    // delivered price higher than imports and the corridor imported what it made.
     let ceiling = world
         .gateways
         .iter()
@@ -110,6 +148,7 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
         .map(|gateway| gateway.sell_price_cents)
         .filter(|price| *price > 0)
         .min()
+        .map(|import| import * 95 / 100)
         .unwrap_or(reference + reference * 15 / 100);
     target
         .clamp(reference / 2, reference * 2)
@@ -151,7 +190,10 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
                 (sold * 2 < full, sold * 10 >= full * 9)
             } else {
                 let stock = free_stock(world, dataset, firm, product);
-                (stock > sold.max(1) * 4, sold > 0 && stock * 2 < sold * 3)
+                (
+                    stock > sold.max(1) * glut_weeks(dataset, product),
+                    sold > 0 && stock * 2 < sold * 3,
+                )
             };
             let target = if glut {
                 (current - 1_500).max(3_000)
@@ -211,7 +253,7 @@ pub fn market_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
                 world
                     .facilities
                     .get(*plant)
-                    .is_some_and(|plant| &dataset.recipes[plant.recipe as usize].output == id)
+                    .is_some_and(|plant| dataset.recipes[plant.recipe as usize].makes(id))
             })
         })
         .filter_map(|(_, entity)| entity.policies.prices.get(&product).copied())
@@ -237,7 +279,7 @@ pub fn unit_cost(world: &World, dataset: &Dataset, firm: Handle, product: u16) -
         .filter(|plant| plant.status == crate::state::FacilityStatus::Operating)
     {
         let recipe = &dataset.recipes[plant.recipe as usize];
-        if &recipe.output != id {
+        if !recipe.makes(id) {
             continue;
         }
         let blocks = plant.blocks as i64;
@@ -261,8 +303,18 @@ pub fn unit_cost(world: &World, dataset: &Dataset, firm: Handle, product: u16) -
         let fixed = recipe.weekly_maintenance(dataset.maintenance_annual_bps)
             + dataset.fixture_land_rent_cents_weekly
             + recipe.weekly_depreciation();
-        cost += (inputs + wages + fixed) * blocks;
-        lots += recipe.weekly_output_lots * blocks;
+        // A joint plant's cost is shared among its products by value at reference prices.
+        let value_of = |product: &str| {
+            dataset
+                .product_index
+                .get(product)
+                .map(|code| dataset.reference_price(*code))
+                .unwrap_or(0)
+        };
+        let total_value = recipe.output_value(value_of).max(1);
+        let own_value = recipe.lots_of(id) * value_of(id);
+        cost += (inputs + wages + fixed) * blocks * own_value / total_value;
+        lots += recipe.lots_of(id) * blocks;
     }
     (lots > 0).then(|| (cost / lots).max(1))
 }
@@ -370,7 +422,7 @@ pub fn corridor_price(world: &World, dataset: &Dataset, product: u16) -> i64 {
                 world
                     .facilities
                     .get(*plant)
-                    .is_some_and(|plant| &dataset.recipes[plant.recipe as usize].output == id)
+                    .is_some_and(|plant| dataset.recipes[plant.recipe as usize].makes(id))
             })
         })
         .filter_map(|(_, entity)| entity.policies.prices.get(&product).copied())

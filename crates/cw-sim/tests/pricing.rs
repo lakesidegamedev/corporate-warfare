@@ -52,14 +52,38 @@ fn stock_and_sell_through_move_the_price() {
         cw_core::money::Cents(0),
     );
     assert_eq!(pricing::target_price(&world, &dataset, firm, food), 9_500);
-    // Half a week of stock: selling out raises two percent.
+    // Half a week of stock: selling out raises two percent while the corridor still imports.
     let entity = world.firms.get_mut(firm).unwrap();
     entity.inventory.retain(|(p, _), _| *p != food);
     entity.stock_lot_mut(food, region).receive(
         cw_core::quantity::MilliLots::from_lots(50),
         cw_core::money::Cents(0),
     );
+    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
+        gateway.last_import_lots = 10;
+    }
     assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_200);
+    // With no imports, local supply already covers demand: a price at reference holds, and one
+    // above reference eases back a percent instead of climbing to the import ceiling.
+    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
+        gateway.last_import_lots = 0;
+    }
+    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_000);
+    world
+        .firms
+        .get_mut(firm)
+        .unwrap()
+        .policies
+        .prices
+        .insert(food, 11_000);
+    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_890);
+    world
+        .firms
+        .get_mut(firm)
+        .unwrap()
+        .policies
+        .prices
+        .insert(food, 10_000);
     // Two weeks of stock: hold.
     let entity = world.firms.get_mut(firm).unwrap();
     entity.inventory.retain(|(p, _), _| *p != food);

@@ -258,7 +258,32 @@ fn produce_goods(
     power: &BTreeMap<Handle, i32>,
     opening: &mut BTreeMap<(Handle, u16, u8), i64>,
 ) {
-    let handles: Vec<Handle> = world.facilities.iter().map(|(handle, _)| handle).collect();
+    let mut handles: Vec<Handle> = world.facilities.iter().map(|(handle, _)| handle).collect();
+    // Services expire each week and are bought in the week they are used, so the plants that
+    // make them run before the plants that use them: service makers with no service inputs
+    // first, then service makers that use services, then everything else.
+    let tier = |handle: &Handle| -> u8 {
+        let Some(facility) = world.facilities.get(*handle) else {
+            return 2;
+        };
+        let recipe = &dataset.recipes[facility.recipe as usize];
+        let makes_service = dataset
+            .product_index
+            .get(&recipe.output)
+            .is_some_and(|code| dataset.products[*code as usize].kind.is_service());
+        if !makes_service {
+            return 2;
+        }
+        let uses_service = recipe.weekly_inputs_lots.keys().any(|id| {
+            id != "electricity"
+                && dataset
+                    .product_index
+                    .get(id)
+                    .is_some_and(|code| dataset.products[*code as usize].kind.is_service())
+        });
+        if uses_service { 1 } else { 0 }
+    };
+    handles.sort_by_key(|handle| (tier(handle), *handle));
     for handle in handles {
         let facility = match world.facilities.get(handle) {
             Some(facility) => facility.clone(),
@@ -456,11 +481,15 @@ fn run_facility(
                         .credit(Account::Cash, paid, "service input")
                         .debit(Account::OperatingExpense, paid, "service input"),
                 );
-                let _ = world.outside.gateway_book.commit(
-                    world.tick,
-                    Txn::new()
-                        .debit(Account::Cash, paid, "service input")
-                        .credit(Account::Revenue, paid, "service input"),
+                // The corridor's own service producers are paid first; the outside sector
+                // supplies only what they cannot.
+                crate::economy::services::pay_for_service(
+                    world,
+                    dataset,
+                    Some(firm_handle),
+                    code,
+                    paid,
+                    "service input",
                 );
             }
             continue;
@@ -490,27 +519,52 @@ fn run_facility(
         output = output.min(cap);
     }
     // Seasonal yield applies to farm output only, before input planning in a full model.
-    if recipe.industry == "agriculture" {
-        let season = SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize];
-        output = output.scale_bps(season);
-    }
+    let season = if recipe.industry == "agriculture" {
+        SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize]
+    } else {
+        10_000
+    };
+    output = output.scale_bps(season);
     // Supply-side events (crop loss, outages) reduce physical output, not household demand.
     if let Some(code) = dataset.product_index.get(&recipe.output) {
         output = output.scale_bps(world.supply_ratio_bps(facility.region, *code) as i32);
     }
+    // Every product the plant makes, in its fixed yield split: the primary output first, then
+    // each by-product at the same run rate, season and supply conditions.
+    let mut made: Vec<(u16, MilliLots)> = Vec::new();
     if output.0 > 0 {
-        let code = dataset.product_index[&recipe.output];
+        made.push((dataset.product_index[&recipe.output], output));
+    }
+    for by in &recipe.by_products {
+        let Some(code) = dataset.product_index.get(&by.product).copied() else {
+            continue;
+        };
+        let qty = MilliLots::from_lots(by.weekly_lots * facility.blocks as i64)
+            .scale_bps(ratio)
+            .scale_bps(season)
+            .scale_bps(world.supply_ratio_bps(facility.region, code) as i32);
+        // A deposit that runs out stops the by-product with the primary.
+        if qty.0 > 0 && output.0 > 0 {
+            made.push((code, qty));
+        }
+    }
+    if output.0 > 0 {
         // Utilities book output too, at zero carrying cost because fuel was expensed as
         // produced. Dispatch then removes exactly what consumers bought, leaving the surplus
         // available for the finite gateway export.
         if utility {
             let firm = world.firms.get_mut(firm_handle).unwrap();
-            firm.stock_lot_mut(code, facility.region)
-                .receive(output, Cents(0));
+            for (code, qty) in &made {
+                firm.stock_lot_mut(*code, facility.region)
+                    .receive(*qty, Cents(0));
+            }
         } else {
+            let shares = joint_cost_shares(dataset, &made, material_cost);
             let firm = world.firms.get_mut(firm_handle).unwrap();
-            firm.stock_lot_mut(code, facility.region)
-                .receive(output, Cents(material_cost));
+            for ((code, qty), share) in made.iter().zip(shares) {
+                firm.stock_lot_mut(*code, facility.region)
+                    .receive(*qty, Cents(share));
+            }
             // Capitalise the converted inputs into the new stock. The consumption posting
             // above already expensed them, so this reverses that expense; without it the
             // Inventory account and the lots' carrying cost drift apart and stock issues
@@ -547,6 +601,41 @@ fn run_facility(
     output
 }
 
+/// Split the converted inputs' carrying cost across a plant's joint outputs by their value at
+/// reference prices (the usual joint-cost rule). The shares always sum to the cost: the rounding
+/// remainder goes to the primary output, the first entry.
+fn joint_cost_shares(dataset: &Dataset, made: &[(u16, MilliLots)], cost: i64) -> Vec<i64> {
+    if made.len() <= 1 || cost <= 0 {
+        let mut shares = vec![0; made.len()];
+        if let Some(first) = shares.first_mut() {
+            *first = cost.max(0);
+        }
+        return shares;
+    }
+    let values: Vec<i64> = made
+        .iter()
+        .map(|(code, qty)| {
+            qty.value_at(Cents(dataset.reference_price(*code)))
+                .unwrap_or(Cents::ZERO)
+                .0
+                .max(0)
+        })
+        .collect();
+    let total: i64 = values.iter().sum();
+    if total <= 0 {
+        let mut shares = vec![0; made.len()];
+        shares[0] = cost;
+        return shares;
+    }
+    let mut shares: Vec<i64> = values
+        .iter()
+        .map(|value| round_even_div(cost as i128 * *value as i128, total as i128) as i64)
+        .collect();
+    let assigned: i64 = shares.iter().sum();
+    shares[0] += cost - assigned;
+    shares
+}
+
 fn update_facility_result(
     world: &mut World,
     handle: Handle,
@@ -558,6 +647,50 @@ fn update_facility_result(
         facility.last_output = output;
         facility.last_staff_ratio_bps = staff_ratio;
         facility.last_inputs_short = inputs_short;
+    }
+}
+
+/// Perishable goods lose a share of the unsold stock each week, written off at carrying cost.
+/// Spoilage destroys stock, never cash, and the loss is an operating expense.
+pub fn spoil_perishables(world: &mut World, dataset: &Dataset) {
+    let rates: Vec<(u16, u32)> = dataset
+        .products
+        .iter()
+        .enumerate()
+        .filter(|(_, product)| product.spoilage_bps_weekly > 0)
+        .map(|(code, product)| (code as u16, product.spoilage_bps_weekly))
+        .collect();
+    if rates.is_empty() {
+        return;
+    }
+    let handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
+    for handle in handles {
+        let Some(firm) = world.firms.get_mut(handle) else {
+            continue;
+        };
+        let mut written_off = 0i64;
+        for (code, bps) in &rates {
+            let keys: Vec<u8> = firm
+                .inventory
+                .iter()
+                .filter(|((p, _), lot)| p == code && lot.qty.0 > 0)
+                .map(|((_, region), _)| *region)
+                .collect();
+            for region in keys {
+                let held = firm.stock(*code, region);
+                // At least one milli-lot spoils while any remains, so small piles do not linger.
+                let lost = MilliLots((held.0 * *bps as i64 / 10_000).max(1)).min(held);
+                written_off += firm.issue_stock(*code, region, lost).0;
+            }
+        }
+        if written_off > 0 {
+            let _ = firm.book.commit(
+                world.tick,
+                Txn::new()
+                    .credit(Account::Inventory, written_off, "spoilage")
+                    .debit(Account::OperatingExpense, written_off, "spoilage"),
+            );
+        }
     }
 }
 

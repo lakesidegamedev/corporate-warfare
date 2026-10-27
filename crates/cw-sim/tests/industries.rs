@@ -962,6 +962,11 @@ fn logistics_carriers_earn_freight_and_delivery_waits_for_the_lane_lead_time() {
         .expect("validated lane");
     let lead = freight::lead_time_weeks(km);
     let expected_freight = freight::freight_cost(&dataset, from_region, to_region, quantity);
+    // Carriers are paid for the lane capacity they hold this week, so each holds some.
+    for carrier in firms_in(&world, "logistics") {
+        let region = world.firm(carrier).unwrap().region;
+        set_stock(&mut world, &dataset, carrier, "freight", region, 50);
+    }
     let carrier_revenue_before: i64 = firms_in(&world, "logistics")
         .iter()
         .map(|firm| lifetime_revenue(&world, *firm))

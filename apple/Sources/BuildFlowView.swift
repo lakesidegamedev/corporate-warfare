@@ -189,7 +189,7 @@ struct BuildFlowView: View {
                         figureRow("Capex", Format.money(strategy.capexCents * Int64(blocks)))
                     }
                     figureRow("Online in", "\(strategy.buildWeeks) weeks")
-                    figureRow("Output", "\((strategy.weeklyOutputLots * Int64(blocks)).formatted()) lots of \(strategy.outputName) a week")
+                    figureRow("Output", "\((strategy.weeklyOutputLots * Int64(blocks)).formatted()) lots of \(strategy.outputName)\(strategy.byProductsText.isEmpty ? "" : " " + strategy.byProductsText) a week")
                 }
             }
             if let preview {
@@ -262,7 +262,7 @@ struct StrategyCard: View {
                 SectorBadge(sector: strategy.industry, size: 30)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(strategy.name).font(.headline).foregroundStyle(Theme.primaryText)
-                    Text("Makes \(strategy.weeklyOutputLots.formatted()) lots of \(strategy.outputName) a week per plant")
+                    Text("Makes \(strategy.weeklyOutputLots.formatted()) lots of \(strategy.outputName)\(strategy.byProductsText.isEmpty ? "" : " " + strategy.byProductsText) a week per plant")
                         .font(.caption).foregroundStyle(Theme.secondary)
                 }
                 Spacer(minLength: 0)

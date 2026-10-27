@@ -221,7 +221,7 @@ struct FoundCompanyPanel: View {
                     Text(strategy.name)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(on ? Theme.gold : Theme.primaryText)
-                    Text("Makes \(strategy.outputName) · \(strategy.weeklyOutputLots) lots a week per plant")
+                    Text("Makes \(strategy.outputName) · \(strategy.weeklyOutputLots) lots a week per plant\(strategy.byProductsText.isEmpty ? "" : " " + strategy.byProductsText)")
                         .font(.caption)
                         .foregroundStyle(Theme.secondary)
                 }

@@ -162,7 +162,7 @@ fn plant_contribution(
     let land = dataset.fixture_land_rent_cents_weekly
         * world.regions[region as usize].land_index_bps as i64
         / 10_000;
-    template.weekly_output_lots * price(&template.output)
+    template.output_value(price)
         - inputs
         - payroll * (10_000 + overhead_bps) / 10_000
         - template.weekly_maintenance(dataset.maintenance_annual_bps)
@@ -263,13 +263,30 @@ impl PolicyRunner {
                 {
                     continue;
                 }
-                let room = world
-                    .gateways
-                    .iter()
-                    .find(|g| g.region == region && g.product == output)
-                    .map(|g| g.smoothed_import_lots)
-                    .unwrap_or(0);
-                if room * 5 < recipe.weekly_output_lots * 4 {
+                let room_of = |product: u16| {
+                    world
+                        .gateways
+                        .iter()
+                        .find(|g| g.region == region && g.product == product)
+                        .map(|g| g.smoothed_import_lots)
+                        .unwrap_or(0)
+                };
+                let enough = if recipe.by_products.is_empty() {
+                    room_of(output) * 5 >= recipe.weekly_output_lots * 4
+                } else {
+                    // Every product counts at its reference value, each capped at the plant's
+                    // own yield; three quarters of four fifths covered is enough.
+                    let (mut covered, mut total) = (0i128, 0i128);
+                    for (id, lots) in recipe.outputs() {
+                        if let Some(code) = dataset.product_index.get(id).copied() {
+                            let value = dataset.reference_price(code) as i128;
+                            covered += value * room_of(code).min(lots) as i128;
+                            total += value * lots as i128;
+                        }
+                    }
+                    total > 0 && covered * 5 * 4 >= total * 4 * 3
+                };
+                if !enough {
                     continue;
                 }
                 let quote = sectors::build_cost(world, dataset, handle, region, recipe_index, 1);

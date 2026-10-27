@@ -128,6 +128,8 @@ fn a_division_runs_one_strategy_and_retools_together() {
         .position(|r| r.industry == "agriculture" && r.id != dataset.recipes[current as usize].id)
         .unwrap() as u16;
     fund(&mut world, firm, 50_000_000_000);
+    // The seeded firm may already run other divisions of its own; count them.
+    let divisions_before = sectors::divisions_of(&world, &dataset, firm).len();
 
     // A second plant of the same strategy joins the division without an entry fee.
     let quote = sectors::build_cost(&world, &dataset, firm, home, current, 1);
@@ -176,7 +178,10 @@ fn a_division_runs_one_strategy_and_retools_together() {
         assert_eq!(plant.recipe, other, "every plant in the division retools");
         assert!(matches!(plant.status, FacilityStatus::Retooling { .. }));
     }
-    assert_eq!(sectors::divisions_of(&world, &dataset, firm).len(), 2);
+    assert_eq!(
+        sectors::divisions_of(&world, &dataset, firm).len(),
+        divisions_before + 1
+    );
 }
 
 /// Cash across every firm's book plus the outside media and gateway accounts.

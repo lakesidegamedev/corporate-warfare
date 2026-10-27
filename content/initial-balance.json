@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "classification": "authored engineering calibration; NOT real regional observations",
   "currency_base": "nominal circa-2000 game USD",
   "baseline_weekly_wage_cents": [
@@ -12,7 +12,8 @@
       "id": "food_raw",
       "name": "Food (farm output)",
       "reference_price_cents": 10000,
-      "kind": "goods"
+      "kind": "goods",
+      "spoilage_bps_weekly": 400
     },
     {
       "id": "ore",
@@ -72,7 +73,8 @@
       "id": "food_retail",
       "name": "Groceries",
       "reference_price_cents": 17000,
-      "kind": "consumer_goods"
+      "kind": "consumer_goods",
+      "spoilage_bps_weekly": 400
     },
     {
       "id": "goods_retail",
@@ -211,6 +213,62 @@
       "name": "Property cover",
       "reference_price_cents": 0,
       "kind": "financial_contract"
+    },
+    {
+      "id": "crude_oil",
+      "name": "Crude oil",
+      "reference_price_cents": 15000,
+      "kind": "goods"
+    },
+    {
+      "id": "gasoline",
+      "name": "Gasoline",
+      "reference_price_cents": 31000,
+      "kind": "goods"
+    },
+    {
+      "id": "jet_fuel",
+      "name": "Jet fuel",
+      "reference_price_cents": 33000,
+      "kind": "goods"
+    },
+    {
+      "id": "petrochem_feedstock",
+      "name": "Petrochemical feedstock",
+      "reference_price_cents": 26000,
+      "kind": "goods"
+    },
+    {
+      "id": "ngl",
+      "name": "Natural gas liquids",
+      "reference_price_cents": 50000,
+      "kind": "goods"
+    },
+    {
+      "id": "pig_iron",
+      "name": "Pig iron",
+      "reference_price_cents": 32000,
+      "kind": "goods"
+    },
+    {
+      "id": "scrap",
+      "name": "Steel scrap",
+      "reference_price_cents": 18000,
+      "kind": "goods"
+    },
+    {
+      "id": "grain",
+      "name": "Grain",
+      "reference_price_cents": 6000,
+      "kind": "goods",
+      "spoilage_bps_weekly": 150
+    },
+    {
+      "id": "livestock",
+      "name": "Livestock",
+      "reference_price_cents": 12000,
+      "kind": "goods",
+      "spoilage_bps_weekly": 300
     }
   ],
   "recipes": [
@@ -355,8 +413,8 @@
       "industry": "extraction",
       "id": "oil_wells",
       "name": "Oil Production",
-      "output": "fuel",
-      "weekly_output_lots": 41,
+      "output": "crude_oil",
+      "weekly_output_lots": 74,
       "weekly_inputs_lots": {
         "electricity": 2,
         "steel": 2
@@ -368,7 +426,13 @@
       ],
       "capex_cents": 48000000,
       "build_weeks": 26,
-      "life_years": 20
+      "life_years": 20,
+      "by_products": [
+        {
+          "product": "natural_gas",
+          "weekly_lots": 5
+        }
+      ]
     },
     {
       "industry": "extraction",
@@ -505,7 +569,8 @@
       "output": "chemicals",
       "weekly_output_lots": 40,
       "weekly_inputs_lots": {
-        "fuel": 20,
+        "fuel": 8,
+        "petrochem_feedstock": 13,
         "ore": 2,
         "electricity": 2
       },
@@ -566,8 +631,8 @@
       "weekly_output_lots": 48,
       "weekly_inputs_lots": {
         "electricity": 2,
-        "fuel": 6,
-        "natural_gas": 4
+        "petrochem_feedstock": 6,
+        "ngl": 2
       },
       "workers_low_mid_high": [
         4,
@@ -616,7 +681,13 @@
       "capex_cents": 60000000,
       "build_weeks": 20,
       "life_years": 20,
-      "name": "Electronics Manufacturing"
+      "name": "Electronics Manufacturing",
+      "by_products": [
+        {
+          "product": "scrap",
+          "weekly_lots": 3
+        }
+      ]
     },
     {
       "industry": "manufacturing",
@@ -636,7 +707,13 @@
       "capex_cents": 20000000,
       "build_weeks": 20,
       "life_years": 20,
-      "name": "Heavy Metals"
+      "name": "Heavy Metals",
+      "by_products": [
+        {
+          "product": "scrap",
+          "weekly_lots": 4
+        }
+      ]
     },
     {
       "industry": "manufacturing",
@@ -678,7 +755,13 @@
       ],
       "capex_cents": 52000000,
       "build_weeks": 39,
-      "life_years": 25
+      "life_years": 25,
+      "by_products": [
+        {
+          "product": "scrap",
+          "weekly_lots": 2
+        }
+      ]
     },
     {
       "industry": "construction",
@@ -788,7 +871,8 @@
       "weekly_inputs_lots": {
         "electricity": 1,
         "fuel": 3,
-        "software": 2
+        "software": 2,
+        "gasoline": 4
       },
       "workers_low_mid_high": [
         6,
@@ -846,7 +930,8 @@
       "weekly_inputs_lots": {
         "electricity": 2,
         "goods": 14,
-        "vehicles": 1
+        "vehicles": 1,
+        "gasoline": 2
       },
       "workers_low_mid_high": [
         6,
@@ -1199,7 +1284,8 @@
         "chemicals": 4,
         "components": 12,
         "electricity": 2,
-        "rare_earth": 2
+        "rare_earth": 2,
+        "jet_fuel": 4
       },
       "workers_low_mid_high": [
         5,
@@ -1250,6 +1336,173 @@
       "capex_cents": 126000000,
       "build_weeks": 26,
       "life_years": 25
+    },
+    {
+      "industry": "chemical_industries",
+      "id": "refinery",
+      "name": "Oil Refining",
+      "output": "fuel",
+      "weekly_output_lots": 26,
+      "weekly_inputs_lots": {
+        "crude_oil": 80,
+        "electricity": 2
+      },
+      "workers_low_mid_high": [
+        2,
+        2,
+        1
+      ],
+      "capex_cents": 110000000,
+      "build_weeks": 52,
+      "life_years": 30,
+      "by_products": [
+        {
+          "product": "gasoline",
+          "weekly_lots": 36
+        },
+        {
+          "product": "jet_fuel",
+          "weekly_lots": 8
+        },
+        {
+          "product": "petrochem_feedstock",
+          "weekly_lots": 12
+        }
+      ]
+    },
+    {
+      "industry": "chemical_industries",
+      "id": "gas_processing",
+      "name": "Gas Processing",
+      "output": "natural_gas",
+      "weekly_output_lots": 36,
+      "weekly_inputs_lots": {
+        "natural_gas": 45
+      },
+      "workers_low_mid_high": [
+        1,
+        1,
+        1
+      ],
+      "capex_cents": 32000000,
+      "build_weeks": 26,
+      "life_years": 25,
+      "by_products": [
+        {
+          "product": "ngl",
+          "weekly_lots": 15
+        }
+      ]
+    },
+    {
+      "industry": "manufacturing",
+      "id": "blast_furnace",
+      "name": "Blast Furnace",
+      "output": "pig_iron",
+      "weekly_output_lots": 48,
+      "weekly_inputs_lots": {
+        "coal": 10,
+        "electricity": 1,
+        "ore": 30
+      },
+      "workers_low_mid_high": [
+        2,
+        2,
+        1
+      ],
+      "capex_cents": 60000000,
+      "build_weeks": 39,
+      "life_years": 25,
+      "by_products": [
+        {
+          "product": "building_materials",
+          "weekly_lots": 6
+        }
+      ]
+    },
+    {
+      "industry": "manufacturing",
+      "id": "steel_mill",
+      "name": "Basic Oxygen Steel",
+      "output": "steel",
+      "weekly_output_lots": 58,
+      "weekly_inputs_lots": {
+        "electricity": 1,
+        "pig_iron": 40,
+        "scrap": 10
+      },
+      "workers_low_mid_high": [
+        1,
+        1,
+        1
+      ],
+      "capex_cents": 80000000,
+      "build_weeks": 39,
+      "life_years": 25
+    },
+    {
+      "industry": "manufacturing",
+      "id": "electric_arc",
+      "name": "Electric Arc Steel",
+      "output": "steel",
+      "weekly_output_lots": 50,
+      "weekly_inputs_lots": {
+        "electricity": 2,
+        "scrap": 52
+      },
+      "workers_low_mid_high": [
+        2,
+        1,
+        1
+      ],
+      "capex_cents": 50000000,
+      "build_weeks": 26,
+      "life_years": 20
+    },
+    {
+      "industry": "manufacturing",
+      "id": "food_processing",
+      "name": "Food Processing",
+      "output": "food_raw",
+      "weekly_output_lots": 175,
+      "weekly_inputs_lots": {
+        "electricity": 1,
+        "grain": 120,
+        "livestock": 20
+      },
+      "workers_low_mid_high": [
+        1,
+        1,
+        1
+      ],
+      "capex_cents": 40000000,
+      "build_weeks": 13,
+      "life_years": 20
+    },
+    {
+      "industry": "agriculture",
+      "id": "mixed_farm",
+      "name": "Mixed Grain and Livestock",
+      "output": "grain",
+      "weekly_output_lots": 190,
+      "weekly_inputs_lots": {
+        "electricity": 2,
+        "fuel": 4
+      },
+      "workers_low_mid_high": [
+        11,
+        2,
+        1
+      ],
+      "capex_cents": 45000000,
+      "build_weeks": 13,
+      "life_years": 20,
+      "by_products": [
+        {
+          "product": "livestock",
+          "weekly_lots": 30
+        }
+      ]
     }
   ],
   "financial_businesses": [

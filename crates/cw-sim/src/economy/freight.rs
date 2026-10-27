@@ -232,7 +232,13 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
             seller.record_sale(contract.to_region, contract.product, deliverable);
         }
         if paid_freight > 0 {
-            pay_freight(world, contract.buyer, paid_freight, "contract freight");
+            pay_freight(
+                world,
+                dataset,
+                contract.buyer,
+                paid_freight,
+                "contract freight",
+            );
         }
 
         if contract.from_region == contract.to_region {
@@ -293,7 +299,7 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
 /// Charge one freight bill to the payer and pay it to a named carrier when one exists,
 /// otherwise to the finite outside carrier sector. The payer is debited exactly once so the
 /// transport service has a real counterparty instead of minting carrier revenue.
-pub fn pay_freight(world: &mut World, payer: Handle, amount: i64, memo: &str) {
+pub fn pay_freight(world: &mut World, dataset: &Dataset, payer: Handle, amount: i64, memo: &str) {
     if amount <= 0 {
         return;
     }
@@ -313,45 +319,15 @@ pub fn pay_freight(world: &mut World, payer: Handle, amount: i64, memo: &str) {
             .credit(Account::Cash, paid, memo)
             .debit(Account::CostOfGoods, paid, memo),
     );
-    // Industry index 6 is logistics in INDUSTRY_NAMES.
-    let carriers: Vec<Handle> = world
-        .firms
-        .iter()
-        .filter(|(_, firm)| firm.industry == 6 && firm.operative())
-        .map(|(handle, _)| handle)
-        .collect();
-    let share = if carriers.is_empty() {
-        0
-    } else {
-        paid / carriers.len() as i64
-    };
-    let mut remaining = paid;
-    for carrier in carriers {
-        let portion = share.min(remaining);
-        if portion > 0 {
-            if let Some(firm) = world.firms.get_mut(carrier) {
-                let _ = firm.book.commit(
-                    world.tick,
-                    Txn::new().debit(Account::Cash, portion, memo).credit(
-                        Account::Revenue,
-                        portion,
-                        memo,
-                    ),
-                );
-            }
-            remaining -= portion;
-        }
-    }
-    if remaining > 0 {
-        let _ = world.outside.gateway_book.commit(
-            world.tick,
-            Txn::new().debit(Account::Cash, remaining, memo).credit(
-                Account::Revenue,
-                remaining,
-                memo,
-            ),
-        );
-    }
+    pay_carriers(world, dataset, payer, paid, memo);
+}
+
+/// Pay a freight bill to the carriers that hold freight capacity this week, in proportion to what
+/// they hold, which also records their sale; the remainder goes to the finite outside carrier
+/// sector. Carriers with no capacity left earn nothing, so a bill is never split by headcount.
+fn pay_carriers(world: &mut World, dataset: &Dataset, payer: Handle, paid: i64, memo: &str) {
+    let freight = dataset.product_index["freight"];
+    crate::economy::services::pay_for_service(world, dataset, Some(payer), freight, paid, memo);
 }
 
 #[cfg(test)]

@@ -83,7 +83,7 @@ fun BuildDialog(store: GameStore, board: RegionBoardDto, onClose: () -> Unit) {
                             ) {
                                 Text(option.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold)
                                 Text(
-                                    "${option.weeklyOutputLots} lots of ${option.outputName} a week · ${Format.compact(option.capexCents)} a plant · ${option.buildWeeks} weeks · ${option.referenceMarginBps / 100}% margin",
+                                    "${option.weeklyOutputLots} lots of ${option.outputName}${if (option.byProductsText.isEmpty()) "" else " " + option.byProductsText} a week · ${Format.compact(option.capexCents)} a plant · ${option.buildWeeks} weeks · ${option.referenceMarginBps / 100}% margin",
                                     color = Palette.secondary,
                                     fontSize = 12.sp,
                                 )

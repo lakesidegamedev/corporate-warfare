@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 pub use balance::{Balance, Product, ProductKind, Recipe};
 pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetting};
 pub use events::EventCard;
-pub use firms::{Archetype, SeedFirm};
+pub use firms::{Archetype, ExtraPlant, SeedFirm};
 pub use geography::{Conditions, Geography, Lane, Region, StateInfo};
 
 pub const BALANCE_JSON: &str = include_str!("../../../content/initial-balance.json");
@@ -141,6 +141,7 @@ impl Dataset {
     pub fn load() -> Result<Dataset, Vec<String>> {
         let balance: Balance = serde_json::from_str(BALANCE_JSON)
             .map_err(|error| vec![format!("initial-balance.json: {error}")])?;
+        let balance = balance.migrate().map_err(|error| vec![error])?;
         let geography: Geography = serde_json::from_str(GEOGRAPHY_JSON)
             .map_err(|error| vec![format!("regions.json: {error}")])?;
         let events: events::EventDeck = serde_json::from_str(EVENTS_JSON)
@@ -202,9 +203,9 @@ impl Dataset {
     /// Structural validation. Any error is a data defect, never a gameplay outcome.
     pub fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
-        if self.products.len() != 34 {
+        if self.products.len() < 34 {
             errors.push(format!(
-                "expected 34 products, found {}",
+                "expected at least 34 products, found {}",
                 self.products.len()
             ));
         }
@@ -272,6 +273,40 @@ impl Dataset {
                             recipe.id
                         ));
                     }
+                }
+            }
+            for by in &recipe.by_products {
+                match self.product_index.get(&by.product) {
+                    None => errors.push(format!(
+                        "recipe {} by-product {} is unknown",
+                        recipe.id, by.product
+                    )),
+                    Some(index) => {
+                        if self.products[*index as usize].kind == ProductKind::FinancialContract {
+                            errors.push(format!(
+                                "recipe {} makes a financial contract as a by-product",
+                                recipe.id
+                            ));
+                        }
+                    }
+                }
+                if by.product == recipe.output || by.weekly_lots <= 0 {
+                    errors.push(format!(
+                        "recipe {} by-product {} repeats the output or has no yield",
+                        recipe.id, by.product
+                    ));
+                }
+                if recipe
+                    .by_products
+                    .iter()
+                    .filter(|other| other.product == by.product)
+                    .count()
+                    > 1
+                {
+                    errors.push(format!(
+                        "recipe {} lists by-product {} twice",
+                        recipe.id, by.product
+                    ));
                 }
             }
             for input in recipe.weekly_inputs_lots.keys() {
@@ -391,6 +426,35 @@ impl Dataset {
             {
                 errors.push(format!("firm {} has unknown recipe", firm.id));
             }
+            // A firm runs one strategy per sector in a region, so no two of its plants share both.
+            let mut divisions: Vec<(&str, &str)> = Vec::new();
+            if let Some(main) = self.recipe(&firm.recipe) {
+                divisions.push((main.industry.as_str(), firm.region.as_str()));
+            }
+            for plant in &firm.extra_plants {
+                if let Some(recipe) = self.recipe(&plant.recipe) {
+                    let key = (recipe.industry.as_str(), plant.region.as_str());
+                    if divisions.contains(&key) {
+                        errors.push(format!(
+                            "firm {} has two plants in one sector and region ({} in {})",
+                            firm.id, key.0, key.1
+                        ));
+                    }
+                    divisions.push(key);
+                }
+                if !self.recipe_index.contains_key(&plant.recipe) {
+                    errors.push(format!("firm {} extra plant has unknown recipe", firm.id));
+                }
+                if !self.region_index.contains_key(&plant.region) {
+                    errors.push(format!("firm {} extra plant has unknown region", firm.id));
+                }
+                if plant.blocks == 0 || plant.blocks > 20 {
+                    errors.push(format!(
+                        "firm {} extra plant block count out of range",
+                        firm.id
+                    ));
+                }
+            }
         }
         for industry in INDUSTRIES {
             if per_industry.get(industry).copied().unwrap_or(0) != 2 {
@@ -449,7 +513,8 @@ impl Dataset {
             hasher
                 .string(&product.id)
                 .u8(product.kind.code())
-                .i64(product.reference_price_cents);
+                .i64(product.reference_price_cents)
+                .u32(product.spoilage_bps_weekly);
         }
         for recipe in &self.recipes {
             hasher
@@ -462,6 +527,9 @@ impl Dataset {
                 .u32(recipe.life_years);
             for (input, quantity) in &recipe.weekly_inputs_lots {
                 hasher.string(input).i64(*quantity);
+            }
+            for by in &recipe.by_products {
+                hasher.string(&by.product).i64(by.weekly_lots);
             }
             for worker in recipe.workers_low_mid_high {
                 hasher.i64(worker);
@@ -493,6 +561,12 @@ impl Dataset {
                 .string(&firm.recipe)
                 .u8(firm.blocks)
                 .bool(firm.public);
+            for plant in &firm.extra_plants {
+                hasher
+                    .string(&plant.recipe)
+                    .string(&plant.region)
+                    .u8(plant.blocks);
+            }
         }
         hasher.finish_hex()
     }
@@ -556,8 +630,8 @@ mod tests {
     #[test]
     fn pinned_dataset_loads_and_validates() {
         let dataset = Dataset::load().expect("dataset must validate");
-        assert_eq!(dataset.products.len(), 34);
-        assert_eq!(dataset.recipes.len(), 53);
+        assert_eq!(dataset.products.len(), 43);
+        assert_eq!(dataset.recipes.len(), 60);
         assert_eq!(dataset.regions.len(), 31);
         assert_eq!(dataset.states.len(), 8);
         assert_eq!(dataset.events.len(), 24);
@@ -649,6 +723,142 @@ mod tests {
                 let product = dataset.product(input).unwrap();
                 assert_ne!(product.kind, ProductKind::FinancialContract);
             }
+        }
+    }
+
+    #[test]
+    fn a_refinery_makes_four_products_in_a_fixed_split() {
+        let dataset = Dataset::load().unwrap();
+        let refinery = dataset.recipe("refinery").unwrap();
+        let outputs: Vec<(&str, i64)> = refinery.outputs().collect();
+        assert_eq!(
+            outputs,
+            vec![
+                ("fuel", 26),
+                ("gasoline", 36),
+                ("jet_fuel", 8),
+                ("petrochem_feedstock", 12)
+            ]
+        );
+        assert!(refinery.makes("gasoline") && !refinery.makes("steel"));
+        assert_eq!(refinery.lots_of("jet_fuel"), 8);
+        assert_eq!(refinery.lots_of("steel"), 0);
+        // Crude is a real product: wells make it, only a refinery turns it into fuel.
+        assert_eq!(dataset.recipe("oil_wells").unwrap().output, "crude_oil");
+        assert!(refinery.weekly_inputs_lots.contains_key("crude_oil"));
+        // Scrap is a by-product of steel works, stamping and vehicle assembly, and feeds steel.
+        for id in ["metal_works", "component_works", "vehicle_assembly"] {
+            assert!(dataset.recipe(id).unwrap().makes("scrap"), "{id}");
+        }
+        assert!(
+            dataset
+                .recipe("electric_arc")
+                .unwrap()
+                .weekly_inputs_lots
+                .contains_key("scrap")
+        );
+    }
+
+    #[test]
+    fn output_value_counts_every_product_the_plant_makes() {
+        let dataset = Dataset::load().unwrap();
+        let price = |id: &str| dataset.reference_price(dataset.product_index[id]);
+        let refinery = dataset.recipe("refinery").unwrap();
+        let expected = 26 * price("fuel")
+            + 36 * price("gasoline")
+            + 8 * price("jet_fuel")
+            + 12 * price("petrochem_feedstock");
+        assert_eq!(refinery.output_value(price), expected);
+        let farm = dataset.recipe("farm").unwrap();
+        assert_eq!(
+            farm.output_value(price),
+            farm.weekly_output_lots * price("food_raw")
+        );
+    }
+
+    #[test]
+    fn a_schema_one_balance_file_migrates_unchanged() {
+        let mut balance: Balance = serde_json::from_str(BALANCE_JSON).unwrap();
+        // A schema 1 file has no by-products or spoilage and still reads as the same plants.
+        balance.schema = 1;
+        for recipe in &mut balance.recipes {
+            recipe.by_products.clear();
+        }
+        let migrated = balance.migrate().unwrap();
+        assert_eq!(migrated.schema, Balance::SCHEMA);
+        assert!(migrated.recipes.iter().all(|r| r.by_products.is_empty()));
+        let mut future: Balance = serde_json::from_str(BALANCE_JSON).unwrap();
+        future.schema = Balance::SCHEMA + 1;
+        assert!(future.migrate().is_err());
+        let mut ancient: Balance = serde_json::from_str(BALANCE_JSON).unwrap();
+        ancient.schema = 0;
+        assert!(ancient.migrate().is_err());
+    }
+
+    #[test]
+    fn bad_by_products_are_rejected() {
+        let mut dataset = Dataset::load().unwrap();
+        let refinery = dataset.recipe_index["refinery"] as usize;
+        dataset.recipes[refinery]
+            .by_products
+            .push(balance::ByProduct {
+                product: "fuel".to_owned(),
+                weekly_lots: 5,
+            });
+        dataset.recipes[refinery]
+            .by_products
+            .push(balance::ByProduct {
+                product: "no_such_good".to_owned(),
+                weekly_lots: 5,
+            });
+        let errors = dataset.validate();
+        assert!(
+            errors.iter().any(|e| e.contains("repeats the output")),
+            "{errors:?}"
+        );
+        assert!(
+            errors.iter().any(|e| e.contains("is unknown")),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn no_firm_runs_two_strategies_of_one_sector_in_one_region() {
+        let mut dataset = Dataset::load().unwrap();
+        let firm = dataset
+            .seed_firms
+            .iter_mut()
+            .find(|f| f.id == "cuyahoga_metal")
+            .unwrap();
+        firm.extra_plants.push(ExtraPlant {
+            recipe: "steel_mill".to_owned(),
+            region: firm.region.clone(),
+            blocks: 1,
+        });
+        let errors = dataset.validate();
+        assert!(
+            errors.iter().any(|e| e.contains("one sector and region")),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn goods_that_were_import_only_now_have_a_local_producer() {
+        let dataset = Dataset::load().unwrap();
+        for product in [
+            "natural_gas",
+            "timber",
+            "pharmaceuticals",
+            "rare_earth",
+            "building_materials",
+        ] {
+            let seeded = dataset.seed_firms.iter().any(|firm| {
+                std::iter::once(firm.recipe.as_str())
+                    .chain(firm.extra_plants.iter().map(|p| p.recipe.as_str()))
+                    .filter_map(|id| dataset.recipe(id))
+                    .any(|recipe| recipe.makes(product))
+            });
+            assert!(seeded, "{product} has no opening producer");
         }
     }
 }
