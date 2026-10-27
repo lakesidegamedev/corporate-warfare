@@ -39,7 +39,8 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// recorded on the engine before the change and must never move because of Texas content.
 /// Repinned when the character cast joined the dataset and the engine began naming chairs and
 /// chief executives from it, and again when rivals began choosing moves by temperament with
-/// grudges and alliances (1.7 preview 5), and again in 1.7.1 when new divisions gained a raid grace period.
+/// grudges and alliances (1.7 preview 5), and again in 1.7.1 when new divisions gained a raid grace period, and when a plant under construction
+/// stopped hiring its crew until the last four weeks and research stopped spending at the frontier.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();

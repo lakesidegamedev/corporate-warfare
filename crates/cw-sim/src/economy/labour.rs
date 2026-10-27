@@ -19,6 +19,9 @@ struct Offer {
     weight: i64,
 }
 
+/// Weeks before opening that a plant under construction starts hiring its crew.
+pub const PREHIRE_WEEKS: u32 = 4;
+
 /// Clear labour for every region and tier, then pay payroll.
 pub fn clear(world: &mut World, dataset: &Dataset) {
     for region_index in 0..world.regions.len() {
@@ -155,6 +158,13 @@ fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: u
             && facility.status != FacilityStatus::Building
         {
             // Mothballed facilities keep no workers.
+            continue;
+        }
+        if facility.status == FacilityStatus::Building
+            && facility.completes.0 > world.tick.0 + PREHIRE_WEEKS
+        {
+            // A plant still being built has no work for a crew. Hiring starts a few weeks
+            // before it opens so it opens staffed without paying idle wages for half a year.
             continue;
         }
         let workers = facility.workers[tier];
@@ -385,6 +395,32 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_plant_under_construction_hires_only_in_its_last_weeks() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 712, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world.investor.primary_group.unwrap();
+        let handle = world.firm(firm).unwrap().facilities[0];
+        {
+            let plant = world.facilities.get_mut(handle).unwrap();
+            plant.status = FacilityStatus::Building;
+            plant.workers = [0; 3];
+            plant.completes = cw_core::calendar::Tick(world.tick.0 + 20);
+        }
+        for _ in 0..3 {
+            clear(&mut world, &dataset);
+        }
+        let early: i64 = world.facilities.get(handle).unwrap().workers.iter().sum();
+        assert_eq!(early, 0, "no crew is hired twenty weeks before opening");
+        world.facilities.get_mut(handle).unwrap().completes =
+            cw_core::calendar::Tick(world.tick.0 + PREHIRE_WEEKS);
+        for _ in 0..3 {
+            clear(&mut world, &dataset);
+        }
+        let late: i64 = world.facilities.get(handle).unwrap().workers.iter().sum();
+        assert!(late > 0, "the crew is hired in the last weeks");
     }
 
     #[test]

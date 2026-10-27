@@ -15,7 +15,7 @@ use cw_core::rng::{Rng, TAG_RESEARCH};
 
 use crate::state::{INDUSTRY_NAMES, World};
 
-pub const RESEARCH_BASE_COST_CENTS: i64 = 10_000_000;
+pub const RESEARCH_BASE_COST_CENTS: i64 = 4_000_000;
 pub const MAX_TECH_LEVEL: u8 = 20;
 pub const BRAND_FLOOR: i32 = 7_500;
 pub const BRAND_CAP: i32 = 15_000;
@@ -35,9 +35,14 @@ pub fn weekly(world: &mut World, dataset: &cw_data::Dataset) {
         if !firm.operative() {
             continue;
         }
-        let budget = firm.policies.research_budget_cents.max(0);
-        let tech_level_before = firm.tech_level;
-        let _ = tech_level_before;
+        // A firm at the frontier cannot buy another level, so it keeps its cash until the
+        // frontier moves on.
+        let cap = (world.macro_state.tech_frontier + 1).min(MAX_TECH_LEVEL);
+        let budget = if firm.tech_level < cap {
+            firm.policies.research_budget_cents.max(0)
+        } else {
+            0
+        };
         if budget > 0 {
             let cash = firm.book.cash().max(0);
             let spend = budget.min(cash);
@@ -294,10 +299,34 @@ mod tests {
 
     #[test]
     fn thresholds_follow_the_squared_rule() {
-        assert_eq!(threshold(0), 10_000_000);
-        assert_eq!(threshold(1), 40_000_000);
-        assert_eq!(threshold(2), 90_000_000);
-        assert_eq!(threshold(4), 250_000_000);
+        assert_eq!(threshold(0), 4_000_000);
+        assert_eq!(threshold(1), 16_000_000);
+        assert_eq!(threshold(2), 36_000_000);
+        assert_eq!(threshold(4), 100_000_000);
+    }
+
+    #[test]
+    fn a_firm_at_the_frontier_keeps_its_research_cash() {
+        let dataset = cw_data::Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            822,
+            crate::state::ScenarioKind::Guided,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let firm = world.investor.primary_group.unwrap();
+        let cap = (world.macro_state.tech_frontier + 1).min(MAX_TECH_LEVEL);
+        {
+            let entity = world.firms.get_mut(firm).unwrap();
+            entity.tech_level = cap;
+            entity.policies.research_budget_cents = 2_000_000;
+        }
+        let before = world.firm(firm).unwrap().book.cash();
+        weekly(&mut world, &dataset);
+        assert_eq!(world.firm(firm).unwrap().book.cash(), before);
+        world.firms.get_mut(firm).unwrap().tech_level = cap - 1;
+        weekly(&mut world, &dataset);
+        assert_eq!(world.firm(firm).unwrap().book.cash(), before - 2_000_000);
     }
 
     #[test]

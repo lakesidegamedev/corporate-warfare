@@ -56,6 +56,9 @@ struct CEOOfficeView: View {
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .tint(Theme.gold)
+                if !store.cfoAdvice.isEmpty {
+                    CfoPanel(currency: firm.currency, rejection: $rejection)
+                }
                 if let weeks = store.finance?.recentWeeks, !weeks.isEmpty, store.finance?.firm == firm.handle {
                     ProfitDrivers(weeks: weeks)
                 }

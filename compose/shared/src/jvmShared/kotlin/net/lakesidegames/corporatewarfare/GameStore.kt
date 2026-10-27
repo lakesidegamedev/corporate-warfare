@@ -130,6 +130,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var economy by mutableStateOf<uniffi.cw_ffi.EconomyDto?>(null); private set
     /** The selected company's research position. */
     var research by mutableStateOf<uniffi.cw_ffi.ResearchDto?>(null); private set
+    /** What the CFO says is costing the selected company money, biggest first. Empty when it is fine. */
+    var cfoAdvice by mutableStateOf<List<uniffi.cw_ffi.CfoAdviceDto>>(emptyList()); private set
     var marketRegion by mutableStateOf<String?>(null)
     var marketRows by mutableStateOf<List<MarketRow>>(emptyList()); private set
 
@@ -444,6 +446,22 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         }
     }
 
+    /** Press a CFO button: send its commands in order, stopping at the first the engine refuses. */
+    fun applyAdvice(advice: uniffi.cw_ffi.CfoAdviceDto) = perform {
+        val handle = session ?: return@perform
+        for (json in advice.commands) {
+            val receipt = withContext(engine) { handle.submitJson(json) }
+            if (!receipt.accepted) {
+                error = Messages.rejection(receipt.errorKey ?: "error.internal_fault", receipt.errorDetail ?: "")
+                reload()
+                return@perform
+            }
+        }
+        error = null
+        status = "Done: ${advice.actionLabel.lowercase()}."
+        reload()
+    }
+
     fun submit(json: String) = perform {
         val handle = session ?: return@perform
         val receipt = withContext(engine) { handle.submitJson(json) }
@@ -516,6 +534,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 firm?.let { handle.rivals(it) } ?: emptyList<RivalSummaryDto>(),
                 handle.rivalFeed(12u),
                 handle.mapPlants(),
+                firm?.let { handle.cfoAdvice(it) } ?: emptyList<uniffi.cw_ffi.CfoAdviceDto>(),
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
@@ -548,6 +567,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 rivals = parts[22] as List<RivalSummaryDto>
                 rivalFeed = parts[23] as List<RivalMoveFeedDto>
                 mapPlants = parts[24] as List<MapPlantDto>
+                cfoAdvice = parts[25] as List<uniffi.cw_ffi.CfoAdviceDto>
             }
         }
         loadMarkets()
