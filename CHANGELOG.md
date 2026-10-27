@@ -11,6 +11,13 @@ heading.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-27
+
+A real economy and a real game shell: business cycles, a central bank with rotating chairs,
+governments and laws; a globe main menu, scenario picker, difficulty and starting economy; a
+Command Center for every action; research and economy screens; a desktop layout; fine-grained
+sliders; load game; a tutorial; and in-game updates. Saves from 1.5.0 do not load in 1.6.0.
+
 ### Added
 
 - A main menu on every platform. The game opens on it instead of jumping into the last save:
@@ -534,7 +541,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.0...v1.3.1
