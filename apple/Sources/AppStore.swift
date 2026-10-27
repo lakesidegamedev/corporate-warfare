@@ -302,6 +302,13 @@ final class AppStore: ObservableObject {
         runSpeed = 0
     }
 
+    /// Show the investor's figures in another of the scenario's currencies and remember the choice.
+    func chooseReportingCurrency(_ id: String) async {
+        guard await engine.setReportingCurrency(id) else { return }
+        UserDefaults.standard.set(id, forKey: Engine.reportingCurrencyKey)
+        await reload()
+    }
+
     func reload() async {
         overview = await engine.overview()
         firms = await engine.firms()
@@ -321,6 +328,7 @@ final class AppStore: ObservableObject {
         }
         events = await engine.events()
         economy = await engine.economy()
+        Format.configure(fx: economy?.fx)
         commodities = await engine.commodityBoard()
         stocks = await engine.stockBoard()
         deals = await engine.deals()

@@ -21,8 +21,19 @@ SCENARIOS = {
     "great-lakes-2000": PLAY,
     "texas-1981": ["LA", "OK", "TX"],
     "silicon-valley-1995": ["CA"],
+    # Ruhr and Rhine plays in whole countries; the "state" of a region is its country code.
+    "ruhr-rhine-1991": ["BE", "DE", "FR", "LU", "NL"],
 }
-SCENARIO_FIPS = {"texas-1981": {"48": "TX", "40": "OK", "22": "LA"}, "silicon-valley-1995": {"06": "CA"}}
+SCENARIO_FIPS = {
+    "texas-1981": {"48": "TX", "40": "OK", "22": "LA"},
+    "silicon-valley-1995": {"06": "CA"},
+    # NUTS 3 areas carry their country code as the state code.
+    "ruhr-rhine-1991": {code: code for code in ["BE", "DE", "FR", "LU", "NL"]},
+}
+# Scenarios whose state codes can collide with another scenario's (DE is also Delaware): their
+# states, regions and counties are tagged with the scenario, and a rerun replaces by tag.
+TAGGED = {"ruhr-rhine-1991"}
+EUROPE_ATTRIBUTION = " Ruhr and Rhine boundaries: Eurostat GISCO NUTS 2016, (C) European Union."
 SCALE = 10_000
 # Spacing in the old 10000-unit corridor box was about 190 m a unit; one unit is about 18 here.
 UNIT = 18
@@ -201,6 +212,8 @@ def merge(scenario, source, output):
     play = SCENARIOS[scenario]
     fips = SCENARIO_FIPS[scenario]
     document = json.load(open(output))
+    tagged = scenario in TAGGED
+    tag = {"scenario": scenario} if tagged else {}
     layers = {name: load(source, name) for name in
               ["play_states", "context_states", "counties", "regions", "rivers", "interstates_thin", "cities", "hubs"]}
     names = {r["code"]: r["name"] for r in
@@ -211,10 +224,13 @@ def merge(scenario, source, output):
     def ours(entry):
         return entry.get("scenario") == scenario
 
-    states = [s for s in document["states"] if s["code"] not in play and not ours(s)]
+    if tagged:
+        states = [s for s in document["states"] if not ours(s)]
+    else:
+        states = [s for s in document["states"] if s["code"] not in play and not ours(s)]
     for feature in layers["play_states"]:
         p = feature["properties"]
-        states.append({"code": p["STUSPS"], "name": p["NAME"], "play": True, "rings": rings(feature, 2)})
+        states.append({"code": p["STUSPS"], "name": p["NAME"], "play": True, "rings": rings(feature, 2), **tag})
     have = {s["code"] for s in states}
     for feature in layers["context_states"]:
         p = feature["properties"]
@@ -223,24 +239,24 @@ def merge(scenario, source, output):
             states.append({"code": p["STUSPS"], "name": p["NAME"], "play": False, "rings": r, "scenario": scenario})
     document["states"] = states
 
-    regions = [r for r in document["regions"] if r["state"] not in play]
+    regions = [r for r in document["regions"] if (not ours(r) if tagged else r["state"] not in play)]
     for feature in layers["regions"]:
         code = feature["properties"]["region"]
         r = rings(feature, 2)
         if r:
-            regions.append({"code": code, "state": code[:2], "name": names[code], "rings": r})
+            regions.append({"code": code, "state": code[:2], "name": names[code], "rings": r, **tag})
     regions.sort(key=lambda region: region["code"])
     ours_codes = sorted(code for code in names)
-    if ours_codes != sorted(r["code"] for r in regions if r["state"] in play):
+    if ours_codes != sorted(r["code"] for r in regions if (ours(r) if tagged else r["state"] in play)):
         raise SystemExit("region shapes do not match the scenario's regions.json")
     document["regions"] = regions
 
-    counties = [c for c in document["counties"] if c["state"] not in play]
+    counties = [c for c in document["counties"] if (not ours(c) if tagged else c["state"] not in play)]
     for feature in layers["counties"]:
         p = feature["properties"]
         r = rings(feature, 3)
         if r:
-            counties.append({"fips": p["GEOID"], "name": p["NAME"], "state": fips[p["STATEFP"]], "rings": r})
+            counties.append({"fips": p["GEOID"], "name": p["NAME"], "state": fips[p["STATEFP"]], "rings": r, **tag})
     document["counties"] = counties
 
     rivers = [r for r in document["rivers"] if not ours(r)]
@@ -288,6 +304,8 @@ def merge(scenario, source, output):
     scenarios.setdefault("great-lakes-2000", {"id": "great-lakes-2000", "states": SCENARIOS["great-lakes-2000"]})
     scenarios[scenario] = {"id": scenario, "states": play}
     document["scenarios"] = [scenarios[key] for key in sorted(scenarios)]
+    if tagged and EUROPE_ATTRIBUTION not in document["attribution"]:
+        document["attribution"] += EUROPE_ATTRIBUTION
     Path(output).write_text(json.dumps(document, separators=(",", ":")))
     print(f"merged {scenario} into {output}: {Path(output).stat().st_size // 1024} KB, "
           f"{len([r for r in regions if r['state'] in play])} regions, "

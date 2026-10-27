@@ -1,0 +1,27 @@
+{
+  "classification": "authored engineering calibration for the January 1991 start; NOT real observations. Engine units stay re-based to the Great Lakes 2000 dollar so West Germany 1991 sits near the shared wage level, which is also what the re-based currency ledger assumes. Coal and steel are dear against the shared base (a protected, shrinking industry), oil is moderate after the Gulf war spike, power is a little dear, chemicals and plastics are somewhat cheaper, and building materials are dear in the reunification construction boom.",
+  "baseline_weekly_wage_cents": [
+    40000,
+    80000,
+    140000
+  ],
+  "reference_price_cents": {
+    "crude_oil": 14000,
+    "natural_gas": 21000,
+    "gasoline": 32800,
+    "fuel": 31500,
+    "electricity": 126000,
+    "chemicals": 57000,
+    "plastics": 27500,
+    "coal": 19200,
+    "ore": 21000,
+    "pig_iron": 35200,
+    "scrap": 19800,
+    "steel": 44000,
+    "food_raw": 10500,
+    "grain": 6300,
+    "livestock": 12600,
+    "food_retail": 18000,
+    "building_materials": 22500
+  }
+}

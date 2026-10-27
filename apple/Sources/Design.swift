@@ -225,30 +225,102 @@ enum Format {
         return formatter
     }()
 
-    static func money(_ cents: Int64) -> String {
-        let dollars = Double(cents) / 100.0
-        return currency.string(from: NSNumber(value: dollars)) ?? "$0"
+    private static let wholeNumber: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }()
+
+    private static let centsNumber: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+
+    /// The reporting symbol and the symbol of every currency in the scenario. With one money the
+    /// symbol is "$" and the table is empty, so every figure reads exactly as before.
+    private static var reportingSymbol = "$"
+    private static var symbols: [String: String] = [:]
+
+    /// Currency id that fair values and share marks are quoted in; empty with one money.
+    private(set) static var numeraire = ""
+
+    /// Set the reporting symbol and the id to symbol table. An empty `reporting` restores "$".
+    static func configure(reporting: String, symbols: [String: String], numeraire: String) {
+        self.reportingSymbol = reporting.isEmpty ? "$" : reporting
+        self.symbols = symbols
+        self.numeraire = numeraire
+    }
+
+    /// Configure from the engine's exchange card; nil restores one money in dollars.
+    static func configure(fx: FxDto?) {
+        guard let fx else { return reset() }
+        configure(
+            reporting: fx.reportingSymbol,
+            symbols: Dictionary(fx.currencies.map { ($0.id, $0.symbol) }, uniquingKeysWith: { first, _ in first }),
+            numeraire: fx.currencies.first?.id ?? ""
+        )
+    }
+
+    static func reset() {
+        configure(reporting: "", symbols: [:], numeraire: "")
+    }
+
+    /// The symbol for a currency id; an empty or unknown id gives the reporting symbol.
+    static func symbol(of currency: String) -> String {
+        currency.isEmpty ? reportingSymbol : (symbols[currency] ?? reportingSymbol)
+    }
+
+    /// "$" sits against the figure; longer symbols such as "DM" get a thin gap.
+    private static func leadText(_ sym: String) -> String {
+        sym.count > 1 ? sym + "\u{2009}" : sym
+    }
+
+    private static func body(_ cents: Int64, _ sym: String, fractional: Bool) -> String {
+        if sym == "$" {
+            if fractional { return String(format: "$%.2f", Double(cents) / 100.0) }
+            return currency.string(from: NSNumber(value: Double(cents) / 100.0)) ?? "$0"
+        }
+        let sign = cents < 0 ? "-" : ""
+        let magnitude = abs(Double(cents) / 100.0)
+        let formatter = fractional ? centsNumber : wholeNumber
+        return sign + leadText(sym) + (formatter.string(from: NSNumber(value: magnitude)) ?? "0")
+    }
+
+    static func money(_ cents: Int64, currency id: String = "") -> String {
+        body(cents, symbol(of: id), fractional: false)
     }
 
     /// A per-unit price with cents, for share prices where whole dollars hide the movement.
-    static func price(_ cents: Int64) -> String {
-        String(format: "$%.2f", Double(cents) / 100.0)
+    static func price(_ cents: Int64, currency id: String = "") -> String {
+        body(cents, symbol(of: id), fractional: true)
     }
 
-    static func moneyCompact(_ cents: Int64) -> String {
+    static func moneyCompact(_ cents: Int64, currency id: String = "") -> String {
         let magnitude = abs(Double(cents) / 100.0)
         // The sign leads the currency symbol: -$21K, not $-21K.
         let sign = cents < 0 ? "-" : ""
+        let lead = leadText(symbol(of: id))
         if magnitude >= 1_000_000_000 {
-            return sign + String(format: "$%.1fB", magnitude / 1_000_000_000)
+            return sign + lead + String(format: "%.1fB", magnitude / 1_000_000_000)
         }
         if magnitude >= 1_000_000 {
-            return sign + String(format: "$%.1fM", magnitude / 1_000_000)
+            return sign + lead + String(format: "%.1fM", magnitude / 1_000_000)
         }
         if magnitude >= 10_000 {
-            return sign + String(format: "$%.0fK", magnitude / 1_000)
+            return sign + lead + String(format: "%.0fK", magnitude / 1_000)
         }
-        return money(cents)
+        return money(cents, currency: id)
+    }
+
+    /// An exchange rate from millionths, four decimals.
+    static func rate(_ ppm: Int64) -> String {
+        String(format: "%.4f", Double(ppm) / 1_000_000.0)
     }
 
     static func percentBps(_ bps: Int32) -> String {
@@ -259,8 +331,8 @@ enum Format {
         "\(lots.formatted()) lots"
     }
 
-    static func signedMoney(_ cents: Int64) -> String {
-        (cents >= 0 ? "+" : "") + money(cents)
+    static func signedMoney(_ cents: Int64, currency id: String = "") -> String {
+        (cents >= 0 ? "+" : "") + money(cents, currency: id)
     }
 }
 

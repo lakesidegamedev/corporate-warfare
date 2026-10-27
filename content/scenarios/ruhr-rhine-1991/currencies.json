@@ -1,0 +1,60 @@
+{
+  "classification": "authored game estimates for the January 1991 start; NOT market history. Ledger units are re-based so one unit of every currency buys the same on day one; face_milli is the real-world number of nominal units per Deutsche Mark, kept only to quote rates.",
+  "numeraire": "DEM",
+  "countries": [
+    { "id": "DE", "name": "Germany", "currency": "DEM" },
+    { "id": "NL", "name": "Netherlands", "currency": "NLG" },
+    { "id": "BE", "name": "Belgium", "currency": "BEF" },
+    { "id": "LU", "name": "Luxembourg", "currency": "BEF" },
+    { "id": "FR", "name": "France", "currency": "FRF" }
+  ],
+  "currencies": [
+    {
+      "id": "DEM",
+      "name": "Deutsche Mark",
+      "symbol": "DM",
+      "country": "DE",
+      "face_milli": 1000,
+      "policy_spread_bps": 0,
+      "inflation_spread_bps": 0,
+      "volatility_bps": 40,
+      "central_bank": "Deutsche Bundesbank"
+    },
+    {
+      "id": "NLG",
+      "name": "Dutch guilder",
+      "symbol": "f",
+      "country": "NL",
+      "face_milli": 1127,
+      "policy_spread_bps": 25,
+      "inflation_spread_bps": -20,
+      "volatility_bps": 30,
+      "central_bank": "De Nederlandsche Bank",
+      "peg": { "anchor": "DEM", "band_bps": 225, "widened_band_bps": 1500, "crisis_hazard_ppm": 100, "crisis_window_weeks": [88, 140] }
+    },
+    {
+      "id": "BEF",
+      "name": "Belgian and Luxembourg franc",
+      "symbol": "BF",
+      "country": "BE",
+      "face_milli": 20630,
+      "policy_spread_bps": 60,
+      "inflation_spread_bps": 30,
+      "volatility_bps": 40,
+      "central_bank": "National Bank of Belgium",
+      "peg": { "anchor": "DEM", "band_bps": 225, "widened_band_bps": 1500, "crisis_hazard_ppm": 200, "crisis_window_weeks": [88, 140] }
+    },
+    {
+      "id": "FRF",
+      "name": "French franc",
+      "symbol": "F",
+      "country": "FR",
+      "face_milli": 3400,
+      "policy_spread_bps": 90,
+      "inflation_spread_bps": 25,
+      "volatility_bps": 55,
+      "central_bank": "Banque de France",
+      "peg": { "anchor": "DEM", "band_bps": 225, "widened_band_bps": 1500, "crisis_hazard_ppm": 300, "crisis_window_weeks": [88, 140] }
+    }
+  ]
+}

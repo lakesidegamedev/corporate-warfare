@@ -86,7 +86,7 @@ pub fn train(world: &mut World) {
                     continue;
                 }
                 let full_cost = upgrade * COST_PER_WORKER_CENTS;
-                let subsidy = if grant {
+                let subsidy = if grant && crate::economy::fx::currency_of(world, firm_handle) == 0 {
                     (full_cost * 20 / 100).min(world.government.training_budget_cents)
                 } else {
                     0

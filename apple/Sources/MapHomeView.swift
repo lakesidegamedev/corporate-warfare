@@ -176,10 +176,10 @@ struct CompanyHUD: View {
     }
 
     @ViewBuilder private var figures: some View {
-        HUDFigure(label: "Cash", value: Format.moneyCompact(store.overview?.firmCashCents ?? 0))
+        HUDFigure(label: "Cash", value: Format.moneyCompact(store.overview?.firmCashCents ?? 0, currency: store.overview?.primaryCurrency ?? ""))
         HUDFigure(
             label: (store.overview?.quarterWeeks ?? 0) >= 13 ? "Profit/qtr" : "Profit so far",
-            value: Format.moneyCompact(store.overview?.quarterNetIncomeCents ?? 0),
+            value: Format.moneyCompact(store.overview?.quarterNetIncomeCents ?? 0, currency: store.overview?.primaryCurrency ?? ""),
             tone: (store.overview?.quarterNetIncomeCents ?? 0) >= 0 ? Theme.positive : Theme.negative
         )
     }

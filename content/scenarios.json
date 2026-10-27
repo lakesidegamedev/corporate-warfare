@@ -55,7 +55,7 @@
       "summary": "Germany has just reunified. Rebuild the east's industry, compete with western giants, and answer to a hawkish Bundesbank guarding the Deutsche Mark.",
       "center_lon_milli": 10400,
       "center_lat_milli": 51000,
-      "available": false,
+      "available": true,
       "region": "Germany",
       "image": "scenario-ruhr-rhine-1991",
       "currency": "Deutsche Mark",

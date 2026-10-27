@@ -84,6 +84,9 @@ pub struct FirmDto {
     pub name: String,
     pub industry: String,
     pub region: String,
+    /// Currency id of cash and equity; empty when the scenario has one money. Fair value and
+    /// the share mark are quoted in the numeraire.
+    pub currency: String,
     pub cash_cents: i64,
     pub equity_cents: i64,
     pub fair_value_cents: i64,
@@ -360,8 +363,13 @@ pub struct OverviewDto {
     pub tick: u32,
     pub week_label: String,
     pub revision: u64,
+    /// Investor cash and net worth, in the reporting currency.
     pub investor_cash_cents: i64,
     pub investor_net_worth_cents: i64,
+    /// Currency id the investor figures are in; empty when the scenario has one money.
+    pub reporting_currency: String,
+    /// Currency id of the primary company's figures; empty when the scenario has one money.
+    pub primary_currency: String,
     pub primary_firm: Option<u64>,
     pub primary_name: String,
     pub firm_cash_cents: i64,
@@ -1138,6 +1146,8 @@ fn overview_dto(overview: Overview) -> OverviewDto {
         revision: overview.revision,
         investor_cash_cents: overview.investor_cash_cents,
         investor_net_worth_cents: overview.investor_net_worth_cents,
+        reporting_currency: overview.reporting_currency,
+        primary_currency: overview.primary_currency,
         primary_firm: overview.primary_firm,
         primary_name: overview.primary_name,
         firm_cash_cents: overview.firm_cash_cents,
@@ -1158,6 +1168,7 @@ fn firm_dto(summary: FirmSummary) -> FirmDto {
         name: summary.name,
         industry: summary.industry,
         region: summary.region,
+        currency: summary.currency,
         cash_cents: summary.cash_cents,
         equity_cents: summary.equity_cents,
         fair_value_cents: summary.fair_value_cents,
@@ -1846,6 +1857,82 @@ pub struct EconomyDto {
     pub price_path: String,
     /// The outside world's price levels the gateways follow, one per product family.
     pub world_prices: Vec<WorldPriceDto>,
+    /// Exchange rates and central banks; None when the scenario has one money.
+    pub fx: Option<FxDto>,
+}
+
+/// One currency against the reporting currency, with its central bank.
+#[derive(uniffi::Record)]
+pub struct CurrencyDto {
+    pub id: String,
+    pub name: String,
+    pub symbol: String,
+    pub country: String,
+    pub central_bank: String,
+    /// The bank's chair and their stance (dovish to hawkish); empty without a cast.
+    pub chair_name: String,
+    pub chair_stance: String,
+    /// What one unit is worth in the reporting currency, in millionths.
+    pub value_ppm: i64,
+    /// Change over the last 13 weeks, in basis points.
+    pub trend_bps: i32,
+    pub policy_rate_bps: i32,
+    pub inflation_bps: i32,
+    pub pegged: bool,
+    /// Half width of the peg band now, in basis points; zero for a float.
+    pub band_bps: i32,
+    /// How hard the market is pushing on the peg, in basis points.
+    pub strain_bps: i32,
+    /// The week a band crisis widened the peg, if one has.
+    pub crisis_week: Option<u32>,
+    /// Weekly value in the reporting currency, millionths, oldest first, up to 52 weeks.
+    pub history_ppm: Vec<i64>,
+}
+
+/// The foreign exchange card: rates, the reporting currency and recorded gains and losses.
+#[derive(uniffi::Record)]
+pub struct FxDto {
+    /// The reporting currency id. `currencies[0]` is the numeraire.
+    pub reporting: String,
+    pub reporting_symbol: String,
+    pub currencies: Vec<CurrencyDto>,
+    /// Foreign exchange results booked by your companies, in the reporting currency.
+    pub gains_cents: i64,
+    pub losses_cents: i64,
+    /// Foreign sales your companies are still waiting to collect, in the reporting currency.
+    pub open_foreign_sales_cents: i64,
+}
+
+fn fx_dto(view: cw_session::dto::FxView) -> FxDto {
+    FxDto {
+        reporting: view.reporting,
+        reporting_symbol: view.reporting_symbol,
+        currencies: view
+            .currencies
+            .into_iter()
+            .map(|c| CurrencyDto {
+                id: c.id,
+                name: c.name,
+                symbol: c.symbol,
+                country: c.country,
+                central_bank: c.central_bank,
+                chair_name: c.chair_name,
+                chair_stance: c.chair_stance,
+                value_ppm: c.value_ppm,
+                trend_bps: c.trend_bps,
+                policy_rate_bps: c.policy_rate_bps,
+                inflation_bps: c.inflation_bps,
+                pegged: c.pegged,
+                band_bps: c.band_bps,
+                strain_bps: c.strain_bps,
+                crisis_week: c.crisis_week,
+                history_ppm: c.history_ppm,
+            })
+            .collect(),
+        gains_cents: view.gains_cents,
+        losses_cents: view.losses_cents,
+        open_foreign_sales_cents: view.open_foreign_sales_cents,
+    }
 }
 
 /// One world commodity price family: where it stands against day one and where it is heading.
@@ -3271,7 +3358,13 @@ impl SessionHandle {
                         .collect(),
                 })
                 .collect(),
+            fx: session.fx_view().map(fx_dto),
         }
+    }
+
+    /// Choose the currency the investor's figures are shown in. False for an unknown id.
+    pub fn set_reporting_currency(&self, id: String) -> bool {
+        self.lock().set_reporting_currency(&id)
     }
 
     /// A company's research position.

@@ -83,7 +83,7 @@ impl PriceMode {
         }
     }
 
-    fn follows_history(self) -> bool {
+    pub fn follows_history(self) -> bool {
         matches!(self, PriceMode::Historical | PriceMode::HistoricalVariance)
     }
 }
@@ -493,7 +493,7 @@ mod tests {
 
     #[test]
     fn a_scenario_without_data_runs_random() {
-        let (w, _) = setup(3, "ruhr-rhine-1991", PricePath::Historical);
+        let (w, _) = setup(3, "atlantis-2050", PricePath::Historical);
         assert_eq!(w.world_prices.mode, PriceMode::Random);
         assert!(
             w.world_prices

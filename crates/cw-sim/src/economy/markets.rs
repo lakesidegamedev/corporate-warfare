@@ -239,12 +239,13 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
             if !removed {
                 continue;
             }
+            let received = crate::economy::fx::numeraire_to_firm(world, dataset, seller, paid);
             if let Some(firm) = world.firms.get_mut(seller) {
                 let _ = firm.book.commit(
                     world.tick,
                     Txn::new()
-                        .debit(Account::Cash, paid, "public works")
-                        .credit(Account::Revenue, paid, "public works")
+                        .debit(Account::Cash, received, "public works")
+                        .credit(Account::Revenue, received, "public works")
                         .credit(Account::Inventory, carrying, "public works cogs")
                         .debit(Account::CostOfGoods, carrying, "public works cogs"),
                 );
@@ -508,13 +509,20 @@ fn clear_goods_exchange(
         }
     }
     let freight_per_lot = |from: u8, to: u8| freight_table.get(&(from, to)).copied().unwrap_or(0);
-    let asking = |world: &World, firm: Handle| {
-        world
+    // The seller's asking price, in the money of the buyer who reads it.
+    let asking = |world: &World, firm: Handle, buyer: Handle| {
+        let price = world
             .firms
             .get(firm)
             .and_then(|f| f.policies.prices.get(&product).copied())
             .unwrap_or_else(|| dataset.reference_price(product))
-            .max(1)
+            .max(1);
+        if !world.fx.active {
+            return price;
+        }
+        let from = crate::economy::fx::handle_currency(world, dataset, firm);
+        let to = crate::economy::fx::handle_currency(world, dataset, buyer);
+        world.fx.convert(price, from, to).max(1)
     };
     // Every pairing with its delivered price per lot. A seller never buys from itself.
     #[derive(Clone, Copy)]
@@ -530,6 +538,10 @@ fn clear_goods_exchange(
     for (buyer_key, _) in demand.iter() {
         let (buyer, to) = *buyer_key;
         for (from, (ask, _)) in &reserve_offers {
+            // The reserve prices in the numeraire; the buyer reads it in its own money.
+            let ask = world
+                .fx
+                .convert(*ask, 0, crate::economy::fx::currency_of(world, buyer));
             let delivered = ask + freight_per_lot(*from, to);
             if caps.get(buyer_key).is_none_or(|cap| delivered <= *cap) {
                 pairs.push((
@@ -546,7 +558,7 @@ fn clear_goods_exchange(
             if seller == buyer {
                 continue;
             }
-            let delivered = asking(world, seller) + freight_per_lot(from, to);
+            let delivered = asking(world, seller, buyer) + freight_per_lot(from, to);
             if caps.get(buyer_key).is_some_and(|cap| delivered > *cap) {
                 continue;
             }
@@ -651,9 +663,18 @@ fn clear_goods_exchange(
             let qty_lots = MilliLots(qty);
             match source {
                 Source::Firm(seller, from) => {
-                    let price = asking(world, seller);
+                    let price = asking(world, seller, buyer);
                     let goods = qty_lots.value_at(Cents(price)).unwrap_or(Cents::ZERO);
-                    if !trade_between(world, buyer, seller, product, (from, to), qty_lots, goods) {
+                    if !trade_between(
+                        world,
+                        dataset,
+                        buyer,
+                        seller,
+                        product,
+                        (from, to),
+                        qty_lots,
+                        goods,
+                    ) {
                         continue;
                     }
                     if let Some(entity) = world.firms.get_mut(seller) {
@@ -680,7 +701,11 @@ fn clear_goods_exchange(
                 Source::Reserve(region) => {
                     let ask = reserve_offers
                         .get(&region)
-                        .map(|o| o.0)
+                        .map(|o| {
+                            world
+                                .fx
+                                .convert(o.0, 0, crate::economy::fx::currency_of(world, buyer))
+                        })
                         .unwrap_or(delivered);
                     let paid = qty_lots.value_at(Cents(ask)).unwrap_or(Cents::ZERO).0;
                     if paid <= 0 {
@@ -700,7 +725,15 @@ fn clear_goods_exchange(
                         .unwrap()
                         .stock_lot_mut(product, to)
                         .receive(qty_lots, Cents(paid));
-                    crate::economy::reserve::record_sale(world, product, region, qty_lots, paid);
+                    let paid_numeraire =
+                        crate::economy::fx::firm_to_numeraire_world(world, buyer, paid);
+                    crate::economy::reserve::record_sale(
+                        world,
+                        product,
+                        region,
+                        qty_lots,
+                        paid_numeraire,
+                    );
                     let freight = if region == to {
                         0
                     } else {
@@ -743,11 +776,13 @@ fn clear_goods_exchange(
                         .stock_lot_mut(product, to)
                         .receive(qty_lots, Cents(paid));
                     world.gateways[gate].last_import_lots += qty_lots.lots();
+                    let received =
+                        crate::economy::fx::region_to_numeraire(world, dataset, to, paid);
                     let _ = world.outside.gateway_book.commit(
                         world.tick,
                         Txn::new()
-                            .debit(Account::Cash, paid, "export receipt")
-                            .credit(Account::Revenue, paid, "export receipt"),
+                            .debit(Account::Cash, received, "export receipt")
+                            .credit(Account::Revenue, received, "export receipt"),
                     );
                     *import_left.get_mut(&gate).unwrap() -= qty;
                     let entry = demand.get_mut(&buyer_key).unwrap();
@@ -823,7 +858,9 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
         // The gateway buys only what its paced cash pays for in full; a seller never hands
         // over goods for part of their price.
         let price = gateway.buy_price_cents.max(1);
-        let affordable = world.outside.gateway_spendable() / price * 1_000;
+        let price_numeraire =
+            crate::economy::fx::region_to_numeraire(world, dataset, region, price).max(1);
+        let affordable = world.outside.gateway_spendable() / price_numeraire * 1_000;
         let qty = MilliLots::from_lots(exportable)
             .min(remaining)
             .min(MilliLots(affordable));
@@ -849,11 +886,12 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
             );
             firm.record_sale(region, product, qty);
         }
+        let spent = crate::economy::fx::region_to_numeraire(world, dataset, region, paid);
         let _ = world.outside.gateway_book.commit(
             world.tick,
             Txn::new()
-                .credit(Account::Cash, paid, "export purchase")
-                .debit(Account::Inventory, paid, "export purchase"),
+                .credit(Account::Cash, spent, "export purchase")
+                .debit(Account::Inventory, spent, "export purchase"),
         );
         world.gateways[index].last_export_lots += qty.lots();
         remaining = MilliLots(remaining.0 - qty.0);
@@ -1172,9 +1210,15 @@ fn settle_fills(
                     .get(seller_handle)
                     .and_then(|firm| firm.policies.prices.get(&product).copied())
                     .unwrap_or_else(|| dataset.reference_price(product));
+                let price = world.fx.convert(
+                    price.max(1),
+                    crate::economy::fx::handle_currency(world, dataset, seller_handle),
+                    crate::economy::fx::handle_currency(world, dataset, buyer_handle),
+                );
                 let cost = qty.value_at(Cents(price.max(1))).unwrap_or(Cents::ZERO);
                 if trade_between(
                     world,
+                    dataset,
                     buyer_handle,
                     seller_handle,
                     product,
@@ -1215,11 +1259,13 @@ fn settle_fills(
                     .stock_lot_mut(product, region)
                     .receive(qty, Cents(paid));
                 world.gateways[index].last_import_lots += qty.lots();
+                let received =
+                    crate::economy::fx::region_to_numeraire(world, dataset, region, paid);
                 let _ = world.outside.gateway_book.commit(
                     world.tick,
                     Txn::new()
-                        .debit(Account::Cash, paid, "export receipt")
-                        .credit(Account::Revenue, paid, "export receipt"),
+                        .debit(Account::Cash, received, "export receipt")
+                        .credit(Account::Revenue, received, "export receipt"),
                 );
             }
         }
@@ -1319,17 +1365,23 @@ fn settle_government_fills(
                 continue;
             }
             let available = world.government.book.cash().max(0);
-            let paid = cost.0.min(available);
-            if paid <= 0 {
+            // The state pays in the numeraire; the seller is paid in its own money.
+            let cost_numeraire =
+                crate::economy::fx::firm_to_numeraire(world, dataset, seller_handle, cost.0);
+            let paid_numeraire = cost_numeraire.min(available);
+            if paid_numeraire <= 0 {
                 continue;
             }
+            let paid = if paid_numeraire == cost_numeraire {
+                cost.0
+            } else {
+                crate::economy::fx::numeraire_to_firm(world, dataset, seller_handle, paid_numeraire)
+            };
             let _ = world.government.book.commit(
                 world.tick,
-                Txn::new().credit(Account::Cash, paid, "procurement").debit(
-                    Account::OperatingExpense,
-                    paid,
-                    "procurement",
-                ),
+                Txn::new()
+                    .credit(Account::Cash, paid_numeraire, "procurement")
+                    .debit(Account::OperatingExpense, paid_numeraire, "procurement"),
             );
             if let Some(firm) = world.firms.get_mut(seller_handle) {
                 let _ = firm.book.commit(
@@ -1343,7 +1395,7 @@ fn settle_government_fills(
                 // Procurement is a real sale and belongs in the unit-sales record.
                 firm.record_sale(region, product, qty);
             }
-            spent += paid;
+            spent += paid_numeraire;
         }
     }
     spent
@@ -1351,8 +1403,10 @@ fn settle_government_fills(
 
 /// Move `qty` of `product` from the seller's stock in region `route.0` to the buyer's stock in
 /// the market region `route.1`, for `cost` capped at the buyer's cash.
+#[allow(clippy::too_many_arguments)]
 fn trade_between(
     world: &mut World,
+    dataset: &Dataset,
     buyer: Handle,
     seller: Handle,
     product: u16,
@@ -1388,13 +1442,16 @@ fn trade_between(
         .unwrap()
         .stock_lot_mut(product, region)
         .receive(qty, Cents(paid));
-    let _ = world.firms.get_mut(seller).unwrap().book.commit(
-        world.tick,
-        Txn::new()
-            .debit(Account::Cash, paid, "sale")
-            .credit(Account::Revenue, paid, "sale")
-            .credit(Account::Inventory, carrying, "cogs")
-            .debit(Account::CostOfGoods, carrying, "cogs"),
+    // The buyer paid in its money; the seller is paid in its own, now or on collection.
+    let buyer_currency = crate::economy::fx::handle_currency(world, dataset, buyer);
+    crate::economy::fx::book_sale_proceeds(
+        world,
+        dataset,
+        seller,
+        buyer_currency,
+        paid,
+        carrying,
+        "sale",
     );
     true
 }

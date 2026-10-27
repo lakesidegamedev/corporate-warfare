@@ -94,4 +94,17 @@ class WorldMapRenderTest {
             assertNotNull(california.anchor(region.code), "${region.code} has a hub")
         }
     }
+
+    @Test
+    fun ruhrAndRhineHasItsOwnMapAndNotDelaware() {
+        val ruhr = assertNotNull(WorldMap.forScenario("ruhr-rhine-1991"), "the Ruhr and Rhine map loads")
+        assertEquals(18, ruhr.regions.size)
+        assertEquals(listOf("BE", "DE", "FR", "LU", "NL"), ruhr.playStates.map { it.code }.sorted())
+        assertEquals("ruhr-rhine-1991", WorldMap.forRegions(listOf("DE-RUH", "NL-ROT"))?.scenarioId)
+        // DE is also Delaware, which is a Great Lakes context state and never a Ruhr play state.
+        val lakes = assertNotNull(WorldMap.forScenario("great-lakes-2000"))
+        assertTrue(lakes.playStates.none { it.code == "DE" }, "Germany is not a Great Lakes play state")
+        val camera = MapCamera.scenario(androidx.compose.ui.geometry.Size(1200f, 800f), ruhr)
+        assertTrue(camera.lon in 4.0..14.0 && camera.lat in 47.0..55.0, "framed on ${camera.lon}, ${camera.lat}")
+    }
 }

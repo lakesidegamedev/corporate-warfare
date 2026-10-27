@@ -62,9 +62,9 @@ struct OverviewView: View {
                                note: "your holdings at fair value plus cash"),
                 stats: [
                     Stat(label: "Your cash", value: Format.moneyCompact(overview.investorCashCents)),
-                    Stat(label: "Company cash", value: Format.moneyCompact(overview.firmCashCents)),
+                    Stat(label: "Company cash", value: Format.moneyCompact(overview.firmCashCents, currency: overview.primaryCurrency)),
                     Stat(label: weeks >= 13 ? "Profit, quarter" : "Profit, \(weeks) wk",
-                         value: Format.moneyCompact(overview.quarterNetIncomeCents),
+                         value: Format.moneyCompact(overview.quarterNetIncomeCents, currency: overview.primaryCurrency),
                          tone: overview.quarterNetIncomeCents >= 0 ? Theme.positive : Theme.negative),
                 ]
             )
@@ -75,7 +75,7 @@ struct OverviewView: View {
                     PixelIcon(outlook >= 0 ? "trend_up" : "trend_down")
                         .foregroundStyle(outlook >= 0 ? Theme.positive : Theme.negative)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("Company cash in four weeks: \(Format.moneyCompact(overview.forecastFourWeekCents))")
+                        Text("Company cash in four weeks: \(Format.moneyCompact(overview.forecastFourWeekCents, currency: overview.primaryCurrency))")
                             .font(.callout.weight(.medium))
                             .foregroundStyle(Theme.primaryText)
                         Text("\(Format.signedMoney(outlook)) after payroll and loan principal due · see the cash bridge")
@@ -349,6 +349,18 @@ struct SettingsView: View {
                         GameSettingsPanel()
                     } else {
                         AnalyticsPanel()
+                    }
+                    if store.sessionReady, let fx = store.economy?.fx {
+                        Panel(padding: 12) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Eyebrow(text: "Currency")
+                                Text("Show my cash and net worth in").font(.callout).foregroundStyle(Theme.primaryText)
+                                CurrencyPicker(fx: fx)
+                                Text("Each company keeps its own currency. This only changes how your own figures are shown.")
+                                    .font(.caption2)
+                                    .foregroundStyle(Theme.secondary)
+                            }
+                        }
                     }
                     GraphicsSettingsPanel()
                     Panel(padding: 12) {

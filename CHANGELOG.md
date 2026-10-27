@@ -46,6 +46,31 @@ heading.
   when the fees, spoilage or an expected price swing pay for one. The market snapshot gains
   per-temperament move counts and grudges and alliances formed.
 
+- Currencies and exchange rates (1.7 preview 7), a mechanic any scenario can use. A scenario may
+  have one country or several, each with its own money and central bank. Every firm keeps its
+  books in the money of its home region, and each week the rates move with the countries'
+  relative inflation, their central bank rates and a random shock. A currency can be pegged to
+  another inside a band, like the 1991 exchange rate mechanism, and a strained peg can break:
+  the band widens, as in 1992 and 1993 when the scenario follows its historical path. Sales
+  paid in another currency are collected two weeks later at the rate of the day, and the
+  difference is booked as a foreign exchange gain or loss. Gateway prices and wages follow each
+  country's money. Contracts, loans, deposits, insurance, joint ventures and mergers stay inside
+  one currency, a firm builds only in regions that use its money, and only firms keeping books in
+  the lead currency hold stakes in other firms, which the exchange quotes in that currency. You
+  see net worth and cash in a reporting currency you choose, company figures carry their own
+  currency where it differs, and the economy card gains a foreign exchange section. Scenarios
+  with one money are unchanged: their saves and world hashes are identical.
+- Ruhr and Rhine, 1991 is playable (1.7 preview 7), the first scenario with more than one
+  currency. Eighteen regions across Germany (the Ruhr, Cologne and Bonn, Hesse, the Palatinate,
+  the Saar, Hamburg, Lower Saxony, Stuttgart, Munich and the new eastern states), the Netherlands
+  (Rotterdam, Amsterdam, Limburg), Belgium (Antwerp, Liege), Luxembourg and France (Lorraine,
+  Alsace), with the Deutsche Mark, guilder, Belgian and Luxembourg franc and French franc, the
+  last three pegged to the mark. Rhine barge, rail, road, the Rotterdam and Antwerp pipelines to
+  the Ruhr and North Sea gateways connect them. Fifty-five rival firms cover coal, steel,
+  chemicals, autos, engineering, utilities, banks and logistics, and world prices follow coal and
+  steel in decline, the reunification boom and the 1992 to 1993 recession. All regional numbers
+  are game estimates built on NUTS areas, not statistics. You start with a steel mill in the
+  Ruhr. The map draws on the globe and the corridor map on Android, desktop and Apple.
 - A character cast (1.7 preview 5). Twelve fictional people, each with a pixel portrait, an age,
   a home town, a background and a temperament, now fill the named posts in the game. The central
   bank chair is always one of them and the chair's leaning toward high or low rates comes from
@@ -63,7 +88,6 @@ heading.
   turnovers. Great Lakes worlds play differently
   from before because posts are now drawn from the cast; saves from earlier previews load with
   unnamed rival management.
-
 - Silicon Valley, 1995 is playable (1.7 preview 7). Sixteen economic regions built from whole
   California counties (San Jose and Silicon Valley, San Francisco, Oakland and the East Bay, San
   Mateo, Marin and the North Bay, Sacramento, Stockton and Modesto, Fresno, Bakersfield, Los

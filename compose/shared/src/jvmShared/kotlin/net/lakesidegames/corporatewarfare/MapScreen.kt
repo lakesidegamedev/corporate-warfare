@@ -348,12 +348,12 @@ private fun MapHud(store: GameStore) {
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Column {
                 Eyebrow("Cash")
-                Text(Format.compact(overview?.firmCashCents ?: 0), color = Palette.primaryText, fontWeight = FontWeight.SemiBold)
+                Text(Format.compact(overview?.firmCashCents ?: 0, overview?.primaryCurrency.orEmpty()), color = Palette.primaryText, fontWeight = FontWeight.SemiBold)
             }
             val profit = overview?.quarterNetIncomeCents ?: 0
             Column {
                 Eyebrow(if ((overview?.quarterWeeks ?: 0u) >= 13u) "Profit/qtr" else "Profit so far")
-                Text(Format.compact(profit), color = if (profit >= 0) Palette.positive else Palette.negative, fontWeight = FontWeight.SemiBold)
+                Text(Format.compact(profit, overview?.primaryCurrency.orEmpty()), color = if (profit >= 0) Palette.positive else Palette.negative, fontWeight = FontWeight.SemiBold)
             }
         }
     }

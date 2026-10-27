@@ -159,21 +159,26 @@ pub fn service(world: &mut World, dataset: &Dataset) {
 fn credit_lender(world: &mut World, loan: &Loan, paid: i64, interest_paid: i64) {
     match loan.lender {
         Lender::Outside(crate::state::STATE_LENDER) => {
+            // The state's books are in the numeraire.
+            let paid_n = crate::economy::fx::firm_to_numeraire_world(world, loan.borrower, paid);
+            let interest_n =
+                crate::economy::fx::firm_to_numeraire_world(world, loan.borrower, interest_paid);
             let _ = world.government.book.commit(
                 world.tick,
                 Txn::new()
-                    .debit(Account::Cash, paid, "state loan receipt")
-                    .credit(Account::InterestIncome, interest_paid, "interest income")
+                    .debit(Account::Cash, paid_n, "state loan receipt")
+                    .credit(Account::InterestIncome, interest_n, "interest income")
                     .credit(
                         Account::Receivables,
-                        paid - interest_paid,
+                        paid_n - interest_n,
                         "principal received",
                     ),
             );
         }
         Lender::Outside(index) => {
+            let paid_n = crate::economy::fx::firm_to_numeraire_world(world, loan.borrower, paid);
             if let Some(lender) = world.outside.lenders.get_mut(index as usize) {
-                lender.capital_cents += paid;
+                lender.capital_cents += paid_n;
             }
         }
         Lender::Bank(handle) | Lender::Firm(handle) => {
@@ -443,16 +448,18 @@ pub fn repay(world: &mut World, loan: Handle, amount: i64) {
     }
     match lender {
         Lender::Outside(crate::state::STATE_LENDER) => {
+            let payment_n = crate::economy::fx::firm_to_numeraire_world(world, borrower, payment);
             let _ = world.government.book.commit(
                 world.tick,
                 Txn::new()
-                    .debit(Account::Cash, payment, "state loan repaid")
-                    .credit(Account::Receivables, payment, "state loan repaid"),
+                    .debit(Account::Cash, payment_n, "state loan repaid")
+                    .credit(Account::Receivables, payment_n, "state loan repaid"),
             );
         }
         Lender::Outside(index) => {
+            let payment_n = crate::economy::fx::firm_to_numeraire_world(world, borrower, payment);
             if let Some(holder) = world.outside.lenders.get_mut(index as usize) {
-                holder.capital_cents += payment;
+                holder.capital_cents += payment_n;
             }
         }
         Lender::Firm(handle) | Lender::Bank(handle) => {

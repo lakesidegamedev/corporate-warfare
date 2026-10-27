@@ -121,6 +121,7 @@ fn busy(world: &World) -> Vec<PersonId> {
     out.extend(world.macro_state.cycle.chair.person);
     out.extend(world.cast.leaders.iter().flatten());
     out.extend(world.cast.governors.values());
+    out.extend(world.fx.chairs.iter().flatten());
     for (_, firm) in world.firms.iter() {
         out.extend(firm.ceo);
     }
@@ -129,7 +130,7 @@ fn busy(world: &World) -> Vec<PersonId> {
     out
 }
 
-fn free_people(world: &World, ds: &Dataset, role: Role) -> Vec<PersonId> {
+pub(crate) fn free_people(world: &World, ds: &Dataset, role: Role) -> Vec<PersonId> {
     let held = busy(world);
     (0..ds.cast.len() as PersonId)
         .filter(|p| ds.cast[*p as usize].can(role))
@@ -159,6 +160,7 @@ pub fn assign(world: &mut World, ds: &Dataset, scenario_id: &str) {
         firm.ceo = None;
     }
     world.macro_state.cycle.chair.person = None;
+    world.fx.chairs.clear();
 
     // The central bank chair.
     let pool = free_people(world, ds, Role::Chair);
@@ -176,6 +178,8 @@ pub fn assign(world: &mut World, ds: &Dataset, scenario_id: &str) {
         world.cast.leaders[slot] = pick;
     }
     draw_governors(world, ds, &mut rng);
+    // Other countries' central banks name their chairs before the rivals take the rest.
+    crate::economy::fx::assign_chairs(world, ds);
     // Rival chief executives while there are people to spare.
     for firm in rivals(world) {
         let pool = free_people(world, ds, Role::Ceo);

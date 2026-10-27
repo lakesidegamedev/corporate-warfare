@@ -9,6 +9,7 @@
 
 pub mod balance;
 pub mod cast;
+pub mod currency;
 pub mod custom;
 pub mod events;
 pub mod firms;
@@ -23,6 +24,7 @@ use serde::{Deserialize, Serialize};
 
 pub use balance::{Balance, BalanceOverlay, Product, ProductKind, Recipe, StorageClass};
 pub use cast::{Person, Role, Temperament};
+pub use currency::{CountryDef, CurrencyDef, CurrencySet, PegDef};
 pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetting};
 pub use events::EventCard;
 pub use firms::{Archetype, ExtraPlant, SeedFirm};
@@ -51,19 +53,22 @@ pub struct ScenarioContent {
     pub logistics_json: Option<&'static str>,
     /// Wage level and opening prices; None keeps the shared balance.
     pub balance_json: Option<&'static str>,
+    /// Countries and currencies, for a scenario that spans more than one money.
+    pub currencies_json: Option<&'static str>,
     /// The region a guided career's opening company is in, and the strategy it runs there.
     pub player_region: &'static str,
     pub player_recipe: &'static str,
 }
 
 /// Every scenario that has its own dataset. A scenario not listed here uses the default one.
-pub const SCENARIO_CONTENT: [ScenarioContent; 3] = [
+pub const SCENARIO_CONTENT: [ScenarioContent; 4] = [
     ScenarioContent {
         id: DEFAULT_SCENARIO,
         geography_json: GEOGRAPHY_JSON,
         firms_json: FIRMS_JSON,
         logistics_json: None,
         balance_json: None,
+        currencies_json: None,
         player_region: "OH-CEN",
         player_recipe: "farm",
     },
@@ -77,6 +82,7 @@ pub const SCENARIO_CONTENT: [ScenarioContent; 3] = [
         balance_json: Some(include_str!(
             "../../../content/scenarios/texas-1981/balance.json"
         )),
+        currencies_json: None,
         player_region: "TX-PMB",
         player_recipe: "oil_wells",
     },
@@ -90,8 +96,25 @@ pub const SCENARIO_CONTENT: [ScenarioContent; 3] = [
         balance_json: Some(include_str!(
             "../../../content/scenarios/silicon-valley-1995/balance.json"
         )),
+        currencies_json: None,
         player_region: "CA-SJC",
         player_recipe: "hardware_maker",
+    },
+    ScenarioContent {
+        id: "ruhr-rhine-1991",
+        geography_json: include_str!("../../../content/scenarios/ruhr-rhine-1991/regions.json"),
+        firms_json: include_str!("../../../content/scenarios/ruhr-rhine-1991/firms.json"),
+        logistics_json: Some(include_str!(
+            "../../../content/scenarios/ruhr-rhine-1991/logistics.json"
+        )),
+        balance_json: Some(include_str!(
+            "../../../content/scenarios/ruhr-rhine-1991/balance.json"
+        )),
+        currencies_json: Some(include_str!(
+            "../../../content/scenarios/ruhr-rhine-1991/currencies.json"
+        )),
+        player_region: "DE-RUH",
+        player_recipe: "steel_mill",
     },
 ];
 
@@ -202,6 +225,10 @@ pub struct Dataset {
     /// Regions that have a public rail yard and a public port from the start.
     pub public_rail: Vec<bool>,
     pub public_ports: Vec<bool>,
+    /// Countries and currencies; None for a scenario with a single money.
+    pub currencies: Option<CurrencySet>,
+    /// The currency index of every region, parallel to `regions`; empty with one money.
+    pub region_currency: Vec<u8>,
     pub hash: String,
 }
 
@@ -322,6 +349,19 @@ impl Dataset {
             }
             out
         };
+        let currencies = match content.currencies_json {
+            Some(json) => Some(CurrencySet::parse(json).map_err(|error| vec![error])?),
+            None => None,
+        };
+        let mut region_currency: Vec<u8> = Vec::new();
+        if let Some(set) = &currencies {
+            for region in &regions {
+                let index = set
+                    .currency_of_country(&region.country)
+                    .ok_or_else(|| vec![format!("region {} has no known country", region.code)])?;
+                region_currency.push(index as u8);
+            }
+        }
         let public_rail = flags(&logistics.public_rail);
         let public_ports = flags(&logistics.public_ports);
         let dataset = Dataset {
@@ -348,6 +388,8 @@ impl Dataset {
             sea_matrix,
             public_rail,
             public_ports,
+            currencies,
+            region_currency,
             hash: String::new(),
         };
         let errors = dataset.validate();
@@ -600,7 +642,10 @@ impl Dataset {
                     state.code
                 ));
             }
-            if self.regions_in_state(&state.code).len() < 2 {
+            // A scenario with several moneys may hold a small country as one region
+            // (Luxembourg), since its states are countries.
+            let fewest = if self.currencies.is_some() { 1 } else { 2 };
+            if self.regions_in_state(&state.code).len() < fewest {
                 errors.push(format!("state {} has fewer than two regions", state.code));
             }
         }
@@ -958,6 +1003,30 @@ impl Dataset {
                 hasher.u8(*role as u8);
             }
         }
+        // Currency data joins the hash only when a scenario has it, so single-money scenarios
+        // keep the hashes they always had.
+        if let Some(set) = &self.currencies {
+            hasher.string("cw-currencies-v1");
+            for currency in &set.currencies {
+                hasher
+                    .string(&currency.id)
+                    .string(&currency.country)
+                    .i64(currency.face_milli)
+                    .i32(currency.policy_spread_bps)
+                    .i32(currency.inflation_spread_bps)
+                    .i32(currency.volatility_bps);
+                if let Some(peg) = &currency.peg {
+                    hasher
+                        .string(&peg.anchor)
+                        .i32(peg.band_bps)
+                        .i32(peg.widened_band_bps)
+                        .i32(peg.crisis_hazard_ppm);
+                }
+            }
+            for region in self.region_currency.iter() {
+                hasher.u8(*region);
+            }
+        }
         hasher.finish_hex()
     }
 }
@@ -1251,5 +1320,53 @@ mod tests {
             });
             assert!(seeded, "{product} has no opening producer");
         }
+    }
+
+    #[test]
+    fn ruhr_rhine_dataset_loads() {
+        let dataset = Dataset::load_scenario("ruhr-rhine-1991").expect("ruhr-rhine-1991 loads");
+        assert!(dataset.validate().is_empty(), "{:?}", dataset.validate());
+        assert!((16..=20).contains(&dataset.regions.len()));
+        let set = dataset.currencies.as_ref().expect("currencies");
+        assert_eq!(dataset.region_currency.len(), dataset.regions.len());
+        let countries: std::collections::BTreeSet<&str> = dataset
+            .regions
+            .iter()
+            .map(|region| region.country.as_str())
+            .collect();
+        assert_eq!(countries.len(), 5);
+        assert!(dataset.seed_firms.len() >= 30);
+        assert!(
+            dataset
+                .region_currency
+                .iter()
+                .all(|index| (*index as usize) < set.currencies.len())
+        );
+        // Outside logistics, a firm's plants and pinned regions share its own money.
+        let money = |code: &str| {
+            let index = dataset.region_index[code] as usize;
+            dataset.region_currency[index]
+        };
+        for firm in &dataset.seed_firms {
+            if firm.industry == "logistics" {
+                continue;
+            }
+            let home = money(&firm.region);
+            for plant in &firm.extra_plants {
+                assert_eq!(
+                    money(&plant.region),
+                    home,
+                    "{} plant {}",
+                    firm.id,
+                    plant.region
+                );
+            }
+            for code in &firm.serves {
+                assert_eq!(money(code), home, "{} serves {code}", firm.id);
+            }
+        }
+        // The opening region and strategy exist.
+        assert!(dataset.region(&dataset.player_region).is_some());
+        assert!(dataset.recipe(&dataset.player_recipe).is_some());
     }
 }

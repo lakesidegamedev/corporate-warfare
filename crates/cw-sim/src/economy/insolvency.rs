@@ -362,7 +362,10 @@ pub fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
         } else {
             0
         };
-        pay_equity(world, *holder, part, *basis);
+        // The residual is in the failed firm's money; the investor, outside holders and the
+        // state are paid in the numeraire.
+        let part_paid = crate::economy::fx::firm_to_numeraire_world(world, firm, part);
+        pay_equity(world, *holder, part_paid, *basis);
         paid_out += part;
         if *holder == HolderId::Investor {
             world.investor.career_losses_cents += (*basis - part).max(0);
@@ -552,7 +555,14 @@ fn pay_creditors(world: &mut World, firm: Handle) {
                 } else {
                     0
                 };
-                pay_claimant(world, *holder, part, Account::Investments, "bond recovery");
+                let part_paid = crate::economy::fx::firm_to_numeraire_world(world, firm, part);
+                pay_claimant(
+                    world,
+                    *holder,
+                    part_paid,
+                    Account::Investments,
+                    "bond recovery",
+                );
                 distributed += part;
             }
             if let Some(entity) = world.firms.get_mut(firm) {
@@ -570,10 +580,11 @@ fn pay_creditors(world: &mut World, firm: Handle) {
         }
         for (holder, claim) in &depositors {
             let paid = share(*claim);
+            let paid_numeraire = crate::economy::fx::firm_to_numeraire_world(world, firm, paid);
             pay_claimant(
                 world,
                 *holder,
-                paid,
+                paid_numeraire,
                 Account::Receivables,
                 "deposit recovery",
             );

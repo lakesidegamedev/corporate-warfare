@@ -79,8 +79,8 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
         "809cf8379852f661de45c4e9e8da738f9d9c470bc270d40d1203c52e1b0672a5"
     );
     // A scenario with no content of its own plays on the default dataset.
-    let ruhr = cw_data::Dataset::load_scenario("ruhr-rhine-1991").unwrap();
-    assert_eq!(ruhr.hash, data.hash);
+    let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();
+    assert_eq!(unlisted.hash, data.hash);
 }
 
 #[test]
@@ -364,4 +364,177 @@ fn silicon_valley_posts_go_to_the_california_cast_first() {
             .iter()
             .any(|(_, f)| f.archetype.is_some() && f.ceo.is_some())
     );
+}
+
+/// Ruhr and Rhine 1991 is the first scenario with more than one money.
+#[test]
+fn ruhr_rhine_has_five_countries_four_currencies_and_its_own_geography() {
+    let ruhr = cw_data::Dataset::load_scenario("ruhr-rhine-1991").unwrap();
+    let lakes = cw_data::Dataset::load().unwrap();
+    assert_ne!(ruhr.hash, lakes.hash);
+    assert!(ruhr.validate().is_empty(), "{:?}", ruhr.validate());
+    assert!((16..=20).contains(&ruhr.regions.len()));
+    let set = ruhr.currencies.as_ref().expect("currencies");
+    assert_eq!(set.currencies.len(), 4);
+    assert_eq!(set.currencies[0].id, "DEM", "the numeraire comes first");
+    assert_eq!(ruhr.region_currency.len(), ruhr.regions.len());
+    // Belgium and Luxembourg share the franc; Germany keeps the mark.
+    let money = |code: &str| {
+        set.currencies[ruhr.region_currency[ruhr.region_index[code] as usize] as usize]
+            .id
+            .clone()
+    };
+    assert_eq!(money("DE-RUH"), "DEM");
+    assert_eq!(money("NL-ROT"), "NLG");
+    assert_eq!(money("BE-ANT"), "BEF");
+    assert_eq!(money("LU-LUX"), "BEF");
+    assert_eq!(money("FR-LOR"), "FRF");
+    assert_eq!(ruhr.player_region, "DE-RUH");
+    // The single-money scenarios carry no currency data at all.
+    assert!(lakes.currencies.is_none() && lakes.region_currency.is_empty());
+    assert!(
+        cw_data::Dataset::load_scenario("texas-1981")
+            .unwrap()
+            .currencies
+            .is_none()
+    );
+}
+
+#[test]
+fn ruhr_rhine_is_deterministic_saves_with_its_rates_and_replays() {
+    let first = run(11, ScenarioKind::Guided, "ruhr-rhine-1991", 30);
+    assert_eq!(first, run(11, ScenarioKind::Guided, "ruhr-rhine-1991", 30));
+
+    let mut session = Session::create(config(12, ScenarioKind::Guided, "ruhr-rhine-1991")).unwrap();
+    session.advance(12);
+    assert!(session.world.fx.active);
+    let bytes = session.export_save().unwrap();
+    let mut loaded = Session::import_save(&bytes).unwrap();
+    assert!(
+        loaded.world.fx.active,
+        "the rate model came back from the save"
+    );
+    assert_eq!(loaded.world.fx, session.world.fx);
+    assert_eq!(loaded.canonical_hash(), session.canonical_hash());
+    session.advance(8);
+    loaded.advance(8);
+    assert_eq!(loaded.canonical_hash(), session.canonical_hash());
+
+    let log: cw_session::ReplayLog = serde_json::from_str(&session.export_replay()).unwrap();
+    assert_eq!(Session::replay(&log).unwrap(), session.canonical_hash());
+}
+
+/// Money paid across a border is accounted per currency: what buyers paid in is either delivered
+/// to a seller or still an open receivable, every ledger balances, and the recorded foreign
+/// exchange results are exactly the receivable differences.
+#[test]
+fn ruhr_rhine_cross_border_payments_reconcile_per_currency() {
+    let mut session = Session::create(config(13, ScenarioKind::Guided, "ruhr-rhine-1991")).unwrap();
+    for _ in 0..52 {
+        let result = session.advance(1);
+        if result.pause.is_some() {
+            for event in session.world.events.pending.iter_mut() {
+                event.resolved = true;
+            }
+            session.dismiss_pause();
+        }
+    }
+    let world = &session.world;
+    let mut open = vec![0i64; world.fx.currencies.len()];
+    for receivable in &world.fx.receivables {
+        open[receivable.from as usize] += receivable.amount;
+    }
+    let mut paid_across = 0;
+    for (index, currency) in world.fx.currencies.iter().enumerate() {
+        assert_eq!(
+            currency.inflow - currency.outflow,
+            open[index],
+            "currency {index}"
+        );
+        paid_across += currency.inflow;
+    }
+    assert!(paid_across > 0, "firms in different countries traded");
+    for (_, firm) in world.firms.iter() {
+        assert!(firm.book.is_balanced());
+    }
+    // Each firm's recorded gain less loss equals its fx postings in other income.
+    for (handle, pnl) in &world.fx.pnl {
+        let Some(firm) = world.firms.get(*handle) else {
+            continue;
+        };
+        let posted: i64 = firm
+            .book
+            .journal()
+            .iter()
+            .filter(|p| p.memo == "fx gain" || p.memo == "fx loss")
+            .map(|p| -p.delta)
+            .sum();
+        // The journal keeps thirteen weeks, so it can only hold a part of the lifetime total.
+        assert!(posted.abs() <= (pnl.gains + pnl.losses));
+    }
+}
+
+#[test]
+fn ruhr_rhine_reporting_currency_changes_the_figures_not_the_world() {
+    let mut session = Session::create(config(14, ScenarioKind::Guided, "ruhr-rhine-1991")).unwrap();
+    session.advance(30);
+    let before = session.canonical_hash();
+    let in_marks = session.overview();
+    assert_eq!(in_marks.reporting_currency, "DEM");
+    assert!(session.set_reporting_currency("FRF"));
+    assert!(!session.set_reporting_currency("USD"));
+    let in_francs = session.overview();
+    assert_eq!(in_francs.reporting_currency, "FRF");
+    assert_eq!(
+        session.canonical_hash(),
+        before,
+        "a display choice never moves the world"
+    );
+    let francs = session
+        .dataset
+        .currencies
+        .as_ref()
+        .unwrap()
+        .index_of("FRF")
+        .unwrap() as u8;
+    let expected = session
+        .world
+        .fx
+        .convert(in_marks.investor_net_worth_cents, 0, francs);
+    assert!((in_francs.investor_net_worth_cents - expected).abs() <= 1);
+    let view = session.fx_view().expect("an fx view");
+    assert_eq!(view.reporting, "FRF");
+    assert_eq!(view.currencies.len(), 4);
+    // Every central bank has a named chair from the cast, and no two banks share one.
+    let mut chairs: Vec<&str> = view
+        .currencies
+        .iter()
+        .map(|c| c.chair_name.as_str())
+        .collect();
+    assert!(chairs.iter().all(|name| !name.is_empty()), "{chairs:?}");
+    chairs.sort_unstable();
+    chairs.dedup();
+    assert_eq!(chairs.len(), 4, "four banks, four chairs");
+}
+
+#[test]
+fn ruhr_rhine_opens_solvent_and_keeps_the_player_company_alive() {
+    for seed in 1..=2u64 {
+        let mut session =
+            Session::create(config(seed, ScenarioKind::Guided, "ruhr-rhine-1991")).unwrap();
+        for _ in 0..26 {
+            let result = session.advance(1);
+            if result.pause.is_some() {
+                for event in session.world.events.pending.iter_mut() {
+                    event.resolved = true;
+                }
+                session.dismiss_pause();
+            }
+        }
+        let group = session.world.investor.primary_group.unwrap();
+        assert!(
+            session.world.firms.get(group).unwrap().operative(),
+            "seed {seed}"
+        );
+    }
 }

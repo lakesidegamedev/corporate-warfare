@@ -34,6 +34,30 @@ pub fn refresh_valuation(world: &mut World, dataset: &Dataset) {
         let markdown = crate::economy::structure::markdown_bps(world, handle) as i64;
         let equity = ((base.equity_cents + stake_value).max(0) * (10_000 - markdown)) / 10_000;
         equity_by_firm.insert(handle, equity);
+        // Shares are quoted in the numeraire; a firm's equity is in its own money.
+        let own_currency = crate::economy::fx::handle_currency(world, dataset, handle);
+        let equity_numeraire = world.fx.convert(equity, own_currency, 0);
+        let parent_currencies: BTreeMap<Handle, u8> = world
+            .firms
+            .get(handle)
+            .map(|firm| {
+                firm.shares
+                    .holders
+                    .keys()
+                    .filter_map(|holder| match holder {
+                        HolderId::Firm(parent) => Some((
+                            *parent,
+                            crate::economy::fx::handle_currency(world, dataset, *parent),
+                        )),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let stake_converted: BTreeMap<Handle, i64> = parent_currencies
+            .iter()
+            .map(|(parent, currency)| (*parent, world.fx.convert(equity, own_currency, *currency)))
+            .collect();
         let Some(firm) = world.firms.get_mut(handle) else {
             continue;
         };
@@ -41,10 +65,11 @@ pub fn refresh_valuation(world: &mut World, dataset: &Dataset) {
         // Each firm holding shares in this one owns its share of this firm's equity.
         for (holder, lot) in firm.shares.holders.iter() {
             if let HolderId::Firm(parent) = holder {
-                *stakes_held.entry(*parent).or_default() += equity * lot.qty / eligible;
+                let held = stake_converted.get(parent).copied().unwrap_or(equity);
+                *stakes_held.entry(*parent).or_default() += held * lot.qty / eligible;
             }
         }
-        let fair = equity / eligible;
+        let fair = equity_numeraire / eligible;
         let previous_mark = firm.shares.mark_cents.max(0);
         let mut mark = if previous_mark == 0 {
             fair
@@ -64,7 +89,6 @@ pub fn refresh_valuation(world: &mut World, dataset: &Dataset) {
         // Sales for the week are closed by `Firm::close_sales_week` at the end of settlement.
         // Clearing them here discarded the unit-sales history before it was ever recorded.
     }
-    let _ = dataset;
 }
 
 /// Held firms before their shareholders. Iterative, so a hundred-level tree cannot overflow the stack.
@@ -155,6 +179,7 @@ pub fn place_order(
                 reserved = cost;
             }
             HolderId::Firm(buyer) => {
+                crate::economy::fx::require_numeraire_holder(world, buyer)?;
                 if crate::economy::ownership::would_create_cycle(world, buyer, firm) {
                     return Err(DomainError::OwnershipCycle {
                         buyer: buyer.0,
@@ -619,6 +644,7 @@ pub fn issue_shares(
             );
         }
         HolderId::Firm(other) => {
+            crate::economy::fx::require_numeraire_holder(world, other)?;
             if crate::economy::ownership::would_create_cycle(world, other, firm) {
                 return Err(DomainError::OwnershipCycle {
                     buyer: other.0,
@@ -665,6 +691,8 @@ pub fn issue_shares(
             });
         }
     }
+    // The subscriber paid in the numeraire; the issuer books it in its own money.
+    let booked = crate::economy::fx::numeraire_to_firm_world(world, firm, proceeds);
     let Some(entity) = world.firms.get_mut(firm) else {
         return Err(DomainError::InvalidEntity {
             handle: firm.0,
@@ -673,9 +701,9 @@ pub fn issue_shares(
     };
     let _ = entity.book.commit(
         world.tick,
-        Txn::new().debit(Account::Cash, proceeds, "issue").credit(
+        Txn::new().debit(Account::Cash, booked, "issue").credit(
             Account::ShareCapital,
-            proceeds,
+            booked,
             "issue",
         ),
     );
@@ -727,43 +755,46 @@ pub fn pay_dividend(world: &mut World, firm: Handle, total_cents: i64) -> Domain
             continue;
         }
         let holder = eligible[index].0;
+        // The dividend is in the issuer's money; investors, outside holders and the state
+        // are paid in the numeraire and a holding firm in its own.
+        let issuer_currency = crate::economy::fx::currency_of(world, firm);
+        let in_numeraire = world.fx.convert(share.0, issuer_currency, 0);
         match holder {
             HolderId::Investor => {
-                world.investor.cash_cents += share.0;
+                world.investor.cash_cents += in_numeraire;
                 let _ = world.investor.book.commit(
                     world.tick,
-                    Txn::new().debit(Account::Cash, share.0, "dividend").credit(
-                        Account::OtherIncome,
-                        share.0,
-                        "dividend",
-                    ),
+                    Txn::new()
+                        .debit(Account::Cash, in_numeraire, "dividend")
+                        .credit(Account::OtherIncome, in_numeraire, "dividend"),
                 );
             }
             HolderId::Firm(child) => {
+                let received = world.fx.convert(
+                    share.0,
+                    issuer_currency,
+                    crate::economy::fx::currency_of(world, child),
+                );
                 if let Some(firm) = world.firms.get_mut(child) {
                     let _ = firm.book.commit(
                         world.tick,
-                        Txn::new().debit(Account::Cash, share.0, "dividend").credit(
-                            Account::OtherIncome,
-                            share.0,
-                            "dividend",
-                        ),
+                        Txn::new()
+                            .debit(Account::Cash, received, "dividend")
+                            .credit(Account::OtherIncome, received, "dividend"),
                     );
                 }
             }
             HolderId::Outside(index) => {
                 if let Some(holder) = world.outside.investors.get_mut(index as usize) {
-                    holder.capital_cents += share.0;
+                    holder.capital_cents += in_numeraire;
                 }
             }
             HolderId::State => {
                 let _ = world.government.book.commit(
                     world.tick,
-                    Txn::new().debit(Account::Cash, share.0, "dividend").credit(
-                        Account::OtherIncome,
-                        share.0,
-                        "dividend",
-                    ),
+                    Txn::new()
+                        .debit(Account::Cash, in_numeraire, "dividend")
+                        .credit(Account::OtherIncome, in_numeraire, "dividend"),
                 );
             }
             HolderId::Treasury => {}
@@ -799,8 +830,9 @@ pub fn repurchase(world: &mut World, firm: Handle, qty: i64) -> DomainResult<i64
     }
     let price = entity.shares.mark_cents.max(1);
     let cost = qty.saturating_mul(price);
+    let cost_own = crate::economy::fx::numeraire_to_firm_world(world, firm, cost);
     let buffer = crate::economy::insolvency::mandatory_weekly_outflow(world, firm) * 4;
-    if entity.book.cash() - cost < buffer {
+    if entity.book.cash() - cost_own < buffer {
         return Err(DomainError::SolvencyRestriction {
             entity: firm.0,
             reason: cw_core::error::SolvencyReason::CashBufferTooThin,
@@ -855,9 +887,9 @@ pub fn repurchase(world: &mut World, firm: Handle, qty: i64) -> DomainResult<i64
     if let Some(entity) = world.firms.get_mut(firm) {
         let _ = entity.book.commit(
             world.tick,
-            Txn::new().credit(Account::Cash, cost, "buyback").debit(
+            Txn::new().credit(Account::Cash, cost_own, "buyback").debit(
                 Account::ShareCapital,
-                cost,
+                cost_own,
                 "buyback",
             ),
         );
@@ -913,12 +945,14 @@ pub fn launch_ipo(
     if let Some(holder) = world.outside.investors.get_mut(outside_index as usize) {
         holder.capital_cents -= proceeds;
     }
+    let proceeds_own = crate::economy::fx::numeraire_to_firm_world(world, firm, proceeds);
+    let fee_own = crate::economy::fx::numeraire_to_firm_world(world, firm, fee);
     if let Some(entity) = world.firms.get_mut(firm) {
         let _ = entity.book.commit(
             world.tick,
-            Txn::new().debit(Account::Cash, proceeds, "ipo").credit(
+            Txn::new().debit(Account::Cash, proceeds_own, "ipo").credit(
                 Account::ShareCapital,
-                proceeds,
+                proceeds_own,
                 "ipo",
             ),
         );
@@ -929,9 +963,9 @@ pub fn launch_ipo(
         entity.shares.ipo_done = true;
         let _ = entity.book.commit(
             world.tick,
-            Txn::new().credit(Account::Cash, fee, "ipo fee").debit(
+            Txn::new().credit(Account::Cash, fee_own, "ipo fee").debit(
                 Account::OperatingExpense,
-                fee,
+                fee_own,
                 "ipo fee",
             ),
         );

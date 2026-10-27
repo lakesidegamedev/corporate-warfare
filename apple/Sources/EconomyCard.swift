@@ -53,6 +53,7 @@ struct EconomyCard: View {
                         figures(e)
                         history(e)
                         credit(e)
+                        if let fx = e.fx { FxSection(fx: fx) }
                         if !e.worldPrices.isEmpty { worldPrices(e) }
                         centralBank(e)
                         government(e)
@@ -392,5 +393,136 @@ struct EconomyCard: View {
                 }
             }
         }
+    }
+}
+
+/// One chip per currency of the scenario; picking one re-quotes the investor's figures.
+struct CurrencyPicker: View {
+    @EnvironmentObject private var store: AppStore
+    let fx: FxDto
+
+    var body: some View {
+        ChipFlow(spacing: 6) {
+            ForEach(fx.currencies, id: \.id) { c in
+                let on = c.id == fx.reporting
+                Button {
+                    Task { await store.chooseReportingCurrency(c.id) }
+                } label: {
+                    Text("\(c.symbol) \(c.name)")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(on ? Theme.ink : Theme.primaryText)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(on ? Theme.gold : Theme.panelRaised, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+    }
+}
+
+/// Exchange rates against the reporting currency, each central bank and peg, and booked exchange results.
+struct FxSection: View {
+    let fx: FxDto
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                PixelIcon("swap", size: 14).foregroundStyle(Theme.secondary)
+                Eyebrow(text: "Currencies")
+            }
+            ForEach(fx.currencies, id: \.id) { c in row(c) }
+            Text("Rates are what one unit buys in \(fx.reporting).")
+                .font(.caption2)
+                .foregroundStyle(Theme.secondary)
+            if fx.gainsCents != 0 || fx.lossesCents != 0 || fx.openForeignSalesCents != 0 {
+                HStack(alignment: .top, spacing: 6) {
+                    PixelIcon("coin", size: 14).foregroundStyle(Theme.secondary)
+                    Text("Exchange results: gains \(Format.money(fx.gainsCents, currency: fx.reporting)), losses \(Format.money(fx.lossesCents, currency: fx.reporting)), foreign sales not yet collected \(Format.money(fx.openForeignSalesCents, currency: fx.reporting))")
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack(spacing: 6) {
+                PixelIcon("coin", size: 14).foregroundStyle(Theme.gold)
+                Text("Show my figures in").font(.caption).foregroundStyle(Theme.primaryText)
+            }
+            CurrencyPicker(fx: fx)
+        }
+    }
+
+    private func row(_ c: CurrencyDto) -> some View {
+        let isReporting = c.id == fx.reporting
+        let trend = Double(c.trendBps) / 100
+        let trendTint = trend > 0.05 ? Theme.positive : trend < -0.05 ? Theme.negative : Theme.secondary
+        return HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 8) {
+                    Text("\(c.symbol) \(c.name) · \(c.country)")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Theme.primaryText)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    if isReporting {
+                        Text("Reporting currency").font(.caption).foregroundStyle(Theme.gold)
+                    } else {
+                        Text(Format.rate(c.valuePpm))
+                            .font(.footnote.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(Theme.primaryText)
+                        Text(String(format: "%+.1f%% over 13 wk", trend))
+                            .font(.caption)
+                            .foregroundStyle(trendTint)
+                    }
+                }
+                Text("\(c.centralBank): rate \(percent(c.policyRateBps, digits: 2)), inflation \(percent(c.inflationBps))")
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !c.chairName.isEmpty {
+                    Text("Chair \(c.chairName), \(c.chairStance)")
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !isReporting {
+                    let peg = pegStatus(c)
+                    Text(peg.0).font(.caption).foregroundStyle(peg.1).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if !isReporting && c.historyPpm.count >= 2 {
+                sparkline(c.historyPpm, tint: trendTint)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func pegStatus(_ c: CurrencyDto) -> (String, Color) {
+        if !c.pegged { return ("Floating", Theme.secondary) }
+        if let crisis = c.crisisWeek {
+            return ("Band widened in \(ResultBuckets.weekLabel(crisis)), now plus or minus \(percent(c.bandBps))", Theme.warning)
+        }
+        if c.bandBps <= 0 { return ("Pegged", Theme.secondary) }
+        let used = min(max(Int(abs(c.strainBps)) * 100 / Int(c.bandBps), 0), 100)
+        let tint = used >= 75 ? Theme.negative : used >= 50 ? Theme.warning : Theme.secondary
+        return ("Pegged, plus or minus \(percent(c.bandBps)): \(used)% of the way to the edge", tint)
+    }
+
+    /// A 52 week line of one rate, scaled to its own range.
+    private func sparkline(_ values: [Int64], tint: Color) -> some View {
+        let low = Double(values.min() ?? 0)
+        let high = max(Double(values.max() ?? 1), low + 1)
+        return Chart {
+            ForEach(Array(values.enumerated()), id: \.offset) { index, value in
+                LineMark(x: .value("Week", index), y: .value("Rate", Double(value)))
+                    .foregroundStyle(tint)
+            }
+        }
+        .chartXAxis(.hidden)
+        .chartYAxis(.hidden)
+        .chartYScale(domain: low...high)
+        .frame(width: 96, height: 30)
+        .accessibilityHidden(true)
     }
 }

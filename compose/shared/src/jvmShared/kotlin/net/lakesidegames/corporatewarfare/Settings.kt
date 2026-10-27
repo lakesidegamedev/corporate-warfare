@@ -51,6 +51,8 @@ class AppSettings(private val file: File) {
     var autoUpdate by mutableStateOf(props.getProperty("autoUpdate")?.toBoolean() ?: true); private set
     var tutorialDone: Set<String> = props.getProperty("tutorial.done")?.split(',')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet(); private set
     var tutorialHidden: Boolean = props.getProperty("tutorial.hidden")?.toBoolean() ?: false; private set
+    /** Currency id the investor's figures are shown in; empty until the player picks one. */
+    var reportingCurrency: String = props.getProperty("reportingCurrency").orEmpty(); private set
     var uiScale by mutableStateOf(props.getProperty("uiScale")?.toFloatOrNull() ?: 1f); private set
     var windowMode by mutableStateOf(enumOr(props.getProperty("windowMode"), WindowMode.Windowed)); private set
     var resolution by mutableStateOf(
@@ -62,6 +64,7 @@ class AppSettings(private val file: File) {
     fun chooseAnimations(value: Boolean) { animations = value; store() }
     fun chooseAutoUpdate(value: Boolean) { autoUpdate = value; store() }
     fun chooseTutorial(done: Set<String>, hidden: Boolean) { tutorialDone = done; tutorialHidden = hidden; store() }
+    fun chooseReportingCurrency(value: String) { reportingCurrency = value; store() }
     fun chooseUiScale(value: Float) { uiScale = value; store() }
     fun chooseWindowMode(value: WindowMode) { windowMode = value; store() }
     fun chooseResolution(value: Pair<Int, Int>) { resolution = value; store() }
@@ -72,6 +75,7 @@ class AppSettings(private val file: File) {
         props.setProperty("autoUpdate", autoUpdate.toString())
         props.setProperty("tutorial.done", tutorialDone.joinToString(","))
         props.setProperty("tutorial.hidden", tutorialHidden.toString())
+        props.setProperty("reportingCurrency", reportingCurrency)
         props.setProperty("uiScale", uiScale.toString())
         props.setProperty("windowMode", windowMode.name)
         props.setProperty("resolution", "${resolution.first}x${resolution.second}")
@@ -105,6 +109,17 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                         TextButton(onClick = { store.saveNow() }) { Text("Save now", color = Palette.gold) }
                     }
                     if (store.status.isNotEmpty()) Text(store.status, color = Palette.secondary, fontSize = 12.sp)
+                }
+            }
+        }
+        val fx = store.economy?.fx
+        if (store.ready && fx != null) {
+            item {
+                Panel {
+                    Eyebrow("Currency")
+                    Text("Show my cash and net worth in", color = Palette.primaryText)
+                    CurrencyChoices(store, fx)
+                    Text("Each company keeps its own currency. This only changes how your own figures are shown.", color = Palette.secondary, fontSize = 12.sp)
                 }
             }
         }
@@ -246,5 +261,13 @@ fun UpdatePanel(updater: Updater, compact: Boolean = false) {
                 )
             }
         }
+    }
+}
+
+/** One chip per currency of the scenario; picking one re-quotes the investor's figures. */
+@Composable
+fun CurrencyChoices(store: GameStore, fx: uniffi.cw_ffi.FxDto) {
+    Choices(fx.currencies.map { it.id }, fx.reporting, { id -> fx.currencies.firstOrNull { it.id == id }?.let { "${it.symbol} ${it.name}" } ?: id }) {
+        store.chooseReportingCurrency(it)
     }
 }

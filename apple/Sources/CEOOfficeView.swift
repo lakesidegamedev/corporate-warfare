@@ -116,7 +116,7 @@ struct CEOOfficeView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                     Spacer(minLength: 4)
-                    Text("\(Format.price(firm.markCents))/share")
+                    Text("\(Format.price(firm.markCents, currency: Format.numeraire))/share")
                         .font(.caption.weight(.semibold).monospacedDigit())
                         .foregroundStyle(Theme.secondary)
                         .lineLimit(1)
@@ -140,19 +140,19 @@ struct CEOOfficeView: View {
         var stats: [Stat] = []
         if let quarter {
             stats.append(Stat(label: weeks >= 13 ? "Profit, quarter" : "Profit, \(weeks) wk",
-                              value: Format.moneyCompact(quarter),
+                              value: Format.moneyCompact(quarter, currency: firm.currency),
                               tone: quarter >= 0 ? Theme.positive : Theme.negative))
         }
-        stats.append(Stat(label: "Equity", value: Format.moneyCompact(firm.equityCents),
+        stats.append(Stat(label: "Equity", value: Format.moneyCompact(firm.equityCents, currency: firm.currency),
                           tone: firm.equityCents >= 0 ? Theme.primaryText : Theme.negative))
-        stats.append(Stat(label: "Fair value", value: Format.moneyCompact(firm.fairValueCents)))
+        stats.append(Stat(label: "Fair value", value: Format.moneyCompact(firm.fairValueCents, currency: Format.numeraire)))
         stats.append(Stat(label: "Plants", value: "\(firm.facilities)"))
         stats.append(Stat(label: "Your votes", value: Format.percentBps(firm.investorVotesBps)))
         if let finance = store.finance, finance.firm == firm.handle, finance.restrictedCents > 0 {
             stats.append(Stat(label: "Restricted", value: Format.moneyCompact(finance.restrictedCents)))
         }
         return StatGroup(
-            headline: Stat(label: "Company cash", value: Format.moneyCompact(firm.cashCents)),
+            headline: Stat(label: "Company cash", value: Format.moneyCompact(firm.cashCents, currency: firm.currency)),
             stats: stats
         )
     }

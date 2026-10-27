@@ -710,12 +710,96 @@ pub fn apply(
     })
 }
 
+/// Arrangements that only work between firms that keep books in the same money. Trade, freight
+/// and the exchange cross borders; contracts, loans, deposits, insurance, joint ventures and
+/// mergers do not, and a firm builds only in regions that use its own currency (to operate in
+/// another country, found a firm there). Never reached with one currency.
+fn fx_gate(world: &World, dataset: &Dataset, intent: &CommandIntent) -> DomainResult<()> {
+    use crate::economy::fx::{
+        currency_of, require_numeraire_holder, require_same_currency, world_region_currency,
+    };
+    let facility_firm = |facility: &Handle| world.facilities.get(*facility).map(|f| f.firm);
+    let _ = dataset;
+    match intent {
+        CommandIntent::BuildFacility { firm, region, .. } => {
+            if world_region_currency(world, *region) != currency_of(world, *firm) {
+                return Err(DomainError::NoAuthority {
+                    actor: firm.0,
+                    reason: AuthorityReason::OtherCurrency,
+                });
+            }
+        }
+        CommandIntent::PlaceSpotOrder { firm, region, .. }
+        | CommandIntent::BuyToStore { firm, region, .. } => {
+            if world_region_currency(world, *region) != currency_of(world, *firm) {
+                return Err(DomainError::NoAuthority {
+                    actor: firm.0,
+                    reason: AuthorityReason::OtherCurrency,
+                });
+            }
+        }
+        CommandIntent::OfferContract { buyer, seller, .. }
+        | CommandIntent::SetTransferContract { buyer, seller, .. } => {
+            require_same_currency(world, *buyer, *seller)?;
+        }
+        CommandIntent::MakeIntercompanyLoan {
+            lender, borrower, ..
+        } => require_same_currency(world, *lender, *borrower)?,
+        CommandIntent::GrantGuarantee {
+            guarantor,
+            beneficiary,
+            ..
+        } => require_same_currency(world, *guarantor, *beneficiary)?,
+        CommandIntent::DepositFunds { bank, firm, .. }
+        | CommandIntent::WithdrawFunds { bank, firm, .. } => {
+            require_same_currency(world, *bank, *firm)?
+        }
+        CommandIntent::ApproveLoan { bank, borrower, .. } => {
+            require_same_currency(world, *bank, *borrower)?
+        }
+        CommandIntent::BindPolicy {
+            insurer, insured, ..
+        } => require_same_currency(world, *insurer, *insured)?,
+        CommandIntent::QuotePolicy {
+            insurer, facility, ..
+        } => {
+            if let Some(owner) = facility_firm(facility) {
+                require_same_currency(world, *insurer, owner)?;
+            }
+        }
+        CommandIntent::IssueBond { firm, .. } => require_numeraire_holder(world, *firm)?,
+        CommandIntent::StartDiligence {
+            buyer,
+            target,
+            kind,
+            ..
+        } => {
+            require_numeraire_holder(world, *buyer)?;
+            if matches!(kind, DealKind::Merger) {
+                require_same_currency(world, *buyer, *target)?;
+            }
+        }
+        CommandIntent::RaidMarket { firm, target, .. } => {
+            require_same_currency(world, *firm, *target)?
+        }
+        CommandIntent::FormJointVenture { .. }
+        | CommandIntent::BuyOutVenture { .. }
+        | CommandIntent::ListSubsidiary { .. }
+        | CommandIntent::SpinOffSubsidiary { .. } => {}
+        _ => {}
+    }
+    Ok(())
+}
+
 fn apply_intent(
     world: &mut World,
     dataset: &Dataset,
     actor: u64,
     intent: &CommandIntent,
 ) -> DomainResult<()> {
+    if world.fx.active {
+        fx_gate(world, dataset, intent)?;
+    }
     match intent {
         CommandIntent::FoundFirm {
             name,
@@ -753,6 +837,12 @@ fn apply_intent(
                 });
             }
             require_region(world, *region)?;
+            // The investor pays in the numeraire; the new firm keeps books in its region's money.
+            let capital_own = world.fx.convert(
+                *capital_cents,
+                0,
+                crate::economy::fx::world_region_currency(world, *region),
+            );
             world.investor.cash_cents -= capital_cents + fee;
             let _ = world.investor.book.commit(
                 world.tick,
@@ -789,8 +879,8 @@ fn apply_intent(
             let _ = entity.book.commit(
                 world.tick,
                 Txn::new()
-                    .debit(Account::Cash, *capital_cents, "paid in capital")
-                    .credit(Account::ShareCapital, *capital_cents, "paid in capital"),
+                    .debit(Account::Cash, capital_own, "paid in capital")
+                    .credit(Account::ShareCapital, capital_own, "paid in capital"),
             );
             entity.shares.issued = INITIAL_SHARES;
             entity.shares.holders.insert(
@@ -809,7 +899,7 @@ fn apply_intent(
             // the books forever, and drove a founded firm's fair value to zero even when it was
             // solvent.
             let cost = template.capex_cents;
-            if *capital_cents >= cost {
+            if capital_own >= cost {
                 spend_firm_cash(world, handle, cost, "construction escrow")?;
                 let service = cost * 40 / 100;
                 let equipment = cost - service;
@@ -1904,14 +1994,17 @@ fn apply_intent(
             let rate = world.macro_state.policy_rate_bps
                 + crate::economy::macro_cycle::lending_premium_bps(world)
                 + grade.spread_bps();
+            // The outside lenders hold the numeraire and lend it in the borrower's money.
+            let amount_numeraire =
+                crate::economy::fx::firm_to_numeraire_world(world, *firm, *amount_cents);
             let lender_index = (0..world.outside.lenders.len())
-                .find(|index| world.outside.lenders[*index].capital_cents >= *amount_cents)
+                .find(|index| world.outside.lenders[*index].capital_cents >= amount_numeraire)
                 .ok_or(DomainError::InsufficientCash {
                     entity: 0,
                     required: *amount_cents,
                     available: 0,
                 })?;
-            world.outside.lenders[lender_index].capital_cents -= *amount_cents;
+            world.outside.lenders[lender_index].capital_cents -= amount_numeraire;
             let _ = world.firms.get_mut(*firm).unwrap().book.commit(
                 world.tick,
                 Txn::new()
@@ -1977,14 +2070,17 @@ fn apply_intent(
                     reason: AuthorityReason::BoardApprovalRequired,
                 });
             }
+            // The outside lenders hold the numeraire and lend it in the borrower's money.
+            let amount_numeraire =
+                crate::economy::fx::firm_to_numeraire_world(world, *firm, *amount_cents);
             let lender_index = (0..world.outside.lenders.len())
-                .find(|index| world.outside.lenders[*index].capital_cents >= *amount_cents)
+                .find(|index| world.outside.lenders[*index].capital_cents >= amount_numeraire)
                 .ok_or(DomainError::InsufficientCash {
                     entity: 0,
                     required: *amount_cents,
                     available: 0,
                 })?;
-            world.outside.lenders[lender_index].capital_cents -= *amount_cents;
+            world.outside.lenders[lender_index].capital_cents -= amount_numeraire;
             let _ = world.firms.get_mut(*firm).unwrap().book.commit(
                 world.tick,
                 Txn::new()

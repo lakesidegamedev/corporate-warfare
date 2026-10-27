@@ -135,6 +135,9 @@ pub struct Session {
     log: ReplayLog,
     /// Rival command outcomes for this process. Diagnostic only: never saved or hashed.
     pub ai_log: AiLog,
+    /// The currency the investor's figures are shown in. A display choice: never saved or
+    /// hashed, and the numeraire (0) until the player picks another.
+    pub reporting_currency: u8,
 }
 
 /// Accepted and rejected rival commands by archetype, with rejection reasons. Rejected
@@ -265,6 +268,7 @@ impl Session {
             custom: custom.cloned(),
             log,
             ai_log: AiLog::default(),
+            reporting_currency: 0,
         })
     }
 
@@ -747,9 +751,33 @@ impl Session {
         }
     }
 
+    /// Choose the currency the investor's figures are shown in. False for an unknown id.
+    pub fn set_reporting_currency(&mut self, id: &str) -> bool {
+        let Some(index) = self
+            .dataset
+            .currencies
+            .as_ref()
+            .and_then(|set| set.index_of(id))
+        else {
+            return false;
+        };
+        self.reporting_currency = index as u8;
+        true
+    }
+
+    /// Exchange rates, central banks and recorded foreign exchange results; None with one money.
+    pub fn fx_view(&self) -> Option<dto::FxView> {
+        dto::fx_view(&self.world, &self.dataset, self.reporting_currency)
+    }
+
     pub fn overview(&self) -> Overview {
         let world = &self.world;
-        let net_worth = cw_sim::economy::score::personal_net_worth(world);
+        let reporting = self.reporting_currency;
+        let net_worth = world.fx.convert(
+            cw_sim::economy::score::personal_net_worth(world),
+            0,
+            reporting,
+        );
         let primary = world
             .investor
             .primary_group
@@ -832,8 +860,18 @@ impl Session {
             tick: world.tick.0,
             week_label: world.tick.label(),
             revision: world.revision,
-            investor_cash_cents: world.investor.cash_cents,
+            investor_cash_cents: world.fx.convert(world.investor.cash_cents, 0, reporting),
             investor_net_worth_cents: net_worth,
+            reporting_currency: self
+                .dataset
+                .currencies
+                .as_ref()
+                .and_then(|set| set.currencies.get(reporting as usize))
+                .map(|def| def.id.clone())
+                .unwrap_or_default(),
+            primary_currency: primary
+                .map(|handle| dto::currency_id(world, &self.dataset, handle.0))
+                .unwrap_or_default(),
             primary_firm: primary.map(|handle| handle.0),
             primary_name: name,
             firm_cash_cents: cash,
@@ -1124,6 +1162,7 @@ impl Session {
             custom,
             log,
             ai_log: AiLog::default(),
+            reporting_currency: 0,
         })
     }
 
@@ -1165,6 +1204,7 @@ fn empty_firm(handle: u64) -> FirmSummary {
         name: String::new(),
         industry: String::new(),
         region: String::new(),
+        currency: String::new(),
         cash_cents: 0,
         equity_cents: 0,
         fair_value_cents: 0,

@@ -235,7 +235,7 @@ struct OnboardingView: View {
     private var identityAction: some View {
         if let overview = store.overview {
             valueRow("Your personal cash", Format.money(overview.investorCashCents))
-            valueRow("\(overview.primaryName) cash", Format.money(overview.firmCashCents))
+            valueRow("\(overview.primaryName) cash", Format.money(overview.firmCashCents, currency: overview.primaryCurrency))
         }
         if store.controlledFirms.isEmpty {
             EmptyNote(text: "You do not control a company yet. Start a guided career to follow the whole walkthrough with a running firm.")
@@ -273,7 +273,7 @@ struct OnboardingView: View {
     @ViewBuilder
     private var cashAction: some View {
         if let overview = store.overview {
-            valueRow("Company cash now", Format.money(overview.firmCashCents))
+            valueRow("Company cash now", Format.money(overview.firmCashCents, currency: overview.primaryCurrency))
             valueRow(
                 "Last week's EBIT",
                 Format.signedMoney(overview.lastWeekEbitCents),
@@ -406,8 +406,8 @@ struct OnboardingView: View {
     private var advanceAction: some View {
         if let overview = store.overview {
             valueRow("Current week", overview.weekLabel)
-            valueRow("Company cash", Format.money(overview.firmCashCents))
-            valueRow("Four-week forecast", Format.money(overview.forecastFourWeekCents))
+            valueRow("Company cash", Format.money(overview.firmCashCents, currency: overview.primaryCurrency))
+            valueRow("Four-week forecast", Format.money(overview.forecastFourWeekCents, currency: overview.primaryCurrency))
             if let pause = overview.pause {
                 PixelLabel("Paused: \(pause)", icon: "hand")
                     .font(.callout)

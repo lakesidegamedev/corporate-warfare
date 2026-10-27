@@ -184,6 +184,7 @@ pub fn build_with(
         systemic: Default::default(),
         structure: Default::default(),
         rivalry: Default::default(),
+        fx: crate::economy::fx::init(dataset, seed),
     };
 
     // Outside gateway capital is finite but real: exports are paid from it, imports add to it.
