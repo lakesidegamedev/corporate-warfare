@@ -31,4 +31,8 @@ economic ownership.
 
 **Scenario**: A starting world and explicit objectives or scoring horizon.
 
+**Cast**: The twelve fictional people who hold named posts: central bank chair, party leaders, governors and rival chief executives. A person is content, with a home scenario, background, temperament and the posts they can hold. A person holds one post at a time.
+
+**Temperament**: How a rival's chief executive tends to play: integrator, raider, financier, speculator, builder or cautious.
+
 **Gateway**: An outside-economy trading source or destination with finite priced capacity.

@@ -2725,7 +2725,7 @@ fn apply_intent(
             // A partner the actor does not run must be willing: a rival with the cash agrees;
             // the player's own companies need the player's say.
             if !crate::economy::events_engine::player_side(world, *partner)
-                && structure::temperament(world, *partner).partnering < 3_000
+                && structure::temperament(world, dataset, *partner).partnering < 3_000
             {
                 return Err(DomainError::NoAuthority {
                     actor: partner.0,
@@ -2895,6 +2895,7 @@ pub(crate) fn blank_firm(
         state_owned_since: None,
         rescued_week: 0,
         inputs_used: Vec::new(),
+        ceo: None,
         founding_week: world.tick,
         bank: None,
         insurer: None,

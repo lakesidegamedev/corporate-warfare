@@ -123,7 +123,8 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
         }
 
         Eyebrow("Central bank")
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (e.chairPerson.isNotEmpty()) PixelPortrait(e.chairPerson, size = 36.dp)
             Text(e.chairName, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             Spacer(Modifier.width(8.dp))
             Text(
@@ -142,6 +143,13 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
         }
 
         Eyebrow("Government")
+        e.posts.filter { it.post != "chair" }.forEach { post ->
+            PersonLine(post.person, when (post.post) {
+                "country_leader" -> "Leads the country, ${post.place}"
+                "party_leader" -> "Opposition, ${post.place}"
+                else -> "Governor of ${post.place}"
+            })
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(e.partyName, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
             Text("Approval ${e.approvalBps / 100}%", color = Palette.secondary, fontSize = 12.sp)
@@ -155,7 +163,12 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
         MarketRules(e)
         if (e.news.isNotEmpty()) {
             Eyebrow("News")
-            e.news.take(5).forEach { n -> Text("${ResultBuckets.weekLabel(n.week.toInt())}: ${n.text}", color = Palette.secondary, fontSize = 12.sp) }
+            e.news.take(5).forEach { n ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    n.person?.let { PixelPortrait(it, size = 28.dp) }
+                    Text("${ResultBuckets.weekLabel(n.week.toInt())}: ${n.text}", color = Palette.secondary, fontSize = 12.sp)
+                }
+            }
         }
     }
 }

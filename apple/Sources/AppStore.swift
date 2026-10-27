@@ -653,6 +653,11 @@ final class AppStore: ObservableObject {
         ]))
     }
 
+    /// A company's chief executive and recent moves.
+    func dossier(_ firm: UInt64) async -> DossierDto? {
+        await engine.dossier(firm: firm)
+    }
+
     func buildQuote(region: UInt32, recipe: UInt32, blocks: UInt32) async -> BuildQuoteDto? {
         guard let firm = selectedFirm ?? overview?.primaryFirm else { return nil }
         return await engine.buildQuote(firm: firm, region: region, recipe: recipe, blocks: blocks)

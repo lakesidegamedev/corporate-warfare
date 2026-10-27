@@ -167,6 +167,7 @@ pub fn weekly(world: &mut World, ds: &Dataset) {
         p.law_changes += 1;
         p.last_effective = week;
         p.news.push(PoliticalNews {
+            person: None,
             week,
             text: format!(
                 "New laws in force: corporate tax {}%, low-skill wage floor ${}/hour, merger review at {}% share, {} union law; {}.",
@@ -187,6 +188,7 @@ pub fn weekly(world: &mut World, ds: &Dataset) {
         let year = cw_core::calendar::Tick(week).year();
         if kept {
             p.news.push(PoliticalNews {
+                person: None,
                 week,
                 text: format!(
                     "{year} election: {} keeps power with {}% approval.",
@@ -215,6 +217,7 @@ pub fn weekly(world: &mut World, ds: &Dataset) {
                 laws,
             });
             p.news.push(PoliticalNews {
+                person: None,
                 week,
                 text: format!(
                     "{year} election: {} wins. Its programme takes effect in {} weeks: corporate tax {}%, merger review at {}% share, {} union law{}; {}.",
@@ -232,6 +235,10 @@ pub fn weekly(world: &mut World, ds: &Dataset) {
     }
     let excess = p.news.len().saturating_sub(NEWS_KEPT);
     p.news.drain(..excess);
+    if world.politics.next_election == week + TERM_WEEKS {
+        // An election was held this week: the states choose their governors again.
+        crate::economy::cast::redraw_governors(world, ds);
+    }
 
     quotas(world, ds);
     refresh_inputs(world, ds);

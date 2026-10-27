@@ -312,6 +312,7 @@ internal fun StockDialog(store: GameStore, line: StockDto, onClose: () -> Unit) 
                 if (line.historyCents.size > 1) {
                     Sparkline(line.historyCents, changeTint(line.changeQuarterBps), Modifier.fillMaxWidth().height(90.dp))
                 }
+                DossierSection(store, line.firm)
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     SegmentedButton(selected = buy, onClick = { buy = true }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Buy") }
                     SegmentedButton(selected = !buy, onClick = { buy = false }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Sell") }

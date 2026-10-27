@@ -172,6 +172,7 @@ pub fn build_with(
         failed_worker_settlements: 0,
         group_cache: BTreeMap::new(),
         pending_pause: None,
+        cast: Default::default(),
         construction_orders: BTreeMap::new(),
         raids: Vec::new(),
         objective: None,
@@ -208,6 +209,7 @@ pub fn build_with(
         seed_player_firm(&mut world, dataset, seed);
     }
     refresh_region_incomes(&mut world, dataset);
+    crate::economy::cast::assign(&mut world, dataset, "");
     build_gateways(&mut world, dataset);
     seed_supply_contracts(&mut world, dataset);
     crate::economy::procurement::ensure_contracts(&mut world, dataset);
@@ -358,6 +360,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
             state_owned_since: None,
             rescued_week: 0,
             inputs_used: Vec::new(),
+            ceo: None,
             founding_week: Tick::OPENING,
             bank: if seed_firm.recipe == "bank" {
                 Some(BankModel {
@@ -606,6 +609,7 @@ fn placeholder_firm() -> Firm {
         state_owned_since: None,
         rescued_week: 0,
         inputs_used: Vec::new(),
+        ceo: None,
         founding_week: Tick::OPENING,
         bank: None,
         insurer: None,

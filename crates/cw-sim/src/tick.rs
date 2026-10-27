@@ -85,6 +85,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::economy::macro_cycle::weekly(world, dataset);
     crate::economy::reserve::weekly(world, dataset);
     crate::economy::politics::weekly(world, dataset);
+    crate::economy::cast::weekly(world, dataset);
     crate::economy::rescue::weekly(world, dataset);
     crate::economy::systemic::weekly(world, dataset);
     crate::economy::events_engine::quarter_check(world, dataset);

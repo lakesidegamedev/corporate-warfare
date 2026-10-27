@@ -25,6 +25,24 @@ heading.
 
 ### Added
 
+- A character cast (1.7 preview 5). Twelve fictional people, each with a pixel portrait, an age,
+  a home town, a background and a temperament, now fill the named posts in the game. The central
+  bank chair is always one of them and the chair's leaning toward high or low rates comes from
+  who they are. The two party leaders, three state governors and the rival chief executives are
+  drawn from the same twelve. Each scenario prefers its own people: Texas Oil Patch, 1981 starts
+  with the Texas and Gulf crowd. Rival firms have a named chief executive with a temperament, and
+  a rival that loses money for six four-week periods in a row can replace its chief executive.
+  The new chief is chosen for a different approach, the old one sits out for two years, and the
+  change is reported in the news. Open a rival's stock page, or a region board, to read its
+  dossier: portrait, name, temperament, background and recent moves. The economy card shows the
+  chair, the leaders and the governors with portraits, and news items about a person show theirs.
+  A chief executive's temperament now steers how the rival uses bond borrowing, transfer pricing,
+  listings, joint ventures and activist defence, and an activist campaign that forces out the
+  chief executive replaces the named person too. Market snapshots gain a count of chief executive
+  turnovers. Great Lakes worlds play differently
+  from before because posts are now drawn from the cast; saves from earlier previews load with
+  unnamed rival management.
+
 - Texas Oil Patch, 1981 is playable (1.7 preview 6). It has its own map and its own start:
   twenty-two economic regions built from whole counties across Texas, Oklahoma and Louisiana
   (Houston, Beaumont and Port Arthur, Dallas and Fort Worth, San Antonio, Austin, the Permian

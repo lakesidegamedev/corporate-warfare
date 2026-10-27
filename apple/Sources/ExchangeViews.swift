@@ -277,6 +277,7 @@ struct StockSheet: View {
                             }
                         }
                     }
+                    DossierSection(firm: stock.firm)
                     Panel(padding: 12) {
                         VStack(alignment: .leading, spacing: 10) {
                             Eyebrow(text: "Order")

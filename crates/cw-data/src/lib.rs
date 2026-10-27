@@ -8,6 +8,7 @@
 //! calibration until a provenance-traceable crosswalk is recovered.
 
 pub mod balance;
+pub mod cast;
 pub mod custom;
 pub mod events;
 pub mod firms;
@@ -21,6 +22,7 @@ use cw_core::hash::{CanonicalHasher, DOMAIN_STATE};
 use serde::{Deserialize, Serialize};
 
 pub use balance::{Balance, BalanceOverlay, Product, ProductKind, Recipe, StorageClass};
+pub use cast::{Person, Role, Temperament};
 pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetting};
 pub use events::EventCard;
 pub use firms::{Archetype, ExtraPlant, SeedFirm};
@@ -172,6 +174,8 @@ pub struct Dataset {
     pub lanes: Vec<Lane>,
     pub events: Vec<EventCard>,
     pub seed_firms: Vec<SeedFirm>,
+    /// The character cast, in file order. A person's index is their id in saves.
+    pub cast: Vec<Person>,
     pub baseline_weekly_wage_cents: [i64; 3],
     pub maintenance_annual_bps: i32,
     pub fixture_land_rent_cents_weekly: i64,
@@ -238,6 +242,9 @@ impl Dataset {
             .map_err(|error| vec![format!("events.json: {error}")])?;
         let firms: firms::SeedFirms = serde_json::from_str(content.firms_json)
             .map_err(|error| vec![format!("{} firms.json: {error}", content.id)])?;
+
+        let cast: cast::CastFile = serde_json::from_str(cast::CAST_JSON)
+            .map_err(|error| vec![format!("cast.json: {error}")])?;
 
         let mut products = balance.products;
         let mut recipes = balance.recipes;
@@ -318,6 +325,7 @@ impl Dataset {
             lanes: geography.lanes,
             events: events.events,
             seed_firms,
+            cast: cast.people,
             baseline_weekly_wage_cents: balance.baseline_weekly_wage_cents,
             maintenance_annual_bps: balance.maintenance_annual_bps,
             fixture_land_rent_cents_weekly: balance.fixture_land_rent_cents_weekly,
@@ -340,7 +348,7 @@ impl Dataset {
 
     /// Structural validation. Any error is a data defect, never a gameplay outcome.
     pub fn validate(&self) -> Vec<String> {
-        let mut errors = Vec::new();
+        let mut errors = cast::validate(&self.cast);
         if self.products.len() < 34 {
             errors.push(format!(
                 "expected at least 34 products, found {}",
@@ -924,6 +932,17 @@ impl Dataset {
                 for code in &plant.serves {
                     hasher.string(code);
                 }
+            }
+        }
+        for person in &self.cast {
+            hasher
+                .string(&person.id)
+                .string(&person.scenario)
+                .string(&person.state)
+                .u8(person.temperament.code())
+                .i64(person.stance.unwrap_or(0) as i64);
+            for role in &person.roles {
+                hasher.u8(*role as u8);
             }
         }
         hasher.finish_hex()

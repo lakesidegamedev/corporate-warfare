@@ -297,6 +297,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         }
     }
 
+    /** A company's chief executive and recent moves, read from the engine. */
+    fun dossier(firm: ULong, onResult: (uniffi.cw_ffi.DossierDto?) -> Unit) {
+        val handle = session ?: return
+        scope.launch { onResult(withContext(engine) { handle.dossier(firm) }) }
+    }
+
     fun build(region: UInt, recipe: UInt, blocks: UInt) {
         val firm = selectedFirm ?: return
         submit(CommandJson.command("BuildFacility", "firm" to firm, "region" to region, "recipe" to recipe, "blocks" to blocks))

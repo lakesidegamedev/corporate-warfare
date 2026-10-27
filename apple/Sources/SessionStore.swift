@@ -25,6 +25,10 @@ actor Engine {
         return handle.overview()
     }
 
+    func dossier(firm: UInt64) -> DossierDto? {
+        session?.dossier(firm: firm)
+    }
+
     func economy() -> EconomyDto? {
         session?.economy()
     }
