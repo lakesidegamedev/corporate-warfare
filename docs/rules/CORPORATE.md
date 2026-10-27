@@ -191,6 +191,10 @@ insurer. The rescue law is set by the party in power (see MARKETS.md, Government
   exchange for new shares at that price. All shares sit with the holder State. A firm the
   investor controls is never nationalised: it gets the bailout loan, as does any sound firm
   that is merely out of cash.
+- The firm must have real systemic size (in the top quarter of firms by employees, or holding at
+  least 30% of a lane) and its last 13 weeks' operating profit must not be negative, so a
+  rescue buys a firm that can stand on its own. Small or structurally losing firms go to the
+  court.
 - The state acts only when the whole cost is at most 30% of its cash. Otherwise the court
   proceeds as before. Every payment has a counterparty on a real ledger.
 - A state firm asks cost plus 5% for its goods and never more than the market ceiling. The

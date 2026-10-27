@@ -302,6 +302,16 @@ fn the_reserve_buys_in_a_bust_sells_in_a_spike_and_moves_only_real_money() {
         "the reserve's stock is the government's inventory"
     );
 
+    // A modest recovery, well under 120 percent of the year average but over 110 percent of
+    // what the reserve paid, is enough to sell.
+    for (_, firm) in w.firms.iter_mut() {
+        firm.policies.prices.insert(product, mean * 9 / 10);
+    }
+    assert_eq!(reserve::phase(&w, &ds, product), reserve::Phase::Selling);
+    // Nothing held, nothing to sell.
+    let saved = std::mem::take(&mut w.politics.reserve);
+    assert_eq!(reserve::phase(&w, &ds, product), reserve::Phase::Idle);
+    w.politics.reserve = saved;
     // Price spike: the reserve offers its stock just under the going price and a sale pays the
     // government what the buyer pays.
     for (_, firm) in w.firms.iter_mut() {
@@ -326,6 +336,21 @@ fn the_reserve_buys_in_a_bust_sells_in_a_spike_and_moves_only_real_money() {
 fn fail(world: &mut World, ds: &Dataset, firm: Handle, owed: i64) {
     let region = world.firms.get(firm).unwrap().region;
     add_plant(world, ds, firm, region, "carrier");
+    // Systemic and viable: a big employer with a profitable last quarter.
+    let last = *world.firms.get(firm).unwrap().facilities.last().unwrap();
+    world.facilities.get_mut(last).unwrap().workers = [5_000, 5_000, 5_000];
+    for week in 0..13 {
+        let book = &mut world.firms.get_mut(firm).unwrap().book;
+        let t = Tick(week);
+        book.commit(
+            t,
+            Txn::new()
+                .debit(Account::Cash, 5_000_000, "test sale")
+                .credit(Account::Revenue, 5_000_000, "test sale"),
+        )
+        .unwrap();
+        let _ = book.close_week(t);
+    }
     insolvency::defer_expense(world, firm, owed, Account::OperatingExpense, "test arrears");
     let f = world.firms.get_mut(firm).unwrap();
     f.past_due_weeks = cw_sim::state::PAST_DUE_GRACE_WEEKS + 1;

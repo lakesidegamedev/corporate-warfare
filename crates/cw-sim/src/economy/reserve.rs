@@ -4,7 +4,7 @@
 //! its year average (a bust) and sells it back into the market when the price runs well over
 //! the average (a spike). It competes with speculators for the same goods: it buys from plants'
 //! free stock at the corridor price, and sells to buyers in the region where the stock sits,
-//! just under the going price, through the same exchange everyone else uses. It pays and is paid
+//! ten percent under the going price, through the same exchange everyone else uses. It pays and is paid
 //! in real cash on the government's book, so the money always has a counterparty.
 //!
 //! Prices are read from the saved weekly price history, so a loaded game decides exactly as a
@@ -23,6 +23,8 @@ use crate::state::World;
 /// A price this far under its year average is a bust, and this far over a spike.
 pub const BUST_PCT: i64 = 85;
 pub const SPIKE_PCT: i64 = 120;
+/// The reserve also sells once the price is this far over what it paid.
+pub const PROFIT_PCT: i64 = 110;
 /// Weeks of price history needed before the reserve judges a price.
 pub const MIN_HISTORY: usize = 26;
 /// Most lots of one good the reserve will hold, bought per week, and sold per region per week.
@@ -98,15 +100,71 @@ pub fn band(world: &World, ds: &Dataset, product: u16) -> Option<(i64, i64)> {
     Some((now, mean.max(1)))
 }
 
+/// A supply shock on a good: a quota biting, a harvest failure or a plant fire shutting a
+/// plant that makes it.
+pub fn shock(world: &World, ds: &Dataset, product: u16) -> bool {
+    if world
+        .politics
+        .quota_active
+        .iter()
+        .any(|(_, p)| *p == product)
+    {
+        return true;
+    }
+    let now = world.tick.0;
+    if world.regions.iter().any(|r| {
+        r.supply_modifiers.iter().any(|(tag, p, _, until)| {
+            tag == "harvest_failure" && *p == Some(product) && until.0 > now
+        })
+    }) {
+        return true;
+    }
+    world.facilities.iter().any(|(_, plant)| {
+        plant
+            .outage
+            .is_some_and(|(cap, until)| cap == 0 && until.0 > now)
+            && ds.recipes[plant.recipe as usize]
+                .outputs()
+                .any(|(id, _)| ds.product_index.get(id) == Some(&product))
+    })
+}
+
+/// Sell when the price is 20 percent over its year average, or when the reserve holds the good
+/// and the price is 10 percent over what it paid, or in a supply shock when the price is above
+/// its year average.
 pub fn phase(world: &World, ds: &Dataset, product: u16) -> Phase {
     if !world.politics.laws.reserve {
         return Phase::Idle;
     }
-    match band(world, ds, product) {
-        Some((now, mean)) if now * 100 < mean * BUST_PCT => Phase::Buying,
-        Some((now, mean)) if now * 100 > mean * SPIKE_PCT => Phase::Selling,
-        _ => Phase::Idle,
+    let Some((now, mean)) = band(world, ds, product) else {
+        return Phase::Idle;
+    };
+    if now * 100 < mean * BUST_PCT {
+        return Phase::Buying;
     }
+    if now * 100 > mean * SPIKE_PCT {
+        return Phase::Selling;
+    }
+    let r = &world.politics.reserve;
+    let held: i64 = r
+        .stock
+        .iter()
+        .filter(|((p, _), _)| *p == product)
+        .map(|(_, q)| *q)
+        .sum();
+    if held > 0 {
+        let cost: i64 = r
+            .cost
+            .iter()
+            .filter(|((p, _), _)| *p == product)
+            .map(|(_, c)| *c)
+            .sum();
+        let avg = (cost as i128 * 1_000 / held as i128) as i64;
+        if now * 100 >= avg * PROFIT_PCT || (now > mean && shock(world, ds, product)) {
+            return Phase::Selling;
+        }
+    }
+    Phase::Idle
 }
 
 /// What the reserve offers a region this week: (asking price per lot, milli-lots).
@@ -126,7 +184,7 @@ pub fn release_offer(world: &World, ds: &Dataset, product: u16, region: u8) -> O
     }
     let (now, _) = band(world, ds, product)?;
     Some((
-        (now * 97 / 100).max(1),
+        (now * 90 / 100).max(1),
         held.min(SELL_LOTS_PER_WEEK * 1_000),
     ))
 }

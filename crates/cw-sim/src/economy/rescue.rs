@@ -58,6 +58,35 @@ pub fn is_strategic(world: &World, ds: &Dataset, firm: Handle) -> bool {
     })
 }
 
+/// Real systemic size and a future: the firm is a large employer or carries a real share of a
+/// lane, and its last quarter's operations covered their costs, so a rescue buys a firm that can
+/// stand on its own. Small or structurally losing firms go to the court.
+fn systemic_and_viable(world: &World, ds: &Dataset, firm: Handle) -> bool {
+    let Some(entity) = world.firms.get(firm) else {
+        return false;
+    };
+    let weeks = entity.book.recent_weeks();
+    if weeks.len() < 13 || weeks.iter().map(|w| w.ebit()).sum::<i64>() < 0 {
+        return false;
+    }
+    let staff = entity.total_employees(&world.facilities);
+    let mut sizes: Vec<i64> = world
+        .firms
+        .iter()
+        .filter(|(_, f)| f.operative())
+        .map(|(_, f)| f.total_employees(&world.facilities))
+        .collect();
+    sizes.sort_unstable();
+    let top_quarter = sizes.get(sizes.len() * 3 / 4).copied().unwrap_or(0);
+    let lane_share = world
+        .logistics
+        .lanes
+        .keys()
+        .any(|key| crate::economy::logistics::group_share_bps(world, firm, *key) >= 3_000);
+    let _ = ds;
+    staff >= top_quarter.max(1) || lane_share
+}
+
 fn loan_arrears(world: &World, firm: Handle) -> Vec<(Handle, i64)> {
     world
         .firms
@@ -108,6 +137,9 @@ pub fn try_rescue(world: &mut World, ds: &Dataset, firm: Handle) -> bool {
             .map(|(_, a)| a)
             .sum::<i64>();
     if need <= 0 {
+        return false;
+    }
+    if !systemic_and_viable(world, ds, firm) {
         return false;
     }
     let gov = world.government.book.cash().max(0);

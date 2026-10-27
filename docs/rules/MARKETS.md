@@ -451,10 +451,7 @@ Strategic reserve. For extraction goods that do not spoil, the government buys w
 corridor price is under 85% of the 52-week average: up to 300 lots a week per good, at the
 corridor price, from firms' free stock (stock beyond their own plants' input cover), paying
 from government cash (at most 1/40 of it a week across goods), up to 4,000 lots per good. When
-the price is over 120% of the average it offers up to 150 lots a week per region from its
-stock in that region, priced 3% under the going price, through the same exchange as everyone
-else, so it competes with speculators and with importers. Its purchases and sales are real
-cash on the government ledger. Rival speculators sell their own store when the reserve sells,
+the reserve sells instead when the price is over 120% of the average, or over 110% of what the reserve paid for the good, or above the average while a supply shock is on that good (a quota biting, a harvest failure, a shut plant that makes it). It offers up to 150 lots a week per region from its stock, ten percent under the going price, to buyers in any region (the buyer pays freight). Its release is an emergency sale and takes orders before other sellers. Its purchases and sales are real cash on the government ledger. Rival speculators sell their own store when the reserve sells,
 and buy beside it when the reserve buys.
 
 Systemic events, state rescue and vertical review: see EVENTS.md and CORPORATE.md.

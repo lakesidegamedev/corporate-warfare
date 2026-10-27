@@ -39,7 +39,9 @@ heading.
   and react to quotas, common carrier rules and the reserve. The freight congestion card now
   fires from lane fill data. The economy card lists laws in force, the reserve, quotas, state
   firms and recent disruptions; alerts appear only when a law or incident touches your
-  companies. Telemetry snapshots (schema 4) carry law changes, reserve, rescue and incident
+  companies. State rescues are rare: only large, operating-profitable strategic firms get one,
+  and the reserve also sells when prices rise 10 percent over what it paid or in a supply shock.
+  Telemetry snapshots (schema 4) carry law changes, reserve, rescue and incident
   counts.
 - Owned logistics (1.7 preview 3). Freight is now lane capacity. Trucking, rail, pipelines and
   lake and sea shipping carry goods between regions; each mode has its own price, speed, smallest
