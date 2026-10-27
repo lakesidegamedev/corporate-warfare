@@ -27,6 +27,11 @@ struct RegionBoardView: View {
         }
     }
 
+    /// One Raid button per rival and sector, on the first plant listed for it.
+    private func firstRivalPlant(_ plant: MapPlantDto) -> Bool {
+        plants.first { $0.firm == plant.firm && $0.industry == plant.industry && !$0.player }?.handle == plant.handle
+    }
+
     private var raids: [RaidOptionDto] {
         store.raidTargets.filter { $0.region == board.code }
     }
@@ -66,7 +71,8 @@ struct RegionBoardView: View {
                             Eyebrow(text: "Rivals here")
                             ForEach(rivalLeaders, id: \.industry) { cell in
                                 RivalLeaderRow(name: cell.leader, firm: cell.leaderFirm,
-                                               detail: "\(Sector.name(cell.industry)) · \(cell.leaderShareBps / 100)%")
+                                               detail: "\(Sector.name(cell.industry)) · \(cell.leaderShareBps / 100)%",
+                                               region: board.code, industry: cell.industry)
                             }
                         }
                     }
@@ -151,11 +157,17 @@ struct RegionBoardView: View {
                                         .foregroundStyle(plant.player ? Theme.gold : Theme.primaryText)
                                     Text("\(plant.strategy) · \(plant.blocks) plant\(plant.blocks == 1 ? "" : "s")")
                                         .font(.caption).foregroundStyle(Theme.secondary)
+                                    if !plant.player && firstRivalPlant(plant) {
+                                        RivalIdentity(firm: plant.firm, portrait: 20)
+                                    }
                                 }
                                 Spacer()
                                 Text(plant.status == "operating" ? "\(plant.utilisationBps / 100)%" : plant.status.capitalized)
                                     .font(.caption.monospacedDigit())
                                     .foregroundStyle(plant.status == "operating" ? Theme.primaryText : Theme.warning)
+                                if !plant.player && firstRivalPlant(plant) {
+                                    RaidMarketButton(target: plant.firm, region: plant.region, industry: plant.industry, compact: true)
+                                }
                             }
                             .accessibilityElement(children: .combine)
                         }
@@ -216,6 +228,7 @@ struct RegionBoardView: View {
             SectorBadge(sector: option.industry, size: 26)
             VStack(alignment: .leading, spacing: 1) {
                 Text(option.targetName).font(.callout).foregroundStyle(Theme.primaryText)
+                RivalIdentity(firm: option.target, portrait: 20)
                 Text("\(option.rivalBlocks) plants · \(option.quote.chanceBps / 100)% at a 2:1 campaign")
                     .font(.caption.monospacedDigit()).foregroundStyle(Theme.secondary)
             }
@@ -295,6 +308,7 @@ struct RaidSheet: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Eyebrow(text: "Target")
                             Text(option.targetName).font(.headline).foregroundStyle(Theme.primaryText)
+                            RivalIdentity(firm: option.target, portrait: 36)
                             Text("\(Sector.name(option.industry)) in \(regionName) · \(option.rivalBlocks) plants")
                                 .font(.caption).foregroundStyle(Theme.secondary)
                         }
@@ -311,8 +325,13 @@ struct RaidSheet: View {
                             row("Budget", Format.money(budget))
                             if let quote {
                                 row("Chance", "\(quote.chanceBps / 100)%")
+                                row("Their defence", Format.money(quote.defenceCents))
                                 row("Plants at stake", "\(quote.blocksAtStake) plant\(quote.blocksAtStake == 1 ? "" : "s")")
                                 row("Price if it lands", Format.money(quote.priceCents))
+                                if quote.surchargeCents > 0 {
+                                    row("Repeat-raid surcharge", Format.money(quote.surchargeCents))
+                                }
+                                row("Most it can cost", Format.money(budget + quote.priceCents + quote.surchargeCents))
                             }
                             Text("The budget buys advertising whatever happens. If the raid lands you take the plants into your division at your strategy and pay the rival half their book value.")
                                 .font(.caption).foregroundStyle(Theme.secondary)

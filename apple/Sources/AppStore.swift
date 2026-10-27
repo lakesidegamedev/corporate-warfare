@@ -24,6 +24,8 @@ final class AppStore: ObservableObject {
     @Published var freight: FreightSummaryDto?
     @Published var raidTargets: [RaidOptionDto] = []
     @Published var recentRaids: [RaidRecordDto] = []
+    @Published var rivals: [RivalSummaryDto] = []
+    @Published var rivalFeed: [RivalMoveFeedDto] = []
     /// The board's quarterly goal for the primary company and its recent results.
     @Published var objective: ObjectiveDto?
     @Published var objectiveHistory: [ObjectiveResultDto] = []
@@ -317,6 +319,7 @@ final class AppStore: ObservableObject {
         mapPlants = await engine.mapPlants()
         mapDivisions = await engine.mapDivisions()
         recentRaids = await engine.recentRaids()
+        rivalFeed = await engine.rivalFeed(limit: 12)
         objective = await engine.objective()
         objectiveHistory = await engine.objectiveHistory()
         let scenario = await engine.scenarioId()
@@ -356,6 +359,7 @@ final class AppStore: ObservableObject {
             freight = await engine.freightSummary()
             structure = await engine.structureView()
             raidTargets = await engine.raidTargets(firm: selectedFirm)
+            rivals = await engine.rivals(firm: selectedFirm)
             research = await engine.research(firm: selectedFirm)
         } else {
             research = nil
@@ -367,6 +371,7 @@ final class AppStore: ObservableObject {
             freight = nil
             structure = nil
             raidTargets = []
+            rivals = []
             facilities = []
             finance = nil
             productLines = []
@@ -669,6 +674,18 @@ final class AppStore: ObservableObject {
     /// A company's chief executive and recent moves.
     func dossier(_ firm: UInt64) async -> DossierDto? {
         await engine.dossier(firm: firm)
+    }
+
+    /// A rival's chief, temperament and any grudge or tie with the selected company.
+    func rivalTag(_ firm: UInt64) async -> RivalTagDto? {
+        guard let you = selectedFirm ?? overview?.primaryFirm else { return nil }
+        return await engine.rivalTag(firm: firm, you: you)
+    }
+
+    /// Whether the selected company can raid `target` in a market, and why not when it cannot.
+    func raidCheck(target: UInt64, region: String, industry: String) async -> RaidCheckDto? {
+        guard let firm = selectedFirm ?? overview?.primaryFirm else { return nil }
+        return await engine.raidCheck(firm: firm, target: target, region: region, industry: industry)
     }
 
     func buildQuote(region: UInt32, recipe: UInt32, blocks: UInt32) async -> BuildQuoteDto? {

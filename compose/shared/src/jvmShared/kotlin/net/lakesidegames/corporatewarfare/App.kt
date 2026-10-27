@@ -322,6 +322,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
                 ),
             )
         }
+        item { RivalsCard(store) }
         store.finance?.takeIf { it.firm == firm.handle && it.recentWeeks.isNotEmpty() }?.let { finance ->
             item { ProfitDrivers(finance.recentWeeks) }
         }
@@ -510,8 +511,16 @@ private fun InboxScreen(store: GameStore) {
         item { ScreenHeader("Inbox", listOfNotNull(store.selectedFirmDto?.name, store.overview?.weekLabel).joinToString(" · ")) }
         val due = store.events.count { it.mandatory }
         if (due > 0) item { Callout("$due decision${if (due == 1) "" else "s"} needed before time can advance.", Palette.warning) }
-        if (store.events.isEmpty()) item { Callout("Quiet week. Decisions show up here when they happen.", Palette.secondary) }
+        if (store.events.isEmpty() && store.rivalFeed.isEmpty()) item { Callout("Quiet week. Decisions show up here when they happen.", Palette.secondary) }
         items(store.events.size) { index -> DecisionCard(store, store.events[index]) }
+        if (store.rivalFeed.isNotEmpty()) {
+            item {
+                Panel {
+                    Eyebrow("Rival moves")
+                    store.rivalFeed.take(8).forEach { RivalMoveRow(it) }
+                }
+            }
+        }
     }
 }
 

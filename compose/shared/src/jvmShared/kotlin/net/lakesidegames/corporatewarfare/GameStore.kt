@@ -23,7 +23,14 @@ import uniffi.cw_ffi.LaneDto
 import uniffi.cw_ffi.StorageSummaryDto
 import uniffi.cw_ffi.OwnershipDto
 import uniffi.cw_ffi.PeriodDto
+import uniffi.cw_ffi.MapPlantDto
+import uniffi.cw_ffi.RaidCheckDto
+import uniffi.cw_ffi.RaidOptionDto
+import uniffi.cw_ffi.RaidQuoteDto
 import uniffi.cw_ffi.RaidRecordDto
+import uniffi.cw_ffi.RivalMoveFeedDto
+import uniffi.cw_ffi.RivalSummaryDto
+import uniffi.cw_ffi.RivalTagDto
 import uniffi.cw_ffi.MapDivisionDto
 import uniffi.cw_ffi.StockDto
 import uniffi.cw_ffi.StrategyDto
@@ -96,6 +103,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var ownership by mutableStateOf<OwnershipDto?>(null); private set
     /** Recent raids anywhere, newest first, for the rival-activity feed. */
     var recentRaids by mutableStateOf<List<RaidRecordDto>>(emptyList()); private set
+    /** Every rival group with a plant, threats first, for the CEO Office card. */
+    var rivals by mutableStateOf<List<RivalSummaryDto>>(emptyList()); private set
+    /** The latest rival moves anywhere, newest first, naming the chief behind each. */
+    var rivalFeed by mutableStateOf<List<RivalMoveFeedDto>>(emptyList()); private set
+    /** Every plant in the world, so a rival's markets can be listed with a Raid button. */
+    var mapPlants by mutableStateOf<List<MapPlantDto>>(emptyList()); private set
     var commodities by mutableStateOf<List<CommodityDto>>(emptyList()); private set
     var mapDivisions by mutableStateOf<List<MapDivisionDto>>(emptyList()); private set
     /** Goods the selected company holds back from sale, with any open buy orders. */
@@ -347,6 +360,35 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         scope.launch { onResult(withContext(engine) { handle.dossier(firm) }) }
     }
 
+    /** A rival's chief, temperament and any grudge or tie with the selected company. */
+    fun rivalTag(firm: ULong, onResult: (RivalTagDto?) -> Unit) {
+        val handle = session ?: return
+        val you = selectedFirm ?: return
+        scope.launch { onResult(withContext(engine) { handle.rivalTag(firm, you) }) }
+    }
+
+    /** Whether the selected company can raid `target` in a market, and why not when it cannot. */
+    fun raidCheck(target: ULong, region: String, industry: String, onResult: (RaidCheckDto?) -> Unit) {
+        val handle = session ?: return
+        val firm = selectedFirm ?: return
+        scope.launch { onResult(withContext(engine) { handle.raidCheck(firm, target, region, industry) }) }
+    }
+
+    /** The odds and stake of a raid at a chosen budget. */
+    fun raidQuote(option: RaidOptionDto, budgetCents: Long, onResult: (RaidQuoteDto?) -> Unit) {
+        val handle = session ?: return
+        val firm = selectedFirm ?: return
+        scope.launch {
+            onResult(withContext(engine) { handle.raidQuote(firm, option.target, option.regionIndex, option.industryIndex, budgetCents) })
+        }
+    }
+
+    /** Launch a market raid; the outcome lands in [recentRaids]. */
+    fun raid(option: RaidOptionDto, budgetCents: Long) {
+        val firm = selectedFirm ?: return
+        submit(CommandJson.command("RaidMarket", "firm" to firm, "target" to option.target, "region" to option.regionIndex, "industry" to option.industryIndex, "budget_cents" to budgetCents))
+    }
+
     fun build(region: UInt, recipe: UInt, blocks: UInt) {
         val firm = selectedFirm ?: return
         submit(CommandJson.command("BuildFacility", "firm" to firm, "region" to region, "recipe" to recipe, "blocks" to blocks))
@@ -471,6 +513,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 firm?.let { handle.storageSummary(it) },
                 handle.lanes(), handle.laneContracts(), handle.freightSummary(),
                 handle.structureView(),
+                firm?.let { handle.rivals(it) } ?: emptyList<RivalSummaryDto>(),
+                handle.rivalFeed(12u),
+                handle.mapPlants(),
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
@@ -500,6 +545,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 laneContracts = parts[19] as List<LaneContractDto>
                 freight = parts[20] as FreightSummaryDto?
                 structure = parts[21] as uniffi.cw_ffi.StructureViewDto
+                rivals = parts[22] as List<RivalSummaryDto>
+                rivalFeed = parts[23] as List<RivalMoveFeedDto>
+                mapPlants = parts[24] as List<MapPlantDto>
             }
         }
         loadMarkets()

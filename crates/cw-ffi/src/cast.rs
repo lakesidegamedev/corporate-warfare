@@ -286,3 +286,156 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
         moves,
     })
 }
+
+/// Who a rival firm is at a glance: its chief executive and how they play, for tags on rows.
+#[derive(Clone, uniffi::Record)]
+pub struct RivalTagDto {
+    pub firm: u64,
+    pub firm_name: String,
+    /// Empty when the firm has no named chief executive.
+    pub ceo_name: String,
+    /// Names the portrait; empty with no chief executive.
+    pub ceo_id: String,
+    /// integrator, raider, financier, speculator, builder or cautious; empty with no chief.
+    pub temperament: String,
+    /// Strength of the grudge this firm holds against you, zero when none is active.
+    pub grudge_bps: i32,
+    /// True when the firm and you are tied by a venture or a friendly deal.
+    pub ally: bool,
+}
+
+/// One rival for the CEO Office card: the tag, how many markets you share and your best raid.
+#[derive(Clone, uniffi::Record)]
+pub struct RivalSummaryDto {
+    pub tag: RivalTagDto,
+    pub shared_markets: u32,
+    /// The raid with the best odds at the suggested budget, when you can raid them now.
+    pub best_raid: Option<crate::RaidOptionDto>,
+}
+
+/// One thing a rival did lately, with who was behind it.
+#[derive(Clone, uniffi::Record)]
+pub struct RivalMoveFeedDto {
+    pub week: u32,
+    pub firm: u64,
+    pub firm_name: String,
+    pub ceo_name: String,
+    pub temperament: String,
+    pub text: String,
+}
+
+fn ceo_of(world: &World, ds: &Dataset, firm: Handle) -> Option<PersonDto> {
+    world
+        .firms
+        .get(firm)
+        .and_then(|f| f.ceo)
+        .and_then(|p| person_dto(ds, p))
+}
+
+/// Chief executive name and temperament for a firm; empty strings when it has none.
+pub fn who(world: &World, ds: &Dataset, firm: Handle) -> (String, String) {
+    ceo_of(world, ds, firm)
+        .map(|p| (p.name, p.temperament))
+        .unwrap_or_default()
+}
+
+pub fn rival_tag(world: &World, ds: &Dataset, firm: Handle, you: Handle) -> Option<RivalTagDto> {
+    use cw_sim::economy::rivalry::{ACTIVE, alliance, grudge};
+    let entity = world.firms.get(firm)?;
+    let ceo = ceo_of(world, ds, firm);
+    let grudge_bps = grudge(world, firm, you);
+    Some(RivalTagDto {
+        firm: firm.0,
+        firm_name: entity.name.clone(),
+        ceo_name: ceo.as_ref().map(|p| p.name.clone()).unwrap_or_default(),
+        ceo_id: ceo.as_ref().map(|p| p.id.clone()).unwrap_or_default(),
+        temperament: ceo.map(|p| p.temperament).unwrap_or_default(),
+        grudge_bps: if grudge_bps >= ACTIVE { grudge_bps } else { 0 },
+        ally: alliance(world, firm, you) >= ACTIVE,
+    })
+}
+
+/// Every operating rival group's lead firm with a plant, threats first, then allies, then the
+/// ones you can raid now by their odds.
+pub fn rivals(session: &Session, you: u64) -> Vec<RivalSummaryDto> {
+    use cw_sim::economy::{ownership::same_group, sectors};
+    let world = &session.world;
+    let ds = &session.dataset;
+    let you = Handle(you);
+    if world.firms.get(you).is_none() {
+        return Vec::new();
+    }
+    let mine = sectors::divisions_of(world, ds, you);
+    let mut out = Vec::new();
+    for rival in world.firms.handles_sorted() {
+        let Some(entity) = world.firms.get(rival) else {
+            continue;
+        };
+        if rival == you
+            || !entity.operative()
+            || entity.facilities.is_empty()
+            || same_group(world, rival, you)
+            || cw_sim::economy::rivalry::root(world, rival) != cw_sim::state::HolderId::Firm(rival)
+        {
+            continue;
+        }
+        let Some(tag) = rival_tag(world, ds, rival, you) else {
+            continue;
+        };
+        let mut shared = 0u32;
+        let mut best: Option<crate::RaidOptionDto> = None;
+        for d in &mine {
+            if sectors::division_plants(world, ds, rival, d.region, d.industry).is_empty() {
+                continue;
+            }
+            shared += 1;
+            if let Some(option) = crate::raid_option(world, ds, you, rival, d.region, d.industry)
+                && best
+                    .as_ref()
+                    .is_none_or(|b| option.quote.chance_bps > b.quote.chance_bps)
+            {
+                best = Some(option);
+            }
+        }
+        out.push(RivalSummaryDto {
+            tag,
+            shared_markets: shared,
+            best_raid: best,
+        });
+    }
+    out.sort_by_key(|r| {
+        (
+            std::cmp::Reverse(r.tag.grudge_bps),
+            !r.tag.ally,
+            std::cmp::Reverse(r.best_raid.as_ref().map_or(-1, |b| b.quote.chance_bps)),
+            r.tag.firm,
+        )
+    });
+    out
+}
+
+/// The latest rival moves anywhere, newest first, naming the chief behind each.
+pub fn rival_feed(world: &World, ds: &Dataset, limit: usize) -> Vec<RivalMoveFeedDto> {
+    world
+        .rivalry
+        .moves
+        .iter()
+        .rev()
+        .take(limit)
+        .map(|m| {
+            let (ceo_name, temperament) = who(world, ds, m.firm);
+            RivalMoveFeedDto {
+                week: m.week,
+                firm: m.firm.0,
+                firm_name: world
+                    .firms
+                    .get(m.firm)
+                    .map(|f| f.name.clone())
+                    .unwrap_or_else(|| "a former rival".to_owned()),
+                ceo_name,
+                temperament,
+                text: m.text.clone(),
+            }
+        })
+        .collect()
+}

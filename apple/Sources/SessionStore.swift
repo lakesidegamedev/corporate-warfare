@@ -144,6 +144,22 @@ actor Engine {
         session?.raidTargets(firm: firm) ?? []
     }
 
+    func raidCheck(firm: UInt64, target: UInt64, region: String, industry: String) -> RaidCheckDto? {
+        session?.raidCheck(firm: firm, target: target, region: region, industry: industry)
+    }
+
+    func rivals(firm: UInt64) -> [RivalSummaryDto] {
+        session?.rivals(firm: firm) ?? []
+    }
+
+    func rivalTag(firm: UInt64, you: UInt64) -> RivalTagDto? {
+        session?.rivalTag(firm: firm, you: you)
+    }
+
+    func rivalFeed(limit: UInt32) -> [RivalMoveFeedDto] {
+        session?.rivalFeed(limit: limit) ?? []
+    }
+
     func raidQuote(firm: UInt64, target: UInt64, region: UInt32, industry: UInt32, budgetCents: Int64) -> RaidQuoteDto? {
         session?.raidQuote(firm: firm, target: target, region: region, industry: industry, budgetCents: budgetCents)
     }

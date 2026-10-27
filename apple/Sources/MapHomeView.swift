@@ -401,7 +401,7 @@ struct MapOutliner: View {
                             .foregroundStyle(Theme.secondary)
                     }
                     ForEach(Array(store.recentRaids.prefix(8).enumerated()), id: \.offset) { _, raid in
-                        Text("\(ResultBuckets.weekLabel(raid.week)): \(raid.attacker) \(raid.success ? "took" : "failed to take") \(Sector.name(raid.industry)) in \(raid.region) from \(raid.defender).")
+                        Text("\(ResultBuckets.weekLabel(raid.week)): \(raid.attacker)\(raid.attackerCeo.isEmpty ? "" : " (\(raid.attackerCeo), \(temperamentLabel(raid.attackerTemperament)))") \(raid.success ? "took" : "failed to take") \(Sector.name(raid.industry)) in \(raid.region) from \(raid.defender).")
                             .font(.caption)
                             .foregroundStyle(Theme.primaryText)
                             .fixedSize(horizontal: false, vertical: true)

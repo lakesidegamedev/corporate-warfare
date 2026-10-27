@@ -16,6 +16,7 @@ struct CEOOfficeView: View {
             if let firm {
                 masthead(firm)
                 figures(firm)
+                RivalsCard()
                 NavigationLink {
                     StatsView().environmentObject(store)
                 } label: {

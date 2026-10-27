@@ -390,6 +390,11 @@ internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () ->
                     Eyebrow("Your divisions here")
                     ours.forEach { Text("${Sectors.name(it.industry)} · ${it.strategyName} · ${it.blocks} plants · ${it.shareBps / 100}% share", color = Palette.primaryText, fontSize = 13.sp) }
                 }
+                val rivalLeaders = board.sectors.filter { it.leaderFirm != 0uL && it.leaderFirm != store.selectedFirm && it.ownBlocks == 0u }
+                if (rivalLeaders.isNotEmpty()) {
+                    Eyebrow("Rivals here")
+                    rivalLeaders.forEach { RivalLeaderRow(store, it.leader, it.leaderFirm, "${Sectors.name(it.industry)} · ${it.leaderShareBps / 100}%", board.code, it.industry) }
+                }
             }
         },
         confirmButton = { GoldButton("Build here", enabled = store.selectedFirm != null) { onBuild() } },

@@ -26,7 +26,7 @@ struct InboxView: View {
             ForEach(store.events, id: \.id) { event in
                 DecisionCard(event: event)
             }
-            if store.events.isEmpty && store.recentRaids.isEmpty && store.deals.isEmpty {
+            if store.events.isEmpty && store.recentRaids.isEmpty && store.rivalFeed.isEmpty && store.deals.isEmpty {
                 CalloutRow(icon: "check_circle",
                            text: "Quiet week. Decisions, market raids and takeover bids show up here when they happen.",
                            tint: Theme.secondary)
@@ -36,6 +36,14 @@ struct InboxView: View {
                     ForEach(Array(store.recentRaids.prefix(8).enumerated()), id: \.offset) { index, raid in
                         if index > 0 { Divider().overlay(Theme.stroke) }
                         RaidNewsRow(raid: raid).padding(.vertical, 6)
+                    }
+                }
+            }
+            if !store.rivalFeed.isEmpty {
+                feedSection("Rival moves") {
+                    ForEach(Array(store.rivalFeed.prefix(8).enumerated()), id: \.offset) { index, move in
+                        if index > 0 { Divider().overlay(Theme.stroke) }
+                        RivalMoveRow(move: move).padding(.vertical, 6)
                     }
                 }
             }
@@ -157,9 +165,22 @@ struct RaidNewsRow: View {
                 Text(headline).font(.callout).foregroundStyle(Theme.primaryText)
                 Text("Week \(raid.week) · \(WorldMap.shared.regionName(raid.region))")
                     .font(.caption).foregroundStyle(tone)
+                if let who = chiefs {
+                    Text(who).font(.caption2).foregroundStyle(Theme.secondary)
+                }
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// The chief and temperament behind the attack, and the one who defended.
+    private var chiefs: String? {
+        func part(_ role: String, _ ceo: String, _ temperament: String) -> String? {
+            ceo.isEmpty ? nil : "\(role) \(ceo) (\(temperamentLabel(temperament)))"
+        }
+        let parts = [part("Led by", raid.attackerCeo, raid.attackerTemperament),
+                     part("against", raid.defenderCeo, raid.defenderTemperament)].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     private var headline: String {

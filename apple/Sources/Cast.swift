@@ -104,6 +104,7 @@ struct DossierBody: View {
                     Text(line).font(.caption).foregroundStyle(Theme.primaryText)
                 }
             }
+            RaidMarketsList(firm: dossier.firm)
             if !dossier.moves.isEmpty {
                 Eyebrow(text: "Recent moves")
                 ForEach(Array(dossier.moves.prefix(5).enumerated()), id: \.offset) { _, move in
@@ -137,28 +138,38 @@ struct DossierSection: View {
     }
 }
 
-/// A rival line that opens its dossier.
+/// A rival line that opens its dossier, with a Raid button when the line names a market.
 struct RivalLeaderRow: View {
     @EnvironmentObject private var store: AppStore
     let name: String
     let firm: UInt64
     let detail: String
+    var region: String? = nil
+    var industry: String? = nil
     @State private var open = false
     @State private var dossier: DossierDto?
 
     var body: some View {
-        Button {
-            open = true
-        } label: {
-            HStack {
-                Text(name).font(.callout).foregroundStyle(Theme.primaryText).lineLimit(1)
-                Spacer()
-                Text(detail).font(.caption).foregroundStyle(Theme.secondary)
-                PixelIcon("chevron_down", size: 10).foregroundStyle(Theme.secondary)
+        HStack(spacing: 8) {
+            Button {
+                open = true
+            } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Text(name).font(.callout).foregroundStyle(Theme.primaryText).lineLimit(1)
+                        Spacer()
+                        Text(detail).font(.caption).foregroundStyle(Theme.secondary)
+                        PixelIcon("chevron_down", size: 10).foregroundStyle(Theme.secondary)
+                    }
+                    RivalIdentity(firm: firm, portrait: 24)
+                }
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            if let region, let industry {
+                RaidMarketButton(target: firm, region: region, industry: industry, compact: true)
+            }
         }
-        .buttonStyle(.plain)
         .sheet(isPresented: $open) {
             NavigationStack {
                 ScrollView {
@@ -168,6 +179,7 @@ struct RivalLeaderRow: View {
                 .navigationTitle(name)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { open = false } } }
             }
+            .environmentObject(store)
             .task { dossier = await store.dossier(firm) }
         }
     }
