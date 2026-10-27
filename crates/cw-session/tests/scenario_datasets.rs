@@ -321,3 +321,45 @@ fn silicon_valley_opens_solvent_and_keeps_the_player_company_alive() {
         );
     }
 }
+
+#[test]
+fn silicon_valley_posts_go_to_the_california_cast_first() {
+    let session = run_answering(2, "silicon-valley-1995", 1);
+    let ds = &session.dataset;
+    let home = |p: cw_sim::economy::cast::PersonId| ds.cast[p as usize].scenario == "silicon-valley-1995";
+    let in_post = |p: Option<cw_sim::economy::cast::PersonId>| p.is_some_and(home);
+    let ceos = session
+        .world
+        .firms
+        .iter()
+        .filter(|(_, f)| f.archetype.is_some())
+        .filter(|(_, f)| in_post(f.ceo))
+        .count();
+    let others = usize::from(in_post(session.world.macro_state.cycle.chair.person))
+        + session
+            .world
+            .cast
+            .leaders
+            .iter()
+            .filter(|p| in_post(**p))
+            .count();
+    // Chair and party leaders are filled first; every California person holds some post, and
+    // the rest of the rivals are led by the wider cast.
+    let held = ds
+        .cast
+        .iter()
+        .filter(|p| p.scenario == "silicon-valley-1995")
+        .count();
+    assert!(held >= 3);
+    assert!(
+        ceos + others >= 2,
+        "{ceos} CEOs and {others} chair or leaders are Californian"
+    );
+    assert!(
+        session
+            .world
+            .firms
+            .iter()
+            .any(|(_, f)| f.archetype.is_some() && f.ceo.is_some())
+    );
+}
