@@ -381,8 +381,24 @@ pub struct OverviewDto {
     pub quarter_weeks: u32,
     pub alerts: Vec<String>,
     pub pause: Option<String>,
+    /// Why the clock is stopped and the one action that resumes it.
+    pub pause_info: Option<PauseInfoDto>,
     pub next_action_key: String,
     pub next_action_reason: String,
+}
+
+/// A pause in plain words. `action` is `answer` (open the card `event_id`) or `continue`
+/// (call `dismiss_pause`); `kind` is `decision`, `deadline`, `warning` or `milestone`.
+#[derive(uniffi::Record)]
+pub struct PauseInfoDto {
+    pub reason: String,
+    pub kind: String,
+    pub title: String,
+    pub detail: String,
+    pub action: String,
+    pub action_label: String,
+    pub event_id: Option<u64>,
+    pub firm: Option<u64>,
 }
 
 #[derive(uniffi::Record)]
@@ -1351,6 +1367,19 @@ fn alert_text(alert: cw_session::Alert) -> String {
     }
 }
 
+fn pause_info_dto(info: cw_session::dto::PauseInfo) -> PauseInfoDto {
+    PauseInfoDto {
+        reason: info.reason,
+        kind: info.kind,
+        title: info.title,
+        detail: info.detail,
+        action: info.action,
+        action_label: info.action_label,
+        event_id: info.event_id,
+        firm: info.firm,
+    }
+}
+
 fn overview_dto(overview: Overview) -> OverviewDto {
     OverviewDto {
         tick: overview.tick,
@@ -1369,6 +1398,7 @@ fn overview_dto(overview: Overview) -> OverviewDto {
         quarter_weeks: overview.quarter_weeks,
         alerts: overview.alerts.into_iter().map(alert_text).collect(),
         pause: overview.pause,
+        pause_info: overview.pause_info.map(pause_info_dto),
         next_action_key: overview.next_action_key,
         next_action_reason: overview.next_action_reason,
     }
@@ -2384,6 +2414,23 @@ impl SessionHandle {
     /// Dismiss the week-260 score pause and keep playing the same career.
     pub fn dismiss_pause(&self) {
         self.lock().dismiss_pause();
+    }
+
+    /// Why the clock is stopped and what resumes it, or none while time runs.
+    pub fn pause_info(&self) -> Option<PauseInfoDto> {
+        self.lock().pause_info().map(pause_info_dto)
+    }
+
+    /// Which pauses stop the clock: `decisions` (the default) or `decisions_and_warnings`.
+    /// False for an unknown key.
+    pub fn set_pause_policy(&self, key: String) -> bool {
+        match cw_session::dto::PausePolicy::from_key(&key) {
+            Some(policy) => {
+                self.lock().set_pause_policy(policy);
+                true
+            }
+            None => false,
+        }
     }
 
     pub fn revision(&self) -> u64 {

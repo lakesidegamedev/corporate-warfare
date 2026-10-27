@@ -243,8 +243,8 @@ final class AppStore: ObservableObject {
         guard sessionReady else { return }
         let body: () async -> Void = {
             if let result = await self.engine.advance(weeks: weeks) {
-                if let pause = result.pause {
-                    self.statusLine = "Paused: \(pause)"
+                if result.pause != nil {
+                    self.statusLine = "Paused: \(self.overview?.pauseInfo?.title ?? "waiting for you")"
                 } else {
                     self.statusLine = "Advanced \(result.weeksAdvanced) week(s)."
                 }
@@ -287,7 +287,6 @@ final class AppStore: ObservableObject {
             while !Task.isCancelled {
                 await self.advance(weeks: 1, background: true)
                 if self.overview?.pause != nil { break }
-                if self.events.contains(where: { $0.mandatory }) { break }
                 let pace = max(self.runSpeed, 1)
                 try? await Task.sleep(nanoseconds: UInt64(1_000_000_000 / pace))
             }

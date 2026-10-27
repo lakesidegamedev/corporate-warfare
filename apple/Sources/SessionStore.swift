@@ -70,8 +70,14 @@ actor Engine {
         session?.overview()
     }
 
+    /// Whether the clock also stops for warnings, not only for decisions that need an answer.
+    static let pauseOnWarningsKey = "pauseOnWarnings"
+
     func advance(weeks: UInt32) -> AdvanceDto? {
-        session?.advance(weeks: weeks)
+        guard let session else { return nil }
+        let warnings = UserDefaults.standard.bool(forKey: Engine.pauseOnWarningsKey)
+        _ = session.setPausePolicy(key: warnings ? "decisions_and_warnings" : "decisions")
+        return session.advance(weeks: weeks)
     }
 
     func firms() -> [FirmDto] {

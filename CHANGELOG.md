@@ -81,6 +81,30 @@ heading.
   kept in the save file, so they are still there after you load a game instead of staying empty
   until the next week closes (older saves load as before and fill in at the next week).
 
+- Every pause now says why and how to continue. A banner at the time controls on every screen,
+  in the Compose and Apple apps, names the pause in plain words with one button: Answer opens
+  the exact card, Continue resumes for everything else.
+- A setting for which events stop the clock. By default time stops only for decisions that need
+  an answer (cards, board votes and deal deadlines close at hand, the five-year score). Turn on
+  Stop for warnings too to also stop for payment grace running out, a first strike or a rejected
+  union counter.
+
+### Fixed
+
+- Market snapshots now arrive from Android, Windows and Linux. Until now only the iPhone build sent
+  its anonymous market-balance snapshot; the Compose app had no sender. It now posts one every five
+  game weeks in the background, with a random install id and nothing else about you, and fails
+  silently. A new Analytics switch in Settings turns it off. The iPhone build already sends the
+  current snapshot format, since the snapshot comes straight from the engine.
+
+- No more stuck pauses. The clock could stay stopped with no way to continue: a card that was
+  answered or no longer applied (a union that settled, a strike that ended, a covenant that was
+  cured, a review that cleared, a bid that closed) kept the pause, a pause could name a card the
+  Inbox did not show, and a rival's card could stop the time bar. Cards that no longer describe the
+  world now retire on their own, a pause that can no longer be answered clears itself, rivals'
+  cards stay out of your Inbox and alerts, and the time bar only stops when the engine says so.
+  Answering a card always clears its pause.
+
 ## [1.7.0] - 2026-10-27
 
 Lone Star: supply chains you can own and contest, a shipping network, deeper corporate play, rivals with names and memories, and three new playable scenarios: Texas Oil Patch 1981, Silicon Valley 1995 and Ruhr and Rhine 1991 with currencies. Saves from 1.6 do not load in 1.7.0.

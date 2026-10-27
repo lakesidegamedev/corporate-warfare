@@ -345,8 +345,7 @@ pub fn state_triggers(world: &mut World, dataset: &Dataset) {
                 opens.push(("hostile_stake", *handle, region, false));
             }
             // Covenant warning: debt above sixty percent of tangible assets.
-            let tangible = firm.book.net_tangible_assets();
-            if !firm.loans.is_empty() && firm.book.debt() * 100 > tangible.max(0) * 60 {
+            if !firm.loans.is_empty() && covenant_breached(firm) {
                 opens.push(("covenant_warning", *handle, region, true));
             }
         }
@@ -465,6 +464,64 @@ pub fn auto_resolve(world: &mut World, dataset: &Dataset) {
     for (id, choice, _) in pending {
         let _ = respond(world, dataset, id, &choice);
     }
+}
+
+/// Mandatory cards that no longer describe the world retire without an effect. A union that
+/// settled through the bargaining command, a strike that ended, a covenant that was cured, a
+/// review that cleared or a bid that closed leaves a card nobody can usefully answer; left open
+/// it would pause the clock every week. A card whose definition is missing from the deck can
+/// never be shown, so it retires too. Retiring never moves money or changes any state.
+pub fn retire_stale_mandatory(world: &mut World, dataset: &Dataset) {
+    let stale: Vec<u64> = world
+        .events
+        .pending
+        .iter()
+        .filter(|event| !event.resolved && event.mandatory)
+        .filter(|event| dataset.event(&event.card).is_none() || !still_applies(world, event))
+        .map(|event| event.id)
+        .collect();
+    for id in stale {
+        if let Some(stored) = world.events.pending.iter_mut().find(|event| event.id == id) {
+            stored.resolved = true;
+        }
+        if world.pending_pause.as_deref() == Some(format!("event:{id}").as_str()) {
+            world.pending_pause = None;
+        }
+    }
+}
+
+/// Whether the situation a mandatory card announced still holds. Cards without a durable
+/// state behind them (bank surge, insurance catastrophe) always apply until answered.
+fn still_applies(world: &World, event: &PendingEvent) -> bool {
+    let firm = event
+        .subject_firm
+        .and_then(|handle| world.firms.get(handle));
+    match event.card.as_str() {
+        "wage_negotiation" => firm
+            .map(|f| matches!(f.union.state, BargainState::Demanding { .. }))
+            .unwrap_or(false),
+        "strike_escalation" => firm
+            .map(|f| matches!(f.union.state, BargainState::Striking { .. }))
+            .unwrap_or(false),
+        "covenant_warning" => firm
+            .map(|f| !f.loans.is_empty() && covenant_breached(f))
+            .unwrap_or(false),
+        "antitrust_review" => world.deals.iter().any(|(_, deal)| {
+            Some(deal.buyer) == event.subject_firm && deal.state == crate::state::DealState::Review
+        }),
+        "tender_offer" => event
+            .deal
+            .and_then(|deal| world.deals.get(deal))
+            .map(|deal| deal.state == crate::state::DealState::OfferOpen && !deal.investor_tendered)
+            .unwrap_or(false),
+        _ => true,
+    }
+}
+
+/// Debt above sixty percent of tangible assets.
+fn covenant_breached(firm: &crate::state::Firm) -> bool {
+    let tangible = firm.book.net_tangible_assets();
+    firm.book.debt() * 100 > tangible.max(0) * 60
 }
 
 /// Optional cards expire at their deadline with an explicit no-action outcome. They otherwise

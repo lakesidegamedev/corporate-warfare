@@ -20,11 +20,8 @@ struct OverviewView: View {
             .accessibilityLabel("Settings")
         } content: {
             if let overview = store.overview {
-                if let pause = overview.pause {
-                    DecisionBanner(text: "Paused: \(pause)")
-                    if pause == "five_year_score" {
-                        fiveYearScore
-                    }
+                if overview.pause == "five_year_score" {
+                    fiveYearScore
                 }
                 wealth(overview)
                 if !overview.nextActionKey.isEmpty {
@@ -248,6 +245,28 @@ enum MapDetailLevel: Int, CaseIterable, Identifiable {
     }
 }
 
+/// Which events stop the clock. Decisions that need an answer always do.
+struct PauseSettingsPanel: View {
+    @AppStorage(Engine.pauseOnWarningsKey) private var onWarnings = false
+
+    var body: some View {
+        Panel(padding: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow(text: "Time")
+                Toggle(isOn: $onWarnings) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Stop for warnings too").font(.callout).foregroundStyle(Theme.primaryText)
+                        Text("Time always stops for a decision that needs your answer. Turn this on to also stop when a company runs short of grace, or workers strike.")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.secondary)
+                    }
+                }
+                .tint(Theme.gold)
+            }
+        }
+    }
+}
+
 /// Map detail and animation settings.
 struct GraphicsSettingsPanel: View {
     @AppStorage(GraphicsKeys.mapDetail) private var detail = MapDetailLevel.high.rawValue
@@ -272,6 +291,62 @@ struct GraphicsSettingsPanel: View {
                     }
                 }
                 .tint(Theme.gold)
+            }
+        }
+    }
+}
+
+/// Why the clock is stopped and the one button that resumes it: Answer opens the exact card,
+/// every other pause has Continue. Shown beside the time controls on every screen.
+struct PauseBanner: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var showingCard = false
+
+    private var event: EventDto? {
+        guard let id = store.overview?.pauseInfo?.eventId else { return nil }
+        return store.events.first { $0.id == id }
+    }
+
+    var body: some View {
+        if let info = store.overview?.pauseInfo {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 10) {
+                    PixelIcon("pause")
+                    Text(info.title).font(.callout.weight(.semibold))
+                    Spacer(minLength: 6)
+                    if info.action == "answer", event != nil {
+                        Button(info.actionLabel) { showingCard = true }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Theme.gold)
+                            .foregroundStyle(Theme.ink)
+                            .disabled(store.isBusy)
+                    } else {
+                        Button("Continue") { Task { await store.continueCareer() } }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Theme.gold)
+                            .foregroundStyle(Theme.ink)
+                            .disabled(store.isBusy)
+                    }
+                }
+                Text(info.detail)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .foregroundStyle(.white)
+            .background(info.kind == "decision" ? Theme.warning : Theme.panelRaised)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .sheet(isPresented: Binding(get: { showingCard && event != nil }, set: { showingCard = $0 })) {
+                if let event {
+                    ScrollView {
+                        DecisionCard(event: event).padding(16)
+                    }
+                    .background(Theme.ink)
+                    .presentationDetents([.medium, .large])
+                }
             }
         }
     }
@@ -362,6 +437,7 @@ struct SettingsView: View {
                             }
                         }
                     }
+                    PauseSettingsPanel()
                     GraphicsSettingsPanel()
                     Panel(padding: 12) {
                         VStack(alignment: .leading, spacing: 10) {

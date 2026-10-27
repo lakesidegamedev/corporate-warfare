@@ -94,6 +94,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::economy::events_engine::state_triggers(world, dataset);
     crate::economy::events_engine::auto_resolve(world, dataset);
     crate::economy::events_engine::expire_optional(world, dataset);
+    crate::economy::events_engine::retire_stale_mandatory(world, dataset);
     world.clear_construction_orders();
     refresh_household_income(world, dataset);
     crate::economy::fiscal::close_week(world);
@@ -118,8 +119,12 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         world.weeks_with_past_due += 1;
     }
 
-    // Pause on decisions that cannot safely pass unattended. Event and score pauses were set
-    // earlier; these cover grace, the first strike and imminent deal or board deadlines.
+    // Pause on decisions that cannot safely pass unattended. A card waiting for an answer comes
+    // first, since it is the one pause only an answer clears; event and score pauses set earlier
+    // stand. Then grace, the first strike and imminent deal or board deadlines.
+    if world.pending_pause.is_none() {
+        world.pending_pause = card_pause(world, dataset);
+    }
     if world.pending_pause.is_none() {
         world.pending_pause = pause_reason(world);
     }
@@ -128,26 +133,6 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::economy::history::record_week(world);
     crate::economy::objectives::weekly(world, dataset);
     crate::economy::score::update(world, dataset);
-    if let Some(reason) = world.pending_pause.clone() {
-        return WeekOutcome {
-            week: world.tick,
-            pause: Some(reason),
-            restructured: Vec::new(),
-            liquidated: Vec::new(),
-        };
-    }
-    // Mandatory player decisions pause the clock. A rival's mandatory card is answered by the
-    // rival and never stops the player's time.
-    if let Some(event) = world.events.pending.iter().find(|event| {
-        !event.resolved
-            && event.mandatory
-            && event
-                .subject_firm
-                .map(|firm| crate::economy::events_engine::player_side(world, firm))
-                .unwrap_or(true)
-    }) {
-        world.pending_pause = Some(format!("event:{}", event.id));
-    }
     WeekOutcome {
         week: world.tick,
         pause: world.pending_pause.clone(),
@@ -162,6 +147,32 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
             .map(|(handle, _)| *handle)
             .collect(),
     }
+}
+
+/// The first mandatory card the player must answer. A rival's mandatory card is answered by
+/// the rival and never stops the player's time; a card the deck cannot show or that has no
+/// choice could never be answered, so it never pauses.
+fn card_pause(world: &World, dataset: &Dataset) -> Option<String> {
+    world
+        .events
+        .pending
+        .iter()
+        .find(|event| {
+            !event.resolved
+                && event.mandatory
+                && dataset
+                    .event(&event.card)
+                    .map(|card| !card.choices.is_empty())
+                    .unwrap_or(false)
+                && event
+                    .subject_firm
+                    .map(|firm| {
+                        world.firms.contains(firm)
+                            && crate::economy::events_engine::player_side(world, firm)
+                    })
+                    .unwrap_or(true)
+        })
+        .map(|event| format!("event:{}", event.id))
 }
 
 /// Reasons the clock must stop for the investor before the next week.

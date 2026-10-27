@@ -127,6 +127,7 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                     open(Page.Actions)
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
+                PauseBanner(store, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp))
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (page) {
                         Page.Map -> DesktopMap(store)
@@ -385,7 +386,7 @@ private fun DesktopMap(store: GameStore) {
             val alerts = buildList {
                 val due = store.events.count { it.mandatory }
                 if (due > 0) add("$due decision${if (due == 1) "" else "s"} waiting in the Inbox" to Palette.warning)
-                overview?.pause?.let { add("Paused: $it" to Palette.warning) }
+                overview?.pauseInfo?.let { add("Paused: ${it.title}" to Palette.warning) }
                 overview?.alerts?.forEach { add(it to Palette.warning) }
                 overview?.nextActionReason?.takeIf { it.isNotEmpty() }?.let { add(it to Palette.gold) }
             }
@@ -795,7 +796,6 @@ private fun DesktopPortfolio(store: GameStore) {
             Figure("Company cash", Format.compact(overview.firmCashCents, overview.primaryCurrency))
             Figure("Cash in 4 wk", Format.compact(overview.forecastFourWeekCents, overview.primaryCurrency))
             Spacer(Modifier.weight(1f))
-            overview.pause?.let { OutlinedButton(onClick = { store.dismissPause() }) { Text("Continue past: $it", color = Palette.primaryText, fontSize = 12.sp) } }
         }
         val fc = listOf(Col("Company", 1.8f), Col("Sector", 1f), Col("HQ", 1f), Col("Cash", 0.8f, true), Col("Equity", 0.8f, true), Col("Fair value", 0.9f, true), Col("Price", 0.7f, true), Col("Plants", 0.5f, true), Col("Votes", 0.6f, true), Col("Credit", 0.5f, true))
         Pane("Companies you control · click to manage", Modifier.fillMaxWidth().weight(1f), scroll = true) {

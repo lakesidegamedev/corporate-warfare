@@ -408,8 +408,8 @@ struct OnboardingView: View {
             valueRow("Current week", overview.weekLabel)
             valueRow("Company cash", Format.money(overview.firmCashCents, currency: overview.primaryCurrency))
             valueRow("Four-week forecast", Format.money(overview.forecastFourWeekCents, currency: overview.primaryCurrency))
-            if let pause = overview.pause {
-                PixelLabel("Paused: \(pause)", icon: "hand")
+            if let pause = overview.pauseInfo {
+                PixelLabel("Paused: \(pause.title)", icon: "hand")
                     .font(.callout)
                     .foregroundStyle(Theme.warning)
                     .fixedSize(horizontal: false, vertical: true)

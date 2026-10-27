@@ -103,6 +103,8 @@ pub enum Query {
     Market(u8, u16),
 }
 
+// One overview is built per query and returned by value, so boxing it would only add a hop.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Detail {
     /// The caller has no management right or completed diligence for this entity.
@@ -139,6 +141,8 @@ pub struct Session {
     /// The currency the investor's figures are shown in. A display choice: never saved or
     /// hashed, and the numeraire (0) until the player picks another.
     pub reporting_currency: u8,
+    /// Which pauses stop the clock. A play preference: never saved or hashed.
+    pub pause_policy: dto::PausePolicy,
 }
 
 /// Accepted and rejected rival commands by archetype, with rejection reasons. Rejected
@@ -270,6 +274,7 @@ impl Session {
             log,
             ai_log: AiLog::default(),
             reporting_currency: 0,
+            pause_policy: dto::PausePolicy::default(),
         })
     }
 
@@ -277,9 +282,11 @@ impl Session {
         &self.dataset.hash
     }
 
-    /// Dismiss an advisory pause (score sheet, default grace, strike, board or deal deadline).
-    /// Mandatory event pauses are answered through `RespondEvent`, never dismissed here.
+    /// Continue past a pause that is not a card waiting for an answer. A card pause is cleared
+    /// by answering it through `RespondEvent`; a pause whose card is gone, answered or no longer
+    /// the player's to answer is cleared here too, so nothing can leave the clock stopped.
     pub fn dismiss_pause(&mut self) {
+        self.heal_pause();
         let advisory = self
             .world
             .pending_pause
@@ -289,6 +296,182 @@ impl Session {
         if advisory {
             self.world.pending_pause = None;
         }
+    }
+
+    /// Choose which pauses stop the clock.
+    pub fn set_pause_policy(&mut self, policy: dto::PausePolicy) {
+        self.pause_policy = policy;
+        self.heal_pause();
+    }
+
+    /// Drop a pause that can no longer be acted on: a card pause whose card is answered, retired,
+    /// missing from the deck, without choices or now belonging to a rival, and a warning pause the
+    /// player has asked not to be stopped for.
+    fn heal_pause(&mut self) {
+        let Some(reason) = self.world.pending_pause.clone() else {
+            return;
+        };
+        let keep = if let Some(id) = reason.strip_prefix("event:") {
+            id.parse::<u64>()
+                .map(|id| self.card_pause_is_live(id))
+                .unwrap_or(false)
+        } else {
+            self.pause_policy == dto::PausePolicy::DecisionsAndWarnings
+                || !is_warning_pause(&reason)
+        };
+        if !keep {
+            self.world.pending_pause = None;
+        }
+    }
+
+    /// Whether the player can answer card `id` right now, which is what a card pause needs.
+    fn card_pause_is_live(&self, id: u64) -> bool {
+        let Some(event) = self
+            .world
+            .events
+            .pending
+            .iter()
+            .find(|event| event.id == id)
+        else {
+            return false;
+        };
+        if event.resolved {
+            return false;
+        }
+        let answerable = self
+            .dataset
+            .event(&event.card)
+            .map(|card| !card.choices.is_empty())
+            .unwrap_or(false);
+        let players = event
+            .subject_firm
+            .filter(|firm| self.world.firms.contains(*firm))
+            .map(|firm| cw_sim::economy::events_engine::player_side(&self.world, firm))
+            .unwrap_or(true);
+        answerable && players
+    }
+
+    /// The current pause in plain words with the action that resumes play, or `None` when the
+    /// clock is running.
+    pub fn pause_info(&self) -> Option<dto::PauseInfo> {
+        let reason = self.world.pending_pause.clone()?;
+        let firm_name = |handle: u64| {
+            self.world
+                .firms
+                .get(cw_core::ids::Handle(handle))
+                .map(|firm| firm.name.clone())
+                .unwrap_or_else(|| "your company".to_owned())
+        };
+        let parts: Vec<&str> = reason.split(':').collect();
+        let number = |index: usize| parts.get(index).and_then(|text| text.parse::<u64>().ok());
+        let proceed =
+            |kind: &str, title: String, detail: String, firm: Option<u64>| dto::PauseInfo {
+                reason: reason.clone(),
+                kind: kind.to_owned(),
+                title,
+                detail,
+                action: "continue".to_owned(),
+                action_label: "Continue".to_owned(),
+                event_id: None,
+                firm,
+            };
+        let info = match parts[0] {
+            "event" => {
+                let id = number(1)?;
+                let event = self.world.events.pending.iter().find(|event| event.id == id)?;
+                let title = self
+                    .dataset
+                    .event(&event.card)
+                    .map(|card| card.title.clone())
+                    .unwrap_or_else(|| event.card.clone());
+                let subject = event.subject_firm.map(|handle| handle.0);
+                dto::PauseInfo {
+                    reason: reason.clone(),
+                    kind: "decision".to_owned(),
+                    detail: match subject {
+                        Some(handle) => format!(
+                            "{} needs your answer before time can move on.",
+                            firm_name(handle)
+                        ),
+                        None => "This needs your answer before time can move on.".to_owned(),
+                    },
+                    title,
+                    action: "answer".to_owned(),
+                    action_label: "Answer".to_owned(),
+                    event_id: Some(id),
+                    firm: subject,
+                }
+            }
+            "default_grace" => {
+                let handle = number(1)?;
+                proceed(
+                    "warning",
+                    "Payment grace is running out".to_owned(),
+                    format!(
+                        "{} is behind on its bills and the grace period ends soon. Raise cash or cut costs, then continue.",
+                        firm_name(handle)
+                    ),
+                    Some(handle),
+                )
+            }
+            "strike" => {
+                let handle = number(1)?;
+                proceed(
+                    "warning",
+                    "Workers walked out".to_owned(),
+                    format!(
+                        "{} has a strike that began this week. Open the company to settle or wait it out, then continue.",
+                        firm_name(handle)
+                    ),
+                    Some(handle),
+                )
+            }
+            "board_vote" => {
+                let handle = number(1)?;
+                proceed(
+                    "deadline",
+                    "A board vote closes next week".to_owned(),
+                    format!(
+                        "{} has a board vote that closes within a week. Open the company's board to cast it, or continue to let it lapse.",
+                        firm_name(handle)
+                    ),
+                    Some(handle),
+                )
+            }
+            "deal_deadline" => {
+                let handle = number(1)?;
+                proceed(
+                    "deadline",
+                    "A deal deadline is close".to_owned(),
+                    format!(
+                        "A deal for {} reaches its deadline within a week. Open Deals to act, or continue to let it run.",
+                        firm_name(handle)
+                    ),
+                    Some(handle),
+                )
+            }
+            "union_counter_rejected" => proceed(
+                "warning",
+                "The union rejected your counter".to_owned(),
+                "Your counteroffer was turned down. Open the company's labour page to try again, or continue."
+                    .to_owned(),
+                None,
+            ),
+            "five_year_score" => proceed(
+                "milestone",
+                "Five-year score".to_owned(),
+                "Your five years are up and the score sheet is ready. Continue to keep playing the same career."
+                    .to_owned(),
+                None,
+            ),
+            _ => proceed(
+                "warning",
+                "The clock is paused".to_owned(),
+                "Continue to resume play.".to_owned(),
+                None,
+            ),
+        };
+        Some(info)
     }
 
     pub fn revision(&self) -> u64 {
@@ -678,6 +861,7 @@ impl Session {
         let mut advanced = 0;
         let mut pause = None;
         for _ in 0..weeks {
+            self.heal_pause();
             if let Some(reason) = self.world.pending_pause.clone() {
                 pause = Some(reason);
                 break;
@@ -685,7 +869,10 @@ impl Session {
             self.run_ai();
             let outcome = cw_sim::tick::advance(&mut self.world, &self.dataset);
             advanced += 1;
-            if let Some(reason) = outcome.pause {
+            self.heal_pause();
+            if outcome.pause.is_some()
+                && let Some(reason) = self.world.pending_pause.clone()
+            {
                 pause = Some(reason);
                 break;
             }
@@ -885,6 +1072,7 @@ impl Session {
             quarter_weeks,
             alerts,
             pause: world.pending_pause.clone(),
+            pause_info: self.pause_info(),
             next_action_key: advice.0,
             next_action_reason: advice.1,
         }
@@ -1167,6 +1355,7 @@ impl Session {
             log,
             ai_log: AiLog::default(),
             reporting_currency: 0,
+            pause_policy: dto::PausePolicy::default(),
         })
     }
 
@@ -1196,6 +1385,13 @@ impl Session {
         }
         Ok(session.canonical_hash())
     }
+}
+
+/// Pauses that only inform. The player may choose not to be stopped for these.
+fn is_warning_pause(reason: &str) -> bool {
+    reason.starts_with("default_grace:")
+        || reason.starts_with("strike:")
+        || reason == "union_counter_rejected"
 }
 
 fn decode_intent(text: &str) -> Option<CommandIntent> {

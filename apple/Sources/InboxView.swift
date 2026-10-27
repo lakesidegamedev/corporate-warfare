@@ -77,7 +77,7 @@ struct InboxView: View {
 }
 
 /// One decision with its choices as buttons.
-private struct DecisionCard: View {
+struct DecisionCard: View {
     @EnvironmentObject private var store: AppStore
     let event: EventDto
 

@@ -28,6 +28,7 @@ struct RootView: View {
             if let notice = store.recoveryNotice {
                 RecoveryNoticeBanner(text: notice)
             }
+            PauseBanner()
             TutorialPanel(compact: true)
             TabView(selection: $tab) {
                 MapHomeView()
