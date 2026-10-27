@@ -1,0 +1,705 @@
+{
+  "schema": 1,
+  "classification": "authored game content; fictional firms, no real brands, logos or claims about real companies",
+  "note": "The 1995 California economy: Silicon Valley chips, software and telecoms, Los Angeles studios and aerospace, the Central Valley farms and Bakersfield oil, ports on the Pacific, banks and venture-style financiers, and the rest of the economy around them. At least two named firms per industry. Carrier plants may pin the lanes they open on, so the Bakersfield pipeline to Los Angeles and Oakland exists from day one.",
+  "firms": [
+    {
+      "id": "bay_area_health",
+      "name": "Bay Area Health",
+      "industry": "healthcare",
+      "archetype": "brand_builder",
+      "region": "CA-OAK",
+      "recipe": "hospital",
+      "blocks": 5,
+      "public": true,
+      "cash_pct": 200
+    },
+    {
+      "id": "bay_broadcasting",
+      "name": "Bay Broadcasting",
+      "industry": "media",
+      "archetype": "vulture",
+      "region": "CA-SFO",
+      "recipe": "media_studio",
+      "blocks": 3,
+      "public": false
+    },
+    {
+      "id": "bay_builders",
+      "name": "Bay Builders",
+      "industry": "construction",
+      "archetype": "consolidator",
+      "region": "CA-SJC",
+      "recipe": "contractor",
+      "blocks": 6,
+      "public": true,
+      "cash_pct": 200
+    },
+    {
+      "id": "bay_refining",
+      "name": "Bay Refining",
+      "industry": "chemical_industries",
+      "archetype": "cost_leader",
+      "region": "CA-OAK",
+      "recipe": "refinery",
+      "blocks": 9,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "refinery",
+          "region": "CA-LAX",
+          "blocks": 6
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "bay_wireless",
+      "name": "Bay Wireless",
+      "industry": "telecommunications",
+      "archetype": "technologist",
+      "region": "CA-SJC",
+      "recipe": "wireless",
+      "blocks": 3,
+      "public": false
+    },
+    {
+      "id": "bayshore_microsystems",
+      "name": "Bayshore Microsystems",
+      "industry": "technology",
+      "archetype": "technologist",
+      "region": "CA-SJC",
+      "recipe": "hardware_maker",
+      "blocks": 8,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "hardware_maker",
+          "region": "CA-SBA",
+          "blocks": 3
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "burbank_pictures",
+      "name": "Burbank Pictures",
+      "industry": "media",
+      "archetype": "brand_builder",
+      "region": "CA-LAX",
+      "recipe": "media_studio",
+      "blocks": 6,
+      "public": true,
+      "cash_pct": 200
+    },
+    {
+      "id": "central_valley_growers",
+      "name": "Central Valley Growers",
+      "industry": "agriculture",
+      "archetype": "cost_leader",
+      "region": "CA-FRS",
+      "recipe": "farm_industrial",
+      "blocks": 14,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "food_processing",
+          "region": "CA-FRS",
+          "blocks": 3
+        }
+      ]
+    },
+    {
+      "id": "coastal_crude",
+      "name": "Coastal Crude Producers",
+      "industry": "extraction",
+      "archetype": "vulture",
+      "region": "CA-LAX",
+      "recipe": "oil_wells",
+      "blocks": 8,
+      "public": false,
+      "cash_pct": 300
+    },
+    {
+      "id": "coastal_generation",
+      "name": "Coastal Generation",
+      "industry": "energy",
+      "archetype": "vulture",
+      "region": "CA-ORA",
+      "recipe": "generator_gas",
+      "blocks": 3,
+      "public": false
+    },
+    {
+      "id": "cobalt_memory",
+      "name": "Cobalt Memory",
+      "industry": "technology",
+      "archetype": "cost_leader",
+      "region": "CA-SJC",
+      "recipe": "hardware_maker",
+      "blocks": 7,
+      "public": true
+    },
+    {
+      "id": "embarcadero_biologics",
+      "name": "Embarcadero Biologics",
+      "industry": "chemical_industries",
+      "archetype": "technologist",
+      "region": "CA-SFO",
+      "recipe": "pharma_plant",
+      "blocks": 5,
+      "public": true
+    },
+    {
+      "id": "embarcadero_ventures",
+      "name": "Embarcadero Ventures",
+      "industry": "financial",
+      "archetype": "vulture",
+      "region": "CA-SFO",
+      "recipe": "bank",
+      "blocks": 1,
+      "public": false
+    },
+    {
+      "id": "emporium_online",
+      "name": "Emporium Online",
+      "industry": "retail",
+      "archetype": "technologist",
+      "region": "CA-SJC",
+      "recipe": "ecommerce",
+      "blocks": 3,
+      "public": false
+    },
+    {
+      "id": "fontana_steel",
+      "name": "Fontana Steel",
+      "industry": "manufacturing",
+      "archetype": "consolidator",
+      "region": "CA-INL",
+      "recipe": "electric_arc",
+      "blocks": 6,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "metal_works",
+          "region": "CA-LAX",
+          "blocks": 3
+        }
+      ]
+    },
+    {
+      "id": "fremont_motors",
+      "name": "Fremont Motors",
+      "industry": "manufacturing",
+      "archetype": "brand_builder",
+      "region": "CA-OAK",
+      "recipe": "vehicle_assembly",
+      "blocks": 6,
+      "public": true
+    },
+    {
+      "id": "golden_gate_grocers",
+      "name": "Golden Gate Grocers",
+      "industry": "retail",
+      "archetype": "cost_leader",
+      "region": "CA-SFO",
+      "recipe": "grocer",
+      "blocks": 8,
+      "public": true
+    },
+    {
+      "id": "golden_gate_press",
+      "name": "Golden Gate Press",
+      "industry": "media",
+      "archetype": "consolidator",
+      "region": "CA-SFO",
+      "recipe": "publishing",
+      "blocks": 4,
+      "public": false,
+      "cash_pct": 200
+    },
+    {
+      "id": "golden_pacific_telecom",
+      "name": "Golden Pacific Telecom",
+      "industry": "telecommunications",
+      "archetype": "cost_leader",
+      "region": "CA-LAX",
+      "recipe": "network",
+      "blocks": 9,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "network",
+          "region": "CA-SJC",
+          "blocks": 4
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "golden_state_building",
+      "name": "Golden State Building Products",
+      "industry": "manufacturing",
+      "archetype": "vulture",
+      "region": "CA-SAC",
+      "recipe": "building_products",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "golden_state_national",
+      "name": "Golden State National",
+      "industry": "financial",
+      "archetype": "cost_leader",
+      "region": "CA-LAX",
+      "recipe": "bank",
+      "blocks": 1,
+      "public": true
+    },
+    {
+      "id": "golden_state_power",
+      "name": "Golden State Power",
+      "industry": "energy",
+      "archetype": "cost_leader",
+      "region": "CA-SAC",
+      "recipe": "generator_gas",
+      "blocks": 6,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "generator_renewable",
+          "region": "CA-INL",
+          "blocks": 2
+        }
+      ],
+      "cash_pct": 300
+    },
+    {
+      "id": "golden_state_rail",
+      "name": "Golden State Rail",
+      "industry": "logistics",
+      "archetype": "technologist",
+      "region": "CA-SAC",
+      "recipe": "freight_rail",
+      "blocks": 4,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "rail_terminal",
+          "region": "CA-LAX",
+          "blocks": 2
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "kern_county_ranches",
+      "name": "Kern County Ranches",
+      "industry": "agriculture",
+      "archetype": "consolidator",
+      "region": "CA-BAK",
+      "recipe": "mixed_farm",
+      "blocks": 10,
+      "public": false
+    },
+    {
+      "id": "kern_river_oil",
+      "name": "Kern River Oil",
+      "industry": "extraction",
+      "archetype": "cost_leader",
+      "region": "CA-BAK",
+      "recipe": "oil_wells",
+      "blocks": 11,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "gas_wells",
+          "region": "CA-SBA",
+          "blocks": 3
+        }
+      ],
+      "cash_pct": 300
+    },
+    {
+      "id": "milpitas_components",
+      "name": "Milpitas Components",
+      "industry": "manufacturing",
+      "archetype": "technologist",
+      "region": "CA-SJC",
+      "recipe": "component_works",
+      "blocks": 4,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "assembly",
+          "region": "CA-SDG",
+          "blocks": 3
+        }
+      ]
+    },
+    {
+      "id": "mission_peak_software",
+      "name": "Mission Peak Software",
+      "industry": "technology",
+      "archetype": "vulture",
+      "region": "CA-SFO",
+      "recipe": "software_studio",
+      "blocks": 3,
+      "public": false
+    },
+    {
+      "id": "mojave_aerospace",
+      "name": "Mojave Aerospace",
+      "industry": "defense",
+      "archetype": "technologist",
+      "region": "CA-LAX",
+      "recipe": "aerospace",
+      "blocks": 4,
+      "public": true
+    },
+    {
+      "id": "mojave_renewables",
+      "name": "Mojave Renewables",
+      "industry": "energy",
+      "archetype": "technologist",
+      "region": "CA-INL",
+      "recipe": "generator",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "orange_grove_development",
+      "name": "Orange Grove Development",
+      "industry": "real_estate",
+      "archetype": "brand_builder",
+      "region": "CA-ORA",
+      "recipe": "rental_property",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "overland_express",
+      "name": "Overland Express",
+      "industry": "logistics",
+      "archetype": "vulture",
+      "region": "CA-INL",
+      "recipe": "carrier",
+      "blocks": 2,
+      "public": false,
+      "cash_pct": 300
+    },
+    {
+      "id": "pacific_chemical",
+      "name": "Pacific Chemical",
+      "industry": "chemical_industries",
+      "archetype": "brand_builder",
+      "region": "CA-OAK",
+      "recipe": "chemical_plant",
+      "blocks": 6,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "plastics_plant",
+          "region": "CA-INL",
+          "blocks": 3
+        }
+      ]
+    },
+    {
+      "id": "pacific_gate_marine",
+      "name": "Pacific Gate Marine",
+      "industry": "logistics",
+      "archetype": "brand_builder",
+      "region": "CA-OAK",
+      "recipe": "shipping",
+      "blocks": 1,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "shipping",
+          "region": "CA-LAX",
+          "blocks": 1
+        },
+        {
+          "recipe": "port",
+          "region": "CA-SDG",
+          "blocks": 1
+        }
+      ],
+      "cash_pct": 900
+    },
+    {
+      "id": "pacific_valley_bank",
+      "name": "Pacific Valley Bank",
+      "industry": "financial",
+      "archetype": "consolidator",
+      "region": "CA-SFO",
+      "recipe": "bank",
+      "blocks": 1,
+      "public": true
+    },
+    {
+      "id": "palo_verde_systems",
+      "name": "Palo Verde Systems",
+      "industry": "technology",
+      "archetype": "consolidator",
+      "region": "CA-SMT",
+      "recipe": "it_services",
+      "blocks": 5,
+      "public": true
+    },
+    {
+      "id": "peninsula_properties",
+      "name": "Peninsula Properties",
+      "industry": "real_estate",
+      "archetype": "consolidator",
+      "region": "CA-SMT",
+      "recipe": "residential",
+      "blocks": 5,
+      "public": true
+    },
+    {
+      "id": "redwood_mutual",
+      "name": "Redwood Mutual Property",
+      "industry": "financial",
+      "archetype": "brand_builder",
+      "region": "CA-SFO",
+      "recipe": "property_insurer",
+      "blocks": 1,
+      "public": true
+    },
+    {
+      "id": "salinas_greens",
+      "name": "Salinas Greens",
+      "industry": "agriculture",
+      "archetype": "technologist",
+      "region": "CA-CCS",
+      "recipe": "farm",
+      "blocks": 8,
+      "public": false
+    },
+    {
+      "id": "san_diego_naval",
+      "name": "San Diego Naval Systems",
+      "industry": "defense",
+      "archetype": "vulture",
+      "region": "CA-SDG",
+      "recipe": "defense_plant",
+      "blocks": 3,
+      "public": false
+    },
+    {
+      "id": "san_joaquin_petroleum",
+      "name": "San Joaquin Petroleum",
+      "industry": "extraction",
+      "archetype": "consolidator",
+      "region": "CA-BAK",
+      "recipe": "oil_wells",
+      "blocks": 6,
+      "public": false
+    },
+    {
+      "id": "sand_hill_partners",
+      "name": "Sand Hill Partners",
+      "industry": "financial",
+      "archetype": "technologist",
+      "region": "CA-SMT",
+      "recipe": "bank",
+      "blocks": 1,
+      "public": false
+    },
+    {
+      "id": "santa_ana_modular",
+      "name": "Santa Ana Modular",
+      "industry": "construction",
+      "archetype": "vulture",
+      "region": "CA-ORA",
+      "recipe": "modular",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "sierra_broadband",
+      "name": "Sierra Broadband",
+      "industry": "telecommunications",
+      "archetype": "vulture",
+      "region": "CA-SAC",
+      "recipe": "broadband",
+      "blocks": 4,
+      "public": false,
+      "cash_pct": 200
+    },
+    {
+      "id": "sierra_infrastructure",
+      "name": "Sierra Infrastructure",
+      "industry": "construction",
+      "archetype": "cost_leader",
+      "region": "CA-SAC",
+      "recipe": "infrastructure",
+      "blocks": 5,
+      "public": false
+    },
+    {
+      "id": "sierra_trunk_lines",
+      "name": "Sierra Trunk Lines",
+      "industry": "logistics",
+      "archetype": "consolidator",
+      "region": "CA-BAK",
+      "recipe": "pipeline",
+      "blocks": 1,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "tank_farm",
+          "region": "CA-LAX",
+          "blocks": 1
+        },
+        {
+          "recipe": "tank_farm",
+          "region": "CA-OAK",
+          "blocks": 1
+        }
+      ],
+      "cash_pct": 900,
+      "serves": [
+        "CA-LAX",
+        "CA-OAK"
+      ]
+    },
+    {
+      "id": "southland_clinics",
+      "name": "Southland Clinics",
+      "industry": "healthcare",
+      "archetype": "technologist",
+      "region": "CA-LAX",
+      "recipe": "clinic",
+      "blocks": 8,
+      "public": false
+    },
+    {
+      "id": "southland_markets",
+      "name": "Southland Markets",
+      "industry": "retail",
+      "archetype": "consolidator",
+      "region": "CA-LAX",
+      "recipe": "grocer",
+      "blocks": 8,
+      "public": false,
+      "cash_pct": 200
+    },
+    {
+      "id": "sun_harvest_orchards",
+      "name": "Sun Harvest Orchards",
+      "industry": "agriculture",
+      "archetype": "brand_builder",
+      "region": "CA-STM",
+      "recipe": "mixed_farm",
+      "blocks": 12,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "food_processing",
+          "region": "CA-STM",
+          "blocks": 3
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "sunnyvale_circuit",
+      "name": "Sunnyvale Circuit",
+      "industry": "manufacturing",
+      "archetype": "cost_leader",
+      "region": "CA-SJC",
+      "recipe": "component_works",
+      "blocks": 6,
+      "public": true,
+      "cash_pct": 200
+    },
+    {
+      "id": "sunnyvale_defense",
+      "name": "Sunnyvale Defense Systems",
+      "industry": "defense",
+      "archetype": "cost_leader",
+      "region": "CA-SJC",
+      "recipe": "defense_plant",
+      "blocks": 4,
+      "public": true
+    },
+    {
+      "id": "sunset_auto",
+      "name": "Sunset Auto Group",
+      "industry": "retail",
+      "archetype": "brand_builder",
+      "region": "CA-ORA",
+      "recipe": "auto_dealer",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "torrey_pines_digital",
+      "name": "Torrey Pines Digital",
+      "industry": "technology",
+      "archetype": "consolidator",
+      "region": "CA-SDG",
+      "recipe": "software_studio",
+      "blocks": 3,
+      "public": false
+    },
+    {
+      "id": "trinity_timber",
+      "name": "Trinity Timber",
+      "industry": "extraction",
+      "archetype": "consolidator",
+      "region": "CA-RDD",
+      "recipe": "timber_forestry",
+      "blocks": 6,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "mine",
+          "region": "CA-SAC",
+          "blocks": 2
+        }
+      ]
+    },
+    {
+      "id": "valley_fertilizer",
+      "name": "Valley Fertilizer",
+      "industry": "chemical_industries",
+      "archetype": "vulture",
+      "region": "CA-FRS",
+      "recipe": "fertilizer_plant",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "valley_mart",
+      "name": "Valley Mart",
+      "industry": "retail",
+      "archetype": "brand_builder",
+      "region": "CA-SAC",
+      "recipe": "goods_store",
+      "blocks": 7,
+      "public": true
+    },
+    {
+      "id": "wilmington_petroleum",
+      "name": "Wilmington Petroleum",
+      "industry": "chemical_industries",
+      "archetype": "consolidator",
+      "region": "CA-LAX",
+      "recipe": "refinery",
+      "blocks": 7,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "gas_processing",
+          "region": "CA-BAK",
+          "blocks": 3
+        }
+      ],
+      "cash_pct": 200
+    }
+  ]
+}
