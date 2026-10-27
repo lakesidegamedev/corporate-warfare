@@ -30,6 +30,14 @@ heading.
   stock and commodity tables together; Stats runs in two columns; Inbox lists decisions beside the
   open one; Portfolio tables your companies and your shareholdings.
 
+- A new main menu on Android and desktop: a slowly turning globe with stars where each
+  scenario's region glows and is named as it turns into view, the sector icons flying in from
+  around the globe to settle under the logo, and Continue, New game, Load game, Settings and Quit.
+- A new-game screen: scenario cards with art (Great Lakes 2000 to play; Texas Oil Patch 1981,
+  Silicon Valley 1995 and Ruhr and Rhine 1991 coming soon), then how you start, difficulty, the
+  economy on day one and starting capital.
+- Load game: every save with its company, game week and date, newest first. Save now keeps its
+  own save beside the autosave instead of overwriting it.
 - Sliders instead of fixed choices, on every platform: a custom track with tick marks, a live
   readout of what the value means and nudge buttons for exact steps. Production target runs 0 to
   100 percent in 1 percent steps with the lots a week it gives; pricing against the market runs

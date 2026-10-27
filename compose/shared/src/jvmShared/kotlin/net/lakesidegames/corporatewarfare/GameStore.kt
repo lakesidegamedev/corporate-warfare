@@ -77,7 +77,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var marketRows by mutableStateOf<List<MarketRow>>(emptyList()); private set
 
     val selectedFirmDto: FirmDto? get() = firms.firstOrNull { it.handle == selectedFirm }
-    val hasAutosave: Boolean get() = autosave.exists()
+    val hasAutosave: Boolean get() = Saves.list(saveDir).isNotEmpty()
+
+    fun saveSlots(): List<SaveSlot> = Saves.list(saveDir)
 
     private val autosave get() = File(saveDir, "autosave.cwsave")
 
@@ -89,8 +91,28 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         ready = true
     }
 
+    /** A new career from the new-game screen. */
+    fun startCareer(options: uniffi.cw_ffi.NewGameDto) = perform {
+        val handle = withContext(engine) { SessionHandle.start(options) }
+        session = handle
+        selectedFirm = withContext(engine) { handle.overview().primaryFirm }
+        reload()
+        ready = true
+    }
+
+    /** Open a save from the load screen. */
+    fun loadSave(file: File) = perform {
+        val bytes = withContext(engine) { file.readBytes() }
+        val handle = withContext(engine) { importSave(bytes) }
+        session = handle
+        selectedFirm = withContext(engine) { handle.overview().primaryFirm }
+        reload()
+        ready = true
+    }
+
     fun continueCareer() = perform {
-        val bytes = withContext(engine) { autosave.readBytes() }
+        val latest = Saves.list(saveDir).firstOrNull()?.file ?: autosave
+        val bytes = withContext(engine) { latest.readBytes() }
         val handle = withContext(engine) { importSave(bytes) }
         session = handle
         selectedFirm = withContext(engine) { handle.overview().primaryFirm }
@@ -210,19 +232,24 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     }
 
     fun saveNow() = perform {
-        save()
+        save(manual = true)
         status = "Saved."
     }
 
-    private suspend fun save() {
+    private suspend fun save(manual: Boolean = false) {
         val handle = session ?: return
+        val now = overview
         withContext(engine) {
-            saveDir.mkdirs()
             val bytes = handle.exportSave()
-            // Write beside the save and swap, so an interrupted write never leaves half a file.
-            val temp = File(saveDir, "autosave.tmp")
-            temp.writeBytes(bytes)
-            temp.renameTo(autosave)
+            val info = SaveInfo(
+                company = now?.primaryName.orEmpty(),
+                week = now?.weekLabel.orEmpty(),
+                tick = now?.tick?.toInt() ?: 0,
+                savedAt = System.currentTimeMillis(),
+                autosave = !manual,
+            )
+            Saves.write(saveDir, if (manual) "save-${System.currentTimeMillis()}" else "autosave", bytes, info)
+            if (manual) Saves.prune(saveDir)
         }
     }
 

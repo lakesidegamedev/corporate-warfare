@@ -63,6 +63,16 @@ $MS ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.shp -simplif
 $MS ne_10m_roads/ne_10m_roads.shp -filter "(type=='Major Highway' || type=='Secondary Highway') && scalerank <= 6" \
   -filter-fields type -simplify 8% -o format=geojson "$OUT/world_roads.json"
 
+# Scenario areas for the menu globe: each scenario's states or country as one outline.
+$MS cb_2018_us_state_500k/cb_2018_us_state_500k.shp -filter "$PLAY.indexOf(STUSPS) >= 0" -dissolve \
+  -simplify 4% keep-shapes -each 'id="great-lakes-2000"' -o format=geojson "$OUT/scenario_great_lakes.json"
+$MS cb_2018_us_state_500k/cb_2018_us_state_500k.shp -filter '["TX","OK","LA"].indexOf(STUSPS) >= 0' -dissolve \
+  -simplify 4% keep-shapes -each 'id="texas-1981"' -o format=geojson "$OUT/scenario_texas.json"
+$MS cb_2018_us_state_500k/cb_2018_us_state_500k.shp -filter 'STUSPS == "CA"' -dissolve \
+  -simplify 4% keep-shapes -each 'id="silicon-valley-1995"' -o format=geojson "$OUT/scenario_california.json"
+$MS ne_10m_admin_0_countries.geojson -filter 'ADM0_A3 == "DEU"' -simplify 4% keep-shapes \
+  -each 'id="ruhr-rhine-1991"' -o format=geojson "$OUT/scenario_germany.json"
+
 # Region hubs: the anchor city of each region in content/geography/regions.json.
 python3 - "$ROOT/content/geography/regions.json" "$OUT/hubs.geojson" <<'EOF'
 import json, sys

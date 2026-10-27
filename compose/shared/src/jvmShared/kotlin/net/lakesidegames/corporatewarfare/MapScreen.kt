@@ -197,11 +197,12 @@ internal fun DrawScope.drawWorldMap(
     divisions: List<MapDivisionDto>,
     measurer: TextMeasurer,
     detailLevel: MapDetail = MapDetail.High,
+    space: Boolean = true,
 ) {
     val p = MapProjection(cam, size)
     val t = p.t
     val center = Offset(p.cx.toFloat(), p.cy.toFloat())
-    drawRect(Color(0xFF05090E))
+    if (space) drawRect(Color(0xFF05090E))
     // Ocean: the globe's disc, growing to fill the view as the map flattens.
     drawCircle(Color(0xFF0E2840), radius = (p.r / max(1 - t, 0.03)).toFloat(), center = center)
     if (t < 1) drawPath(p.lines(graticule), Palette.primaryText.copy(alpha = (0.06 * (1 - t)).toFloat()), style = Stroke(0.6f))

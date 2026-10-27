@@ -22,6 +22,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,6 +80,7 @@ private object DesktopUpdates : UpdatePlatform {
 }
 
 fun main() = application {
+    Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
     val settings = remember { AppSettings(File(saveDirectory(), "settings.properties")) }
     var loaded by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
