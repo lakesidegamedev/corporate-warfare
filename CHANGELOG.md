@@ -25,6 +25,21 @@ heading.
 
 ### Added
 
+- Texas Oil Patch, 1981 is playable (1.7 preview 6). It has its own map and its own start:
+  twenty-two economic regions built from whole counties across Texas, Oklahoma and Louisiana
+  (Houston, Beaumont and Port Arthur, Dallas and Fort Worth, San Antonio, Austin, the Permian
+  Basin, Corpus Christi, the Panhandle, El Paso, East Texas, the Rio Grande Valley, Lubbock,
+  Abilene, Oklahoma City, Tulsa, Cushing, western Oklahoma, New Orleans, Baton Rouge, Lake
+  Charles, Shreveport and Lafayette), sized from the 1980 census. Forty-five rival firms cover
+  the oil chain (independent drillers, refiners, petrochemicals, savings and loans lending against
+  rigs, farms and cattle, builders, carriers) and the pipelines from the Permian and Cushing to
+  the Gulf Coast and across Louisiana already exist on day one. Six Gulf ports are linked by sea
+  and by gateway legs to the Atlantic, the Caribbean and the Mississippi. Wages are lower and oil,
+  gas, fuel, power and farm output are dearer than in 2000, and world prices follow the Texas
+  1981 path with variance by default. You start with oil wells in the Permian. The Texas map
+  draws on the globe and the corridor map on Android, desktop and Apple. Every scenario now
+  picks its own regions, lanes, firms and starting balance from `content/scenarios/<id>/`;
+  Great Lakes 2000 plays exactly as before (its saved games and replays are unchanged).
 - Government and systemic events (1.7 preview 4). The party in power now also sets five
   market laws. The Workers' Party brings common carrier rules (owned pipelines, rail and ships
   sell spare capacity at a capped rate and may not lock a lane up with contracts), review of

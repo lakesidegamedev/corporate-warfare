@@ -473,7 +473,7 @@ mod tests {
     #[test]
     fn bad_values_each_get_a_clear_message() {
         let data = dataset();
-        let mut custom = CustomScenario::standard(&data, "texas-1981", "");
+        let mut custom = CustomScenario::standard(&data, "silicon-valley-1995", "");
         custom.difficulty = "brutal".into();
         custom.starting_capital_cents = Some(5);
         custom.rivals[0].size_pct = 900;

@@ -1,0 +1,624 @@
+{
+  "schema": 1,
+  "classification": "authored game content; fictional firms, no real brands, logos or claims about real companies",
+  "note": "The 1981 oil patch: independent drillers, refiners, pipelines, petrochemicals, savings and loans lending against rigs, farms and cattle, and the rest of the economy around them. At least two named firms per industry. Carrier plants may pin the lanes they open on, so the Permian, Cushing and Louisiana pipelines exist from day one.",
+  "firms": [
+    {
+      "id": "llano_estacado_farms",
+      "name": "Llano Estacado Farms",
+      "industry": "agriculture",
+      "archetype": "cost_leader",
+      "region": "TX-LUB",
+      "recipe": "farm_industrial",
+      "blocks": 12,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "mixed_farm",
+          "region": "TX-AMA",
+          "blocks": 5
+        }
+      ]
+    },
+    {
+      "id": "brazos_cattle",
+      "name": "Brazos Cattle and Grain",
+      "industry": "agriculture",
+      "archetype": "brand_builder",
+      "region": "TX-ABI",
+      "recipe": "mixed_farm",
+      "blocks": 14,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "food_processing",
+          "region": "TX-DFW",
+          "blocks": 3
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "red_river_wheat",
+      "name": "Red River Wheat Growers",
+      "industry": "agriculture",
+      "archetype": "consolidator",
+      "region": "OK-WES",
+      "recipe": "farm",
+      "blocks": 8,
+      "public": false
+    },
+    {
+      "id": "permian_wildcat",
+      "name": "Permian Wildcat Drilling",
+      "industry": "extraction",
+      "archetype": "vulture",
+      "region": "TX-PMB",
+      "recipe": "oil_wells",
+      "blocks": 10,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "gas_wells",
+          "region": "OK-WES",
+          "blocks": 4
+        }
+      ]
+    },
+    {
+      "id": "gulf_coast_exploration",
+      "name": "Gulf Coast Exploration",
+      "industry": "extraction",
+      "archetype": "technologist",
+      "region": "LA-LAF",
+      "recipe": "oil_wells",
+      "blocks": 9,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "gas_wells",
+          "region": "LA-LCH",
+          "blocks": 4
+        }
+      ]
+    },
+    {
+      "id": "mid_continent_crude",
+      "name": "Mid-Continent Crude Partners",
+      "industry": "extraction",
+      "archetype": "cost_leader",
+      "region": "OK-CSH",
+      "recipe": "oil_wells",
+      "blocks": 6,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "tank_farm",
+          "region": "OK-CSH",
+          "blocks": 2
+        },
+        {
+          "recipe": "oil_wells",
+          "region": "TX-AMA",
+          "blocks": 3
+        }
+      ]
+    },
+    {
+      "id": "anadarko_gas",
+      "name": "Anadarko Gas Partners",
+      "industry": "extraction",
+      "archetype": "consolidator",
+      "region": "OK-WES",
+      "recipe": "gas_wells",
+      "blocks": 10,
+      "public": true
+    },
+    {
+      "id": "piney_woods_lignite",
+      "name": "Piney Woods Lignite",
+      "industry": "extraction",
+      "archetype": "brand_builder",
+      "region": "TX-TYL",
+      "recipe": "coal_mine",
+      "blocks": 6,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "timber_forestry",
+          "region": "LA-SHV",
+          "blocks": 4
+        }
+      ]
+    },
+    {
+      "id": "lone_star_power",
+      "name": "Lone Star Power and Light",
+      "industry": "energy",
+      "archetype": "cost_leader",
+      "region": "TX-DFW",
+      "recipe": "generator_gas",
+      "blocks": 5,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "generator_coal",
+          "region": "TX-TYL",
+          "blocks": 3
+        }
+      ],
+      "cash_pct": 300
+    },
+    {
+      "id": "bayou_electric",
+      "name": "Bayou Electric Cooperative",
+      "industry": "energy",
+      "archetype": "vulture",
+      "region": "LA-BTR",
+      "recipe": "generator_gas",
+      "blocks": 5,
+      "public": false
+    },
+    {
+      "id": "sooner_generation",
+      "name": "Sooner Generation",
+      "industry": "energy",
+      "archetype": "brand_builder",
+      "region": "OK-OKC",
+      "recipe": "generator_gas",
+      "blocks": 4,
+      "public": true
+    },
+    {
+      "id": "bayport_refining",
+      "name": "Bayport Refining",
+      "industry": "chemical_industries",
+      "archetype": "cost_leader",
+      "region": "TX-HOU",
+      "recipe": "refinery",
+      "blocks": 12,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "refinery",
+          "region": "TX-BPA",
+          "blocks": 8
+        },
+        {
+          "recipe": "refinery",
+          "region": "LA-BTR",
+          "blocks": 8
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "sabine_petrochem",
+      "name": "Sabine Petrochemical",
+      "industry": "chemical_industries",
+      "archetype": "brand_builder",
+      "region": "TX-BPA",
+      "recipe": "chemical_plant",
+      "blocks": 9,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "plastics_plant",
+          "region": "TX-HOU",
+          "blocks": 4
+        }
+      ]
+    },
+    {
+      "id": "calcasieu_chemical",
+      "name": "Calcasieu Chemical",
+      "industry": "chemical_industries",
+      "archetype": "consolidator",
+      "region": "LA-LCH",
+      "recipe": "chemical_plant",
+      "blocks": 6,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "fertilizer_plant",
+          "region": "LA-BTR",
+          "blocks": 3
+        },
+        {
+          "recipe": "gas_processing",
+          "region": "LA-LAF",
+          "blocks": 3
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "panhandle_gas_processing",
+      "name": "Panhandle Gas Processing",
+      "industry": "chemical_industries",
+      "archetype": "technologist",
+      "region": "TX-AMA",
+      "recipe": "gas_processing",
+      "blocks": 5,
+      "public": false
+    },
+    {
+      "id": "longhorn_tubular",
+      "name": "Longhorn Tubular Steel",
+      "industry": "manufacturing",
+      "archetype": "cost_leader",
+      "region": "TX-TYL",
+      "recipe": "metal_works",
+      "blocks": 10,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "electric_arc",
+          "region": "TX-HOU",
+          "blocks": 3
+        }
+      ]
+    },
+    {
+      "id": "bluebonnet_assembly",
+      "name": "Bluebonnet Assembly",
+      "industry": "manufacturing",
+      "archetype": "technologist",
+      "region": "TX-DFW",
+      "recipe": "assembly",
+      "blocks": 7,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "component_works",
+          "region": "TX-AUS",
+          "blocks": 4
+        }
+      ]
+    },
+    {
+      "id": "alamo_builders",
+      "name": "Alamo Builders",
+      "industry": "construction",
+      "archetype": "consolidator",
+      "region": "TX-SAT",
+      "recipe": "contractor",
+      "blocks": 8,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "infrastructure",
+          "region": "TX-HOU",
+          "blocks": 4
+        }
+      ]
+    },
+    {
+      "id": "crescent_infrastructure",
+      "name": "Crescent Infrastructure",
+      "industry": "construction",
+      "archetype": "cost_leader",
+      "region": "LA-NOL",
+      "recipe": "infrastructure",
+      "blocks": 5,
+      "public": false
+    },
+    {
+      "id": "heartland_modular",
+      "name": "Heartland Modular Homes",
+      "industry": "construction",
+      "archetype": "vulture",
+      "region": "OK-OKC",
+      "recipe": "modular",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "permian_trunk_lines",
+      "name": "Permian Trunk Lines",
+      "industry": "logistics",
+      "archetype": "consolidator",
+      "region": "TX-PMB",
+      "recipe": "pipeline",
+      "blocks": 1,
+      "public": true,
+      "serves": [
+        "TX-HOU"
+      ],
+      "extra_plants": [
+        {
+          "recipe": "pipeline",
+          "region": "OK-CSH",
+          "blocks": 1,
+          "serves": [
+            "TX-HOU"
+          ]
+        },
+        {
+          "recipe": "tank_farm",
+          "region": "TX-HOU",
+          "blocks": 1
+        }
+      ],
+      "cash_pct": 900
+    },
+    {
+      "id": "bayou_pipeline",
+      "name": "Bayou Pipeline Company",
+      "industry": "logistics",
+      "archetype": "cost_leader",
+      "region": "LA-LAF",
+      "recipe": "pipeline",
+      "blocks": 1,
+      "public": false,
+      "serves": [
+        "LA-BTR"
+      ],
+      "extra_plants": [
+        {
+          "recipe": "pipeline",
+          "region": "TX-BPA",
+          "blocks": 1,
+          "serves": [
+            "TX-HOU"
+          ]
+        }
+      ],
+      "cash_pct": 900
+    },
+    {
+      "id": "gulfline_marine",
+      "name": "Gulfline Marine",
+      "industry": "logistics",
+      "archetype": "brand_builder",
+      "region": "TX-HOU",
+      "recipe": "shipping",
+      "blocks": 1,
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "shipping",
+          "region": "LA-NOL",
+          "blocks": 1
+        },
+        {
+          "recipe": "port",
+          "region": "TX-CRP",
+          "blocks": 1
+        }
+      ],
+      "cash_pct": 900
+    },
+    {
+      "id": "lone_star_rail",
+      "name": "Lone Star Rail Freight",
+      "industry": "logistics",
+      "archetype": "technologist",
+      "region": "TX-DFW",
+      "recipe": "freight_rail",
+      "blocks": 4,
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "rail_terminal",
+          "region": "TX-HOU",
+          "blocks": 2
+        }
+      ],
+      "cash_pct": 200
+    },
+    {
+      "id": "red_river_freight",
+      "name": "Red River Freight Lines",
+      "industry": "logistics",
+      "archetype": "vulture",
+      "region": "OK-TUL",
+      "recipe": "carrier",
+      "blocks": 2,
+      "public": false,
+      "cash_pct": 300
+    },
+    {
+      "id": "bluebonnet_grocers",
+      "name": "Bluebonnet Grocers",
+      "industry": "retail",
+      "archetype": "cost_leader",
+      "region": "TX-SAT",
+      "recipe": "grocer",
+      "blocks": 8,
+      "public": true
+    },
+    {
+      "id": "sooner_goods",
+      "name": "Sooner Dry Goods",
+      "industry": "retail",
+      "archetype": "consolidator",
+      "region": "OK-TUL",
+      "recipe": "goods_store",
+      "blocks": 8,
+      "public": false,
+      "cash_pct": 200
+    },
+    {
+      "id": "sunbelt_auto",
+      "name": "Sunbelt Auto Mart",
+      "industry": "retail",
+      "archetype": "brand_builder",
+      "region": "TX-DFW",
+      "recipe": "auto_dealer",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "bayou_health",
+      "name": "Bayou Health Network",
+      "industry": "healthcare",
+      "archetype": "brand_builder",
+      "region": "TX-HOU",
+      "recipe": "hospital",
+      "blocks": 5,
+      "public": true
+    },
+    {
+      "id": "prairie_clinics",
+      "name": "Prairie Clinics",
+      "industry": "healthcare",
+      "archetype": "technologist",
+      "region": "OK-OKC",
+      "recipe": "clinic",
+      "blocks": 8,
+      "public": false
+    },
+    {
+      "id": "lone_star_national",
+      "name": "Lone Star National Bank",
+      "industry": "financial",
+      "archetype": "consolidator",
+      "region": "TX-HOU",
+      "recipe": "bank",
+      "blocks": 1,
+      "public": true
+    },
+    {
+      "id": "cimarron_plains_bank",
+      "name": "Cimarron Plains Bank",
+      "industry": "financial",
+      "archetype": "vulture",
+      "region": "OK-OKC",
+      "recipe": "bank",
+      "blocks": 1,
+      "public": false
+    },
+    {
+      "id": "crescent_savings",
+      "name": "Crescent Savings and Loan",
+      "industry": "financial",
+      "archetype": "cost_leader",
+      "region": "LA-NOL",
+      "recipe": "bank",
+      "blocks": 1,
+      "public": false
+    },
+    {
+      "id": "alamo_savings",
+      "name": "Alamo Savings and Loan",
+      "industry": "financial",
+      "archetype": "brand_builder",
+      "region": "TX-SAT",
+      "recipe": "bank",
+      "blocks": 1,
+      "public": false
+    },
+    {
+      "id": "gulf_mutual_property",
+      "name": "Gulf Mutual Property",
+      "industry": "financial",
+      "archetype": "technologist",
+      "region": "TX-HOU",
+      "recipe": "property_insurer",
+      "blocks": 1,
+      "public": true
+    },
+    {
+      "id": "frontier_instruments",
+      "name": "Frontier Instruments",
+      "industry": "technology",
+      "archetype": "technologist",
+      "region": "TX-DFW",
+      "recipe": "hardware_maker",
+      "blocks": 6,
+      "public": true
+    },
+    {
+      "id": "cactus_software",
+      "name": "Cactus Software",
+      "industry": "technology",
+      "archetype": "vulture",
+      "region": "TX-AUS",
+      "recipe": "software_studio",
+      "blocks": 6,
+      "public": false
+    },
+    {
+      "id": "lone_star_press",
+      "name": "Lone Star Press Group",
+      "industry": "media",
+      "archetype": "brand_builder",
+      "region": "TX-DFW",
+      "recipe": "publishing",
+      "blocks": 5,
+      "public": true,
+      "cash_pct": 200
+    },
+    {
+      "id": "gulf_broadcast",
+      "name": "Gulf Broadcast Network",
+      "industry": "media",
+      "archetype": "consolidator",
+      "region": "LA-NOL",
+      "recipe": "media_studio",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "southwestern_telephone",
+      "name": "Southwestern Telephone",
+      "industry": "telecommunications",
+      "archetype": "cost_leader",
+      "region": "TX-DFW",
+      "recipe": "network",
+      "blocks": 8,
+      "public": true
+    },
+    {
+      "id": "sooner_telephone",
+      "name": "Sooner Telephone",
+      "industry": "telecommunications",
+      "archetype": "technologist",
+      "region": "OK-OKC",
+      "recipe": "network",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "sunbelt_properties",
+      "name": "Sunbelt Properties",
+      "industry": "real_estate",
+      "archetype": "consolidator",
+      "region": "TX-HOU",
+      "recipe": "residential",
+      "blocks": 5,
+      "public": true
+    },
+    {
+      "id": "lone_star_towers",
+      "name": "Lone Star Towers",
+      "industry": "real_estate",
+      "archetype": "brand_builder",
+      "region": "TX-DFW",
+      "recipe": "rental_property",
+      "blocks": 4,
+      "public": false
+    },
+    {
+      "id": "fort_worth_aerospace",
+      "name": "Fort Worth Aerospace",
+      "industry": "defense",
+      "archetype": "technologist",
+      "region": "TX-DFW",
+      "recipe": "aerospace",
+      "blocks": 4,
+      "public": true
+    },
+    {
+      "id": "sooner_ordnance",
+      "name": "Sooner Ordnance",
+      "industry": "defense",
+      "archetype": "vulture",
+      "region": "OK-TUL",
+      "recipe": "munitions",
+      "blocks": 3,
+      "public": false
+    }
+  ]
+}

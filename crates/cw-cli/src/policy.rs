@@ -42,10 +42,8 @@ pub const PLAYER_COMMAND_HIGH: u64 = 0x00C0_FFFF_0000_0000;
 /// Reference policies decide every four weeks, like the rival strategic cohorts.
 pub const CADENCE_WEEKS: u32 = 4;
 
-/// Founder bootstrap: Central Ohio is the guided start's home region; the farm is the
-/// documented starter strategy (see `content/initial-balance.json`).
-const FOUNDER_REGION: &str = "OH-CEN";
-const FOUNDER_RECIPE: &str = "farm";
+/// Founder bootstrap: the scenario's opening region and starter strategy (a farm in Great
+/// Lakes 2000) are the guided start's home and plant, named in `cw_data::SCENARIO_CONTENT`.
 const FOUNDER_NAME: &str = "Lakeside Holdings";
 /// Fund the founding farm plant plus working capital and room to build, matching the guided
 /// firm's opening assets and cash without its opening loan.
@@ -319,10 +317,15 @@ impl PolicyRunner {
     }
 
     fn found_firm(&mut self, session: &mut Session) {
-        let Some(region) = session.world.region_index(FOUNDER_REGION) else {
+        let Some(region) = session.world.region_index(&session.dataset.player_region) else {
             return;
         };
-        let Some(recipe) = session.dataset.recipe_index.get(FOUNDER_RECIPE).copied() else {
+        let Some(recipe) = session
+            .dataset
+            .recipe_index
+            .get(&session.dataset.player_recipe)
+            .copied()
+        else {
             return;
         };
         self.submit(

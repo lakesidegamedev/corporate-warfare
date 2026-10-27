@@ -64,8 +64,8 @@ enum class MapLayer(val title: String) { Presence("Your divisions"), Room("Room 
  */
 @Composable
 fun WorldMapView(store: GameStore, layer: MapLayer, selected: String?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
-    val map = WorldMap.shared
-    var camera by remember { mutableStateOf<MapCamera?>(null) }
+    val map = WorldMap.forRegions(store.boards.map { it.code })
+    var camera by remember(map) { mutableStateOf<MapCamera?>(null) }
     var viewSize by remember { mutableStateOf(Size.Zero) }
     val scope = rememberCoroutineScope()
     var flight by remember { mutableStateOf<Job?>(null) }

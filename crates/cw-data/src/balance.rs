@@ -260,6 +260,48 @@ pub struct Balance {
     pub fixture_land_rent_cents_weekly: i64,
 }
 
+/// A scenario's starting balance on top of the shared products and strategies: the wage level
+/// and the opening reference price of any product whose price differs from the base file.
+/// Strategies, inputs and outputs are universal; only money levels are the scenario's.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct BalanceOverlay {
+    #[serde(default)]
+    pub classification: String,
+    #[serde(default)]
+    pub baseline_weekly_wage_cents: Option<[i64; 3]>,
+    #[serde(default)]
+    pub fixture_land_rent_cents_weekly: Option<i64>,
+    #[serde(default)]
+    pub maintenance_annual_bps: Option<i32>,
+    /// Product id to opening reference price in cents. Unknown ids are an error.
+    #[serde(default)]
+    pub reference_price_cents: BTreeMap<String, i64>,
+}
+
+impl BalanceOverlay {
+    /// Apply to a parsed balance, or name the product the overlay got wrong.
+    pub fn apply(&self, balance: &mut Balance) -> Result<(), String> {
+        if let Some(wages) = self.baseline_weekly_wage_cents {
+            balance.baseline_weekly_wage_cents = wages;
+        }
+        if let Some(rent) = self.fixture_land_rent_cents_weekly {
+            balance.fixture_land_rent_cents_weekly = rent;
+        }
+        if let Some(bps) = self.maintenance_annual_bps {
+            balance.maintenance_annual_bps = bps;
+        }
+        for (id, price) in &self.reference_price_cents {
+            let product = balance
+                .products
+                .iter_mut()
+                .find(|product| &product.id == id)
+                .ok_or_else(|| format!("scenario balance prices unknown product {id}"))?;
+            product.reference_price_cents = *price;
+        }
+        Ok(())
+    }
+}
+
 impl Balance {
     /// Oldest balance schema the loader still reads. Schema 1 had no by-products and no spoilage;
     /// both default to none, so a schema 1 file migrates unchanged in meaning. Schema 3 adds storage

@@ -15,8 +15,12 @@ pub struct StateInfo {
     pub code: String,
     pub name: String,
     pub capital_hub: String,
-    /// Census 2000 resident population.
+    /// Census 2000 resident population (Great Lakes 2000).
+    #[serde(default)]
     pub population_2000: i64,
+    /// Census 1980 resident population (Texas Oil Patch 1981).
+    #[serde(default)]
+    pub population_1980: i64,
     /// Primary then secondary specialized sector type.
     #[serde(default)]
     pub specialization: Vec<String>,
@@ -38,15 +42,30 @@ pub struct Region {
     pub land_index_bps: i32,
     /// Opening worker organisation, from rounded circa-2000 union membership.
     pub opening_organisation_bps: i32,
-    /// Census 2000 resident population, for display.
+    /// Census 2000 resident population, for display (Great Lakes 2000).
     #[serde(default)]
     pub population_2000: i64,
+    /// Census 1980 resident population, for display (Texas Oil Patch 1981).
+    #[serde(default)]
+    pub population_1980: i64,
     /// Authored condition indices that shape costs and productivity in the state.
     #[serde(default)]
     pub conditions: Conditions,
 }
 
+impl StateInfo {
+    /// Resident population at the census of the scenario's start decade.
+    pub fn population(&self) -> i64 {
+        self.population_2000.max(self.population_1980)
+    }
+}
+
 impl Region {
+    /// Resident population at the census of the scenario's start decade.
+    pub fn population(&self) -> i64 {
+        self.population_2000.max(self.population_1980)
+    }
+
     /// The state this region belongs to.
     pub fn state(&self) -> &str {
         self.states.first().map(String::as_str).unwrap_or("")

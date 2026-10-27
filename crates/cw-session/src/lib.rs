@@ -164,8 +164,8 @@ impl Session {
         mut config: ScenarioConfig,
         custom: &cw_data::CustomScenario,
     ) -> Result<Session, String> {
-        let dataset =
-            Dataset::load().map_err(|_| "The game data could not be loaded".to_owned())?;
+        let dataset = Dataset::load_scenario(&custom.base_scenario_id)
+            .map_err(|_| "The game data could not be loaded".to_owned())?;
         let errors = custom.validate(&dataset);
         if !errors.is_empty() {
             return Err(errors.join("; "));
@@ -180,12 +180,22 @@ impl Session {
         Self::create_with(config, Some(custom)).map_err(|e| format!("{e:?}"))
     }
 
+    /// The dataset a career plays on. A config that names the hash it was recorded on gets the
+    /// bundled dataset with that hash; a new career gets the dataset of the scenario its price
+    /// setup names, and the default scenario's when it names none.
+    fn dataset_for(config: &ScenarioConfig) -> Result<Dataset, DomainError> {
+        let fault = || DomainError::InternalFault { diagnostic: 1 };
+        if !config.dataset_hash.is_empty() {
+            return Dataset::for_hash(&config.dataset_hash).ok_or_else(fault);
+        }
+        Dataset::load_scenario(&config.prices.scenario_id).map_err(|_| fault())
+    }
+
     fn create_with(
         config: ScenarioConfig,
         custom: Option<&cw_data::CustomScenario>,
     ) -> Result<Session, DomainError> {
-        let mut dataset =
-            Dataset::load().map_err(|_| DomainError::InternalFault { diagnostic: 1 })?;
+        let mut dataset = Self::dataset_for(&config)?;
         if !config.dataset_hash.is_empty() && config.dataset_hash != dataset.hash {
             return Err(DomainError::InvalidSave {
                 detail: cw_core::error::SaveFault::MalformedPayload,
@@ -1051,12 +1061,9 @@ impl Session {
         }
         let (world, career_id, custom) = save::decode_with(bytes)?;
         let mut dataset =
-            Dataset::load().map_err(|_| DomainError::InternalFault { diagnostic: 2 })?;
-        if world.dataset_hash != dataset.hash {
-            return Err(DomainError::InvalidSave {
+            Dataset::for_hash(&world.dataset_hash).ok_or(DomainError::InvalidSave {
                 detail: cw_core::error::SaveFault::MalformedPayload,
-            });
-        }
+            })?;
         if let Some(custom) = &custom {
             if !custom.validate(&dataset).is_empty() {
                 return Err(DomainError::InvalidSave {

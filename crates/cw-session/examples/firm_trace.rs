@@ -3,6 +3,8 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let industry: String = args.get(1).cloned().unwrap_or("agriculture".into());
     let seed: u64 = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(3);
+    // Optional fourth argument: a scenario id; the default plays the default scenario.
+    let scenario = args.get(3).cloned().unwrap_or_default();
     let config = cw_session::ScenarioConfig {
         seed,
         scenario: cw_sim::state::ScenarioKind::Guided,
@@ -11,7 +13,10 @@ fn main() {
         difficulty: cw_data::Difficulty::Standard,
         economy_start: Default::default(),
         starting_capital_cents: None,
-        prices: Default::default(),
+        prices: cw_session::PriceSetup {
+            scenario_id: scenario,
+            path: None,
+        },
     };
     let mut session = cw_session::Session::create(config).unwrap();
     for week in 0..=260u32 {

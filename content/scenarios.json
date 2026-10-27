@@ -25,7 +25,7 @@
       "summary": "Oil at forty dollars a barrel, banks lending against every rig, and the 1982 bust a year away. Drill, refine and survive the savings-and-loan crash.",
       "center_lon_milli": -96000,
       "center_lat_milli": 32000,
-      "available": false,
+      "available": true,
       "region": "Texas, Oklahoma and Louisiana, United States",
       "image": "scenario-texas-1981",
       "currency": "US dollar",

@@ -52,6 +52,8 @@ struct WorldMapView: View {
     let layer: MapLayer
     let divisions: [DivisionMarker]
     var lanes: [LaneDto] = []
+    /// The career's region codes, which say which scenario's map to draw.
+    var regionCodes: [String] = []
     @Binding var selected: String?
 
     @State private var camera: MapCamera?
@@ -59,7 +61,7 @@ struct WorldMapView: View {
     @State private var lastPinch: CGFloat = 1
     @State private var flight: Task<Void, Never>?
 
-    private let map = WorldMap.shared
+    private var map: WorldMap { WorldMap.forRegions(regionCodes) }
     private static let space = Color(red: 0.020, green: 0.035, blue: 0.055)
     private static let outsideLand = Color(red: 0.145, green: 0.157, blue: 0.169)
     private static let outsideBorder = Color(red: 0.333, green: 0.349, blue: 0.365)
@@ -78,7 +80,7 @@ struct WorldMapView: View {
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
-            let current = camera ?? MapCamera.scenario(in: size)
+            let current = camera ?? MapCamera.scenario(in: size, map: map)
             Canvas { context, size in
                 draw(in: &context, projection: MapProjection(camera: current, size: size), camera: current)
             }
@@ -108,7 +110,7 @@ struct WorldMapView: View {
             .onTapGesture(count: 2) {
                 let target = current.zoom > MapCamera.flatStart
                     ? MapCamera(lon: current.lon, lat: current.lat, zoom: 1)
-                    : MapCamera.scenario(in: size)
+                    : MapCamera.scenario(in: size, map: map)
                 fly(from: current, to: target)
             }
             .onTapGesture(coordinateSpace: .local) { location in
@@ -127,7 +129,7 @@ struct WorldMapView: View {
             .accessibilityAction(named: "Show the whole globe") {
                 fly(from: current, to: MapCamera(lon: current.lon, lat: current.lat, zoom: 1))
             }
-            .accessibilityAction(named: "Show the scenario") { fly(from: current, to: MapCamera.scenario(in: size)) }
+            .accessibilityAction(named: "Show the scenario") { fly(from: current, to: MapCamera.scenario(in: size, map: map)) }
         }
     }
 
@@ -141,7 +143,7 @@ struct WorldMapView: View {
                       label: current.zoom > MapCamera.flatStart ? "Show the whole globe" : "Show the scenario") {
                 let target = current.zoom > MapCamera.flatStart
                     ? MapCamera(lon: current.lon, lat: current.lat, zoom: 1)
-                    : MapCamera.scenario(in: size)
+                    : MapCamera.scenario(in: size, map: map)
                 fly(from: current, to: target)
             }
         }

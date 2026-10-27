@@ -30,19 +30,24 @@ data class WorldMapFile(
     val roads: List<List<Int>> = emptyList(),
     val states: List<Area>,
     val regions: List<RegionArea>,
-    val counties: List<Rings> = emptyList(),
+    val counties: List<County> = emptyList(),
     val lakes: List<Rings>,
     val rivers: List<Lines> = emptyList(),
     val interstates: List<Lines>,
     val cities: List<City>,
     val hubs: Map<String, List<Double>>,
+    /** The states each scenario plays in; the first is the default scenario. */
+    val scenarios: List<ScenarioStates> = emptyList(),
 ) {
     @Serializable data class Country(val code: String, val name: String, val rings: List<List<Int>>)
     @Serializable data class Area(val code: String, val name: String, val play: Boolean, val rings: List<List<Int>>)
     @Serializable data class RegionArea(val code: String, val state: String, val name: String, val rings: List<List<Int>>)
     @Serializable data class Rings(val rings: List<List<Int>>)
+    @Serializable data class County(val state: String = "", val rings: List<List<Int>>)
+    @Serializable data class ScenarioStates(val id: String, val states: List<String>)
     @Serializable data class ScenarioArea(val id: String, val rings: List<List<Int>>)
-    @Serializable data class Lines(val lines: List<List<Int>>)
+    /** [scenario] names the scenario a layer was added for; none means the default scenario's. */
+    @Serializable data class Lines(val lines: List<List<Int>>, val scenario: String? = null)
     @Serializable data class City(
         val name: String,
         val region: String,
@@ -51,6 +56,7 @@ data class WorldMapFile(
         val y: Int,
         val population: Int,
         val capital: Boolean,
+        val scenario: String? = null,
     )
 }
 
@@ -87,30 +93,43 @@ class GeoRing(flat: List<Int>) {
     }
 }
 
-/** Geometry turned into sphere points once. */
-class WorldMap private constructor(val file: WorldMapFile) {
+/**
+ * Geometry turned into sphere points once. A map is for one scenario: its playable states,
+ * regions, counties, roads, rivers and cities. A file with no scenario list shows everything.
+ */
+class WorldMap private constructor(val file: WorldMapFile, val scenarioId: String?) {
     class Feature(val code: String, val name: String, val rings: List<GeoRing>)
 
+    private val scenarioStates: Set<String>? =
+        scenarioId?.let { id -> file.scenarios.firstOrNull { it.id == id }?.states?.toSet() }
+    private val defaultScenario: String? = file.scenarios.firstOrNull()?.id
+    private fun isPlay(area: WorldMapFile.Area) = scenarioStates?.contains(area.code) ?: area.play
+    /** A layer tagged for another scenario is hidden; an untagged one belongs to the default. */
+    private fun owns(tag: String?) = scenarioStates == null || (tag ?: defaultScenario) == scenarioId
+
     val countries = file.countries.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
-    val playStates = file.states.filter { it.play }.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
-    val contextStates = file.states.filter { !it.play }.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
-    val regions = file.regions.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
+    val playStates = file.states.filter { isPlay(it) }.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
+    val contextStates = file.states.filter { !isPlay(it) }.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
+    val regions = file.regions.filter { scenarioStates?.contains(it.state) ?: true }
+        .map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
     val provinces = file.provinces.map(::GeoRing)
     /** Each scenario's area as outlines, for the menu globe. */
     val scenarioAreas: List<Pair<String, List<GeoRing>>> = file.scenarioAreas.map { it.id to it.rings.map(::GeoRing) }
     val roads = file.roads.map(::GeoRing)
-    val counties = file.counties.flatMap { c -> c.rings.map(::GeoRing) }
+    val counties = file.counties.filter { c -> scenarioStates?.contains(c.state) ?: true }
+        .flatMap { c -> c.rings.map(::GeoRing) }
     val lakes = file.lakes.flatMap { l -> l.rings.map(::GeoRing) }
-    val rivers = file.rivers.flatMap { r -> r.lines.map(::GeoRing) }
-    val interstates = file.interstates.flatMap { r -> r.lines.map(::GeoRing) }
+    val rivers = file.rivers.filter { owns(it.scenario) }.flatMap { r -> r.lines.map(::GeoRing) }
+    val interstates = file.interstates.filter { owns(it.scenario) }.flatMap { r -> r.lines.map(::GeoRing) }
     val hubs: Map<String, GeoRing> = file.hubs.filterValues { it.size == 2 }
         .mapValues { GeoRing.point(it.value[0] / 10_000, it.value[1] / 10_000) }
-    val cities: List<Pair<WorldMapFile.City, GeoRing>> = file.cities.map { it to GeoRing.point(it.x / 10_000.0, it.y / 10_000.0) }
+    val cities: List<Pair<WorldMapFile.City, GeoRing>> = file.cities.filter { owns(it.scenario) }
+        .map { it to GeoRing.point(it.x / 10_000.0, it.y / 10_000.0) }
 
     /** The scenario's playable states in degrees: west, south, east, north. */
     val playBounds: DoubleArray = run {
         var w = 180.0; var s = 90.0; var e = -180.0; var n = -90.0
-        file.states.filter { it.play }.forEach { state ->
+        file.states.filter { isPlay(it) }.forEach { state ->
             state.rings.forEach { ring ->
                 var i = 0
                 while (i + 1 < ring.size) {
@@ -131,10 +150,26 @@ class WorldMap private constructor(val file: WorldMapFile) {
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
 
-        /** Loaded once from the app's resources; null if the file is missing. */
-        val shared: WorldMap? by lazy {
+        private val loaded: WorldMapFile? by lazy {
             val stream = WorldMap::class.java.getResourceAsStream("/world-map.json") ?: return@lazy null
-            WorldMap(json.decodeFromString(WorldMapFile.serializer(), stream.bufferedReader().readText()))
+            json.decodeFromString(WorldMapFile.serializer(), stream.bufferedReader().readText())
+        }
+        private val byScenario = HashMap<String?, WorldMap>()
+
+        /** The default scenario's map, loaded once from the app's resources; null if the file is missing. */
+        val shared: WorldMap? by lazy { forScenario(loaded?.scenarios?.firstOrNull()?.id) }
+
+        /** One scenario's map, built once. */
+        fun forScenario(id: String?): WorldMap? {
+            val file = loaded ?: return null
+            return synchronized(byScenario) { byScenario.getOrPut(id) { WorldMap(file, id) } }
+        }
+
+        /** The map of the scenario whose regions these codes belong to (their state prefix). */
+        fun forRegions(codes: Collection<String>): WorldMap? {
+            val state = codes.firstOrNull()?.substringBefore('-') ?: return shared
+            val id = loaded?.scenarios?.firstOrNull { state in it.states }?.id ?: return shared
+            return forScenario(id)
         }
     }
 }

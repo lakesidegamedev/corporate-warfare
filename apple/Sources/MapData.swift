@@ -32,6 +32,7 @@ struct WorldMapFile: Decodable {
     }
 
     struct County: Decodable {
+        let state: String?
         let rings: [[Int]]
     }
 
@@ -41,6 +42,14 @@ struct WorldMapFile: Decodable {
 
     struct Line: Decodable {
         let lines: [[Int]]
+        /// The scenario a layer was added for; none means the default scenario's.
+        let scenario: String?
+    }
+
+    /// The states one scenario plays in. The first scenario in the file is the default.
+    struct ScenarioStates: Decodable {
+        let id: String
+        let states: [String]
     }
 
     struct City: Decodable {
@@ -51,6 +60,7 @@ struct WorldMapFile: Decodable {
         let y: Int
         let population: Int
         let capital: Bool
+        let scenario: String?
     }
 
     let attribution: String
@@ -67,6 +77,7 @@ struct WorldMapFile: Decodable {
     let interstates: [Line]
     let cities: [City]
     let hubs: [String: [Double]]
+    let scenarios: [ScenarioStates]?
 }
 
 /// A point on the sphere in radians, with its sine and cosine of latitude kept for projection.
@@ -123,9 +134,36 @@ struct GeoRing {
     }
 }
 
-/// Geometry turned into sphere points once, shared by every map view.
+/// Geometry turned into sphere points once, shared by every map view. A map is for one scenario:
+/// its playable states, regions, counties, roads, rivers and cities.
 final class WorldMap {
-    static let shared = WorldMap()
+    /// The default scenario's map, for views that have no career yet.
+    static let shared = WorldMap.forScenario(nil)
+
+    private static let file: WorldMapFile? = Bundle.main.url(forResource: "world-map", withExtension: "json")
+        .flatMap { try? Data(contentsOf: $0) }
+        .flatMap { try? JSONDecoder().decode(WorldMapFile.self, from: $0) }
+    private static let lock = NSLock()
+    private static var built: [String: WorldMap] = [:]
+
+    /// One scenario's map, built once. nil is the default scenario, the first in the file.
+    static func forScenario(_ id: String?) -> WorldMap {
+        let key = id ?? file?.scenarios?.first?.id ?? ""
+        lock.lock()
+        defer { lock.unlock() }
+        if let map = built[key] { return map }
+        let map = WorldMap(file: file, scenario: key.isEmpty ? nil : key)
+        built[key] = map
+        return map
+    }
+
+    /// The map of the scenario whose regions these codes belong to, found from their state prefix.
+    static func forRegions(_ codes: [String]) -> WorldMap {
+        guard let state = codes.first?.split(separator: "-").first.map(String.init),
+              let id = file?.scenarios?.first(where: { $0.states.contains(state) })?.id
+        else { return shared }
+        return forScenario(id)
+    }
 
     struct Feature {
         let code: String
@@ -160,11 +198,13 @@ final class WorldMap {
     /// The scenario's playable states, in degrees: west, south, east, north.
     let playBounds: (west: Double, south: Double, east: Double, north: Double)
 
-    private init() {
-        let file: WorldMapFile? = Bundle.main.url(forResource: "world-map", withExtension: "json")
-            .flatMap { try? Data(contentsOf: $0) }
-            .flatMap { try? JSONDecoder().decode(WorldMapFile.self, from: $0) }
+    /// Every region's name in the file, whichever scenario it belongs to, for feeds that name a
+    /// region the current map does not draw.
+    private let names: [String: String]
+
+    private init(file: WorldMapFile?, scenario: String?) {
         guard let file else {
+            names = [:]
             attribution = ""
             countries = []
             provinces = []
@@ -183,26 +223,36 @@ final class WorldMap {
             return
         }
         attribution = file.attribution
+        names = Dictionary(file.regions.map { ($0.code, $0.name) }, uniquingKeysWith: { first, _ in first })
+        let scenarioStates: Set<String>? = scenario.flatMap { id in
+            file.scenarios?.first { $0.id == id }.map { Set($0.states) }
+        }
+        let defaultScenario = file.scenarios?.first?.id
+        func isPlay(_ area: WorldMapFile.Area) -> Bool { scenarioStates?.contains(area.code) ?? area.play }
+        // A layer tagged for another scenario is hidden; an untagged one belongs to the default.
+        func owns(_ tag: String?) -> Bool { scenarioStates == nil || (tag ?? defaultScenario) == scenario }
         countries = file.countries.map { Feature(code: $0.code, name: $0.name, rings: $0.rings.map(GeoRing.init)) }
         provinces = (file.provinces ?? []).map(GeoRing.init)
         roads = (file.roads ?? []).map(GeoRing.init)
         func feature(_ area: WorldMapFile.Area) -> Feature {
             Feature(code: area.code, name: area.name, rings: area.rings.map(GeoRing.init))
         }
-        playStates = file.states.filter { $0.play }.map(feature)
-        contextStates = file.states.filter { !$0.play }.map(feature)
-        regions = file.regions.map {
+        playStates = file.states.filter { isPlay($0) }.map(feature)
+        contextStates = file.states.filter { !isPlay($0) }.map(feature)
+        regions = file.regions.filter { scenarioStates?.contains($0.state) ?? true }.map {
             RegionFeature(code: $0.code, state: $0.state, name: $0.name, rings: $0.rings.map(GeoRing.init))
         }
-        counties = file.counties.flatMap { $0.rings.map(GeoRing.init) }
+        counties = file.counties
+            .filter { county in scenarioStates.map { states in county.state.map { states.contains($0) } ?? false } ?? true }
+            .flatMap { $0.rings.map(GeoRing.init) }
         lakes = file.lakes.flatMap { $0.rings.map(GeoRing.init) }
-        rivers = file.rivers.flatMap { $0.lines.map(GeoRing.init) }
-        interstates = file.interstates.flatMap { $0.lines.map(GeoRing.init) }
-        cities = file.cities
+        rivers = file.rivers.filter { owns($0.scenario) }.flatMap { $0.lines.map(GeoRing.init) }
+        interstates = file.interstates.filter { owns($0.scenario) }.flatMap { $0.lines.map(GeoRing.init) }
+        cities = file.cities.filter { owns($0.scenario) }
         scenarioAreas = (file.scenario_areas ?? []).map { (id: $0.id, rings: $0.rings.map(GeoRing.init)) }
         hubs = file.hubs.compactMapValues { $0.count == 2 ? GeoPoint(lonDegrees: $0[0] / 10_000, latDegrees: $0[1] / 10_000) : nil }
         var bounds = (west: 180.0, south: 90.0, east: -180.0, north: -90.0)
-        for state in file.states where state.play {
+        for state in file.states where isPlay(state) {
             for ring in state.rings {
                 var index = 0
                 while index + 1 < ring.count {
@@ -218,7 +268,7 @@ final class WorldMap {
 
     /// A region's display name.
     func regionName(_ code: String) -> String {
-        regions.first { $0.code == code }?.name ?? code
+        names[code] ?? code
     }
 
     /// A label point for a region: its anchor hub, or its first vertex.

@@ -10,14 +10,29 @@ use cw_session::Session;
 
 use crate::{FfiError, SessionHandle};
 
-fn dataset() -> Result<&'static Dataset, FfiError> {
-    static DATASET: OnceLock<Result<Dataset, String>> = OnceLock::new();
-    DATASET
-        .get_or_init(|| Dataset::load().map_err(|errors| errors.join("; ")))
-        .as_ref()
-        .map_err(|detail| FfiError::Internal {
-            detail: detail.clone(),
-        })
+/// The dataset of one built-in scenario, loaded once. A base id with no content of its own
+/// gets the default scenario's, and `validate` refuses it if it is not playable.
+fn dataset(base_scenario_id: &str) -> Result<&'static Dataset, FfiError> {
+    type Loaded = Result<Dataset, String>;
+    static DATASETS: OnceLock<Mutex<Vec<(String, &'static Loaded)>>> = OnceLock::new();
+    let key = cw_data::scenario_content(base_scenario_id).id;
+    let mut cache = DATASETS
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let loaded: &'static Loaded = match cache.iter().find(|(id, _)| id == key) {
+        Some((_, loaded)) => loaded,
+        None => {
+            let loaded: &'static Loaded = Box::leak(Box::new(
+                Dataset::load_scenario(key).map_err(|errors| errors.join("; ")),
+            ));
+            cache.push((key.to_owned(), loaded));
+            loaded
+        }
+    };
+    loaded.as_ref().map_err(|detail| FfiError::Internal {
+        detail: detail.clone(),
+    })
 }
 
 fn invalid(errors: Vec<String>) -> FfiError {
@@ -244,7 +259,7 @@ pub fn custom_scenario_default(
     base_scenario_id: String,
     name: String,
 ) -> Result<CustomScenarioDto, FfiError> {
-    let data = dataset()?;
+    let data = dataset(&base_scenario_id)?;
     let mut scenario = CustomScenario::standard(data, &base_scenario_id, &name);
     let laws = cw_sim::state::Laws::default();
     scenario.laws = Some(CustomLaws {
@@ -263,7 +278,7 @@ pub fn custom_scenario_default(
 /// Live summary and problems for what is on screen.
 #[uniffi::export]
 pub fn custom_scenario_summary(scenario: CustomScenarioDto) -> Result<CustomSummaryDto, FfiError> {
-    let data = dataset()?;
+    let data = dataset(&scenario.base_scenario_id)?;
     let model = from_dto(&scenario)?;
     let mean = |values: Vec<u32>| -> u32 {
         if values.is_empty() {
@@ -297,7 +312,7 @@ pub fn custom_scenario_save(
     dir: String,
     scenario: CustomScenarioDto,
 ) -> Result<CustomScenarioDto, FfiError> {
-    let data = dataset()?;
+    let data = dataset(&scenario.base_scenario_id)?;
     let model = from_dto(&scenario)?;
     let stored = custom::save(Path::new(&dir), data, &model).map_err(invalid)?;
     Ok(to_dto(data, &stored))
@@ -306,12 +321,12 @@ pub fn custom_scenario_save(
 /// Every saved custom scenario, by name.
 #[uniffi::export]
 pub fn custom_scenario_list(dir: String) -> Vec<CustomScenarioDto> {
-    let Ok(data) = dataset() else {
-        return Vec::new();
-    };
     custom::list(Path::new(&dir))
         .iter()
-        .map(|scenario| to_dto(data, scenario))
+        .filter_map(|scenario| {
+            let data = dataset(&scenario.base_scenario_id).ok()?;
+            Some(to_dto(data, scenario))
+        })
         .collect()
 }
 
@@ -396,6 +411,6 @@ mod tests {
             .err()
             .unwrap();
         assert!(err.to_string().contains("Demand in"), "{err}");
-        assert!(custom_scenario_default("texas-1981".into(), "T".into()).is_err());
+        assert!(custom_scenario_default("silicon-valley-1995".into(), "T".into()).is_err());
     }
 }

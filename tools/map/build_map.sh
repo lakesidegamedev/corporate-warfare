@@ -85,3 +85,6 @@ EOF
 $MS "$OUT/hubs.geojson" -o format=geojson "$OUT/hubs.json"
 
 python3 "$ROOT/tools/map/compact_map.py" "$OUT" "$ROOT/apple/Resources/world-map.json"
+
+# Scenarios beyond the first add their own layers to the file just written.
+bash "$ROOT/tools/map/build_scenario_map.sh" "$SRC" texas-1981
