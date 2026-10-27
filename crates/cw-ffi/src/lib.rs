@@ -761,6 +761,8 @@ pub struct SectorCellDto {
     pub industry: String,
     pub operators: u32,
     pub leader: String,
+    /// The leader's firm handle, zero when there is none, for its dossier.
+    pub leader_firm: u64,
     pub leader_share_bps: i32,
     /// The selected firm's blocks and share here; zero when it has no division.
     pub own_blocks: u32,
@@ -2096,6 +2098,7 @@ impl SessionHandle {
                             .and_then(|(h, _)| world.firms.get(*h))
                             .map(|f| f.name.clone())
                             .unwrap_or_default(),
+                        leader_firm: leader.map(|(h, _)| h.0).unwrap_or(0),
                         leader_share_bps: leader.map(|(_, v)| bps(*v)).unwrap_or(0),
                         own_blocks,
                         own_share_bps: bps(own_value),

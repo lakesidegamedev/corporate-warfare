@@ -10,6 +10,11 @@ struct RegionBoardView: View {
     let onClose: () -> Void
     @State private var raiding: RaidOptionDto?
 
+    /// The leading rival in each sector the player does not operate in, for its dossier.
+    private var rivalLeaders: [SectorCellDto] {
+        cells.filter { $0.leaderFirm != 0 && $0.ownBlocks == 0 && $0.leaderFirm != store.selectedFirm }
+    }
+
     private var plants: [MapPlantDto] {
         store.mapPlants.filter { $0.region == board.code }
             .sorted { ($0.player ? 0 : 1, $0.industry, $0.firmName) < ($1.player ? 0 : 1, $1.industry, $1.firmName) }
@@ -52,6 +57,18 @@ struct RegionBoardView: View {
                         }
                         Text("Share is capacity value against all capacity here plus unmet imports. Expanding past half a market costs more.")
                             .font(.caption).foregroundStyle(Theme.secondary)
+                    }
+                }
+
+                if !rivalLeaders.isEmpty {
+                    Panel {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Eyebrow(text: "Rivals here")
+                            ForEach(rivalLeaders, id: \.industry) { cell in
+                                RivalLeaderRow(name: cell.leader, firm: cell.leaderFirm,
+                                               detail: "\(Sector.name(cell.industry)) · \(cell.leaderShareBps / 100)%")
+                            }
+                        }
                     }
                 }
 

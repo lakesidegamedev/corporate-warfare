@@ -21,6 +21,8 @@ cp apple/Resources/cw-logo.json "$OUT/resources/"
 cp apple/Resources/cw-logo.json "$OUT/desktop/"
 cp apple/Resources/pixel-icons.json "$OUT/resources/"
 cp apple/Resources/pixel-icons.json "$OUT/desktop/"
+cp apple/Resources/cast-portraits.json "$OUT/resources/"
+cp apple/Resources/cast-portraits.json "$OUT/desktop/"
 
 android() {
   local ndk="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"

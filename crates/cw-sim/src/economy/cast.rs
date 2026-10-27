@@ -326,7 +326,7 @@ pub fn weekly(world: &mut World, ds: &Dataset) {
             world.cast.appointed.remove(&firm);
         }
     }
-    if week == 0 || week % crate::state::PERIOD_WEEKS != 0 {
+    if week == 0 || !week.is_multiple_of(crate::state::PERIOD_WEEKS) {
         return;
     }
     for firm in rivals(world) {

@@ -221,6 +221,7 @@ struct EconomyCard: View {
         VStack(alignment: .leading, spacing: 6) {
             Eyebrow(text: "Central bank")
             HStack(spacing: 8) {
+                if !e.chairPerson.isEmpty { PixelPortrait(person: e.chairPerson, size: 36) }
                 Text(e.chairName).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.primaryText)
                 Text(e.chairStance)
                     .font(.caption2.weight(.bold))
@@ -253,9 +254,20 @@ struct EconomyCard: View {
         return "Held at \(percent(d.rateBps, digits: 2))"
     }
 
+    private func postRole(_ post: PostDto) -> String {
+        switch post.post {
+        case "country_leader": return "Leads the country, \(post.place)"
+        case "party_leader": return "Opposition, \(post.place)"
+        default: return "Governor of \(post.place)"
+        }
+    }
+
     private func government(_ e: EconomyDto) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Eyebrow(text: "Government")
+            ForEach(Array(e.posts.filter { $0.post != "chair" }.enumerated()), id: \.offset) { _, post in
+                PersonLine(person: post.person, role: postRole(post))
+            }
             HStack {
                 Text(e.partyName).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.primaryText)
                 Spacer()
@@ -371,10 +383,13 @@ struct EconomyCard: View {
         VStack(alignment: .leading, spacing: 4) {
             Eyebrow(text: "News")
             ForEach(Array(e.news.prefix(5).enumerated()), id: \.offset) { _, item in
-                Text("\(ResultBuckets.weekLabel(item.week)): \(item.text)")
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    if let person = item.person { PixelPortrait(person: person, size: 28) }
+                    Text("\(ResultBuckets.weekLabel(item.week)): \(item.text)")
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }

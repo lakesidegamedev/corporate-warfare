@@ -30,7 +30,12 @@ fn the_scenarios_people_take_the_posts_and_the_same_seed_gives_the_same_cast() {
         a.dataset.cast[chair as usize].scenario, "great-lakes-2000",
         "the chair is one of the scenario's own"
     );
-    let named = a.world.firms.iter().filter(|(_, f)| f.ceo.is_some()).count();
+    let named = a
+        .world
+        .firms
+        .iter()
+        .filter(|(_, f)| f.ceo.is_some())
+        .count();
     assert!(named >= 3, "rivals have named chief executives: {named}");
 }
 

@@ -194,7 +194,7 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
             text,
         });
     }
-    moves.sort_by(|a, b| b.week.cmp(&a.week));
+    moves.sort_by_key(|m| std::cmp::Reverse(m.week));
     moves.truncate(8);
     let style = entity
         .archetype
