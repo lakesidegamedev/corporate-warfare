@@ -4,8 +4,8 @@ struct StartView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.colorScheme) private var scheme
     @AppStorage(OnboardingKeys.completed) private var onboardingCompleted = false
-    @State private var guided = true
-    @State private var fiveYear = true
+    @State private var mode: GameMode = .guided
+    @State private var showingSettings = false
     @State private var showingAbout = false
     @State private var showingSaves = false
     @State private var export: DiagnosticExport?
@@ -38,6 +38,19 @@ struct StartView: View {
                     }
                     .frame(maxWidth: .infinity)
 
+                    if let latest = store.saves.first {
+                        SectionCard(title: "Continue") {
+                            Button {
+                                Task { await store.resume(latest) }
+                            } label: {
+                                Label("Resume week \(latest.week)", systemImage: "arrow.clockwise")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                        }
+                    }
+
                     SectionCard(title: "New career") {
                         ForEach(catalogue, id: \.id) { scenario in
                             Button {
@@ -47,11 +60,16 @@ struct StartView: View {
                             }
                             .buttonStyle(.plain)
                         }
-                        Toggle("Guided start (60% of a running firm)", isOn: $guided)
-                        Toggle("Five-year scored scenario", isOn: $fiveYear)
+                        Picker("Mode", selection: $mode) {
+                            ForEach(GameMode.allCases) { Text($0.title).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        Text(mode.note)
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondary)
                         Button {
                             let seed = UInt64.random(in: 1...9_999_999)
-                            Task { await store.newCareer(guided: guided, fiveYear: fiveYear, seed: seed) }
+                            Task { await store.newCareer(guided: mode.guided, fiveYear: mode.fiveYear, seed: seed) }
                         } label: {
                             Label("Start", systemImage: "play.fill")
                                 .frame(maxWidth: .infinity)
@@ -68,19 +86,6 @@ struct StartView: View {
                         .environmentObject(store)
                     }
 
-                    if let latest = store.saves.first {
-                        SectionCard(title: "Continue") {
-                            Button {
-                                Task { await store.resume(latest) }
-                            } label: {
-                                Label("Resume week \(latest.week)", systemImage: "arrow.clockwise")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.large)
-                        }
-                    }
-
                     SectionCard(title: "About this build") {
                         Text("Engine \(info.version) · interface \(info.interfaceVersion) · rules \(info.rulesVersion)")
                             .font(.caption.monospaced())
@@ -95,6 +100,15 @@ struct StartView: View {
                         Button("Saves and recovery") { showingSaves = true }
                     }
 
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+
                     if let error = store.errorMessage {
                         Text(error)
                             .font(.footnote)
@@ -108,12 +122,37 @@ struct StartView: View {
             }
             .background(Theme.background(for: scheme))
             .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showingSettings) {
+                SettingsView().environmentObject(store)
+            }
             .sheet(isPresented: $showingSaves) {
                 SavesView()
                     .environmentObject(store)
             }
         }
     }
+}
+
+/// Ways to play a scenario.
+enum GameMode: String, CaseIterable, Identifiable {
+    case guided, sandbox, scored
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .guided: return "Guided"
+        case .sandbox: return "Sandbox"
+        case .scored: return "Five-year"
+        }
+    }
+    var note: String {
+        switch self {
+        case .guided: return "Take over 60% of a running company, with the walkthrough."
+        case .sandbox: return "Start with cash and found your own company. No end date."
+        case .scored: return "Guided start, scored at the end of year five."
+        }
+    }
+    var guided: Bool { self != .sandbox }
+    var fiveYear: Bool { self == .scored }
 }
 
 /// One scenario on the start screen: where and when it starts, and what the player is up against.

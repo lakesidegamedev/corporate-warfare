@@ -252,12 +252,12 @@ struct RaidSheet: View {
     @Environment(\.dismiss) private var dismiss
     let option: RaidOptionDto
     let regionName: String
-    @State private var multiple = 2
+    @State private var multiple: Double = 2
     @State private var quote: RaidQuoteDto?
     @State private var rejection: CommandRejection?
     @State private var result: RaidRecordDto?
 
-    private var budget: Int64 { option.quote.defenceCents * Int64(multiple) }
+    private var budget: Int64 { Int64((Double(option.quote.defenceCents) * multiple).rounded()) }
 
     var body: some View {
         NavigationStack {
@@ -274,13 +274,12 @@ struct RaidSheet: View {
                     Panel {
                         VStack(alignment: .leading, spacing: 10) {
                             Eyebrow(text: "Campaign")
-                            Picker("Campaign size", selection: $multiple) {
-                                Text("Even").tag(1)
-                                Text("2 to 1").tag(2)
-                                Text("3 to 1").tag(3)
-                            }
-                            .pickerStyle(.segmented)
-                            .onChange(of: multiple) { _, _ in Task { await refresh() } }
+                            ValueSlider(
+                                value: $multiple, range: 0.5...4, step: 0.1, ticks: 35,
+                                label: { String(format: "%.1f to 1", $0) },
+                                detail: { "Budget \(Format.money(Int64((Double(option.quote.defenceCents) * $0).rounded()))) against their defence of \(Format.money(option.quote.defenceCents))" },
+                                onCommit: { _ in Task { await refresh() } }
+                            )
                             row("Budget", Format.money(budget))
                             if let quote {
                                 row("Chance", "\(quote.chanceBps / 100)%")

@@ -55,25 +55,30 @@ import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 
-private enum class MapLayer(val title: String) { Presence("Your divisions"), Room("Room to build"), Wages("Wages") }
+enum class MapLayer(val title: String) { Presence("Your divisions"), Room("Room to build"), Wages("Wages") }
 
-/** The world map: a globe when zoomed out that flattens onto the scenario as you zoom in. */
+/**
+ * The world map with its own camera and zoom buttons: a globe when zoomed out that flattens onto
+ * the scenario as you zoom in. Tapping a region reports it through [onSelect].
+ */
 @Composable
-fun MapScreen(store: GameStore) {
+fun WorldMapView(store: GameStore, layer: MapLayer, selected: String?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
     val map = WorldMap.shared
-    var layer by remember { mutableStateOf(MapLayer.Presence) }
-    var selected by remember { mutableStateOf<String?>(null) }
-    var building by remember { mutableStateOf<RegionBoardDto?>(null) }
     var camera by remember { mutableStateOf<MapCamera?>(null) }
     var viewSize by remember { mutableStateOf(Size.Zero) }
     val scope = rememberCoroutineScope()
     var flight by remember { mutableStateOf<Job?>(null) }
     val measurer = rememberTextMeasurer()
+    val appSettings = LocalAppSettings.current
 
     fun current(): MapCamera? = camera ?: map?.let { if (viewSize.width > 0) MapCamera.scenario(viewSize, it) else null }
     fun fly(target: MapCamera) {
         val start = current() ?: return
         flight?.cancel()
+        if (appSettings?.animations == false) {
+            camera = target
+            return
+        }
         flight = scope.launch {
             val frames = 42
             for (frame in 1..frames) {
@@ -88,7 +93,7 @@ fun MapScreen(store: GameStore) {
         fly(if (now.zoom > MapCamera.FLAT_START) now.copy(zoom = 1.0) else MapCamera.scenario(viewSize, map ?: return))
     }
 
-    Box(Modifier.fillMaxSize().background(Palette.ink)) {
+    Box(modifier.background(Palette.ink)) {
         if (map == null) {
             Text("The map file is missing from this build.", color = Palette.secondary, modifier = Modifier.padding(24.dp))
         } else {
@@ -126,12 +131,12 @@ fun MapScreen(store: GameStore) {
                                 val now = current() ?: return@detectTapGestures
                                 val projection = MapProjection(now, viewSize)
                                 val hit = map.regions.firstOrNull { projection.contains(it.rings, tap) }?.code
-                                selected = if (hit == selected) null else hit
+                                onSelect(if (hit == selected) null else hit)
                             },
                         )
                     },
             ) {
-                drawWorldMap(map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shading, selected, store.mapDivisions, measurer)
+                drawWorldMap(map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shading, selected, store.mapDivisions, measurer, appSettings?.mapDetail ?: MapDetail.High)
             }
             Column(
                 Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 24.dp)
@@ -144,6 +149,17 @@ fun MapScreen(store: GameStore) {
                 MapButton(if (zoomedIn) "◍" else "◎") { toggleGlobe() }
             }
         }
+    }
+}
+
+/** The phone map: the world map with the company HUD and layer chips over it. */
+@Composable
+fun MapScreen(store: GameStore) {
+    var layer by remember { mutableStateOf(MapLayer.Presence) }
+    var selected by remember { mutableStateOf<String?>(null) }
+    var building by remember { mutableStateOf<RegionBoardDto?>(null) }
+    Box(Modifier.fillMaxSize().background(Palette.ink)) {
+        WorldMapView(store, layer, selected, { selected = it }, Modifier.fillMaxSize())
 
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             MapHud(store)
@@ -180,11 +196,13 @@ internal fun DrawScope.drawWorldMap(
     selected: String?,
     divisions: List<MapDivisionDto>,
     measurer: TextMeasurer,
+    detailLevel: MapDetail = MapDetail.High,
+    space: Boolean = true,
 ) {
     val p = MapProjection(cam, size)
     val t = p.t
     val center = Offset(p.cx.toFloat(), p.cy.toFloat())
-    drawRect(Color(0xFF05090E))
+    if (space) drawRect(Color(0xFF05090E))
     // Ocean: the globe's disc, growing to fill the view as the map flattens.
     drawCircle(Color(0xFF0E2840), radius = (p.r / max(1 - t, 0.03)).toFloat(), center = center)
     if (t < 1) drawPath(p.lines(graticule), Palette.primaryText.copy(alpha = (0.06 * (1 - t)).toFloat()), style = Stroke(0.6f))
@@ -193,12 +211,12 @@ internal fun DrawScope.drawWorldMap(
     val land = Path().apply { fillType = PathFillType.EvenOdd }
     map.countries.forEach { p.addPolygons(it.rings, land) }
     drawPath(land, OutsideLand)
-    val provinces = ((cam.zoom - 1.4) / 1.2).coerceIn(0.0, 1.0).toFloat()
+    val provinces = if (detailLevel == MapDetail.Low) 0f else ((cam.zoom - 1.4) / 1.2).coerceIn(0.0, 1.0).toFloat()
     if (provinces > 0) drawPath(p.lines(map.provinces), OutsideBorder.copy(alpha = 0.7f * provinces), style = Stroke(0.5f))
-    val roads = ((cam.zoom - 2.4) / 1.6).coerceIn(0.0, 1.0).toFloat()
+    val roads = if (detailLevel != MapDetail.High) 0f else ((cam.zoom - 2.4) / 1.6).coerceIn(0.0, 1.0).toFloat()
     if (roads > 0) drawPath(p.lines(map.roads), OutsideRoad.copy(alpha = 0.6f * roads), style = Stroke(0.8f))
     drawPath(land, OutsideBorder, style = Stroke(0.8f))
-    val detail = ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
+    val detail = if (detailLevel != MapDetail.High) 0f else ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
     val regionPaths = map.regions.map { it.code to p.polygons(it.rings) }
     regionPaths.forEach { (code, path) ->
         drawPath(path, Color(0xFF2B3B4A))
@@ -271,14 +289,14 @@ private fun MapButton(symbol: String, onClick: () -> Unit) {
     }
 }
 
-private fun layerTint(layer: MapLayer): Color = when (layer) {
+internal fun layerTint(layer: MapLayer): Color = when (layer) {
     MapLayer.Presence -> Palette.gold
     MapLayer.Room -> Palette.positive
     MapLayer.Wages -> Color(0xFF42A5F5)
 }
 
 /** 0..1 intensity per region for the active layer. */
-private fun shading(store: GameStore, layer: MapLayer): Map<String, Double> = when (layer) {
+internal fun shading(store: GameStore, layer: MapLayer): Map<String, Double> = when (layer) {
     MapLayer.Presence -> {
         val plants = store.mapDivisions.groupBy { it.region }.mapValues { (_, items) -> items.sumOf { it.blocks.toInt() }.toDouble() }
         val top = plants.values.maxOrNull() ?: 1.0
@@ -325,7 +343,7 @@ private fun MapHud(store: GameStore) {
 }
 
 @Composable
-private fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () -> Unit, onClose: () -> Unit) {
+internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () -> Unit, onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
         containerColor = Palette.panel,

@@ -90,6 +90,12 @@ def main(source, output):
         if r:
             countries.append({"code": p.get("ADM0_A3") or "", "name": p.get("NAME") or "", "rings": r})
 
+    scenario_areas = []
+    for name in ["scenario_great_lakes", "scenario_texas", "scenario_california", "scenario_germany"]:
+        for feature in load(source, name):
+            r = rings(feature, 2)
+            if r:
+                scenario_areas.append({"id": feature["properties"]["id"], "rings": r})
     provinces = [line for f in layers["provinces"] for line in lines(f, 4)]
     roads = [line for f in layers["world_roads"] for line in lines(f, 6)]
 
@@ -156,6 +162,7 @@ def main(source, output):
         "units": "ten-thousandths of a degree, longitude then latitude",
         "countries": countries,
         "provinces": provinces,
+        "scenario_areas": scenario_areas,
         "roads": roads,
         "states": states,
         "regions": regions,

@@ -26,6 +26,7 @@ import kotlin.math.sqrt
 data class WorldMapFile(
     val countries: List<Country>,
     val provinces: List<List<Int>> = emptyList(),
+    @kotlinx.serialization.SerialName("scenario_areas") val scenarioAreas: List<ScenarioArea> = emptyList(),
     val roads: List<List<Int>> = emptyList(),
     val states: List<Area>,
     val regions: List<RegionArea>,
@@ -40,6 +41,7 @@ data class WorldMapFile(
     @Serializable data class Area(val code: String, val name: String, val play: Boolean, val rings: List<List<Int>>)
     @Serializable data class RegionArea(val code: String, val state: String, val name: String, val rings: List<List<Int>>)
     @Serializable data class Rings(val rings: List<List<Int>>)
+    @Serializable data class ScenarioArea(val id: String, val rings: List<List<Int>>)
     @Serializable data class Lines(val lines: List<List<Int>>)
     @Serializable data class City(
         val name: String,
@@ -94,6 +96,8 @@ class WorldMap private constructor(val file: WorldMapFile) {
     val contextStates = file.states.filter { !it.play }.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
     val regions = file.regions.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
     val provinces = file.provinces.map(::GeoRing)
+    /** Each scenario's area as outlines, for the menu globe. */
+    val scenarioAreas: List<Pair<String, List<GeoRing>>> = file.scenarioAreas.map { it.id to it.rings.map(::GeoRing) }
     val roads = file.roads.map(::GeoRing)
     val counties = file.counties.flatMap { c -> c.rings.map(::GeoRing) }
     val lakes = file.lakes.flatMap { l -> l.rings.map(::GeoRing) }
@@ -205,6 +209,9 @@ class MapProjection(camera: MapCamera, size: Size) {
     private val vy = cos0 * sin(lon0)
     private val vz = sin0
     private val reach = min(PI / 2 + 0.05 + t, sqrt((size.width * size.width + size.height * size.height).toDouble()) / 2 / r * 1.4 + 0.05)
+
+    /** How squarely a ring's centre faces the viewer: 1 dead centre, 0 at the horizon, negative behind. */
+    fun facing(ring: GeoRing): Double = ring.cx * vx + ring.cy * vy + ring.cz * vz
 
     /** Whether any of a ring could be on screen. */
     fun mayShow(ring: GeoRing): Boolean =

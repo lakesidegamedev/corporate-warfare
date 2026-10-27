@@ -9,7 +9,54 @@
       "start_year": 2000,
       "summary": "Thirty-one regions across eight states around the Great Lakes and the Ohio Valley. Farms, steel, autos and freight at the turn of the century, with rivals already in every market.",
       "center_lon_milli": -82300,
-      "center_lat_milli": 41300
+      "center_lat_milli": 41300,
+      "available": true,
+      "region": "Great Lakes and Ohio Valley, United States",
+      "image": "scenario-great-lakes-2000",
+      "currency": "US dollar",
+      "tagline": "Steel, autos and farms at the turn of the century, on stretched credit."
+    },
+    {
+      "id": "texas-1981",
+      "name": "Texas Oil Patch, 1981",
+      "country": "United States",
+      "start_year": 1981,
+      "summary": "Oil at forty dollars a barrel, banks lending against every rig, and the 1982 bust a year away. Drill, refine and survive the savings-and-loan crash.",
+      "center_lon_milli": -96000,
+      "center_lat_milli": 32000,
+      "available": false,
+      "region": "Texas, Oklahoma and Louisiana, United States",
+      "image": "scenario-texas-1981",
+      "currency": "US dollar",
+      "tagline": "Boom, bust and the savings-and-loan crisis."
+    },
+    {
+      "id": "silicon-valley-1995",
+      "name": "Silicon Valley, 1995",
+      "country": "United States",
+      "start_year": 1995,
+      "summary": "The web arrives. Chips, software and telecoms race for capital as valuations climb toward the dot-com peak and the crash after it.",
+      "center_lon_milli": -119500,
+      "center_lat_milli": 37200,
+      "available": false,
+      "region": "California, United States",
+      "image": "scenario-silicon-valley-1995",
+      "currency": "US dollar",
+      "tagline": "Ride the dot-com boom and live through the crash."
+    },
+    {
+      "id": "ruhr-rhine-1991",
+      "name": "Ruhr and Rhine, 1991",
+      "country": "Germany",
+      "start_year": 1991,
+      "summary": "Germany has just reunified. Rebuild the east's industry, compete with western giants, and answer to a hawkish Bundesbank guarding the Deutsche Mark.",
+      "center_lon_milli": 10400,
+      "center_lat_milli": 51000,
+      "available": false,
+      "region": "Germany",
+      "image": "scenario-ruhr-rhine-1991",
+      "currency": "Deutsche Mark",
+      "tagline": "Reunification, the D-Mark and a hawkish central bank."
     }
   ]
 }

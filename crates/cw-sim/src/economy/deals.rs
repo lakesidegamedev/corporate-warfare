@@ -153,13 +153,13 @@ pub fn start(
     Ok(world.deals.insert(deal))
 }
 
-fn triggers(share: i64, hhi: i64, delta: i64) -> bool {
-    share >= SHARE_REVIEW_BPS || (hhi > HHI_REVIEW && delta > HHI_DELTA)
+fn triggers(review_bps: i64, share: i64, hhi: i64, delta: i64) -> bool {
+    share >= review_bps || (hhi > HHI_REVIEW && delta > HHI_DELTA)
 }
 
 fn review_triggered(world: &World, buyer: Handle, target: Handle) -> bool {
     let (share, hhi, delta) = trigger_metrics(world, buyer, target);
-    triggers(share, hhi, delta)
+    triggers(world.politics.laws.merger_review_bps, share, hhi, delta)
 }
 
 /// Advance every deal at its declared boundary.
@@ -446,7 +446,7 @@ fn remedy_feasible(world: &World, deal: &Deal) -> bool {
             continue;
         }
         let own = volumes.get(&buyer_key).copied().unwrap_or(0);
-        if (own as i128 * 10_000 / total as i128) as i64 >= SHARE_REVIEW_BPS {
+        if (own as i128 * 10_000 / total as i128) as i64 >= world.politics.laws.merger_review_bps {
             return false;
         }
     }

@@ -16,6 +16,9 @@ use cw_session::{Query, Session};
 
 uniffi::setup_scaffolding!();
 
+mod catalogue;
+pub use catalogue::{ActionDto, FieldDto, OptionDto, action_catalogue};
+
 #[derive(uniffi::Record)]
 pub struct EngineInfo {
     pub version: String,
@@ -993,6 +996,12 @@ pub struct ScenarioDto {
     pub center_lon_milli: i32,
     pub center_lat_milli: i32,
     pub region_count: u32,
+    /// False for scenarios shown as coming soon.
+    pub available: bool,
+    pub region: String,
+    pub image: String,
+    pub currency: String,
+    pub tagline: String,
 }
 
 /// The scenarios a new career can start in, in display order.
@@ -1011,7 +1020,12 @@ pub fn scenarios() -> Vec<ScenarioDto> {
             summary: scenario.summary,
             center_lon_milli: scenario.center_lon_milli,
             center_lat_milli: scenario.center_lat_milli,
-            region_count: regions,
+            region_count: if scenario.available { regions } else { 0 },
+            available: scenario.available,
+            region: scenario.region,
+            image: scenario.image,
+            currency: scenario.currency,
+            tagline: scenario.tagline,
         })
         .collect()
 }
@@ -1212,8 +1226,146 @@ pub fn import_save(bytes: Vec<u8>) -> Result<Arc<SessionHandle>, FfiError> {
     }))
 }
 
+/// One week of the economy for the charts.
+#[derive(uniffi::Record)]
+pub struct MacroPointDto {
+    pub week: u32,
+    pub gdp_index: i64,
+    pub output_gap_bps: i32,
+    pub inflation_bps: i32,
+    pub policy_rate_bps: i32,
+}
+
+#[derive(uniffi::Record)]
+pub struct RateDecisionDto {
+    pub week: u32,
+    pub change_bps: i32,
+    pub rate_bps: i32,
+    pub reason: String,
+}
+
+#[derive(uniffi::Record)]
+pub struct NewsDto {
+    pub week: u32,
+    pub text: String,
+}
+
+/// The laws in force or announced.
+#[derive(uniffi::Record)]
+pub struct LawsDto {
+    pub corporate_tax_bps: i32,
+    pub wage_floor_hourly_cents: i64,
+    pub merger_review_bps: i64,
+    pub unions: String,
+}
+
+/// The economy, the central bank and the government, for the Markets economy card.
+#[derive(uniffi::Record)]
+pub struct EconomyDto {
+    /// expansion, boom, slowdown, recession or recovery.
+    pub phase: String,
+    pub growth_bps: i32,
+    pub output_gap_bps: i32,
+    pub inflation_bps: i32,
+    pub expected_inflation_bps: i32,
+    pub target_inflation_bps: i32,
+    pub policy_rate_bps: i32,
+    pub prime_rate_bps: i32,
+    pub ten_year_yield_bps: i32,
+    pub price_index_bps: i64,
+    /// How stretched borrowing is, 0 to 1,500: above about 450 a bust grows likely.
+    pub credit_bps: i32,
+    pub next_meeting_week: u32,
+    pub chair_name: String,
+    /// dovish, leaning dovish, centrist, leaning hawkish or hawkish.
+    pub chair_stance: String,
+    pub chair_term_ends: u32,
+    pub decisions: Vec<RateDecisionDto>,
+    pub history: Vec<MacroPointDto>,
+    /// The governing party's name and key (business or labour).
+    pub party_name: String,
+    pub party: String,
+    pub approval_bps: i32,
+    pub next_election_week: u32,
+    pub laws: LawsDto,
+    pub pending_laws: Option<LawsDto>,
+    pub pending_effective_week: u32,
+    pub news: Vec<NewsDto>,
+}
+
+/// One company's research: technology level, progress to the next and what it buys.
+#[derive(uniffi::Record)]
+pub struct ResearchDto {
+    pub firm: u64,
+    pub level: u32,
+    pub max_level: u32,
+    /// The industry's frontier: a company can research one level past it.
+    pub frontier: u32,
+    pub progress_cents: i64,
+    pub next_threshold_cents: i64,
+    pub success_bps: i32,
+    pub research_budget_cents: i64,
+    pub marketing_budget_cents: i64,
+    /// Input and labour use per unit at this level and the next, in basis points of baseline.
+    pub intensity_bps: i32,
+    pub next_intensity_bps: i32,
+    pub quality_bps: i32,
+    pub next_quality_bps: i32,
+}
+
+fn laws_dto(laws: &cw_sim::state::Laws) -> LawsDto {
+    LawsDto {
+        corporate_tax_bps: laws.corporate_tax_bps,
+        wage_floor_hourly_cents: laws.wage_floor_cents / 40,
+        merger_review_bps: laws.merger_review_bps,
+        unions: laws.unions.key().to_owned(),
+    }
+}
+
+/// Everything the new-game screen chooses.
+#[derive(uniffi::Record)]
+pub struct NewGameDto {
+    pub seed: u64,
+    pub scenario_id: String,
+    /// Start running 60 percent of a company (true) or with cash to found one (false).
+    pub guided: bool,
+    pub five_year: bool,
+    /// "easy", "standard" or "hard".
+    pub difficulty: String,
+    /// "historic", "calm", "boom" or "downturn".
+    pub economy: String,
+    /// Starting capital in cents, or none for the difficulty's.
+    pub starting_capital_cents: Option<i64>,
+}
+
 #[uniffi::export]
 impl SessionHandle {
+    /// A new career from the new-game screen's choices.
+    #[uniffi::constructor]
+    pub fn start(options: NewGameDto) -> Result<Arc<SessionHandle>, FfiError> {
+        let config = cw_session::ScenarioConfig {
+            seed: options.seed,
+            scenario: if options.guided {
+                cw_sim::state::ScenarioKind::Guided
+            } else {
+                cw_sim::state::ScenarioKind::Founder
+            },
+            mode: if options.five_year {
+                cw_sim::state::ScenarioMode::FiveYear
+            } else {
+                cw_sim::state::ScenarioMode::Sandbox
+            },
+            dataset_hash: String::new(),
+            difficulty: cw_data::Difficulty::from_key(&options.difficulty),
+            economy_start: cw_sim::state::EconomyStart::from_key(&options.economy),
+            starting_capital_cents: options.starting_capital_cents.filter(|c| *c > 0),
+        };
+        let session = Session::create(config)?;
+        Ok(Arc::new(SessionHandle {
+            inner: Mutex::new(session),
+        }))
+    }
+
     #[uniffi::constructor]
     pub fn new(seed: u64, guided: bool, five_year: bool) -> Result<Arc<SessionHandle>, FfiError> {
         let config = cw_session::ScenarioConfig {
@@ -1230,6 +1382,8 @@ impl SessionHandle {
             },
             dataset_hash: String::new(),
             difficulty: cw_data::Difficulty::Standard,
+            economy_start: Default::default(),
+            starting_capital_cents: None,
         };
         let session = Session::create(config)?;
         Ok(Arc::new(SessionHandle {
@@ -1825,6 +1979,99 @@ impl SessionHandle {
             )
             .len() as u32,
             sprawl_threshold: threshold as u32,
+        })
+    }
+
+    /// The economy, central bank and government.
+    pub fn economy(&self) -> EconomyDto {
+        let session = self.lock();
+        let world = &session.world;
+        let m = &world.macro_state;
+        let c = &m.cycle;
+        let p = &world.politics;
+        EconomyDto {
+            phase: c.phase.key().to_owned(),
+            growth_bps: m.real_growth_bps,
+            output_gap_bps: c.output_gap_bps,
+            inflation_bps: m.inflation_bps,
+            expected_inflation_bps: c.expected_inflation_bps,
+            target_inflation_bps: c.target_inflation_bps,
+            policy_rate_bps: m.policy_rate_bps,
+            prime_rate_bps: cw_sim::economy::macro_cycle::prime_rate_bps(world),
+            ten_year_yield_bps: cw_sim::economy::macro_cycle::ten_year_yield_bps(world),
+            price_index_bps: m.price_index_bps,
+            credit_bps: c.credit_bps,
+            next_meeting_week: c.next_meeting,
+            chair_name: c.chair.name.clone(),
+            chair_stance: c.chair.stance_label().to_owned(),
+            chair_term_ends: c.chair.term_ends,
+            decisions: c
+                .decisions
+                .iter()
+                .rev()
+                .take(12)
+                .map(|d| RateDecisionDto {
+                    week: d.week,
+                    change_bps: d.change_bps,
+                    rate_bps: d.rate_bps,
+                    reason: d.reason.clone(),
+                })
+                .collect(),
+            history: c
+                .history
+                .iter()
+                .map(|h| MacroPointDto {
+                    week: h.week,
+                    gdp_index: h.gdp_index,
+                    output_gap_bps: h.output_gap_bps,
+                    inflation_bps: h.inflation_bps,
+                    policy_rate_bps: h.policy_rate_bps,
+                })
+                .collect(),
+            party_name: cw_sim::economy::politics::party_name(p.party)
+                .trim_start_matches("the ")
+                .to_owned(),
+            party: p.party.key().to_owned(),
+            approval_bps: p.approval_bps,
+            next_election_week: p.next_election,
+            laws: laws_dto(&p.laws),
+            pending_laws: p.pending.map(|change| laws_dto(&change.laws)),
+            pending_effective_week: p.pending.map(|change| change.effective).unwrap_or(0),
+            news: p
+                .news
+                .iter()
+                .rev()
+                .take(12)
+                .map(|n| NewsDto {
+                    week: n.week,
+                    text: n.text.clone(),
+                })
+                .collect(),
+        }
+    }
+
+    /// A company's research position.
+    pub fn research(&self, firm: u64) -> Option<ResearchDto> {
+        use cw_sim::economy::research::{MAX_TECH_LEVEL, intensity_bps, quality, threshold};
+        let session = self.lock();
+        let world = &session.world;
+        let entity = world.firms.get(cw_core::ids::Handle(firm))?;
+        let level = entity.tech_level;
+        let next = (level + 1).min(MAX_TECH_LEVEL);
+        Some(ResearchDto {
+            firm,
+            level: level as u32,
+            max_level: MAX_TECH_LEVEL as u32,
+            frontier: world.macro_state.tech_frontier as u32,
+            progress_cents: entity.tech_progress_cents,
+            next_threshold_cents: threshold(level),
+            success_bps: 7_500,
+            research_budget_cents: entity.policies.research_budget_cents,
+            marketing_budget_cents: entity.policies.marketing_budget_cents,
+            intensity_bps: intensity_bps(level),
+            next_intensity_bps: intensity_bps(next),
+            quality_bps: quality(level, 0),
+            next_quality_bps: quality(next, 0),
         })
     }
 

@@ -210,6 +210,74 @@ struct GameSettingsPanel: View {
     }
 }
 
+/// The anonymous-data switch on its own, for the main menu's settings.
+struct AnalyticsPanel: View {
+    @State private var analytics = Telemetry.enabled
+
+    var body: some View {
+        Panel(padding: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow(text: "Game")
+                Toggle(isOn: $analytics) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Share anonymous market data").font(.callout).foregroundStyle(Theme.primaryText)
+                        Text("A market summary every five weeks with a random id; no names, account or device data.")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.secondary)
+                    }
+                }
+                .tint(Theme.gold)
+                .onChange(of: analytics) { _, value in Telemetry.enabled = value }
+            }
+        }
+    }
+}
+
+/// Keys for the graphics settings, read by the map.
+enum GraphicsKeys {
+    static let mapDetail = "graphics.mapDetail"
+    static let animations = "graphics.animations"
+}
+
+/// How much the map draws: 0 low, 1 medium, 2 high.
+enum MapDetailLevel: Int, CaseIterable, Identifiable {
+    case low = 0, medium, high
+    var id: Int { rawValue }
+    var title: String { ["Low", "Medium", "High"][rawValue] }
+    var note: String {
+        ["Countries and the scenario only", "Adds state and province borders", "Adds highways, counties and rivers"][rawValue]
+    }
+}
+
+/// Map detail and animation settings.
+struct GraphicsSettingsPanel: View {
+    @AppStorage(GraphicsKeys.mapDetail) private var detail = MapDetailLevel.high.rawValue
+    @AppStorage(GraphicsKeys.animations) private var animations = true
+
+    var body: some View {
+        Panel(padding: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow(text: "Graphics")
+                Picker("Map detail", selection: $detail) {
+                    ForEach(MapDetailLevel.allCases) { Text($0.title).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                Text((MapDetailLevel(rawValue: detail) ?? .high).note)
+                    .font(.caption2)
+                    .foregroundStyle(Theme.secondary)
+                Divider().overlay(Theme.stroke)
+                Toggle(isOn: $animations) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Animations").font(.callout).foregroundStyle(Theme.primaryText)
+                        Text("Map flights between the globe and the scenario.").font(.caption2).foregroundStyle(Theme.secondary)
+                    }
+                }
+                .tint(Theme.gold)
+            }
+        }
+    }
+}
+
 struct DecisionBanner: View {
     let text: String
 
@@ -278,17 +346,29 @@ struct SettingsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    GameSettingsPanel()
+                    if store.sessionReady {
+                        GameSettingsPanel()
+                    } else {
+                        AnalyticsPanel()
+                    }
+                    GraphicsSettingsPanel()
                     Panel(padding: 12) {
                         VStack(alignment: .leading, spacing: 10) {
                             Eyebrow(text: "Help")
                             Button("Saves and recovery") { showingSaves = true }
                                 .tint(Theme.gold)
-                            Button("Replay the guided walkthrough") {
-                                dismiss()
-                                store.showOnboarding = true
+                            if store.sessionReady {
+                                Button("Replay the guided walkthrough") {
+                                    dismiss()
+                                    store.showOnboarding = true
+                                }
+                                .tint(Theme.gold)
+                                Button("Save and exit to main menu") {
+                                    dismiss()
+                                    Task { await store.exitToMenu() }
+                                }
+                                .tint(Theme.gold)
                             }
-                            .tint(Theme.gold)
                         }
                     }
                     Panel(padding: 12) {

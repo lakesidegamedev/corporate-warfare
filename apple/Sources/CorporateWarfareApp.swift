@@ -35,9 +35,8 @@ struct CorporateWarfareApp: App {
             .tint(Theme.gold)
             .preferredColorScheme(.dark)
             .task {
-                if !Self.isUITesting {
-                    await store.restoreLatestIfAvailable()
-                }
+                // The app opens on the main menu; Continue there resumes the latest save.
+                store.refreshSaves()
             }
             .onChange(of: store.sessionReady) { _, ready in
                 if ready && !onboardingCompleted && !Self.isUITesting {

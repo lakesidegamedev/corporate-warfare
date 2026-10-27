@@ -341,6 +341,7 @@ struct TrainingBudgetSheet: View {
             }
         ) {
             Section("Weekly budget") {
+                BudgetSlider(amountText: $amountText)
                 TextField("Training budget in dollars per week", text: $amountText)
                     .keyboardType(.decimalPad)
                     .accessibilityLabel("Weekly training budget in dollars")
@@ -406,6 +407,7 @@ struct QualityBudgetSheet: View {
                         Text(item.name).tag(item.index)
                     }
                 }
+                BudgetSlider(amountText: $amountText)
                 TextField("Weekly quality budget in dollars", text: $amountText)
                     .keyboardType(.decimalPad)
                     .accessibilityLabel("Weekly quality budget in dollars")
@@ -871,6 +873,7 @@ struct RemedySheet: View {
     let deal: DealDto
     @EnvironmentObject private var store: AppStore
     @State private var divestBps: Int32 = 500
+    @State private var divestPercent: Double = 5
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
 
@@ -900,9 +903,12 @@ struct RemedySheet: View {
             }
         ) {
             Section("Divestiture") {
-                Stepper(value: $divestBps, in: 100...5_000, step: 100) {
-                    Text("Divest \(Format.percentBps(divestBps)) of the combined share")
-                }
+                ValueSlider(
+                    value: $divestPercent,
+                    range: 1...50, step: 0.5, ticks: 49,
+                    label: { String(format: "Divest %.1f%% of the combined share", $0) },
+                    onCommit: { divestBps = Int32(($0 * 100).rounded()) }
+                )
                 Text("A feasible bundle clears the review. If no bundle reaches the thresholds the merger is rejected rather than inventing regulator discretion.")
                     .font(.caption)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1608,5 +1614,28 @@ struct FoundFirmSheet: View {
             return
         }
         preview = await store.preview(json)
+    }
+}
+
+/// A weekly budget on a slider, kept in step with the typed amount beside it. The range runs to a
+/// tenth of the company's weekly revenue, at least $20,000; type a figure for anything larger.
+struct BudgetSlider: View {
+    @EnvironmentObject private var store: AppStore
+    @Binding var amountText: String
+    @State private var dollars: Double = 0
+
+    private var ceiling: Double {
+        let weekly = Double(store.finance?.revenueTrailingCents ?? 0) / 100 / 13
+        return max((weekly * 0.1 / 1_000).rounded(.up) * 1_000, 20_000)
+    }
+
+    var body: some View {
+        ValueSlider(
+            value: $dollars, range: 0...ceiling, step: max((ceiling / 200 / 50).rounded() * 50, 50), ticks: 20,
+            label: { $0 == 0 ? "None" : Format.money(Int64($0 * 100)) + " a week" },
+            onCommit: { value in amountText = String(Int(value)) }
+        )
+        .onAppear { dollars = min(Double(amountText) ?? 0, ceiling) }
+        .onChange(of: dollars) { _, value in amountText = String(Int(value)) }
     }
 }

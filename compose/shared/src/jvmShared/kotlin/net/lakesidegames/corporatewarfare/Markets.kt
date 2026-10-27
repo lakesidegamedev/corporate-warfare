@@ -58,6 +58,7 @@ fun MarketsScreen(store: GameStore) {
     var pickingRegion by remember { mutableStateOf(false) }
     TabList {
         item { ScreenHeader("Markets", store.overview?.weekLabel) }
+        item { EconomyCard(store, collapsible = true) }
         item {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 Section.entries.forEachIndexed { index, option ->
@@ -80,8 +81,8 @@ fun MarketsScreen(store: GameStore) {
     if (pickingRegion) RegionPicker(store) { pickingRegion = false }
 }
 
-private fun changeText(bps: Long) = "%+.1f%%".format(bps / 100.0)
-private fun changeTint(bps: Long) = if (bps > 0) Palette.positive else if (bps < 0) Palette.negative else Palette.secondary
+internal fun changeText(bps: Long) = "%+.1f%%".format(bps / 100.0)
+internal fun changeTint(bps: Long) = if (bps > 0) Palette.positive else if (bps < 0) Palette.negative else Palette.secondary
 
 /** A small line of closing prices, scaled to its own range. */
 @Composable
@@ -100,7 +101,7 @@ fun Sparkline(values: List<Long>, tint: Color, modifier: Modifier) {
 }
 
 /** A market-cap weighted index of the companies with a full history, 1,000 at its start. */
-private fun corridorIndex(stocks: List<StockDto>): List<Long> {
+internal fun corridorIndex(stocks: List<StockDto>): List<Long> {
     val length = stocks.maxOfOrNull { it.historyCents.size } ?: 0
     val members = stocks.filter { it.historyCents.size == length && length > 0 }
     val base = members.sumOf { it.historyCents[0] * it.sharesIssued }
@@ -258,7 +259,7 @@ private fun LazyListScope.regionMarkets(store: GameStore, onPickRegion: () -> Un
 }
 
 @Composable
-private fun RegionPicker(store: GameStore, onClose: () -> Unit) {
+internal fun RegionPicker(store: GameStore, onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
         containerColor = Palette.panel,
@@ -284,7 +285,7 @@ private fun RegionPicker(store: GameStore, onClose: () -> Unit) {
 
 /** One stock: valuation, your position, and an order ticket. */
 @Composable
-private fun StockDialog(store: GameStore, line: StockDto, onClose: () -> Unit) {
+internal fun StockDialog(store: GameStore, line: StockDto, onClose: () -> Unit) {
     var buy by remember { mutableStateOf(true) }
     var quantity by remember { mutableStateOf("1000") }
     var limit by remember { mutableStateOf("") }
@@ -336,7 +337,7 @@ private fun StockDialog(store: GameStore, line: StockDto, onClose: () -> Unit) {
 }
 
 @Composable
-private fun CommodityDialog(store: GameStore, line: CommodityDto, onClose: () -> Unit) {
+internal fun CommodityDialog(store: GameStore, line: CommodityDto, onClose: () -> Unit) {
     val mine: ProductLineDto? = store.productLines.firstOrNull { it.product == line.product }
     AlertDialog(
         onDismissRequest = onClose,

@@ -39,6 +39,18 @@ pub struct Scenario {
     pub summary: String,
     pub center_lon_milli: i32,
     pub center_lat_milli: i32,
+    /// False for scenarios shown as coming soon.
+    #[serde(default)]
+    pub available: bool,
+    #[serde(default)]
+    pub region: String,
+    /// Bundled art, without extension.
+    #[serde(default)]
+    pub image: String,
+    #[serde(default)]
+    pub currency: String,
+    #[serde(default)]
+    pub tagline: String,
 }
 
 #[derive(Deserialize)]
@@ -475,13 +487,37 @@ impl Dataset {
 /// Difficulty is a published rule set, never hidden income.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Difficulty {
+    /// More starting capital; rivals never attack the player's markets.
+    Easy,
     #[default]
     Standard,
+    /// Less starting capital; every rival fights for market share.
+    Hard,
 }
 
 impl Difficulty {
     pub const fn starting_capital_cents(self) -> i64 {
-        500_000_000
+        match self {
+            Difficulty::Easy => 800_000_000,
+            Difficulty::Standard => 500_000_000,
+            Difficulty::Hard => 300_000_000,
+        }
+    }
+
+    pub const fn key(self) -> &'static str {
+        match self {
+            Difficulty::Easy => "easy",
+            Difficulty::Standard => "standard",
+            Difficulty::Hard => "hard",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Difficulty {
+        match key {
+            "easy" => Difficulty::Easy,
+            "hard" => Difficulty::Hard,
+            _ => Difficulty::Standard,
+        }
     }
 
     pub const fn formation_fee_cents(self) -> i64 {

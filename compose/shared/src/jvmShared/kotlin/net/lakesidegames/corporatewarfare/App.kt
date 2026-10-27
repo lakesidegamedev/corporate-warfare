@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.AlertDialog
@@ -66,12 +68,42 @@ private enum class Tab(val title: String, val icon: ImageVector) {
     Portfolio("Portfolio", Icons.Filled.AccountBalance),
 }
 
-/** The whole app: the start screen until a career is open, then the five tabs. */
+/** Settings that live outside a career, for any screen that needs them. */
+val LocalAppSettings = androidx.compose.runtime.staticCompositionLocalOf<AppSettings?> { null }
+
+/**
+ * The whole app: the main menu until a career is open, then the five tabs. [onQuit] is set on
+ * desktop, where the menu offers Quit and the settings page offers the window options.
+ */
 @Composable
-fun CorporateWarfareApp(store: GameStore) {
-    CorporateWarfareTheme {
-        Box(Modifier.fillMaxSize().background(Palette.ink)) {
-            if (store.ready) MainScreen(store) else StartScreen(store)
+fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Updater? = null, onQuit: (() -> Unit)? = null) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var showSettings by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(updater) {
+        Tutorial.load(settings)
+        if (updater != null && settings.autoUpdate) updater.check()
+    }
+    androidx.compose.runtime.LaunchedEffect(store.overview?.tick) {
+        store.overview?.tick?.let { Tutorial.week(it) }
+    }
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalAppSettings provides settings,
+        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density * settings.uiScale, density.fontScale),
+    ) {
+        CorporateWarfareTheme {
+            Box(Modifier.fillMaxSize().background(Palette.ink)) {
+                when {
+                    showSettings -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                        Box(Modifier.widthIn(max = 820.dp)) {
+                            SettingsScreen(store, settings, desktop = onQuit != null, updater = updater) { showSettings = false }
+                        }
+                    }
+                    store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+                        if (maxWidth >= DesktopBreakpoint) DesktopShell(store, onSettings = { showSettings = true })
+                        else MainScreen(store, onSettings = { showSettings = true })
+                    }
+                    else -> StartScreen(store, updater, onSettings = { showSettings = true }, onQuit = onQuit)
+                }
             store.error?.let { message ->
                 AlertDialog(
                     onDismissRequest = { store.error = null },
@@ -81,56 +113,8 @@ fun CorporateWarfareApp(store: GameStore) {
                     containerColor = Palette.panel,
                 )
             }
+            }
         }
-    }
-}
-
-@Composable
-private fun StartScreen(store: GameStore) {
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        LogoArt(Modifier.width(300.dp))
-        Spacer(Modifier.height(14.dp))
-        Text(
-            "Build an industrial empire. Outprice, outbuild and buy out your rivals.",
-            color = Palette.secondary,
-            fontSize = 14.sp,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Sectors.order.take(8).forEach { SectorBadge(it, 26) }
-        }
-        Spacer(Modifier.height(24.dp))
-        scenarios().forEach { scenario -> ScenarioCard(scenario, selected = true, modifier = Modifier.width(420.dp)) }
-        Spacer(Modifier.height(20.dp))
-        if (store.hasAutosave) {
-            GoldButton("Continue career", Modifier.width(260.dp), enabled = !store.busy) { store.continueCareer() }
-            Spacer(Modifier.height(10.dp))
-        }
-        GoldButton("New guided career", Modifier.width(260.dp), enabled = !store.busy) { store.newCareer(System.nanoTime() % 9_999_999, guided = true) }
-        Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = { store.newCareer(System.nanoTime() % 9_999_999, guided = false) }, enabled = !store.busy, modifier = Modifier.width(260.dp)) {
-            Text("New sandbox career", color = Palette.primaryText)
-        }
-    }
-}
-
-/** One scenario on the start screen: where and when it starts, and what the player is up against. */
-@Composable
-private fun ScenarioCard(scenario: ScenarioDto, selected: Boolean, modifier: Modifier = Modifier) {
-    Column(
-        modifier.clip(RoundedCornerShape(12.dp)).background(Palette.panel)
-            .border(if (selected) 2.dp else 1.dp, if (selected) Palette.gold else Palette.stroke, RoundedCornerShape(12.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Text(scenario.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-        Text("${scenario.country} · starts ${scenario.startYear} · ${scenario.regionCount} regions", color = Palette.secondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        Text(scenario.summary, color = Palette.secondary, fontSize = 13.sp)
     }
 }
 
@@ -166,8 +150,42 @@ fun GoldButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = t
 }
 
 @Composable
-private fun MainScreen(store: GameStore) {
-    var tab by remember { mutableStateOf(Tab.Office) }
+private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
+    var tab by remember { mutableStateOf(Tab.Map) }
+    var menu by remember { mutableStateOf(false) }
+    // Full screens opened over the tabs: actions, research, stats.
+    var overlay by remember { mutableStateOf<String?>(null) }
+    fun open(page: String) {
+        Tutorial.visited(page)
+        when (page) {
+            "map" -> { overlay = null; tab = Tab.Map }
+            "office" -> { overlay = null; tab = Tab.Office }
+            "markets" -> { overlay = null; tab = Tab.Markets }
+            "inbox" -> { overlay = null; tab = Tab.Inbox }
+            "portfolio" -> { overlay = null; tab = Tab.Portfolio }
+            else -> overlay = page
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(Tutorial.requestedPage) {
+        val wanted = Tutorial.requestedPage ?: return@LaunchedEffect
+        open(wanted)
+        Tutorial.requestedPage = null
+    }
+    overlay?.let { page ->
+        Column(Modifier.fillMaxSize().background(Palette.ink)) {
+            Row(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { overlay = null }) { Text("‹ Back", color = Palette.gold) }
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                when (page) {
+                    "actions" -> CommandCenterScreen(store)
+                    "research" -> ResearchScreen(store)
+                    else -> StatsScreen(store) { overlay = null }
+                }
+            }
+        }
+        return
+    }
     Scaffold(
         containerColor = Palette.ink,
         bottomBar = {
@@ -175,7 +193,7 @@ private fun MainScreen(store: GameStore) {
                 Tab.entries.forEach { item ->
                     NavigationBarItem(
                         selected = tab == item,
-                        onClick = { tab = item },
+                        onClick = { open(item.name.lowercase()) },
                         icon = {
                             val due = store.events.count { it.mandatory }
                             if (item == Tab.Inbox && due > 0) {
@@ -194,19 +212,45 @@ private fun MainScreen(store: GameStore) {
                         ),
                     )
                 }
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { menu = true },
+                    icon = { Icon(Icons.Filled.Menu, "Menu") },
+                    label = { Text("Menu", fontSize = 11.sp) },
+                    colors = NavigationBarItemDefaults.colors(unselectedIconColor = Palette.secondary, unselectedTextColor = Palette.secondary),
+                )
             }
         },
     ) { padding ->
         // Content stops at the navigation bar: the scaffold's padding keeps it clear.
-        Box(Modifier.padding(padding)) {
+        Column(Modifier.padding(padding)) {
+            TutorialPanel(compact = true, modifier = Modifier.fillMaxWidth())
+            Box(Modifier.weight(1f)) {
             when (tab) {
                 Tab.Map -> MapScreen(store)
-                Tab.Office -> OfficeScreen(store)
+                Tab.Office -> OfficeScreen(store, ::open)
                 Tab.Markets -> MarketsScreen(store)
                 Tab.Inbox -> InboxScreen(store)
-                Tab.Portfolio -> PortfolioScreen(store)
+                Tab.Portfolio -> PortfolioScreen(store, onSettings)
+            }
             }
         }
+    }
+    if (menu) {
+        AlertDialog(
+            onDismissRequest = { menu = false },
+            containerColor = Palette.panel,
+            title = { Text("Menu") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    GoldButton("Resume", Modifier.fillMaxWidth()) { menu = false }
+                    OutlinedButton(onClick = { store.saveNow(); menu = false }, modifier = Modifier.fillMaxWidth()) { Text("Save now", color = Palette.primaryText) }
+                    OutlinedButton(onClick = { menu = false; onSettings() }, modifier = Modifier.fillMaxWidth()) { Text("Settings", color = Palette.primaryText) }
+                    OutlinedButton(onClick = { menu = false; store.exitToMenu() }, modifier = Modifier.fillMaxWidth()) { Text("Save and exit to main menu", color = Palette.primaryText) }
+                }
+            },
+            confirmButton = {},
+        )
     }
 }
 
@@ -223,7 +267,7 @@ internal fun TabList(content: LazyListScope.() -> Unit) {
 // MARK: CEO Office
 
 @Composable
-private fun OfficeScreen(store: GameStore) {
+private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
     val firm = store.selectedFirmDto
     var editing by remember { mutableStateOf<ProductLineDto?>(null) }
     var stats by remember { mutableStateOf(false) }
@@ -234,11 +278,17 @@ private fun OfficeScreen(store: GameStore) {
     TabList {
         item {
             ScreenHeader("CEO Office", store.overview?.weekLabel) {
-                if (firm != null) GoldButton("Stats") { stats = true }
+                if (firm != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(onClick = { onOpen("research") }) { Text("Research", color = Palette.primaryText, fontSize = 12.sp) }
+                        OutlinedButton(onClick = { onOpen("stats") }) { Text("Stats", color = Palette.primaryText, fontSize = 12.sp) }
+                        GoldButton("Actions") { onOpen("actions") }
+                    }
+                }
             }
         }
         if (firm == null) {
-            item { Callout("Choose a company from the portfolio.") }
+            item { FoundCompanyPanel(store) }
             return@TabList
         }
         item {
@@ -283,6 +333,7 @@ private fun OfficeScreen(store: GameStore) {
                 }
             }
         }
+        if (store.facilities.isNotEmpty()) item { ProductionTarget(store) }
         if (store.divisions.isNotEmpty()) {
             item { Eyebrow("Divisions") }
             items(store.divisions.size) { index ->
@@ -304,8 +355,24 @@ private fun OfficeScreen(store: GameStore) {
     editing?.let { line -> PostureDialog(store, line) { editing = null } }
 }
 
+/** How hard every plant runs, 0 to 100 percent of capacity. */
 @Composable
-private fun ProfitDrivers(weeks: List<uniffi.cw_ffi.WeekDto>) {
+internal fun ProductionTarget(store: GameStore) {
+    val capacity = store.facilities.sumOf { it.capacityLots }
+    var target by remember(store.selectedFirm) { mutableStateOf((store.facilities.firstOrNull()?.targetBps ?: 8_500) / 100.0) }
+    Panel {
+        Eyebrow("Production target")
+        ValueSlider(
+            target, { target = it }, 0.0..100.0, 1.0,
+            label = { "%.0f%% of capacity".format(it) },
+            detail = { "About ${Format.count((capacity * it / 100).toLong())} of ${Format.count(capacity)} lots a week. Lower targets save inputs and wages when stock piles up." },
+            onCommit = { store.setTarget((it * 100).toInt()) },
+        )
+    }
+}
+
+@Composable
+internal fun ProfitDrivers(weeks: List<uniffi.cw_ffi.WeekDto>) {
     val revenue = weeks.sumOf { it.revenueCents }
     val net = weeks.sumOf { it.netIncomeCents }
     val costs = listOf(
@@ -337,7 +404,7 @@ private fun ProfitDrivers(weeks: List<uniffi.cw_ffi.WeekDto>) {
     }
 }
 
-private fun postureLabel(line: ProductLineDto): String = when (line.mode) {
+internal fun postureLabel(line: ProductLineDto): String = when (line.mode) {
     "market" -> if (line.postureBps == 0) "At market" else "%+d%% vs market".format(line.postureBps / 100)
     "cost_plus" -> "Cost +${line.postureBps / 100}%"
     "fixed" -> "Fixed price"
@@ -345,7 +412,7 @@ private fun postureLabel(line: ProductLineDto): String = when (line.mode) {
 }
 
 @Composable
-private fun PricingRow(line: ProductLineDto, onClick: () -> Unit) {
+internal fun PricingRow(line: ProductLineDto, onClick: () -> Unit) {
     val perLot = line.priceCents - line.unitCostCents
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -365,7 +432,7 @@ private fun PricingRow(line: ProductLineDto, onClick: () -> Unit) {
 
 /** Automatic pricing, a step against the market, or a markup over the company's own cost. */
 @Composable
-private fun PostureDialog(store: GameStore, line: ProductLineDto, onDismiss: () -> Unit) {
+internal fun PostureDialog(store: GameStore, line: ProductLineDto, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Palette.panel,
@@ -379,18 +446,35 @@ private fun PostureDialog(store: GameStore, line: ProductLineDto, onDismiss: () 
                     fontSize = 13.sp,
                 )
                 Text("Buyers take the cheapest offer first. Undercut to sell out; price above the market for margin and risk unsold stock.", color = Palette.secondary, fontSize = 12.sp)
-                OutlinedButton(onClick = { store.setPosture(line.product, 0, 0); onDismiss() }) { Text("Automatic", color = Palette.primaryText) }
-                Eyebrow("Against the market")
-                ChipRow(listOf(-2000, -1000, -500, 0, 500, 1000, 2000)) { bps ->
-                    store.setPosture(line.product, 1, bps); onDismiss()
+                OutlinedButton(onClick = { store.setPosture(line.product, 0, 0); onDismiss() }) {
+                    Text(if (line.mode == "auto") "Automatic (on)" else "Automatic", color = Palette.primaryText)
                 }
-                Eyebrow("Over your cost")
-                ChipRow(listOf(1000, 2000, 3000, 5000), prefix = "+") { bps ->
-                    store.setPosture(line.product, 2, bps); onDismiss()
+                var market by remember { mutableStateOf(if (line.mode == "market") line.postureBps / 100.0 else 0.0) }
+                var cost by remember { mutableStateOf(if (line.mode == "cost_plus") line.postureBps / 100.0 else 20.0) }
+                fun margin(price: Long) = if (line.unitCostCents > 0) " · ${Format.signed(price - line.unitCostCents)} a lot over cost" else ""
+                Eyebrow("Against the market" + if (line.mode == "market") " · active" else "")
+                ValueSlider(
+                    market, { market = it }, -50.0..50.0, 1.0,
+                    label = { if (it == 0.0) "At market" else "%+.0f%%".format(it) },
+                    origin = 0.0,
+                    detail = { val p = (line.marketCents * (1 + it / 100)).toLong(); "${Format.money(p)} a lot" + margin(p) },
+                    tint = if (market <= 0) Palette.positive else Palette.warning,
+                    onCommit = { store.setPosture(line.product, 1, (it * 100).toInt()) },
+                )
+                Eyebrow("Over your cost" + if (line.mode == "cost_plus") " · active" else "")
+                if (line.unitCostCents > 0) {
+                    ValueSlider(
+                        cost, { cost = it }, 0.0..100.0, 1.0,
+                        label = { "+%.0f%%".format(it) },
+                        detail = { val p = (line.unitCostCents * (1 + it / 100)).toLong(); "${Format.money(p)} a lot · ${Format.money(p - line.unitCostCents)} margin" },
+                        onCommit = { store.setPosture(line.product, 2, (it * 100).toInt()) },
+                    )
+                } else {
+                    Text("Available once the good has a production cost.", color = Palette.secondary, fontSize = 12.sp)
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
     )
 }
 
@@ -427,7 +511,7 @@ private fun InboxScreen(store: GameStore) {
 }
 
 @Composable
-private fun DecisionCard(store: GameStore, event: EventDto) {
+internal fun DecisionCard(store: GameStore, event: EventDto) {
     Panel {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(event.title, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -445,13 +529,12 @@ private fun DecisionCard(store: GameStore, event: EventDto) {
 // MARK: Portfolio
 
 @Composable
-private fun PortfolioScreen(store: GameStore) {
+private fun PortfolioScreen(store: GameStore, onSettings: () -> Unit) {
     val overview = store.overview ?: return
-    var settings by remember { mutableStateOf(false) }
     TabList {
         item {
             ScreenHeader("Portfolio", overview.weekLabel) {
-                TextButton(onClick = { settings = true }) { Text("⚙ Settings", color = Palette.secondary) }
+                TextButton(onClick = onSettings) { Text("⚙ Settings", color = Palette.secondary) }
             }
         }
         overview.pause?.let { pause ->
@@ -501,7 +584,6 @@ private fun PortfolioScreen(store: GameStore) {
             }
         }
     }
-    if (settings) SettingsDialog(store) { settings = false }
 }
 
 @Composable
@@ -538,26 +620,3 @@ fun SpeedControl(store: GameStore) {
     }
 }
 
-/** Game settings: saving and the version. Company business stays on the other tabs. */
-@Composable
-private fun SettingsDialog(store: GameStore, onClose: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onClose,
-        containerColor = Palette.panel,
-        title = { Text("Settings") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Save", color = Palette.primaryText)
-                        Text("The game also saves itself every four weeks.", color = Palette.secondary, fontSize = 12.sp)
-                    }
-                    TextButton(onClick = { store.saveNow() }) { Text("Save now", color = Palette.gold) }
-                }
-                if (store.status.isNotEmpty()) Text(store.status, color = Palette.secondary, fontSize = 12.sp)
-                Text("Institutions are simplified game rules, not legal, tax or investment advice.", color = Palette.secondary, fontSize = 11.sp)
-            }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text("Done") } },
-    )
-}

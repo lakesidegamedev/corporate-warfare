@@ -74,6 +74,8 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::economy::production::expire_services(world, dataset);
     crate::economy::equity::refresh_valuation(world, dataset);
     crate::economy::equity::clear_exchange(world, dataset);
+    crate::economy::macro_cycle::weekly(world, dataset);
+    crate::economy::politics::weekly(world);
     crate::economy::events_engine::quarter_check(world, dataset);
     crate::economy::events_engine::state_triggers(world, dataset);
     crate::economy::events_engine::auto_resolve(world, dataset);
@@ -382,7 +384,7 @@ fn accrue_tax(world: &mut World, firm: Handle) {
     } else {
         0
     };
-    let rate = (2_500 + modifier).clamp(0, 10_000);
+    let rate = (world.politics.laws.corporate_tax_bps + modifier).clamp(0, 10_000);
     let quarterly = round_even_div(taxable as i128 * rate as i128, 10_000) as i64;
     let weekly = quarterly / 13;
     if weekly <= 0 {

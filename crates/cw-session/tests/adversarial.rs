@@ -27,6 +27,8 @@ fn config(seed: u64, scenario: ScenarioKind) -> ScenarioConfig {
         mode: ScenarioMode::FiveYear,
         dataset_hash: String::new(),
         difficulty: Difficulty::Standard,
+        economy_start: Default::default(),
+        starting_capital_cents: None,
     }
 }
 

@@ -11,6 +11,8 @@ fn session() -> Session {
         mode: ScenarioMode::FiveYear,
         dataset_hash: String::new(),
         difficulty: cw_data::Difficulty::Standard,
+        economy_start: Default::default(),
+        starting_capital_cents: None,
     })
     .unwrap()
 }

@@ -11,10 +11,104 @@ heading.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-27
+
+A real economy and a real game shell: business cycles, a central bank with rotating chairs,
+governments and laws; a globe main menu, scenario picker, difficulty and starting economy; a
+Command Center for every action; research and economy screens; a desktop layout; fine-grained
+sliders; load game; a tutorial; and in-game updates. Saves from 1.5.0 do not load in 1.6.0.
+
 ### Added
 
+- A main menu on every platform. The game opens on it instead of jumping into the last save:
+  Continue, New game with a scenario and a mode (guided, sandbox or five-year score), Settings
+  and, on desktop, Quit.
+- Exit to the main menu from a running career. The in-game menu (the map HUD on iPhone and Mac,
+  the Menu tab on Android and desktop) saves, opens Settings or saves and returns to the menu.
+- A full Settings page, also from the main menu: graphics (map detail low, medium or high,
+  animations, and interface size on Android and desktop) and, on desktop, window mode
+  (windowed, maximized, full screen) and resolution.
+
+- A desktop layout for wide windows (Windows, Linux and large tablets) instead of the stretched
+  phone screens: a sidebar for every screen, a status bar with cash, profit, cash outlook, share
+  price, net worth and the time controls always in view, and dense multi-pane screens. The map
+  sits between an outliner (alerts, your divisions, rival moves) and the selected region's board;
+  the CEO Office shows results, a pricing table and divisions side by side; Markets shows the full
+  stock and commodity tables together; Stats runs in two columns; Inbox lists decisions beside the
+  open one; Portfolio tables your companies and your shareholdings.
+
+- A Command Center on Android and desktop: every action in the game in one searchable list,
+  grouped by category, each with a form built for it (pickers, sliders with exact amounts,
+  switches), a live preview of what it would do and Submit. Ctrl+K opens it from anywhere on
+  desktop.
+- A Research screen: the technology ladder to level 20, progress and cost to the next level,
+  what it buys, the industry frontier, and research and marketing budgets on sliders.
+- An economy card on Markets (a fold-out panel on phones): the cycle phase, growth, inflation
+  against target, the central bank, prime and ten-year rates with a history chart, the central
+  bank chair and recent decisions, the government, its approval, the next election, laws in
+  force and announced, and the news.
+- Founding a company when you start with none: name, headquarters with wages and demand, first
+  strategy by sector with capex, build time and margin, and capital on a slider.
+- A guided tutorial of eight steps that tick off as you do them, each with a Show me button;
+  docked on desktop, a slim bar on phones, replayable from Settings.
+- Desktop: a grouped sidebar with icons and a company switcher, a status bar with the economy
+  phase, the central bank rate and inflation, action search, keyboard shortcuts (Space plays or
+  pauses, N next week, 1, 2 and 3 set the speed, F1 to F7 switch screens), and hover states.
+- A new main menu on Android and desktop: a slowly turning globe with stars where each
+  scenario's region glows and is named as it turns into view, the sector icons flying in from
+  around the globe to settle under the logo, and Continue, New game, Load game, Settings and Quit.
+- A new-game screen: scenario cards with art (Great Lakes 2000 to play; Texas Oil Patch 1981,
+  Silicon Valley 1995 and Ruhr and Rhine 1991 coming soon), then how you start, difficulty, the
+  economy on day one and starting capital.
+- Load game: every save with its company, game week and date, newest first. Save now keeps its
+  own save beside the autosave instead of overwriting it.
+- Sliders instead of fixed choices, on every platform: a custom track with tick marks, a live
+  readout of what the value means and nudge buttons for exact steps. Production target runs 0 to
+  100 percent in 1 percent steps with the lots a week it gives; pricing against the market runs
+  -50 to +50 percent and over cost 0 to 100 percent, each showing the price and margin per lot;
+  raid size runs 0.5 to 4 to 1 in tenths; training and quality budgets slide up to a tenth of
+  weekly revenue beside the typed amount; a merger remedy divests 1 to 50 percent in half steps.
+
+- A launcher on desktop: a branded splash window with progress while the engine and world map
+  load, then the game window centred at the chosen size.
+- Updates from inside the game. At launch (switchable in Settings) the game reads the public
+  release list; when a newer version is out the main menu shows it with its notes. On Windows
+  "Update now" downloads the installer with a progress bar, installs it and reopens the game;
+  Linux, Mac and Android open the download.
+- Tester previews: preview builds show as 1.6.0-preview.N, follow pre-releases in the updater so
+  each preview offers the next one and then the final release, and install over each other.
 - A Preview release workflow that builds tester previews for Windows, Linux and Android and
   publishes them as GitHub pre-releases; the full release workflow now skips pre-releases.
+- The Windows installer adds a Start menu entry and a desktop shortcut and lets you choose the
+  install folder.
+
+- A real business cycle. Output runs above or below its trend with momentum; good times and
+  cheap money build up credit, and the more credit the likelier a bust, which leaves borrowers
+  paying debt down for months. Inflation rises when the economy runs hot. Household demand,
+  loan rates and the nominal drift of wages and import prices all follow the cycle. Booms and
+  recessions now come from the economy instead of random cards.
+- A central bank that meets every six weeks and moves its rate in quarter points toward its
+  inflation target. Its chair has a stance from dovish to hawkish that tilts every decision;
+  at the end of a four-year term the government reappoints the chair or names a new one. Each
+  meeting records its decision and reason. A prime lending rate and a ten-year bond yield
+  follow from the policy rate.
+- Government and laws. Two parties, an election every four years from November 2000 decided by
+  the economy, and a programme that takes effect a quarter after a change of government:
+  corporate tax, a low-skill wage floor, the share at which a merger is reviewed, and union law.
+- Difficulty: Easy ($8M, rivals never attack your markets), Standard ($5M) and Hard ($3M, every
+  rival fights for share), a starting economy (as in 2000, calm, boom or downturn) and a custom
+  starting capital.
+- Three future scenarios shown on the scenario picker: Texas Oil Patch 1981, Silicon Valley
+  1995 and Ruhr and Rhine 1991, with art for every scenario.
+- An action catalogue in the engine describing every player action once, so every platform can
+  list and offer all of them.
+
+### Changed
+
+- Pricing against the market now allows -50 to +50 percent (was -20 to +20). Prices still stay
+  between half and twice the reference.
+- Desktop opens at 1600 x 900 instead of a phone-shaped window, and the map is the first tab on
+  Android and desktop.
 
 ## [1.5.0] - 2026-10-27
 
@@ -447,7 +541,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.0...v1.3.1

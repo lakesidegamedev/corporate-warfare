@@ -98,7 +98,7 @@ pub enum CommandIntent {
         price_cents: i64,
     },
     /// Pricing posture for one good: mode 0 hands it back to automatic pricing, 1 prices at
-    /// `bps` against the market (-2000..=2000), 2 marks up the firm's cost per lot by `bps`
+    /// `bps` against the market (-5000..=5000), 2 marks up the firm's cost per lot by `bps`
     /// (0..=10000).
     SetPricePosture {
         firm: Handle,
@@ -1189,7 +1189,7 @@ fn apply_intent(
             reference_price(dataset, *product)?;
             let posture = match (*mode, *bps) {
                 (0, _) => None,
-                (1, bps) if (-2_000..=2_000).contains(&bps) => {
+                (1, bps) if (-5_000..=5_000).contains(&bps) => {
                     Some(crate::state::PricePosture::Market { bps })
                 }
                 (2, bps) if (0..=10_000).contains(&bps) => {
@@ -1884,7 +1884,9 @@ fn apply_intent(
                 });
             }
             let grade = firm_ref(world, *firm)?.grade;
-            let rate = world.macro_state.policy_rate_bps + grade.spread_bps();
+            let rate = world.macro_state.policy_rate_bps
+                + crate::economy::macro_cycle::lending_premium_bps(world)
+                + grade.spread_bps();
             let lender_index = (0..world.outside.lenders.len())
                 .find(|index| world.outside.lenders[*index].capital_cents >= *amount_cents)
                 .ok_or(DomainError::InsufficientCash {
@@ -1932,8 +1934,9 @@ fn apply_intent(
                     detail: ArithmeticFault::OutOfRange,
                 });
             }
-            let quoted =
-                world.macro_state.policy_rate_bps + firm_ref(world, *firm)?.grade.spread_bps();
+            let quoted = world.macro_state.policy_rate_bps
+                + crate::economy::macro_cycle::lending_premium_bps(world)
+                + firm_ref(world, *firm)?.grade.spread_bps();
             if *rate_bps < quoted {
                 return Err(DomainError::SolvencyRestriction {
                     entity: firm.0,
@@ -2881,8 +2884,9 @@ mod tests {
         let dataset = Dataset::load().unwrap();
         let mut world = seed::build(&dataset, 143, ScenarioKind::Guided, ScenarioMode::Sandbox);
         let firm = world.investor.primary_group.unwrap();
-        let quoted =
-            world.macro_state.policy_rate_bps + world.firm(firm).unwrap().grade.spread_bps();
+        let quoted = world.macro_state.policy_rate_bps
+            + crate::economy::macro_cycle::lending_premium_bps(&world)
+            + world.firm(firm).unwrap().grade.spread_bps();
         let capacity = crate::economy::credit::secured_capacity(&world, firm)
             + crate::economy::credit::unsecured_capacity(&world, firm);
         let attempt = |world: &World, amount: i64, rate: i32, weeks: u32| {

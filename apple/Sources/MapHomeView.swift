@@ -164,7 +164,10 @@ struct CompanyHUD: View {
     }
 
     private var controls: some View {
-        TimeBar()
+        HStack(spacing: 6) {
+            TimeBar()
+            GameMenuButton()
+        }
     }
 }
 
@@ -287,3 +290,40 @@ struct GoalLine: View {
     }
 }
 
+
+/// The in-game menu: save, settings, and back to the main menu.
+struct GameMenuButton: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var showingSettings = false
+
+    var body: some View {
+        Menu {
+            Button {
+                Task { await store.manualSave() }
+            } label: {
+                Label("Save now", systemImage: "square.and.arrow.down")
+            }
+            Button {
+                showingSettings = true
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+            }
+            Divider()
+            Button {
+                Task { await store.exitToMenu() }
+            } label: {
+                Label("Save and exit to main menu", systemImage: "rectangle.portrait.and.arrow.right")
+            }
+        } label: {
+            Image(systemName: "line.3.horizontal")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Theme.primaryText)
+                .frame(width: 30, height: 30)
+                .background(Theme.panelRaised, in: Circle())
+        }
+        .accessibilityLabel("Menu")
+        .sheet(isPresented: $showingSettings) {
+            SettingsView().environmentObject(store)
+        }
+    }
+}

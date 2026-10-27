@@ -318,6 +318,7 @@ struct FacilitiesView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.colorScheme) private var scheme
     @State private var showingBuild = false
+    @State private var targetPercent: Double = 85
     @State private var showingPrice = false
     @State private var showingWage = false
 
@@ -362,15 +363,14 @@ struct FacilitiesView: View {
                         }
                     }
                     SectionCard(title: "Production target") {
-                        let current = store.facilities.first?.targetBps ?? 8_500
-                        Text("Target: \(Format.percentBps(current)) of full capacity")
-                            .font(.callout)
-                        ActionButton(title: "Set target to 85%", systemImage: "gauge.with.dots.needle.33percent") {
-                            Task { await store.setTarget(8_500) }
-                        }
-                        ActionButton(title: "Set target to 100%", systemImage: "gauge.with.dots.needle.100percent") {
-                            Task { await store.setTarget(10_000) }
-                        }
+                        let capacity = store.facilities.reduce(Int64(0)) { $0 + $1.capacityLots }
+                        ValueSlider(
+                            value: $targetPercent, range: 0...100, step: 1, ticks: 20,
+                            label: { String(format: "%.0f%% of capacity", $0) },
+                            detail: { "About \(Int64(Double(capacity) * $0 / 100).formatted()) of \(capacity.formatted()) lots a week. Lower targets save inputs and wages when stock is piling up." },
+                            onCommit: { value in Task { await store.setTarget(Int32(value * 100)) } }
+                        )
+                        .onAppear { targetPercent = Double(store.facilities.first?.targetBps ?? 8_500) / 100 }
                         ActionButton(title: "Build another facility", systemImage: "hammer") {
                             showingBuild = true
                         }

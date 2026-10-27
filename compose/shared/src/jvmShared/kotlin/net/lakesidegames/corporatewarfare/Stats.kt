@@ -206,7 +206,7 @@ fun StatsScreen(store: GameStore, onBack: () -> Unit) {
 }
 
 @Composable
-private fun Legend(color: Color, text: String) {
+internal fun Legend(color: Color, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(color))
         Spacer(Modifier.width(5.dp))
@@ -216,7 +216,7 @@ private fun Legend(color: Color, text: String) {
 
 /** Paired bars per bucket: revenue, then net income above or below zero. */
 @Composable
-private fun ResultsChart(buckets: List<ResultBucket>) {
+internal fun ResultsChart(buckets: List<ResultBucket>) {
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
     Canvas(Modifier.fillMaxWidth().height(200.dp)) {
         val top = buckets.maxOf { max(it.revenue, it.netIncome) }.coerceAtLeast(1)
@@ -249,7 +249,7 @@ private fun ResultsChart(buckets: List<ResultBucket>) {
 
 /** One or more series on shared axes. */
 @Composable
-private fun LineChart(series: List<Pair<Color, List<Long>>>) {
+internal fun LineChart(series: List<Pair<Color, List<Long>>>) {
     Canvas(Modifier.fillMaxWidth().height(160.dp)) {
         val all = series.flatMap { it.second }
         if (all.isEmpty()) return@Canvas
@@ -270,7 +270,7 @@ private fun LineChart(series: List<Pair<Color, List<Long>>>) {
 
 /** The latest bucket's income statement beside the one before it. */
 @Composable
-private fun Statement(buckets: List<ResultBucket>) {
+internal fun Statement(buckets: List<ResultBucket>) {
     val latest = buckets.last()
     val previous = buckets.getOrNull(buckets.size - 2)
     val rows: List<Triple<String, Boolean, (ResultBucket) -> Long>> = listOf(

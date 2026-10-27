@@ -13,6 +13,8 @@ mkdir -p "$OUT/resources" "$OUT/desktop"
 # The world map is the iPhone app's own file; both Compose targets read it as a resource.
 cp apple/Resources/world-map.json "$OUT/resources/"
 cp apple/Resources/world-map.json "$OUT/desktop/"
+cp apple/Resources/scenarios/*.png "$OUT/resources/"
+cp apple/Resources/scenarios/*.png "$OUT/desktop/"
 cp apple/Resources/sector-icons.json "$OUT/resources/"
 cp apple/Resources/sector-icons.json "$OUT/desktop/"
 cp apple/Resources/cw-logo.json "$OUT/resources/"
