@@ -21,31 +21,28 @@ use crate::state::{HolderId, OrderSide, ShareOrder, World};
 pub fn refresh_valuation(world: &mut World, dataset: &Dataset) {
     let order = valuation_order(world);
     let mut equity_by_firm: BTreeMap<Handle, i64> = BTreeMap::new();
+    // Look-through value of the stakes a firm holds in other firms, accumulated as each held
+    // firm is valued. Held firms come before their shareholders in `order`.
+    let mut stakes_held: BTreeMap<Handle, i64> = BTreeMap::new();
     for handle in order {
         let Some(firm) = world.firms.get(handle) else {
             continue;
         };
         let financial = firm.bank.is_some() || firm.insurer.is_some();
         let base = base_value(&firm.book, world.tick, financial);
-        let mut stake_value = 0i64;
-        for (holder, lot) in firm.shares.holders.iter() {
-            if let HolderId::Firm(child) = holder
-                && let Some(child_equity) = equity_by_firm.get(child)
-            {
-                let eligible = world
-                    .firms
-                    .get(*child)
-                    .map(|entity| entity.shares.eligible_votes().max(1))
-                    .unwrap_or(1);
-                stake_value += child_equity * lot.qty / eligible;
-            }
-        }
+        let stake_value = stakes_held.get(&handle).copied().unwrap_or(0);
         let equity = (base.equity_cents + stake_value).max(0);
         equity_by_firm.insert(handle, equity);
         let Some(firm) = world.firms.get_mut(handle) else {
             continue;
         };
         let eligible = firm.shares.eligible_votes().max(1);
+        // Each firm holding shares in this one owns its share of this firm's equity.
+        for (holder, lot) in firm.shares.holders.iter() {
+            if let HolderId::Firm(parent) = holder {
+                *stakes_held.entry(*parent).or_default() += equity * lot.qty / eligible;
+            }
+        }
         let fair = equity / eligible;
         let previous_mark = firm.shares.mark_cents.max(0);
         let mut mark = if previous_mark == 0 {
@@ -69,7 +66,7 @@ pub fn refresh_valuation(world: &mut World, dataset: &Dataset) {
     let _ = dataset;
 }
 
-/// Leaves before parents. Iterative, so a hundred-level tree cannot overflow the stack.
+/// Held firms before their shareholders. Iterative, so a hundred-level tree cannot overflow the stack.
 fn valuation_order(world: &World) -> Vec<Handle> {
     let mut order = Vec::new();
     let mut state: BTreeMap<Handle, u8> = BTreeMap::new();
@@ -103,6 +100,8 @@ fn valuation_order(world: &World) -> Vec<Handle> {
             }
         }
     }
+    // The walk above lists shareholders before the firms they hold; valuation needs the reverse.
+    order.reverse();
     order
 }
 
@@ -950,6 +949,46 @@ mod tests {
         let mark = world.firm(handle).unwrap().shares.mark_cents;
         assert!(mark > 0);
         assert_eq!(world.firm(handle).unwrap().book.cash(), cash_before);
+    }
+
+    /// Regression for the seed 2 growth-policy spike: when a rival took half of the player's
+    /// company, the company's own value gained the rival's whole equity and its per-share fair
+    /// value jumped about six times with flat cash and income. A shareholder's equity belongs to
+    /// the shareholder; the shareholder's value gains its stake in the held firm.
+    #[test]
+    fn a_shareholder_firm_adds_its_stake_to_itself_not_its_equity_to_the_held_firm() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 2, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let handles: Vec<Handle> = world.firms.iter().map(|(h, _)| h).collect();
+        let primary = world.investor.primary_group.unwrap();
+        let rival = handles
+            .iter()
+            .copied()
+            .find(|h| *h != primary && world.firm(*h).unwrap().shares.holders.len() == 1)
+            .or_else(|| handles.iter().copied().find(|h| *h != primary))
+            .unwrap();
+        // Strip both firms' registers to a known state: a held firm and a shareholder.
+        refresh_valuation(&mut world, &dataset);
+        let held_before = world.firm(primary).unwrap().shares.fair_cents;
+        let rival_before = world.firm(rival).unwrap().valuation.equity_cents;
+        let held_issued = world.firm(primary).unwrap().shares.issued;
+        {
+            let held = world.firms.get_mut(primary).unwrap();
+            let seller_qty = held.shares.qty(HolderId::Investor).min(held_issued / 2);
+            held.shares
+                .transfer(HolderId::Investor, HolderId::Firm(rival), seller_qty, 0);
+        }
+        refresh_valuation(&mut world, &dataset);
+        let held_after = world.firm(primary).unwrap().shares.fair_cents;
+        assert_eq!(
+            held_after, held_before,
+            "a new shareholder does not change what the held firm is worth per share"
+        );
+        let rival_after = world.firm(rival).unwrap().valuation.equity_cents;
+        assert!(
+            rival_after > rival_before,
+            "the shareholder gains its stake: {rival_before} to {rival_after}"
+        );
     }
 
     #[test]
