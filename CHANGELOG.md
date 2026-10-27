@@ -11,6 +11,11 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- A Preview release workflow that builds tester previews for Windows, Linux and Android and
+  publishes them as GitHub pre-releases; the full release workflow now skips pre-releases.
+
 ## [1.5.0] - 2026-10-27
 
 The whole world on a globe, scenarios, a Stats screen, tougher rivals and a new look. Saves from
