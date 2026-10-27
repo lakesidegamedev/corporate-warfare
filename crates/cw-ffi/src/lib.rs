@@ -16,8 +16,10 @@ use cw_session::{Query, Session};
 
 uniffi::setup_scaffolding!();
 
+mod cast;
 mod catalogue;
 mod custom;
+pub use cast::{DossierDto, MoveDto, PersonDto, PostDto};
 pub use catalogue::{ActionDto, FieldDto, OptionDto, action_catalogue};
 
 #[derive(uniffi::Record)]
@@ -1701,6 +1703,8 @@ pub struct RateDecisionDto {
 pub struct NewsDto {
     pub week: u32,
     pub text: String,
+    /// The cast member the item is about, for the portrait beside it.
+    pub person: Option<String>,
 }
 
 /// The laws in force or announced.
@@ -1778,6 +1782,10 @@ pub struct EconomyDto {
     /// dovish, leaning dovish, centrist, leaning hawkish or hawkish.
     pub chair_stance: String,
     pub chair_term_ends: u32,
+    /// The chair's portrait id, empty when the chair is not a cast member.
+    pub chair_person: String,
+    /// The central bank chair, the country's leader, the opposition leader and the governors.
+    pub posts: Vec<PostDto>,
     pub decisions: Vec<RateDecisionDto>,
     pub history: Vec<MacroPointDto>,
     /// The governing party's name and key (business or labour).
@@ -3045,6 +3053,16 @@ impl SessionHandle {
         })
     }
 
+    /// Everyone in the character cast.
+    pub fn cast_people(&self) -> Vec<PersonDto> {
+        cast::people(&self.lock().dataset)
+    }
+
+    /// A company's dossier: its chief executive, their style and its recent moves.
+    pub fn dossier(&self, firm: u64) -> Option<DossierDto> {
+        cast::dossier(&self.lock(), firm)
+    }
+
     /// The economy, central bank and government.
     pub fn economy(&self) -> EconomyDto {
         let session = self.lock();
@@ -3068,6 +3086,13 @@ impl SessionHandle {
             chair_name: c.chair.name.clone(),
             chair_stance: c.chair.stance_label().to_owned(),
             chair_term_ends: c.chair.term_ends,
+            chair_person: c
+                .chair
+                .person
+                .and_then(|p| session.dataset.cast.get(p as usize))
+                .map(|p| p.id.clone())
+                .unwrap_or_default(),
+            posts: cast::posts(world, &session.dataset),
             decisions: c
                 .decisions
                 .iter()
@@ -3110,6 +3135,10 @@ impl SessionHandle {
                 .map(|n| NewsDto {
                     week: n.week,
                     text: n.text.clone(),
+                    person: n
+                        .person
+                        .and_then(|p| session.dataset.cast.get(p as usize))
+                        .map(|p| p.id.clone()),
                 })
                 .collect(),
             reserve: cw_sim::economy::reserve::strategic_goods(&session.dataset)

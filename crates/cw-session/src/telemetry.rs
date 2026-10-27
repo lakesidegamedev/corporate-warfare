@@ -138,6 +138,12 @@ pub struct StructureLine {
     pub repeat_raids_total: u32,
     pub blocks_under_construction: i64,
     pub firms_over_construction_capacity: u32,
+/// The character cast at work: rival chief executives replaced after long losses, and how many
+/// rivals have a named chief executive. Counts only, never names.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct CastLine {
+    pub ceo_turnovers: u32,
+    pub named_ceos: u32,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -170,6 +176,7 @@ pub struct MarketSnapshot {
     pub logistics: LogisticsLine,
     pub government: GovernmentLine,
     pub structure: StructureLine,
+    pub cast: CastLine,
     pub player: Option<PlayerLine>,
 }
 
@@ -517,6 +524,10 @@ impl Session {
             logistics: logistics_line(world, dataset),
             government: government_line(world, dataset),
             structure: structure_line(world),
+            cast: CastLine {
+                ceo_turnovers: world.cast.turnovers,
+                named_ceos: world.firms.iter().filter(|(_, f)| f.ceo.is_some()).count() as u32,
+            },
             player,
         }
     }

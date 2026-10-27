@@ -589,6 +589,10 @@ pub struct Firm {
     /// merger review.
     #[serde(default)]
     pub inputs_used: Vec<u16>,
+    /// The cast member running the firm, for rivals with a named chief executive. Their
+    /// temperament is read through `economy::cast::temperament`.
+    #[serde(default)]
+    pub ceo: Option<crate::economy::cast::PersonId>,
     pub founding_week: Tick,
     pub bank: Option<BankModel>,
     pub insurer: Option<InsurerModel>,
@@ -1190,6 +1194,9 @@ pub struct CentralBanker {
     pub stance: i32,
     pub appointed_week: u32,
     pub term_ends: u32,
+    /// The cast member in the chair, when there is one.
+    #[serde(default)]
+    pub person: Option<crate::economy::cast::PersonId>,
 }
 
 impl Default for CentralBanker {
@@ -1199,6 +1206,7 @@ impl Default for CentralBanker {
             stance: 35,
             appointed_week: 0,
             term_ends: 130,
+            person: None,
         }
     }
 }
@@ -1475,6 +1483,9 @@ pub struct World {
     /// Group membership cache, invalidated on ownership transitions.
     pub group_cache: BTreeMap<Handle, Vec<Handle>>,
     pub pending_pause: Option<String>,
+    /// The character cast's posts and chief executive turnover. See `economy::cast`.
+    #[serde(default)]
+    pub cast: crate::economy::cast::CastState,
     /// Construction lots already committed to build orders this week, by contractor.
     #[serde(default)]
     pub construction_orders: BTreeMap<Handle, i64>,
@@ -1649,6 +1660,9 @@ pub struct LawChange {
 pub struct PoliticalNews {
     pub week: u32,
     pub text: String,
+    /// The cast member the item is about, shown beside it.
+    #[serde(default)]
+    pub person: Option<crate::economy::cast::PersonId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

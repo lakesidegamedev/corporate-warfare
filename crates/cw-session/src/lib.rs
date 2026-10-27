@@ -234,6 +234,10 @@ impl Session {
                 config.seed,
             );
         }
+        if !config.prices.scenario_id.is_empty() {
+            // The scenario's own people take the posts they fit.
+            cw_sim::economy::cast::assign(&mut world, &dataset, &config.prices.scenario_id);
+        }
         if let Some(laws) = custom.and_then(|c| c.laws.as_ref()) {
             world.politics.laws = cw_sim::state::Laws {
                 corporate_tax_bps: laws.corporate_tax_bps,

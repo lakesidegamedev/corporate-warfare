@@ -110,6 +110,7 @@ fn lane_firms(world: &World, key: LaneKey) -> Vec<Handle> {
 fn record(world: &mut World, incident: Incident) {
     world.systemic.counts[incident.kind as usize] += 1;
     world.politics.news.push(PoliticalNews {
+        person: None,
         week: world.tick.0,
         text: incident.text.clone(),
     });

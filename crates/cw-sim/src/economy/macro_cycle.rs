@@ -147,7 +147,7 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
     let growth = year_on_year_growth(&c.history);
 
     world.macro_state.inflation_bps = new_inflation;
-    rotate_chair(world);
+    rotate_chair(world, dataset);
     world.macro_state.policy_rate_bps = new_rate;
     world.macro_state.real_growth_bps = growth;
     apply_nominal_drift(world, new_inflation);
@@ -173,26 +173,12 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
     }
 }
 
-/// Fictional chairs a government can appoint, drawn in a fixed order from the macro stream.
-const CHAIRS: [&str; 12] = [
-    "Ruth Halvorsen",
-    "Marcus Delacroix",
-    "Eleanor Vance",
-    "Theodore Okafor",
-    "Miriam Castellanos",
-    "Henry Ashworth",
-    "Priya Raman",
-    "Walter Brennan",
-    "Dana Kowalski",
-    "Samuel Achebe",
-    "Claire Montgomery",
-    "Victor Lindqvist",
-];
-
-/// At the end of a term the government reappoints the chair or picks a new one. A pro-business
-/// government leans toward a dovish chair, a pro-labour one toward a centrist; a successful
-/// chair (inflation near target, no recession) is likelier to stay.
-fn rotate_chair(world: &mut World) {
+/// At the end of a term the government reappoints the chair or picks a new one from the cast.
+/// A pro-business government leans toward a dovish chair, a pro-labour one toward a centrist;
+/// a successful chair (inflation near target, no recession) is likelier to stay. The new chair
+/// is the free chair-capable person whose stance is nearest the government's draw, preferring
+/// the scenario's own people; with nobody free the incumbent stays.
+fn rotate_chair(world: &mut World, dataset: &Dataset) {
     let week = world.tick.0;
     if week < world.macro_state.cycle.chair.term_ends {
         return;
@@ -212,37 +198,47 @@ fn rotate_chair(world: &mut World) {
         crate::state::Party::Business => -20,
         crate::state::Party::Labour => 0,
     };
-    let stance = (rng.uniform_inclusive(-70, 70) as i32 + lean).clamp(-100, 100);
-    let pick = rng.uniform_below(CHAIRS.len() as u64) as usize;
+    let desired = (rng.uniform_inclusive(-70, 70) as i32 + lean).clamp(-100, 100);
+    let successor = if keep {
+        None
+    } else {
+        crate::economy::cast::pick_chair(world, dataset, desired)
+    };
     let c = &mut world.macro_state.cycle;
-    if keep {
-        c.chair.term_ends = week + 208;
-        world.politics.news.push(crate::state::PoliticalNews {
-            week,
-            text: format!(
+    match successor {
+        None => {
+            c.chair.term_ends = week + 208;
+            let person = c.chair.person;
+            let text = format!(
                 "{} reappointed to chair the central bank for four more years.",
                 c.chair.name
-            ),
-        });
-    } else {
-        let mut name = CHAIRS[pick].to_owned();
-        if name == c.chair.name {
-            name = CHAIRS[(pick + 1) % CHAIRS.len()].to_owned();
+            );
+            world
+                .politics
+                .news
+                .push(crate::state::PoliticalNews { person, week, text });
         }
-        c.chair = crate::state::CentralBanker {
-            name,
-            stance,
-            appointed_week: week,
-            term_ends: week + 208,
-        };
-        world.politics.news.push(crate::state::PoliticalNews {
-            week,
-            text: format!(
+        Some(person) => {
+            let appointed = week;
+            c.chair = crate::state::CentralBanker {
+                name: String::new(),
+                stance: 0,
+                appointed_week: appointed,
+                term_ends: week + 208,
+                person: None,
+            };
+            crate::economy::cast::seat_chair(dataset, &mut c.chair, person);
+            let text = format!(
                 "{} takes over the central bank, seen as {}.",
                 c.chair.name,
                 c.chair.stance_label()
-            ),
-        });
+            );
+            world.politics.news.push(crate::state::PoliticalNews {
+                person: Some(person),
+                week,
+                text,
+            });
+        }
     }
 }
 

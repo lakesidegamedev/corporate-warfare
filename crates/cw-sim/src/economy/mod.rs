@@ -1,6 +1,7 @@
 //! Economic rules, split by concern. Each module implements one section of `docs/rules`.
 
 pub mod banking;
+pub mod cast;
 pub mod credit;
 pub mod deals;
 pub mod equity;

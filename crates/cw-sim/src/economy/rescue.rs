@@ -111,6 +111,7 @@ fn overdue(world: &World, firm: Handle) -> i64 {
 
 fn news(world: &mut World, text: String) {
     world.politics.news.push(PoliticalNews {
+        person: None,
         week: world.tick.0,
         text,
     });

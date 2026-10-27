@@ -1,0 +1,189 @@
+{
+  "schema": 1,
+  "classification": "authored game content; fictional people, no real individuals",
+  "note": "The character cast: rival CEOs, central bank chairs, state governors and party leaders. Roles are what a person can be asked to do; the engine fills posts from this list, preferring people whose scenario matches. Stance runs from -100 (dovish) to +100 (hawkish) and is present only for chair-capable people. Portraits are drawn by tools/cast_portraits.py.",
+  "people": [
+    {
+      "id": "walter_pruitt",
+      "name": "Walter Pruitt",
+      "age": 61,
+      "scenario": "texas-1981",
+      "home": "Tulsa, Oklahoma",
+      "state": "OK",
+      "temperament": "raider",
+      "roles": [
+        "ceo",
+        "governor"
+      ],
+      "background": "Ran a small drilling contractor for 30 years and bought distressed leases whenever prices fell. He is blunt, distrusts banks, and is happiest taking a rival's rigs at auction."
+    },
+    {
+      "id": "marisol_ybarra",
+      "name": "Marisol Ybarra",
+      "age": 47,
+      "scenario": "texas-1981",
+      "home": "Houston, Texas",
+      "state": "TX",
+      "temperament": "integrator",
+      "roles": [
+        "ceo",
+        "chair",
+        "governor",
+        "leader"
+      ],
+      "stance": -10,
+      "background": "Chemical engineer from Rice who rose to run refining at a Houston major. She ties wells, pipelines and refineries into one chain and favours steady credit over tight money."
+    },
+    {
+      "id": "desmond_broussard",
+      "name": "Desmond Broussard",
+      "age": 55,
+      "scenario": "texas-1981",
+      "home": "Baton Rouge, Louisiana",
+      "state": "LA",
+      "temperament": "financier",
+      "roles": [
+        "ceo",
+        "chair",
+        "governor"
+      ],
+      "stance": 25,
+      "background": "Former Louisiana state treasurer who now runs a pipeline and petrochemical lender. He knows which Gulf operators are over-borrowed and prices loans accordingly."
+    },
+    {
+      "id": "helen_kowalczyk",
+      "name": "Helen Kowalczyk",
+      "age": 58,
+      "scenario": "great-lakes-2000",
+      "home": "Cleveland, Ohio",
+      "state": "OH",
+      "temperament": "cautious",
+      "roles": [
+        "ceo",
+        "chair",
+        "leader"
+      ],
+      "stance": 60,
+      "background": "Daughter of a steelworker, she became chief financial officer and then chief executive of a Cleveland steel maker. She keeps large cash reserves and wants slow, predictable growth."
+    },
+    {
+      "id": "kenji_watanabe_moore",
+      "name": "Kenji Watanabe-Moore",
+      "age": 44,
+      "scenario": "great-lakes-2000",
+      "home": "Detroit, Michigan",
+      "state": "MI",
+      "temperament": "builder",
+      "roles": [
+        "ceo",
+        "governor",
+        "leader"
+      ],
+      "background": "Runs an auto-parts supplier his mother's family started, and has opened three new plants in a decade. He prefers adding capacity to buying competitors."
+    },
+    {
+      "id": "gloria_abernathy",
+      "name": "Gloria Abernathy",
+      "age": 66,
+      "scenario": "great-lakes-2000",
+      "home": "Chicago, Illinois",
+      "state": "IL",
+      "temperament": "financier",
+      "roles": [
+        "ceo",
+        "chair"
+      ],
+      "stance": -40,
+      "background": "Spent 25 years as an economist at a regional reserve bank, then ran a Chicago commercial lender. She argues that tight money hurts factory towns first."
+    },
+    {
+      "id": "priya_raman",
+      "name": "Priya Raman",
+      "age": 39,
+      "scenario": "silicon-valley-1995",
+      "home": "San Jose, California",
+      "state": "CA",
+      "temperament": "integrator",
+      "roles": [
+        "ceo",
+        "governor",
+        "leader"
+      ],
+      "background": "Chip designer who moved into management and now runs a firm making both processors and the boards around them. She likes owning every step from design to shipping."
+    },
+    {
+      "id": "joel_rosenthal",
+      "name": "Joel Rosenthal",
+      "age": 52,
+      "scenario": "silicon-valley-1995",
+      "home": "Los Angeles, California",
+      "state": "CA",
+      "temperament": "speculator",
+      "roles": [
+        "ceo",
+        "chair"
+      ],
+      "stance": -75,
+      "background": "Venture investor who made money early in cable and software, and lost some of it in a 1987 crash. He backs fast growth and cheap credit, and trades his own stakes often."
+    },
+    {
+      "id": "linh_tran",
+      "name": "Linh Tran",
+      "age": 34,
+      "scenario": "silicon-valley-1995",
+      "home": "Oakland, California",
+      "state": "CA",
+      "temperament": "speculator",
+      "roles": [
+        "ceo",
+        "governor"
+      ],
+      "background": "Software founder who sold her first company at 27 and put the money into three new ones. She chases unproven markets and changes direction quickly."
+    },
+    {
+      "id": "ingrid_vossberg",
+      "name": "Ingrid Vossberg",
+      "age": 59,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Duesseldorf, Germany",
+      "state": "",
+      "temperament": "cautious",
+      "roles": [
+        "ceo",
+        "chair",
+        "leader"
+      ],
+      "stance": 90,
+      "background": "Economist who worked 20 years at the national central bank before joining a Rhine chemicals firm's board. She holds that price stability comes before everything else."
+    },
+    {
+      "id": "emre_kaplan",
+      "name": "Emre Kaplan",
+      "age": 45,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Duisburg, Germany",
+      "state": "",
+      "temperament": "raider",
+      "roles": [
+        "ceo",
+        "governor"
+      ],
+      "background": "Son of a Turkish steelworker, he built a river freight and scrap business and now buys troubled Ruhr suppliers cheaply. Established firms in the region still treat him as an outsider."
+    },
+    {
+      "id": "tobias_wendt",
+      "name": "Tobias Wendt",
+      "age": 70,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Essen, Germany",
+      "state": "",
+      "temperament": "builder",
+      "roles": [
+        "ceo",
+        "governor",
+        "leader"
+      ],
+      "background": "Mining engineer who became head of a coal and steel group and spent the 1980s converting old pits into industrial parks. He wants the region retrained and rebuilt, not sold off."
+    }
+  ]
+}
