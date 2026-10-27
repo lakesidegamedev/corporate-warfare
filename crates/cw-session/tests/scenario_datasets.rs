@@ -570,7 +570,10 @@ fn every_scenario_opens_in_its_own_year() {
             }
         }
         assert!(
-            session.overview().week_label.starts_with(&format!("{} ", year + 1)),
+            session
+                .overview()
+                .week_label
+                .starts_with(&format!("{} ", year + 1)),
             "{scenario}: {}",
             session.overview().week_label
         );
@@ -599,7 +602,8 @@ fn price_ratios(session: &Session) -> Vec<(String, f64)> {
 fn opening_share_prices_stay_near_fair_value() {
     for (scenario, _) in SCENARIOS {
         for seed in [1, 2] {
-            let mut session = Session::create(config(seed, ScenarioKind::Guided, scenario)).unwrap();
+            let mut session =
+                Session::create(config(seed, ScenarioKind::Guided, scenario)).unwrap();
             for week in 1..=52u32 {
                 let result = session.advance(1);
                 if result.pause.is_some() {
