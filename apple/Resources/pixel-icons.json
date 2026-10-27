@@ -1879,6 +1879,31 @@
     "................"
    ]
   },
+  "sliders": {
+   "palette": {
+    "g": "#E2B04A",
+    "s": "#8996A6",
+    "w": "#E8EEF4"
+   },
+   "rows": [
+    "................",
+    "...www..........",
+    "...wgw..........",
+    ".sswgwsssssssss.",
+    ".sswgwsssssssss.",
+    "...wgw...www....",
+    "...www...wgw....",
+    ".sssssssswgwsss.",
+    ".sssssssswgwsss.",
+    ".....www.wgw....",
+    ".....wgw.www....",
+    ".sssswgwsssssss.",
+    ".sssswgwsssssss.",
+    ".....wgw........",
+    ".....www........",
+    "................"
+   ]
+  },
   "sort": {
    "palette": {
     "w": "#E8EEF4"

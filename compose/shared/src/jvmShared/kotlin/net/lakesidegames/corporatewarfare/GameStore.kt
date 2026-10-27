@@ -116,6 +116,19 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         ready = true
     }
 
+    /** Where custom scenarios are kept, beside the saves. */
+    val customDir: String get() = File(saveDir, "custom-scenarios").path
+
+    /** A new career from an edited scenario. Its own difficulty, economy and capital apply. */
+    fun startCustom(scenario: uniffi.cw_ffi.CustomScenarioDto, guided: Boolean, fiveYear: Boolean) = perform {
+        val seed = (System.nanoTime() % 9_999_999).toULong()
+        val handle = withContext(engine) { SessionHandle.startCustom(seed, guided, fiveYear, scenario) }
+        session = handle
+        selectedFirm = withContext(engine) { handle.overview().primaryFirm }
+        reload()
+        ready = true
+    }
+
     /** Open a save from the load screen. */
     fun loadSave(file: File) = perform {
         val bytes = withContext(engine) { file.readBytes() }

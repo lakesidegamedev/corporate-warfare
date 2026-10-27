@@ -149,6 +149,22 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// A new career from an edited scenario. Its own difficulty, economy and capital apply.
+    func startCustom(_ scenario: CustomScenarioDto, guided: Bool, seed: UInt64, fiveYear: Bool) async {
+        await perform {
+            do {
+                let overview = try await self.engine.startCustom(scenario, guided: guided, seed: seed, fiveYear: fiveYear)
+                self.tutorial.beginCareer()
+                self.apply(overview)
+                await self.reload()
+                await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
+            } catch {
+                self.lastErrorKey = ErrorKey.of(error)
+                self.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     func resume(_ save: StoredSave, silent: Bool = false) async {
         do {
             let data = try saveManager.load(save)

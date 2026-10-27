@@ -199,6 +199,12 @@ def _(g):
     g.disc(7.5, 7.5, 2.3, 's')
 
 
+@icon('sliders')
+def _(g):
+    for y, knob in ((3, 4), (7, 10), (11, 6)):
+        g.rect(1, y, 14, y + 1, 's').rect(knob - 1, y - 2, knob + 1, y + 3, 'w').rect(knob, y - 1, knob, y + 2, 'g')
+
+
 @icon('search')
 def _(g):
     g.disc(6.5, 6.5, 5, 'w', inner=3).line(10, 10, 14, 14, 'w').line(10, 11, 13, 14, 'w')

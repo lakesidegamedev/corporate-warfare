@@ -227,6 +227,7 @@ struct StartView: View {
     @State private var screen = Screen.menu
     @State private var showingSettings = false
     @State private var showingSaves = false
+    @State private var showingEditor = false
     @State private var export: DiagnosticExport?
 
     private var version: String {
@@ -245,6 +246,9 @@ struct StartView: View {
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView().environmentObject(store)
+        }
+        .sheet(isPresented: $showingEditor) {
+            ScenarioEditorView().environmentObject(store)
         }
         .sheet(isPresented: $showingSaves) {
             SavesView().environmentObject(store)
@@ -288,6 +292,7 @@ struct StartView: View {
                         if !store.saves.isEmpty {
                             MenuButton(title: "Load game") { showingSaves = true }
                         }
+                        MenuButton(title: "Scenario editor") { showingEditor = true }
                         MenuButton(title: "Settings") { showingSettings = true }
                         if let issue = store.recoveryIssue {
                             RecoveryCard(issue: issue) { export = store.makeDiagnostics() }

@@ -118,6 +118,8 @@ pub struct Session {
     pub world: World,
     pub career_id: u64,
     pub config: ScenarioConfig,
+    /// The custom scenario this career started from, kept in saves.
+    pub custom: Option<cw_data::CustomScenario>,
     log: ReplayLog,
     /// Rival command outcomes for this process. Diagnostic only: never saved or hashed.
     pub ai_log: AiLog,
@@ -140,7 +142,34 @@ pub struct ArchetypeActions {
 
 impl Session {
     pub fn create(config: ScenarioConfig) -> Result<Session, DomainError> {
-        let dataset = Dataset::load().map_err(|_| DomainError::InternalFault { diagnostic: 1 })?;
+        Self::create_with(config, None)
+    }
+
+    /// A career from a custom scenario. Its difficulty, economy and capital replace the
+    /// config's; its rivals, regional levels and opening laws shape the starting world. The
+    /// scenario is validated first and refused with a plain-words reason if it cannot be played.
+    pub fn create_custom(
+        mut config: ScenarioConfig,
+        custom: &cw_data::CustomScenario,
+    ) -> Result<Session, String> {
+        let dataset =
+            Dataset::load().map_err(|_| "The game data could not be loaded".to_owned())?;
+        let errors = custom.validate(&dataset);
+        if !errors.is_empty() {
+            return Err(errors.join("; "));
+        }
+        config.difficulty = Difficulty::from_key(&custom.difficulty);
+        config.economy_start = cw_sim::state::EconomyStart::from_key(&custom.economy);
+        config.starting_capital_cents = custom.starting_capital_cents;
+        Self::create_with(config, Some(custom)).map_err(|e| format!("{e:?}"))
+    }
+
+    fn create_with(
+        config: ScenarioConfig,
+        custom: Option<&cw_data::CustomScenario>,
+    ) -> Result<Session, DomainError> {
+        let mut dataset =
+            Dataset::load().map_err(|_| DomainError::InternalFault { diagnostic: 1 })?;
         if !config.dataset_hash.is_empty() && config.dataset_hash != dataset.hash {
             return Err(DomainError::InvalidSave {
                 detail: cw_core::error::SaveFault::MalformedPayload,
@@ -151,13 +180,28 @@ impl Session {
             economy: config.economy_start,
             capital_cents: config.starting_capital_cents,
         };
-        let world = cw_sim::economy::seed::build_with(
+        if let Some(custom) = custom {
+            custom.apply_to(&mut dataset);
+        }
+        let mut world = cw_sim::economy::seed::build_with(
             &dataset,
             config.seed,
             config.scenario,
             config.mode,
             &options,
         );
+        if let Some(laws) = custom.and_then(|c| c.laws.as_ref()) {
+            world.politics.laws = cw_sim::state::Laws {
+                corporate_tax_bps: laws.corporate_tax_bps,
+                wage_floor_cents: laws.wage_floor_cents,
+                merger_review_bps: laws.merger_review_bps,
+                unions: match laws.unions.as_str() {
+                    "weak" => cw_sim::state::UnionLaw::Weak,
+                    "strong" => cw_sim::state::UnionLaw::Strong,
+                    _ => cw_sim::state::UnionLaw::Standard,
+                },
+            };
+        }
         let career_id = cw_core::rng::scramble(config.seed) & 0x00FF_FFFF_FFFF_FFFF;
         let log = ReplayLog {
             config: config.clone(),
@@ -169,6 +213,7 @@ impl Session {
             world,
             career_id,
             config,
+            custom: custom.cloned(),
             log,
             ai_log: AiLog::default(),
         })
@@ -956,7 +1001,7 @@ impl Session {
     }
 
     pub fn export_save(&self) -> Result<Vec<u8>, DomainError> {
-        save::encode(&self.world, self.career_id)
+        save::encode_with(&self.world, self.career_id, self.custom.as_ref())
     }
 
     /// Import into a new session. The current session is untouched on failure.
@@ -967,12 +1012,21 @@ impl Session {
                 requested: bytes.len() as u64,
             });
         }
-        let (world, career_id) = save::decode(bytes)?;
-        let dataset = Dataset::load().map_err(|_| DomainError::InternalFault { diagnostic: 2 })?;
+        let (world, career_id, custom) = save::decode_with(bytes)?;
+        let mut dataset =
+            Dataset::load().map_err(|_| DomainError::InternalFault { diagnostic: 2 })?;
         if world.dataset_hash != dataset.hash {
             return Err(DomainError::InvalidSave {
                 detail: cw_core::error::SaveFault::MalformedPayload,
             });
+        }
+        if let Some(custom) = &custom {
+            if !custom.validate(&dataset).is_empty() {
+                return Err(DomainError::InvalidSave {
+                    detail: cw_core::error::SaveFault::MalformedPayload,
+                });
+            }
+            custom.apply_to(&mut dataset);
         }
         let config = ScenarioConfig {
             seed: world.seed,
@@ -993,6 +1047,7 @@ impl Session {
             world,
             career_id,
             config,
+            custom,
             log,
             ai_log: AiLog::default(),
         })

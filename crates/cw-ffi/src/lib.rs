@@ -17,6 +17,7 @@ use cw_session::{Query, Session};
 uniffi::setup_scaffolding!();
 
 mod catalogue;
+mod custom;
 pub use catalogue::{ActionDto, FieldDto, OptionDto, action_catalogue};
 
 #[derive(uniffi::Record)]
