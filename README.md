@@ -1,10 +1,9 @@
 # Corporate Warfare
 
-An offline corporate strategy game for iPhone. Build a holding company in the
-Great Lakes economy, compete with rival firms, and grow through subsidiaries,
-production, finance and acquisitions. References: Capitalism Lab and A House Divided.
+An offline economic strategy game. Build a holding company, compete with rival
+firms, and grow through subsidiaries, production, finance and acquisitions. The
+first scenario is the Great Lakes in 2000; more countries and scenarios follow. References: Capitalism Lab and A House Divided.
 
-This repository is in planning and bootstrap. It is not a playable game.
 
 Start with [the planning index](docs/planning/README.md), then the
 [audit](docs/planning/AUDIT.md). The original [DeepSeek plan](docs/PLAN.md) is
@@ -24,8 +23,8 @@ On this shared VPS, full builds/tests go through the host check scheduler. See
 
 ## Release target
 
-A polished Great Lakes game installed through TestFlight. National expansion and
-desktop ports follow separately. Apple console setup can be a named owner dependency;
+A polished economic sim on iPhone, iPad, Mac, Android, Windows and Linux, starting
+with the Great Lakes 2000 scenario. More scenarios and countries follow. Apple console setup can be a named owner dependency;
 it cannot be reported as a successful TestFlight install.
 
 Changes by version: [CHANGELOG.md](CHANGELOG.md). Versioning and releases: [docs/RELEASING.md](docs/RELEASING.md).

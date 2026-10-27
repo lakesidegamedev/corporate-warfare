@@ -8,6 +8,7 @@ pub mod events_engine;
 pub mod fiscal;
 pub mod freight;
 pub mod governance;
+pub mod history;
 pub mod insolvency;
 pub mod insurance;
 pub mod labour;

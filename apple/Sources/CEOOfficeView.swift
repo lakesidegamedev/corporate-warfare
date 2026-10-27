@@ -16,6 +16,19 @@ struct CEOOfficeView: View {
             if let firm {
                 masthead(firm)
                 figures(firm)
+                NavigationLink {
+                    StatsView().environmentObject(store)
+                } label: {
+                    HStack {
+                        Label("Stats: results, balance sheet, shares, owners", systemImage: "chart.xyaxis.line")
+                            .font(.callout.weight(.semibold))
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                    }
+                    .padding(12)
+                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .tint(Theme.gold)
                 if let weeks = store.finance?.recentWeeks, !weeks.isEmpty, store.finance?.firm == firm.handle {
                     ProfitDrivers(weeks: weeks)
                 }

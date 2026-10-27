@@ -155,7 +155,7 @@ struct RaidNewsRow: View {
             SectorBadge(sector: raid.industry, size: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(headline).font(.callout).foregroundStyle(Theme.primaryText)
-                Text("Week \(raid.week) · \(CorridorMap.shared.regionName(raid.region))")
+                Text("Week \(raid.week) · \(WorldMap.shared.regionName(raid.region))")
                     .font(.caption).foregroundStyle(tone)
             }
         }

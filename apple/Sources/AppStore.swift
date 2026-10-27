@@ -26,6 +26,8 @@ final class AppStore: ObservableObject {
     @Published var commodities: [CommodityDto] = []
     @Published var stocks: [StockDto] = []
     @Published var ownership: OwnershipDto?
+    /// The selected company's four-week results, loaded when the stats screen opens.
+    @Published var history: [PeriodDto] = []
     @Published var contracts: [ContractDto] = []
     @Published var loans: [LoanDto] = []
     @Published var insurance: [InsuranceDto] = []
@@ -159,9 +161,11 @@ final class AppStore: ObservableObject {
         recoveryNotice = nil
     }
 
-    func advance(weeks: UInt32) async {
+    /// Settle weeks. A tick of the run loop runs in the background: it does not mark the app
+    /// busy, so buttons stay put while time runs instead of flashing disabled every week.
+    func advance(weeks: UInt32, background: Bool = false) async {
         guard sessionReady else { return }
-        await perform {
+        let body: () async -> Void = {
             if let result = await self.engine.advance(weeks: weeks) {
                 if let pause = result.pause {
                     self.statusLine = "Paused: \(pause)"
@@ -179,22 +183,37 @@ final class AppStore: ObservableObject {
                 await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
             }
         }
+        if background {
+            await body()
+        } else {
+            await perform(body)
+        }
     }
 
+    /// Play or pause at 1x. Kept for the single play button.
     func toggleRun() {
-        if runTask != nil {
+        setSpeed(runTask == nil ? 1 : 0)
+    }
+
+    /// Time runs at `speed` weeks a second: 0 pauses, 1, 2 or 4 play. Changing speed while
+    /// running takes effect from the next week without restarting the loop.
+    func setSpeed(_ speed: Double) {
+        guard speed > 0 else {
             stopRunLoop()
             return
         }
+        runSpeed = speed
+        if runTask != nil { return }
         runGeneration += 1
         let generation = runGeneration
-        runSpeed = 1
         runTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
-                await self.advance(weeks: 1)
+                await self.advance(weeks: 1, background: true)
                 if self.overview?.pause != nil { break }
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if self.events.contains(where: { $0.mandatory }) { break }
+                let pace = max(self.runSpeed, 1)
+                try? await Task.sleep(nanoseconds: UInt64(1_000_000_000 / pace))
             }
             await MainActor.run {
                 guard self.runGeneration == generation else { return }
@@ -242,6 +261,7 @@ final class AppStore: ObservableObject {
             finance = await engine.finance(firm: selectedFirm)
             productLines = await engine.productLines(firm: selectedFirm)
             ownership = await engine.ownership(firm: selectedFirm)
+            history = await engine.history(firm: selectedFirm)
             contracts = await engine.contracts(firm: selectedFirm)
             loans = await engine.loans(firm: selectedFirm)
             insurance = await engine.insurance(firm: selectedFirm)
@@ -259,6 +279,7 @@ final class AppStore: ObservableObject {
             finance = nil
             productLines = []
             ownership = nil
+            history = []
             contracts = []
             loans = []
             insurance = []
@@ -276,6 +297,14 @@ final class AppStore: ObservableObject {
         selectedRegionCode
             ?? selectedFirmDto.flatMap { firm in boards.first { $0.name == firm.region }?.code }
             ?? boards.first?.code
+    }
+
+    func loadHistory() async {
+        if let selectedFirm {
+            history = await engine.history(firm: selectedFirm)
+        } else {
+            history = []
+        }
     }
 
     func loadMarkets() async {

@@ -1,7 +1,7 @@
 # App Store metadata (draft; owner makes final choices)
 
 - Name: Corporate Warfare
-- Subtitle candidate: Build a Great Lakes business empire
+- Subtitle candidate: Build a business empire
 - Category candidate: Games / Strategy; secondary Simulation
 - Price: owner decision (premium, no in-app purchases)
 - Keywords candidate: business, simulation, strategy, tycoon, corporation, economy, offline

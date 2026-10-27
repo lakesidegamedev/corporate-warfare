@@ -11,6 +11,47 @@ heading.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-27
+
+The whole world on a globe, scenarios, a Stats screen, tougher rivals and a new look. Saves from
+1.4.0 do not load in 1.5.0: the engine now keeps five years of company history.
+
+### Added
+
+- A new 8-bit Corporate Warfare logo: a gold C beside a W drawn as a stock line that runs green
+  to red and breaks out into an arrow. It is the app icon on iPhone, iPad, Mac, Android, Windows
+  and Linux and leads the redesigned start screen, with a row of the new 8-bit sector icons.
+- 8-bit icons for all fifteen sectors, shared by every platform.
+- A speed control: pause, 1x, 2x and 4x (one tick is one week; 1x is a week a second).
+- A Stats screen for every company, from the CEO Office: results by week, four-week period or
+  year with revenue and profit charts, the income statement beside the period before, the balance
+  sheet over time, market value, shares issued, free float, price to earnings, the share price
+  and who owns it. The engine now keeps five years of each company's results.
+- Scenarios on the start screen. A new career starts from a scenario card that shows the
+  country, starting year, number of regions and the situation; Great Lakes, 2000 is the first.
+- The whole world on the map. Zoomed out it is a globe you can spin; zooming in flattens it
+  smoothly onto the scenario, where counties, roads and rivers fade in. Double-tap, or the
+  globe button, flies between the two. Zoom buttons on every platform and the mouse wheel on
+  desktop.
+- Outside the scenario the world is greyed out but still mapped: every country, state and
+  province border and the main highways, in grey, with the scenario in colour.
+
+### Changed
+
+- Buttons no longer flash while weeks process: a running week does not mark the app busy.
+- The seed field is gone from the new-career screen; every career gets a random seed.
+- Test runs no longer send anonymous market data.
+- Rival companies fight harder. Cost leaders, consolidators and vultures undercut prices, move
+  into markets you hold, review their plans every two weeks and can bid for your companies.
+  A rival waits at least 26 weeks between raids on the same target.
+- Corporate Warfare is presented as an economic sim, not a Great Lakes game. The start screen,
+  store text and market labels no longer advertise the region; the Great Lakes is named only as
+  the first scenario.
+- A proper Settings page, opened from a gear on Portfolio, holds saving, analytics, saves and
+  recovery, the walkthrough and the version; Portfolio is back to the player's money.
+- On the map, Next week and the speed buttons fold into one time pill showing the current speed;
+  tap it to open them. The "circles are your divisions" legend is gone.
+
 ### Fixed
 
 - iPhone release builds failed at signing once the team reached Apple's cap on development
@@ -401,7 +442,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.2.0...v1.3.0

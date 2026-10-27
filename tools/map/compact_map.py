@@ -1,22 +1,28 @@
-#!/usr/bin/env python3
-"""Compact projected GeoJSON layers into apple/Resources/corridor-map.json.
+"""Compact GeoJSON layers into apple/Resources/world-map.json.
 
-Input: the mapshaper outputs written by tools/map/build_map.sh (Albers conic, metres). Output: a
-10000-unit-wide view box with integer coordinates, flat [x0, y0, x1, y1, ...] rings and lines,
-and per-layer points thinned to a minimum spacing. Sources are US Census cartographic boundary
-and TIGER files and Natural Earth, all public domain.
+Input: the mapshaper outputs written by tools/map/build_map.sh, in longitude and latitude. Output:
+integer coordinates in ten-thousandths of a degree, flat [lon0, lat0, lon1, lat1, ...] rings and
+lines, with points thinned to a minimum spacing. The apps project at draw time. Sources are US
+Census cartographic boundary and TIGER files and Natural Earth, all public domain.
 """
 import json
+import math
 import sys
 from pathlib import Path
 
 PLAY = ["IL", "IN", "KY", "MI", "NY", "OH", "PA", "WV"]
 FIPS = {"17": "IL", "18": "IN", "21": "KY", "26": "MI", "36": "NY", "39": "OH", "42": "PA", "54": "WV"}
-WIDTH = 10_000
+SCALE = 10_000
+# Spacing in the old 10000-unit corridor box was about 190 m a unit; one unit is about 18 here.
+UNIT = 18
 
 
 def load(directory, name):
-    return json.load(open(Path(directory) / f"{name}.json"))["features"]
+    document = json.load(open(Path(directory) / f"{name}.json"))
+    if "features" in document:
+        return document["features"]
+    # -innerlines writes bare geometries.
+    return [{"type": "Feature", "properties": {}, "geometry": g} for g in document.get("geometries", [])]
 
 
 def geometries(feature):
@@ -36,41 +42,24 @@ def geometries(feature):
 
 def main(source, output):
     layers = {name: load(source, name) for name in
-              ["play_states", "context_states", "canada", "counties", "regions", "lakes", "rivers",
-               "interstates_thin", "cities", "hubs"]}
+              ["countries", "provinces", "world_roads", "play_states", "context_states", "canada", "counties", "regions", "lakes",
+               "rivers", "interstates_thin", "cities", "hubs"]}
     names = {r["code"]: r["name"] for r in
              json.load(open(Path(__file__).resolve().parents[2] / "content/geography/regions.json"))["regions"]}
-    xs, ys = [], []
-    for feature in layers["play_states"] + layers["context_states"] + layers["canada"]:
-        for polygon in geometries(feature):
-            for ring in polygon:
-                for x, y in ring:
-                    xs.append(x)
-                    ys.append(y)
-    # Frame on the playable states with a margin, so context land fills the edges.
-    play_x, play_y = [], []
-    for feature in layers["play_states"]:
-        for polygon in geometries(feature):
-            for ring in polygon:
-                for x, y in ring:
-                    play_x.append(x)
-                    play_y.append(y)
-    margin = 0.06 * (max(play_x) - min(play_x))
-    left, right = min(play_x) - margin, max(play_x) + margin
-    bottom, top = min(play_y) - margin, max(play_y) + margin
-    scale = WIDTH / (right - left)
-    height = round((top - bottom) * scale)
 
-    def point(x, y):
-        return round((x - left) * scale), round((top - y) * scale)
+    def point(lon, lat):
+        return round(lon * SCALE), round(lat * SCALE)
 
     def flat(sequence, spacing, closed):
         out = []
         last = None
-        for x, y in sequence:
-            px, py = point(x, y)
-            if last is not None and abs(px - last[0]) + abs(py - last[1]) < spacing:
-                continue
+        limit = spacing * UNIT
+        for lon, lat in sequence:
+            px, py = point(lon, lat)
+            if last is not None:
+                east = abs(px - last[0]) * math.cos(math.radians(lat))
+                if east + abs(py - last[1]) < limit:
+                    continue
             out += [px, py]
             last = (px, py)
         minimum = 6 if closed else 4
@@ -93,6 +82,16 @@ def main(source, output):
                 if compact:
                     result.append(compact)
         return result
+
+    countries = []
+    for feature in layers["countries"]:
+        p = feature["properties"]
+        r = rings(feature, 0)
+        if r:
+            countries.append({"code": p.get("ADM0_A3") or "", "name": p.get("NAME") or "", "rings": r})
+
+    provinces = [line for f in layers["provinces"] for line in lines(f, 4)]
+    roads = [line for f in layers["world_roads"] for line in lines(f, 6)]
 
     states = []
     for feature in layers["play_states"]:
@@ -136,8 +135,6 @@ def main(source, output):
         p = feature["properties"]
         x, y = feature["geometry"]["coordinates"]
         px, py = point(x, y)
-        if not (0 <= px <= WIDTH and 0 <= py <= height):
-            continue
         region = p.get("ADM1NAME") or ""
         cities.append({
             "name": " ".join(p["NAME"].split()),
@@ -154,10 +151,12 @@ def main(source, output):
         x, y = feature["geometry"]["coordinates"]
         hubs[feature["properties"]["code"]] = list(point(x, y))
     document = {
-        "schema": 2,
-        "attribution": "Boundaries and roads: US Census Bureau cartographic boundary and TIGER/Line files (2018). Lakes, rivers, places and provinces: Natural Earth. All public domain.",
-        "projection": "Albers equal-area conic, standard parallels 38N and 44N, centre 41N 82W",
-        "viewbox": [WIDTH, height],
+        "schema": 3,
+        "attribution": "Boundaries and roads: US Census Bureau cartographic boundary and TIGER/Line files (2018). Countries, lakes, rivers, places and provinces: Natural Earth. All public domain.",
+        "units": "ten-thousandths of a degree, longitude then latitude",
+        "countries": countries,
+        "provinces": provinces,
+        "roads": roads,
         "states": states,
         "regions": regions,
         "counties": counties,
@@ -170,7 +169,7 @@ def main(source, output):
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     Path(output).write_text(json.dumps(document, separators=(",", ":")))
     size = Path(output).stat().st_size
-    print(f"wrote {output}: {size // 1024} KB, {len(states)} states/provinces, {len(regions)} regions, {len(counties)} counties, "
+    print(f"wrote {output}: {size // 1024} KB, {len(countries)} countries, {len(provinces)} province borders, {len(roads)} roads, {len(states)} states/provinces, {len(regions)} regions, {len(counties)} counties, "
           f"{len(lakes)} lakes, {len(rivers)} rivers, {len(interstates)} interstates, {len(cities)} cities")
 
 

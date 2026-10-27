@@ -15,6 +15,8 @@ import kotlinx.coroutines.withContext
 import uniffi.cw_ffi.BuildQuoteDto
 import uniffi.cw_ffi.CommodityDto
 import uniffi.cw_ffi.DivisionDto
+import uniffi.cw_ffi.OwnershipDto
+import uniffi.cw_ffi.PeriodDto
 import uniffi.cw_ffi.MapDivisionDto
 import uniffi.cw_ffi.StockDto
 import uniffi.cw_ffi.StrategyDto
@@ -47,6 +49,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var ready by mutableStateOf(false); private set
     var busy by mutableStateOf(false); private set
     var running by mutableStateOf(false); private set
+    /** Weeks a second while running: 1, 2 or 4. */
+    var speed by mutableStateOf(1); private set
     var status by mutableStateOf(""); private set
     var error by mutableStateOf<String?>(null)
 
@@ -60,6 +64,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var events by mutableStateOf<List<EventDto>>(emptyList()); private set
     var boards by mutableStateOf<List<RegionBoardDto>>(emptyList()); private set
     var stocks by mutableStateOf<List<StockDto>>(emptyList()); private set
+    /** The selected company's four-week results, oldest first, up to five years. */
+    var history by mutableStateOf<List<PeriodDto>>(emptyList()); private set
+    var ownership by mutableStateOf<OwnershipDto?>(null); private set
     var commodities by mutableStateOf<List<CommodityDto>>(emptyList()); private set
     var mapDivisions by mutableStateOf<List<MapDivisionDto>>(emptyList()); private set
     val strategyCatalogue: List<StrategyDto> by lazy { strategies() }
@@ -90,19 +97,28 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     fun advance() = perform { step() }
 
-    fun toggleRun() {
-        if (runJob != null) {
+    fun toggleRun() = playAt(if (runJob == null) 1 else 0)
+
+    /**
+     * Time runs at [weeksPerSecond]: 0 pauses, 1, 2 or 4 play. One tick is one week. A running
+     * loop picks up a new speed from the next week; ticks never mark the app busy, so buttons
+     * stay put while time runs.
+     */
+    fun playAt(weeksPerSecond: Int) {
+        if (weeksPerSecond <= 0) {
             runJob?.cancel()
             runJob = null
             running = false
             return
         }
+        speed = weeksPerSecond
+        if (runJob != null) return
         running = true
         runJob = scope.launch {
             while (isActive) {
                 step()
                 if (overview?.pause != null || events.any { it.mandatory }) break
-                delay(1_000)
+                delay(1_000L / speed)
             }
             running = false
             runJob = null
@@ -203,6 +219,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
             listOf(
                 overviewNow, firmsNow, eventsNow, boardsNow, financeNow, linesNow, facilitiesNow, divisionsNow,
                 handle.stockBoard(), handle.commodityBoard(), handle.mapDivisions(),
+                firm?.let { handle.history(it) } ?: emptyList<PeriodDto>(), firm?.let { handle.ownership(it) },
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
@@ -218,6 +235,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 stocks = parts[8] as List<StockDto>
                 commodities = parts[9] as List<CommodityDto>
                 mapDivisions = parts[10] as List<MapDivisionDto>
+                history = parts[11] as List<PeriodDto>
+                ownership = parts[12] as OwnershipDto?
             }
         }
         loadMarkets()

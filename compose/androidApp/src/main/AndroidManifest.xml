@@ -5,6 +5,7 @@
     <application
         android:allowBackup="true"
         android:label="Corporate Warfare"
+        android:icon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
         <activity

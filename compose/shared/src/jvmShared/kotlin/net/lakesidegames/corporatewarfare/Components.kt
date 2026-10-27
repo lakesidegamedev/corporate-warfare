@@ -113,14 +113,29 @@ fun Callout(text: String, tint: Color = Palette.gold) {
     }
 }
 
-/** A square sector badge with the sector's initial. */
+/** A sector's 8-bit icon on a dark tile with a rim in the sector's colour. */
 @Composable
 fun SectorBadge(sector: String, size: Int = 26) {
-    Box(
-        Modifier.size(size.dp).clip(RoundedCornerShape((size * 0.28).dp)).background(Sectors.color(sector)),
-        contentAlignment = Alignment.Center,
+    val icon = SectorIcons.all[sector]
+    androidx.compose.foundation.Canvas(
+        Modifier.size(size.dp).clip(RoundedCornerShape((size * 0.22).dp)).background(Palette.ink)
+            .border(maxOf(1, size / 18).dp, Sectors.color(sector), RoundedCornerShape((size * 0.22).dp)),
     ) {
-        Text(Sectors.name(sector).take(1), color = Palette.ink, fontWeight = FontWeight.Bold, fontSize = (size * 0.45).sp)
+        if (icon == null) return@Canvas
+        val inset = this.size.width * 0.12f
+        val cell = (this.size.width - inset * 2) / 12f
+        icon.rows.forEachIndexed { y, row ->
+            row.forEachIndexed { x, character ->
+                val hex = if (character == '.') null else icon.palette[character.toString()]
+                if (hex != null) {
+                    drawRect(
+                        SectorIcons.color(hex),
+                        topLeft = androidx.compose.ui.geometry.Offset(inset + x * cell, inset + y * cell),
+                        size = androidx.compose.ui.geometry.Size(cell + 0.5f, cell + 0.5f),
+                    )
+                }
+            }
+        }
     }
 }
 

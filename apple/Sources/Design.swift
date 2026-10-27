@@ -125,17 +125,87 @@ struct Panel<Content: View>: View {
     }
 }
 
-/// A sector icon in its colour.
+/// The 8-bit sector icons, shared with every platform (Resources/sector-icons.json): a 12 by 12
+/// grid per sector, each letter a colour from that icon's palette.
+enum SectorIcons {
+    struct Icon: Decodable {
+        let palette: [String: String]
+        let rows: [String]
+    }
+
+    private struct File: Decodable {
+        let icons: [String: Icon]
+    }
+
+    static let all: [String: Icon] = {
+        guard let url = Bundle.main.url(forResource: "sector-icons", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let file = try? JSONDecoder().decode(File.self, from: data) else { return [:] }
+        return file.icons
+    }()
+
+    static func color(_ hex: String) -> Color {
+        let value = UInt64(hex.dropFirst(), radix: 16) ?? 0
+        return Color(red: Double((value >> 16) & 0xFF) / 255, green: Double((value >> 8) & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
+    }
+}
+
+/// The Corporate Warfare logo: the CW emblem over the pixel wordmark, drawn from the shared
+/// Resources/cw-logo.json so every platform shows the same pixels.
+struct PixelLogo: View {
+    private struct File: Decodable {
+        let width: Int
+        let height: Int
+        let palette: [String: String]
+        let rows: [String]
+    }
+
+    private static let file: File? = Bundle.main.url(forResource: "cw-logo", withExtension: "json")
+        .flatMap { try? Data(contentsOf: $0) }
+        .flatMap { try? JSONDecoder().decode(File.self, from: $0) }
+
+    var body: some View {
+        let file = Self.file
+        Canvas { context, canvas in
+            guard let file else { return }
+            let cell = min(canvas.width / CGFloat(file.width), canvas.height / CGFloat(file.height))
+            let origin = CGPoint(x: (canvas.width - cell * CGFloat(file.width)) / 2, y: (canvas.height - cell * CGFloat(file.height)) / 2)
+            for (y, row) in file.rows.enumerated() {
+                for (x, character) in row.enumerated() where character != "." {
+                    guard let hex = file.palette[String(character)] else { continue }
+                    let rect = CGRect(x: origin.x + CGFloat(x) * cell, y: origin.y + CGFloat(y) * cell, width: cell + 0.5, height: cell + 0.5)
+                    context.fill(Path(rect), with: .color(SectorIcons.color(hex)))
+                }
+            }
+        }
+        .aspectRatio(CGFloat(file?.width ?? 64) / CGFloat(file?.height ?? 58), contentMode: .fit)
+        .accessibilityLabel("Corporate Warfare")
+    }
+}
+
+/// A sector's 8-bit icon on a dark tile with a rim in the sector's colour.
 struct SectorBadge: View {
     let sector: String
     var size: CGFloat = 28
+
     var body: some View {
-        Image(systemName: Sector.symbol(sector))
-            .font(.system(size: size * 0.48, weight: .semibold))
-            .foregroundStyle(Theme.ink)
-            .frame(width: size, height: size)
-            .background(Sector.color(sector), in: RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
-            .accessibilityLabel(Sector.name(sector))
+        Canvas { context, canvas in
+            guard let icon = SectorIcons.all[sector] else { return }
+            let inset = canvas.width * 0.12
+            let cell = (canvas.width - inset * 2) / 12
+            for (y, row) in icon.rows.enumerated() {
+                for (x, character) in row.enumerated() where character != "." {
+                    guard let hex = icon.palette[String(character)] else { continue }
+                    // Whole-pixel cells, slightly overlapping, so the art stays crisp at any size.
+                    let rect = CGRect(x: inset + CGFloat(x) * cell, y: inset + CGFloat(y) * cell, width: cell + 0.5, height: cell + 0.5)
+                    context.fill(Path(rect), with: .color(SectorIcons.color(hex)))
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .background(Theme.ink, in: RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous).stroke(Sector.color(sector), lineWidth: max(1, size / 18)))
+        .accessibilityLabel(Sector.name(sector))
     }
 }
 

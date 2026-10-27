@@ -1,7 +1,12 @@
 package net.lakesidegames.corporatewarfare
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
@@ -48,6 +54,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uniffi.cw_ffi.EventDto
+import uniffi.cw_ffi.ScenarioDto
+import uniffi.cw_ffi.scenarios
 import uniffi.cw_ffi.ProductLineDto
 
 private enum class Tab(val title: String, val icon: ImageVector) {
@@ -80,26 +88,69 @@ fun CorporateWarfareApp(store: GameStore) {
 @Composable
 private fun StartScreen(store: GameStore) {
     Column(
-        Modifier.fillMaxSize().padding(24.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Corporate Warfare", color = Palette.primaryText, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        LogoArt(Modifier.width(300.dp))
+        Spacer(Modifier.height(14.dp))
         Text(
-            "Build an industrial empire across the Rust Belt corridor, 2000.",
+            "Build an industrial empire. Outprice, outbuild and buy out your rivals.",
             color = Palette.secondary,
             fontSize = 14.sp,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Sectors.order.take(8).forEach { SectorBadge(it, 26) }
+        }
+        Spacer(Modifier.height(24.dp))
+        scenarios().forEach { scenario -> ScenarioCard(scenario, selected = true, modifier = Modifier.width(420.dp)) }
+        Spacer(Modifier.height(20.dp))
         if (store.hasAutosave) {
-            GoldButton("Continue career", enabled = !store.busy) { store.continueCareer() }
+            GoldButton("Continue career", Modifier.width(260.dp), enabled = !store.busy) { store.continueCareer() }
             Spacer(Modifier.height(10.dp))
         }
-        GoldButton("New guided career", enabled = !store.busy) { store.newCareer(System.currentTimeMillis() % 1_000_000, guided = true) }
+        GoldButton("New guided career", Modifier.width(260.dp), enabled = !store.busy) { store.newCareer(System.nanoTime() % 9_999_999, guided = true) }
         Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = { store.newCareer(System.currentTimeMillis() % 1_000_000, guided = false) }, enabled = !store.busy) {
+        OutlinedButton(onClick = { store.newCareer(System.nanoTime() % 9_999_999, guided = false) }, enabled = !store.busy, modifier = Modifier.width(260.dp)) {
             Text("New sandbox career", color = Palette.primaryText)
+        }
+    }
+}
+
+/** One scenario on the start screen: where and when it starts, and what the player is up against. */
+@Composable
+private fun ScenarioCard(scenario: ScenarioDto, selected: Boolean, modifier: Modifier = Modifier) {
+    Column(
+        modifier.clip(RoundedCornerShape(12.dp)).background(Palette.panel)
+            .border(if (selected) 2.dp else 1.dp, if (selected) Palette.gold else Palette.stroke, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(scenario.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+        Text("${scenario.country} · starts ${scenario.startYear} · ${scenario.regionCount} regions", color = Palette.secondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(scenario.summary, color = Palette.secondary, fontSize = 13.sp)
+    }
+}
+
+/** The pixel logo, scaled to fit with square pixels. */
+@Composable
+fun LogoArt(modifier: Modifier) {
+    val file = PixelLogo.file ?: return
+    androidx.compose.foundation.Canvas(modifier.aspectRatio(file.width.toFloat() / file.height)) {
+        val cell = minOf(size.width / file.width, size.height / file.height)
+        file.rows.forEachIndexed { y, row ->
+            row.forEachIndexed { x, character ->
+                val hex = if (character == '.') null else file.palette[character.toString()]
+                if (hex != null) {
+                    drawRect(
+                        SectorIcons.color(hex),
+                        topLeft = androidx.compose.ui.geometry.Offset(x * cell, y * cell),
+                        size = androidx.compose.ui.geometry.Size(cell + 0.5f, cell + 0.5f),
+                    )
+                }
+            }
         }
     }
 }
@@ -175,8 +226,17 @@ internal fun TabList(content: LazyListScope.() -> Unit) {
 private fun OfficeScreen(store: GameStore) {
     val firm = store.selectedFirmDto
     var editing by remember { mutableStateOf<ProductLineDto?>(null) }
+    var stats by remember { mutableStateOf(false) }
+    if (stats) {
+        StatsScreen(store) { stats = false }
+        return
+    }
     TabList {
-        item { ScreenHeader("CEO Office", store.overview?.weekLabel) }
+        item {
+            ScreenHeader("CEO Office", store.overview?.weekLabel) {
+                if (firm != null) GoldButton("Stats") { stats = true }
+            }
+        }
         if (firm == null) {
             item { Callout("Choose a company from the portfolio.") }
             return@TabList
@@ -387,8 +447,13 @@ private fun DecisionCard(store: GameStore, event: EventDto) {
 @Composable
 private fun PortfolioScreen(store: GameStore) {
     val overview = store.overview ?: return
+    var settings by remember { mutableStateOf(false) }
     TabList {
-        item { ScreenHeader("Portfolio", overview.weekLabel) }
+        item {
+            ScreenHeader("Portfolio", overview.weekLabel) {
+                TextButton(onClick = { settings = true }) { Text("⚙ Settings", color = Palette.secondary) }
+            }
+        }
         overview.pause?.let { pause ->
             item {
                 Callout("Paused: $pause", Palette.warning)
@@ -435,9 +500,53 @@ private fun PortfolioScreen(store: GameStore) {
                 }
             }
         }
-        item {
-            Panel {
-                Eyebrow("Game")
+    }
+    if (settings) SettingsDialog(store) { settings = false }
+}
+
+@Composable
+fun RunControls(store: GameStore) {
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            GoldButton("Next week", Modifier.weight(1f), enabled = !store.busy && !store.running) { store.advance() }
+            SpeedControl(store)
+        }
+        Text("One tick is one week. 1x plays a week a second, 2x two, 4x four; play stops for any decision.", color = Palette.secondary, fontSize = 11.sp)
+    }
+}
+
+/** Pause, 1x, 2x, 4x. */
+@Composable
+fun SpeedControl(store: GameStore) {
+    Row(
+        Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(Palette.panelRaised).padding(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        listOf(0 to "II", 1 to "1x", 2 to "2x", 4 to "4x").forEach { (value, label) ->
+            val selected = if (value == 0) !store.running else store.running && store.speed == value
+            Text(
+                label,
+                color = if (selected) Palette.ink else Palette.primaryText,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                    .background(if (selected) Palette.gold else androidx.compose.ui.graphics.Color.Transparent)
+                    .clickable { store.playAt(value) }
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+            )
+        }
+    }
+}
+
+/** Game settings: saving and the version. Company business stays on the other tabs. */
+@Composable
+private fun SettingsDialog(store: GameStore, onClose: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = Palette.panel,
+        title = { Text("Settings") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Save", color = Palette.primaryText)
@@ -446,20 +555,9 @@ private fun PortfolioScreen(store: GameStore) {
                     TextButton(onClick = { store.saveNow() }) { Text("Save now", color = Palette.gold) }
                 }
                 if (store.status.isNotEmpty()) Text(store.status, color = Palette.secondary, fontSize = 12.sp)
+                Text("Institutions are simplified game rules, not legal, tax or investment advice.", color = Palette.secondary, fontSize = 11.sp)
             }
-        }
-    }
-}
-
-@Composable
-fun RunControls(store: GameStore) {
-    Column {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            GoldButton("Next week", Modifier.weight(1f), enabled = !store.busy && !store.running) { store.advance() }
-            OutlinedButton(onClick = { store.toggleRun() }, modifier = Modifier.weight(1f)) {
-                Text(if (store.running) "Pause" else "Auto-advance", color = Palette.gold)
-            }
-        }
-        Text("Next week settles one week. Auto-advance plays a week a second and stops for any decision.", color = Palette.secondary, fontSize = 11.sp)
-    }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Done") } },
+    )
 }

@@ -6,10 +6,11 @@ struct StartView: View {
     @AppStorage(OnboardingKeys.completed) private var onboardingCompleted = false
     @State private var guided = true
     @State private var fiveYear = true
-    @State private var seedText = ""
     @State private var showingAbout = false
     @State private var showingSaves = false
     @State private var export: DiagnosticExport?
+    @State private var chosen: String?
+    private let catalogue = scenarios()
 
     private var info: EngineInfo { engineInfo() }
     private var walkthroughTitle: String {
@@ -20,23 +21,36 @@ struct StartView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Corporate Warfare")
-                            .font(.largeTitle.weight(.semibold))
-                            .foregroundStyle(Theme.navy)
-                        Text("A Great Lakes business simulation. Offline, single player, one investor across every company you own or lose.")
-                            .font(.body)
+                    VStack(spacing: 14) {
+                        PixelLogo()
+                            .frame(maxWidth: 300)
+                            .padding(.top, 24)
+                        Text("Build an industrial empire. Outprice, outbuild and buy out your rivals.")
+                            .font(.callout)
                             .foregroundStyle(Theme.secondary)
+                            .multilineTextAlignment(.center)
+                        HStack(spacing: 6) {
+                            ForEach(Sector.order.prefix(8), id: \.self) { sector in
+                                SectorBadge(sector: sector, size: 26)
+                            }
+                        }
+                        .accessibilityHidden(true)
                     }
+                    .frame(maxWidth: .infinity)
 
                     SectionCard(title: "New career") {
+                        ForEach(catalogue, id: \.id) { scenario in
+                            Button {
+                                chosen = scenario.id
+                            } label: {
+                                ScenarioCard(scenario: scenario, selected: (chosen ?? catalogue.first?.id) == scenario.id)
+                            }
+                            .buttonStyle(.plain)
+                        }
                         Toggle("Guided start (60% of a running firm)", isOn: $guided)
                         Toggle("Five-year scored scenario", isOn: $fiveYear)
-                        TextField("Optional seed", text: $seedText)
-                            .textFieldStyle(.roundedBorder)
-                            .keyboardType(.numberPad)
                         Button {
-                            let seed = UInt64(seedText) ?? UInt64.random(in: 1...9_999_999)
+                            let seed = UInt64.random(in: 1...9_999_999)
                             Task { await store.newCareer(guided: guided, fiveYear: fiveYear, seed: seed) }
                         } label: {
                             Label("Start", systemImage: "play.fill")
@@ -71,7 +85,7 @@ struct StartView: View {
                         Text("Engine \(info.version) · interface \(info.interfaceVersion) · rules \(info.rulesVersion)")
                             .font(.caption.monospaced())
                             .foregroundStyle(Theme.secondary)
-                        Text("Premium offline game. No account, no ads, no network calls. Institutions are simplified game rules, not legal, tax or investment advice.")
+                        Text("No account, no ads. An anonymous market summary is shared every five weeks unless switched off in Settings. Institutions are simplified game rules, not legal, tax or investment advice.")
                             .font(.footnote)
                             .foregroundStyle(Theme.secondary)
                         Button(walkthroughTitle) {
@@ -93,12 +107,49 @@ struct StartView: View {
                 }
             }
             .background(Theme.background(for: scheme))
-            .navigationTitle("Start")
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingSaves) {
                 SavesView()
                     .environmentObject(store)
             }
         }
+    }
+}
+
+/// One scenario on the start screen: where and when it starts, and what the player is up against.
+struct ScenarioCard: View {
+    let scenario: ScenarioDto
+    let selected: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(scenario.name)
+                    .font(.headline)
+                    .foregroundStyle(Theme.primaryText)
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Theme.gold)
+                }
+            }
+            Text("\(scenario.country) · starts \(String(scenario.startYear)) · \(scenario.regionCount) regions")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.secondary)
+            Text(scenario.summary)
+                .font(.footnote)
+                .foregroundStyle(Theme.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.ink.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(selected ? Theme.gold : Theme.stroke, lineWidth: selected ? 2 : 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
     }
 }
 

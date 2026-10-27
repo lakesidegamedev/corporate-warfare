@@ -155,6 +155,7 @@ pub fn build(dataset: &Dataset, seed: u64, scenario: ScenarioKind, mode: Scenari
         objective: None,
         objective_history: Vec::new(),
         price_history: Vec::new(),
+        firm_history: BTreeMap::new(),
     };
 
     // Outside gateway capital is finite but real: exports are paid from it, imports add to it.

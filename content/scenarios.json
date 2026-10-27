@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "note": "Playable scenarios. Each names its map centre in thousandths of a degree; its regions, firms and starting balance come from the rest of content/.",
+  "scenarios": [
+    {
+      "id": "great-lakes-2000",
+      "name": "Great Lakes, 2000",
+      "country": "United States",
+      "start_year": 2000,
+      "summary": "Thirty-one regions across eight states around the Great Lakes and the Ohio Valley. Farms, steel, autos and freight at the turn of the century, with rivals already in every market.",
+      "center_lon_milli": -82300,
+      "center_lat_milli": 41300
+    }
+  ]
+}

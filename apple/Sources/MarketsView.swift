@@ -320,7 +320,7 @@ private struct BoardRow: View {
     private var advice: String {
         switch signal {
         case .shortage:
-            return "The region buys from outside the corridor: local supply is short. A plant here would sell into that demand at up to the import price."
+            return "The region imports from outside the map: local supply is short. A plant here would sell into that demand at up to the import price."
         case .tight:
             return "Selling faster than stock builds. Prices tend to rise; producers can raise output."
         case .glut:

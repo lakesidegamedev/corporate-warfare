@@ -222,6 +222,28 @@ pub struct WeekDto {
     pub net_income_cents: i64,
 }
 
+/// Four weeks of a firm's results with closing balances and share price.
+#[derive(uniffi::Record)]
+pub struct PeriodDto {
+    pub first_week: u32,
+    pub weeks: u32,
+    pub revenue_cents: i64,
+    pub cost_of_goods_cents: i64,
+    pub wages_cents: i64,
+    pub operating_expense_cents: i64,
+    pub depreciation_cents: i64,
+    pub net_interest_cents: i64,
+    pub tax_cents: i64,
+    pub other_cents: i64,
+    pub net_income_cents: i64,
+    pub cash_cents: i64,
+    pub assets_cents: i64,
+    pub liabilities_cents: i64,
+    pub equity_cents: i64,
+    pub share_price_cents: i64,
+    pub shares_issued: i64,
+}
+
 #[derive(uniffi::Record)]
 pub struct HolderDto {
     pub holder: String,
@@ -959,6 +981,39 @@ pub fn engine_info() -> EngineInfo {
             .map(|dataset| dataset.hash)
             .unwrap_or_default(),
     }
+}
+
+#[derive(uniffi::Record)]
+pub struct ScenarioDto {
+    pub id: String,
+    pub name: String,
+    pub country: String,
+    pub start_year: u32,
+    pub summary: String,
+    pub center_lon_milli: i32,
+    pub center_lat_milli: i32,
+    pub region_count: u32,
+}
+
+/// The scenarios a new career can start in, in display order.
+#[uniffi::export]
+pub fn scenarios() -> Vec<ScenarioDto> {
+    let regions = cw_data::Dataset::load()
+        .map(|dataset| dataset.regions.len() as u32)
+        .unwrap_or_default();
+    cw_data::scenarios()
+        .into_iter()
+        .map(|scenario| ScenarioDto {
+            id: scenario.id,
+            name: scenario.name,
+            country: scenario.country,
+            start_year: scenario.start_year,
+            summary: scenario.summary,
+            center_lon_milli: scenario.center_lon_milli,
+            center_lat_milli: scenario.center_lat_milli,
+            region_count: regions,
+        })
+        .collect()
 }
 
 #[uniffi::export]
@@ -1778,6 +1833,40 @@ impl SessionHandle {
             cw_session::Detail::Finance(row) => Some(finance_dto(row)),
             _ => None,
         }
+    }
+
+    /// A firm's results in four-week periods, oldest first, up to five years.
+    pub fn history(&self, firm: u64) -> Vec<PeriodDto> {
+        let session = self.lock();
+        session
+            .world
+            .firm_history
+            .get(&cw_core::ids::Handle(firm))
+            .map(|periods| {
+                periods
+                    .iter()
+                    .map(|p| PeriodDto {
+                        first_week: p.first_week,
+                        weeks: p.weeks,
+                        revenue_cents: p.revenue,
+                        cost_of_goods_cents: p.cost_of_goods,
+                        wages_cents: p.wages,
+                        operating_expense_cents: p.operating_expense,
+                        depreciation_cents: p.depreciation,
+                        net_interest_cents: p.net_interest,
+                        tax_cents: p.tax,
+                        other_cents: p.other,
+                        net_income_cents: p.net_income,
+                        cash_cents: p.cash,
+                        assets_cents: p.assets,
+                        liabilities_cents: p.liabilities,
+                        equity_cents: p.equity,
+                        share_price_cents: p.share_price_cents,
+                        shares_issued: p.shares_issued,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub fn ownership(&self, firm: u64) -> Option<OwnershipDto> {

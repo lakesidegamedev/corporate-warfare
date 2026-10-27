@@ -139,7 +139,7 @@ struct StocksSection: View {
                 Panel(padding: 12) {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Eyebrow(text: "Corridor index")
+                            Eyebrow(text: "Market index")
                             Text(last.formatted())
                                 .font(.title2.weight(.bold).monospacedDigit())
                                 .foregroundStyle(Theme.primaryText)
@@ -359,7 +359,7 @@ struct CommoditiesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Corridor prices per lot: the median asking price of the companies that make each good, or the import price where nobody does.")
+            Text("Market prices per lot: the median asking price of the companies that make each good, or the import price where nobody does.")
                 .font(.caption)
                 .foregroundStyle(Theme.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -439,7 +439,7 @@ private struct CommoditySheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     StatGroup(
-                        headline: Stat(label: "Corridor price per lot", value: Format.money(line.priceCents),
+                        headline: Stat(label: "Market price per lot", value: Format.money(line.priceCents),
                                        note: "\(Change.text(line.changeWeekBps)) this week"),
                         stats: [
                             Stat(label: "Quarter", value: Change.text(line.changeQuarterBps), tone: Change.tint(line.changeQuarterBps)),
