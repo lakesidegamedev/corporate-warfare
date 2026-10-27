@@ -99,6 +99,10 @@ actor Engine {
         session?.divisions(firm: firm) ?? []
     }
 
+    func divisionDetail(firm: UInt64, region: String, industry: String) -> DivisionDetailDto? {
+        session?.divisionDetail(firm: firm, region: region, industry: industry)
+    }
+
     func heldStock(firm: UInt64) -> [HeldStockDto] {
         session?.heldStock(firm: firm) ?? []
     }

@@ -45,6 +45,9 @@ struct DesktopShell: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView().environmentObject(store)
         }
+        .sheet(item: $store.openDivision) { division in
+            DivisionDetailSheet(division: division).environmentObject(store)
+        }
     }
 
     private func open(_ next: GamePage) {

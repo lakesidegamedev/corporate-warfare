@@ -117,6 +117,7 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                 }
             },
     ) {
+        DivisionDetailHost(store)
         Row(Modifier.fillMaxSize()) {
             Sidebar(store, page, ::open, onSettings)
             Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.stroke))
@@ -401,7 +402,7 @@ private fun DesktopMap(store: GameStore) {
                 TableHeader(cols)
                 if (store.divisions.isEmpty()) Text("No divisions yet. Pick a region and build.", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
                 store.divisions.forEachIndexed { i, d ->
-                    TableRow(i, selected = d.region == selected, onClick = { selected = d.region }) {
+                    TableRow(i, selected = d.region == selected, onClick = { selected = d.region; store.showDivision(d) }) {
                         SectorBadge(d.industry, 18)
                         Spacer(Modifier.width(6.dp))
                         Cell("${Sectors.name(d.industry)} · ${d.regionName}", cols[0].copy(weight = cols[0].weight - 0.2f))
@@ -497,7 +498,13 @@ private fun RegionBoardDetail(store: GameStore, board: RegionBoardDto) {
         if (ours.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             Eyebrow("Your divisions here")
-            ours.forEach { Text("${Sectors.name(it.industry)} · ${it.strategyName} · ${it.blocks} plants · ${it.shareBps / 100}% share", color = Palette.primaryText, fontSize = 12.sp) }
+            ours.forEach {
+                Text(
+                    "${Sectors.name(it.industry)} · ${it.strategyName} · ${it.blocks} plants · ${it.shareBps / 100}% share",
+                    color = Palette.primaryText, fontSize = 12.sp,
+                    modifier = Modifier.clickable { store.showDivision(it) },
+                )
+            }
         }
     }
 }
@@ -573,7 +580,7 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
             Pane("Divisions", Modifier.weight(1.1f).fillMaxHeight()) {
                 TableHeader(dc)
                 store.divisions.forEachIndexed { i, d ->
-                    TableRow(i) {
+                    TableRow(i, onClick = { store.showDivision(d) }) {
                         Cell("${Sectors.name(d.industry)} · ${d.regionName}", dc[0], bold = true)
                         Cell(d.strategyName + if (d.retooling) " (retooling)" else "", dc[1], Palette.secondary)
                         Cell("${d.blocks}", dc[2])

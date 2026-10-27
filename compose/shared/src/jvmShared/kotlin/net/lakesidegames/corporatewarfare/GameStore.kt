@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.cw_ffi.BuildQuoteDto
 import uniffi.cw_ffi.CommodityDto
+import uniffi.cw_ffi.DivisionDetailDto
 import uniffi.cw_ffi.DivisionDto
 import uniffi.cw_ffi.FreightSummaryDto
 import uniffi.cw_ffi.HeldStockDto
@@ -88,6 +89,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var productLines by mutableStateOf<List<ProductLineDto>>(emptyList()); private set
     var facilities by mutableStateOf<List<FacilityDto>>(emptyList()); private set
     var divisions by mutableStateOf<List<DivisionDto>>(emptyList()); private set
+    /** The division whose detail view is open, from the map, a region board, the CEO Office or the company page. */
+    var openDivision by mutableStateOf<DivisionDto?>(null); private set
     var events by mutableStateOf<List<EventDto>>(emptyList()); private set
     var boards by mutableStateOf<List<RegionBoardDto>>(emptyList()); private set
     var stocks by mutableStateOf<List<StockDto>>(emptyList()); private set
@@ -302,6 +305,27 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
             status = "Stock target set."
         }
         reload()
+    }
+
+    fun showDivision(division: DivisionDto?) {
+        openDivision = division
+    }
+
+    /** The engine's detail report for one division of the selected company. */
+    fun divisionDetail(division: DivisionDto, onResult: (DivisionDetailDto?) -> Unit) {
+        val handle = session ?: return
+        val firm = selectedFirm ?: return
+        scope.launch { onResult(withContext(engine) { handle.divisionDetail(firm, division.region, division.industry) }) }
+    }
+
+    /** A supplying division's transfer price to the rest of its group, 0 at cost, 10,000 at market. */
+    fun setTransferPrice(detail: DivisionDetailDto, bps: Int) =
+        submit(CommandJson.command("SetTransferPrice", "firm" to detail.firm, "region" to detail.regionIndex, "industry" to detail.industryIndex, "bps" to bps))
+
+    /** The weekly wage the selected company offers in one tier, 0 low to 2 high. */
+    fun setWageOffer(tier: Int, wageCents: Long) {
+        val firm = selectedFirm ?: return
+        submit(CommandJson.command("SetWageOffer", "firm" to firm, "tier" to tier, "wage_cents" to wageCents))
     }
 
     /** Index of a region in the engine's region list, for commands that take one. */

@@ -4,6 +4,7 @@ pub mod banking;
 pub mod cast;
 pub mod credit;
 pub mod deals;
+pub mod division_report;
 pub mod equity;
 pub mod events_engine;
 pub mod fiscal;
