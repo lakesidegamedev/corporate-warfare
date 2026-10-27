@@ -160,6 +160,48 @@ fn triggers(review_bps: i64, share: i64, hhi: i64, delta: i64) -> bool {
 fn review_triggered(world: &World, buyer: Handle, target: Handle) -> bool {
     let (share, hhi, delta) = trigger_metrics(world, buyer, target);
     triggers(world.politics.laws.merger_review_bps, share, hhi, delta)
+        || vertical_share_bps(world, buyer, target) >= vertical_threshold(world)
+}
+
+fn vertical_threshold(world: &World) -> i64 {
+    match world.politics.laws.vertical_review_bps {
+        0 => i64::MAX,
+        bps => bps,
+    }
+}
+
+/// Vertical integration: the largest share of a regional market held by the target in a good
+/// the buyer's plants use as an input, or by the buyer in a good the target's plants use. Buying
+/// your own supplier or customer is reviewed when that share is high enough to foreclose rivals.
+/// Zero when the two are not linked, or when the law does not review vertical deals.
+pub fn vertical_share_bps(world: &World, buyer: Handle, target: Handle) -> i64 {
+    if world.politics.laws.vertical_review_bps == 0 {
+        return 0;
+    }
+    // The largest share the maker holds in a regional market for a good the user's plants use.
+    let supplier = |maker: Handle, user: Handle| -> i64 {
+        let (Some(maker_firm), Some(user_firm)) = (world.firm(maker), world.firm(user)) else {
+            return 0;
+        };
+        let regions: BTreeSet<(u8, u16)> = maker_firm
+            .sales_history
+            .iter()
+            .flat_map(|week| week.keys().copied())
+            .filter(|(_, product)| user_firm.inputs_used.contains(product))
+            .collect();
+        let key = group_key(world, maker);
+        let mut worst = 0i64;
+        for (region, product) in regions {
+            let volumes = group_volumes(world, region, product);
+            let total: i64 = volumes.values().sum();
+            if total > 0 {
+                let own = volumes.get(&key).copied().unwrap_or(0);
+                worst = worst.max((own as i128 * 10_000 / total as i128) as i64);
+            }
+        }
+        worst
+    };
+    supplier(target, buyer).max(supplier(buyer, target))
 }
 
 /// Advance every deal at its declared boundary.
@@ -490,7 +532,7 @@ fn accepts(world: &World, deal: &Deal, holder: HolderId, buyer_group: &BTreeSet<
             // A company in the player's group never sells without a player decision.
             group_key(world, owner) != HolderId::Investor && offer >= fair
         }
-        HolderId::Treasury => false,
+        HolderId::Treasury | HolderId::State => false,
     }
 }
 
@@ -816,7 +858,7 @@ fn pay_seller(world: &mut World, holder: HolderId, amount: i64, basis: i64, memo
                 );
             }
         }
-        HolderId::Treasury => {}
+        HolderId::Treasury | HolderId::State => {}
     }
 }
 

@@ -81,7 +81,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::economy::equity::clear_exchange(world, dataset);
     crate::economy::world_prices::weekly(world);
     crate::economy::macro_cycle::weekly(world, dataset);
-    crate::economy::politics::weekly(world);
+    crate::economy::reserve::weekly(world, dataset);
+    crate::economy::politics::weekly(world, dataset);
+    crate::economy::rescue::weekly(world, dataset);
+    crate::economy::systemic::weekly(world, dataset);
     crate::economy::events_engine::quarter_check(world, dataset);
     crate::economy::events_engine::state_triggers(world, dataset);
     crate::economy::events_engine::auto_resolve(world, dataset);

@@ -75,12 +75,11 @@ pub fn quarter_check(world: &mut World, dataset: &Dataset) {
 /// Triggers drawn at random at the quarter boundary. Every other card opens only when its
 /// actual state transition happens (see `state_triggers`); macro cards come from the macro
 /// stream.
-const QUIET_TRIGGERS: [&str; 9] = [
+const QUIET_TRIGGERS: [&str; 8] = [
     "random_energy_region",
     "quarter_crop_event",
     "deposit_below_26_weeks",
     "random_active_freight_lane",
-    "lane_utilisation_above_90",
     "government_budget_available",
     "region_disaster_no_active",
     "tech_level_below_frontier",
@@ -192,9 +191,7 @@ fn eligible_subjects(world: &World, dataset: &Dataset, trigger: &str, region: u8
                             && facility.status == FacilityStatus::Operating
                             && facility.deposit_remaining.lots() < weekly * 26
                     }),
-                "random_active_freight_lane" | "lane_utilisation_above_90" => {
-                    in_transit(world, *handle)
-                }
+                "random_active_freight_lane" => in_transit(world, *handle),
                 "government_budget_available" => {
                     world.government.training_budget_cents > 0
                         && has_facility_in(world, *handle, region)
@@ -211,6 +208,25 @@ fn eligible_subjects(world: &World, dataset: &Dataset, trigger: &str, region: u8
         .collect();
     found.sort_unstable();
     found
+}
+
+/// The fullest lane a firm ships on that has been above 90 percent full for four weeks.
+pub fn congested_lane(world: &World, firm: Handle) -> Option<crate::economy::logistics::LaneKey> {
+    use crate::economy::logistics as lg;
+    world
+        .logistics
+        .stats
+        .iter()
+        .filter(|(_, stat)| {
+            stat.hot_weeks >= lg::SUSTAINED_WEEKS
+                && stat.fill_bps >= lg::CONGESTED_BPS
+                && stat
+                    .users
+                    .iter()
+                    .any(|(f, last)| *f == firm && world.tick.0.saturating_sub(*last) <= 4)
+        })
+        .max_by_key(|(key, stat)| (stat.fill_bps, stat.hot_weeks, std::cmp::Reverse(**key)))
+        .map(|(key, _)| *key)
 }
 
 /// Weekly state-transition cards. Each opens only when its documented state actually holds;
@@ -261,6 +277,11 @@ pub fn state_triggers(world: &mut World, dataset: &Dataset) {
         });
         if supplier_down {
             opens.push(("supplier_default", *handle, region, false));
+        }
+        // Freight congestion: a lane the firm ships on has run above 90 percent full for four
+        // weeks running, read from the lane fill data.
+        if congested_lane(world, *handle).is_some() {
+            opens.push(("freight_congestion", *handle, region, false));
         }
         // Quality recall: a product below 8,000 quality bps with sales in the last four weeks.
         if recall_products(world, *handle)
@@ -712,8 +733,24 @@ fn apply(
         "pause_lane" => {}
         "reserve_carrier" => {
             if let Some(firm) = firm {
-                let fee = freight_reserve_fee(world, dataset, firm);
-                pay_operating(world, firm, fee, "carrier reservation");
+                // Reserve a 26-week contract on the congested lane itself when the lane has
+                // room; otherwise the carrier's flat reservation fee applies.
+                let reserved = congested_lane(world, firm).is_some_and(|key| {
+                    let mine =
+                        crate::economy::logistics::shipped_last_week(world, firm, key) as i64;
+                    let lots = crate::economy::logistics::reservable_lots(world, firm, key)
+                        .min(mine.max(1))
+                        .min(i32::MAX as i64) as i32;
+                    lots >= 1
+                        && crate::economy::logistics::reserve_lane(
+                            world, dataset, firm, key.a, key.b, key.mode, lots, 26,
+                        )
+                        .is_ok()
+                });
+                if !reserved {
+                    let fee = freight_reserve_fee(world, dataset, firm);
+                    pay_operating(world, firm, fee, "carrier reservation");
+                }
             }
         }
         "spot_delay" => {
@@ -1089,7 +1126,7 @@ fn set_outage(world: &mut World, firm: Handle, region: Option<u8>, cap_bps: i32,
 }
 
 /// Pay an explicit outside professional service; it is income to the outside services sector.
-fn pay_service(world: &mut World, firm: Handle, amount: i64, memo: &str) {
+pub(crate) fn pay_service(world: &mut World, firm: Handle, amount: i64, memo: &str) {
     let cash = world.firm(firm).map(|f| f.book.cash().max(0)).unwrap_or(0);
     pay_operating(world, firm, amount, memo);
     let paid = amount.min(cash).max(0);

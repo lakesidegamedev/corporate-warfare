@@ -251,6 +251,7 @@ fn holder_name(world: &World, holder: HolderId) -> String {
             .map(|investor| investor.name.clone())
             .unwrap_or_else(|| "Institution".to_owned()),
         HolderId::Treasury => "Treasury".to_owned(),
+        HolderId::State => "The State".to_owned(),
     }
 }
 
@@ -625,6 +626,9 @@ pub fn loans(world: &World, firm: u64) -> Vec<LoanLine> {
                 .map(|f| f.name.clone())
                 .unwrap_or_default(),
             lender: match loan.lender {
+                cw_sim::state::Lender::Outside(cw_sim::state::STATE_LENDER) => {
+                    "The State".to_owned()
+                }
                 cw_sim::state::Lender::Outside(index) => world
                     .outside
                     .lenders

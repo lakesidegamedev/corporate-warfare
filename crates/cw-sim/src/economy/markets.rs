@@ -484,12 +484,26 @@ fn clear_goods_exchange(
             }
         }
     }
+    // The reserve's release in a spike, by region: (asking price, milli-lots).
+    let reserve_offers: BTreeMap<u8, (i64, i64)> = (0..world.regions.len() as u8)
+        .filter_map(|region| {
+            crate::economy::reserve::release_offer(world, dataset, product, region)
+                .map(|offer| (region, offer))
+        })
+        .collect();
+    let mut reserve_left: BTreeMap<u8, i64> =
+        reserve_offers.iter().map(|(r, (_, q))| (*r, *q)).collect();
     let class = dataset.products[product as usize].storage_class;
     let mut freight_table: BTreeMap<(u8, u8), i64> = BTreeMap::new();
     for (_, to) in demand.keys() {
-        for (_, from) in supply.keys() {
-            freight_table.entry((*from, *to)).or_insert_with(|| {
-                crate::economy::logistics::estimate_cents_per_lot(world, dataset, *from, *to, class)
+        let froms: Vec<u8> = supply
+            .keys()
+            .map(|(_, from)| *from)
+            .chain(reserve_offers.keys().copied())
+            .collect();
+        for from in froms {
+            freight_table.entry((from, *to)).or_insert_with(|| {
+                crate::economy::logistics::estimate_cents_per_lot(world, dataset, from, *to, class)
             });
         }
     }
@@ -507,12 +521,26 @@ fn clear_goods_exchange(
     enum Source {
         Firm(Handle, u8),
         Gateway(usize),
+        /// The strategic reserve's stock in one region, sold in that region only.
+        Reserve(u8),
     }
     // (delivered price, seller key, buyer key, buyer, source)
     type Pairing = (i64, u64, u64, (Handle, u8), Source);
     let mut pairs: Vec<Pairing> = Vec::new();
     for (buyer_key, _) in demand.iter() {
         let (buyer, to) = *buyer_key;
+        for (from, (ask, _)) in &reserve_offers {
+            let delivered = ask + freight_per_lot(*from, to);
+            if caps.get(buyer_key).is_none_or(|cap| delivered <= *cap) {
+                pairs.push((
+                    delivered,
+                    u64::MAX / 2 - *from as u64,
+                    buyer.0 ^ ((to as u64) << 56),
+                    *buyer_key,
+                    Source::Reserve(*from),
+                ));
+            }
+        }
         for (seller_key, _) in supply.iter() {
             let (seller, from) = *seller_key;
             if seller == buyer {
@@ -549,7 +577,16 @@ fn clear_goods_exchange(
             }
         }
     }
-    pairs.sort_by_key(|(price, seller, buyer, ..)| (*price, *seller, *buyer));
+    // The reserve's release is an emergency sale that takes orders first, then the cheapest
+    // delivered price as usual.
+    pairs.sort_by_key(|(price, seller, buyer, _, source)| {
+        (
+            !matches!(source, Source::Reserve(_)),
+            *price,
+            *seller,
+            *buyer,
+        )
+    });
     let mut import_left: BTreeMap<usize, i64> = BTreeMap::new();
     // Work through the pairings one price tier and source at a time. Buyers tied on the same
     // source at the same delivered price share it in proportion to what each still wants and
@@ -570,6 +607,7 @@ fn clear_goods_exchange(
             Source::Gateway(gate) => *import_left
                 .entry(gate)
                 .or_insert(world.gateways[gate].capacity_lots * 1_000),
+            Source::Reserve(region) => reserve_left.get(&region).copied().unwrap_or(0),
         };
         if available <= 0 {
             continue;
@@ -638,6 +676,52 @@ fn clear_goods_exchange(
                     let entry = demand.get_mut(&buyer_key).unwrap();
                     entry.0 -= qty;
                     entry.1 -= goods.0 + freight;
+                }
+                Source::Reserve(region) => {
+                    let ask = reserve_offers
+                        .get(&region)
+                        .map(|o| o.0)
+                        .unwrap_or(delivered);
+                    let paid = qty_lots.value_at(Cents(ask)).unwrap_or(Cents::ZERO).0;
+                    if paid <= 0 {
+                        continue;
+                    }
+                    let _ = world.firms.get_mut(buyer).unwrap().book.commit(
+                        world.tick,
+                        Txn::new().credit(Account::Cash, paid, "purchase").debit(
+                            Account::Inventory,
+                            paid,
+                            "purchase",
+                        ),
+                    );
+                    world
+                        .firms
+                        .get_mut(buyer)
+                        .unwrap()
+                        .stock_lot_mut(product, to)
+                        .receive(qty_lots, Cents(paid));
+                    crate::economy::reserve::record_sale(world, product, region, qty_lots, paid);
+                    let freight = if region == to {
+                        0
+                    } else {
+                        crate::economy::logistics::book(
+                            world,
+                            dataset,
+                            buyer,
+                            product,
+                            region,
+                            to,
+                            qty_lots,
+                            "exchange freight",
+                        )
+                        .cents
+                    };
+                    if let Some(left) = reserve_left.get_mut(&region) {
+                        *left -= qty;
+                    }
+                    let entry = demand.get_mut(&buyer_key).unwrap();
+                    entry.0 -= qty;
+                    entry.1 -= paid + freight;
                 }
                 Source::Gateway(gate) => {
                     let paid = qty_lots.value_at(Cents(delivered)).unwrap_or(Cents::ZERO).0;

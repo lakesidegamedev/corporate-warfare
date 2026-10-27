@@ -152,6 +152,7 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
         Text("Next election ${ResultBuckets.weekLabel(e.nextElectionWeek.toInt())}", color = Palette.secondary, fontSize = 12.sp)
         LawsTable(e.laws, null)
         e.pendingLaws?.let { LawsTable(it, "From ${ResultBuckets.weekLabel(e.pendingEffectiveWeek.toInt())}") }
+        MarketRules(e)
         if (e.news.isNotEmpty()) {
             Eyebrow("News")
             e.news.take(5).forEach { n -> Text("${ResultBuckets.weekLabel(n.week.toInt())}: ${n.text}", color = Palette.secondary, fontSize = 12.sp) }
@@ -179,6 +180,65 @@ private fun LawsTable(laws: LawsDto, heading: String?) {
         Row { Text("Low-skill wage floor", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.weight(1f)); Text(Format.price(laws.wageFloorHourlyCents) + " an hour", color = Palette.primaryText, fontSize = 12.sp) }
         Row { Text("Merger review from", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.weight(1f)); Text("${laws.mergerReviewBps / 100}% market share", color = Palette.primaryText, fontSize = 12.sp) }
         Row { Text("Union law", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.weight(1f)); Text(laws.unions.replaceFirstChar { it.uppercase() }, color = Palette.primaryText, fontSize = 12.sp) }
+        LawRow("Common carrier", if (laws.commonCarrier) "Spare lane capacity sold at a regulated rate" else "Not required")
+        LawRow("Production quotas", if (laws.quotaBps > 0 && laws.quotaStates.isNotEmpty()) "${laws.quotaStates.joinToString(", ")}: up to ${laws.quotaBps / 100}% of capacity when prices are soft" else "None")
+        LawRow("Supplier and customer deals", if (laws.verticalReviewBps > 0) "Reviewed from ${laws.verticalReviewBps / 100}% market share" else "Not reviewed")
+        LawRow("Strategic reserve", if (laws.reserve) "Buys in busts, sells in spikes" else "None")
+        LawRow(
+            "Failing strategic firms",
+            when (laws.rescue) { "bailout" -> "State rescue loan"; "nationalise" -> "Nationalised"; else -> "Left to the courts" } +
+                if (laws.privatise && laws.rescue != "none") ", sold back when sound" else "",
+        )
+    }
+}
+
+@Composable
+private fun LawRow(title: String, value: String) {
+    Row {
+        Text(title, color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        Text(value, color = Palette.primaryText, fontSize = 12.sp, modifier = Modifier.weight(2f))
+    }
+}
+
+/** The strategic reserve, quotas biting now, state firms and the latest disruptions. */
+@Composable
+private fun MarketRules(e: EconomyDto) {
+    if (e.reserve.isEmpty() && e.quotas.isEmpty() && e.incidents.isEmpty() && e.stateFirms.isEmpty()) return
+    Eyebrow("Markets and rules")
+    if (e.reserve.isNotEmpty()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PixelIcon("storage", size = 14.dp, tint = Palette.secondary)
+            Spacer(Modifier.width(6.dp))
+            Text("Reserve holds ${Format.price(e.reserveValueCents)} at cost", color = Palette.primaryText, fontSize = 12.sp)
+        }
+        e.reserve.forEach { r ->
+            Text(
+                "${r.label}: ${r.lots} lots, ${r.phase}",
+                color = if (r.phase == "buying") Palette.positive else if (r.phase == "selling") Palette.warning else Palette.secondary,
+                fontSize = 12.sp,
+            )
+        }
+    }
+    e.quotas.forEach { q ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PixelIcon("gavel", size = 14.dp, tint = Palette.warning)
+            Spacer(Modifier.width(6.dp))
+            Text("${q.label} in ${q.regionName} capped at ${q.capBps / 100}% of capacity", color = Palette.secondary, fontSize = 12.sp)
+        }
+    }
+    if (e.stateFirms.isNotEmpty()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PixelIcon("flag", size = 14.dp, tint = Palette.secondary)
+            Spacer(Modifier.width(6.dp))
+            Text("State owned: ${e.stateFirms.joinToString(", ")}", color = Palette.secondary, fontSize = 12.sp)
+        }
+    }
+    e.incidents.take(4).forEach { i ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PixelIcon(if (i.touchesYou) "alert" else "warning", size = 14.dp, tint = if (i.touchesYou) Palette.negative else Palette.warning)
+            Spacer(Modifier.width(6.dp))
+            Text(i.text + if (i.weeksLeft > 0u) " ${i.weeksLeft} weeks left." else "", color = if (i.touchesYou) Palette.primaryText else Palette.secondary, fontSize = 12.sp)
+        }
     }
 }
 

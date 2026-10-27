@@ -12,7 +12,7 @@ use crate::Session;
 
 /// Weeks between snapshots.
 pub const SNAPSHOT_EVERY_WEEKS: u32 = 5;
-pub const SNAPSHOT_SCHEMA: u32 = 3;
+pub const SNAPSHOT_SCHEMA: u32 = 4;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct GoodLine {
@@ -78,6 +78,37 @@ pub struct LogisticsLine {
     pub contract_lots_held: i64,
 }
 
+/// The government: which laws are in force, what the reserve holds and how many times the state
+/// has stepped in, plus how many systemic incidents of each kind have struck so far.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct GovernmentLine {
+    pub party: String,
+    /// Announced changes that have taken effect so far.
+    pub law_changes: u32,
+    pub common_carrier: bool,
+    pub vertical_review_bps: i64,
+    pub quota_states: u32,
+    /// Extraction goods under a quota right now, as (region, good) cells.
+    pub quota_cells_active: u32,
+    pub reserve_on: bool,
+    pub reserve_lots: i64,
+    pub reserve_value_cents: i64,
+    pub reserve_bought_cents: i64,
+    pub reserve_sold_cents: i64,
+    pub rescue: String,
+    pub bailouts: u32,
+    pub nationalisations: u32,
+    pub privatisations: u32,
+    pub state_firms: u32,
+    /// Incident kinds, and how many of each have struck since the game began.
+    pub incident_kinds: Vec<String>,
+    pub incidents: Vec<u32>,
+    /// Lanes closed or cut this week.
+    pub closures_active: u32,
+    /// Pipeline carriers the corridor's firms run.
+    pub pipelines: u32,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct PlayerLine {
     pub cash_cents: i64,
@@ -103,7 +134,51 @@ pub struct MarketSnapshot {
     pub corridor: CorridorLine,
     pub storage: StorageLine,
     pub logistics: LogisticsLine,
+    pub government: GovernmentLine,
     pub player: Option<PlayerLine>,
+}
+
+fn government_line(world: &cw_sim::state::World, dataset: &cw_data::Dataset) -> GovernmentLine {
+    use cw_sim::economy::systemic;
+    let p = &world.politics;
+    let pipeline = dataset.logistics.mode_index("pipeline");
+    GovernmentLine {
+        party: p.party.key().to_owned(),
+        law_changes: p.law_changes,
+        common_carrier: p.laws.common_carrier,
+        vertical_review_bps: p.laws.vertical_review_bps,
+        quota_states: if p.laws.quota_bps > 0 {
+            p.laws.quota_states.count_ones()
+        } else {
+            0
+        },
+        quota_cells_active: p.quota_active.len() as u32,
+        reserve_on: p.laws.reserve,
+        reserve_lots: p.reserve.total_lots(),
+        reserve_value_cents: p.reserve.value_cents(),
+        reserve_bought_cents: p.reserve.bought_cents,
+        reserve_sold_cents: p.reserve.sold_cents,
+        rescue: p.laws.rescue.key().to_owned(),
+        bailouts: p.bailouts,
+        nationalisations: p.nationalisations,
+        privatisations: p.privatisations,
+        state_firms: world
+            .firms
+            .iter()
+            .filter(|(_, f)| f.state_owned_since.is_some() && f.operative())
+            .count() as u32,
+        incident_kinds: (0..systemic::KINDS as u8)
+            .map(|k| systemic::kind_key(k).to_owned())
+            .collect(),
+        incidents: world.systemic.counts.to_vec(),
+        closures_active: world.logistics.closures.len() as u32,
+        pipelines: world
+            .logistics
+            .carriers
+            .iter()
+            .filter(|c| Some(c.mode) == pipeline)
+            .count() as u32,
+    }
 }
 
 fn storage_line(
@@ -312,6 +387,7 @@ impl Session {
             corridor,
             storage,
             logistics: logistics_line(world, dataset),
+            government: government_line(world, dataset),
             player,
         }
     }

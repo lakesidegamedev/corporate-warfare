@@ -14,7 +14,7 @@ while mandatory player input has paused time.
 | Energy outage | Random eligible energy region | Pay 2 weeks normal power expense for backup, retain75% capacity for2 weeks; or accept50% capacity, no extra fee. Supplier compensation follows contract. |
 | Fuel spike | Macro opportunity, no active fuel shock | Reference fuel price +25% for13 weeks; buy finite available stock at current executable price or keep policy. No forced arbitrary cash loss. |
 | Bridge closure | Random active freight lane | Reroute affected future shipments at+20% freight and+1 week for4 weeks; or pause new lane orders. Already dispatched reroutes require paid carrier quote. |
-| Freight congestion | Utilisation >90% for4 weeks | Reserve26-week carrier contract at+10% quote; or use spot with+1-week delay for4 weeks. No duplicate bridge effect on same lane. |
+| Freight congestion | A lane the firm ships on has run above 90% full for 4 weeks (read from the lane fill statistics, drawn weekly, no random roll) | Reserve a 26-week contract on that lane (a real lane contract at the lane's rate less the commitment discount, sized to what the firm shipped last week); or use spot with +1-week delay for 4 weeks. No duplicate bridge effect on same lane. |
 | Crop loss | Quarter crop event | Spend$10,000/farm block mitigation, yield-10% for13 weeks; or yield-25%. Physical insured loss invokes normal policy once. |
 | Mine warning | Deposit <26 weeks planned extraction | Fund retool to another sourced deposit at50% new mine capex and13 weeks; or plan depletion/mothball. No free ore increase. |
 | Quality recall | Quality <8000 and consumer goods sales | Pay sold affected lots*10% unit price, reputation-250 BPS; or voluntary refund at25% price, reputation-50. One4-week sales cohort, no endless recurring recall of same goods. |
@@ -40,3 +40,24 @@ CONTENT macro caps. Signed penalties/refunds post to actual counterparties. If e
 contract authority is unavailable, show why a response is disabled; do not bypass rules
 for event convenience. Cards above require copy, icons and scenario tests, not new model
 design by the implementation agent.
+
+## Systemic events (1.7)
+
+Systemic events hit the logistics network and the plants and storage behind it, not cash. They
+are not cards: nothing to answer, they happen, are recorded as incidents and appear in the
+news. Every roll comes from a stream keyed by the game seed and the week, so a saved and
+reloaded game draws what an unbroken game draws. All five work in every scenario.
+
+| Event | Weekly chance | Duration | Effects |
+|---|---|---|---|
+| Pipeline spill | 0.08% per pipeline lane with capacity | 3 to 8 weeks | Lane capacity 0; each operator pays a clean-up bill of 2 weeks of its lane capacity at the empty-lane rate. Pipelines have no outside carriers, so shippers take another mode. |
+| Port strike | 0.06% per port (strong union law doubles it, weak halves it) | 2 to 5 weeks | Every sea lane touching the port has capacity 0; shipments go to outside carriers at the premium. |
+| Refinery fire | 0.05% per running plant that makes by-products of liquid or gas goods | 8 to 16 weeks | The plant is shut (outage 0); 10% of the owner's stock of its products in that region burns, booked as an operating loss. |
+| Lane outage | 0.03% per truck or rail lane with capacity | 1 to 4 weeks | Capacity 0 or 25% (even chance). |
+| Harvest failure | 8% per farming region, once a year in the harvest quarter's last week | 26 weeks | Every crop yield in the region falls 25 to 40%. |
+
+Closures reduce lane capacity in the week the lane is built, before contracts and shipments,
+so conservation of freight money holds: shippers pay exactly what carriers and the outside
+sector receive. A fire or spill never creates or destroys cash except the booked loss and the
+clean-up payment to the outside services sector. Incidents name the firms they touch;
+the overview alerts only for incidents touching the player's companies, within four weeks.

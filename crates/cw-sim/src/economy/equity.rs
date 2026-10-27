@@ -195,7 +195,7 @@ pub fn place_order(
                 }
                 reserved = cost;
             }
-            HolderId::Treasury => {
+            HolderId::Treasury | HolderId::State => {
                 return Err(DomainError::NoAuthority {
                     actor: 0,
                     reason: cw_core::error::AuthorityReason::NotOwner,
@@ -465,7 +465,7 @@ fn settle_trade(
                     holder.capital_cents.max(0) - cost.min(holder.capital_cents.max(0));
             }
         }
-        HolderId::Treasury => {}
+        HolderId::Treasury | HolderId::State => {}
     }
     // Seller receives, and a sale below cost is a realised loss, not a company expense.
     match seller {
@@ -521,7 +521,7 @@ fn settle_trade(
                 holder.capital_cents += cost;
             }
         }
-        HolderId::Treasury => {}
+        HolderId::Treasury | HolderId::State => {}
     }
     if let Some(entity) = world.firms.get_mut(firm) {
         entity.shares.transfer(seller, buyer, qty, cost);
@@ -568,7 +568,7 @@ fn release_order(world: &mut World, handle: Handle) {
                     holder.capital_cents += refund;
                 }
             }
-            HolderId::Treasury => {}
+            HolderId::Treasury | HolderId::State => {}
         }
     }
 }
@@ -657,7 +657,7 @@ pub fn issue_shares(
                 holder.capital_cents -= proceeds;
             }
         }
-        HolderId::Treasury => {
+        HolderId::Treasury | HolderId::State => {
             return Err(DomainError::NoAuthority {
                 actor: 0,
                 reason: cw_core::error::AuthorityReason::NotOwner,
@@ -754,6 +754,16 @@ pub fn pay_dividend(world: &mut World, firm: Handle, total_cents: i64) -> Domain
                 if let Some(holder) = world.outside.investors.get_mut(index as usize) {
                     holder.capital_cents += share.0;
                 }
+            }
+            HolderId::State => {
+                let _ = world.government.book.commit(
+                    world.tick,
+                    Txn::new().debit(Account::Cash, share.0, "dividend").credit(
+                        Account::OtherIncome,
+                        share.0,
+                        "dividend",
+                    ),
+                );
             }
             HolderId::Treasury => {}
         }

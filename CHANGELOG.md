@@ -25,6 +25,24 @@ heading.
 
 ### Added
 
+- Government and systemic events (1.7 preview 4). The party in power now also sets five
+  market laws. The Workers' Party brings common carrier rules (owned pipelines, rail and ships
+  sell spare capacity at a capped rate and may not lock a lane up with contracts), review of
+  deals that buy a supplier or a customer once their market share reaches 35 percent, a
+  strategic reserve (the government buys oil, ore and other raw goods in busts and sells in
+  spikes) and nationalisation of failing strategic firms. The Commerce Party brings production
+  quotas in extraction states (output held to 80 percent of capacity while a price is soft),
+  bailout loans for failing strategic firms and privatisation of state firms once they earn.
+  State firms price at cost plus five percent. Pipeline spills, port strikes, refinery fires,
+  lane outages and harvest failures now hit the network with real probabilities, durations and
+  effects on lanes, plants and stock. Rivals build pipelines on congested liquid and gas lanes
+  and react to quotas, common carrier rules and the reserve. The freight congestion card now
+  fires from lane fill data. The economy card lists laws in force, the reserve, quotas, state
+  firms and recent disruptions; alerts appear only when a law or incident touches your
+  companies. State rescues are rare: only large, operating-profitable strategic firms get one,
+  and the reserve also sells when prices rise 10 percent over what it paid or in a supply shock.
+  Telemetry snapshots (schema 4) carry law changes, reserve, rescue and incident
+  counts.
 - Owned logistics (1.7 preview 3). Freight is now lane capacity. Trucking, rail, pipelines and
   lake and sea shipping carry goods between regions; each mode has its own price, speed, smallest
   load, terminal needs and list of goods it may carry (pipelines liquids and gas only, cold goods

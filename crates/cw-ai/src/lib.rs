@@ -58,6 +58,11 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         // Production follows sell-through plant by plant in the weekly tick, the same planner
         // as the player's automatic production (cw_sim::economy::pricing::plan).
         reopen(world, dataset, handle, &mut proposals);
+        // A state firm has one aim, covering its costs, which the pricing rules apply. It does
+        // not expand, raid, speculate or lock lanes.
+        if firm.state_owned_since.is_some() {
+            continue;
+        }
         // Aggressive archetypes reconsider strategy every second week, the rest every fourth.
         let aggressive = fights(world, firm.archetype);
         let due = if aggressive {
@@ -132,8 +137,15 @@ fn speculate(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         let level = family.index_bps;
         let trend = family.trend_bps();
         let held = entity.storage.held_of(product, region);
+        // The state reserve competes for the same goods: it sells into a spike, so a rival
+        // releases its own store first, and it buys in a bust, which puts a floor under the
+        // price that makes buying beside it safe.
+        let reserve_phase = cw_sim::economy::reserve::phase(world, dataset, product);
         if held.0 > 0
-            && (level >= 10_500 || (trend <= -500 && level > 10_000) || phase == CyclePhase::Boom)
+            && (level >= 10_500
+                || (trend <= -500 && level > 10_000)
+                || phase == CyclePhase::Boom
+                || reserve_phase == cw_sim::economy::reserve::Phase::Selling)
         {
             proposals.push(Proposal {
                 actor: firm.0,
@@ -146,9 +158,10 @@ fn speculate(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
             });
             continue;
         }
-        let buy = level <= 9_000
+        let buy = (level <= 9_000
             && trend >= -200
-            && matches!(phase, CyclePhase::Recession | CyclePhase::Recovery);
+            && matches!(phase, CyclePhase::Recession | CyclePhase::Recovery))
+            || (reserve_phase == cw_sim::economy::reserve::Phase::Buying && level <= 9_500);
         if !buy
             || held.0 > 0
             || !entity.storage.orders.is_empty()
@@ -289,7 +302,32 @@ fn logistics_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
         });
     }
 
-    if fights(world, entity.archetype) {
+    // A producer of liquids or gas builds a pipeline where its goods crowd a lane and it pays.
+    if entity.book.recent_weeks().len() >= 13
+        && recent_income > 0
+        && entity.facilities.len() < 8
+        && !entity.facilities.iter().any(|h| {
+            world.facilities.get(*h).is_some_and(|p| {
+                p.status == FacilityStatus::Building
+                    && dataset.recipes[p.recipe as usize].transport_mode.as_deref()
+                        == Some("pipeline")
+            })
+        })
+        && let Some((recipe, region)) = pipeline_build(world, dataset, firm, reserve)
+    {
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::BuildFacility {
+                firm,
+                region,
+                recipe,
+                blocks: 1,
+            },
+        });
+    }
+
+    // Common carrier law forbids locking a lane up, so rivals do not try.
+    if fights(world, entity.archetype) && !world.politics.laws.common_carrier {
         for (key, lane) in &world.logistics.lanes {
             if lane.fill_bps() < 7_500 || lg::group_share_bps(world, firm, *key) < 2_000 {
                 continue;
@@ -394,6 +432,120 @@ fn best_carrier_build(
         }
     }
     best.map(|(_, recipe, region)| (recipe, region))
+}
+
+/// A pipeline for a producer of liquids or gas whose goods crowd a truck or rail lane. The
+/// group's own liquid output there would ship at operating cost instead of the lane price, which
+/// is the saving that pays for it; the rest of the pipeline's room sells to other shippers at the
+/// lane rate, half of it counted. Only built where a lane is congested and the numbers clear
+/// five years of financing, so a pipeline appears where it pays and nowhere else.
+fn pipeline_build(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    reserve: i64,
+) -> Option<(u16, u8)> {
+    use cw_sim::economy::logistics as lg;
+    let entity = world.firms.get(firm)?;
+    let pipeline = dataset.logistics.mode_index("pipeline")?;
+    let mut best: Option<(i64, u16, u8)> = None;
+    for hot in lg::hot_lanes(world, dataset).into_iter().take(8) {
+        if hot.key.mode == pipeline {
+            continue;
+        }
+        for region in [hot.key.a, hot.key.b] {
+            let own = liquid_output_lots(world, dataset, region, Some(firm));
+            let all = liquid_output_lots(world, dataset, region, None);
+            if own <= 0 {
+                continue;
+            }
+            // The firm must ship on the lane today: a pipeline replaces freight it pays for.
+            if lg::shipped_last_week(world, firm, hot.key) <= 0
+                && !world
+                    .logistics
+                    .stats
+                    .get(&hot.key)
+                    .is_some_and(|s| s.users.iter().any(|(f, _)| *f == firm))
+            {
+                continue;
+            }
+            // An existing pipeline division of another strategy blocks a second one.
+            for (index, recipe) in dataset.recipes.iter().enumerate() {
+                if recipe.industry != "logistics"
+                    || recipe.transport_mode.as_deref() != Some("pipeline")
+                {
+                    continue;
+                }
+                let logistics = cw_sim::economy::operations::industry_index("logistics")?;
+                if cw_sim::economy::sectors::division_strategy(
+                    world, dataset, firm, region, logistics,
+                )
+                .is_some_and(|s| s != index as u16)
+                {
+                    continue;
+                }
+                let cost = cw_sim::economy::sectors::build_cost(
+                    world,
+                    dataset,
+                    firm,
+                    region,
+                    index as u16,
+                    1,
+                )
+                .total_cents();
+                if entity.book.cash() < reserve * 2 + cost {
+                    continue;
+                }
+                let room = recipe.weekly_output_lots;
+                let own_lots = own.min(room).min(hot.moved as i64);
+                let other_lots = (all - own)
+                    .max(0)
+                    .min(room - own_lots)
+                    .min(hot.moved as i64);
+                let mut mult = lg::spot_mult_bps(dataset, 5_000);
+                if world.politics.laws.common_carrier {
+                    mult = mult.min(lg::regulated_cap_bps(dataset));
+                }
+                let pipe_rate =
+                    lg::leg_cents(dataset, hot.key.a, hot.key.b, pipeline, 1, mult).max(1);
+                let own_rate = pipe_rate * dataset.logistics.own_cost_bps / mult.max(1);
+                let saving = (hot.rate_cents - own_rate).max(0);
+                // A pipeline lasts for decades, so it is weighed over five years, not three.
+                let npv = (own_lots * saving + other_lots * pipe_rate / 2) * 260
+                    - cost
+                    - cost * world.macro_state.policy_rate_bps as i64 * 5 / 10_000;
+                if npv > 0 && best.as_ref().is_none_or(|b| npv > b.0) {
+                    best = Some((npv, index as u16, region));
+                }
+            }
+        }
+    }
+    best.map(|(_, recipe, region)| (recipe, region))
+}
+
+/// Weekly lots of liquid or gas goods the plants in a region make, for one firm's group or all.
+fn liquid_output_lots(world: &World, dataset: &Dataset, region: u8, group: Option<Handle>) -> i64 {
+    world
+        .facilities
+        .iter()
+        .filter(|(_, plant)| plant.region == region && plant.status == FacilityStatus::Operating)
+        .filter(|(_, plant)| {
+            group.is_none_or(|g| cw_sim::economy::ownership::same_group(world, g, plant.firm))
+        })
+        .map(|(_, plant)| {
+            dataset.recipes[plant.recipe as usize]
+                .outputs()
+                .filter(|(id, _)| {
+                    dataset
+                        .product_index
+                        .get(*id)
+                        .and_then(|p| dataset.storage_class_of(*p))
+                        == Some(cw_data::StorageClass::Tank)
+                })
+                .map(|(_, lots)| lots * plant.blocks as i64)
+                .sum::<i64>()
+        })
+        .sum()
 }
 
 /// Bring a mothballed plant back when its output pays at public prices, the corridor is
@@ -1172,11 +1324,15 @@ fn best_expansion(
         if !sectors.contains(&sector) || template.storage_class.is_some() {
             continue;
         }
-        if !dataset.product_index.contains_key(&template.output) {
+        let Some(output) = dataset.product_index.get(&template.output).copied() else {
             continue;
-        }
+        };
         let fighter = fights(world, entity.archetype);
         for region in 0..world.regions.len() as u8 {
+            // Under a production quota new extraction capacity would only sit idle.
+            if world.politics.quota_active.contains(&(region, output)) {
+                continue;
+            }
             // An aggressive rival may invade a market the player holds even without unmet
             // demand, when it would still profit at prices a tenth lower in the fight to come.
             let invading = fighter
@@ -2055,6 +2211,65 @@ mod tests {
         let handle = world.facilities.insert(plant);
         world.firms.get_mut(firm).unwrap().facilities.push(handle);
         handle
+    }
+
+    #[test]
+    fn a_liquids_producer_builds_a_pipeline_on_a_congested_lane_and_nowhere_else() {
+        use cw_sim::economy::logistics as lg;
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 191, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let chem = world
+            .firms
+            .iter()
+            .find(|(h, f)| f.name.starts_with("Scioto") && !player_controlled(&world, *h))
+            .map(|(h, _)| h)
+            .unwrap();
+        let (a, b) = (
+            dataset.region_index["OH-CEN"],
+            dataset.region_index["OH-SE"],
+        );
+        // A big refinery in the congested lane's end region.
+        let plant = add_carrier(&mut world, &dataset, chem, a, "refinery");
+        world.facilities.get_mut(plant).unwrap().blocks = 12;
+        give_cash(&mut world, chem, 50_000_000_000);
+        let key = lg::LaneKey::new(a, b, 0);
+        world.logistics.stats.insert(
+            key,
+            lg::LaneStat {
+                moved: 3_000,
+                outside: 2_500,
+                hot_weeks: 6,
+                users: vec![(chem, world.tick.0)],
+                ..Default::default()
+            },
+        );
+        let (recipe, region) = pipeline_build(&world, &dataset, chem, 0).expect("a pipeline pays");
+        assert_eq!(
+            dataset.recipes[recipe as usize].transport_mode.as_deref(),
+            Some("pipeline")
+        );
+        assert!(region == a || region == b);
+        // Not congested: no pipeline.
+        world.logistics.stats.clear();
+        assert!(pipeline_build(&world, &dataset, chem, 0).is_none());
+        // A firm that makes no liquids there does not build one.
+        world.logistics.stats.insert(
+            key,
+            lg::LaneStat {
+                moved: 3_000,
+                outside: 2_500,
+                hot_weeks: 6,
+                ..Default::default()
+            },
+        );
+        let farm = world
+            .firms
+            .iter()
+            .find(|(h, f)| f.industry == 0 && !player_controlled(&world, *h))
+            .map(|(h, _)| h)
+            .unwrap();
+        give_cash(&mut world, farm, 50_000_000_000);
+        assert!(pipeline_build(&world, &dataset, farm, 0).is_none());
     }
 
     #[test]
