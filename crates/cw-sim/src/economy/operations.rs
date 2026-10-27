@@ -91,17 +91,6 @@ pub fn industry_index(name: &str) -> Option<u8> {
     })
 }
 
-#[cfg(test)]
-mod industry_index_tests {
-    #[test]
-    fn matches_the_name_table() {
-        for (i, name) in super::INDUSTRY_NAMES.iter().enumerate() {
-            assert_eq!(super::industry_index(name), Some(i as u8));
-        }
-        assert_eq!(super::industry_index("nonsense"), None);
-    }
-}
-
 pub fn focus(world: &World, dataset: &Dataset, facility: Handle) -> Focus {
     let Some(plant) = world.facilities.get(facility) else {
         return Focus::Off;
@@ -392,4 +381,15 @@ pub fn set_focus(
     entity.focus_cooldown_until = now + FOCUS_COOLDOWN_WEEKS;
     let _ = Tick(now);
     Ok(())
+}
+
+#[cfg(test)]
+mod industry_index_tests {
+    #[test]
+    fn matches_the_name_table() {
+        for (i, name) in super::INDUSTRY_NAMES.iter().enumerate() {
+            assert_eq!(super::industry_index(name), Some(i as u8));
+        }
+        assert_eq!(super::industry_index("nonsense"), None);
+    }
 }
