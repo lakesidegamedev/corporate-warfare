@@ -4,19 +4,64 @@
 //! cargo run --release -p cw-session --example scenario_smoke -- [scenario-id] [seeds] [weeks]
 use std::collections::BTreeMap;
 
+/// Answer every open event card the way a passive player would, so an event pause never freezes
+/// the run. (Marking events resolved alone leaves the pause in place and the world stops.)
+fn answer_events(session: &mut cw_session::Session) {
+    let open: Vec<(u64, String)> = session
+        .world
+        .events
+        .pending
+        .iter()
+        .filter(|event| !event.resolved)
+        .filter_map(|event| {
+            let card = session.dataset.event(&event.card)?;
+            let choice = card
+                .choices
+                .iter()
+                .find(|choice| choice.handler == "no_action")
+                .or_else(|| card.choices.last())?;
+            Some((event.id, choice.id.clone()))
+        })
+        .collect();
+    for (id, choice) in open {
+        let _ = cw_sim::economy::events_engine::respond(
+            &mut session.world,
+            &session.dataset,
+            id,
+            &choice,
+        );
+    }
+    session.world.pending_pause = None;
+}
+
 fn main() {
     let mut args = std::env::args().skip(1);
     let scenario = args.next().unwrap_or_else(|| "texas-1981".to_owned());
     let seeds: u64 = args.next().and_then(|v| v.parse().ok()).unwrap_or(8);
     let weeks: u32 = args.next().and_then(|v| v.parse().ok()).unwrap_or(104);
-    let goods = [
-        "crude_oil",
-        "fuel",
-        "gasoline",
-        "natural_gas",
-        "food_raw",
-        "livestock",
-    ];
+    let goods: &[&str] = if scenario == "silicon-valley-1995" {
+        &[
+            "components",
+            "software",
+            "telecom",
+            "goods_retail",
+            "plastics",
+            "rare_earth",
+            "crude_oil",
+            "fuel",
+            "gasoline",
+            "food_raw",
+        ]
+    } else {
+        &[
+            "crude_oil",
+            "fuel",
+            "gasoline",
+            "natural_gas",
+            "food_raw",
+            "livestock",
+        ]
+    };
     let mut flows: BTreeMap<&str, (i64, i64, i64)> = BTreeMap::new();
     let mut dissolved: BTreeMap<String, i64> = BTreeMap::new();
     let (mut start_total, mut end_total) = (0i64, 0i64);
@@ -56,9 +101,7 @@ fn main() {
         for week in 1..=weeks {
             let r = session.advance(1);
             if r.pause.is_some() {
-                for e in session.world.events.pending.iter_mut() {
-                    e.resolved = true;
-                }
+                answer_events(&mut session);
                 session.dismiss_pause();
             }
             if week > weeks.saturating_sub(52) {

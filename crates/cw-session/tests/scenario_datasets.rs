@@ -78,8 +78,8 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
         "ac180b862d07794f14dfff634b295c969b009bd963c49a2abb558c3388be07ea"
     );
     // A scenario with no content of its own plays on the default dataset.
-    let silicon = cw_data::Dataset::load_scenario("silicon-valley-1995").unwrap();
-    assert_eq!(silicon.hash, data.hash);
+    let ruhr = cw_data::Dataset::load_scenario("ruhr-rhine-1991").unwrap();
+    assert_eq!(ruhr.hash, data.hash);
 }
 
 #[test]
@@ -170,6 +170,139 @@ fn texas_opens_solvent_and_keeps_the_player_company_alive() {
                 session.dismiss_pause();
             }
         }
+        let group = session.world.investor.primary_group.unwrap();
+        assert!(
+            session.world.firms.get(group).unwrap().operative(),
+            "seed {seed}"
+        );
+        let dissolved = session
+            .world
+            .firms
+            .iter()
+            .filter(|(_, firm)| firm.archetype.is_some())
+            .filter(|(_, firm)| matches!(firm.status, cw_sim::state::FirmStatus::Dissolved))
+            .count();
+        assert!(
+            dissolved <= 2,
+            "seed {seed}: {dissolved} named firms dissolved"
+        );
+    }
+}
+
+/// Like `run`, but answers event cards and clears their pause, so a run is never frozen at the
+/// first event. (`run` is kept as it was because the pinned Great Lakes hashes were recorded with it.)
+fn run_answering(seed: u64, scenario: &str, weeks: u32) -> Session {
+    let mut session = Session::create(config(seed, ScenarioKind::Guided, scenario)).unwrap();
+    for _ in 0..weeks {
+        let result = session.advance(1);
+        if result.pause.is_some() {
+            for event in session.world.events.pending.iter_mut() {
+                event.resolved = true;
+            }
+            session.world.pending_pause = None;
+        }
+    }
+    session
+}
+
+#[test]
+fn silicon_valley_has_its_own_geography_lanes_firms_and_balance() {
+    let valley = cw_data::Dataset::load_scenario("silicon-valley-1995").unwrap();
+    let lakes = cw_data::Dataset::load().unwrap();
+    assert_ne!(valley.hash, lakes.hash);
+    assert_eq!(valley.scenario_id, "silicon-valley-1995");
+    assert_eq!(valley.states.len(), 1);
+    assert_eq!(valley.regions.len(), 16);
+    assert!(valley.seed_firms.len() >= 45);
+    assert!(valley.validate().is_empty(), "{:?}", valley.validate());
+    let n = valley.regions.len();
+    assert_eq!(valley.lanes.len(), n * (n - 1) / 2);
+    // Oakland, Los Angeles and San Diego are ports on one Pacific sea system.
+    let oakland = valley.region_index["CA-OAK"];
+    let los_angeles = valley.region_index["CA-LAX"];
+    let san_diego = valley.region_index["CA-SDG"];
+    assert!(valley.sea_km(oakland, los_angeles).is_some());
+    assert!(valley.sea_km(los_angeles, san_diego).is_some());
+    assert!(valley.public_ports[oakland as usize]);
+    assert_eq!(valley.public_ports.iter().filter(|p| **p).count(), 5);
+    // Oil and fuel cheaper, chips dearer and pay lower than the Great Lakes engine units.
+    let price = |d: &cw_data::Dataset, id: &str| d.reference_price(d.product_index[id]);
+    assert!(price(&valley, "crude_oil") < price(&lakes, "crude_oil"));
+    assert!(price(&valley, "components") > price(&lakes, "components"));
+    assert!(valley.baseline_weekly_wage_cents[0] < lakes.baseline_weekly_wage_cents[0]);
+    assert_eq!(price(&valley, "defense"), price(&lakes, "defense"));
+    assert_eq!(valley.recipes.len(), lakes.recipes.len());
+    assert_eq!(valley.products.len(), lakes.products.len());
+    assert_eq!(valley.player_region, "CA-SJC");
+    assert_eq!(valley.player_recipe, "hardware_maker");
+    // 1995 county estimates add up to the state: about 31.5 million people.
+    let people: i64 = valley.regions.iter().map(|r| r.population()).sum();
+    assert!((31_000_000..32_000_000).contains(&people), "{people}");
+}
+
+#[test]
+fn silicon_valley_opens_the_bakersfield_pipelines() {
+    let mut session =
+        Session::create(config(1, ScenarioKind::Guided, "silicon-valley-1995")).unwrap();
+    assert_eq!(session.dataset.scenario_id, "silicon-valley-1995");
+    assert_eq!(session.world.regions.len(), 16);
+    let pipeline = session.dataset.logistics.mode_index("pipeline").unwrap();
+    session.advance(2);
+    let st = &session.world.logistics;
+    let bakersfield = session.dataset.region_index["CA-BAK"];
+    for destination in ["CA-LAX", "CA-OAK"] {
+        let to = session.dataset.region_index[destination];
+        let key = cw_sim::economy::logistics::LaneKey::new(bakersfield, to, pipeline);
+        let lane = st
+            .lanes
+            .get(&key)
+            .unwrap_or_else(|| panic!("the Bakersfield to {destination} pipeline exists"));
+        assert!(lane.cap() > 0);
+    }
+}
+
+#[test]
+fn silicon_valley_electronics_prices_follow_the_chip_cycle() {
+    // Components are in the scenario's own family; Great Lakes and Texas have no such family.
+    let valley = run_answering(3, "silicon-valley-1995", 1);
+    let family = |s: &Session| {
+        s.world
+            .world_prices
+            .families
+            .iter()
+            .any(|f| f.key == "electronics")
+    };
+    assert!(family(&valley));
+    assert!(!family(&run_answering(3, "great-lakes-2000", 1)));
+    assert!(!family(&run_answering(3, "texas-1981", 1)));
+}
+
+#[test]
+fn silicon_valley_runs_replays_and_saves_on_its_own_dataset() {
+    let first = run(7, ScenarioKind::Guided, "silicon-valley-1995", 26);
+    assert_eq!(
+        first,
+        run(7, ScenarioKind::Guided, "silicon-valley-1995", 26)
+    );
+    assert_ne!(first, run(7, ScenarioKind::Guided, "great-lakes-2000", 26));
+
+    let mut session =
+        Session::create(config(8, ScenarioKind::Guided, "silicon-valley-1995")).unwrap();
+    session.advance(10);
+    let bytes = session.export_save().unwrap();
+    let mut loaded = Session::import_save(&bytes).unwrap();
+    assert_eq!(loaded.dataset.scenario_id, "silicon-valley-1995");
+    assert_eq!(loaded.canonical_hash(), session.canonical_hash());
+    session.advance(5);
+    loaded.advance(5);
+    assert_eq!(loaded.canonical_hash(), session.canonical_hash());
+}
+
+/// A short smoke inside the test suite; `examples/scenario_smoke.rs` runs the full 8 x 104.
+#[test]
+fn silicon_valley_opens_solvent_and_keeps_the_player_company_alive() {
+    for seed in 1..=2u64 {
+        let session = run_answering(seed, "silicon-valley-1995", 26);
         let group = session.world.investor.primary_group.unwrap();
         assert!(
             session.world.firms.get(group).unwrap().operative(),

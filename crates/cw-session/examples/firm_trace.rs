@@ -106,7 +106,8 @@ fn main() {
             for e in session.world.events.pending.iter_mut() {
                 e.resolved = true;
             }
-            session.dismiss_pause();
+            // An event pause stays until cleared, whatever the cards say.
+            session.world.pending_pause = None;
         }
     }
 }
