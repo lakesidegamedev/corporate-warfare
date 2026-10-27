@@ -18,7 +18,11 @@ UNIT = 18
 
 
 def load(directory, name):
-    return json.load(open(Path(directory) / f"{name}.json"))["features"]
+    document = json.load(open(Path(directory) / f"{name}.json"))
+    if "features" in document:
+        return document["features"]
+    # -innerlines writes bare geometries.
+    return [{"type": "Feature", "properties": {}, "geometry": g} for g in document.get("geometries", [])]
 
 
 def geometries(feature):
@@ -38,7 +42,7 @@ def geometries(feature):
 
 def main(source, output):
     layers = {name: load(source, name) for name in
-              ["countries", "play_states", "context_states", "canada", "counties", "regions", "lakes",
+              ["countries", "provinces", "world_roads", "play_states", "context_states", "canada", "counties", "regions", "lakes",
                "rivers", "interstates_thin", "cities", "hubs"]}
     names = {r["code"]: r["name"] for r in
              json.load(open(Path(__file__).resolve().parents[2] / "content/geography/regions.json"))["regions"]}
@@ -85,6 +89,9 @@ def main(source, output):
         r = rings(feature, 0)
         if r:
             countries.append({"code": p.get("ADM0_A3") or "", "name": p.get("NAME") or "", "rings": r})
+
+    provinces = [line for f in layers["provinces"] for line in lines(f, 4)]
+    roads = [line for f in layers["world_roads"] for line in lines(f, 6)]
 
     states = []
     for feature in layers["play_states"]:
@@ -148,6 +155,8 @@ def main(source, output):
         "attribution": "Boundaries and roads: US Census Bureau cartographic boundary and TIGER/Line files (2018). Countries, lakes, rivers, places and provinces: Natural Earth. All public domain.",
         "units": "ten-thousandths of a degree, longitude then latitude",
         "countries": countries,
+        "provinces": provinces,
+        "roads": roads,
         "states": states,
         "regions": regions,
         "counties": counties,
@@ -160,7 +169,7 @@ def main(source, output):
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     Path(output).write_text(json.dumps(document, separators=(",", ":")))
     size = Path(output).stat().st_size
-    print(f"wrote {output}: {size // 1024} KB, {len(countries)} countries, {len(states)} states/provinces, {len(regions)} regions, {len(counties)} counties, "
+    print(f"wrote {output}: {size // 1024} KB, {len(countries)} countries, {len(provinces)} province borders, {len(roads)} roads, {len(states)} states/provinces, {len(regions)} regions, {len(counties)} counties, "
           f"{len(lakes)} lakes, {len(rivers)} rivers, {len(interstates)} interstates, {len(cities)} cities")
 
 

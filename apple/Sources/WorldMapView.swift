@@ -55,6 +55,9 @@ struct WorldMapView: View {
 
     private let map = WorldMap.shared
     private static let space = Color(red: 0.020, green: 0.035, blue: 0.055)
+    private static let outsideLand = Color(red: 0.145, green: 0.157, blue: 0.169)
+    private static let outsideBorder = Color(red: 0.333, green: 0.349, blue: 0.365)
+    private static let outsideRoad = Color(red: 0.416, green: 0.431, blue: 0.447)
     private static let graticule: [GeoRing] = {
         var rings: [GeoRing] = []
         for lon in stride(from: -180, to: 180, by: 15) {
@@ -180,22 +183,24 @@ struct WorldMapView: View {
             context.stroke(p.lines(WorldMapView.graticule), with: .color(Theme.primaryText.opacity(0.06 * (1 - t))), lineWidth: 0.6)
         }
 
+        // Outside the scenario the world is greyed out: neutral land, grey borders and roads.
+        // The scenario's regions are drawn over it in colour.
         var land = Path()
         for country in map.countries {
             for ring in country.rings { p.addPolygon(ring, to: &land) }
         }
-        context.fill(land, with: .color(Theme.landDim), style: FillStyle(eoFill: true))
-        context.stroke(land, with: .color(Theme.stroke), lineWidth: 0.6)
+        context.fill(land, with: .color(WorldMapView.outsideLand), style: FillStyle(eoFill: true))
+        let provinces = min(max((camera.zoom - 1.4) / 1.2, 0), 1)
+        if provinces > 0 {
+            context.stroke(p.lines(map.provinces), with: .color(WorldMapView.outsideBorder.opacity(0.7 * provinces)), lineWidth: 0.5)
+        }
+        let roads = min(max((camera.zoom - 2.4) / 1.6, 0), 1)
+        if roads > 0 {
+            context.stroke(p.lines(map.roads), with: .color(WorldMapView.outsideRoad.opacity(0.6 * roads)), lineWidth: 0.8)
+        }
+        context.stroke(land, with: .color(WorldMapView.outsideBorder), lineWidth: 0.8)
 
         let detail = min(max((camera.zoom - 7) / 5, 0), 1)
-        if camera.zoom > 3 {
-            var context2 = Path()
-            for state in map.contextStates {
-                for ring in state.rings { p.addPolygon(ring, to: &context2) }
-            }
-            context.stroke(context2, with: .color(Theme.stroke.opacity(min((camera.zoom - 3) / 3, 1))), lineWidth: 0.6)
-        }
-
         let regionPaths = map.regions.map { (code: $0.code, path: p.path($0.rings)) }
         for region in regionPaths {
             context.fill(region.path, with: .color(Theme.land))

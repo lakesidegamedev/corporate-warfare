@@ -25,6 +25,8 @@ import kotlin.math.sqrt
 @Serializable
 data class WorldMapFile(
     val countries: List<Country>,
+    val provinces: List<List<Int>> = emptyList(),
+    val roads: List<List<Int>> = emptyList(),
     val states: List<Area>,
     val regions: List<RegionArea>,
     val counties: List<Rings> = emptyList(),
@@ -91,6 +93,8 @@ class WorldMap private constructor(val file: WorldMapFile) {
     val playStates = file.states.filter { it.play }.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
     val contextStates = file.states.filter { !it.play }.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
     val regions = file.regions.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
+    val provinces = file.provinces.map(::GeoRing)
+    val roads = file.roads.map(::GeoRing)
     val counties = file.counties.flatMap { c -> c.rings.map(::GeoRing) }
     val lakes = file.lakes.flatMap { l -> l.rings.map(::GeoRing) }
     val rivers = file.rivers.flatMap { r -> r.lines.map(::GeoRing) }

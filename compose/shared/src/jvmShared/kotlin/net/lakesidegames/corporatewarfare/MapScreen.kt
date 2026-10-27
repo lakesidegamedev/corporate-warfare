@@ -188,15 +188,16 @@ internal fun DrawScope.drawWorldMap(
     // Ocean: the globe's disc, growing to fill the view as the map flattens.
     drawCircle(Color(0xFF0E2840), radius = (p.r / max(1 - t, 0.03)).toFloat(), center = center)
     if (t < 1) drawPath(p.lines(graticule), Palette.primaryText.copy(alpha = (0.06 * (1 - t)).toFloat()), style = Stroke(0.6f))
+    // Outside the scenario the world is greyed out: neutral land, grey borders and roads. The
+    // scenario's regions are drawn over it in colour.
     val land = Path().apply { fillType = PathFillType.EvenOdd }
     map.countries.forEach { p.addPolygons(it.rings, land) }
-    drawPath(land, Color(0xFF1E2A36))
-    drawPath(land, Palette.stroke, style = Stroke(0.6f))
-    if (cam.zoom > 3) {
-        val others = Path()
-        map.contextStates.forEach { p.addPolygons(it.rings, others) }
-        drawPath(others, Palette.stroke.copy(alpha = min((cam.zoom - 3) / 3, 1.0).toFloat()), style = Stroke(0.6f))
-    }
+    drawPath(land, OutsideLand)
+    val provinces = ((cam.zoom - 1.4) / 1.2).coerceIn(0.0, 1.0).toFloat()
+    if (provinces > 0) drawPath(p.lines(map.provinces), OutsideBorder.copy(alpha = 0.7f * provinces), style = Stroke(0.5f))
+    val roads = ((cam.zoom - 2.4) / 1.6).coerceIn(0.0, 1.0).toFloat()
+    if (roads > 0) drawPath(p.lines(map.roads), OutsideRoad.copy(alpha = 0.6f * roads), style = Stroke(0.8f))
+    drawPath(land, OutsideBorder, style = Stroke(0.8f))
     val detail = ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
     val regionPaths = map.regions.map { it.code to p.polygons(it.rings) }
     regionPaths.forEach { (code, path) ->
@@ -253,6 +254,10 @@ internal fun DrawScope.drawWorldMap(
         }
     }
 }
+
+private val OutsideLand = Color(0xFF25282B)
+private val OutsideBorder = Color(0xFF55595D)
+private val OutsideRoad = Color(0xFF6A6E72)
 
 /** Meridians and parallels every 15 degrees, for the globe. */
 private val graticule: List<GeoRing> =

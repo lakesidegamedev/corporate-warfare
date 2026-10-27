@@ -8,7 +8,7 @@
 #   tl_2018_us_primaryroads                         https://www2.census.gov/geo/tiger/TIGER2018/PRIMARYROADS/
 #   ne_10m_admin_0_countries.geojson, ne_10m_admin_1_states_provinces, ne_10m_lakes,
 #   ne_10m_rivers_lake_centerlines,
-#   ne_10m_populated_places                         https://www.naturalearthdata.com/ (10m)
+#   ne_10m_populated_places, ne_10m_roads           https://www.naturalearthdata.com/ (10m)
 # All are public domain. Requires mapshaper (npm i -g mapshaper) and python3.
 #
 # Geometry stays in longitude and latitude: the apps project it at draw time, as a globe when
@@ -46,7 +46,7 @@ $MS ne_10m_lakes/ne_10m_lakes.shp -filter 'scalerank <= 5' -simplify 15% keep-sh
   -o format=geojson "$OUT/lakes.json"
 $MS ne_10m_rivers_lake_centerlines/ne_10m_rivers_lake_centerlines.shp -clip $B -filter 'scalerank <= 7' \
   -simplify 20% -o format=geojson "$OUT/rivers.json"
-$MS tl_2018_us_primaryroads/tl_2018_us_primaryroads.shp -filter 'RTTYP=="I"' -clip $B -dissolve FULLNAME \
+$MS tl_2018_us_primaryroads/tl_2018_us_primaryroads.shp -filter 'RTTYP=="I"' -clip "$OUT/play_states.json" -dissolve FULLNAME \
   -simplify 3% -o format=geojson "$OUT/interstates.json"
 $MS "$OUT/interstates.json" -simplify 25% -o format=geojson "$OUT/interstates_thin.json"
 $MS ne_10m_populated_places/ne_10m_populated_places.shp -clip $B \
@@ -56,6 +56,12 @@ $MS ne_10m_populated_places/ne_10m_populated_places.shp -clip $B \
 # Every country, for the globe and the context around a scenario.
 $MS ne_10m_admin_0_countries.geojson -filter-fields NAME,ADM0_A3 -simplify 4% keep-shapes \
   -filter-slivers -o format=geojson "$OUT/countries.json"
+
+# Every state and province border and the main highways, drawn grey outside the scenario.
+$MS ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.shp -simplify 3% keep-shapes \
+  -innerlines -o format=geojson "$OUT/provinces.json"
+$MS ne_10m_roads/ne_10m_roads.shp -filter "(type=='Major Highway' || type=='Secondary Highway') && scalerank <= 6" \
+  -filter-fields type -simplify 8% -o format=geojson "$OUT/world_roads.json"
 
 # Region hubs: the anchor city of each region in content/geography/regions.json.
 python3 - "$ROOT/content/geography/regions.json" "$OUT/hubs.geojson" <<'EOF'

@@ -49,6 +49,8 @@ struct WorldMapFile: Decodable {
 
     let attribution: String
     let countries: [Country]
+    let provinces: [[Int]]?
+    let roads: [[Int]]?
     let states: [Area]
     let regions: [RegionArea]
     let counties: [County]
@@ -132,6 +134,10 @@ final class WorldMap {
 
     let attribution: String
     let countries: [Feature]
+    /// Every state and province border in the world, as shared lines.
+    let provinces: [GeoRing]
+    /// Main highways worldwide, drawn grey outside the scenario.
+    let roads: [GeoRing]
     let playStates: [Feature]
     let contextStates: [Feature]
     let regions: [RegionFeature]
@@ -151,6 +157,8 @@ final class WorldMap {
         guard let file else {
             attribution = ""
             countries = []
+            provinces = []
+            roads = []
             playStates = []
             contextStates = []
             regions = []
@@ -165,6 +173,8 @@ final class WorldMap {
         }
         attribution = file.attribution
         countries = file.countries.map { Feature(code: $0.code, name: $0.name, rings: $0.rings.map(GeoRing.init)) }
+        provinces = (file.provinces ?? []).map(GeoRing.init)
+        roads = (file.roads ?? []).map(GeoRing.init)
         func feature(_ area: WorldMapFile.Area) -> Feature {
             Feature(code: area.code, name: area.name, rings: area.rings.map(GeoRing.init))
         }
