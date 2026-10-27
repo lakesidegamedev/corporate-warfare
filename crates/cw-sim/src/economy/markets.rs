@@ -484,9 +484,16 @@ fn clear_goods_exchange(
             }
         }
     }
-    let freight_per_lot = |from: u8, to: u8| {
-        crate::economy::freight::freight_cost(dataset, from, to, MilliLots::from_lots(100)) / 100
-    };
+    let class = dataset.products[product as usize].storage_class;
+    let mut freight_table: BTreeMap<(u8, u8), i64> = BTreeMap::new();
+    for (_, to) in demand.keys() {
+        for (_, from) in supply.keys() {
+            freight_table.entry((*from, *to)).or_insert_with(|| {
+                crate::economy::logistics::estimate_cents_per_lot(world, dataset, *from, *to, class)
+            });
+        }
+    }
+    let freight_per_lot = |from: u8, to: u8| freight_table.get(&(from, to)).copied().unwrap_or(0);
     let asking = |world: &World, firm: Handle| {
         world
             .firms
@@ -614,15 +621,17 @@ fn clear_goods_exchange(
                     if let Some(entity) = world.firms.get_mut(seller) {
                         entity.record_sale(to, product, qty_lots);
                     }
-                    let freight =
-                        crate::economy::freight::freight_cost(dataset, from, to, qty_lots);
-                    crate::economy::freight::pay_freight(
+                    let freight = crate::economy::logistics::book(
                         world,
                         dataset,
                         buyer,
-                        freight,
+                        product,
+                        from,
+                        to,
+                        qty_lots,
                         "exchange freight",
-                    );
+                    )
+                    .cents;
                     if let Some(left) = supply.get_mut(&(seller, from)) {
                         *left -= qty;
                     }
@@ -1413,8 +1422,12 @@ mod tests {
         assert_eq!(held(&world, buyer, to), 15);
         assert_eq!(held(&world, remote, far), 0);
         assert_eq!(held(&world, local, to), 5);
+        // Ten lots are below the smallest rail shipment and no carrier serves the lane, so the
+        // outside trucks haul them at the reference rate plus their premium (120 percent).
         let freight =
-            crate::economy::freight::freight_cost(&dataset, far, to, MilliLots::from_lots(10));
+            crate::economy::freight::freight_cost(&dataset, far, to, MilliLots::from_lots(10))
+                * dataset.logistics.outside_premium_bps
+                / 10_000;
         assert_eq!(
             buyer_cash - world.firms.get(buyer).unwrap().book.cash(),
             10 * 38_000 + freight + 5 * 44_000,

@@ -65,6 +65,18 @@ actor Engine {
         session?.heldStock(firm: firm) ?? []
     }
 
+    func lanes() -> [LaneDto] {
+        session?.lanes() ?? []
+    }
+
+    func laneContracts() -> [LaneContractDto] {
+        session?.laneContracts() ?? []
+    }
+
+    func freightSummary() -> FreightSummaryDto? {
+        session?.freightSummary()
+    }
+
     func mapDivisions() -> [MapDivisionDto] {
         session?.mapDivisions() ?? []
     }

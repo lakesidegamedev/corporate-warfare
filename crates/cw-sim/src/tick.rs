@@ -6,7 +6,8 @@
 //! 3. Allocate labour and pay payroll.
 //! 4. Dispatch utilities, then allocate power and produce from opening stock.
 //! 5. Clear contracts, spot markets and final demand simultaneously.
-//! 6. Freight for inter-region shipments was charged at dispatch.
+//! 6. Freight for inter-region shipments was charged at dispatch, against the week's lane
+//!    capacity built at the opening of phase 1.
 //! 7. Accrue expenses, depreciation, interest, tax and claims; apply default rules.
 //! 8. Advance investment, R&D, brand, credit, values, events and closing reports.
 //! 9. AI observes closing data and queues next-week commands (session layer).
@@ -40,6 +41,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     }
 
     // Phase 1: expiries, deliveries, construction and governance.
+    crate::economy::logistics::begin_week(world, dataset);
     crate::economy::freight::settle(world, dataset);
     crate::economy::procurement::ensure_contracts(world, dataset);
     crate::economy::procurement::settle(world, dataset);

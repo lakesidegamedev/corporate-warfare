@@ -79,8 +79,8 @@
     },
     {
       "id": "freight",
-      "name": "Freight",
-      "reference_price_cents": 12000,
+      "name": "Freight capacity",
+      "reference_price_cents": 800,
       "kind": "transport_service"
     },
     {
@@ -889,7 +889,7 @@
       "industry": "logistics",
       "id": "carrier",
       "output": "freight",
-      "weekly_output_lots": 87,
+      "weekly_output_lots": 1500,
       "weekly_inputs_lots": {
         "fuel": 8,
         "electricity": 1
@@ -902,14 +902,15 @@
       "capex_cents": 40000000,
       "build_weeks": 8,
       "life_years": 10,
-      "name": "Trucking"
+      "name": "Trucking",
+      "transport_mode": "truck"
     },
     {
       "industry": "logistics",
       "id": "freight_rail",
       "name": "Freight Rail",
       "output": "freight",
-      "weekly_output_lots": 126,
+      "weekly_output_lots": 3200,
       "weekly_inputs_lots": {
         "electricity": 1,
         "fuel": 8,
@@ -922,14 +923,15 @@
       ],
       "capex_cents": 68000000,
       "build_weeks": 26,
-      "life_years": 30
+      "life_years": 30,
+      "transport_mode": "rail"
     },
     {
       "industry": "logistics",
       "id": "full_service",
       "name": "Full-Service Logistics",
       "output": "freight",
-      "weekly_output_lots": 106,
+      "weekly_output_lots": 1800,
       "weekly_inputs_lots": {
         "electricity": 1,
         "fuel": 3,
@@ -943,7 +945,8 @@
       ],
       "capex_cents": 34000000,
       "build_weeks": 8,
-      "life_years": 20
+      "life_years": 20,
+      "transport_mode": "truck"
     },
     {
       "industry": "retail",
@@ -1012,7 +1015,7 @@
       "weekly_output_lots": 15,
       "weekly_inputs_lots": {
         "electricity": 1,
-        "freight": 12,
+        "freight": 180,
         "goods": 14,
         "software": 2
       },
@@ -1635,6 +1638,85 @@
       "capex_cents": 55000000,
       "build_weeks": 13,
       "life_years": 20
+    },
+    {
+      "industry": "logistics",
+      "id": "pipeline",
+      "name": "Pipeline",
+      "output": "freight",
+      "weekly_output_lots": 3600,
+      "transport_mode": "pipeline",
+      "weekly_inputs_lots": {
+        "electricity": 2
+      },
+      "workers_low_mid_high": [
+        2,
+        1,
+        1
+      ],
+      "capex_cents": 90000000,
+      "build_weeks": 26,
+      "life_years": 40
+    },
+    {
+      "industry": "logistics",
+      "id": "shipping",
+      "name": "Lake & Sea Shipping",
+      "output": "freight",
+      "weekly_output_lots": 4800,
+      "transport_mode": "sea",
+      "weekly_inputs_lots": {
+        "fuel": 10
+      },
+      "workers_low_mid_high": [
+        6,
+        3,
+        1
+      ],
+      "capex_cents": 80000000,
+      "build_weeks": 26,
+      "life_years": 30
+    },
+    {
+      "industry": "logistics",
+      "id": "rail_terminal",
+      "name": "Rail Terminal",
+      "output": "freight",
+      "weekly_output_lots": 1100,
+      "transport_mode": "rail",
+      "terminal": true,
+      "weekly_inputs_lots": {
+        "electricity": 1
+      },
+      "workers_low_mid_high": [
+        2,
+        1,
+        0
+      ],
+      "capex_cents": 30000000,
+      "build_weeks": 13,
+      "life_years": 30
+    },
+    {
+      "industry": "logistics",
+      "id": "port",
+      "name": "Port",
+      "output": "freight",
+      "weekly_output_lots": 3000,
+      "transport_mode": "sea",
+      "terminal": true,
+      "weekly_inputs_lots": {
+        "electricity": 1,
+        "fuel": 2
+      },
+      "workers_low_mid_high": [
+        3,
+        2,
+        1
+      ],
+      "capex_cents": 50000000,
+      "build_weeks": 26,
+      "life_years": 40
     }
   ],
   "financial_businesses": [

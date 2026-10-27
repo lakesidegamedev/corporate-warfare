@@ -410,7 +410,10 @@ private fun DesktopMap(store: GameStore) {
                     }
                 }
                 store.divisions.firstOrNull { it.region == selected }?.let { d ->
-                    Column(Modifier.padding(12.dp)) { DivisionStock(store, d) }
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        DivisionStock(store, d)
+                        DivisionShipping(store, d)
+                    }
                 }
             }
             Pane("Rival moves", Modifier.fillMaxWidth().weight(1f)) {
@@ -439,6 +442,9 @@ private fun DesktopMap(store: GameStore) {
             Row(Modifier.align(Alignment.TopStart).padding(10.dp)) {
                 Chips(MapLayer.entries.map { it.title }, layer.title) { title -> layer = MapLayer.entries.first { it.title == title } }
             }
+        }
+        if (layer == MapLayer.Freight) {
+            Pane("Freight lanes", Modifier.width(360.dp).fillMaxHeight()) { FreightPanel(store, selected) }
         }
         val board = selected?.let { code -> store.boards.firstOrNull { it.code == code } }
         if (board != null) {

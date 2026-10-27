@@ -56,7 +56,7 @@ import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 
-enum class MapLayer(val title: String) { Presence("Your divisions"), Room("Room to build"), Wages("Wages") }
+enum class MapLayer(val title: String) { Presence("Your divisions"), Room("Room to build"), Wages("Wages"), Freight("Freight") }
 
 /**
  * The world map with its own camera and zoom buttons: a globe when zoomed out that flattens onto
@@ -137,7 +137,10 @@ fun WorldMapView(store: GameStore, layer: MapLayer, selected: String?, onSelect:
                         )
                     },
             ) {
-                drawWorldMap(map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shading, selected, store.mapDivisions, measurer, appSettings?.mapDetail ?: MapDetail.High)
+                drawWorldMap(
+                    map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shading, selected, store.mapDivisions, measurer,
+                    appSettings?.mapDetail ?: MapDetail.High, lanes = if (layer == MapLayer.Freight) store.lanes else emptyList(),
+                )
             }
             Column(
                 Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 24.dp)
@@ -181,9 +184,17 @@ fun MapScreen(store: GameStore) {
         }
     }
 
+    if (layer == MapLayer.Freight) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            Column(
+                Modifier.fillMaxWidth().padding(8.dp).clip(RoundedCornerShape(14.dp)).background(Palette.panel.copy(alpha = 0.96f)),
+            ) { FreightPanel(store, selected) }
+        }
+    }
+
     selected?.let { code ->
         val board = store.boards.firstOrNull { it.code == code }
-        if (board != null) RegionSheet(store, board, onBuild = { building = board; selected = null }, onClose = { selected = null })
+        if (board != null && layer != MapLayer.Freight) RegionSheet(store, board, onBuild = { building = board; selected = null }, onClose = { selected = null })
     }
     building?.let { board -> BuildDialog(store, board) { building = null } }
 }
@@ -199,6 +210,7 @@ internal fun DrawScope.drawWorldMap(
     measurer: TextMeasurer,
     detailLevel: MapDetail = MapDetail.High,
     space: Boolean = true,
+    lanes: List<uniffi.cw_ffi.LaneDto> = emptyList(),
 ) {
     val p = MapProjection(cam, size)
     val t = p.t
@@ -242,6 +254,7 @@ internal fun DrawScope.drawWorldMap(
         drawCircle(Color(0xFF16354F).copy(alpha = (0.9 * (1 - t)).toFloat()), radius = p.r.toFloat(), center = center, style = Stroke(1.5f))
         drawCircle(Color(0xFF16354F).copy(alpha = (0.3 * (1 - t)).toFloat()), radius = p.r.toFloat() + 4f, center = center, style = Stroke(6f))
     }
+    if (lanes.isNotEmpty()) drawLanes(map, p, lanes, selected)
     if (cam.zoom > 3) {
         // Cities, then division markers, a fixed size on screen.
         val close = cam.zoom > 14
@@ -294,6 +307,7 @@ internal fun layerTint(layer: MapLayer): Color = when (layer) {
     MapLayer.Presence -> Palette.gold
     MapLayer.Room -> Palette.positive
     MapLayer.Wages -> Color(0xFF42A5F5)
+    MapLayer.Freight -> Palette.gold
 }
 
 /** 0..1 intensity per region for the active layer. */
@@ -313,6 +327,8 @@ internal fun shading(store: GameStore, layer: MapLayer): Map<String, Double> = w
         val high = store.boards.maxOfOrNull { it.wageIndexBps } ?: 1
         store.boards.associate { it.code to (it.wageIndexBps - low).toDouble() / maxOf(high - low, 1) }
     }
+    // Lanes are drawn over the land instead of shading it.
+    MapLayer.Freight -> emptyMap()
 }
 
 @Composable

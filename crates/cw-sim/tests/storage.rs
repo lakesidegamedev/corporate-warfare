@@ -56,6 +56,8 @@ fn add_plant(
         equipment_due_cents: 0,
         outage: None,
         stock_plan: Default::default(),
+        ship: Default::default(),
+        serves: Vec::new(),
     };
     let handle = world.facilities.insert(facility);
     world.firms.get_mut(firm).unwrap().facilities.push(handle);

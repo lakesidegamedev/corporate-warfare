@@ -11,9 +11,10 @@
 //!   and broadband save up to 4 percent of inputs instead, so no plant exceeds its rated
 //!   capacity. Roads move freight cost, and crime costs retail and property plants a
 //!   shrinkage share of their output value.
-//! - Sprawl. Plants beyond 15 cost 0.5 percent of weekly revenue per two plants, doubled with a
-//!   secondary type. Logistics strength (0..200), built by a weekly logistics budget, raises the
-//!   threshold to 30 and halves the slope.
+//! - Sprawl. Overhead grows smoothly with the number of divisions: 0.18 percent of weekly revenue
+//!   at ten, 0.72 at twenty, 1.6 at thirty, doubled with a secondary type. Logistics strength
+//!   (0..200), built by a weekly logistics budget, takes up to half of it off, and so does each
+//!   logistics division the firm owns (six percent each, up to forty).
 //!
 //! Every overhead is paid in cash to the outside services sector, so no money is created or
 //! destroyed. All arithmetic is integer basis points.
@@ -31,7 +32,6 @@ pub const OFF_FOCUS_OVERHEAD_BPS: i64 = 1_000;
 pub const FOCUS_TRANSITION_OVERHEAD_BPS: i64 = 500;
 pub const FOCUS_TRANSITION_WEEKS: u32 = 4;
 pub const FOCUS_COOLDOWN_WEEKS: u32 = 8;
-pub const SPRAWL_THRESHOLD: i64 = 15;
 pub const MAX_LOGISTICS_STRENGTH: i32 = 200;
 
 const SKILLED: [&str; 5] = [
@@ -169,15 +169,40 @@ fn plant_payroll(world: &World, facility: Handle) -> i64 {
         .sum()
 }
 
-/// Sprawl threshold and slope (bps of weekly revenue per two plants over it).
-pub fn sprawl_terms(logistics_strength: i32, has_secondary: bool) -> (i64, i64) {
+/// Sprawl overhead in basis points of weekly revenue for a number of divisions. A smooth square
+/// curve with no cliff: `0.18 * d * d`. Logistics strength takes off up to half of it and every
+/// logistics division the firm owns takes off six percent, up to forty; both multiply.
+pub fn sprawl_rate_bps(
+    divisions: i64,
+    logistics_strength: i32,
+    owned_logistics: i64,
+    has_secondary: bool,
+) -> i64 {
+    let d = divisions.max(0);
+    let mut rate = d * d * 18 * 100; // hundredths of a basis point
     let strength = logistics_strength.clamp(0, MAX_LOGISTICS_STRENGTH) as i64;
-    let threshold = SPRAWL_THRESHOLD + strength * 15 / 200;
-    let mut slope = 50 - strength * 25 / 200;
+    rate = rate * (400 - strength) / 400;
+    rate = rate * (10_000 - (owned_logistics.max(0) * 600).min(4_000)) / 10_000;
     if has_secondary {
-        slope *= 2;
+        rate *= 2;
     }
-    (threshold, slope)
+    rate / 10_000
+}
+
+/// The division count at which sprawl costs one percent of weekly revenue, for display.
+pub fn sprawl_onset(logistics_strength: i32, owned_logistics: i64, has_secondary: bool) -> i64 {
+    (1..=200)
+        .find(|d| sprawl_rate_bps(*d, logistics_strength, owned_logistics, has_secondary) >= 100)
+        .unwrap_or(200)
+}
+
+/// Divisions of a firm in the logistics sector.
+pub fn owned_logistics_divisions(world: &World, dataset: &Dataset, firm: Handle) -> i64 {
+    let logistics = industry_index("logistics").unwrap_or(0);
+    crate::economy::sectors::divisions_of(world, dataset, firm)
+        .iter()
+        .filter(|d| d.industry == logistics)
+        .count() as i64
 }
 
 /// Logistics strength gained in a week from the budget actually paid.
@@ -282,10 +307,9 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
         }
         // Sprawl counts divisions (sector types run in a region), as in A House Divided's
         // per-sector rule: adding plants to an existing division never sprawls.
-        let (threshold, slope) = sprawl_terms(strength, has_secondary);
         let divisions = crate::economy::sectors::divisions_of(world, dataset, firm).len() as i64;
-        let over = (divisions - threshold).max(0);
-        let sprawl = revenue * (over / 2) * slope / 10_000;
+        let owned = owned_logistics_divisions(world, dataset, firm);
+        let sprawl = revenue * sprawl_rate_bps(divisions, strength, owned, has_secondary) / 10_000;
 
         pay_outside(world, firm, overhead, "coordination overhead");
         pay_outside(world, firm, shrinkage, "shrinkage");

@@ -70,6 +70,7 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         }
         strategic(world, dataset, handle, &mut proposals);
         speculate(world, dataset, handle, &mut proposals);
+        logistics_moves(world, dataset, handle, &mut proposals);
     }
     proposals.truncate(WEEKLY_PROPOSALS);
     proposals
@@ -179,6 +180,220 @@ fn speculate(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
             },
         });
     }
+}
+
+/// Freight: choose shipping policies, build carriers where lanes are short of capacity, and lock a
+/// busy lane when that pays.
+///
+/// * A firm whose group owns carriers ships on them first; a brand builder takes the most reliable
+///   route; everyone else takes the cheapest. One division is corrected per slot.
+/// * A logistics firm that has earned for a quarter, has cash well over its reserve and owns fewer
+///   than four sites builds on the lane with the most overflow to outside carriers, where a third
+///   of the overflow priced at the lane rate over three years beats the build and its financing.
+///   Rail and sea need a terminal or port at the lane's ends: the firm builds that first. A new
+///   pipeline is pinned to the hottest truck lane from its region.
+/// * An aggressive rival that owns at least a fifth of a lane and ships on it reserves up to two
+///   fifths of what is still open for a quarter once the lane is three quarters full, when its
+///   cash covers the fees: the lockout pushes other shippers onto dearer lanes.
+fn logistics_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
+    use cw_sim::economy::logistics as lg;
+    let Some(entity) = world.firms.get(firm) else {
+        return;
+    };
+    let reserve = reserve_target(world, firm);
+    let owns_carrier = world
+        .logistics
+        .carriers
+        .iter()
+        .any(|c| cw_sim::economy::ownership::same_group(world, firm, c.firm));
+    let want = if owns_carrier {
+        lg::ShipKind::OwnFirst
+    } else if entity.archetype == Some(Archetype::BrandBuilder) {
+        lg::ShipKind::Reliable
+    } else {
+        lg::ShipKind::Cheapest
+    };
+    let wrong = entity.facilities.iter().find_map(|handle| {
+        let plant = world.facilities.get(*handle)?;
+        let recipe = &dataset.recipes[plant.recipe as usize];
+        (recipe.transport_mode.is_none()
+            && plant.status == FacilityStatus::Operating
+            && plant.ship.kind != want)
+            .then_some(*handle)
+    });
+    if let Some(facility) = wrong {
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::SetShippingPolicy {
+                facility,
+                kind: want.code(),
+                mode: None,
+                carrier: None,
+            },
+        });
+    }
+
+    // A pipeline with no pinned lane goes where truck freight is heaviest from its region.
+    for handle in &entity.facilities {
+        let Some(plant) = world.facilities.get(*handle) else {
+            continue;
+        };
+        let recipe = &dataset.recipes[plant.recipe as usize];
+        if recipe.transport_mode.as_deref() != Some("pipeline")
+            || plant.status != FacilityStatus::Operating
+            || !plant.serves.is_empty()
+        {
+            continue;
+        }
+        let best = world
+            .logistics
+            .flows
+            .iter()
+            .filter(|(k, _)| k.mode == 0 && (k.a == plant.region || k.b == plant.region))
+            .max_by_key(|(k, v)| (**v, std::cmp::Reverse(**k)));
+        if let Some((key, _)) = best {
+            let other = if key.a == plant.region { key.b } else { key.a };
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::SetCarrierLanes {
+                    facility: *handle,
+                    regions: vec![other],
+                },
+            });
+        }
+    }
+
+    let sector_logistics = cw_sim::economy::operations::industry_index("logistics");
+    let in_sector = sector_logistics
+        .is_some_and(|s| entity.industry == s || entity.secondary_industry == Some(s));
+    let recent_income: i64 = entity
+        .book
+        .recent_weeks()
+        .iter()
+        .map(|week| week.net_income)
+        .sum();
+    if in_sector
+        && entity.book.recent_weeks().len() >= 13
+        && recent_income > 0
+        && entity.facilities.len() < 4
+        && let Some((recipe, region)) = best_carrier_build(world, dataset, firm, reserve)
+    {
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::BuildFacility {
+                firm,
+                region,
+                recipe,
+                blocks: 1,
+            },
+        });
+    }
+
+    if fights(world, entity.archetype) {
+        for (key, lane) in &world.logistics.lanes {
+            if lane.fill_bps() < 7_500 || lg::group_share_bps(world, firm, *key) < 2_000 {
+                continue;
+            }
+            let mine = lg::shipped_last_week(world, firm, *key) as i64;
+            if mine < 50
+                || world
+                    .logistics
+                    .contracts
+                    .iter()
+                    .any(|c| c.holder == firm && c.key == *key)
+            {
+                continue;
+            }
+            let open = lg::reservable_lots(world, firm, *key);
+            let lots = (open * 40 / 100).min(mine * 2).min(i32::MAX as i64) as i32;
+            if lots < 20 {
+                continue;
+            }
+            let fee = lg::lane_rate_cents_per_lot(dataset, &world.logistics, *key) * lots as i64;
+            if entity.book.cash() < reserve * 2 + fee * 13 {
+                continue;
+            }
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::ReserveLane {
+                    firm,
+                    from: key.a,
+                    to: key.b,
+                    mode: key.mode,
+                    lots,
+                    weeks: 13,
+                },
+            });
+            break;
+        }
+    }
+}
+
+/// The carrier build with the best three-year value on a hot lane, or the terminal that lane
+/// still needs: (recipe, region).
+fn best_carrier_build(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    reserve: i64,
+) -> Option<(u16, u8)> {
+    use cw_sim::economy::logistics as lg;
+    let entity = world.firms.get(firm)?;
+    let logistics = cw_sim::economy::operations::industry_index("logistics")?;
+    let mut best: Option<(i64, u16, u8)> = None;
+    for hot in lg::hot_lanes(world, dataset).into_iter().take(8) {
+        let def = &dataset.logistics.modes[hot.key.mode as usize];
+        for region in [hot.key.a, hot.key.b] {
+            // A division runs one strategy; a firm with another logistics strategy here skips it.
+            let existing = cw_sim::economy::sectors::division_strategy(
+                world, dataset, firm, region, logistics,
+            );
+            let access = lg::has_access(dataset, &world.logistics, hot.key.mode, region);
+            for (index, recipe) in dataset.recipes.iter().enumerate() {
+                if recipe.industry != "logistics"
+                    || recipe.transport_mode.as_deref() != Some(def.id.as_str())
+                {
+                    continue;
+                }
+                // A rival does not guess where a pipeline would pay; those are for people.
+                if def.needs_infrastructure {
+                    continue;
+                }
+                // Without a terminal here the first build is the terminal, and only that.
+                if def.needs_terminal && !access && !recipe.terminal {
+                    continue;
+                }
+                if def.needs_terminal && access && recipe.terminal {
+                    continue;
+                }
+                if existing.is_some_and(|s| s != index as u16) {
+                    continue;
+                }
+                let cost = cw_sim::economy::sectors::build_cost(
+                    world,
+                    dataset,
+                    firm,
+                    region,
+                    index as u16,
+                    1,
+                )
+                .total_cents();
+                if entity.book.cash() < reserve * 2 + cost {
+                    continue;
+                }
+                let lots = hot.outside.min(recipe.weekly_output_lots as i32) as i64;
+                // A third of the lane rate on the lots it can take over, three years of it.
+                let take = if recipe.terminal { lots / 2 } else { lots };
+                let npv = take * hot.rate_cents * 33 / 100 * 156
+                    - cost
+                    - cost * world.macro_state.policy_rate_bps as i64 * 3 / 10_000;
+                if npv > 0 && best.as_ref().is_none_or(|b| npv > b.0) {
+                    best = Some((npv, index as u16, region));
+                }
+            }
+        }
+    }
+    best.map(|(_, recipe, region)| (recipe, region))
 }
 
 /// Bring a mothballed plant back when its output pays at public prices, the corridor is
@@ -1797,5 +2012,169 @@ mod tests {
                 "a distant site wins only on lower costs after freight"
             );
         }
+    }
+
+    fn give_cash(world: &mut World, firm: Handle, cents: i64) {
+        let tick = world.tick;
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .book
+            .commit(
+                tick,
+                cw_core::ledger::Txn::new()
+                    .debit(cw_core::ledger::Account::Cash, cents, "test")
+                    .credit(cw_core::ledger::Account::ShareCapital, cents, "test"),
+            )
+            .unwrap();
+    }
+
+    fn add_carrier(
+        world: &mut World,
+        dataset: &Dataset,
+        firm: Handle,
+        region: u8,
+        recipe: &str,
+    ) -> Handle {
+        let mut plant = world
+            .facilities
+            .iter()
+            .map(|(_, f)| f.clone())
+            .find(|f| f.firm == firm)
+            .expect("the firm has a plant to copy");
+        plant.region = region;
+        plant.recipe = dataset.recipe_index[recipe];
+        plant.blocks = 1;
+        plant.status = FacilityStatus::Operating;
+        plant.ship = Default::default();
+        plant.serves = Vec::new();
+        plant.last_output = cw_core::quantity::MilliLots::from_lots(
+            dataset.recipes[plant.recipe as usize].weekly_output_lots,
+        );
+        let handle = world.facilities.insert(plant);
+        world.firms.get_mut(firm).unwrap().facilities.push(handle);
+        handle
+    }
+
+    #[test]
+    fn rivals_ship_on_their_own_carriers_build_on_overflowing_lanes_and_lock_a_busy_one() {
+        use cw_sim::economy::logistics as lg;
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 191, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let rivals: Vec<Handle> = world
+            .firms
+            .iter()
+            .filter(|(h, f)| !player_controlled(&world, *h) && f.operative() && f.industry != 6)
+            .map(|(h, _)| h)
+            .collect();
+        let (owner, other) = (rivals[0], rivals[1]);
+        let (a, b) = (
+            dataset.region_index["OH-CEN"],
+            dataset.region_index["OH-SE"],
+        );
+        add_carrier(&mut world, &dataset, owner, a, "carrier");
+        add_carrier(&mut world, &dataset, other, a, "carrier");
+        lg::begin_week(&mut world, &dataset);
+
+        // The owner of a carrier ships on it first: its other divisions are told so.
+        let mut proposals = Vec::new();
+        logistics_moves(&world, &dataset, owner, &mut proposals);
+        assert!(
+            proposals
+                .iter()
+                .any(|p| matches!(p.intent, CommandIntent::SetShippingPolicy { kind: 2, .. })),
+            "{proposals:?}"
+        );
+
+        // A logistics firm with cash builds a carrier where rail freight overflows to outside
+        // carriers, and a terminal first where the lane's end has none.
+        let oaken = world
+            .firms
+            .iter()
+            .find(|(_, f)| f.name.starts_with("Oaken"))
+            .map(|(h, _)| h)
+            .unwrap();
+        give_cash(&mut world, oaken, 50_000_000_000);
+        let (chi, ne, ces) = (
+            dataset.region_index["IL-CHI"],
+            dataset.region_index["OH-NE"],
+            dataset.region_index["IL-CEN"],
+        );
+        let rail = lg::LaneKey::new(chi, ne, 1);
+        world.logistics.stats.insert(
+            rail,
+            lg::LaneStat {
+                moved: 2_000,
+                outside: 1_800,
+                ..Default::default()
+            },
+        );
+        let (recipe, region) = best_carrier_build(&world, &dataset, oaken, 0).expect("a build");
+        assert_eq!(
+            dataset.recipes[recipe as usize].transport_mode.as_deref(),
+            Some("rail")
+        );
+        assert!(
+            !dataset.recipes[recipe as usize].terminal,
+            "both ends have yards"
+        );
+        assert!(region == chi || region == ne);
+        let no_yard = lg::LaneKey::new(ces, ne, 1);
+        world.logistics.stats.clear();
+        world.logistics.stats.insert(
+            no_yard,
+            lg::LaneStat {
+                moved: 2_000,
+                outside: 1_800,
+                ..Default::default()
+            },
+        );
+        // Peoria has no rail yard, so the lane cannot exist yet and is not worth a carrier.
+        assert!(!lg::lane_possible(&dataset, &world.logistics, 1, ces, ne));
+        // Lanes that overflow in trucks need no terminal.
+        world.logistics.stats.clear();
+        world.logistics.stats.insert(
+            lg::LaneKey::new(ces, ne, 0),
+            lg::LaneStat {
+                moved: 2_000,
+                outside: 1_800,
+                ..Default::default()
+            },
+        );
+        let (recipe, _) = best_carrier_build(&world, &dataset, oaken, 0).expect("a truck build");
+        assert_eq!(
+            dataset.recipes[recipe as usize].transport_mode.as_deref(),
+            Some("truck")
+        );
+
+        // An aggressive carrier that owns a fifth of a busy lane and ships on it reserves part of
+        // what others could still use.
+        world.difficulty = cw_data::Difficulty::Hard;
+        give_cash(&mut world, owner, 50_000_000_000);
+        let key = lg::LaneKey::new(a, b, 0);
+        {
+            let lane = world
+                .logistics
+                .lanes
+                .get_mut(&key)
+                .expect("both carriers serve the lane");
+            for alloc in &mut lane.allocs {
+                alloc.used = alloc.cap * 8 / 10;
+            }
+            lane.users.push((owner, 150));
+        }
+        let mut proposals = Vec::new();
+        logistics_moves(&world, &dataset, owner, &mut proposals);
+        let reserve = proposals.iter().find_map(|p| match p.intent {
+            CommandIntent::ReserveLane {
+                lots, weeks, mode, ..
+            } => Some((lots, weeks, mode)),
+            _ => None,
+        });
+        let (lots, weeks, mode) = reserve.expect("a lockout is proposed");
+        assert!(lots >= 20 && weeks == 13 && mode == 0);
+        // The proposal is legal: the validator accepts it.
+        assert!(lg::reserve_lane(&mut world, &dataset, owner, a, b, 0, lots, weeks).is_ok());
     }
 }

@@ -15,7 +15,10 @@ import kotlinx.coroutines.withContext
 import uniffi.cw_ffi.BuildQuoteDto
 import uniffi.cw_ffi.CommodityDto
 import uniffi.cw_ffi.DivisionDto
+import uniffi.cw_ffi.FreightSummaryDto
 import uniffi.cw_ffi.HeldStockDto
+import uniffi.cw_ffi.LaneContractDto
+import uniffi.cw_ffi.LaneDto
 import uniffi.cw_ffi.StorageSummaryDto
 import uniffi.cw_ffi.OwnershipDto
 import uniffi.cw_ffi.PeriodDto
@@ -86,6 +89,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     /** Goods the selected company holds back from sale, with any open buy orders. */
     var held by mutableStateOf<List<HeldStockDto>>(emptyList()); private set
     var storageSummary by mutableStateOf<StorageSummaryDto?>(null); private set
+    /** Freight lanes this week, lane contracts, and the corridor's freight in a glance. */
+    var lanes by mutableStateOf<List<LaneDto>>(emptyList()); private set
+    var laneContracts by mutableStateOf<List<LaneContractDto>>(emptyList()); private set
+    var freight by mutableStateOf<FreightSummaryDto?>(null); private set
     val strategyCatalogue: List<StrategyDto> by lazy { strategies() }
     /** Every player action with its form, in Command Center order. */
     val actions: List<uniffi.cw_ffi.ActionDto> by lazy { uniffi.cw_ffi.actionCatalogue() }
@@ -264,6 +271,19 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         submit(CommandJson.command("SellFromStore", "firm" to firm, "product" to product, "region" to region, "lots" to lots))
     }
 
+    /** A division's shipping policy: 0 cheapest, 1 fastest, 2 own carriers first, 3 most reliable, and an optional preferred mode. */
+    fun setShippingPolicy(plant: ULong, kind: Int, mode: Int?) {
+        val fields = mutableListOf<Pair<String, Any>>("facility" to plant, "kind" to kind)
+        if (mode != null) fields.add("mode" to mode)
+        submit(CommandJson.command("SetShippingPolicy", *fields.toTypedArray()))
+    }
+
+    /** Reserve [lots] a week on a lane for [weeks] at the lane's rate, locked for the term. */
+    fun reserveLane(from: String, to: String, mode: UInt, lots: Int, weeks: Int) {
+        val firm = selectedFirm ?: return
+        submit(CommandJson.command("ReserveLane", "firm" to firm, "from" to regionIndex(from), "to" to regionIndex(to), "mode" to mode, "lots" to lots, "weeks" to weeks))
+    }
+
     /** What a build would cost, computed by the engine without changing anything. */
     fun quote(region: UInt, recipe: UInt, blocks: UInt, onResult: (BuildQuoteDto?) -> Unit) {
         val handle = session ?: return
@@ -388,6 +408,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 handle.economy(), firm?.let { handle.research(it) },
                 firm?.let { handle.heldStock(it) } ?: emptyList<HeldStockDto>(),
                 firm?.let { handle.storageSummary(it) },
+                handle.lanes(), handle.laneContracts(), handle.freightSummary(),
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
@@ -410,6 +431,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 research = parts[15] as uniffi.cw_ffi.ResearchDto?
                 held = parts[16] as List<HeldStockDto>
                 storageSummary = parts[17] as StorageSummaryDto?
+                lanes = parts[18] as List<LaneDto>
+                laneContracts = parts[19] as List<LaneContractDto>
+                freight = parts[20] as FreightSummaryDto?
             }
         }
         loadMarkets()

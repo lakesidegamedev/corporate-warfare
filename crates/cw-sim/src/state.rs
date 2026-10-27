@@ -330,6 +330,12 @@ pub struct Facility {
     /// Standing stock target and seasonal build for this plant's inputs.
     #[serde(default)]
     pub stock_plan: crate::economy::storage::StockPlan,
+    /// Standing shipping policy for the freight this division pays for.
+    #[serde(default)]
+    pub ship: crate::economy::logistics::ShipPolicy,
+    /// A carrier's pinned lanes, as the other region of each. Empty means automatic.
+    #[serde(default)]
+    pub serves: Vec<u8>,
 }
 
 impl Facility {
@@ -1475,6 +1481,9 @@ pub struct World {
     /// The governing party, the next election and the laws it sets. See `economy::politics`.
     #[serde(default)]
     pub politics: Politics,
+    /// Freight lanes, carriers and lane contracts. See `economy::logistics`.
+    #[serde(default)]
+    pub logistics: crate::economy::logistics::LogisticsState,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.

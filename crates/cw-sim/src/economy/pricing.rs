@@ -216,7 +216,17 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
         .map(|(handle, product, current)| {
             let sold = weekly_sold(world, firm, product);
             let full = capacity[&product];
-            let (glut, tight) = if dataset.products[product as usize].kind.is_service() {
+            let carrier = world
+                .facilities
+                .get(handle)
+                .is_some_and(|p| dataset.recipes[p.recipe as usize].transport_mode.is_some());
+            let (glut, tight) = if carrier {
+                // A carrier follows how full its lanes ran: under 40 percent cuts, over 85 raises.
+                match crate::economy::logistics::carrier_utilisation_bps(world, handle) {
+                    Some(use_bps) => (use_bps < 4_000, use_bps >= 8_500),
+                    None => (false, false),
+                }
+            } else if dataset.products[product as usize].kind.is_service() {
                 (sold * 2 < full, sold * 10 >= full * 9)
             } else {
                 let stock = free_stock(world, dataset, firm, product);

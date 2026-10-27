@@ -6,6 +6,7 @@ enum MapLayer: String, CaseIterable, Identifiable {
     case room = "Room to build"
     case wages = "Wages"
     case skill = "Workforce skill"
+    case freight = "Freight"
 
     var id: String { rawValue }
 
@@ -15,6 +16,7 @@ enum MapLayer: String, CaseIterable, Identifiable {
         case .room: return "layer_room"
         case .wages: return "layer_wages"
         case .skill: return "layer_skill"
+        case .freight: return "layer_freight"
         }
     }
 
@@ -24,6 +26,7 @@ enum MapLayer: String, CaseIterable, Identifiable {
         case .room: return Theme.positive
         case .wages: return Theme.copper
         case .skill: return Color(red: 0.259, green: 0.647, blue: 0.961)
+        case .freight: return Theme.gold
         }
     }
 }
@@ -48,6 +51,7 @@ struct WorldMapView: View {
     let shading: [String: Double]
     let layer: MapLayer
     let divisions: [DivisionMarker]
+    var lanes: [LaneDto] = []
     @Binding var selected: String?
 
     @State private var camera: MapCamera?
@@ -234,6 +238,9 @@ struct WorldMapView: View {
             context.stroke(Path(ellipseIn: rim), with: .color(Theme.water.opacity(0.9 * (1 - t))), lineWidth: 1.5)
             context.stroke(Path(ellipseIn: rim.insetBy(dx: -4, dy: -4)), with: .color(Theme.water.opacity(0.3 * (1 - t))), lineWidth: 6)
         }
+        if layer == .freight {
+            drawLanes(in: &context, projection: p)
+        }
         if camera.zoom > 3 {
             if layer == .presence {
                 drawDivisions(in: &context, projection: p)
@@ -242,6 +249,28 @@ struct WorldMapView: View {
         }
         if camera.zoom > 14 {
             drawRegionNames(in: &context, projection: p)
+        }
+    }
+
+    /// The busiest lanes between region anchors: wider with more traffic, coloured by congestion,
+    /// dashed for sea.
+    private func drawLanes(in context: inout GraphicsContext, projection p: MapProjection) {
+        let busiest = lanes.sorted { ($0.capacityLots + $0.outsideLots) > ($1.capacityLots + $1.outsideLots) }.prefix(90)
+        let top = CGFloat(max(busiest.map { Int($0.capacityLots + $0.outsideLots) }.max() ?? 1, 1))
+        for lane in busiest {
+            guard let from = map.anchor(of: lane.a), let to = map.anchor(of: lane.b) else { continue }
+            let (a, visibleA) = p.project(from)
+            let (b, visibleB) = p.project(to)
+            guard visibleA, visibleB else { continue }
+            var path = Path()
+            path.move(to: a)
+            path.addLine(to: b)
+            let weight = CGFloat(lane.capacityLots + lane.outsideLots) / top
+            let dim = (selected != nil && lane.a != selected && lane.b != selected) ? 0.35 : 0.9
+            context.stroke(
+                path, with: .color(laneColor(lane).opacity(dim)),
+                style: StrokeStyle(lineWidth: 1.5 + 5 * weight, lineCap: .round, dash: lane.modeId == "sea" ? [12, 9] : [])
+            )
         }
     }
 

@@ -12,7 +12,7 @@ use crate::Session;
 
 /// Weeks between snapshots.
 pub const SNAPSHOT_EVERY_WEEKS: u32 = 5;
-pub const SNAPSHOT_SCHEMA: u32 = 2;
+pub const SNAPSHOT_SCHEMA: u32 = 3;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct GoodLine {
@@ -51,6 +51,33 @@ pub struct StorageLine {
     pub open_buy_orders: u32,
 }
 
+/// Freight: capacity, use and price by mode for the week just closed, and how much of it went to
+/// outside carriers. `mode_ids` names the four slots of every `*_by_mode` list.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct LogisticsLine {
+    pub mode_ids: Vec<String>,
+    pub carriers: u32,
+    pub lanes_with_capacity: u32,
+    pub capacity_lots: i64,
+    pub capacity_lots_by_mode: Vec<i64>,
+    pub lots_by_mode: Vec<i64>,
+    pub outside_lots_by_mode: Vec<i64>,
+    /// Share of leg lots that overflowed to outside carriers, basis points.
+    pub outside_share_bps: i32,
+    pub own_group_lots: i64,
+    pub contract_lots: i64,
+    pub freight_paid_cents: i64,
+    pub outside_paid_cents: i64,
+    pub shipments: i64,
+    /// Average price paid, thousandths of a cent per lot-kilometre.
+    pub avg_milli_cents_per_lot_km: i64,
+    /// Average spot price of a lane with capacity, basis points of its base rate.
+    pub avg_lane_mult_bps: i32,
+    pub congested_lanes: u32,
+    pub active_contracts: u32,
+    pub contract_lots_held: i64,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct PlayerLine {
     pub cash_cents: i64,
@@ -59,6 +86,9 @@ pub struct PlayerLine {
     pub divisions: u32,
     pub plants: u32,
     pub storage: StorageLine,
+    pub carrier_lots: i64,
+    pub group_lots_shipped: i64,
+    pub contract_lots_held: i64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -72,6 +102,7 @@ pub struct MarketSnapshot {
     pub goods: Vec<GoodLine>,
     pub corridor: CorridorLine,
     pub storage: StorageLine,
+    pub logistics: LogisticsLine,
     pub player: Option<PlayerLine>,
 }
 
@@ -100,6 +131,50 @@ fn storage_line(
         line.open_buy_orders += firm.storage.orders.len() as u32;
     }
     line
+}
+
+fn logistics_line(world: &cw_sim::state::World, dataset: &cw_data::Dataset) -> LogisticsLine {
+    let st = &world.logistics;
+    let last = &st.last;
+    let modes = dataset.logistics.modes.len();
+    let mut capacity_by_mode = vec![0i64; modes];
+    let mut with_cap = 0u32;
+    let mut mult_sum = 0i64;
+    for (key, lane) in &st.lanes {
+        let cap = lane.cap() as i64;
+        if cap > 0 {
+            with_cap += 1;
+            capacity_by_mode[key.mode as usize] += cap;
+            mult_sum += cw_sim::economy::logistics::spot_mult_bps(dataset, lane.fill_bps());
+        }
+    }
+    let moved: i64 = last.lots_by_mode.iter().sum();
+    let outside: i64 = last.outside_lots_by_mode.iter().sum();
+    LogisticsLine {
+        mode_ids: dataset
+            .logistics
+            .modes
+            .iter()
+            .map(|m| m.id.clone())
+            .collect(),
+        carriers: st.carriers.len() as u32,
+        lanes_with_capacity: with_cap,
+        capacity_lots: capacity_by_mode.iter().sum(),
+        capacity_lots_by_mode: capacity_by_mode,
+        lots_by_mode: last.lots_by_mode.to_vec(),
+        outside_lots_by_mode: last.outside_lots_by_mode.to_vec(),
+        outside_share_bps: (outside * 10_000 / moved.max(1)) as i32,
+        own_group_lots: last.own_lots,
+        contract_lots: last.contract_lots,
+        freight_paid_cents: last.cents,
+        outside_paid_cents: last.outside_cents,
+        shipments: last.shipments,
+        avg_milli_cents_per_lot_km: last.cents * 1_000 / last.lot_km.max(1),
+        avg_lane_mult_bps: (mult_sum / (with_cap as i64).max(1)) as i32,
+        congested_lanes: st.stats.values().filter(|s| s.hot_weeks >= 4).count() as u32,
+        active_contracts: st.contracts.iter().filter(|c| c.weeks_left > 0).count() as u32,
+        contract_lots_held: st.contracts.iter().map(|c| c.held as i64).sum(),
+    }
 }
 
 /// True on the weeks a snapshot is due.
@@ -193,6 +268,28 @@ impl Session {
                     .map(|p| p.blocks as u32)
                     .sum(),
                 storage: storage_line(world, dataset, [handle].into_iter()),
+                carrier_lots: world
+                    .logistics
+                    .carriers
+                    .iter()
+                    .filter(|c| cw_sim::economy::ownership::same_group(world, handle, c.firm))
+                    .map(|c| c.cap as i64)
+                    .sum(),
+                group_lots_shipped: world
+                    .logistics
+                    .lanes
+                    .values()
+                    .flat_map(|l| l.users.iter())
+                    .filter(|(f, _)| cw_sim::economy::ownership::same_group(world, handle, *f))
+                    .map(|(_, lots)| *lots as i64)
+                    .sum(),
+                contract_lots_held: world
+                    .logistics
+                    .contracts
+                    .iter()
+                    .filter(|c| cw_sim::economy::ownership::same_group(world, handle, c.holder))
+                    .map(|c| c.held as i64)
+                    .sum(),
             })
         });
         let storage = storage_line(
@@ -214,6 +311,7 @@ impl Session {
             goods,
             corridor,
             storage,
+            logistics: logistics_line(world, dataset),
             player,
         }
     }

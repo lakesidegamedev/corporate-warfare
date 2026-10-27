@@ -356,3 +356,64 @@ a cell holding at least 500 lots, when four weeks of outside fees and holding co
 of four weeks of revenue (and $2,000), or when four weeks of spoilage reaches 2 percent of revenue
 (and $2,000). Market snapshots (schema 2) carry corridor and player storage lines: use, capacity,
 owned capacity, outside lots, fees, holding cost, spoilage and held goods.
+
+## Owned logistics, lanes and routing (1.7)
+
+The generic `freight` product is lane capacity. Data lives in `content/logistics.json` and the
+carrier recipes; the rules are the same in every scenario and scenarios only supply data
+(starting terminals, ports, sea systems, gateway links).
+
+**Modes.** Truck, rail, pipeline and sea are data: a price per lot-kilometre, a speed, a smallest
+shipment, whether both ends need a terminal or port, whether the lane needs built infrastructure,
+whether outside carriers backstop it, and which storage classes it may carry. Pipelines carry
+tank goods (liquids and gas) only. Cold goods go by truck or rail only. Ship carries dry, tank
+and silo goods. Services are never shipped. Rail needs a rail terminal at both ends of a leg, sea
+needs a port at both ends on one sea system, and a pipeline lane exists only where a firm has
+built capacity on it. Public terminals and ports come from the scenario; any firm can build more
+(Rail Terminal and Port recipes), and a built one opens its region to every firm.
+
+**Carriers and lanes.** A carrier is a logistics division whose recipe carries a mode (Trucking,
+Full-Service, Freight Rail, Pipeline, Lake and Sea Shipping, Rail Terminal, Port). The lots it
+made last week, counted over a 400 km reference haul, are its capacity this week, so a short lane
+holds more lots than a long one. The capacity is spread over the lanes it serves: lanes with an
+end within the mode's reach of its region, weighted by how much freight those lanes asked for in
+that mode, or lanes the owner pinned. A lane is two regions in one mode. Capacity, use and
+contracts are saved with the world.
+
+**Price.** A lane's owners charge from the empty-lane rate (100 percent of the base rate) up to
+the outside price (125 percent) as the lane fills, along a smooth square curve, so a full lane
+meets the outside price with no cliff. A group ships on its own carriers at operating cost
+(65 percent) and first. Lots beyond capacity go to outside carriers at 125 percent, so goods
+never stop; pipelines have none, so a shipment either fits or takes another mode. Truck prices
+also move with road condition.
+
+**Charging.** A shipment is charged once. The shipper's cash pays exactly what carriers and the
+outside sector receive; a shipper short of cash pays what it has and every receipt shrinks
+together. Carriers are paid in cash and relieved of the freight stock they made for the purpose.
+
+**Routing.** Each shipment is routed over one to three legs through hubs. A division's standing
+policy picks: cheapest, fastest, own carriers first, or most reliable (fewest outside lots, then
+emptiest lanes), with an optional preferred mode or carrier that ranks routes meeting it ahead.
+The default is cheapest. The policy governs the freight a division pays for, goods arriving in
+its region. A change of mode at a hub adds a week.
+
+**Lane contracts.** A firm reserves lots on a lane for 4 to 52 weeks at the lane's spot rate less a
+10 percent commitment discount, fixed for the term, up to 80 percent of the lane and never against
+its own group's carriers. The fee is paid to the lane's carriers every week at the opening whether
+or not the lots are used; a holder that cannot pay loses the contract. Reserved lots are not for
+sale to anyone else, so a busy lane pushes rivals onto dearer routes.
+
+**Alerts** are sent only for lanes the player ships on: a lane full for four weeks, a carrier rate
+hike of a fifth over four weeks, a rival reserving the lane.
+
+**Carrier planning.** A carrier follows how full its lanes ran: under 40 percent of capacity cuts
+its run rate, over 85 percent raises it.
+
+**Rivals** set policies (own carriers first when they own any), build a carrier on the lane with
+the most outside overflow when they earn and have cash (a terminal first where the lane has none),
+and aggressive rivals reserve part of a busy lane they own a fifth of and ship on.
+
+**Sprawl** no longer has a threshold. Overhead is 0.18 percent of revenue times the square of the
+division count over 100 (10 divisions 0.18 percent, 20 0.72, 30 1.6), doubled with a secondary
+type. Logistics strength takes up to half off and each owned logistics division takes six percent
+off, up to forty.

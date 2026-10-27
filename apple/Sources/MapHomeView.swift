@@ -24,7 +24,7 @@ struct MapHomeView: View {
                         .background(Theme.panel)
                         .overlay(alignment: .trailing) { Rectangle().fill(Theme.stroke).frame(width: 1) }
                 }
-                WorldMapView(shading: shading, layer: layer, divisions: divisionMarkers, selected: $selected)
+                WorldMapView(shading: shading, layer: layer, divisions: divisionMarkers, lanes: layer == .freight ? store.lanes : [], selected: $selected)
                     .ignoresSafeArea(edges: .bottom)
                 if wide, let code = selected, let board = store.boards.first(where: { $0.code == code }) {
                     RegionBoardView(board: board, onBuild: { building = code }, onClose: { selected = nil })
@@ -32,6 +32,15 @@ struct MapHomeView: View {
                         .background(Theme.panel)
                         .overlay(alignment: .leading) { Rectangle().fill(Theme.stroke).frame(width: 1) }
                         .transition(.move(edge: .trailing))
+                }
+            }
+            if layer == .freight {
+                VStack {
+                    Spacer()
+                    FreightPanelView(focus: selected)
+                        .frame(maxHeight: 300)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 56)
                 }
             }
             VStack(spacing: 10) {
@@ -106,6 +115,9 @@ struct MapHomeView: View {
             return Dictionary(uniqueKeysWithValues: store.boards.map { ($0.code, (Double($0.wageIndexBps) - low) / max(high - low, 1)) })
         case .skill:
             return Dictionary(uniqueKeysWithValues: store.boards.map { ($0.code, Double($0.skillBps) / 10_000) })
+        case .freight:
+            // Lanes are drawn over the land instead of shading it.
+            return [:]
         }
     }
 }
