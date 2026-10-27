@@ -48,6 +48,7 @@ class AppSettings(private val file: File) {
 
     var mapDetail by mutableStateOf(enumOr(props.getProperty("mapDetail"), MapDetail.High)); private set
     var animations by mutableStateOf(props.getProperty("animations")?.toBoolean() ?: true); private set
+    var autoUpdate by mutableStateOf(props.getProperty("autoUpdate")?.toBoolean() ?: true); private set
     var uiScale by mutableStateOf(props.getProperty("uiScale")?.toFloatOrNull() ?: 1f); private set
     var windowMode by mutableStateOf(enumOr(props.getProperty("windowMode"), WindowMode.Windowed)); private set
     var resolution by mutableStateOf(
@@ -57,6 +58,7 @@ class AppSettings(private val file: File) {
 
     fun chooseMapDetail(value: MapDetail) { mapDetail = value; store() }
     fun chooseAnimations(value: Boolean) { animations = value; store() }
+    fun chooseAutoUpdate(value: Boolean) { autoUpdate = value; store() }
     fun chooseUiScale(value: Float) { uiScale = value; store() }
     fun chooseWindowMode(value: WindowMode) { windowMode = value; store() }
     fun chooseResolution(value: Pair<Int, Int>) { resolution = value; store() }
@@ -64,6 +66,7 @@ class AppSettings(private val file: File) {
     private fun store() {
         props.setProperty("mapDetail", mapDetail.name)
         props.setProperty("animations", animations.toString())
+        props.setProperty("autoUpdate", autoUpdate.toString())
         props.setProperty("uiScale", uiScale.toString())
         props.setProperty("windowMode", windowMode.name)
         props.setProperty("resolution", "${resolution.first}x${resolution.second}")
@@ -82,7 +85,7 @@ class AppSettings(private val file: File) {
  * desktop, the window.
  */
 @Composable
-fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, onClose: () -> Unit) {
+fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, updater: Updater? = null, onClose: () -> Unit) {
     TabList {
         item { ScreenHeader("Settings", null) { TextButton(onClick = onClose) { Text("Done", color = Palette.gold) } } }
         if (store.ready) {
@@ -136,6 +139,25 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, on
                 }
             }
         }
+        if (updater != null) {
+            item {
+                Panel {
+                    Eyebrow("Updates")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Check for updates at launch", color = Palette.primaryText)
+                            Text("Reads the public release list on GitHub. Nothing about you or your game is sent.", color = Palette.secondary, fontSize = 12.sp)
+                        }
+                        Switch(
+                            checked = settings.autoUpdate,
+                            onCheckedChange = { settings.chooseAutoUpdate(it) },
+                            colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
+                        )
+                    }
+                    UpdatePanel(updater, compact = true)
+                }
+            }
+        }
         item {
             Panel {
                 Eyebrow("About")
@@ -163,6 +185,48 @@ private fun <T> Choices(options: List<T>, selected: T, label: (T) -> String, onP
                     .clickable { onPick(option) }
                     .padding(horizontal = 12.dp, vertical = 7.dp),
             )
+        }
+    }
+}
+
+/** Version, update status and the one action that applies to it. */
+@Composable
+fun UpdatePanel(updater: Updater, compact: Boolean = false) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        when (val status = updater.status) {
+            UpdateStatus.Idle -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Version ${updater.current}", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { updater.check() }) { Text("Check for updates", color = Palette.gold) }
+            }
+            UpdateStatus.Checking -> Text("Version ${updater.current} · checking for updates…", color = Palette.secondary, fontSize = 12.sp)
+            UpdateStatus.Current -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Version ${updater.current} · up to date", color = Palette.positive, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                if (compact) TextButton(onClick = { updater.check() }) { Text("Check again", color = Palette.secondary) }
+            }
+            is UpdateStatus.Failed -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Version ${updater.current} · ${status.reason}", color = Palette.warning, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { updater.check() }) { Text("Retry", color = Palette.gold) }
+            }
+            is UpdateStatus.Available -> {
+                Text("Version ${status.release.version} is out (you have ${updater.current})", color = Palette.gold, fontWeight = FontWeight.SemiBold)
+                if (!compact) {
+                    val notes = status.release.notes.lines().filter { it.startsWith("- ") }.take(4)
+                    notes.forEach { Text(it.removePrefix("- ").take(120), color = Palette.secondary, fontSize = 12.sp, maxLines = 2) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GoldButton(if (status.release.installer != null) "Update now" else "Get the update") { updater.update(status.release) }
+                    TextButton(onClick = { updater.openPage(status.release) }) { Text("What's new", color = Palette.secondary) }
+                }
+            }
+            is UpdateStatus.Downloading -> {
+                Text("Downloading ${status.release.version}… ${(status.fraction * 100).toInt()}%", color = Palette.primaryText, fontSize = 12.sp)
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = { status.fraction },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Palette.gold,
+                    trackColor = Palette.panelRaised,
+                )
+            }
         }
     }
 }

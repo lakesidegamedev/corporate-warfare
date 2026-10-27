@@ -76,9 +76,12 @@ val LocalAppSettings = androidx.compose.runtime.staticCompositionLocalOf<AppSett
  * desktop, where the menu offers Quit and the settings page offers the window options.
  */
 @Composable
-fun CorporateWarfareApp(store: GameStore, settings: AppSettings, onQuit: (() -> Unit)? = null) {
+fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Updater? = null, onQuit: (() -> Unit)? = null) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     var showSettings by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(updater) {
+        if (updater != null && settings.autoUpdate) updater.check()
+    }
     androidx.compose.runtime.CompositionLocalProvider(
         LocalAppSettings provides settings,
         androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density * settings.uiScale, density.fontScale),
@@ -88,14 +91,14 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, onQuit: (() -> 
                 when {
                     showSettings -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                         Box(Modifier.widthIn(max = 820.dp)) {
-                            SettingsScreen(store, settings, desktop = onQuit != null) { showSettings = false }
+                            SettingsScreen(store, settings, desktop = onQuit != null, updater = updater) { showSettings = false }
                         }
                     }
                     store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         if (maxWidth >= DesktopBreakpoint) DesktopShell(store, onSettings = { showSettings = true })
                         else MainScreen(store, onSettings = { showSettings = true })
                     }
-                    else -> StartScreen(store, onSettings = { showSettings = true }, onQuit = onQuit)
+                    else -> StartScreen(store, updater, onSettings = { showSettings = true }, onQuit = onQuit)
                 }
             store.error?.let { message ->
                 AlertDialog(
@@ -120,7 +123,7 @@ private enum class GameMode(val title: String, val note: String, val guided: Boo
 
 /** The main menu: continue, a new game by scenario and mode, settings and, on desktop, quit. */
 @Composable
-private fun StartScreen(store: GameStore, onSettings: () -> Unit, onQuit: (() -> Unit)?) {
+private fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> Unit, onQuit: (() -> Unit)?) {
     val catalogue = remember { scenarios() }
     var chosen by remember { mutableStateOf(catalogue.firstOrNull()?.id) }
     var mode by remember { mutableStateOf(GameMode.Guided) }
@@ -172,6 +175,7 @@ private fun StartScreen(store: GameStore, onSettings: () -> Unit, onQuit: (() ->
                     store.newCareer(System.nanoTime() % 9_999_999, guided = mode.guided, fiveYear = mode.fiveYear)
                 }
             }
+            if (updater != null) Panel { UpdatePanel(updater) }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = onSettings, modifier = Modifier.weight(1f)) { Text("Settings", color = Palette.primaryText) }
                 if (onQuit != null) {

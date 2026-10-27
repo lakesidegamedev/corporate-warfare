@@ -37,6 +37,15 @@ heading.
   raid size runs 0.5 to 4 to 1 in tenths; training and quality budgets slide up to a tenth of
   weekly revenue beside the typed amount; a merger remedy divests 1 to 50 percent in half steps.
 
+- A launcher on desktop: a branded splash window with progress while the engine and world map
+  load, then the game window centred at the chosen size.
+- Updates from inside the game. At launch (switchable in Settings) the game reads the public
+  release list; when a newer version is out the main menu shows it with its notes. On Windows
+  "Update now" downloads the installer with a progress bar, installs it and reopens the game;
+  Linux, Mac and Android open the download.
+- The Windows installer adds a Start menu entry and a desktop shortcut and lets you choose the
+  install folder.
+
 ### Changed
 
 - Pricing against the market now allows -50 to +50 percent (was -20 to +20). Prices still stay
