@@ -142,7 +142,7 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                 }
             }
         }
-        TutorialPanel(compact = false, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).width(360.dp))
+        TutorialPanel(compact = false, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).width(360.dp), researchHint = store.research?.let { r -> store.selectedFirmDto?.let { Tutorial.researchHint(it.cashCents, r) } })
     }
 }
 

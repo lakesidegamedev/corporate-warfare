@@ -229,7 +229,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
         // Content stops at the navigation bar: the scaffold's padding keeps it clear.
         Column(Modifier.padding(padding)) {
             PauseBanner(store, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp))
-            TutorialPanel(compact = true, modifier = Modifier.fillMaxWidth())
+            TutorialPanel(compact = true, modifier = Modifier.fillMaxWidth(), researchHint = store.research?.let { r -> store.selectedFirmDto?.let { Tutorial.researchHint(it.cashCents, r) } })
             Box(Modifier.weight(1f)) {
             when (tab) {
                 Tab.Map -> MapScreen(store)
