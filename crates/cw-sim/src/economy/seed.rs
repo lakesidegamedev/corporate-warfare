@@ -80,6 +80,11 @@ pub fn build_with(
         revision: 0,
         seed,
         dataset_hash: dataset.hash.clone(),
+        start_year: cw_data::scenarios()
+            .iter()
+            .find(|s| s.id == dataset.scenario_id)
+            .map(|s| s.start_year as i32)
+            .unwrap_or(cw_core::calendar::START_YEAR),
         scenario,
         mode,
         difficulty: options.difficulty,
@@ -382,6 +387,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
                 None
             },
             valuation: Default::default(),
+            ebitda_prior_weekly_cents: None,
             reserved_cash_cents: 0,
             last_week_units_sold: BTreeMap::new(),
             sales_history: Vec::new(),
@@ -616,6 +622,7 @@ fn placeholder_firm() -> Firm {
         bank: None,
         insurer: None,
         valuation: Default::default(),
+        ebitda_prior_weekly_cents: None,
         reserved_cash_cents: 0,
         last_week_units_sold: BTreeMap::new(),
         sales_history: Vec::new(),
@@ -1185,7 +1192,7 @@ fn seed_supply_contracts(world: &mut World, dataset: &Dataset) {
 
 /// A year of a firm's plants' standard EBITDA: output at reference less inputs at reference,
 /// baseline payroll, maintenance and land.
-fn expected_annual_ebitda(world: &World, dataset: &Dataset, firm: Handle) -> i64 {
+pub fn expected_annual_ebitda(world: &World, dataset: &Dataset, firm: Handle) -> i64 {
     let Some(entity) = world.firms.get(firm) else {
         return 0;
     };
@@ -1233,6 +1240,7 @@ fn seed_share_marks(world: &mut World, dataset: &Dataset) {
             &world.firms.get(handle).unwrap().book,
             Tick::OPENING,
             financial,
+            None,
         );
         // No week has closed yet, so the opening valuation reads its plants' standard earnings
         // at reference prices and baseline wages instead of the book floor alone; otherwise
@@ -1240,7 +1248,13 @@ fn seed_share_marks(world: &mut World, dataset: &Dataset) {
         let mut value = value;
         if !financial {
             let expected = expected_annual_ebitda(world, dataset, handle);
-            let enterprise = value.enterprise_cents.max(expected.max(0) * 6 / 2);
+            let prior = crate::economy::valuation::opening_weekly_prior(expected);
+            let enterprise = value.enterprise_cents.max(prior.unwrap_or(0) * 52 * 6);
+            world
+                .firms
+                .get_mut(handle)
+                .unwrap()
+                .ebitda_prior_weekly_cents = prior;
             value.equity_cents = (value.equity_cents - value.enterprise_cents + enterprise).max(0);
             value.enterprise_cents = enterprise;
         }

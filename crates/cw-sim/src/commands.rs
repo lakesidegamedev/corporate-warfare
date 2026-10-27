@@ -2996,6 +2996,7 @@ pub(crate) fn blank_firm(
         bank: None,
         insurer: None,
         valuation: Default::default(),
+        ebitda_prior_weekly_cents: None,
         reserved_cash_cents: 0,
         last_week_units_sold: Default::default(),
         sales_history: Vec::new(),

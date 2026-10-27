@@ -11,8 +11,8 @@ struct RegionsView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     ContextChip()
-                    SectionCard(title: "Scenario: Great Lakes, 2000") {
-                        Text("Eleven BEA economic areas around the Great Lakes and Ohio Valley. Region codes and names come from the verified 2004 roster; county membership and calibrated demand are labelled engineering estimates.")
+                    SectionCard(title: "Regions, \(String(ResultBuckets.startYear))") {
+                        Text("The economic regions of this scenario. County membership and calibrated demand are labelled engineering estimates.")
                             .font(.footnote)
                             .foregroundStyle(Theme.secondaryText(for: scheme))
                     }

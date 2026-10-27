@@ -65,7 +65,7 @@
     },
     {
       "id": "bayshore_microsystems",
-      "name": "Bayshore Microsystems",
+      "name": "Bayshore Silicon",
       "industry": "technology",
       "archetype": "technologist",
       "region": "CA-SJC",
@@ -162,7 +162,7 @@
     },
     {
       "id": "emporium_online",
-      "name": "Emporium Online",
+      "name": "Marketstreet Online",
       "industry": "retail",
       "archetype": "technologist",
       "region": "CA-SJC",
@@ -172,7 +172,7 @@
     },
     {
       "id": "fontana_steel",
-      "name": "Fontana Steel",
+      "name": "Cajon Pass Steel",
       "industry": "manufacturing",
       "archetype": "consolidator",
       "region": "CA-INL",
@@ -568,7 +568,7 @@
     },
     {
       "id": "southland_clinics",
-      "name": "Southland Clinics",
+      "name": "Coastline Clinics",
       "industry": "healthcare",
       "archetype": "technologist",
       "region": "CA-LAX",
@@ -578,7 +578,7 @@
     },
     {
       "id": "southland_markets",
-      "name": "Southland Markets",
+      "name": "Inland Markets",
       "industry": "retail",
       "archetype": "consolidator",
       "region": "CA-LAX",
