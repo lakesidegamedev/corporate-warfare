@@ -65,36 +65,36 @@ struct FinanceView: View {
                             .font(.caption)
                             .foregroundStyle(Theme.secondaryText(for: scheme))
                             .fixedSize(horizontal: false, vertical: true)
-                        ActionButton(title: "Pay dividend", systemImage: "dollarsign.circle") {
+                        ActionButton(title: "Pay dividend", icon: "coin") {
                             showingDividend = true
                         }
-                        ActionButton(title: "Issue shares", systemImage: "plus.rectangle.on.rectangle") {
+                        ActionButton(title: "Issue shares", icon: "plus") {
                             showingIssue = true
                         }
-                        ActionButton(title: "Repurchase shares", systemImage: "arrow.down.circle") {
+                        ActionButton(title: "Repurchase shares", icon: "arrow_down") {
                             showingRepurchase = true
                         }
-                        ActionButton(title: "Retire treasury shares", systemImage: "trash.slash") {
+                        ActionButton(title: "Retire treasury shares", icon: "trash") {
                             showingRetire = true
                         }
-                        ActionButton(title: "Launch IPO", systemImage: "arrow.up.forward") {
+                        ActionButton(title: "Launch IPO", icon: "arrow_up") {
                             showingIPO = true
                         }
-                        ActionButton(title: "Set a price", systemImage: "tag") {
+                        ActionButton(title: "Set a price", icon: "tag") {
                             showingPrice = true
                         }
                     }
                     SectionCard(title: "Credit") {
-                        ActionButton(title: "Request a loan", systemImage: "creditcard") {
+                        ActionButton(title: "Request a loan", icon: "card") {
                             showingLoan = true
                         }
-                        ActionButton(title: "Issue a bond", systemImage: "doc.text") {
+                        ActionButton(title: "Issue a bond", icon: "doc") {
                             showingBond = true
                         }
-                        ActionButton(title: "Fund skill training", systemImage: "graduationcap") {
+                        ActionButton(title: "Fund skill training", icon: "grad") {
                             showingTraining = true
                         }
-                        ActionButton(title: "Fund product quality", systemImage: "sparkles") {
+                        ActionButton(title: "Fund product quality", icon: "sparkle") {
                             showingQuality = true
                         }
                         if store.loans.isEmpty {
@@ -191,7 +191,7 @@ struct OwnershipView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     SectionCard(title: "Governance actions") {
-                        ActionButton(title: "Call an extraordinary meeting", systemImage: "calendar.badge.clock") {
+                        ActionButton(title: "Call an extraordinary meeting", icon: "calendar") {
                             confirm = ConfirmRequest(
                                 title: "Call meeting",
                                 actorName: firm.name,
@@ -200,13 +200,13 @@ struct OwnershipView: View {
                                 json: CommandJSON.command("CallMeeting", ["firm": firm.handle])
                             )
                         }
-                        ActionButton(title: "Nominate a CEO", systemImage: "person.crop.circle.badge.checkmark") {
+                        ActionButton(title: "Nominate a CEO", icon: "user") {
                             showingNominate = true
                         }
-                        ActionButton(title: "Propose a board action", systemImage: "text.badge.checkmark") {
+                        ActionButton(title: "Propose a board action", icon: "doc") {
                             showingBoardAction = true
                         }
-                        ActionButton(title: "Place a share order", systemImage: "arrow.left.arrow.right") {
+                        ActionButton(title: "Place a share order", icon: "swap") {
                             showingShareOrder = true
                         }
                     }
@@ -329,7 +329,7 @@ struct FacilitiesView: View {
                 if store.facilities.isEmpty {
                     SectionCard(title: "Facilities") {
                         EmptyNote(text: "No facilities yet. Build one from a region and a template; the form previews the escrow before you confirm.")
-                        ActionButton(title: "Build a facility", systemImage: "hammer") {
+                        ActionButton(title: "Build a facility", icon: "hammer") {
                             showingBuild = true
                         }
                     }
@@ -371,7 +371,7 @@ struct FacilitiesView: View {
                             onCommit: { value in Task { await store.setTarget(Int32(value * 100)) } }
                         )
                         .onAppear { targetPercent = Double(store.facilities.first?.targetBps ?? 8_500) / 100 }
-                        ActionButton(title: "Build another facility", systemImage: "hammer") {
+                        ActionButton(title: "Build another facility", icon: "hammer") {
                             showingBuild = true
                         }
                     }
@@ -449,8 +449,7 @@ struct GroupView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                                         if node.depth > 0 {
-                                            Image(systemName: "arrow.turn.down.right")
-                                                .font(.caption2)
+                                            PixelIcon("indent", size: 12)
                                                 .foregroundStyle(Theme.secondaryText(for: scheme))
                                                 .accessibilityHidden(true)
                                         }
@@ -458,8 +457,7 @@ struct GroupView: View {
                                             .font(.body.weight(.medium))
                                             .fixedSize(horizontal: false, vertical: true)
                                         if store.selectedFirm == node.handle {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .font(.caption)
+                                            PixelIcon("check_circle", size: 12)
                                                 .foregroundStyle(Theme.positive)
                                         }
                                     }
@@ -486,7 +484,7 @@ struct GroupView: View {
                             .font(.caption)
                             .foregroundStyle(Theme.secondaryText(for: scheme))
                             .fixedSize(horizontal: false, vertical: true)
-                        ActionButton(title: "Make \(firm.name) the primary group", systemImage: "star") {
+                        ActionButton(title: "Make \(firm.name) the primary group", icon: "star") {
                             confirm = ConfirmRequest(
                                 title: "Set primary group",
                                 actorName: "You, the investor",

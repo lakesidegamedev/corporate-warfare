@@ -11,6 +11,15 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- A custom 8-bit icon set used everywhere. Navigation, the sidebar and status bar, menus, save,
+  load, settings, search, quit, play, pause and the three speeds, next week, map zoom and globe
+  buttons, every Command Center category, alerts, buy and sell, movement arrows, close and back
+  are now hand-drawn pixel icons, the same pixels on Android, Windows, Linux, iPhone, iPad and
+  Mac. They replace the stock Material and SF Symbols icons. New tooling checks that every icon
+  the apps use exists and that every grid is 16 by 16.
+
 ## [1.6.1] - 2026-10-27
 
 Android and desktop fixes from the first tester reports.

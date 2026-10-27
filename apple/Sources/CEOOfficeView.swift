@@ -20,10 +20,10 @@ struct CEOOfficeView: View {
                     StatsView().environmentObject(store)
                 } label: {
                     HStack {
-                        Label("Stats: results, balance sheet, shares, owners", systemImage: "chart.xyaxis.line")
+                        PixelLabel("Stats: results, balance sheet, shares, owners", icon: "stats")
                             .font(.callout.weight(.semibold))
                         Spacer()
-                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                        PixelIcon("chevron_right", size: 14)
                     }
                     .padding(12)
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -43,17 +43,17 @@ struct CEOOfficeView: View {
                     CompanyView().environmentObject(store)
                 } label: {
                     HStack {
-                        Label("Finance, shares, board and deals", systemImage: "building.columns")
+                        PixelLabel("Finance, shares, board and deals", icon: "bank")
                             .font(.callout.weight(.semibold))
                         Spacer()
-                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                        PixelIcon("chevron_right", size: 14)
                     }
                     .padding(12)
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .tint(Theme.gold)
             } else {
-                CalloutRow(symbol: "building.2", text: "Choose a company from the portfolio, or found one from the map.")
+                CalloutRow(icon: "office", text: "Choose a company from the portfolio, or found one from the map.")
             }
         }
         .task {
@@ -148,7 +148,7 @@ struct CEOOfficeView: View {
                         }
                     }
                     if ops.focusTransitionWeeks > 0 {
-                        Label("Refocusing: \(ops.focusTransitionWeeks) more week(s) at 5% payroll overhead.", systemImage: "arrow.triangle.2.circlepath")
+                        PixelLabel("Refocusing: \(ops.focusTransitionWeeks) more week(s) at 5% payroll overhead.", icon: "refresh")
                             .font(.caption).foregroundStyle(Theme.warning)
                     } else if ops.focusCooldownWeeks > 0 {
                         Text("Focus locked for \(ops.focusCooldownWeeks) more week(s).").font(.caption).foregroundStyle(Theme.secondary)
@@ -215,7 +215,7 @@ struct CEOOfficeView: View {
                     }
                     ForEach(Array(store.objectiveHistory.prefix(3).enumerated()), id: \.offset) { _, result in
                         HStack {
-                            Image(systemName: result.met ? "checkmark.circle.fill" : "xmark.circle")
+                            PixelIcon(result.met ? "check_circle" : "close")
                                 .foregroundStyle(result.met ? Theme.positive : Theme.secondary)
                             Text(result.title).font(.caption).foregroundStyle(Theme.primaryText).lineLimit(1)
                             Spacer()
@@ -261,7 +261,7 @@ struct CEOOfficeView: View {
                 }
                 HStack {
                     if division.retooling {
-                        Label("Retooling", systemImage: "gearshape.arrow.triangle.2.circlepath").font(.caption).foregroundStyle(Theme.warning)
+                        PixelLabel("Retooling", icon: "settings").font(.caption).foregroundStyle(Theme.warning)
                     }
                     Spacer()
                     if let first = plants.first {

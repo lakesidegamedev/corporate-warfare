@@ -58,27 +58,6 @@ enum Sector {
         }
     }
 
-    static func symbol(_ id: String) -> String {
-        switch id {
-        case "agriculture": return "leaf.fill"
-        case "extraction": return "mountain.2.fill"
-        case "energy": return "bolt.fill"
-        case "chemical_industries": return "flask.fill"
-        case "manufacturing": return "gearshape.2.fill"
-        case "construction": return "hammer.fill"
-        case "logistics": return "truck.box.fill"
-        case "retail": return "cart.fill"
-        case "healthcare": return "cross.case.fill"
-        case "technology": return "cpu.fill"
-        case "media": return "tv.fill"
-        case "telecommunications": return "antenna.radiowaves.left.and.right"
-        case "real_estate": return "building.2.fill"
-        case "defense": return "shield.lefthalf.filled"
-        case "financial": return "banknote.fill"
-        default: return "circle.fill"
-        }
-    }
-
     static func color(_ id: String) -> Color {
         switch id {
         case "agriculture": return Color(red: 0.545, green: 0.765, blue: 0.290)
@@ -515,13 +494,13 @@ struct SignalPill: View {
 
 /// A one-line callout with an icon: the next action, a warning, a quiet-week note.
 struct CalloutRow: View {
-    let symbol: String
+    let icon: String
     let text: String
     var tint: Color = Theme.gold
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: symbol).foregroundStyle(tint).font(.callout)
+            PixelIcon(icon).foregroundStyle(tint)
             Text(text)
                 .font(.subheadline)
                 .foregroundStyle(Theme.primaryText)
@@ -711,17 +690,17 @@ struct ValueSlider: View {
         }
     }
 
-    private func nudge(_ symbol: String, _ delta: Double) -> some View {
+    private func nudge(_ icon: String, _ delta: Double) -> some View {
         Button {
             value = snapped(value + delta)
             onCommit(value)
         } label: {
-            Image(systemName: symbol)
-                .font(.caption.weight(.bold))
+            PixelIcon(icon, size: 14)
                 .frame(width: 30, height: 30)
                 .background(Theme.panelRaised, in: Circle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(icon == "plus" ? "Increase" : "Decrease")
         .foregroundStyle(Theme.primaryText)
     }
 

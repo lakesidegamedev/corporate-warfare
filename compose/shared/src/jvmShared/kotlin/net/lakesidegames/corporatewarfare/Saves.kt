@@ -100,7 +100,7 @@ fun LoadGameScreen(store: GameStore, onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("‹ Back", color = Palette.secondary) }
+                TextButton(onClick = onBack) { BackLabel("Back", Palette.secondary) }
                 Spacer(Modifier.width(8.dp))
                 Text("Load game", color = Palette.primaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             }

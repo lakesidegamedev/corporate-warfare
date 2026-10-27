@@ -145,9 +145,9 @@ fun WorldMapView(store: GameStore, layer: MapLayer, selected: String?, onSelect:
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val zoomedIn = (current()?.zoom ?: 1.0) > MapCamera.FLAT_START
-                MapButton("+") { current()?.let { fly(it.zoomed(1.8)) } }
-                MapButton("−") { current()?.let { fly(it.zoomed(1 / 1.8)) } }
-                MapButton(if (zoomedIn) "◍" else "◎") { toggleGlobe() }
+                MapButton("zoom_in") { current()?.let { fly(it.zoomed(1.8)) } }
+                MapButton("zoom_out") { current()?.let { fly(it.zoomed(1 / 1.8)) } }
+                MapButton(if (zoomedIn) "globe" else "scope") { toggleGlobe() }
             }
         }
     }
@@ -286,7 +286,7 @@ private val graticule: List<GeoRing> =
 @Composable
 private fun MapButton(symbol: String, onClick: () -> Unit) {
     Box(Modifier.size(40.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Text(symbol, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        PixelIcon(symbol, size = 22.dp, tint = Palette.primaryText)
     }
 }
 
@@ -386,13 +386,15 @@ fun TimeBar(store: GameStore) {
             GoldButton("Next", enabled = !store.busy && !store.running) { store.advance() }
             SpeedControl(store)
         }
-        Text(
-            (if (store.running) "▶ ${store.speed}x" else "II") + if (open) "  ›" else "  ‹",
-            color = Palette.primaryText,
-            fontWeight = FontWeight.Bold,
-            fontSize = 13.sp,
-            modifier = Modifier.clip(CircleShape).background(Palette.panelRaised).clickable { open = !open }
+        Row(
+            Modifier.clip(CircleShape).background(Palette.panelRaised).clickable { open = !open }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            val speedIcon = if (!store.running) "pause" else when (store.speed) { 1 -> "speed1"; 2 -> "speed2"; else -> "speed3" }
+            PixelIcon(speedIcon, size = 16.dp, tint = Palette.primaryText)
+            PixelIcon(if (open) "chevron_right" else "chevron_left", size = 12.dp, tint = Palette.primaryText)
+        }
     }
 }

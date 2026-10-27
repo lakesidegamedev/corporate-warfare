@@ -4,24 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Business
-import androidx.compose.material.icons.filled.CandlestickChart
-import androidx.compose.material.icons.filled.Inbox
-import androidx.compose.material.icons.filled.Insights
-import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Science
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -77,15 +63,15 @@ import uniffi.cw_ffi.StockDto
 /** Windows at least this wide get the desktop layout instead of the phone tabs. */
 val DesktopBreakpoint: Dp = 1000.dp
 
-private enum class Page(val id: String, val title: String, val icon: ImageVector, val group: String, val key: String) {
-    Map("map", "Map", Icons.Filled.Public, "Play", "F1"),
-    Office("office", "CEO Office", Icons.Filled.Business, "Company", "F2"),
-    Research("research", "Research", Icons.Filled.Science, "Company", "F3"),
-    Stats("stats", "Stats", Icons.Filled.Insights, "Company", "F4"),
-    Markets("markets", "Markets", Icons.Filled.CandlestickChart, "World", "F5"),
-    Actions("actions", "Actions", Icons.Filled.Bolt, "World", "Ctrl K"),
-    Inbox("inbox", "Inbox", Icons.Filled.Inbox, "World", "F6"),
-    Portfolio("portfolio", "Portfolio", Icons.Filled.AccountBalance, "You", "F7"),
+private enum class Page(val id: String, val title: String, val icon: String, val group: String, val key: String) {
+    Map("map", "Map", "map", "Play", "F1"),
+    Office("office", "CEO Office", "office", "Company", "F2"),
+    Research("research", "Research", "research", "Company", "F3"),
+    Stats("stats", "Stats", "stats", "Company", "F4"),
+    Markets("markets", "Markets", "markets", "World", "F5"),
+    Actions("actions", "Actions", "command", "World", "Ctrl K"),
+    Inbox("inbox", "Inbox", "inbox", "World", "F6"),
+    Portfolio("portfolio", "Portfolio", "portfolio", "You", "F7"),
 }
 
 /**
@@ -176,9 +162,9 @@ private fun Sidebar(store: GameStore, page: Page, onPage: (Page) -> Unit, onSett
             SidebarItem(item.icon, item.title, item.key, page == item, badge = due) { onPage(item) }
         }
         Spacer(Modifier.weight(1f))
-        SidebarItem(Icons.Filled.Save, "Save", "", false) { store.saveNow() }
-        SidebarItem(Icons.Filled.Settings, "Settings", "", false, onClick = onSettings)
-        SidebarItem(Icons.Filled.Logout, "Main menu", "", false) { store.exitToMenu() }
+        SidebarItem("save", "Save", "", false) { store.saveNow() }
+        SidebarItem("settings", "Settings", "", false, onClick = onSettings)
+        SidebarItem("quit", "Main menu", "", false) { store.exitToMenu() }
     }
 }
 
@@ -200,7 +186,7 @@ private fun CompanySwitcher(store: GameStore) {
                 Text(firm?.name ?: "No company yet", color = Palette.primaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(firm?.let { "${Sectors.name(it.industry)} · ${it.region}" } ?: "Found one in the CEO Office", color = Palette.secondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (controlled.size > 1) Text(if (open) "▴" else "▾", color = Palette.secondary, fontSize = 12.sp)
+            if (controlled.size > 1) PixelIcon(if (open) "chevron_up" else "chevron_down", size = 12.dp, tint = Palette.secondary)
         }
         if (open) {
             controlled.forEach { f ->
@@ -214,7 +200,7 @@ private fun CompanySwitcher(store: GameStore) {
 }
 
 @Composable
-private fun SidebarItem(icon: ImageVector, title: String, shortcut: String, selected: Boolean, badge: Int = 0, onClick: () -> Unit) {
+private fun SidebarItem(icon: String, title: String, shortcut: String, selected: Boolean, badge: Int = 0, onClick: () -> Unit) {
     val hover = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
     Row(
@@ -226,7 +212,7 @@ private fun SidebarItem(icon: ImageVector, title: String, shortcut: String, sele
     ) {
         if (selected) Box(Modifier.width(3.dp).height(18.dp).clip(RoundedCornerShape(2.dp)).background(Palette.gold))
         Spacer(Modifier.width(if (selected) 7.dp else 10.dp))
-        Icon(icon, null, tint = if (selected) Palette.gold else Palette.secondary, modifier = Modifier.size(18.dp))
+        PixelIcon(icon, size = 18.dp, tint = if (selected) Palette.gold else Palette.secondary)
         Spacer(Modifier.width(10.dp))
         Text(title, color = if (selected) Palette.primaryText else Palette.secondary, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.weight(1f))
         if (badge > 0) SignalPill("$badge", Palette.warning)
@@ -291,7 +277,7 @@ private fun StatusBar(store: GameStore, onSearch: (String) -> Unit) {
                         .padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Filled.Search, null, tint = Palette.secondary, modifier = Modifier.size(15.dp))
+                    PixelIcon("search", size = 16.dp, tint = Palette.secondary)
                     Spacer(Modifier.width(6.dp))
                     Box(Modifier.weight(1f)) {
                         if (text.isEmpty()) Text("Search actions", color = Palette.secondary, fontSize = 13.sp)
@@ -405,7 +391,7 @@ private fun DesktopMap(store: GameStore) {
                 if (alerts.isEmpty()) Text("Nothing needs you this week.", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
                 alerts.forEach { (text, tone) ->
                     Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                        Text("●", color = tone, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp, end = 6.dp))
+                        PixelIcon("alert", size = 12.dp, tint = tone, modifier = Modifier.padding(top = 1.dp, end = 6.dp))
                         Text(text, color = Palette.primaryText, fontSize = 12.sp)
                     }
                 }
@@ -454,7 +440,7 @@ private fun DesktopMap(store: GameStore) {
         val board = selected?.let { code -> store.boards.firstOrNull { it.code == code } }
         if (board != null) {
             Pane(board.name, Modifier.width(320.dp).fillMaxHeight(), trailing = {
-                Text("✕", color = Palette.secondary, modifier = Modifier.clickable { selected = null }.padding(6.dp))
+                PixelIcon("close", size = 14.dp, tint = Palette.secondary, modifier = Modifier.clickable { selected = null }.padding(6.dp))
             }) {
                 RegionBoardDetail(store, board)
                 GoldButton("Build here", Modifier.fillMaxWidth().padding(12.dp), enabled = store.selectedFirm != null) { building = board }

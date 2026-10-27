@@ -68,9 +68,9 @@ fun ValueSlider(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label(value), color = Palette.primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Nudge("−") { val v = snap(current - step); onValue(v); onCommit(v) }
+            Nudge("minus") { val v = snap(current - step); onValue(v); onCommit(v) }
             Spacer(Modifier.width(6.dp))
-            Nudge("+") { val v = snap(current + step); onValue(v); onCommit(v) }
+            Nudge("plus") { val v = snap(current + step); onValue(v); onCommit(v) }
         }
         Canvas(
             Modifier.fillMaxWidth().height(30.dp)
@@ -125,6 +125,6 @@ fun ValueSlider(
 @Composable
 private fun Nudge(symbol: String, onClick: () -> Unit) {
     Box(Modifier.size(30.dp).clip(CircleShape).background(Palette.panelRaised).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Text(symbol, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        PixelIcon(symbol, size = 16.dp, tint = Palette.primaryText)
     }
 }

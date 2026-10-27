@@ -19,7 +19,7 @@ struct InboxView: View {
     var body: some View {
         TabScreen(title: "Inbox", subtitle: subtitle) {
             if mandatory > 0 {
-                CalloutRow(symbol: "hand.raised.fill",
+                CalloutRow(icon: "hand",
                            text: "\(mandatory) decision\(mandatory == 1 ? "" : "s") needed before time can advance.",
                            tint: Theme.warning)
             }
@@ -27,7 +27,7 @@ struct InboxView: View {
                 DecisionCard(event: event)
             }
             if store.events.isEmpty && store.recentRaids.isEmpty && store.deals.isEmpty {
-                CalloutRow(symbol: "checkmark.circle",
+                CalloutRow(icon: "check_circle",
                            text: "Quiet week. Decisions, market raids and takeover bids show up here when they happen.",
                            tint: Theme.secondary)
             }

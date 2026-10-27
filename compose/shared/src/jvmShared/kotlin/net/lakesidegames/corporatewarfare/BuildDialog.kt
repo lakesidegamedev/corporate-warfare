@@ -73,7 +73,7 @@ fun BuildDialog(store: GameStore, board: RegionBoardDto, onClose: () -> Unit) {
                         }
                     }
                     chosenStrategy == null -> {
-                        item { TextButton(onClick = { sector = null }) { Text("‹ Sectors") } }
+                        item { TextButton(onClick = { sector = null }) { BackLabel("Sectors", Palette.gold) } }
                         val options = store.strategyCatalogue.filter { it.industry == chosenSector }
                         items(options.size) { index ->
                             val option = options[index]
@@ -91,14 +91,14 @@ fun BuildDialog(store: GameStore, board: RegionBoardDto, onClose: () -> Unit) {
                         }
                     }
                     else -> {
-                        item { TextButton(onClick = { strategy = null }) { Text("‹ Strategies") } }
+                        item { TextButton(onClick = { strategy = null }) { BackLabel("Strategies", Palette.gold) } }
                         item { Text(chosenStrategy.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold) }
                         item {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Plants", color = Palette.secondary, modifier = Modifier.weight(1f))
-                                OutlinedButton(onClick = { if (blocks > 1) blocks-- }) { Text("−", color = Palette.primaryText) }
+                                OutlinedButton(onClick = { if (blocks > 1) blocks-- }) { PixelIcon("minus", size = 16.dp, tint = Palette.primaryText) }
                                 Text("  $blocks  ", color = Palette.primaryText, fontWeight = FontWeight.SemiBold)
-                                OutlinedButton(onClick = { if (blocks < 20) blocks++ }) { Text("+", color = Palette.primaryText) }
+                                OutlinedButton(onClick = { if (blocks < 20) blocks++ }) { PixelIcon("plus", size = 16.dp, tint = Palette.primaryText) }
                             }
                         }
                         val current = quote

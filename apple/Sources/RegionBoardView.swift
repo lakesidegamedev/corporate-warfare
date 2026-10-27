@@ -31,7 +31,7 @@ struct RegionBoardView: View {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 Button(action: onBuild) {
-                    Label("Build in \(board.name)", systemImage: "plus.circle.fill")
+                    PixelLabel("Build in \(board.name)", icon: "plus")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
@@ -170,7 +170,7 @@ struct RegionBoardView: View {
             }
             Spacer()
             Button(action: onClose) {
-                Image(systemName: "xmark.circle.fill").font(.title2).foregroundStyle(Theme.secondary)
+                PixelIcon("close", size: 24).foregroundStyle(Theme.secondary)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close \(board.name)")
@@ -220,7 +220,7 @@ struct SectorCellRow: View {
                 HStack(spacing: 4) {
                     Text(Sector.name(cell.industry)).font(.callout.weight(.semibold)).foregroundStyle(Theme.primaryText)
                     if specialized != nil {
-                        Image(systemName: "star.fill").font(.caption2).foregroundStyle(Theme.gold)
+                        PixelIcon("star", size: 12).foregroundStyle(Theme.gold)
                             .accessibilityLabel("State specialty")
                     }
                 }
@@ -291,9 +291,9 @@ struct RaidSheet: View {
                         }
                     }
                     if let result {
-                        Label(
+                        PixelLabel(
                             result.success ? "Took \(result.blocks) plant\(result.blocks == 1 ? "" : "s") from \(result.defender)" : "The campaign did not move \(result.defender)'s customers",
-                            systemImage: result.success ? "checkmark.seal.fill" : "xmark.octagon"
+                            icon: result.success ? "check" : "blocked"
                         )
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(result.success ? Theme.positive : Theme.warning)
@@ -304,7 +304,7 @@ struct RaidSheet: View {
                     Button {
                         Task { await launch() }
                     } label: {
-                        Label("Launch campaign", systemImage: "flag.2.crossed.fill")
+                        PixelLabel("Launch campaign", icon: "flag")
                             .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
                     }
                     .buttonStyle(.borderedProminent)

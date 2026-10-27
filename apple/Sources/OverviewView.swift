@@ -12,7 +12,7 @@ struct OverviewView: View {
             Button {
                 showingSettings = true
             } label: {
-                Image(systemName: "gearshape.fill")
+                PixelIcon("settings")
                     .font(.title3)
                     .foregroundStyle(Theme.secondary)
                     .frame(width: 44, height: 44)
@@ -28,10 +28,10 @@ struct OverviewView: View {
                 }
                 wealth(overview)
                 if !overview.nextActionKey.isEmpty {
-                    CalloutRow(symbol: "lightbulb.fill", text: overview.nextActionReason)
+                    CalloutRow(icon: "bulb", text: overview.nextActionReason)
                 }
                 ForEach(overview.alerts, id: \.self) { alert in
-                    CalloutRow(symbol: "exclamationmark.triangle.fill", text: alert, tint: Theme.warning)
+                    CalloutRow(icon: "warning", text: alert, tint: Theme.warning)
                 }
                 RunControls()
                 Text("Next week settles one week. The speed control plays a week a second at 1x, two at 2x and four at 4x, and stops for any decision.")
@@ -72,7 +72,7 @@ struct OverviewView: View {
                 showingBridge = true
             } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: outlook >= 0 ? "arrow.up.right" : "arrow.down.right")
+                    PixelIcon(outlook >= 0 ? "trend_up" : "trend_down")
                         .foregroundStyle(outlook >= 0 ? Theme.positive : Theme.negative)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Company cash in four weeks: \(Format.moneyCompact(overview.forecastFourWeekCents))")
@@ -83,7 +83,7 @@ struct OverviewView: View {
                             .foregroundStyle(outlook >= 0 ? Theme.secondary : Theme.negative)
                     }
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary)
+                    PixelIcon("chevron_right", size: 14).foregroundStyle(Theme.secondary)
                 }
                 .padding(12)
                 .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -116,7 +116,7 @@ struct OverviewView: View {
         Button {
             Task { await store.continueCareer() }
         } label: {
-            Label("Continue this career in sandbox", systemImage: "arrow.right.circle")
+            PixelLabel("Continue this career in sandbox", icon: "arrow_right")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
@@ -138,8 +138,7 @@ struct OverviewView: View {
                     } label: {
                         HStack(spacing: 10) {
                             if node.depth > 0 {
-                                Image(systemName: "arrow.turn.down.right")
-                                    .font(.caption2)
+                                PixelIcon("indent", size: 12)
                                     .foregroundStyle(Theme.secondary)
                                     .accessibilityHidden(true)
                             }
@@ -147,7 +146,7 @@ struct OverviewView: View {
                                 HStack(spacing: 6) {
                                     Text(node.name).font(.callout.weight(.medium)).foregroundStyle(Theme.primaryText).lineLimit(1)
                                     if store.selectedFirm == node.handle {
-                                        Image(systemName: "checkmark.circle.fill").font(.caption).foregroundStyle(Theme.positive)
+                                        PixelIcon("check_circle", size: 14).foregroundStyle(Theme.positive)
                                     }
                                 }
                                 Text("\(node.industry) · \(node.region) · control \(Format.percentBps(node.controlBps))")
@@ -283,7 +282,7 @@ struct DecisionBanner: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "hand.raised.fill")
+            PixelIcon("hand")
             Text(text).font(.callout.weight(.medium))
             Spacer()
         }

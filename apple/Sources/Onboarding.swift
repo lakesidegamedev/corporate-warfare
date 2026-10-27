@@ -181,7 +181,7 @@ struct OnboardingView: View {
 
     private var previewNotice: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "info.circle")
+            PixelIcon("info")
                 .accessibilityHidden(true)
             Text("This is a preview. Start or resume a guided career to run these steps against your own company and real numbers.")
                 .font(.footnote)
@@ -201,9 +201,9 @@ struct OnboardingView: View {
             Button {
                 advanceStep()
             } label: {
-                Label(
+                PixelLabel(
                     nextTitle,
-                    systemImage: isLastStep ? "checkmark" : "chevron.right"
+                    icon: isLastStep ? "check" : "chevron_right"
                 )
                 .frame(maxWidth: .infinity)
             }
@@ -256,7 +256,7 @@ struct OnboardingView: View {
                         }
                         Spacer(minLength: 8)
                         if store.selectedFirm == firm.handle {
-                            Label("Running", systemImage: "checkmark.circle.fill")
+                            PixelLabel("Running", icon: "check_circle")
                                 .font(.caption)
                                 .foregroundStyle(Theme.positive)
                         }
@@ -283,7 +283,7 @@ struct OnboardingView: View {
         Button {
             showingBridge = true
         } label: {
-            Label("Open the cash bridge", systemImage: "arrow.left.arrow.right")
+            PixelLabel("Open the cash bridge", icon: "swap")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
@@ -307,7 +307,7 @@ struct OnboardingView: View {
         Button {
             showingBuild = true
         } label: {
-            Label("Open the build form", systemImage: "hammer")
+            PixelLabel("Open the build form", icon: "hammer")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
@@ -335,7 +335,7 @@ struct OnboardingView: View {
                 guard let wage = tierWage(wageTier) else { return }
                 Task { await store.setWage(tier: wageTier, wage: wage) }
             } label: {
-                Label("Offer \(Format.money(tierWage(wageTier) ?? 0)) a week", systemImage: "person.badge.plus")
+                PixelLabel("Offer \(Format.money(tierWage(wageTier) ?? 0)) a week", icon: "user_add")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -378,7 +378,7 @@ struct OnboardingView: View {
                     Task { await store.setPrice(product: priceProduct, price: cents) }
                 }
             } label: {
-                Label("Set asking price", systemImage: "tag")
+                PixelLabel("Set asking price", icon: "tag")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -409,7 +409,7 @@ struct OnboardingView: View {
             valueRow("Company cash", Format.money(overview.firmCashCents))
             valueRow("Four-week forecast", Format.money(overview.forecastFourWeekCents))
             if let pause = overview.pause {
-                Label("Paused: \(pause)", systemImage: "hand.raised.fill")
+                PixelLabel("Paused: \(pause)", icon: "hand")
                     .font(.callout)
                     .foregroundStyle(Theme.warning)
                     .fixedSize(horizontal: false, vertical: true)
@@ -418,7 +418,7 @@ struct OnboardingView: View {
         Button {
             Task { await store.advance(weeks: 1) }
         } label: {
-            Label("Advance one week", systemImage: "forward.frame")
+            PixelLabel("Advance one week", icon: "next_week")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
@@ -439,7 +439,7 @@ struct OnboardingView: View {
         Button {
             Task { await store.manualSave() }
         } label: {
-            Label("Save now", systemImage: "externaldrive.badge.checkmark")
+            PixelLabel("Save now", icon: "save")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)

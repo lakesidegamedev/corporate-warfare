@@ -22,13 +22,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Business
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Inbox
-import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -51,7 +44,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,12 +52,12 @@ import uniffi.cw_ffi.ScenarioDto
 import uniffi.cw_ffi.scenarios
 import uniffi.cw_ffi.ProductLineDto
 
-private enum class Tab(val title: String, val icon: ImageVector) {
-    Map("Map", Icons.Filled.Map),
-    Office("Office", Icons.Filled.Business),
-    Markets("Markets", Icons.Filled.BarChart),
-    Inbox("Inbox", Icons.Filled.Inbox),
-    Portfolio("Portfolio", Icons.Filled.AccountBalance),
+private enum class Tab(val title: String, val icon: String) {
+    Map("Map", "map"),
+    Office("Office", "office"),
+    Markets("Markets", "markets"),
+    Inbox("Inbox", "inbox"),
+    Portfolio("Portfolio", "portfolio"),
 }
 
 /** Settings that live outside a career, for any screen that needs them. */
@@ -174,7 +166,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
     overlay?.let { page ->
         Column(Modifier.fillMaxSize().background(Palette.ink)) {
             Row(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { overlay = null }) { Text("‹ Back", color = Palette.gold) }
+                TextButton(onClick = { overlay = null }) { BackLabel("Back", Palette.gold) }
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (page) {
@@ -197,9 +189,9 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
                         icon = {
                             val due = store.events.count { it.mandatory }
                             if (item == Tab.Inbox && due > 0) {
-                                BadgedBox(badge = { Badge { Text("$due") } }) { Icon(item.icon, item.title) }
+                                BadgedBox(badge = { Badge { Text("$due") } }) { PixelIcon(item.icon, size = 24.dp) }
                             } else {
-                                Icon(item.icon, item.title)
+                                PixelIcon(item.icon, size = 24.dp)
                             }
                         },
                         label = { Text(item.title, fontSize = 11.sp) },
@@ -215,7 +207,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
                 NavigationBarItem(
                     selected = false,
                     onClick = { menu = true },
-                    icon = { Icon(Icons.Filled.Menu, "Menu") },
+                    icon = { PixelIcon("menu", size = 24.dp) },
                     label = { Text("Menu", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(unselectedIconColor = Palette.secondary, unselectedTextColor = Palette.secondary),
                 )
@@ -534,7 +526,11 @@ private fun PortfolioScreen(store: GameStore, onSettings: () -> Unit) {
     TabList {
         item {
             ScreenHeader("Portfolio", overview.weekLabel) {
-                TextButton(onClick = onSettings) { Text("⚙ Settings", color = Palette.secondary) }
+                TextButton(onClick = onSettings) {
+                    PixelIcon("settings", size = 16.dp, tint = Palette.secondary)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Settings", color = Palette.secondary)
+                }
             }
         }
         overview.pause?.let { pause ->
@@ -604,13 +600,12 @@ fun SpeedControl(store: GameStore) {
         Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(Palette.panelRaised).padding(2.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        listOf(0 to "II", 1 to "1x", 2 to "2x", 4 to "4x").forEach { (value, label) ->
+        listOf(0 to "pause", 1 to "speed1", 2 to "speed2", 4 to "speed3").forEach { (value, label) ->
             val selected = if (value == 0) !store.running else store.running && store.speed == value
-            Text(
+            PixelIcon(
                 label,
-                color = if (selected) Palette.ink else Palette.primaryText,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
+                size = 16.dp,
+                tint = if (selected) Palette.ink else Palette.primaryText,
                 modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
                     .background(if (selected) Palette.gold else androidx.compose.ui.graphics.Color.Transparent)
                     .clickable { store.playAt(value) }
