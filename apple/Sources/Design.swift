@@ -149,7 +149,7 @@ struct PixelLogo: View {
             guard let file else { return }
             let cell = min(canvas.width / CGFloat(file.width), canvas.height / CGFloat(file.height))
             let origin = CGPoint(x: (canvas.width - cell * CGFloat(file.width)) / 2, y: (canvas.height - cell * CGFloat(file.height)) / 2)
-            guard let image = PixelIcons.bitmap(key: "logo", rows: file.rows, palette: file.palette) else { return }
+            guard let image = PixelIcons.bitmap(key: "wordmark-art", rows: file.rows, palette: file.palette) else { return }
             var context = context
             PixelIcons.drawBitmap(image, in: &context, rect: CGRect(x: origin.x, y: origin.y, width: cell * CGFloat(file.width), height: cell * CGFloat(file.height)))
         }
