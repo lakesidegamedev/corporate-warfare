@@ -44,7 +44,7 @@ struct OnboardingView: View {
         GuidedStep(
             id: 2,
             title: "A facility has one bottleneck",
-            explanation: "A facility turns workers and inputs into output, and output stops at the first limit — staffing, inputs or the production target. The company pays payroll, inputs, rent and maintenance from its own cash, so add capacity only when that cash can fund the capex."
+            explanation: "A facility turns workers and inputs into output, and output stops at the first limit, staffing, inputs or the production target. The company pays payroll, inputs, rent and maintenance from its own cash, so add capacity only when that cash can fund the capex."
         ),
         GuidedStep(
             id: 3,

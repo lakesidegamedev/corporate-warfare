@@ -29,6 +29,32 @@ struct CEOOfficeView: View {
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .tint(Theme.gold)
+                NavigationLink {
+                    ResearchView().environmentObject(store)
+                } label: {
+                    HStack {
+                        Label("Research: technology and budgets", systemImage: "flask.fill")
+                            .font(.callout.weight(.semibold))
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                    }
+                    .padding(12)
+                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .tint(Theme.gold)
+                NavigationLink {
+                    CommandCenterView().environmentObject(store)
+                } label: {
+                    HStack {
+                        Label("Actions: search every action in the game", systemImage: "bolt.fill")
+                            .font(.callout.weight(.semibold))
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                    }
+                    .padding(12)
+                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .tint(Theme.gold)
                 if let weeks = store.finance?.recentWeeks, !weeks.isEmpty, store.finance?.firm == firm.handle {
                     ProfitDrivers(weeks: weeks)
                 }
@@ -52,6 +78,8 @@ struct CEOOfficeView: View {
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .tint(Theme.gold)
+            } else if store.controlledFirms.isEmpty {
+                FoundCompanyPanel()
             } else {
                 CalloutRow(icon: "office", text: "Choose a company from the portfolio, or found one from the map.")
             }

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 
@@ -33,6 +34,10 @@ final class AppStore: ObservableObject {
     @Published var insurance: [InsuranceDto] = []
     @Published var deals: [DealDto] = []
     @Published var events: [EventDto] = []
+    /// The economy, central bank and government, for the Markets economy card and the status bar.
+    @Published var economy: EconomyDto?
+    /// The selected company's technology position.
+    @Published var research: ResearchDto?
     @Published var groupTree: [GroupNodeDto] = []
     @Published var boardVotes: [BoardVoteDto] = []
     @Published var institutions: [InstitutionDto] = []
@@ -59,6 +64,9 @@ final class AppStore: ObservableObject {
     /// Last engine or save error key, recorded for the diagnostics bundle only.
     @Published var lastErrorKey: String?
 
+    /// Tutorial progress. Its changes republish through the store so every screen redraws.
+    let tutorial = TutorialModel()
+    private var tutorialSink: AnyCancellable?
     private let engine = Engine()
     private let saveManager: SaveManager
     private var runTask: Task<Void, Never>?
@@ -68,6 +76,9 @@ final class AppStore: ObservableObject {
 
     init(saveManager: SaveManager = .shared) {
         self.saveManager = saveManager
+        tutorialSink = tutorial.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
     }
 
     struct MarketRow: Identifiable {
@@ -112,6 +123,22 @@ final class AppStore: ObservableObject {
         await perform {
             do {
                 let overview = try await self.engine.start(seed: seed, guided: guided, fiveYear: fiveYear)
+                self.apply(overview)
+                await self.reload()
+                await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
+            } catch {
+                self.lastErrorKey = ErrorKey.of(error)
+                self.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// A new career from the new-game wizard: scenario, difficulty, starting economy and capital.
+    func startCareer(_ options: NewGameDto) async {
+        await perform {
+            do {
+                let overview = try await self.engine.start(options: options)
+                self.tutorial.beginCareer()
                 self.apply(overview)
                 await self.reload()
                 await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
@@ -261,6 +288,7 @@ final class AppStore: ObservableObject {
             strategyCatalogue = strategies()
         }
         events = await engine.events()
+        economy = await engine.economy()
         commodities = await engine.commodityBoard()
         stocks = await engine.stockBoard()
         deals = await engine.deals()
@@ -286,7 +314,9 @@ final class AppStore: ObservableObject {
             firmOps = await engine.firmOps(firm: selectedFirm)
             divisions = await engine.divisions(firm: selectedFirm)
             raidTargets = await engine.raidTargets(firm: selectedFirm)
+            research = await engine.research(firm: selectedFirm)
         } else {
+            research = nil
             firmOps = nil
             divisions = []
             raidTargets = []
@@ -304,6 +334,7 @@ final class AppStore: ObservableObject {
         }
         saves = saveManager.list()
         score = await engine.score()
+        if let tick = overview?.tick { tutorial.week(tick) }
         await loadMarkets()
     }
 
@@ -543,6 +574,7 @@ final class AppStore: ObservableObject {
         await perform {
             let receipt = await self.engine.setPrice(firm: selectedFirm, product: product, price: price)
             self.handle(receipt)
+            if receipt?.accepted == true { self.tutorial.sent("SetPrice") }
             await self.reload()
         }
     }
@@ -570,6 +602,7 @@ final class AppStore: ObservableObject {
         await perform {
             let receipt = await self.engine.build(firm: selectedFirm, region: region, recipe: recipe)
             self.handle(receipt)
+            if receipt?.accepted == true { self.tutorial.sent("BuildFacility") }
             await self.reload()
         }
     }
@@ -687,6 +720,7 @@ final class AppStore: ObservableObject {
             errorMessage = nil
             lastErrorDetail = nil
             statusLine = "Accepted at revision \(receipt.revision)."
+            tutorial.sent(CommandJSON.name(of: json))
             await reload()
             return nil
         }
@@ -903,6 +937,21 @@ final class AppStore: ObservableObject {
             "region": region,
             "request": kind
         ]))
+    }
+
+    /// Loans, contracts, policies and votes of one company and every open deal, for the pickers
+    /// in the Command Center forms.
+    func pickers(firm: UInt64?) async -> ActionPickers {
+        guard let firm else {
+            return ActionPickers(deals: await engine.deals())
+        }
+        return ActionPickers(
+            loans: await engine.loans(firm: firm),
+            contracts: await engine.contracts(firm: firm),
+            policies: await engine.insurance(firm: firm),
+            votes: await engine.boardVotes(firm: firm),
+            deals: await engine.deals()
+        )
     }
 
     func insuranceQuote(insurer: UInt64, facility: UInt64, limitCents: Int64) async -> QuoteDto? {

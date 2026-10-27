@@ -356,6 +356,8 @@ struct SettingsView: View {
                             Eyebrow(text: "Help")
                             Button("Saves and recovery") { showingSaves = true }
                                 .tint(Theme.gold)
+                            Button("Restart the tutorial") { store.tutorial.restart() }
+                                .tint(Theme.gold)
                             if store.sessionReady {
                                 Button("Replay the guided walkthrough") {
                                     dismiss()

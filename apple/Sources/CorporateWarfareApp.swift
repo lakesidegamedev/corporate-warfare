@@ -3,7 +3,6 @@ import SwiftUI
 @main
 struct CorporateWarfareApp: App {
     @StateObject private var store: AppStore
-    @AppStorage(OnboardingKeys.completed) private var onboardingCompleted = false
     @Environment(\.scenePhase) private var scenePhase
 
     private static var isUITesting: Bool {
@@ -37,11 +36,6 @@ struct CorporateWarfareApp: App {
             .task {
                 // The app opens on the main menu; Continue there resumes the latest save.
                 store.refreshSaves()
-            }
-            .onChange(of: store.sessionReady) { _, ready in
-                if ready && !onboardingCompleted && !Self.isUITesting {
-                    store.showOnboarding = true
-                }
             }
             .onChange(of: scenePhase) { _, phase in
                 // Background asks for one bounded stop-and-save. Foreground never replays an

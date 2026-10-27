@@ -23,6 +23,19 @@ enum CommandJSON {
         return text
     }
 
+    /// The command a JSON intent carries: the bare string of a unit variant, or the single key of
+    /// a struct variant.
+    static func name(of json: String) -> String {
+        let trimmed = json.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("\"") {
+            return trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        }
+        guard let open = trimmed.range(of: "{\"") else { return "" }
+        let rest = trimmed[open.upperBound...]
+        guard let close = rest.firstIndex(of: "\"") else { return "" }
+        return String(rest[rest.startIndex..<close])
+    }
+
     /// A unit variant is a bare JSON string, for example `AcceptManagementContract`.
     static func unit(_ variant: String) -> String {
         "\"" + variant + "\""
