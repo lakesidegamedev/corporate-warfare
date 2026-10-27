@@ -1868,6 +1868,12 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
             {
                 continue;
             }
+            // A new company or a newly opened division is left to find its feet.
+            if world.tick.0
+                < sectors::raid_open_tick(world, dataset, rival, division.region, division.industry)
+            {
+                continue;
+            }
             let probe = sectors::raid_quote(
                 world,
                 dataset,
