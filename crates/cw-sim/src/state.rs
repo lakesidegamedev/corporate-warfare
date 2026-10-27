@@ -241,7 +241,7 @@ impl FirmStatus {
 /// How a good's asking price is set each week when the player chooses a posture.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PricePosture {
-    /// Basis points against the market price of the good: -2000 undercuts by a fifth.
+    /// Basis points against the market price of the good, -5000 to 5000: -2000 undercuts by a fifth.
     Market { bps: i32 },
     /// Basis points over the firm's own cost per lot.
     CostPlus { bps: i32 },

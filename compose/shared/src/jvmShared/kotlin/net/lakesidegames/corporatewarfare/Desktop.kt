@@ -358,6 +358,10 @@ private fun DesktopOffice(store: GameStore) {
             Column(Modifier.weight(0.9f).fillMaxHeight().verticalScroll(rememberScrollState())) {
                 store.finance?.takeIf { it.firm == firm.handle && it.recentWeeks.isNotEmpty() }?.let { ProfitDrivers(it.recentWeeks) }
                     ?: Callout("Results appear after the first week closes.", Palette.secondary)
+                if (store.facilities.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    ProductionTarget(store)
+                }
                 val periods = ResultBuckets.make(StatsPeriod.Month, emptyList(), store.history)
                 if (periods.size > 1) {
                     Spacer(Modifier.height(10.dp))

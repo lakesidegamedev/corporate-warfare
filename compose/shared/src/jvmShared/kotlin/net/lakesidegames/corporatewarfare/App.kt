@@ -370,6 +370,7 @@ private fun OfficeScreen(store: GameStore) {
                 }
             }
         }
+        if (store.facilities.isNotEmpty()) item { ProductionTarget(store) }
         if (store.divisions.isNotEmpty()) {
             item { Eyebrow("Divisions") }
             items(store.divisions.size) { index ->
@@ -389,6 +390,22 @@ private fun OfficeScreen(store: GameStore) {
         }
     }
     editing?.let { line -> PostureDialog(store, line) { editing = null } }
+}
+
+/** How hard every plant runs, 0 to 100 percent of capacity. */
+@Composable
+internal fun ProductionTarget(store: GameStore) {
+    val capacity = store.facilities.sumOf { it.capacityLots }
+    var target by remember(store.selectedFirm) { mutableStateOf((store.facilities.firstOrNull()?.targetBps ?: 8_500) / 100.0) }
+    Panel {
+        Eyebrow("Production target")
+        ValueSlider(
+            target, { target = it }, 0.0..100.0, 1.0,
+            label = { "%.0f%% of capacity".format(it) },
+            detail = { "About ${Format.count((capacity * it / 100).toLong())} of ${Format.count(capacity)} lots a week. Lower targets save inputs and wages when stock piles up." },
+            onCommit = { store.setTarget((it * 100).toInt()) },
+        )
+    }
 }
 
 @Composable
@@ -466,18 +483,35 @@ internal fun PostureDialog(store: GameStore, line: ProductLineDto, onDismiss: ()
                     fontSize = 13.sp,
                 )
                 Text("Buyers take the cheapest offer first. Undercut to sell out; price above the market for margin and risk unsold stock.", color = Palette.secondary, fontSize = 12.sp)
-                OutlinedButton(onClick = { store.setPosture(line.product, 0, 0); onDismiss() }) { Text("Automatic", color = Palette.primaryText) }
-                Eyebrow("Against the market")
-                ChipRow(listOf(-2000, -1000, -500, 0, 500, 1000, 2000)) { bps ->
-                    store.setPosture(line.product, 1, bps); onDismiss()
+                OutlinedButton(onClick = { store.setPosture(line.product, 0, 0); onDismiss() }) {
+                    Text(if (line.mode == "auto") "Automatic (on)" else "Automatic", color = Palette.primaryText)
                 }
-                Eyebrow("Over your cost")
-                ChipRow(listOf(1000, 2000, 3000, 5000), prefix = "+") { bps ->
-                    store.setPosture(line.product, 2, bps); onDismiss()
+                var market by remember { mutableStateOf(if (line.mode == "market") line.postureBps / 100.0 else 0.0) }
+                var cost by remember { mutableStateOf(if (line.mode == "cost_plus") line.postureBps / 100.0 else 20.0) }
+                fun margin(price: Long) = if (line.unitCostCents > 0) " · ${Format.signed(price - line.unitCostCents)} a lot over cost" else ""
+                Eyebrow("Against the market" + if (line.mode == "market") " · active" else "")
+                ValueSlider(
+                    market, { market = it }, -50.0..50.0, 1.0,
+                    label = { if (it == 0.0) "At market" else "%+.0f%%".format(it) },
+                    origin = 0.0,
+                    detail = { val p = (line.marketCents * (1 + it / 100)).toLong(); "${Format.money(p)} a lot" + margin(p) },
+                    tint = if (market <= 0) Palette.positive else Palette.warning,
+                    onCommit = { store.setPosture(line.product, 1, (it * 100).toInt()) },
+                )
+                Eyebrow("Over your cost" + if (line.mode == "cost_plus") " · active" else "")
+                if (line.unitCostCents > 0) {
+                    ValueSlider(
+                        cost, { cost = it }, 0.0..100.0, 1.0,
+                        label = { "+%.0f%%".format(it) },
+                        detail = { val p = (line.unitCostCents * (1 + it / 100)).toLong(); "${Format.money(p)} a lot · ${Format.money(p - line.unitCostCents)} margin" },
+                        onCommit = { store.setPosture(line.product, 2, (it * 100).toInt()) },
+                    )
+                } else {
+                    Text("Available once the good has a production cost.", color = Palette.secondary, fontSize = 12.sp)
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
     )
 }
 

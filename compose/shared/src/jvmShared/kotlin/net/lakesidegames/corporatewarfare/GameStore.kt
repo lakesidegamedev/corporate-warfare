@@ -167,6 +167,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         submit(CommandJson.command("SetPricePosture", "firm" to firm, "product" to product, "mode" to mode, "bps" to bps))
     }
 
+    /** Every plant of the selected company runs at [bps] of full capacity, 0 to 10,000. */
+    fun setTarget(bps: Int) {
+        val firm = selectedFirm ?: return
+        submit(CommandJson.command("SetProductionTarget", "firm" to firm, "target_bps" to bps))
+    }
+
     /** What a build would cost, computed by the engine without changing anything. */
     fun quote(region: UInt, recipe: UInt, blocks: UInt, onResult: (BuildQuoteDto?) -> Unit) {
         val handle = session ?: return

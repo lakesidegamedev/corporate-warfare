@@ -98,7 +98,7 @@ pub enum CommandIntent {
         price_cents: i64,
     },
     /// Pricing posture for one good: mode 0 hands it back to automatic pricing, 1 prices at
-    /// `bps` against the market (-2000..=2000), 2 marks up the firm's cost per lot by `bps`
+    /// `bps` against the market (-5000..=5000), 2 marks up the firm's cost per lot by `bps`
     /// (0..=10000).
     SetPricePosture {
         firm: Handle,
@@ -1189,7 +1189,7 @@ fn apply_intent(
             reference_price(dataset, *product)?;
             let posture = match (*mode, *bps) {
                 (0, _) => None,
-                (1, bps) if (-2_000..=2_000).contains(&bps) => {
+                (1, bps) if (-5_000..=5_000).contains(&bps) => {
                     Some(crate::state::PricePosture::Market { bps })
                 }
                 (2, bps) if (0..=10_000).contains(&bps) => {

@@ -98,9 +98,25 @@ struct PostureSheet: View {
     let line: ProductLineDto
     @State private var rejection: CommandRejection?
     @State private var exact = false
+    @State private var marketPercent: Double = 0
+    @State private var costPercent: Double = 20
+    @State private var applied: String?
 
-    private let marketSteps: [Int32] = [-2_000, -1_000, -500, 0, 500, 1_000, 2_000]
-    private let costSteps: [Int32] = [1_000, 2_000, 3_000, 5_000]
+    private var hasCost: Bool { line.unitCostCents > 0 }
+
+    private func priceAgainstMarket(_ percent: Double) -> Int64 {
+        Int64((Double(line.marketCents) * (1 + percent / 100)).rounded())
+    }
+
+    private func priceOverCost(_ percent: Double) -> Int64 {
+        Int64((Double(line.unitCostCents) * (1 + percent / 100)).rounded())
+    }
+
+    private func marginText(_ price: Int64) -> String {
+        guard hasCost else { return "" }
+        let margin = price - line.unitCostCents
+        return " · \(margin >= 0 ? "+" : "")\(Format.money(margin)) a lot over your cost"
+    }
 
     var body: some View {
         NavigationStack {
@@ -123,24 +139,38 @@ struct PostureSheet: View {
                     option(title: "Automatic", detail: "Follows sell-through: cuts when stock piles up, raises when it sells out.",
                            selected: line.mode == "auto") { await set(mode: 0, bps: 0) }
 
-                    Eyebrow(text: "Against the market")
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 8)], spacing: 8) {
-                        ForEach(marketSteps, id: \.self) { step in
-                            chip(step == 0 ? "Market" : String(format: "%+ld%%", Int(step) / 100),
-                                 selected: line.mode == "market" && line.postureBps == step) {
-                                await set(mode: 1, bps: step)
+                    Panel(padding: 12) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Eyebrow(text: "Against the market" + (line.mode == "market" ? " · active" : ""))
+                            ValueSlider(
+                                value: $marketPercent, range: -50...50, step: 1, origin: 0, ticks: 20,
+                                label: { $0 == 0 ? "At market" : String(format: "%+.0f%%", $0) },
+                                detail: { "\(Format.money(priceAgainstMarket($0))) a lot" + marginText(priceAgainstMarket($0)) },
+                                tint: marketPercent <= 0 ? Theme.positive : Theme.copper,
+                                onCommit: { value in Task { await set(mode: 1, bps: Int32(value * 100)) } }
+                            )
+                        }
+                    }
+                    Panel(padding: 12) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Eyebrow(text: "Over your cost" + (line.mode == "cost_plus" ? " · active" : ""))
+                            if hasCost {
+                                ValueSlider(
+                                    value: $costPercent, range: 0...100, step: 1, ticks: 20,
+                                    label: { String(format: "+%.0f%%", $0) },
+                                    detail: { "\(Format.money(priceOverCost($0))) a lot · \(Format.money(priceOverCost($0) - line.unitCostCents)) margin" },
+                                    onCommit: { value in Task { await set(mode: 2, bps: Int32(value * 100)) } }
+                                )
+                            } else {
+                                Text("Available once the good has a production cost.").font(.caption).foregroundStyle(Theme.secondary)
                             }
                         }
                     }
-                    Eyebrow(text: "Over your cost")
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 8)], spacing: 8) {
-                        ForEach(costSteps, id: \.self) { step in
-                            chip("+\(step / 100)%", selected: line.mode == "cost_plus" && line.postureBps == step) {
-                                await set(mode: 2, bps: step)
-                            }
-                        }
+                    if let applied {
+                        Label(applied, systemImage: "checkmark.circle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.positive)
                     }
-                    .disabled(line.unitCostCents == 0)
 
                     Button("Set an exact price") { exact = true }
                         .font(.callout.weight(.semibold))
@@ -155,7 +185,11 @@ struct PostureSheet: View {
             .background(Theme.panel)
             .navigationTitle(line.name)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
+            .onAppear {
+                if line.mode == "market" { marketPercent = Double(line.postureBps) / 100 }
+                if line.mode == "cost_plus" { costPercent = Double(line.postureBps) / 100 }
+            }
             .sheet(isPresented: $exact) {
                 PriceSheet(initialProduct: line.product).environmentObject(store)
             }
@@ -170,7 +204,8 @@ struct PostureSheet: View {
         if let result {
             rejection = result
         } else {
-            dismiss()
+            rejection = nil
+            applied = mode == 0 ? "Automatic pricing on" : "Applied"
         }
     }
 
@@ -194,19 +229,4 @@ struct PostureSheet: View {
         .disabled(store.isBusy)
     }
 
-    private func chip(_ text: String, selected: Bool, action: @escaping () async -> Void) -> some View {
-        Button {
-            Task { await action() }
-        } label: {
-            Text(text)
-                .font(.callout.weight(.semibold).monospacedDigit())
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
-                .foregroundStyle(selected ? Theme.ink : Theme.primaryText)
-                .background(selected ? Theme.gold : Theme.panelRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.stroke, lineWidth: selected ? 0 : 1))
-        }
-        .buttonStyle(.plain)
-        .disabled(store.isBusy)
-    }
 }

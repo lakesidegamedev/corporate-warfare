@@ -275,7 +275,8 @@ fn a_market_posture_prices_against_the_other_sellers_median() {
         median * 9 / 10
     );
     // Out of range is refused; mode 0 hands the good back to automatic pricing.
-    assert!(!posture(&mut world, &dataset, firm, food, 1, 2_500));
+    assert!(posture(&mut world, &dataset, firm, food, 1, 2_500));
+    assert!(!posture(&mut world, &dataset, firm, food, 1, 5_001));
     assert!(!posture(&mut world, &dataset, firm, food, 2, -100));
     assert!(posture(&mut world, &dataset, firm, food, 0, 0));
     let policies = &world.firms.get(firm).unwrap().policies;

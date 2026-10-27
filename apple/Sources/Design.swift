@@ -618,3 +618,119 @@ struct ProfitDrivers: View {
         .accessibilityLabel("\(name) \(Format.moneyCompact(cents))")
     }
 }
+
+// MARK: - Value slider
+
+/// A fine-grained control for one number: a custom track with tick marks and a filled run from
+/// the origin, a gold handle, a live readout of what the value means, and nudge buttons for exact
+/// steps. Dragging updates the readout live; `onCommit` fires once when the drag ends or a nudge
+/// lands, so the engine sees one command per change.
+struct ValueSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    var step: Double = 1
+    /// Where the filled run starts: zero for a signed range, the bottom otherwise.
+    var origin: Double?
+    var ticks: Int = 10
+    let label: (Double) -> String
+    var detail: ((Double) -> String)?
+    var tint: Color = Theme.gold
+    var onCommit: (Double) -> Void = { _ in }
+
+    @State private var dragging = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(label(value))
+                    .font(.title3.weight(.bold).monospacedDigit())
+                    .foregroundStyle(Theme.primaryText)
+                    .contentTransition(.numericText())
+                Spacer()
+                nudge("minus", -step)
+                nudge("plus", step)
+            }
+            GeometryReader { proxy in
+                let inset: CGFloat = 14
+                let width = proxy.size.width - inset * 2
+                let x = inset + position(value, width)
+                let start = inset + position(origin ?? range.lowerBound, width)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.panelRaised).frame(width: width, height: 8).offset(x: inset)
+                    ForEach(0...ticks, id: \.self) { index in
+                        Rectangle()
+                            .fill(Theme.secondary.opacity(index % 5 == 0 ? 0.55 : 0.3))
+                            .frame(width: 1, height: index % 5 == 0 ? 16 : 10)
+                            .offset(x: inset + width * CGFloat(index) / CGFloat(ticks))
+                    }
+                    Capsule()
+                        .fill(LinearGradient(colors: [tint.opacity(0.55), tint], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: abs(x - start), height: 8)
+                        .offset(x: min(x, start))
+                    Circle()
+                        .fill(Theme.primaryText)
+                        .overlay(Circle().stroke(tint, lineWidth: 3))
+                        .frame(width: dragging ? 28 : 24, height: dragging ? 28 : 24)
+                        .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+                        .offset(x: x - (dragging ? 14 : 12))
+                }
+                .frame(height: 30)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { drag in
+                            dragging = true
+                            value = snapped(range.lowerBound + Double((drag.location.x - inset) / max(width, 1)) * (range.upperBound - range.lowerBound))
+                        }
+                        .onEnded { _ in
+                            dragging = false
+                            onCommit(value)
+                        }
+                )
+            }
+            .frame(height: 30)
+            HStack {
+                Text(label(range.lowerBound))
+                Spacer()
+                Text(label(range.upperBound))
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(Theme.secondary)
+            if let detail {
+                Text(detail(value))
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityValue(label(value))
+        .accessibilityAdjustableAction { direction in
+            value = snapped(value + (direction == .increment ? step : -step))
+            onCommit(value)
+        }
+    }
+
+    private func nudge(_ symbol: String, _ delta: Double) -> some View {
+        Button {
+            value = snapped(value + delta)
+            onCommit(value)
+        } label: {
+            Image(systemName: symbol)
+                .font(.caption.weight(.bold))
+                .frame(width: 30, height: 30)
+                .background(Theme.panelRaised, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.primaryText)
+    }
+
+    private func position(_ v: Double, _ width: CGFloat) -> CGFloat {
+        CGFloat((v - range.lowerBound) / (range.upperBound - range.lowerBound)) * width
+    }
+
+    private func snapped(_ v: Double) -> Double {
+        let clamped = min(max(v, range.lowerBound), range.upperBound)
+        return (clamped / step).rounded() * step
+    }
+}

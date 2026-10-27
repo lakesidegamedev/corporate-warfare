@@ -30,8 +30,17 @@ heading.
   stock and commodity tables together; Stats runs in two columns; Inbox lists decisions beside the
   open one; Portfolio tables your companies and your shareholdings.
 
+- Sliders instead of fixed choices, on every platform: a custom track with tick marks, a live
+  readout of what the value means and nudge buttons for exact steps. Production target runs 0 to
+  100 percent in 1 percent steps with the lots a week it gives; pricing against the market runs
+  -50 to +50 percent and over cost 0 to 100 percent, each showing the price and margin per lot;
+  raid size runs 0.5 to 4 to 1 in tenths; training and quality budgets slide up to a tenth of
+  weekly revenue beside the typed amount.
+
 ### Changed
 
+- Pricing against the market now allows -50 to +50 percent (was -20 to +20). Prices still stay
+  between half and twice the reference.
 - Desktop opens at 1600 x 900 instead of a phone-shaped window, and the map is the first tab on
   Android and desktop.
 
