@@ -62,6 +62,65 @@ impl ProductKind {
     }
 }
 
+/// How a good is kept. Each class has its own finite capacity in a region: dry warehouses,
+/// tank farms for liquids and gas, silos for grain and bulk, cold storage for perishables.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageClass {
+    #[default]
+    Dry,
+    Tank,
+    Silo,
+    Cold,
+}
+
+impl StorageClass {
+    pub const ALL: [StorageClass; 4] = [
+        StorageClass::Dry,
+        StorageClass::Tank,
+        StorageClass::Silo,
+        StorageClass::Cold,
+    ];
+
+    pub const fn code(self) -> u8 {
+        match self {
+            StorageClass::Dry => 0,
+            StorageClass::Tank => 1,
+            StorageClass::Silo => 2,
+            StorageClass::Cold => 3,
+        }
+    }
+
+    pub const fn key(self) -> &'static str {
+        match self {
+            StorageClass::Dry => "dry",
+            StorageClass::Tank => "tank",
+            StorageClass::Silo => "silo",
+            StorageClass::Cold => "cold",
+        }
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            StorageClass::Dry => "Warehouse",
+            StorageClass::Tank => "Tank farm",
+            StorageClass::Silo => "Silo",
+            StorageClass::Cold => "Cold store",
+        }
+    }
+
+    /// Weekly fee in cents per lot at the region's outside storage, who takes the overflow of
+    /// every firm so goods never vanish for lack of space. Always dearer than owning a store.
+    pub const fn outside_fee_cents(self) -> i64 {
+        match self {
+            StorageClass::Dry => 80,
+            StorageClass::Tank => 120,
+            StorageClass::Silo => 60,
+            StorageClass::Cold => 200,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Product {
     pub id: String,
@@ -71,6 +130,13 @@ pub struct Product {
     /// Share of unsold stock that spoils each week, in basis points. Zero for durable goods.
     #[serde(default)]
     pub spoilage_bps_weekly: u32,
+    /// Which kind of store holds the good (balance schema 3). Services are never stored.
+    #[serde(default)]
+    pub storage_class: StorageClass,
+    /// Weekly cost of holding stock beyond a plant's working yard, in basis points of the
+    /// reference price per lot: capital, insurance and handling.
+    #[serde(default)]
+    pub holding_bps_weekly: u32,
 }
 
 /// A further product a plant makes alongside its primary output, in a fixed yield: the lots a
@@ -94,6 +160,10 @@ pub struct Recipe {
     /// Further products made in a fixed yield alongside `output` (balance schema 2).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub by_products: Vec<ByProduct>,
+    /// Set on a storage facility: the class of store it adds. Its `weekly_output_lots` is then
+    /// the lots of space one block holds (balance schema 3) and it makes no goods.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage_class: Option<StorageClass>,
     pub weekly_inputs_lots: BTreeMap<String, i64>,
     pub workers_low_mid_high: [i64; 3],
     pub capex_cents: i64,
@@ -102,6 +172,15 @@ pub struct Recipe {
 }
 
 impl Recipe {
+    /// Lots of space one block of a storage facility holds; zero for a producing plant.
+    pub fn storage_lots(&self) -> i64 {
+        if self.storage_class.is_some() {
+            self.weekly_output_lots
+        } else {
+            0
+        }
+    }
+
     /// Every product the plant makes with its weekly lots per block at full capacity, the
     /// primary output first.
     pub fn outputs(&self) -> impl Iterator<Item = (&str, i64)> {
@@ -175,9 +254,10 @@ pub struct Balance {
 
 impl Balance {
     /// Oldest balance schema the loader still reads. Schema 1 had no by-products and no spoilage;
-    /// both default to none, so a schema 1 file migrates to schema 2 unchanged in meaning.
+    /// both default to none, so a schema 1 file migrates unchanged in meaning. Schema 3 adds storage
+    /// classes and holding costs, which default to a dry store with no holding cost.
     pub const MIN_SCHEMA: u32 = 1;
-    pub const SCHEMA: u32 = 2;
+    pub const SCHEMA: u32 = 3;
 
     /// Bring a parsed file up to the current schema, or say why it cannot be read.
     pub fn migrate(mut self) -> Result<Balance, String> {

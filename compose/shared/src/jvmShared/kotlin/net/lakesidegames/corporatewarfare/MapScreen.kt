@@ -365,6 +365,10 @@ internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () ->
                     Eyebrow("Room to build")
                     room.forEach { Text("${it.productName}: ${it.importLots} lots a week imported at ${Format.money(it.importPriceCents)}", color = Palette.primaryText, fontSize = 13.sp) }
                 }
+                if (board.storage.isNotEmpty()) {
+                    Eyebrow("Your storage here")
+                    StorageLines(board.storage)
+                }
                 val ours = store.divisions.filter { it.region == board.code }
                 if (ours.isNotEmpty()) {
                     Eyebrow("Your divisions here")

@@ -245,6 +245,46 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             vec![firm(), f("enabled", "On", "bool")],
         ),
         a(
+            "SetStockTarget",
+            "Supply",
+            "Stock target",
+            "Weeks of inputs a site keeps on hand. Zero uses the company's default cover. Seasonal build buys grain ahead in the harvest quarter.",
+            "inventory cover buffer safety stock season harvest",
+            vec![
+                f("facility", "Site", "my_facility"),
+                f("weeks", "Weeks of inputs", "count").range(0, 26, 1, 0),
+                f("seasonal", "Seasonal build", "bool").range(0, 1, 1, 1),
+            ],
+        ),
+        a(
+            "BuyToStore",
+            "Supply",
+            "Buy to store",
+            "Buy a good on the exchange into storage to sell later. Fills over the next weeks at no more than your price limit. Stored goods are not for sale until you release them.",
+            "speculate stockpile hoard commodity buy inventory",
+            vec![
+                firm(),
+                f("product", "Good", "product"),
+                f("region", "Store in", "region"),
+                f("lots", "Lots", "count").range(1, 5_000, 10, 100),
+                f("limit_bps", "Price limit (percent of reference)", "bps")
+                    .range(5_000, 20_000, 500, 10_000),
+            ],
+        ),
+        a(
+            "SellFromStore",
+            "Supply",
+            "Sell from store",
+            "Release stored goods for sale at your asking price. Zero lots releases everything held there and cancels its open buy order.",
+            "release speculate unload stockpile",
+            vec![
+                firm(),
+                f("product", "Good", "product"),
+                f("region", "Stored in", "region"),
+                f("lots", "Lots (0 for all)", "count").range(0, 20_000, 10, 0),
+            ],
+        ),
+        a(
             "SetLogisticsBudget",
             "Operations",
             "Logistics programme",

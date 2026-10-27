@@ -290,3 +290,68 @@ producer at the start. A firm runs one strategy per sector in a region, so a fir
 one sector sit in different regions; the dataset check refuses a roster that breaks this. Seed
 supply contracts deliver from the region of the plant that makes the good, not the firm's
 headquarters.
+
+## Storage, stock targets and speculation (1.7)
+
+Stock is still kept per firm, product and region. Space is a second, separate limit with four
+classes: dry (warehouse), tank (liquids and gas), silo (grain and bulk) and cold (food, livestock,
+pharmaceuticals). Each good declares its class, a weekly holding cost (basis points of the
+reference price per lot) and the existing weekly spoilage rate. Services and contracts take no
+space.
+
+Capacity of a firm in a region and class is the sum of two parts, both in lots:
+
+- A working yard: every operating plant brings 6 weeks of each input and output of that class,
+  times its blocks. A plant that keeps normal cover never fills its yard.
+- Owned storage: an operating storage facility adds `weekly_output_lots` times its blocks of its
+  class (the recipe's `storage_class` marks it; it is a logistics recipe that makes the service
+  `storage_space` and no goods, with the usual capex, crew, power and build time).
+
+At each week's close, before spoilage, for every firm and cell:
+
+1. Stock above capacity sits in outside storage and pays a fee per lot, by class: dry 80, tank
+   120, silo 60, cold 200 cents a week. The fee goes to other firms with spare owned space in the
+   same cell, pro rata to that space, as revenue; the rest goes to the outside sector. Goods are
+   never refused or destroyed for lack of room.
+2. Stock above the yard (inside owned storage or outside) pays a holding cost: the share of each
+   lot's reference value given by the good's `holding_bps_weekly`. It goes to the outside sector.
+3. A firm pays what its cash covers; it never goes negative from storage.
+4. Spoilage (see Product chains) uses the good's weekly rate, halved for the share of a class's
+   stock that fits in owned storage in that region. Lost stock is written off at carrying cost as
+   an operating expense, and its milli-lots are recorded on the firm's storage book.
+
+Storage moves money and never creates or destroys stock; the only stock destroyed is the recorded
+spoilage.
+
+Stock targets. Each plant carries a stock target (0 to 26 weeks of inputs; 0 means the firm's
+default cover, 4 weeks, and 2 for perishables) and a seasonal build, on by default. In the harvest
+quarter (quarter 3) a plant that uses a seasonal farm good with spoilage under 2 percent a week
+(grain) keeps 8 more weeks of it, buying ahead of the lean quarters. In that same quarter a grower
+tolerates 6 more weeks of unsold stock of such a good before cutting price and output, so the
+harvest is stored rather than dumped. An explicit target replaces the perishable limit.
+
+Holding goods. A firm may hold goods back from sale and export. Held goods are reserved like
+input cover: not offered on the exchange, not exported, not counted as unsold stock for pricing.
+They never exceed stock on hand (production or contracts using them reduces the hold).
+
+Buy to store. A buy order names a good, a region, up to 5,000 lots and a price limit of 50 to 200
+percent of reference. Each week, after plants have bought their inputs from the exchange, an open
+order buys up to 400 lots from the cheapest delivered sellers (firms or the region's gateway) whose
+delivered price is within the limit, paying freight like any buyer. What arrives is added to held
+stock. Orders last 13 weeks, a firm may keep 6, and a second order for the same cell tops up the
+first. Sell from store releases held goods (all, or a number of lots) for the normal channels at
+the firm's asking price and cancels the cell's order when releasing all.
+
+Rival rule. Every strategic review a rival may, for a good its plants make or use that is
+storable, not perishable and in a world price family: buy to store when the family index is at
+least 10 percent under day one, no more than 2 percent down on the quarter, and the cycle is in
+recession or recovery, using at most 6 percent of cash (up to 300 lots) and only into space it
+already has, with cash above twice its reserve and profit behind it; release when the index is 5
+percent over day one, or falling over 5 percent on the quarter while above day one, or the cycle
+is in a boom. Rivals never build storage; temperament hooks come later.
+
+Alerts and telemetry. The player is alerted only when stock is 95 percent or more of capacity in
+a cell holding at least 500 lots, when four weeks of outside fees and holding cost reach 3 percent
+of four weeks of revenue (and $2,000), or when four weeks of spoilage reaches 2 percent of revenue
+(and $2,000). Market snapshots (schema 2) carry corridor and player storage lines: use, capacity,
+owned capacity, outside lots, fees, holding cost, spoilage and held goods.

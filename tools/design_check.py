@@ -15,8 +15,8 @@ INDUSTRIES = {
 def check():
     data = json.loads((ROOT / 'content/initial-balance.json').read_text())
     products = {p['id']: p for p in data['products']}
-    # 34 products and contracts at the original calibration, plus the nine goods of the 1.7 chains.
-    assert len(products) == len(data['products']) == 43, '43 unique products/contracts required'
+    # 34 products and contracts at the original calibration, plus the nine goods of the 1.7 chains and the storage space service.
+    assert len(products) == len(data['products']) == 44, '44 unique products/contracts required'
     kinds = {'goods', 'local_service', 'project_service', 'transport_service',
              'consumer_goods', 'subscription', 'service', 'lease_service',
              'contract_goods', 'financial_contract'}
@@ -58,7 +58,7 @@ def check():
     assert Fraction(5, 10) <= Fraction(1, 2) < Fraction(6, 10)
     assert min(100000, max(0, 30000 - 5000)) == 25000  # insured loss, deductible, limit
     assert Fraction(7, 10) * Fraction(1, 10) + Fraction(1, 4) * Fraction(3, 10) + Fraction(1, 20) == Fraction(195, 1000)
-    print('Design inputs valid: 43 products, 15 industries; worked arithmetic consistent. No game behaviour certified.')
+    print('Design inputs valid: 44 products, 15 industries; worked arithmetic consistent. No game behaviour certified.')
 
 
 if __name__ == '__main__':

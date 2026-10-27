@@ -395,6 +395,53 @@ pub struct ProductDto {
     pub name: String,
     pub reference_price_cents: i64,
     pub kind: String,
+    /// The store a good needs: dry, tank, silo or cold. Empty for services and contracts.
+    pub storage_class: String,
+    /// Weekly holding cost beyond a plant's yard, basis points of the reference price.
+    pub holding_bps_weekly: u32,
+    /// Share of stock that spoils each week, basis points.
+    pub spoilage_bps_weekly: u32,
+}
+
+/// A firm's use of one class of storage in one region.
+#[derive(uniffi::Record)]
+pub struct StorageCellDto {
+    pub region: String,
+    pub region_name: String,
+    pub class_key: String,
+    pub class_label: String,
+    pub used_lots: i64,
+    /// Working yard of the firm's plants plus owned storage facilities.
+    pub capacity_lots: i64,
+    pub owned_lots: i64,
+    /// Lots in the region's outside storage, which pays a weekly fee per lot.
+    pub outside_lots: i64,
+    pub outside_fee_cents_weekly: i64,
+}
+
+/// Goods a firm holds back from sale, and any open buy order for them.
+#[derive(uniffi::Record)]
+pub struct HeldStockDto {
+    pub product: u32,
+    pub product_name: String,
+    pub region: String,
+    pub region_name: String,
+    pub held_lots: i64,
+    pub order_lots_left: i64,
+    pub order_limit_bps: i32,
+}
+
+/// Storage results of a firm: costs over the last quarter and the last week's totals.
+#[derive(uniffi::Record)]
+pub struct StorageSummaryDto {
+    pub used_lots: i64,
+    pub capacity_lots: i64,
+    pub outside_lots: i64,
+    pub fee_cents_13w: i64,
+    pub holding_cents_13w: i64,
+    pub spoiled_cents_13w: i64,
+    pub spoiled_lots_13w: i64,
+    pub rent_cents_13w: i64,
 }
 
 #[derive(uniffi::Record)]
@@ -406,6 +453,8 @@ pub struct RecipeDto {
     pub capex_cents: i64,
     pub build_weeks: u32,
     pub weekly_output_lots: i64,
+    /// Set on a storage facility; its `weekly_output_lots` is the lots of space one plant holds.
+    pub storage_class: String,
 }
 
 /// One node of the investor's controlled group tree, breadth first from a direct holding.
@@ -568,6 +617,8 @@ pub struct StrategyDto {
     /// EBITDA margin at reference prices and baseline wages, full capacity, in basis points.
     pub reference_margin_bps: i32,
     pub depletes: bool,
+    /// Set on a storage facility: dry, tank, silo or cold. Empty for a producing plant.
+    pub storage_class: String,
 }
 
 /// A good a state imports: demand local plants are not meeting.
@@ -604,6 +655,8 @@ pub struct RegionBoardDto {
     pub room: Vec<RoomDto>,
     /// Every sector type with operators or unmet imports here.
     pub sectors: Vec<SectorCellDto>,
+    /// The selected firm's storage here: capacity, use and outside storage by class.
+    pub storage: Vec<StorageCellDto>,
 }
 
 /// One sector type in one region: who operates and how the player's firm stands.
@@ -631,6 +684,12 @@ pub struct DivisionDto {
     pub blocks: u32,
     pub share_bps: i32,
     pub retooling: bool,
+    /// Weeks of inputs the division keeps (zero is the firm's default cover) and whether it
+    /// builds seasonal inputs ahead in the harvest quarter. Read from its first plant.
+    pub stock_weeks: i32,
+    pub seasonal_build: bool,
+    /// The firm's storage in the division's region.
+    pub storage: Vec<StorageCellDto>,
 }
 
 /// The board's quarterly objective for the player's primary company.
@@ -759,6 +818,48 @@ pub struct SessionHandle {
     inner: Mutex<Session>,
 }
 
+/// A firm's storage by region and class, optionally for one region. Cells with nothing stored
+/// and no space are left out.
+fn storage_cells(
+    world: &cw_sim::state::World,
+    dataset: &cw_data::Dataset,
+    firm: &cw_sim::state::Firm,
+    region: Option<u8>,
+) -> Vec<StorageCellDto> {
+    cw_sim::economy::storage::uses(world, dataset, firm)
+        .into_iter()
+        .filter(|u| region.is_none_or(|r| r == u.region))
+        .filter(|u| u.used_milli > 0 || u.owned_milli > 0)
+        .map(|u| StorageCellDto {
+            region: dataset.regions[u.region as usize].code.clone(),
+            region_name: dataset.regions[u.region as usize].name.clone(),
+            class_key: u.class.key().to_owned(),
+            class_label: u.class.label().to_owned(),
+            used_lots: u.used_milli / 1_000,
+            capacity_lots: u.capacity_milli() / 1_000,
+            owned_lots: u.owned_milli / 1_000,
+            outside_lots: u.outside_milli() / 1_000,
+            outside_fee_cents_weekly: u.outside_milli() / 1_000 * u.class.outside_fee_cents(),
+        })
+        .collect()
+}
+
+/// Player-facing text for an overview alert key; unknown keys pass through unchanged.
+fn alert_text(alert: cw_session::Alert) -> String {
+    match alert.key.as_str() {
+        "alert.storage_full" => format!("{}: storage is nearly full.", alert.subject),
+        "alert.storage_fees" => format!(
+            "{}: outside storage fees are eating into margin. Build storage or sell down stock.",
+            alert.subject
+        ),
+        "alert.spoilage" => format!(
+            "{}: spoilage is losing real money. Sell perishables sooner or build cold storage.",
+            alert.subject
+        ),
+        _ => alert.key,
+    }
+}
+
 fn overview_dto(overview: Overview) -> OverviewDto {
     OverviewDto {
         tick: overview.tick,
@@ -773,7 +874,7 @@ fn overview_dto(overview: Overview) -> OverviewDto {
         last_week_ebit_cents: overview.last_week_ebit_cents,
         quarter_net_income_cents: overview.quarter_net_income_cents,
         quarter_weeks: overview.quarter_weeks,
-        alerts: overview.alerts.into_iter().map(|alert| alert.key).collect(),
+        alerts: overview.alerts.into_iter().map(alert_text).collect(),
         pause: overview.pause,
         next_action_key: overview.next_action_key,
         next_action_reason: overview.next_action_reason,
@@ -1051,6 +1152,13 @@ pub fn products() -> Vec<ProductDto> {
                 name: product.name.clone(),
                 reference_price_cents: product.reference_price_cents,
                 kind: format!("{:?}", product.kind).to_lowercase(),
+                storage_class: if product.kind.is_service() || product.kind.is_financial() {
+                    String::new()
+                } else {
+                    product.storage_class.key().to_owned()
+                },
+                holding_bps_weekly: product.holding_bps_weekly,
+                spoilage_bps_weekly: product.spoilage_bps_weekly,
             })
             .collect(),
         Err(_) => Vec::new(),
@@ -1073,6 +1181,10 @@ pub fn recipes() -> Vec<RecipeDto> {
                 capex_cents: recipe.capex_cents,
                 build_weeks: recipe.build_weeks,
                 weekly_output_lots: recipe.weekly_output_lots,
+                storage_class: recipe
+                    .storage_class
+                    .map(|c| c.key().to_owned())
+                    .unwrap_or_default(),
             })
             .collect(),
         Err(_) => Vec::new(),
@@ -1177,7 +1289,10 @@ pub fn strategies() -> Vec<StrategyDto> {
                 },
                 industry: recipe.industry.clone(),
                 output: recipe.output.clone(),
-                output_name: name(&recipe.output),
+                output_name: match recipe.storage_class {
+                    Some(class) => format!("{} space", class.label().to_lowercase()),
+                    None => name(&recipe.output),
+                },
                 weekly_output_lots: recipe.weekly_output_lots,
                 by_products: recipe
                     .by_products
@@ -1222,6 +1337,10 @@ pub fn strategies() -> Vec<StrategyDto> {
                     0
                 },
                 depletes: recipe.depletes(),
+                storage_class: recipe
+                    .storage_class
+                    .map(|c| c.key().to_owned())
+                    .unwrap_or_default(),
             }
         })
         .collect()
@@ -1630,6 +1749,10 @@ impl SessionHandle {
                         .unwrap_or(region.opening_organisation_bps),
                     room,
                     sectors: cells,
+                    storage: own
+                        .and_then(|o| world.firms.get(o))
+                        .map(|f| storage_cells(world, dataset, f, Some(index as u8)))
+                        .unwrap_or_default(),
                 }
             })
             .collect()
@@ -1665,9 +1788,98 @@ impl SessionHandle {
                             matches!(p.status, cw_sim::state::FacilityStatus::Retooling { .. })
                         })
                     }),
+                    stock_weeks: d
+                        .plants
+                        .first()
+                        .and_then(|h| world.facilities.get(*h))
+                        .map(|p| p.stock_plan.weeks)
+                        .unwrap_or(0),
+                    seasonal_build: d
+                        .plants
+                        .first()
+                        .and_then(|h| world.facilities.get(*h))
+                        .map(|p| p.stock_plan.seasonal)
+                        .unwrap_or(true),
+                    storage: world
+                        .firms
+                        .get(handle)
+                        .map(|f| storage_cells(world, dataset, f, Some(d.region)))
+                        .unwrap_or_default(),
                 }
             })
             .collect()
+    }
+
+    /// A firm's storage in every region where it holds stock or owns space.
+    pub fn storage_cells(&self, firm: u64) -> Vec<StorageCellDto> {
+        let session = self.lock();
+        let world = &session.world;
+        world
+            .firms
+            .get(cw_core::ids::Handle(firm))
+            .map(|f| storage_cells(world, &session.dataset, f, None))
+            .unwrap_or_default()
+    }
+
+    /// Goods a firm holds back from sale, with any open buy order for them.
+    pub fn held_stock(&self, firm: u64) -> Vec<HeldStockDto> {
+        let session = self.lock();
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let Some(entity) = world.firms.get(cw_core::ids::Handle(firm)) else {
+            return Vec::new();
+        };
+        let mut keys: std::collections::BTreeSet<(u16, u8)> =
+            entity.storage.held.keys().copied().collect();
+        keys.extend(entity.storage.orders.iter().map(|o| (o.product, o.region)));
+        keys.into_iter()
+            .map(|(product, region)| {
+                let order = entity
+                    .storage
+                    .orders
+                    .iter()
+                    .find(|o| o.product == product && o.region == region);
+                HeldStockDto {
+                    product: product as u32,
+                    product_name: dataset.products[product as usize].name.clone(),
+                    region: dataset.regions[region as usize].code.clone(),
+                    region_name: dataset.regions[region as usize].name.clone(),
+                    held_lots: entity.storage.held_of(product, region).lots(),
+                    order_lots_left: order.map(|o| o.lots_left).unwrap_or(0),
+                    order_limit_bps: order.map(|o| o.limit_bps).unwrap_or(0),
+                }
+            })
+            .collect()
+    }
+
+    /// A firm's storage use now and its fees, holding costs and spoilage over the last quarter.
+    pub fn storage_summary(&self, firm: u64) -> StorageSummaryDto {
+        let session = self.lock();
+        let world = &session.world;
+        let Some(entity) = world.firms.get(cw_core::ids::Handle(firm)) else {
+            return StorageSummaryDto {
+                used_lots: 0,
+                capacity_lots: 0,
+                outside_lots: 0,
+                fee_cents_13w: 0,
+                holding_cents_13w: 0,
+                spoiled_cents_13w: 0,
+                spoiled_lots_13w: 0,
+                rent_cents_13w: 0,
+            };
+        };
+        let quarter = entity.storage.recent(13);
+        let last = entity.storage.last;
+        StorageSummaryDto {
+            used_lots: last.used_lots,
+            capacity_lots: last.capacity_lots,
+            outside_lots: last.outside_lots,
+            fee_cents_13w: quarter.fee_cents,
+            holding_cents_13w: quarter.holding_cents,
+            spoiled_cents_13w: quarter.spoiled_cents,
+            spoiled_lots_13w: quarter.spoiled_milli / 1_000,
+            rent_cents_13w: quarter.rent_cents,
+        }
     }
 
     /// The board's current objective, if one is open.
@@ -3086,7 +3298,7 @@ mod tests {
             "the player's plant is marked"
         );
         let catalogue = strategies();
-        assert_eq!(catalogue.len(), 60);
+        assert_eq!(catalogue.len(), 64);
         // A refinery lists its by-products for the build screens.
         let refinery = catalogue.iter().find(|s| s.id == "refinery").unwrap();
         assert_eq!(refinery.by_products.len(), 3);

@@ -14,6 +14,8 @@ final class AppStore: ObservableObject {
     @Published var mapPlants: [MapPlantDto] = []
     @Published var mapDivisions: [MapDivisionDto] = []
     @Published var divisions: [DivisionDto] = []
+    /// Goods the selected company holds back from sale, with any open buy orders.
+    @Published var held: [HeldStockDto] = []
     @Published var raidTargets: [RaidOptionDto] = []
     @Published var recentRaids: [RaidRecordDto] = []
     /// The board's quarterly goal for the primary company and its recent results.
@@ -329,12 +331,14 @@ final class AppStore: ObservableObject {
             policyState = await engine.policyState(firm: selectedFirm)
             firmOps = await engine.firmOps(firm: selectedFirm)
             divisions = await engine.divisions(firm: selectedFirm)
+            held = await engine.heldStock(firm: selectedFirm)
             raidTargets = await engine.raidTargets(firm: selectedFirm)
             research = await engine.research(firm: selectedFirm)
         } else {
             research = nil
             firmOps = nil
             divisions = []
+            held = []
             raidTargets = []
             facilities = []
             finance = nil

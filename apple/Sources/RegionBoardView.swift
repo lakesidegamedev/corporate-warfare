@@ -68,6 +68,17 @@ struct RegionBoardView: View {
                     }
                 }
 
+                if !board.storage.isEmpty {
+                    Panel {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Eyebrow(text: "Your storage here")
+                            StorageLines(cells: board.storage)
+                            Text("Stock beyond your plants' yards and your own stores sits in outside storage for a weekly fee per lot.")
+                                .font(.caption).foregroundStyle(Theme.secondary)
+                        }
+                    }
+                }
+
                 Panel {
                     VStack(alignment: .leading, spacing: 10) {
                         Eyebrow(text: "Room to build")

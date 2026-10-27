@@ -345,6 +345,30 @@ pub enum CommandIntent {
         #[serde(default)]
         secondary: Option<u8>,
     },
+    /// A plant's standing stock target: weeks of inputs to keep (zero is the firm's default
+    /// cover, up to 26) and whether to build seasonal inputs ahead in the harvest quarter.
+    SetStockTarget {
+        facility: Handle,
+        weeks: i32,
+        seasonal: bool,
+    },
+    /// Buy a good on the exchange into held stock for later sale: speculation. Fills over the
+    /// following weeks, up to `lots`, at no more than `limit_bps` of the reference price a lot.
+    BuyToStore {
+        firm: Handle,
+        product: u16,
+        region: u8,
+        lots: i64,
+        limit_bps: i32,
+    },
+    /// Release held goods for sale. Zero lots releases all held in the region and cancels its
+    /// open buy order.
+    SellFromStore {
+        firm: Handle,
+        product: u16,
+        region: u8,
+        lots: i64,
+    },
     /// Weekly logistics and operations programme that builds logistics strength.
     SetLogisticsBudget {
         firm: Handle,
@@ -439,6 +463,9 @@ impl CommandIntent {
             CommandIntent::ProposeSettlement { .. } => "propose_settlement",
             CommandIntent::SetSectorFocus { .. } => "set_sector_focus",
             CommandIntent::SetLogisticsBudget { .. } => "set_logistics_budget",
+            CommandIntent::SetStockTarget { .. } => "set_stock_target",
+            CommandIntent::BuyToStore { .. } => "buy_to_store",
+            CommandIntent::SellFromStore { .. } => "sell_from_store",
             CommandIntent::RaidMarket { .. } => "raid_market",
             CommandIntent::FileLobbyRequest { .. } => "file_lobby_request",
             CommandIntent::RespondEvent { .. } => "respond_event",
@@ -689,6 +716,7 @@ fn apply_intent(
                 sales_history: Vec::new(),
                 quality_bps: Default::default(),
                 intercompany_inventory: Default::default(),
+                storage: Default::default(),
             };
             firm.policies.wage_offer = [
                 dataset.baseline_weekly_wage_cents[0]
@@ -2533,6 +2561,78 @@ fn apply_intent(
             crate::economy::operations::set_focus(world, *firm, *primary, *secondary)?;
             Ok(())
         }
+        CommandIntent::SetStockTarget {
+            facility,
+            weeks,
+            seasonal,
+        } => {
+            let owner = world
+                .facilities
+                .get(*facility)
+                .map(|entity| entity.firm)
+                .ok_or(DomainError::InvalidEntity {
+                    handle: facility.0,
+                    kind: EntityKind::Facility,
+                })?;
+            require_control(world, actor, owner)?;
+            if !(0..=crate::economy::storage::MAX_STOCK_WEEKS).contains(weeks) {
+                return Err(DomainError::Arithmetic {
+                    detail: ArithmeticFault::OutOfRange,
+                });
+            }
+            if let Some(stored) = world.facilities.get_mut(*facility) {
+                stored.stock_plan = crate::economy::storage::StockPlan {
+                    weeks: *weeks,
+                    seasonal: *seasonal,
+                };
+            }
+            Ok(())
+        }
+        CommandIntent::BuyToStore {
+            firm,
+            product,
+            region,
+            lots,
+            limit_bps,
+        } => {
+            require_control(world, actor, *firm)?;
+            reference_price(dataset, *product)?;
+            let valid = *lots >= 1
+                && *lots <= crate::economy::storage::MAX_ORDER_LOTS
+                && (5_000..=20_000).contains(limit_bps)
+                && (*region as usize) < world.regions.len()
+                && dataset.products[*product as usize].kind == cw_data::ProductKind::Goods;
+            if !valid {
+                return Err(DomainError::Arithmetic {
+                    detail: ArithmeticFault::OutOfRange,
+                });
+            }
+            if !crate::economy::storage::place_order(
+                world, dataset, *firm, *product, *region, *lots, *limit_bps,
+            ) {
+                return Err(DomainError::WrongPhase {
+                    expected: "a free buy order slot",
+                    actual: "all buy orders in use",
+                });
+            }
+            Ok(())
+        }
+        CommandIntent::SellFromStore {
+            firm,
+            product,
+            region,
+            lots,
+        } => {
+            require_control(world, actor, *firm)?;
+            reference_price(dataset, *product)?;
+            if *lots < 0 || *lots > crate::economy::storage::MAX_ORDER_LOTS * 4 {
+                return Err(DomainError::Arithmetic {
+                    detail: ArithmeticFault::OutOfRange,
+                });
+            }
+            crate::economy::storage::release(world, *firm, *product, *region, *lots);
+            Ok(())
+        }
         CommandIntent::SetLogisticsBudget { firm, amount_cents } => {
             require_control(world, actor, *firm)?;
             if *amount_cents < 0 {
@@ -2735,6 +2835,7 @@ fn start_facility(
         mothballed_since: None,
         equipment_due_cents: 0,
         outage: None,
+        stock_plan: Default::default(),
     }
 }
 

@@ -337,6 +337,11 @@ fn run_facility(
         return MilliLots::ZERO;
     }
     let recipe = &dataset.recipes[facility.recipe as usize];
+    // A storage facility holds goods and makes none; its crew and power are paid elsewhere.
+    if recipe.storage_class.is_some() {
+        update_facility_result(world, handle, MilliLots::ZERO, 10_000, false);
+        return MilliLots::ZERO;
+    }
 
     // Staffing limit: the minimum tier ratio, capped at full capacity. A seasonal farm crew is a
     // full crew for its season.
@@ -651,7 +656,9 @@ fn update_facility_result(
 }
 
 /// Perishable goods lose a share of the unsold stock each week, written off at carrying cost.
-/// Spoilage destroys stock, never cash, and the loss is an operating expense.
+/// Spoilage destroys stock, never cash, and the loss is an operating expense. Stock that sits in
+/// the firm's own dedicated storage in that region spoils at half the rate; the milli-lots lost
+/// are recorded on the firm's storage book.
 pub fn spoil_perishables(world: &mut World, dataset: &Dataset) {
     let rates: Vec<(u16, u32)> = dataset
         .products
@@ -665,11 +672,22 @@ pub fn spoil_perishables(world: &mut World, dataset: &Dataset) {
     }
     let handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
     for handle in handles {
+        // Share of each class's stock that sits in owned, dedicated space, by region.
+        let owned: BTreeMap<(u8, cw_data::StorageClass), (i64, i64)> = match world.firms.get(handle)
+        {
+            Some(firm) => crate::economy::storage::uses(world, dataset, firm)
+                .into_iter()
+                .map(|u| ((u.region, u.class), (u.owned_milli, u.used_milli)))
+                .collect(),
+            None => continue,
+        };
         let Some(firm) = world.firms.get_mut(handle) else {
             continue;
         };
         let mut written_off = 0i64;
+        let mut lost_milli = 0i64;
         for (code, bps) in &rates {
+            let class = dataset.storage_class_of(*code);
             let keys: Vec<u8> = firm
                 .inventory
                 .iter()
@@ -678,11 +696,19 @@ pub fn spoil_perishables(world: &mut World, dataset: &Dataset) {
                 .collect();
             for region in keys {
                 let held = firm.stock(*code, region);
+                let (own, used) = class
+                    .and_then(|c| owned.get(&(region, c)).copied())
+                    .unwrap_or((0, 0));
+                let rate = crate::economy::storage::spoilage_bps(*bps, own, used);
                 // At least one milli-lot spoils while any remains, so small piles do not linger.
-                let lost = MilliLots((held.0 * *bps as i64 / 10_000).max(1)).min(held);
+                let lost = MilliLots((held.0 * rate / 10_000).max(1)).min(held);
                 written_off += firm.issue_stock(*code, region, lost).0;
+                lost_milli += lost.0;
             }
         }
+        firm.storage.last.spoiled_cents += written_off;
+        firm.storage.last.spoiled_milli += lost_milli;
+        firm.storage.spoiled_total_milli += lost_milli;
         if written_off > 0 {
             let _ = firm.book.commit(
                 world.tick,

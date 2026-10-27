@@ -254,6 +254,7 @@ fn add_facility(
         mothballed_since: None,
         equipment_due_cents: 0,
         outage: None,
+        stock_plan: Default::default(),
     };
     let handle = world.facilities.insert(facility);
     world

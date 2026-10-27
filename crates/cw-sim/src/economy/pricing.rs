@@ -56,14 +56,15 @@ pub fn free_stock(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
     let Some(entity) = world.firms.get(firm) else {
         return 0;
     };
-    let held: i64 = entity
+    let held_all: i64 = entity
         .inventory
         .iter()
         .filter(|((p, _), _)| *p == product)
         .map(|(_, lot)| lot.qty.lots())
         .sum();
     let id = &dataset.products[product as usize].id;
-    let weekly_need: i64 = entity
+    // Lots the firm's own plants keep as input cover, each at its own stock target.
+    let cover: i64 = entity
         .facilities
         .iter()
         .filter_map(|handle| world.facilities.get(*handle))
@@ -75,9 +76,18 @@ pub fn free_stock(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
                 .copied()
                 .unwrap_or(0)
                 * plant.blocks as i64
+                * crate::economy::storage::plant_cover_weeks(world, dataset, entity, plant, product)
         })
         .sum();
-    (held - weekly_need * cover_weeks(entity, dataset, product)).max(0)
+    // Goods held back on purpose are stored, not unsold.
+    let held: i64 = entity
+        .storage
+        .held
+        .iter()
+        .filter(|((p, _), _)| *p == product)
+        .map(|(_, qty)| qty.lots())
+        .sum();
+    (held_all - cover - held).max(0)
 }
 
 /// Weeks of sales a firm may hold of a good before it counts as a glut. Perishables spoil each
@@ -87,6 +97,20 @@ pub fn glut_weeks(dataset: &Dataset, product: u16) -> i64 {
         2
     } else {
         4
+    }
+}
+
+/// Extra weeks of unsold stock a harvest tolerates. In the harvest quarter a grower keeps what
+/// the season's glut brings (up to its storage) for the lean quarters instead of cutting price
+/// and output; this is how storage smooths farm seasonality. Perishables get nothing extra.
+pub fn harvest_glut_extra(world: &World, dataset: &Dataset, product: u16) -> i64 {
+    if world.tick.quarter() == crate::economy::storage::HARVEST_QUARTER
+        && dataset.products[product as usize].spoilage_bps_weekly < 200
+        && crate::economy::storage::is_seasonal_good(dataset, product)
+    {
+        6
+    } else {
+        0
     }
 }
 
@@ -126,7 +150,10 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
     let sold = weekly_sold(world, firm, product);
     let stock = free_stock(world, dataset, firm, product);
     let mut target = price;
-    if (sold == 0 && stock > 0) || stock > sold * glut_weeks(dataset, product) {
+    if (sold == 0 && stock > 0)
+        || stock
+            > sold * (glut_weeks(dataset, product) + harvest_glut_extra(world, dataset, product))
+    {
         target = price * 95 / 100;
     } else if stock < sold {
         // Selling out only lifts the price while the corridor is still importing the good: with
@@ -176,6 +203,9 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
             continue;
         }
         let recipe = &dataset.recipes[plant.recipe as usize];
+        if recipe.storage_class.is_some() {
+            continue;
+        }
         if let Some(code) = dataset.product_index.get(&recipe.output) {
             *capacity.entry(*code).or_default() += recipe.weekly_output_lots * plant.blocks as i64;
             plants.push((*handle, *code, plant.target_bps));
@@ -191,7 +221,10 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
             } else {
                 let stock = free_stock(world, dataset, firm, product);
                 (
-                    stock > sold.max(1) * glut_weeks(dataset, product),
+                    stock
+                        > sold.max(1)
+                            * (glut_weeks(dataset, product)
+                                + harvest_glut_extra(world, dataset, product)),
                     sold > 0 && stock * 2 < sold * 3,
                 )
             };
@@ -225,6 +258,12 @@ pub fn plan(world: &mut World, dataset: &Dataset, firm: Handle) {
         .filter_map(|handle| world.facilities.get(*handle))
         .filter(|plant| plant.status == crate::state::FacilityStatus::Operating)
     {
+        if dataset.recipes[plant.recipe as usize]
+            .storage_class
+            .is_some()
+        {
+            continue;
+        }
         let full = dataset.recipes[plant.recipe as usize].weekly_output_lots * plant.blocks as i64;
         weighted += full * plant.target_bps as i64;
         total += full;

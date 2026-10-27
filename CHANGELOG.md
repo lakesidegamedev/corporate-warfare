@@ -13,6 +13,23 @@ heading.
 
 ### Added
 
+- Storage (1.7 preview 2). Goods now take up space. Every plant has a working yard, six weeks of
+  what it uses and makes; anything beyond that sits in the region's outside storage for a weekly
+  fee per lot, so goods never vanish for lack of room but a pile costs money. Four new logistics
+  strategies you can build, with capex, a crew and a build time like any plant: Warehouse, Tank
+  Farm (liquids and gas), Grain Silo (grain and bulk) and Cold Store (food, livestock and
+  pharmaceuticals). Other firms' overflow fees are paid to storage owners with spare room.
+  Perishables spoil at half the rate inside your own cold store or silo. Stock beyond the yard
+  also pays a small holding cost. Each division has a stock target, one slider for weeks of
+  inputs to keep, and grain is bought ahead in the harvest quarter by default, so the harvest
+  glut no longer forces a fire sale. Buy to store lets you (and rivals) buy a good on the
+  exchange into storage and release it later; the Markets good card has a Store section, and
+  the Command Center has Stock target, Buy to store and Sell from store. Rivals run a simple
+  version: they buy cheap, steadying world-price goods in a downturn into space they already
+  have, and sell when prices are high or the cycle booms. The region board and each division
+  show storage used against capacity. Alerts appear only when storage is nearly full, outside
+  fees are a real cost, or spoilage is losing real money. Market snapshots now report storage
+  use, outside fees, holding costs, spoilage and held goods.
 - World commodity price paths, in every scenario. Oil, natural gas, coal, ore, steel, grain,
   fertilizer, chemicals, timber, rare earths and building materials now have an outside-world
   price that moves every week and sets what gateways charge to import and pay to export. The
