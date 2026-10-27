@@ -21,6 +21,9 @@ pub struct StateInfo {
     /// Census 1980 resident population (Texas Oil Patch 1981).
     #[serde(default)]
     pub population_1980: i64,
+    /// July 1995 resident population estimate (Silicon Valley 1995).
+    #[serde(default)]
+    pub population_1995: i64,
     /// Primary then secondary specialized sector type.
     #[serde(default)]
     pub specialization: Vec<String>,
@@ -48,6 +51,9 @@ pub struct Region {
     /// Census 1980 resident population, for display (Texas Oil Patch 1981).
     #[serde(default)]
     pub population_1980: i64,
+    /// July 1995 resident population estimate, for display (Silicon Valley 1995).
+    #[serde(default)]
+    pub population_1995: i64,
     /// Authored condition indices that shape costs and productivity in the state.
     #[serde(default)]
     pub conditions: Conditions,
@@ -56,14 +62,18 @@ pub struct Region {
 impl StateInfo {
     /// Resident population at the census of the scenario's start decade.
     pub fn population(&self) -> i64 {
-        self.population_2000.max(self.population_1980)
+        self.population_2000
+            .max(self.population_1980)
+            .max(self.population_1995)
     }
 }
 
 impl Region {
     /// Resident population at the census of the scenario's start decade.
     pub fn population(&self) -> i64 {
-        self.population_2000.max(self.population_1980)
+        self.population_2000
+            .max(self.population_1980)
+            .max(self.population_1995)
     }
 
     /// The state this region belongs to.

@@ -210,12 +210,15 @@ pub fn init(
     let mut product_family = BTreeMap::new();
     let mut used: Vec<&String> = Vec::new();
     for (product, family) in &file.products {
-        let (Some(code), Some(_)) = (
+        let (Some(code), Some(info)) = (
             dataset.product_index.get(product),
             file.families.get(family),
         ) else {
             continue;
         };
+        if info.listed_only && !scenario.is_some_and(|s| s.families.contains_key(family)) {
+            continue;
+        }
         if !used.contains(&family) {
             used.push(family);
         }
@@ -490,7 +493,7 @@ mod tests {
 
     #[test]
     fn a_scenario_without_data_runs_random() {
-        let (w, _) = setup(3, "silicon-valley-1995", PricePath::Historical);
+        let (w, _) = setup(3, "ruhr-rhine-1991", PricePath::Historical);
         assert_eq!(w.world_prices.mode, PriceMode::Random);
         assert!(
             w.world_prices
