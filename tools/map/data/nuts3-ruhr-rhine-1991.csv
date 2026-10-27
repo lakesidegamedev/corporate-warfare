@@ -1,0 +1,493 @@
+nuts_id,name,country
+BE100,Arr. de Bruxelles-Capitale/Arr. van Brussel-Hoofdstad,BE
+BE211,Arr. Antwerpen,BE
+BE212,Arr. Mechelen,BE
+BE213,Arr. Turnhout,BE
+BE221,Arr. Hasselt,BE
+BE222,Arr. Maaseik,BE
+BE223,Arr. Tongeren,BE
+BE231,Arr. Aalst,BE
+BE232,Arr. Dendermonde,BE
+BE233,Arr. Eeklo,BE
+BE234,Arr. Gent,BE
+BE235,Arr. Oudenaarde,BE
+BE236,Arr. Sint-Niklaas,BE
+BE241,Arr. Halle-Vilvoorde,BE
+BE242,Arr. Leuven,BE
+BE251,Arr. Brugge,BE
+BE252,Arr. Diksmuide,BE
+BE253,Arr. Ieper,BE
+BE254,Arr. Kortrijk,BE
+BE255,Arr. Oostende,BE
+BE256,Arr. Roeselare,BE
+BE257,Arr. Tielt,BE
+BE258,Arr. Veurne,BE
+BE310,Arr. Nivelles,BE
+BE321,Arr. Ath,BE
+BE322,Arr. Charleroi,BE
+BE323,Arr. Mons,BE
+BE324,Arr. Mouscron,BE
+BE325,Arr. Soignies,BE
+BE326,Arr. Thuin,BE
+BE327,Arr. Tournai,BE
+BE331,Arr. Huy,BE
+BE332,Arr. Liège,BE
+BE334,Arr. Waremme,BE
+BE335,Arr. Verviers - communes francophones,BE
+BE336,Bezirk Verviers - Deutschsprachige Gemeinschaft,BE
+BE341,Arr. Arlon,BE
+BE342,Arr. Bastogne,BE
+BE343,Arr. Marche-en-Famenne,BE
+BE344,Arr. Neufchâteau,BE
+BE345,Arr. Virton,BE
+BE351,Arr. Dinant,BE
+BE352,Arr. Namur,BE
+BE353,Arr. Philippeville,BE
+DE111,"Stuttgart, Stadtkreis",DE
+DE112,Böblingen,DE
+DE113,Esslingen,DE
+DE114,Göppingen,DE
+DE115,Ludwigsburg,DE
+DE116,Rems-Murr-Kreis,DE
+DE117,"Heilbronn, Stadtkreis",DE
+DE118,"Heilbronn, Landkreis",DE
+DE119,Hohenlohekreis,DE
+DE11A,Schwäbisch Hall,DE
+DE11B,Main-Tauber-Kreis,DE
+DE11C,Heidenheim,DE
+DE11D,Ostalbkreis,DE
+DE121,"Baden-Baden, Stadtkreis",DE
+DE122,"Karlsruhe, Stadtkreis",DE
+DE123,"Karlsruhe, Landkreis",DE
+DE124,Rastatt,DE
+DE125,"Heidelberg, Stadtkreis",DE
+DE126,"Mannheim, Stadtkreis",DE
+DE127,Neckar-Odenwald-Kreis,DE
+DE128,Rhein-Neckar-Kreis,DE
+DE129,"Pforzheim, Stadtkreis",DE
+DE12A,Calw,DE
+DE12B,Enzkreis,DE
+DE12C,Freudenstadt,DE
+DE131,"Freiburg im Breisgau, Stadtkreis",DE
+DE132,Breisgau-Hochschwarzwald,DE
+DE133,Emmendingen,DE
+DE134,Ortenaukreis,DE
+DE135,Rottweil,DE
+DE136,Schwarzwald-Baar-Kreis,DE
+DE137,Tuttlingen,DE
+DE138,Konstanz,DE
+DE139,Lörrach,DE
+DE13A,Waldshut,DE
+DE141,Reutlingen,DE
+DE142,"Tübingen, Landkreis",DE
+DE143,Zollernalbkreis,DE
+DE144,"Ulm, Stadtkreis",DE
+DE145,Alb-Donau-Kreis,DE
+DE146,Biberach,DE
+DE147,Bodenseekreis,DE
+DE148,Ravensburg,DE
+DE149,Sigmaringen,DE
+DE211,"Ingolstadt, Kreisfreie Stadt",DE
+DE212,"München, Kreisfreie Stadt",DE
+DE213,"Rosenheim, Kreisfreie Stadt",DE
+DE214,Altötting,DE
+DE215,Berchtesgadener Land,DE
+DE216,Bad Tölz-Wolfratshausen,DE
+DE217,Dachau,DE
+DE218,Ebersberg,DE
+DE219,Eichstätt,DE
+DE21A,Erding,DE
+DE21B,Freising,DE
+DE21C,Fürstenfeldbruck,DE
+DE21D,Garmisch-Partenkirchen,DE
+DE21E,Landsberg am Lech,DE
+DE21F,Miesbach,DE
+DE21G,Mühldorf a. Inn,DE
+DE21H,"München, Landkreis",DE
+DE21I,Neuburg-Schrobenhausen,DE
+DE21J,Pfaffenhofen a. d. Ilm,DE
+DE21K,"Rosenheim, Landkreis",DE
+DE21L,Starnberg,DE
+DE21M,Traunstein,DE
+DE21N,Weilheim-Schongau,DE
+DE221,"Landshut, Kreisfreie Stadt",DE
+DE222,"Passau, Kreisfreie Stadt",DE
+DE223,"Straubing, Kreisfreie Stadt",DE
+DE224,Deggendorf,DE
+DE225,Freyung-Grafenau,DE
+DE226,Kelheim,DE
+DE227,"Landshut, Landkreis",DE
+DE228,"Passau, Landkreis",DE
+DE229,Regen,DE
+DE22A,Rottal-Inn,DE
+DE22B,Straubing-Bogen,DE
+DE22C,Dingolfing-Landau,DE
+DE231,"Amberg, Kreisfreie Stadt",DE
+DE232,"Regensburg, Kreisfreie Stadt",DE
+DE233,"Weiden i. d. Opf, Kreisfreie Stadt",DE
+DE234,Amberg-Sulzbach,DE
+DE235,Cham,DE
+DE236,Neumarkt i. d. OPf.,DE
+DE237,Neustadt a. d. Waldnaab,DE
+DE238,"Regensburg, Landkreis",DE
+DE239,Schwandorf,DE
+DE23A,Tirschenreuth,DE
+DE241,"Bamberg, Kreisfreie Stadt",DE
+DE242,"Bayreuth, Kreisfreie Stadt",DE
+DE243,"Coburg, Kreisfreie Stadt",DE
+DE244,"Hof, Kreisfreie Stadt",DE
+DE245,"Bamberg, Landkreis",DE
+DE246,"Bayreuth, Landkreis",DE
+DE247,"Coburg, Landkreis",DE
+DE248,Forchheim,DE
+DE249,"Hof, Landkreis",DE
+DE24A,Kronach,DE
+DE24B,Kulmbach,DE
+DE24C,Lichtenfels,DE
+DE24D,Wunsiedel i. Fichtelgebirge,DE
+DE251,"Ansbach, Kreisfreie Stadt",DE
+DE252,"Erlangen, Kreisfreie Stadt",DE
+DE253,"Fürth, Kreisfreie Stadt",DE
+DE254,"Nürnberg, Kreisfreie Stadt",DE
+DE255,"Schwabach, Kreisfreie Stadt",DE
+DE256,"Ansbach, Landkreis",DE
+DE257,Erlangen-Höchstadt,DE
+DE258,"Fürth, Landkreis",DE
+DE259,Nürnberger Land,DE
+DE25A,Neustadt a. d. Aisch-Bad Windsheim,DE
+DE25B,Roth,DE
+DE25C,Weißenburg-Gunzenhausen,DE
+DE261,"Aschaffenburg, Kreisfreie Stadt",DE
+DE262,"Schweinfurt, Kreisfreie Stadt",DE
+DE263,"Würzburg, Kreisfreie Stadt",DE
+DE264,"Aschaffenburg, Landkreis",DE
+DE265,Bad Kissingen,DE
+DE266,Rhön-Grabfeld,DE
+DE267,Haßberge,DE
+DE268,Kitzingen,DE
+DE269,Miltenberg,DE
+DE26A,Main-Spessart,DE
+DE26B,"Schweinfurt, Landkreis",DE
+DE26C,"Würzburg, Landkreis",DE
+DE271,"Augsburg, Kreisfreie Stadt",DE
+DE272,"Kaufbeuren, Kreisfreie Stadt",DE
+DE273,"Kempten (Allgäu), Kreisfreie Stadt",DE
+DE274,"Memmingen, Kreisfreie Stadt",DE
+DE275,Aichach-Friedberg,DE
+DE276,"Augsburg, Landkreis",DE
+DE277,Dillingen a.d. Donau,DE
+DE278,Günzburg,DE
+DE279,Neu-Ulm,DE
+DE27A,Lindau (Bodensee),DE
+DE27B,Ostallgäu,DE
+DE27C,Unterallgäu,DE
+DE27D,Donau-Ries,DE
+DE27E,Oberallgäu,DE
+DE300,Berlin,DE
+DE401,"Brandenburg an der Havel, Kreisfreie Stadt",DE
+DE402,"Cottbus, Kreisfreie Stadt",DE
+DE403,"Frankfurt (Oder), Kreisfreie Stadt",DE
+DE404,"Potsdam, Kreisfreie Stadt",DE
+DE405,Barnim,DE
+DE406,Dahme-Spreewald,DE
+DE407,Elbe-Elster,DE
+DE408,Havelland,DE
+DE409,Märkisch-Oderland,DE
+DE40A,Oberhavel,DE
+DE40B,Oberspreewald-Lausitz,DE
+DE40C,Oder-Spree,DE
+DE40D,Ostprignitz-Ruppin,DE
+DE40E,Potsdam-Mittelmark,DE
+DE40F,Prignitz,DE
+DE40G,Spree-Neiße,DE
+DE40H,Teltow-Fläming,DE
+DE40I,Uckermark,DE
+DE501,"Bremen, Kreisfreie Stadt",DE
+DE502,"Bremerhaven, Kreisfreie Stadt",DE
+DE600,Hamburg,DE
+DE711,"Darmstadt, Kreisfreie Stadt",DE
+DE712,"Frankfurt am Main, Kreisfreie Stadt",DE
+DE713,"Offenbach am Main, Kreisfreie Stadt",DE
+DE714,"Wiesbaden, Kreisfreie Stadt",DE
+DE715,Bergstraße,DE
+DE716,Darmstadt-Dieburg,DE
+DE717,Groß-Gerau,DE
+DE718,Hochtaunuskreis,DE
+DE719,Main-Kinzig-Kreis,DE
+DE71A,Main-Taunus-Kreis,DE
+DE71B,Odenwaldkreis,DE
+DE71C,"Offenbach, Landkreis",DE
+DE71D,Rheingau-Taunus-Kreis,DE
+DE71E,Wetteraukreis,DE
+DE721,"Gießen, Landkreis",DE
+DE722,Lahn-Dill-Kreis,DE
+DE723,Limburg-Weilburg,DE
+DE724,Marburg-Biedenkopf,DE
+DE725,Vogelsbergkreis,DE
+DE731,"Kassel, Kreisfreie Stadt",DE
+DE732,Fulda,DE
+DE733,Hersfeld-Rotenburg,DE
+DE734,"Kassel, Landkreis",DE
+DE735,Schwalm-Eder-Kreis,DE
+DE736,Waldeck-Frankenberg,DE
+DE737,Werra-Meißner-Kreis,DE
+DE803,"Rostock, Kreisfreie Stadt",DE
+DE804,"Schwerin, Kreisfreie Stadt",DE
+DE80J,Mecklenburgische Seenplatte,DE
+DE80K,Landkreis Rostock,DE
+DE80L,Vorpommern-Rügen,DE
+DE80M,Nordwestmecklenburg,DE
+DE80N,Vorpommern-Greifswald,DE
+DE80O,Ludwigslust-Parchim,DE
+DE911,"Braunschweig, Kreisfreie Stadt",DE
+DE912,"Salzgitter, Kreisfreie Stadt",DE
+DE913,"Wolfsburg, Kreisfreie Stadt",DE
+DE914,Gifhorn,DE
+DE916,Goslar,DE
+DE917,Helmstedt,DE
+DE918,Northeim,DE
+DE91A,Peine,DE
+DE91B,Wolfenbüttel,DE
+DE91C,Göttingen,DE
+DE922,Diepholz,DE
+DE923,Hameln-Pyrmont,DE
+DE925,Hildesheim,DE
+DE926,Holzminden,DE
+DE927,Nienburg (Weser),DE
+DE928,Schaumburg,DE
+DE929,Region Hannover,DE
+DE931,Celle,DE
+DE932,Cuxhaven,DE
+DE933,Harburg,DE
+DE934,Lüchow-Dannenberg,DE
+DE935,"Lüneburg, Landkreis",DE
+DE936,Osterholz,DE
+DE937,Rotenburg (Wümme),DE
+DE938,Heidekreis,DE
+DE939,Stade,DE
+DE93A,Uelzen,DE
+DE93B,Verden,DE
+DE941,"Delmenhorst, Kreisfreie Stadt",DE
+DE942,"Emden, Kreisfreie Stadt",DE
+DE943,"Oldenburg (Oldenburg), Kreisfreie Stadt",DE
+DE944,"Osnabrück, Kreisfreie Stadt",DE
+DE945,"Wilhelmshaven, Kreisfreie Stadt",DE
+DE946,Ammerland,DE
+DE947,Aurich,DE
+DE948,Cloppenburg,DE
+DE949,Emsland,DE
+DE94A,Friesland (DE),DE
+DE94B,Grafschaft Bentheim,DE
+DE94C,Leer,DE
+DE94D,"Oldenburg, Landkreis",DE
+DE94E,"Osnabrück, Landkreis",DE
+DE94F,Vechta,DE
+DE94G,Wesermarsch,DE
+DE94H,Wittmund,DE
+DEA11,"Düsseldorf, Kreisfreie Stadt",DE
+DEA12,"Duisburg, Kreisfreie Stadt",DE
+DEA13,"Essen, Kreisfreie Stadt",DE
+DEA14,"Krefeld, Kreisfreie Stadt",DE
+DEA15,"Mönchengladbach, Kreisfreie Stadt",DE
+DEA16,"Mülheim an der Ruhr, Kreisfreie Stadt",DE
+DEA17,"Oberhausen, Kreisfreie Stadt",DE
+DEA18,"Remscheid, Kreisfreie Stadt",DE
+DEA19,"Solingen, Kreisfreie Stadt",DE
+DEA1A,"Wuppertal, Kreisfreie Stadt",DE
+DEA1B,Kleve,DE
+DEA1C,Mettmann,DE
+DEA1D,Rhein-Kreis Neuss,DE
+DEA1E,Viersen,DE
+DEA1F,Wesel,DE
+DEA22,"Bonn, Kreisfreie Stadt",DE
+DEA23,"Köln, Kreisfreie Stadt",DE
+DEA24,"Leverkusen, Kreisfreie Stadt",DE
+DEA26,Düren,DE
+DEA27,Rhein-Erft-Kreis,DE
+DEA28,Euskirchen,DE
+DEA29,Heinsberg,DE
+DEA2A,Oberbergischer Kreis,DE
+DEA2B,Rheinisch-Bergischer Kreis,DE
+DEA2C,Rhein-Sieg-Kreis,DE
+DEA2D,Städteregion Aachen,DE
+DEA31,"Bottrop, Kreisfreie Stadt",DE
+DEA32,"Gelsenkirchen, Kreisfreie Stadt",DE
+DEA33,"Münster, Kreisfreie Stadt",DE
+DEA34,Borken,DE
+DEA35,Coesfeld,DE
+DEA36,Recklinghausen,DE
+DEA37,Steinfurt,DE
+DEA38,Warendorf,DE
+DEA41,"Bielefeld, Kreisfreie Stadt",DE
+DEA42,Gütersloh,DE
+DEA43,Herford,DE
+DEA44,Höxter,DE
+DEA45,Lippe,DE
+DEA46,Minden-Lübbecke,DE
+DEA47,Paderborn,DE
+DEA51,"Bochum, Kreisfreie Stadt",DE
+DEA52,"Dortmund, Kreisfreie Stadt",DE
+DEA53,"Hagen, Kreisfreie Stadt",DE
+DEA54,"Hamm, Kreisfreie Stadt",DE
+DEA55,"Herne, Kreisfreie Stadt",DE
+DEA56,Ennepe-Ruhr-Kreis,DE
+DEA57,Hochsauerlandkreis,DE
+DEA58,Märkischer Kreis,DE
+DEA59,Olpe,DE
+DEA5A,Siegen-Wittgenstein,DE
+DEA5B,Soest,DE
+DEA5C,Unna,DE
+DEB11,"Koblenz, Kreisfreie Stadt",DE
+DEB12,Ahrweiler,DE
+DEB13,Altenkirchen (Westerwald),DE
+DEB14,Bad Kreuznach,DE
+DEB15,Birkenfeld,DE
+DEB17,Mayen-Koblenz,DE
+DEB18,Neuwied,DE
+DEB1A,Rhein-Lahn-Kreis,DE
+DEB1B,Westerwaldkreis,DE
+DEB1C,Cochem-Zell,DE
+DEB1D,Rhein-Hunsrück-Kreis,DE
+DEB21,"Trier, Kreisfreie Stadt",DE
+DEB22,Bernkastel-Wittlich,DE
+DEB23,Eifelkreis Bitburg-Prüm,DE
+DEB24,Vulkaneifel,DE
+DEB25,Trier-Saarburg,DE
+DEB31,"Frankenthal (Pfalz), Kreisfreie Stadt",DE
+DEB32,"Kaiserslautern, Kreisfreie Stadt",DE
+DEB33,"Landau in der Pfalz, Kreisfreie Stadt",DE
+DEB34,"Ludwigshafen am Rhein, Kreisfreie Stadt",DE
+DEB35,"Mainz, Kreisfreie Stadt",DE
+DEB36,"Neustadt an der Weinstraße, Kreisfreie Stadt",DE
+DEB37,"Pirmasens, Kreisfreie Stadt",DE
+DEB38,"Speyer, Kreisfreie Stadt",DE
+DEB39,"Worms, Kreisfreie Stadt",DE
+DEB3A,"Zweibrücken, Kreisfreie Stadt",DE
+DEB3B,Alzey-Worms,DE
+DEB3C,Bad Dürkheim,DE
+DEB3D,Donnersbergkreis,DE
+DEB3E,Germersheim,DE
+DEB3F,"Kaiserslautern, Landkreis",DE
+DEB3G,Kusel,DE
+DEB3H,Südliche Weinstraße,DE
+DEB3I,Rhein-Pfalz-Kreis,DE
+DEB3J,Mainz-Bingen,DE
+DEB3K,Südwestpfalz,DE
+DEC01,Regionalverband Saarbrücken,DE
+DEC02,Merzig-Wadern,DE
+DEC03,Neunkirchen,DE
+DEC04,Saarlouis,DE
+DEC05,Saarpfalz-Kreis,DE
+DEC06,St. Wendel,DE
+DED21,"Dresden, Kreisfreie Stadt",DE
+DED2C,Bautzen,DE
+DED2D,Görlitz,DE
+DED2E,Meißen,DE
+DED2F,Sächsische Schweiz-Osterzgebirge,DE
+DED41,"Chemnitz, Kreisfreie Stadt",DE
+DED42,Erzgebirgskreis,DE
+DED43,Mittelsachsen,DE
+DED44,Vogtlandkreis,DE
+DED45,Zwickau,DE
+DED51,"Leipzig, Kreisfreie Stadt",DE
+DED52,Leipzig,DE
+DED53,Nordsachsen,DE
+DEE01,"Dessau-Roßlau, Kreisfreie Stadt",DE
+DEE02,"Halle (Saale), Kreisfreie Stadt",DE
+DEE03,"Magdeburg, Kreisfreie Stadt",DE
+DEE04,Altmarkkreis Salzwedel,DE
+DEE05,Anhalt-Bitterfeld,DE
+DEE06,Jerichower Land,DE
+DEE07,Börde,DE
+DEE08,Burgenlandkreis,DE
+DEE09,Harz,DE
+DEE0A,Mansfeld-Südharz,DE
+DEE0B,Saalekreis,DE
+DEE0C,Salzlandkreis,DE
+DEE0D,Stendal,DE
+DEE0E,Wittenberg,DE
+DEF01,"Flensburg, Kreisfreie Stadt",DE
+DEF02,"Kiel, Kreisfreie Stadt",DE
+DEF03,"Lübeck, Kreisfreie Stadt",DE
+DEF04,"Neumünster, Kreisfreie Stadt",DE
+DEF05,Dithmarschen,DE
+DEF06,Herzogtum Lauenburg,DE
+DEF07,Nordfriesland,DE
+DEF08,Ostholstein,DE
+DEF09,Pinneberg,DE
+DEF0A,Plön,DE
+DEF0B,Rendsburg-Eckernförde,DE
+DEF0C,Schleswig-Flensburg,DE
+DEF0D,Segeberg,DE
+DEF0E,Steinburg,DE
+DEF0F,Stormarn,DE
+DEG01,"Erfurt, Kreisfreie Stadt",DE
+DEG02,"Gera, Kreisfreie Stadt",DE
+DEG03,"Jena, Kreisfreie Stadt",DE
+DEG04,"Suhl, Kreisfreie Stadt",DE
+DEG05,"Weimar, Kreisfreie Stadt",DE
+DEG06,Eichsfeld,DE
+DEG07,Nordhausen,DE
+DEG09,Unstrut-Hainich-Kreis,DE
+DEG0A,Kyffhäuserkreis,DE
+DEG0B,Schmalkalden-Meiningen,DE
+DEG0C,Gotha,DE
+DEG0D,Sömmerda,DE
+DEG0E,Hildburghausen,DE
+DEG0F,Ilm-Kreis,DE
+DEG0G,Weimarer Land,DE
+DEG0H,Sonneberg,DE
+DEG0I,Saalfeld-Rudolstadt,DE
+DEG0J,Saale-Holzland-Kreis,DE
+DEG0K,Saale-Orla-Kreis,DE
+DEG0L,Greiz,DE
+DEG0M,Altenburger Land,DE
+DEG0N,"Eisenach, Kreisfreie Stadt",DE
+DEG0P,Wartburgkreis,DE
+FRF11,Bas-Rhin,FR
+FRF12,Haut-Rhin,FR
+FRF31,Meurthe-et-Moselle,FR
+FRF32,Meuse,FR
+FRF33,Moselle,FR
+FRF34,Vosges,FR
+LU000,Luxembourg,LU
+NL111,Oost-Groningen,NL
+NL112,Delfzijl en omgeving,NL
+NL113,Overig Groningen,NL
+NL124,Noord-Friesland,NL
+NL125,Zuidwest-Friesland,NL
+NL126,Zuidoost-Friesland,NL
+NL131,Noord-Drenthe,NL
+NL132,Zuidoost-Drenthe,NL
+NL133,Zuidwest-Drenthe,NL
+NL211,Noord-Overijssel,NL
+NL212,Zuidwest-Overijssel,NL
+NL213,Twente,NL
+NL221,Veluwe,NL
+NL224,Zuidwest-Gelderland,NL
+NL225,Achterhoek,NL
+NL226,Arnhem/Nijmegen,NL
+NL230,Flevoland,NL
+NL310,Utrecht,NL
+NL321,Kop van Noord-Holland,NL
+NL323,IJmond,NL
+NL324,Agglomeratie Haarlem,NL
+NL325,Zaanstreek,NL
+NL327,Het Gooi en Vechtstreek,NL
+NL328,Alkmaar en omgeving,NL
+NL329,Groot-Amsterdam,NL
+NL332,Agglomeratie's-Gravenhage,NL
+NL333,Delft en Westland,NL
+NL337,Agglomeratie Leiden en Bollenstreek,NL
+NL33A,Zuidoost-Zuid-Holland,NL
+NL33B,Oost-Zuid-Holland,NL
+NL33C,Groot-Rijnmond,NL
+NL341,Zeeuwsch-Vlaanderen,NL
+NL342,Overig Zeeland,NL
+NL411,West-Noord-Brabant,NL
+NL412,Midden-Noord-Brabant,NL
+NL413,Noordoost-Noord-Brabant,NL
+NL414,Zuidoost-Noord-Brabant,NL
+NL421,Noord-Limburg,NL
+NL422,Midden-Limburg,NL
+NL423,Zuid-Limburg,NL

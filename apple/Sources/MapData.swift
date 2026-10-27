@@ -16,6 +16,9 @@ struct WorldMapFile: Decodable {
         let name: String
         let play: Bool
         let rings: [[Int]]
+        /// The scenario a state was added for, when its code could match another place
+        /// (DE is also Delaware); none means the default scenario's.
+        let scenario: String?
     }
 
     /// The outline of a scenario's whole region, lit up on the main menu globe.
@@ -228,7 +231,14 @@ final class WorldMap {
             file.scenarios?.first { $0.id == id }.map { Set($0.states) }
         }
         let defaultScenario = file.scenarios?.first?.id
-        func isPlay(_ area: WorldMapFile.Area) -> Bool { scenarioStates?.contains(area.code) ?? area.play }
+        func isPlay(_ area: WorldMapFile.Area) -> Bool {
+            guard let states = scenarioStates else { return area.play }
+            // A tagged state counts only in its own scenario; an untagged one is the default's.
+            return states.contains(area.code) && (area.scenario.map { $0 == scenario } ?? area.play)
+        }
+        func showsState(_ area: WorldMapFile.Area) -> Bool {
+            scenarioStates == nil || area.scenario == nil || area.scenario == scenario
+        }
         // A layer tagged for another scenario is hidden; an untagged one belongs to the default.
         func owns(_ tag: String?) -> Bool { scenarioStates == nil || (tag ?? defaultScenario) == scenario }
         countries = file.countries.map { Feature(code: $0.code, name: $0.name, rings: $0.rings.map(GeoRing.init)) }
@@ -237,8 +247,8 @@ final class WorldMap {
         func feature(_ area: WorldMapFile.Area) -> Feature {
             Feature(code: area.code, name: area.name, rings: area.rings.map(GeoRing.init))
         }
-        playStates = file.states.filter { isPlay($0) }.map(feature)
-        contextStates = file.states.filter { !isPlay($0) }.map(feature)
+        playStates = file.states.filter { showsState($0) && isPlay($0) }.map(feature)
+        contextStates = file.states.filter { showsState($0) && !isPlay($0) }.map(feature)
         regions = file.regions.filter { scenarioStates?.contains($0.state) ?? true }.map {
             RegionFeature(code: $0.code, state: $0.state, name: $0.name, rings: $0.rings.map(GeoRing.init))
         }

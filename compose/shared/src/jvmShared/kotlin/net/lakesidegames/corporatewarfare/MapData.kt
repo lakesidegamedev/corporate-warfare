@@ -40,7 +40,14 @@ data class WorldMapFile(
     val scenarios: List<ScenarioStates> = emptyList(),
 ) {
     @Serializable data class Country(val code: String, val name: String, val rings: List<List<Int>>)
-    @Serializable data class Area(val code: String, val name: String, val play: Boolean, val rings: List<List<Int>>)
+    /** [scenario] tags a state added for one scenario, whose code may match another place (DE is also Delaware). */
+    @Serializable data class Area(
+        val code: String,
+        val name: String,
+        val play: Boolean,
+        val rings: List<List<Int>>,
+        val scenario: String? = null,
+    )
     @Serializable data class RegionArea(val code: String, val state: String, val name: String, val rings: List<List<Int>>)
     @Serializable data class Rings(val rings: List<List<Int>>)
     @Serializable data class County(val state: String = "", val rings: List<List<Int>>)
@@ -103,13 +110,18 @@ class WorldMap private constructor(val file: WorldMapFile, val scenarioId: Strin
     private val scenarioStates: Set<String>? =
         scenarioId?.let { id -> file.scenarios.firstOrNull { it.id == id }?.states?.toSet() }
     private val defaultScenario: String? = file.scenarios.firstOrNull()?.id
-    private fun isPlay(area: WorldMapFile.Area) = scenarioStates?.contains(area.code) ?: area.play
+    private fun isPlay(area: WorldMapFile.Area): Boolean {
+        val states = scenarioStates ?: return area.play
+        // A tagged state counts only in its own scenario; an untagged one is the default's.
+        return states.contains(area.code) && if (area.scenario != null) area.scenario == scenarioId else area.play
+    }
+    private fun showsState(area: WorldMapFile.Area) = scenarioStates == null || area.scenario == null || area.scenario == scenarioId
     /** A layer tagged for another scenario is hidden; an untagged one belongs to the default. */
     private fun owns(tag: String?) = scenarioStates == null || (tag ?: defaultScenario) == scenarioId
 
     val countries = file.countries.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
-    val playStates = file.states.filter { isPlay(it) }.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
-    val contextStates = file.states.filter { !isPlay(it) }.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
+    val playStates = file.states.filter { showsState(it) && isPlay(it) }.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
+    val contextStates = file.states.filter { showsState(it) && !isPlay(it) }.map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
     val regions = file.regions.filter { scenarioStates?.contains(it.state) ?: true }
         .map { Feature(it.code, it.name, it.rings.map(::GeoRing)) }
     val provinces = file.provinces.map(::GeoRing)
