@@ -1,6 +1,6 @@
 # Current checkpoint
 
-Date: 2026-10-27. Released: **1.6.0**, business cycle, central bank, government and laws, globe menu, scenarios, difficulty, Command Center, research, economy card, desktop layout, sliders, load game, tutorial and in-game updates. Before that **1.5.0**, whole-world globe map, scenario cards, Stats screen with five-year history, aggressive rivals, new logo and icons, speed control. Before that **1.4.0**, stock exchange and commodity board, valuation fix, and
+Date: 2026-10-27. Released: **1.6.1** (Android and desktop fixes: Office crash, map gap). Before that **1.6.0**, business cycle, central bank, government and laws, globe menu, scenarios, difficulty, Command Center, research, economy card, desktop layout, sliders, load game, tutorial and in-game updates. Before that **1.5.0**, whole-world globe map, scenario cards, Stats screen with five-year history, aggressive rivals, new logo and icons, speed control. Before that **1.4.0**, stock exchange and commodity board, valuation fix, and
 the first Android, Windows, Linux and Mac (Catalyst) builds (PRs #88, #89, #90). Kanban: 254808.
 Saves from 1.3.1 load.
 
