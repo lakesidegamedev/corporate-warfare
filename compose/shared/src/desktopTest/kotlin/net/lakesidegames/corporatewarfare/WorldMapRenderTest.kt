@@ -76,4 +76,22 @@ class WorldMapRenderTest {
             assertNotNull(texas.anchor(region.code), "${region.code} has a hub")
         }
     }
+
+    @Test
+    fun californiaHasItsOwnRegionsAndFraming() {
+        val lakes = assertNotNull(WorldMap.forScenario("great-lakes-2000"))
+        val texas = assertNotNull(WorldMap.forScenario("texas-1981"))
+        val california = assertNotNull(WorldMap.forScenario("silicon-valley-1995"), "the California map loads")
+        assertEquals(31, lakes.regions.size, "Great Lakes layers are unchanged")
+        assertEquals(22, texas.regions.size, "Texas layers are unchanged")
+        assertEquals(16, california.regions.size)
+        assertEquals(listOf("CA"), california.playStates.map { it.code })
+        assertEquals("silicon-valley-1995", WorldMap.forRegions(listOf("CA-SJC", "CA-LAX"))?.scenarioId)
+        val size = androidx.compose.ui.geometry.Size(1200f, 800f)
+        val camera = MapCamera.scenario(size, california)
+        assertTrue(camera.lon < -115 && camera.lon > -123 && camera.lat in 33.0..40.0, "framed on ${camera.lon}, ${camera.lat}")
+        for (region in california.regions) {
+            assertNotNull(california.anchor(region.code), "${region.code} has a hub")
+        }
+    }
 }

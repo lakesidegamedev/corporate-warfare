@@ -3,9 +3,9 @@
 #
 # Usage: tools/map/build_scenario_map.sh <source-dir> <scenario-id>
 #
-# Supported scenario: texas-1981 (Texas, Oklahoma, Louisiana). <source-dir> holds the unzipped
+# Supported scenarios: texas-1981 (Texas, Oklahoma, Louisiana) and silicon-valley-1995 (California). <source-dir> holds the unzipped
 # downloads named in build_map.sh. The scenario's regions are whole counties dissolved by
-# tools/map/data/county-regions-texas-1981.csv, which tools/map/build_regions.py writes; run
+# tools/map/data/county-regions-<scenario-id>.csv, which tools/map/build_regions.py writes; run
 # that first when regions change. Layers land in <source-dir>/out-<scenario-id> and
 # compact_map.py merges them into the shipped world map, replacing any earlier copy of the
 # scenario so the step can be repeated. Great Lakes layers are not touched.
@@ -24,6 +24,14 @@ case "$SCENARIO" in
     NEAR='this.bounds[0] < -88.6 && this.bounds[2] > -107.2 && this.bounds[1] < 37.2 && this.bounds[3] > 25.7'
     ASSIGNMENT="$ROOT/tools/map/data/county-regions-texas-1981.csv"
     REGIONS_JSON="$ROOT/content/scenarios/texas-1981/regions.json"
+    ;;
+  silicon-valley-1995)
+    PLAY='["CA"]'
+    FIPS='["06"]'
+    B='bbox=-124.6,32.4,-113.9,42.1'
+    NEAR='this.bounds[0] < -113.9 && this.bounds[2] > -124.6 && this.bounds[1] < 42.1 && this.bounds[3] > 32.4'
+    ASSIGNMENT="$ROOT/tools/map/data/county-regions-silicon-valley-1995.csv"
+    REGIONS_JSON="$ROOT/content/scenarios/silicon-valley-1995/regions.json"
     ;;
   *)
     echo "no map recipe for scenario $SCENARIO" >&2
