@@ -35,6 +35,15 @@ import uniffi.cw_ffi.SessionHandle
 import uniffi.cw_ffi.importSave
 import uniffi.cw_ffi.products
 
+/** What a form's pickers can choose from, loaded for one company when a form opens. */
+data class Pickers(
+    val loans: List<uniffi.cw_ffi.LoanDto> = emptyList(),
+    val contracts: List<uniffi.cw_ffi.ContractDto> = emptyList(),
+    val policies: List<uniffi.cw_ffi.InsuranceDto> = emptyList(),
+    val votes: List<uniffi.cw_ffi.BoardVoteDto> = emptyList(),
+    val deals: List<uniffi.cw_ffi.DealDto> = emptyList(),
+)
+
 /** One market row for the selected region: a product and its local market, if traded. */
 data class MarketRow(val product: ProductDto, val market: MarketDto?)
 
@@ -73,6 +82,13 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var commodities by mutableStateOf<List<CommodityDto>>(emptyList()); private set
     var mapDivisions by mutableStateOf<List<MapDivisionDto>>(emptyList()); private set
     val strategyCatalogue: List<StrategyDto> by lazy { strategies() }
+    /** Every player action with its form, in Command Center order. */
+    val actions: List<uniffi.cw_ffi.ActionDto> by lazy { uniffi.cw_ffi.actionCatalogue() }
+    val productCatalogue: List<ProductDto> by lazy { products() }
+    /** The economy, central bank and government. */
+    var economy by mutableStateOf<uniffi.cw_ffi.EconomyDto?>(null); private set
+    /** The selected company's research position. */
+    var research by mutableStateOf<uniffi.cw_ffi.ResearchDto?>(null); private set
     var marketRegion by mutableStateOf<String?>(null)
     var marketRows by mutableStateOf<List<MarketRow>>(emptyList()); private set
 
@@ -213,6 +229,51 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     fun orderShares(firm: ULong, buy: Boolean, quantity: Long, limitCents: Long) =
         submit(CommandJson.command("PlaceShareOrder", "investor" to true, "firm" to firm, "buy" to buy, "qty" to quantity, "limit_price_cents" to limitCents))
 
+    /** What an action would do, computed without changing anything. */
+    fun preview(json: String, onResult: (uniffi.cw_ffi.PreviewDto?) -> Unit) {
+        val handle = session ?: return onResult(null)
+        scope.launch {
+            val result = withContext(engine) { runCatching { handle.previewJson(json) }.getOrNull() }
+            onResult(result)
+        }
+    }
+
+    /** Submit an action from a form and report back accepted or the reason, in plain words. */
+    fun act(json: String, onResult: (Boolean, String) -> Unit) {
+        val handle = session ?: return onResult(false, "No career is open.")
+        scope.launch {
+            val receipt = withContext(engine) { runCatching { handle.submitJson(json) }.getOrNull() }
+            if (receipt == null) {
+                onResult(false, "The engine could not read that action.")
+                return@launch
+            }
+            if (receipt.accepted) {
+                Tutorial.sent(json.substringAfter("{\"").substringBefore("\""))
+                reload()
+                onResult(true, "Done.")
+            } else {
+                onResult(false, Messages.rejection(receipt.errorKey ?: "error.internal_fault", receipt.errorDetail ?: ""))
+            }
+        }
+    }
+
+    /** Loans, contracts, policies and votes of [firm], and every open deal, for form pickers. */
+    fun pickers(firm: ULong?, onResult: (Pickers) -> Unit) {
+        val handle = session ?: return onResult(Pickers())
+        scope.launch {
+            val result = withContext(engine) {
+                Pickers(
+                    loans = firm?.let { handle.loans(it) } ?: emptyList(),
+                    contracts = firm?.let { handle.contracts(it) } ?: emptyList(),
+                    policies = firm?.let { handle.insurance(it) } ?: emptyList(),
+                    votes = firm?.let { handle.boardVotes(it) } ?: emptyList(),
+                    deals = handle.deals(),
+                )
+            }
+            onResult(result)
+        }
+    }
+
     fun submit(json: String) = perform {
         val handle = session ?: return@perform
         val receipt = withContext(engine) { handle.submitJson(json) }
@@ -271,6 +332,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 handle.stockBoard(), handle.commodityBoard(), handle.mapDivisions(),
                 firm?.let { handle.history(it) } ?: emptyList<PeriodDto>(), firm?.let { handle.ownership(it) },
                 handle.recentRaids(),
+                handle.economy(), firm?.let { handle.research(it) },
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
@@ -289,6 +351,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 history = parts[11] as List<PeriodDto>
                 ownership = parts[12] as OwnershipDto?
                 recentRaids = parts[13] as List<RaidRecordDto>
+                economy = parts[14] as uniffi.cw_ffi.EconomyDto
+                research = parts[15] as uniffi.cw_ffi.ResearchDto?
             }
         }
         loadMarkets()

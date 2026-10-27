@@ -288,7 +288,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
             }
         }
         if (firm == null) {
-            item { Callout("Choose a company from the portfolio.") }
+            item { FoundCompanyPanel(store) }
             return@TabList
         }
         item {

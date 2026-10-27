@@ -30,6 +30,23 @@ heading.
   stock and commodity tables together; Stats runs in two columns; Inbox lists decisions beside the
   open one; Portfolio tables your companies and your shareholdings.
 
+- A Command Center on Android and desktop: every action in the game in one searchable list,
+  grouped by category, each with a form built for it (pickers, sliders with exact amounts,
+  switches), a live preview of what it would do and Submit. Ctrl+K opens it from anywhere on
+  desktop.
+- A Research screen: the technology ladder to level 20, progress and cost to the next level,
+  what it buys, the industry frontier, and research and marketing budgets on sliders.
+- An economy card on Markets (a fold-out panel on phones): the cycle phase, growth, inflation
+  against target, the central bank, prime and ten-year rates with a history chart, the central
+  bank chair and recent decisions, the government, its approval, the next election, laws in
+  force and announced, and the news.
+- Founding a company when you start with none: name, headquarters with wages and demand, first
+  strategy by sector with capex, build time and margin, and capital on a slider.
+- A guided tutorial of eight steps that tick off as you do them, each with a Show me button;
+  docked on desktop, a slim bar on phones, replayable from Settings.
+- Desktop: a grouped sidebar with icons and a company switcher, a status bar with the economy
+  phase, the central bank rate and inflation, action search, keyboard shortcuts (Space plays or
+  pauses, N next week, 1, 2 and 3 set the speed, F1 to F7 switch screens), and hover states.
 - A new main menu on Android and desktop: a slowly turning globe with stars where each
   scenario's region glows and is named as it turns into view, the sector icons flying in from
   around the globe to settle under the logo, and Continue, New game, Load game, Settings and Quit.

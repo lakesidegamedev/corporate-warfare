@@ -588,11 +588,14 @@ private fun DesktopMarkets(store: GameStore) {
     var stock by remember { mutableStateOf<StockDto?>(null) }
     var commodity by remember { mutableStateOf<CommodityDto?>(null) }
     var sort by remember { mutableStateOf("Top movers") }
+    var board by remember { mutableStateOf("Stocks") }
     Row(Modifier.fillMaxSize().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+      Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Chips(listOf("Stocks", "Commodities"), board) { board = it }
         val index = corridorIndex(store.stocks)
         val sc = listOf(Col("Company", 1.7f), Col("Sector", 1f), Col("Price", 0.8f, true), Col("Week", 0.6f, true), Col("Quarter", 0.7f, true), Col("Market cap", 0.9f, true), Col("Float", 0.55f, true), Col("You hold", 0.75f, true))
         val title = if (index.isNotEmpty()) "Stocks · index ${Format.count(index.last())}" else "Stocks"
-        Pane(title, Modifier.weight(1.25f).fillMaxHeight(), trailing = { Chips(listOf("Top movers", "Largest", "Yours"), sort) { sort = it } }) {
+        if (board == "Stocks") Pane(title, Modifier.fillMaxWidth().weight(1f), trailing = { Chips(listOf("Top movers", "Largest", "Yours"), sort) { sort = it } }) {
             TableHeader(sc)
             val rows = when (sort) {
                 "Largest" -> store.stocks.sortedByDescending { it.marketCapCents }
@@ -613,10 +616,7 @@ private fun DesktopMarkets(store: GameStore) {
             }
         }
         val cc = listOf(Col("Good", 1.5f), Col("Price", 0.8f, true), Col("Week", 0.6f, true), Col("Made", 0.7f, true), Col("Sold", 0.7f, true), Col("Imported", 0.75f, true), Col("Exported", 0.75f, true))
-        Column(Modifier.width(400.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
-            EconomyCard(store, collapsible = false)
-        }
-        Pane("Commodities, per lot", Modifier.weight(1f).fillMaxHeight()) {
+        if (board == "Commodities") Pane("Commodities, per lot", Modifier.fillMaxWidth().weight(1f)) {
             TableHeader(cc)
             val ordered = store.commodities.sortedWith(compareBy({ (Sectors.order + "other").indexOf(it.sector).let { i -> if (i < 0) 99 else i } }, { it.name }))
             ordered.forEachIndexed { i, c ->
@@ -632,6 +632,10 @@ private fun DesktopMarkets(store: GameStore) {
                     Cell(if (c.exportedLots > 0) Format.count(c.exportedLots) else "", cc[6], Palette.secondary)
                 }
             }
+        }
+      }
+        Column(Modifier.width(430.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
+            EconomyCard(store, collapsible = false)
         }
     }
     stock?.let { StockDialog(store, it) { stock = null } }

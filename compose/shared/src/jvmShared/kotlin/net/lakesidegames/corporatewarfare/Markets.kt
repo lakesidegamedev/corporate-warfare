@@ -58,6 +58,7 @@ fun MarketsScreen(store: GameStore) {
     var pickingRegion by remember { mutableStateOf(false) }
     TabList {
         item { ScreenHeader("Markets", store.overview?.weekLabel) }
+        item { EconomyCard(store, collapsible = true) }
         item {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 Section.entries.forEachIndexed { index, option ->
