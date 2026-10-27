@@ -39,8 +39,10 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// recorded on the engine before the change and must never move because of Texas content.
 /// Repinned when the character cast joined the dataset and the engine began naming chairs and
 /// chief executives from it, and again when rivals began choosing moves by temperament with
-/// grudges and alliances (1.7 preview 5), and again in 1.7.1 when new divisions gained a raid grace period, and when a plant under construction
-/// stopped hiring its crew until the last four weeks and research stopped spending at the frontier.
+/// grudges and alliances (1.7 preview 5), and again in 1.7.1 when new divisions gained a raid
+/// grace period, a plant under construction stopped hiring its crew until the last four weeks,
+/// research stopped spending at the frontier, seed share prices began from an opening earnings
+/// prior and the world began carrying its scenario start year.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -52,15 +54,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "e7d28ac571f561ac3cd1f541943b999cb2d9deac1a5be858d835e887d647db48",
+            "8e3875cd6174ad99e3b685a7dceb5b0a0ad1a8b3a8320da7f5a749aa933c6790",
         ),
         (
             2,
-            "ff90ce38ae3199be570b1aa2928a41a70ae1b5e4d43813edfd7450b7156cf115",
+            "fe5e704abfca35772dc99c54af44197e7bd15018ae029ecf2805cdd625a97792",
         ),
         (
             3,
-            "fe1d201c7b6fc774cbc2ac17c44dc12771ddc4a6eef75634c20e4012b2d5a9cd",
+            "ccc706eb49845e2aac25db8562f2c4ed8fe94a537570f323f054c2846f42b52d",
         ),
     ];
     for (seed, hash) in pins {
@@ -72,12 +74,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "11e8b31680af9056fb5a4a9ddc73b886a3cff05578b8ac46033a23e4bcf51368"
+        "f885cdab4f174d8764d77816951fe0b34d499e6be93e66208c0e45eeedb3f8ec"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "07abed35746973c3e52d6e728698ac1387294768f117b65d10beae171bf88d97"
+        "eb6d2e403b9f5f45531847307a925a48f55324f272e768a7da38a2110f06ac31"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();
@@ -537,5 +539,93 @@ fn ruhr_rhine_opens_solvent_and_keeps_the_player_company_alive() {
             session.world.firms.get(group).unwrap().operative(),
             "seed {seed}"
         );
+    }
+}
+
+const SCENARIOS: [(&str, i32); 4] = [
+    ("great-lakes-2000", 2000),
+    ("texas-1981", 1981),
+    ("silicon-valley-1995", 1995),
+    ("ruhr-rhine-1991", 1991),
+];
+
+#[test]
+fn every_scenario_opens_in_its_own_year() {
+    for (scenario, year) in SCENARIOS {
+        let mut session = Session::create(config(1, ScenarioKind::Guided, scenario)).unwrap();
+        for _ in 0..5 {
+            session.advance(1);
+        }
+        let overview = session.overview();
+        assert_eq!(overview.start_year, year, "{scenario}");
+        assert_eq!(overview.week_label, format!("{year} W05"), "{scenario}");
+        // The year turns over after 52 weeks, not before.
+        for _ in 5..53 {
+            session.advance(1);
+            if session.world.events.pending.iter().any(|e| !e.resolved) {
+                for event in session.world.events.pending.iter_mut() {
+                    event.resolved = true;
+                }
+                session.dismiss_pause();
+            }
+        }
+        assert!(
+            session.overview().week_label.starts_with(&format!("{} ", year + 1)),
+            "{scenario}: {}",
+            session.overview().week_label
+        );
+    }
+}
+
+/// Share price over fair value, for firms worth more than a few dollars a share.
+fn price_ratios(session: &Session) -> Vec<(String, f64)> {
+    session
+        .world
+        .firms
+        .iter()
+        .filter(|(_, f)| f.shares.fair_cents >= 100)
+        .map(|(_, f)| {
+            (
+                f.name.clone(),
+                f.shares.mark_cents as f64 / f.shares.fair_cents as f64,
+            )
+        })
+        .collect()
+}
+
+/// A seed firm's first quarter of earnings is unobserved, so its fair value must not collapse
+/// away from the opening price faster than the price can follow it.
+#[test]
+fn opening_share_prices_stay_near_fair_value() {
+    for (scenario, _) in SCENARIOS {
+        for seed in [1, 2] {
+            let mut session = Session::create(config(seed, ScenarioKind::Guided, scenario)).unwrap();
+            for week in 1..=52u32 {
+                let result = session.advance(1);
+                if result.pause.is_some() {
+                    for event in session.world.events.pending.iter_mut() {
+                        event.resolved = true;
+                    }
+                    session.dismiss_pause();
+                }
+                if week == 5 || week == 52 {
+                    let (low, high) = if week == 5 { (0.3, 4.0) } else { (0.15, 6.0) };
+                    let ratios = price_ratios(&session);
+                    let mut sorted: Vec<f64> = ratios.iter().map(|r| r.1).collect();
+                    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                    let median = sorted[sorted.len() / 2];
+                    assert!(
+                        (0.85..=1.3).contains(&median),
+                        "{scenario} seed {seed} week {week}: median {median}"
+                    );
+                    for (name, ratio) in ratios {
+                        assert!(
+                            (low..=high).contains(&ratio),
+                            "{scenario} seed {seed} week {week}: {name} price/fair {ratio}"
+                        );
+                    }
+                }
+            }
+        }
     }
 }

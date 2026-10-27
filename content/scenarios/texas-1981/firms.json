@@ -133,7 +133,7 @@
     },
     {
       "id": "lone_star_power",
-      "name": "Texoma Power and Light",
+      "name": "Red Fork Power and Light",
       "industry": "energy",
       "archetype": "cost_leader",
       "region": "TX-DFW",
@@ -261,7 +261,7 @@
     },
     {
       "id": "bluebonnet_assembly",
-      "name": "Bluebonnet Assembly",
+      "name": "Brazoria Assembly",
       "industry": "manufacturing",
       "archetype": "technologist",
       "region": "TX-DFW",
@@ -391,7 +391,7 @@
     },
     {
       "id": "lone_star_rail",
-      "name": "Lone Star Rail Freight",
+      "name": "Cross Timbers Rail Freight",
       "industry": "logistics",
       "archetype": "technologist",
       "region": "TX-DFW",
@@ -420,7 +420,7 @@
     },
     {
       "id": "bluebonnet_grocers",
-      "name": "Bluebonnet Grocers",
+      "name": "Mesquite Grocers",
       "industry": "retail",
       "archetype": "cost_leader",
       "region": "TX-SAT",
@@ -521,7 +521,7 @@
     },
     {
       "id": "frontier_instruments",
-      "name": "Frontier Instruments",
+      "name": "Pecos Instruments",
       "industry": "technology",
       "archetype": "technologist",
       "region": "TX-DFW",
@@ -541,7 +541,7 @@
     },
     {
       "id": "lone_star_press",
-      "name": "Lone Star Press Group",
+      "name": "Staked Plains Press Group",
       "industry": "media",
       "archetype": "brand_builder",
       "region": "TX-DFW",
@@ -592,7 +592,7 @@
     },
     {
       "id": "lone_star_towers",
-      "name": "Lone Star Towers",
+      "name": "Caprock Towers",
       "industry": "real_estate",
       "archetype": "brand_builder",
       "region": "TX-DFW",

@@ -32,9 +32,10 @@ final class EngineBridgeTests: XCTestCase {
         // world gained its world price state, and again in 1.7 preview 2 when the product chains
         // and multi-output plants changed the dataset, and in 1.7 preview 4 when the world gained
         // government laws, the reserve and systemic incidents, and in 1.7 preview 5 when rivals chose
-        // moves by temperament and the world gained grudges and alliances. This constant needs
+        // moves by temperament and the world gained grudges and alliances, and in 1.7.1 when seed
+        // shares began from an opening earnings prior and the world gained its start year. This needs
         // a fresh simulator run on the Mac runner before R05 is claimed again.
-        XCTAssertEqual(session.canonicalHash(), "5c231e40dabce2114eea6c5e9e34fea0a8090a274f554f1a8a987a69ba9cc551")
+        XCTAssertEqual(session.canonicalHash(), "8403cff8e15e49ad24c22e28043d175ea98c755ada19ba45f67203604d0263fc")
 
         let data = try session.exportSave()
         XCTAssertGreaterThan(data.count, 1_000)
