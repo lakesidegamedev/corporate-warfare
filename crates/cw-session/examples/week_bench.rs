@@ -15,9 +15,14 @@ fn main() {
         }
     }
     if scenarios.is_empty() {
-        scenarios = ["great-lakes-2000", "texas-1981", "silicon-valley-1995", "ruhr-rhine-1991"]
-            .map(String::from)
-            .to_vec();
+        scenarios = [
+            "great-lakes-2000",
+            "texas-1981",
+            "silicon-valley-1995",
+            "ruhr-rhine-1991",
+        ]
+        .map(String::from)
+        .to_vec();
     }
     for scenario in scenarios {
         let config = cw_session::ScenarioConfig {
@@ -64,7 +69,10 @@ fn main() {
         let mut phases = phases;
         phases.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
         for (name, nanos) in phases.iter().take(16) {
-            println!("    {name:<34} {:>8.3} ms/week", *nanos as f64 / 1e6 / weeks as f64);
+            println!(
+                "    {name:<34} {:>8.3} ms/week",
+                *nanos as f64 / 1e6 / weeks as f64
+            );
         }
     }
 }

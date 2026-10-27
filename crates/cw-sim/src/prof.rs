@@ -15,7 +15,11 @@ pub fn record(name: &'static str, nanos: u128) {
 /// Take and clear the accumulated nanoseconds per phase on this thread.
 #[cfg(feature = "phase-timing")]
 pub fn take() -> Vec<(&'static str, u128)> {
-    TOTALS.with(|totals| std::mem::take(&mut *totals.borrow_mut()).into_iter().collect())
+    TOTALS.with(|totals| {
+        std::mem::take(&mut *totals.borrow_mut())
+            .into_iter()
+            .collect()
+    })
 }
 
 #[cfg(not(feature = "phase-timing"))]
