@@ -694,6 +694,18 @@ final class AppStore: ObservableObject {
         return await engine.raidCheck(firm: firm, target: target, region: region, industry: industry)
     }
 
+    /// One division's (or, with `facility` zero, the whole company's) freight for the week just
+    /// closed, with each shipping policy priced.
+    func shipping(facility: UInt64) async -> ShippingSummaryDto? {
+        guard let firm = selectedFirm else { return nil }
+        return await engine.shippingSummary(firm: firm, facility: facility)
+    }
+
+    /// What a lane reservation would cost and save, before any command is sent.
+    func reserveQuote(lane: LaneDto, lots: Int32, weeks: UInt32) async -> ReserveQuoteDto? {
+        await engine.reserveQuote(a: lane.a, b: lane.b, mode: lane.mode, lots: lots, weeks: weeks)
+    }
+
     func buildQuote(region: UInt32, recipe: UInt32, blocks: UInt32) async -> BuildQuoteDto? {
         guard let firm = selectedFirm ?? overview?.primaryFirm else { return nil }
         return await engine.buildQuote(firm: firm, region: region, recipe: recipe, blocks: blocks)

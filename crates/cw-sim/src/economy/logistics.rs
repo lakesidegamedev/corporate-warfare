@@ -238,6 +238,81 @@ pub struct Reservation {
     pub lots: i32,
 }
 
+/// Region value of the row that holds a firm's lane contract fees, which belong to no destination.
+pub const FEE_ROW: u8 = u8::MAX;
+
+/// One lane's part of a destination's freight week.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LaneUse {
+    pub key: LaneKey,
+    pub lots: i64,
+    pub cents: i64,
+    pub outside_lots: i64,
+    pub outside_cents: i64,
+}
+
+/// A shipment pattern: lots of one good from one region, kept so a policy can be priced before it
+/// is chosen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Sample {
+    pub from: u8,
+    pub product: u16,
+    pub lots: i64,
+}
+
+/// What a firm paid to bring goods into one region in a week, read back for the Shipping panels.
+/// Not part of the hashed world state. The save file carries it in its own trailer so the panels
+/// are filled after a load, and a save without the trailer simply starts empty.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DestFreight {
+    pub cents: i64,
+    pub own_cents: i64,
+    pub other_cents: i64,
+    pub outside_cents: i64,
+    /// Lane contract fees (on the firm's fee row only).
+    pub fee_cents: i64,
+    pub lots: i64,
+    pub own_lots: i64,
+    pub other_lots: i64,
+    pub outside_lots: i64,
+    pub mode_lots: [i64; 4],
+    pub lanes: Vec<LaneUse>,
+    pub samples: Vec<Sample>,
+}
+
+impl DestFreight {
+    fn add_lane(&mut self, add: LaneUse) {
+        match self.lanes.iter_mut().find(|l| l.key == add.key) {
+            Some(l) => {
+                l.lots += add.lots;
+                l.cents += add.cents;
+                l.outside_lots += add.outside_lots;
+                l.outside_cents += add.outside_cents;
+            }
+            None => self.lanes.push(add),
+        }
+        if self.lanes.len() > 24 {
+            self.lanes.sort_by_key(|l| std::cmp::Reverse(l.cents));
+            self.lanes.truncate(16);
+        }
+    }
+
+    fn add_sample(&mut self, add: Sample) {
+        match self
+            .samples
+            .iter_mut()
+            .find(|s| s.from == add.from && s.product == add.product)
+        {
+            Some(s) => s.lots += add.lots,
+            None => self.samples.push(add),
+        }
+        if self.samples.len() > 24 {
+            self.samples.sort_by_key(|s| std::cmp::Reverse(s.lots));
+            self.samples.truncate(16);
+        }
+    }
+}
+
 /// A disruption to lanes: capacity on matching lanes is cut to `cap_bps` of normal until the
 /// week `until`. A closure with `a == b` covers every lane of the mode that touches the region.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -297,6 +372,11 @@ pub struct LogisticsState {
     cache: BTreeMap<(u8, u8, u8), Vec<Structure>>,
     #[serde(skip)]
     estimates: Vec<i32>,
+    /// Freight paid by firm and destination region: the week in progress and the week just closed.
+    #[serde(skip)]
+    pub dest_week: BTreeMap<(Handle, u8), DestFreight>,
+    #[serde(skip)]
+    pub dest_last: BTreeMap<(Handle, u8), DestFreight>,
 }
 
 /// One route shape: legs by mode and hub, ranked at empty-lane prices.
@@ -531,6 +611,7 @@ pub fn begin_week(world: &mut World, ds: &Dataset) {
     world.logistics.estimates.clear();
     world.logistics.week = world.tick.0;
     world.logistics.last = std::mem::take(&mut world.logistics.totals);
+    world.logistics.dest_last = std::mem::take(&mut world.logistics.dest_week);
     world.logistics.common_carrier = world.politics.laws.common_carrier;
     let now = world.tick.0;
     world.logistics.closures.retain(|c| c.until > now);
@@ -783,6 +864,13 @@ fn apply_contracts(world: &mut World, ds: &Dataset) {
             );
         }
         world.logistics.totals.cents += fee;
+        let row = world
+            .logistics
+            .dest_week
+            .entry((holder, FEE_ROW))
+            .or_default();
+        row.cents += fee;
+        row.fee_cents += fee;
         contract.held = held;
         contract.used = 0;
         contract.weeks_left -= 1;
@@ -1409,6 +1497,15 @@ pub fn book(
     }
     let lots = plan.lots;
     let mut outside_cents = 0i64;
+    let mut dest = DestFreight {
+        lots,
+        ..Default::default()
+    };
+    dest.add_sample(Sample {
+        from,
+        product,
+        lots,
+    });
     for (li, leg) in plan.legs.iter().enumerate() {
         let key = LaneKey::new(leg.from, leg.to, leg.mode);
         let km = leg_km(ds, leg.from, leg.to, leg.mode) as i64;
@@ -1431,6 +1528,31 @@ pub fn book(
                 .position(|(l, p)| *l == li && *p == pi)
                 .map(|i| scaled[i])
                 .unwrap_or(0);
+            let mut use_ = LaneUse {
+                key,
+                lots: part.lots,
+                cents,
+                outside_lots: 0,
+                outside_cents: 0,
+            };
+            dest.cents += cents;
+            match part.kind {
+                PartKind::Contract(_) | PartKind::Own(_) => {
+                    dest.own_cents += cents;
+                    dest.own_lots += part.lots;
+                }
+                PartKind::Public(_) => {
+                    dest.other_cents += cents;
+                    dest.other_lots += part.lots;
+                }
+                PartKind::Outside => {
+                    dest.outside_cents += cents;
+                    dest.outside_lots += part.lots;
+                    use_.outside_lots = part.lots;
+                    use_.outside_cents = cents;
+                }
+            }
+            dest.add_lane(use_);
             match part.kind {
                 PartKind::Contract(index) => {
                     if let Some(c) = world.logistics.contracts.get_mut(index as usize) {
@@ -1474,6 +1596,7 @@ pub fn book(
                 }
             }
         }
+        dest.mode_lots[(leg.mode as usize).min(3)] += lots;
         let lane = world.logistics.lanes.entry(key).or_default();
         match lane.users.iter_mut().find(|(f, _)| *f == payer) {
             Some(entry) => entry.1 += lots as i32,
@@ -1494,6 +1617,24 @@ pub fn book(
                 memo,
             ),
         );
+    }
+    let row = world.logistics.dest_week.entry((payer, to)).or_default();
+    row.cents += dest.cents;
+    row.own_cents += dest.own_cents;
+    row.other_cents += dest.other_cents;
+    row.outside_cents += dest.outside_cents;
+    row.lots += dest.lots;
+    row.own_lots += dest.own_lots;
+    row.other_lots += dest.other_lots;
+    row.outside_lots += dest.outside_lots;
+    for (m, l) in dest.mode_lots.iter().enumerate() {
+        row.mode_lots[m] += l;
+    }
+    for lane in dest.lanes {
+        row.add_lane(lane);
+    }
+    for sample in dest.samples {
+        row.add_sample(sample);
     }
     let totals = &mut world.logistics.totals;
     totals.cents += paid;
@@ -1695,6 +1836,32 @@ pub fn set_serves(
     Ok(())
 }
 
+/// The weekly fee for one reserved lot: the lane's spot price once the reservation is counted as
+/// used, less the commitment discount. The same figure `reserve_lane` charges.
+pub fn contract_fee_cents(world: &World, ds: &Dataset, key: LaneKey, lots: i32) -> i64 {
+    let cap = world
+        .logistics
+        .lanes
+        .get(&key)
+        .map(|l| l.cap())
+        .unwrap_or(0)
+        .max(1) as i64;
+    let after = world
+        .logistics
+        .lanes
+        .get(&key)
+        .map(|lane| {
+            (((lane.used() + lane.held()) as i64 + lots as i64) * 10_000 / cap).clamp(0, 10_000)
+        })
+        .unwrap_or(0);
+    let mut spot = spot_mult_bps(ds, after as i32);
+    if world.logistics.common_carrier {
+        spot = spot.min(regulated_cap_bps(ds));
+    }
+    let mult = spot * ds.logistics.contract_discount_bps / 10_000;
+    leg_cents(ds, key.a, key.b, key.mode, 1, mult).max(1)
+}
+
 /// Lots on a lane that a firm's group could reserve now: capacity of other groups' carriers that
 /// is neither used nor already held.
 pub fn reservable_lots(world: &World, firm: Handle, key: LaneKey) -> i64 {
@@ -1770,16 +1937,7 @@ pub fn reserve_lane(
             actual: "no room on the lane",
         });
     }
-    let after = {
-        let lane = &world.logistics.lanes[&key];
-        (((lane.used() + lane.held()) as i64 + lots as i64) * 10_000 / cap).clamp(0, 10_000)
-    };
-    let mut spot = spot_mult_bps(ds, after as i32);
-    if world.logistics.common_carrier {
-        spot = spot.min(regulated_cap_bps(ds));
-    }
-    let mult = spot * ds.logistics.contract_discount_bps / 10_000;
-    let fee = leg_cents(ds, from, to, mode, 1, mult).max(1);
+    let fee = contract_fee_cents(world, ds, key, lots);
     let id = world.logistics.next_contract;
     world.logistics.next_contract += 1;
     let tick = world.tick.0;
@@ -1937,4 +2095,327 @@ pub fn shipped_last_week(world: &World, firm: Handle, key: LaneKey) -> i32 {
         .and_then(|lane| lane.users.iter().find(|(f, _)| *f == firm))
         .map(|(_, lots)| *lots)
         .unwrap_or(0)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Shipping summaries for the apps
+
+/// A lane a firm or division shipped on in the week just closed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShippingLane {
+    pub key: LaneKey,
+    pub lots: i64,
+    pub cents: i64,
+    pub outside_lots: i64,
+    pub fill_bps: i32,
+    pub hot_weeks: u16,
+}
+
+/// What the engine suggests doing about freight spend.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Suggestion {
+    /// Build carrier blocks of a mode on a lane the group pays outside carriers on.
+    Build {
+        key: LaneKey,
+        recipe: u16,
+        blocks: i64,
+        upfront_cents: i64,
+        weekly_saving_cents: i64,
+        payback_weeks: i64,
+    },
+    /// Reserve lots on a busy lane the group ships on.
+    Reserve {
+        key: LaneKey,
+        lots: i32,
+        weekly_fee_cents: i64,
+        weekly_saving_cents: i64,
+    },
+}
+
+/// A firm's or division's freight for the week just closed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ShippingSummary {
+    pub cents: i64,
+    pub own_cents: i64,
+    pub other_cents: i64,
+    pub outside_cents: i64,
+    pub fee_cents: i64,
+    pub lots: i64,
+    pub own_lots: i64,
+    pub other_lots: i64,
+    pub outside_lots: i64,
+    pub mode_lots: [i64; 4],
+    /// What outside carriers charged beyond what the same lots cost on own carriers.
+    pub outside_extra_cents: i64,
+    /// The busiest three lanes by spend.
+    pub lanes: Vec<ShippingLane>,
+    pub suggestion: Option<Suggestion>,
+}
+
+fn merged_rows(
+    world: &World,
+    firm: Handle,
+    region: Option<u8>,
+) -> impl Iterator<Item = &DestFreight> {
+    world
+        .logistics
+        .dest_last
+        .range((firm, 0)..=(firm, u8::MAX))
+        .filter(move |((_, r), _)| match region {
+            Some(want) => *r == want,
+            None => true,
+        })
+        .map(|(_, row)| row)
+}
+
+/// Lots the investor's group moved on a lane in the closed week.
+fn group_lane_lots(world: &World, firm: Handle, key: LaneKey) -> i32 {
+    world
+        .logistics
+        .lanes
+        .get(&key)
+        .map(|lane| {
+            lane.users
+                .iter()
+                .filter(|(f, _)| crate::economy::ownership::same_group(world, firm, *f))
+                .map(|(_, lots)| *lots)
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
+/// Freight paid by a firm for goods arriving in one region (a division), or in all of them with
+/// the firm's lane contract fees (the CEO Office). Read back from the shipments of the week just
+/// closed.
+pub fn shipping_summary(
+    world: &World,
+    ds: &Dataset,
+    firm: Handle,
+    region: Option<u8>,
+) -> ShippingSummary {
+    let mut out = ShippingSummary::default();
+    let mut lanes: Vec<LaneUse> = Vec::new();
+    for row in merged_rows(world, firm, region) {
+        out.cents += row.cents;
+        out.own_cents += row.own_cents;
+        out.other_cents += row.other_cents;
+        out.outside_cents += row.outside_cents;
+        out.fee_cents += row.fee_cents;
+        out.lots += row.lots;
+        out.own_lots += row.own_lots;
+        out.other_lots += row.other_lots;
+        out.outside_lots += row.outside_lots;
+        for (m, l) in row.mode_lots.iter().enumerate() {
+            out.mode_lots[m] += l;
+        }
+        for lane in &row.lanes {
+            match lanes.iter_mut().find(|l| l.key == lane.key) {
+                Some(l) => {
+                    l.lots += lane.lots;
+                    l.cents += lane.cents;
+                    l.outside_lots += lane.outside_lots;
+                    l.outside_cents += lane.outside_cents;
+                }
+                None => lanes.push(*lane),
+            }
+        }
+    }
+    let l = &ds.logistics;
+    out.outside_extra_cents =
+        out.outside_cents - out.outside_cents * l.own_cost_bps / l.outside_premium_bps.max(1);
+    lanes.sort_by_key(|u| (std::cmp::Reverse(u.cents), u.key));
+    let stat_of = |key: LaneKey| world.logistics.stats.get(&key);
+    out.lanes = lanes
+        .iter()
+        .take(3)
+        .map(|u| ShippingLane {
+            key: u.key,
+            lots: u.lots,
+            cents: u.cents,
+            outside_lots: u.outside_lots,
+            fill_bps: stat_of(u.key).map(|s| s.fill_bps).unwrap_or(0),
+            hot_weeks: stat_of(u.key).map(|s| s.hot_weeks).unwrap_or(0),
+        })
+        .collect();
+    out.suggestion = suggest(world, ds, firm, &lanes, out.cents);
+    out
+}
+
+/// Most weeks of payback worth suggesting a build for.
+const MAX_PAYBACK_WEEKS: i64 = 260;
+/// A build that pays back within this is preferred over reserving.
+const GOOD_PAYBACK_WEEKS: i64 = 104;
+
+fn suggest(
+    world: &World,
+    ds: &Dataset,
+    firm: Handle,
+    lanes: &[LaneUse],
+    total_cents: i64,
+) -> Option<Suggestion> {
+    let st = &world.logistics;
+    let l = &ds.logistics;
+    let mut build: Option<Suggestion> = None;
+    // The lane where outside carriers took the most money.
+    if let Some(lane) = lanes
+        .iter()
+        .filter(|u| u.outside_lots > 0)
+        .max_by_key(|u| (u.outside_cents, std::cmp::Reverse(u.key)))
+        .filter(|u| u.outside_cents >= 50_000 && u.outside_cents * 10 >= total_cents)
+    {
+        let key = lane.key;
+        let def = &l.modes[key.mode as usize];
+        let km = leg_km(ds, key.a, key.b, key.mode).max(1) as i64;
+        let recipe = ds
+            .recipes
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| {
+                !r.terminal
+                    && r.weekly_output_lots > 0
+                    && r.transport_mode.as_deref() == Some(def.id.as_str())
+            })
+            .min_by_key(|(i, r)| (r.capex_cents / r.weekly_output_lots.max(1), *i))
+            .map(|(i, _)| i);
+        if let Some(recipe) = recipe
+            && def.outside_backstop
+            && has_access(ds, st, key.mode, key.a)
+            && has_access(ds, st, key.mode, key.b)
+        {
+            let per_block = (ds.recipes[recipe].weekly_output_lots * REF_KM / km).max(1);
+            let blocks = (lane.outside_lots + per_block - 1) / per_block;
+            let upfront = blocks * ds.recipes[recipe].capex_cents;
+            let saving = lane.outside_cents
+                - lane.outside_cents * l.own_cost_bps / l.outside_premium_bps.max(1);
+            if saving > 0 && upfront > 0 {
+                let payback = (upfront + saving - 1) / saving;
+                if payback <= MAX_PAYBACK_WEEKS {
+                    build = Some(Suggestion::Build {
+                        key,
+                        recipe: recipe as u16,
+                        blocks,
+                        upfront_cents: upfront,
+                        weekly_saving_cents: saving,
+                        payback_weeks: payback,
+                    });
+                }
+            }
+        }
+    }
+    if let Some(Suggestion::Build { payback_weeks, .. }) = &build
+        && *payback_weeks <= GOOD_PAYBACK_WEEKS
+    {
+        return build;
+    }
+    // Otherwise a busy lane the group leans on and does not own.
+    let reserve = lanes
+        .iter()
+        .filter(|u| {
+            st.stats
+                .get(&u.key)
+                .is_some_and(|s| s.hot_weeks >= 2 || s.fill_bps >= 8_000)
+        })
+        .filter_map(|u| {
+            let lots = (group_lane_lots(world, firm, u.key) as i64)
+                .min(reservable_lots(world, firm, u.key));
+            if lots < 10 {
+                return None;
+            }
+            let q = reserve_quote(world, ds, firm, u.key, lots as i32, 13)?;
+            (q.weekly_net_cents > 0).then_some((q.weekly_net_cents, u.key, lots as i32, q))
+        })
+        .max_by_key(|(net, key, _, _)| (*net, std::cmp::Reverse(*key)));
+    if let Some((_, key, lots, q)) = reserve {
+        return Some(Suggestion::Reserve {
+            key,
+            lots,
+            weekly_fee_cents: q.weekly_fee_cents,
+            weekly_saving_cents: q.weekly_net_cents,
+        });
+    }
+    build
+}
+
+/// A priced lane reservation before it is made.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReserveQuote {
+    pub fee_per_lot_cents: i64,
+    pub spot_per_lot_cents: i64,
+    pub weekly_fee_cents: i64,
+    pub total_cents: i64,
+    /// Lots the group is expected to use, from what it moved on the lane last week.
+    pub expected_use_lots: i32,
+    /// Spot price saved on lots used, less the fee on lots left idle, per week.
+    pub weekly_net_cents: i64,
+    /// Most the lane will let the group reserve now.
+    pub max_lots: i64,
+}
+
+/// What reserving lots on a lane for a number of weeks would cost and save. None for a lane with
+/// no capacity.
+pub fn reserve_quote(
+    world: &World,
+    ds: &Dataset,
+    firm: Handle,
+    key: LaneKey,
+    lots: i32,
+    weeks: u32,
+) -> Option<ReserveQuote> {
+    let lane = world.logistics.lanes.get(&key)?;
+    let cap = lane.cap() as i64;
+    if cap <= 0 || lots < 1 {
+        return None;
+    }
+    let fee = contract_fee_cents(world, ds, key, lots);
+    let spot = lane_rate_cents_per_lot(ds, &world.logistics, key);
+    let used = group_lane_lots(world, firm, key).min(lots).max(0);
+    let weekly_fee = fee * lots as i64;
+    Some(ReserveQuote {
+        fee_per_lot_cents: fee,
+        spot_per_lot_cents: spot,
+        weekly_fee_cents: weekly_fee,
+        total_cents: weekly_fee * weeks as i64,
+        expected_use_lots: used,
+        weekly_net_cents: used as i64 * (spot - fee) - (lots - used) as i64 * fee,
+        max_lots: reservable_lots(world, firm, key)
+            .min(cap * contract_share_bps(&world.logistics) / 10_000),
+    })
+}
+
+/// What the shipments of the closed week would have cost under a policy, at today's lane prices:
+/// total cents and lots that would go to outside carriers.
+pub fn estimate_policy(
+    world: &mut World,
+    ds: &Dataset,
+    firm: Handle,
+    region: u8,
+    policy: ShipPolicy,
+) -> Option<(i64, i64)> {
+    let samples = world
+        .logistics
+        .dest_last
+        .get(&(firm, region))
+        .map(|row| row.samples.clone())
+        .unwrap_or_default();
+    if samples.is_empty() {
+        return None;
+    }
+    let mut cents = 0;
+    let mut outside = 0;
+    for s in samples {
+        if let Some(plan) = plan_route(
+            world,
+            ds,
+            firm,
+            policy,
+            s.product,
+            s.from,
+            region,
+            MilliLots::from_lots(s.lots),
+        ) {
+            cents += plan.cents;
+            outside += plan.outside_lots();
+        }
+    }
+    Some((cents, outside))
 }

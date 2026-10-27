@@ -61,6 +61,26 @@ heading.
   good above what it costs to make, or let the plants plan production again. A company that is
   making money sees nothing.
 
+### Changed
+
+- Freight you can read at a glance (1.7.1). Every division and the CEO Office now have a
+  Shipping section in plain words: what the freight bill is each week and per load, how much of
+  it went to your own carriers, other firms' carriers and outside carriers (with the premium the
+  outside carriers cost you), the three lanes you use most and whether they are congested, your
+  route policy in a sentence such as "Cheapest route: mostly truck, mainly Columbus to Chicago",
+  and one suggestion with a quoted payback when it matters: build carrier plants on a lane where
+  outside carriers take a lot of your money, or reserve loads on a busy lane. The route policy
+  picker explains each choice in a line and shows what this division's last week of freight would
+  have cost under it, before you pick. On the map, the Freight layer has a legend, lanes you own
+  or ship on carry a gold edge, and tapping a lane opens a simple panel with its room, price,
+  owners, your share and a reservation with its quote (price, weekly cost, expected saving).
+  Freight alerts now say what is happening on the lane in figures and what to do about it. The
+  screens call a lot of goods a load. A build suggestion has a Review this build button that
+  opens the build dialog already filled in with the region, plant type and number of plants.
+  Summaries are worked out by the engine; they add no mechanics. The Shipping figures are now
+  kept in the save file, so they are still there after you load a game instead of staying empty
+  until the next week closes (older saves load as before and fill in at the next week).
+
 ## [1.7.0] - 2026-10-27
 
 Lone Star: supply chains you can own and contest, a shipping network, deeper corporate play, rivals with names and memories, and three new playable scenarios: Texas Oil Patch 1981, Silicon Valley 1995 and Ruhr and Rhine 1991 with currencies. Saves from 1.6 do not load in 1.7.0.

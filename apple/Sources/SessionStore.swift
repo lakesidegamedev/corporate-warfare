@@ -123,6 +123,14 @@ actor Engine {
         session?.freightSummary()
     }
 
+    func shippingSummary(firm: UInt64, facility: UInt64) -> ShippingSummaryDto? {
+        session?.shippingSummary(firm: firm, facility: facility)
+    }
+
+    func reserveQuote(a: String, b: String, mode: UInt32, lots: Int32, weeks: UInt32) -> ReserveQuoteDto? {
+        session?.reserveQuote(a: a, b: b, mode: mode, lots: lots, weeks: weeks)
+    }
+
     func structureView() -> StructureViewDto? {
         session?.structureView()
     }

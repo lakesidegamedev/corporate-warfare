@@ -377,6 +377,7 @@ private fun Chips(options: List<String>, selected: String, onPick: (String) -> U
 private fun DesktopMap(store: GameStore) {
     var layer by remember { mutableStateOf(MapLayer.Presence) }
     var selected by remember { mutableStateOf<String?>(null) }
+    var pickedLane by remember { mutableStateOf<String?>(null) }
     var building by remember { mutableStateOf<RegionBoardDto?>(null) }
     Row(Modifier.fillMaxSize().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(Modifier.width(300.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -444,13 +445,13 @@ private fun DesktopMap(store: GameStore) {
             }
         }
         Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(10.dp)).border(1.dp, Palette.stroke, RoundedCornerShape(10.dp))) {
-            WorldMapView(store, layer, selected, { selected = it }, Modifier.fillMaxSize())
+            WorldMapView(store, layer, selected, { selected = it }, Modifier.fillMaxSize(), pickedLane, { pickedLane = it })
             Row(Modifier.align(Alignment.TopStart).padding(10.dp)) {
                 Chips(MapLayer.entries.map { it.title }, layer.title) { title -> layer = MapLayer.entries.first { it.title == title } }
             }
         }
         if (layer == MapLayer.Freight) {
-            Pane("Freight lanes", Modifier.width(360.dp).fillMaxHeight()) { FreightPanel(store, selected) }
+            Pane("Freight lanes", Modifier.width(360.dp).fillMaxHeight()) { FreightPanel(store, selected, pickedLane, { pickedLane = it }) }
         }
         val board = selected?.let { code -> store.boards.firstOrNull { it.code == code } }
         if (board != null) {
@@ -560,6 +561,8 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
                     Spacer(Modifier.height(10.dp))
                     ProductionTarget(store)
                 }
+                Spacer(Modifier.height(10.dp))
+                Panel { CompanyShipping(store) }
                 val periods = ResultBuckets.make(StatsPeriod.Month, emptyList(), store.history)
                 if (periods.size > 1) {
                     Spacer(Modifier.height(10.dp))

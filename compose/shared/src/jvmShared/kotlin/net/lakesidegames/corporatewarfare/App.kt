@@ -342,6 +342,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
             }
         }
         if (store.facilities.isNotEmpty()) item { ProductionTarget(store) }
+        if (store.divisions.isNotEmpty()) item { Panel { CompanyShipping(store) } }
         if (store.divisions.isNotEmpty()) {
             item { Eyebrow("Divisions") }
             items(store.divisions.size) { index ->

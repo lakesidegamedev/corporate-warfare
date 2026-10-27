@@ -37,6 +37,8 @@ pub struct Alert {
     pub key: String,
     pub subject: String,
     pub severity: u8,
+    /// A fuller plain-English line with figures and the next step, when the key alone is not enough.
+    pub detail: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

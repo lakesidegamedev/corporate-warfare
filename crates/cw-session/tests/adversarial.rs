@@ -771,10 +771,12 @@ fn expect_save_fault(outcome: Result<Session, DomainError>, expected: SaveFault,
 fn corrupt_truncated_mis_sized_and_future_saves_are_typed_rejections() {
     let mut session = session(0x5A7E_0001, ScenarioKind::Guided);
     session.advance(3);
-    let bytes = session.export_save().expect("export");
+    let exported = session.export_save().expect("export");
     let live_hash = session.canonical_hash();
-    let at = layout(&bytes);
-    assert_eq!(at.payload_start + at.declared, bytes.len());
+    let at = layout(&exported);
+    // The world payload is what these cuts probe: drop the optional freight read-out trailer
+    // that follows it (its own corruption is covered in the save module tests).
+    let bytes = exported[..at.payload_start + at.declared].to_vec();
     assert!(at.declared > 128, "fixture payload is too small to cut");
 
     // Truncation: every length in the last sixty-four bytes, plus interior cuts across the

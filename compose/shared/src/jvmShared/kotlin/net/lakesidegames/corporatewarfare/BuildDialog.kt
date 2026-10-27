@@ -33,12 +33,17 @@ import uniffi.cw_ffi.BuildQuoteDto
 import uniffi.cw_ffi.RegionBoardDto
 import uniffi.cw_ffi.StrategyDto
 
-/** Build plants in a region: choose a sector and strategy, the number of plants, see the quote. */
+/**
+ * Build plants in a region: choose a sector and strategy, the number of plants, see the quote.
+ * With [initialRecipe] (a strategy index) the dialog opens on that strategy with [initialBlocks]
+ * plants already chosen, as when a freight suggestion hands over its build.
+ */
 @Composable
-fun BuildDialog(store: GameStore, board: RegionBoardDto, onClose: () -> Unit) {
-    var sector by remember { mutableStateOf<String?>(null) }
-    var strategy by remember { mutableStateOf<StrategyDto?>(null) }
-    var blocks by remember { mutableIntStateOf(1) }
+fun BuildDialog(store: GameStore, board: RegionBoardDto, initialRecipe: Int? = null, initialBlocks: Int = 1, onClose: () -> Unit) {
+    val preset = initialRecipe?.let { index -> store.strategyCatalogue.firstOrNull { it.index == index.toUInt() } }
+    var sector by remember { mutableStateOf(preset?.industry) }
+    var strategy by remember { mutableStateOf(preset) }
+    var blocks by remember { mutableIntStateOf(initialBlocks.coerceIn(1, 20)) }
     var quote by remember { mutableStateOf<BuildQuoteDto?>(null) }
 
     LaunchedEffect(strategy, blocks) {
