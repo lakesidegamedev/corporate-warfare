@@ -80,6 +80,16 @@ heading.
   Summaries are worked out by the engine; they add no mechanics. The Shipping figures are now
   kept in the save file, so they are still there after you load a game instead of staying empty
   until the next week closes (older saves load as before and fill in at the next week).
+- Phone parity with the desktop app (1.7.1). The phone layouts now carry the desktop panels that
+  were missing. On Android phones: the map shows decisions waiting, a pause and engine warnings,
+  its layer chips scroll sideways instead of running off the screen, and a region's sheet scrolls
+  and lists the rival leaders there (tap one for its dossier); the Inbox lists recent raids as
+  Rival moves; the Portfolio lists your shareholdings with stake, value and the quarter's move;
+  the CEO Office shows four-weekly results and marks a retooling division; Stats shows each
+  holder's share of the votes. On iPhone and iPad: the Portfolio lists your shareholdings, the
+  CEO Office shows four-weekly results, Stats shows each holder's share of the votes, and the
+  Structure panel gains past activist campaigns, carve-out, activist win and internal-pricing tax
+  totals, and sector names with a reputation bar.
 
 ## [1.7.0] - 2026-10-27
 

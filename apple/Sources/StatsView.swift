@@ -307,7 +307,7 @@ struct StatsView: View {
                     HStack {
                         Text(holder.holder).font(.callout)
                         Spacer()
-                        Text(String(format: "%.1f%%", share * 100)).font(.callout.monospacedDigit())
+                        Text(String(format: "%.1f%% · %.1f%% of votes", share * 100, Double(holder.votesBps) / 100)).font(.callout.monospacedDigit())
                     }
                     GeometryReader { proxy in
                         ZStack(alignment: .leading) {

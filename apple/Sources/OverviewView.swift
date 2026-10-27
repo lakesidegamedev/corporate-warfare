@@ -38,6 +38,7 @@ struct OverviewView: View {
                     .font(.caption2)
                     .foregroundStyle(Theme.secondary)
                 groupPanel
+                ShareholdingsPanel()
             } else {
                 ProgressView("Opening your world…")
             }
