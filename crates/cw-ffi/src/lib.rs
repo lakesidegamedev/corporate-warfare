@@ -905,6 +905,9 @@ pub struct DivisionDto {
     /// Weeks of inputs the division keeps (zero is the firm's default cover) and whether it
     /// builds seasonal inputs ahead in the harvest quarter. Read from its first plant.
     pub stock_weeks: i32,
+    /// The firm's default cover in weeks, what a zero stock target means (perishable inputs
+    /// keep at most two).
+    pub stock_weeks_default: i32,
     pub seasonal_build: bool,
     /// The firm's storage in the division's region.
     pub storage: Vec<StorageCellDto>,
@@ -2669,6 +2672,11 @@ impl SessionHandle {
                         .and_then(|h| world.facilities.get(*h))
                         .map(|p| p.stock_plan.weeks)
                         .unwrap_or(0),
+                    stock_weeks_default: world
+                        .firms
+                        .get(handle)
+                        .map(|f| f.policies.input_cover_weeks.max(1))
+                        .unwrap_or(4),
                     seasonal_build: d
                         .plants
                         .first()

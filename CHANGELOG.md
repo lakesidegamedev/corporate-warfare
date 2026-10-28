@@ -32,6 +32,13 @@ heading.
 
 ### Fixed
 
+- A division's stock target slider read "Company default" beside "26 weeks of inputs", which was
+  only the slider's maximum. It now shows the real company default, such as "Company default: 4
+  weeks", and notes that perishable inputs keep at most 2. The tutorial's research step told new
+  players to fund research with a budget that lost them money. It now asks for a modest budget and
+  shows one sized to your company: its cost a week, the weeks to the next level and what that
+  level buys. Display only, no change to world state or hashes.
+
 - Market snapshots now arrive from Android, Windows and Linux. Until now only the iPhone build sent
   its anonymous market-balance snapshot; the Compose app had no sender. It now posts one every five
   game weeks in the background, with a random install id and nothing else about you, and fails

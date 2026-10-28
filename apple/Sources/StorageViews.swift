@@ -50,8 +50,8 @@ struct DivisionStockTarget: View {
                 range: 0...26,
                 step: 1,
                 ticks: 26,
-                label: { $0 < 0.5 ? "Company default" : "\(Int($0)) weeks of inputs" },
-                detail: { _ in "Weeks of inputs this division keeps on hand. Grain is also bought ahead in the harvest quarter." },
+                label: { [defaultWeeks = division.stockWeeksDefault] in $0 < 0.5 ? "Company default: \(defaultWeeks) weeks" : "\(Int($0)) weeks of inputs" },
+                detail: { _ in "Weeks of inputs this division keeps on hand. Perishable inputs keep at most 2 weeks unless you set a target. Grain is also bought ahead in the harvest quarter." },
                 onCommit: { value in
                     Task {
                         for plant in division.plants {
