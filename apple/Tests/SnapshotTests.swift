@@ -143,15 +143,24 @@ final class SnapshotTests: XCTestCase {
         }
         Countryside.prepare(map)
         let now = Earth.week(of: store.overview?.weekLabel)
-        let shots: [(String, MapCamera, Int, Bool)] = [
-            ("map-close-pad", framed, now, true), ("map-turned-pad", framed.rotated(by: 35), now, true),
-            ("map-vehicles-pad", framed.zoomed(by: 1.6), now, true), ("map-winter-pad", framed, 2, true),
-            ("map-close-plain-pad", framed, now, false),
+        // The bearings show the buildings' sides turning; the pan pair shows the roads staying on
+        // the ground as the camera moves; the Freight mode shows its arcs and nothing else moving.
+        let panned = framed.panned(by: CGSize(width: 140, height: 90), in: size, pitch: 0.4)
+        let shots: [(String, MapCamera, Int, Bool, Bool)] = [
+            ("map-close-pad", framed, now, true, false), ("map-turned-pad", framed.rotated(by: 35), now, true, false),
+            ("map-bearing-90-pad", framed.rotated(by: 90), now, true, false),
+            ("map-bearing-180-pad", framed.rotated(by: 180), now, true, false),
+            ("map-bearing-270-pad", framed.rotated(by: 270), now, true, false),
+            ("map-pan-a-pad", framed.zoomed(by: 1.6), now, true, false),
+            ("map-pan-b-pad", panned.zoomed(by: 1.6), now, true, false),
+            ("map-vehicles-pad", framed.zoomed(by: 1.6), now, true, false), ("map-winter-pad", framed, 2, true, false),
+            ("map-close-plain-pad", framed, now, false, false), ("map-freight-pad", framed, now, true, true),
         ]
-        for (name, camera, week, earth) in shots {
+        for (name, camera, week, earth, freight) in shots {
             look.earth = earth
             let scene = MapScene(map: map, camera: camera, look: look, tint: MapLayer.presence.tintRGB, shading: [:], heights: [:],
-                                 selected: nil, divisions: divisions, lanes: store.lanes, sun: nil, plants: store.mapPlants,
+                                 selected: nil, divisions: divisions, lanes: store.lanes, freightLayer: freight, sun: nil,
+                                 plants: store.mapPlants,
                                  economyPhase: store.economy?.phase, week: week, displayScale: UIScreen.main.scale)
             let geometry = MapGeometry(map: map, camera: camera, size: size, tilt: look.tilt, detail: look.detail)
             XCTAssertTrue(geometry.closeUp, "\(name) is close enough for models")
