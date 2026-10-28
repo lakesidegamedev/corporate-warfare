@@ -296,7 +296,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
             ) {
                 TextButton(onClick = { if (step == 0) onBack() else step = 0 }) { BackLabel("Back", Palette.secondary) }
                 Spacer(Modifier.width(8.dp))
-                Text("New game", color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("New game", color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 StepDot(1, "Scenario", step == 0)
                 Spacer(Modifier.width(14.dp))
                 StepDot(2, "Setup", step == 1)
@@ -307,7 +307,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     if (step == 0) {
-                        Text("Choose a scenario", color = Palette.primaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("Choose a scenario", color = Palette.primaryText, fontSize = 22.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                         val columns = if (wide) 2 else 1
                         catalogue.chunked(columns).forEach { row ->
                             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -328,7 +328,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                         }
                         if (customs.isNotEmpty()) {
                             Spacer(Modifier.height(4.dp))
-                            Text("Your scenarios", color = Palette.primaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            Text("Your scenarios", color = Palette.primaryText, fontSize = 22.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 customs.forEach { custom ->
                                     val on = chosenCustom?.id == custom.id
@@ -352,7 +352,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                         }
                     } else if (chosenCustom != null) {
                         val custom = chosenCustom!!
-                        Text(custom.name, color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text(custom.name, color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                         Text(
                             "Difficulty, economy, capital, rivals and laws come from this scenario. Open the editor to change them.",
                             color = Palette.secondary, fontSize = 13.sp,
@@ -369,7 +369,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                                     Spacer(Modifier.width(14.dp))
                                 }
                                 Column {
-                                    Text(scenario.name, color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                    Text(scenario.name, color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                                     Text("${scenario.region} · starts ${scenario.startYear} · ${scenario.currency}", color = Palette.secondary, fontSize = 13.sp)
                                 }
                             }
@@ -511,7 +511,7 @@ private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Mod
                 ),
             )
             Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
-                Text(scenario.name, color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(scenario.name, color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                 Text("${scenario.region} · ${scenario.startYear}", color = Palette.secondary, fontSize = 12.sp)
             }
             if (scenario.available && onCustomize != null) {

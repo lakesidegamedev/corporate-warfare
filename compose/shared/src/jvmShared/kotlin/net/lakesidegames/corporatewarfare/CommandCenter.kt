@@ -82,7 +82,7 @@ fun CommandCenterScreen(store: GameStore, initialQuery: String = "", onClose: ((
                     .clip(Pixel.shape).background(Palette.panel).border(1.dp, Palette.stroke, Pixel.shape),
             ) {
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Actions", color = Palette.primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("Actions", color = Palette.primaryText, fontSize = 18.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     Text("${matches.size} of ${all.size}", color = Palette.secondary, fontSize = 12.sp)
                     if (onClose != null) TextButton(onClick = onClose) { Text("Done", color = Palette.gold) }
                 }
@@ -253,7 +253,7 @@ private fun ActionForm(store: GameStore, action: ActionDto, modifier: Modifier, 
             }
             Column(Modifier.weight(1f)) {
                 Eyebrow(action.category)
-                Text(action.title, color = Palette.primaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text(action.title, color = Palette.primaryText, fontSize = 22.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
             }
         }
         Text(action.summary, color = Palette.secondary, fontSize = 14.sp)

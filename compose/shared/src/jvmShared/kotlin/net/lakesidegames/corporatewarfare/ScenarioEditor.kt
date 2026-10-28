@@ -109,7 +109,7 @@ internal fun ScenarioEditorScreen(store: GameStore, baseId: String?, existing: C
             Row(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { if (current == null || baseId != null || existing != null) onBack() else draft = null }) { Text("‹ Back", color = Palette.secondary) }
                 Spacer(Modifier.width(8.dp))
-                Text("Scenario editor", color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("Scenario editor", color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 if (current != null && wide) {
                     GoldButton("Save", enabled = summary?.problems.isNullOrEmpty()) { save(false) }
                 }
@@ -119,12 +119,12 @@ internal fun ScenarioEditorScreen(store: GameStore, baseId: String?, existing: C
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(if (wide) 28.dp else 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Text("Start from a built-in scenario", color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text("Start from a built-in scenario", color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         builtIns.forEach { s -> Card(s.name, "${s.region} · ${s.startYear}", false) { open(s.id, "My ${s.name}") } }
                     }
                     if (saved.isNotEmpty()) {
-                        Text("Your scenarios", color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("Your scenarios", color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             saved.forEach { s -> Card(s.name, "Custom · ${s.difficulty}", false) { draft = s } }
                         }
@@ -172,7 +172,7 @@ internal fun ScenarioEditorScreen(store: GameStore, baseId: String?, existing: C
                                     (ranges.capitalMinCents / 100.0)..top, 250_000.0,
                                     label = { Format.compact((it * 100).toLong()) }, ticks = 20,
                                 )
-                            } ?: Text(Format.compact(standard), color = Palette.primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            } ?: Text(Format.compact(standard), color = Palette.primaryText, fontSize = 18.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                         }
                         val laws = d.laws
                         if (laws != null) {

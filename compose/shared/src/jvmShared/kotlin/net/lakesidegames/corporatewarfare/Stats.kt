@@ -115,7 +115,7 @@ fun StatsScreen(store: GameStore, onBack: () -> Unit) {
                         option.title,
                         color = if (period == option) Palette.ink else Palette.primaryText,
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = Pixel.font,
                         modifier = Modifier.clip(Pixel.small)
                             .background(if (period == option) Palette.gold else Palette.panel)
                             .clickable { period = option }

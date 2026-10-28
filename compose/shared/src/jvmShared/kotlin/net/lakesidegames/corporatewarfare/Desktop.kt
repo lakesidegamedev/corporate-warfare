@@ -361,7 +361,7 @@ private fun Chips(options: List<String>, selected: String, onPick: (String) -> U
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         options.forEach { option ->
             Text(
-                option, color = if (option == selected) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                option, color = if (option == selected) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontFamily = Pixel.font,
                 modifier = Modifier.clip(Pixel.small).background(if (option == selected) Palette.gold else Palette.panelRaised)
                     .clickable { onPick(option) }.padding(horizontal = 10.dp, vertical = 4.dp),
             )
@@ -680,7 +680,7 @@ private fun DesktopStats(store: GameStore) {
     val stock = firm?.let { f -> store.stocks.firstOrNull { it.firm == f.handle } }
     Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${firm?.name ?: ""} stats", color = Palette.primaryText, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("${firm?.name ?: ""} stats".uppercase(), color = Palette.primaryText, fontSize = 16.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Chips(StatsPeriod.entries.map { it.title }, period.title) { t -> period = StatsPeriod.entries.first { it.title == t } }
         }
         if (buckets.isEmpty()) {

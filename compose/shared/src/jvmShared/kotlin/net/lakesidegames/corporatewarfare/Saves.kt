@@ -106,7 +106,7 @@ fun LoadGameScreen(store: GameStore, onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onBack) { BackLabel("Back", Palette.secondary) }
                 Spacer(Modifier.width(8.dp))
-                Text("Load game", color = Palette.primaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("Load game", color = Palette.primaryText, fontSize = 22.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
             }
             if (slots.isEmpty()) {
                 Callout("No saves yet. Start a new game; it saves every four weeks and when you leave.", Palette.secondary)

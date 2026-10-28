@@ -66,7 +66,7 @@ fun ValueSlider(
     val span = range.endInclusive - range.start
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label(value), color = Palette.primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(label(value), color = Palette.primaryText, fontSize = 18.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Nudge("minus") { val v = snap(current - step); onValue(v); onCommit(v) }
             Spacer(Modifier.width(6.dp))
             Nudge("plus") { val v = snap(current + step); onValue(v); onCommit(v) }

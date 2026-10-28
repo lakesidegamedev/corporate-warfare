@@ -45,7 +45,19 @@ class UiRenderTest {
                 }
             },
         )
-        for ((name, content) in screens) {
+        // A live career for the in-game desktop screens.
+        store.startCareer(
+            uniffi.cw_ffi.NewGameDto(
+                seed = 7uL, scenarioId = "great-lakes-2000", guided = true, fiveYear = false, difficulty = "standard", economy = "historic",
+                startingCapitalCents = null, pricePath = "historical",
+            ),
+        )
+        val deadline = System.currentTimeMillis() + 30_000
+        while (!store.ready && System.currentTimeMillis() < deadline) Thread.sleep(100)
+        val desktop = if (store.ready) (0 until 8).associate { page ->
+            "ui-desktop-$page" to @androidx.compose.runtime.Composable { DesktopShell(store, onSettings = {}, startPage = page) }
+        } else emptyMap()
+        for ((name, content) in screens + desktop) {
             val scene = ImageComposeScene(1400, 860, Density(1f)) {
                 CorporateWarfareTheme { androidx.compose.runtime.CompositionLocalProvider(LocalAppSettings provides settings) { content() } }
             }

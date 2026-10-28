@@ -113,7 +113,7 @@ internal fun laneAt(map: WorldMap, projection: MapProjection, lanes: List<LaneDt
 @Composable
 private fun Pill(text: String, on: Boolean, onClick: () -> Unit) {
     Text(
-        text, color = if (on) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+        text, color = if (on) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontFamily = Pixel.font,
         modifier = Modifier.clip(Pixel.small).background(if (on) Palette.gold else Palette.panelRaised)
             .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 4.dp),
     )

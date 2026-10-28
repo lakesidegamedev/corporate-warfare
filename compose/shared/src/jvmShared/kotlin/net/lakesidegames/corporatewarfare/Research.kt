@@ -38,7 +38,7 @@ fun ResearchScreen(store: GameStore) {
             Modifier.widthIn(max = 1100.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Research", color = Palette.primaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text("Research", color = Palette.primaryText, fontSize = 22.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
             if (firm == null || research == null) {
                 Callout("Found or take over a company to research.", Palette.secondary)
                 return@Column

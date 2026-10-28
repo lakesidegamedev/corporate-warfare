@@ -72,7 +72,7 @@ fun FoundCompanyPanel(store: GameStore, scroll: Boolean = true) {
             Modifier.widthIn(max = 1000.dp).fillMaxWidth().then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("Found your company", color = Palette.primaryText, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Found your company", color = Palette.primaryText, fontSize = 24.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
             Text("You have ${Format.compact(cash)} of your own. Put some of it into a company, pick where it is based and what it makes first.", color = Palette.secondary, fontSize = 14.sp)
             Panel {
                 Eyebrow("Name")
@@ -110,7 +110,7 @@ fun FoundCompanyPanel(store: GameStore, scroll: Boolean = true) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     store.strategyCatalogue.map { it.industry }.distinct().forEach { s ->
                         Text(
-                            Sectors.name(s), color = if (s == sector) Palette.ink else Palette.primaryText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            Sectors.name(s), color = if (s == sector) Palette.ink else Palette.primaryText, fontSize = 12.sp, fontFamily = Pixel.font,
                             modifier = Modifier.clip(Pixel.small).background(if (s == sector) Palette.gold else Palette.panelRaised)
                                 .clickable { sector = s; recipe = store.strategyCatalogue.firstOrNull { it.industry == s }?.index }
                                 .padding(horizontal = 10.dp, vertical = 5.dp),
