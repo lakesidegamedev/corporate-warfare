@@ -526,12 +526,19 @@ final class WorldClock {
     }
 }
 
-/// What the map shades the regions by.
+/// What the map shades the regions by, with the words for each end of its legend. The same order,
+/// titles, tints and words as the other platforms.
 enum MapLayer: String, CaseIterable, Identifiable {
     case presence = "Your divisions"
+    case share = "Your share"
+    case competition = "Competition"
     case room = "Room to build"
+    case demand = "Demand"
     case wages = "Wages"
     case skill = "Workforce skill"
+    case infrastructure = "Infrastructure"
+    case land = "Land price"
+    case population = "Population"
     case freight = "Freight"
 
     var id: String { rawValue }
@@ -539,10 +546,43 @@ enum MapLayer: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .presence: return "layer_presence"
+        case .share: return "percent"
+        case .competition: return "target"
         case .room: return "layer_room"
+        case .demand: return "trend_up"
         case .wages: return "layer_wages"
         case .skill: return "layer_skill"
+        case .infrastructure: return "rail"
+        case .land: return "tag"
+        case .population: return "people"
         case .freight: return "layer_freight"
+        }
+    }
+
+    /// The legend's word for the faint end.
+    var low: String {
+        switch self {
+        case .presence, .share: return "None"
+        case .competition: return "Open"
+        case .room: return "Little"
+        case .wages, .land: return "Cheap"
+        case .infrastructure: return "Poor"
+        case .population: return "Small"
+        case .demand, .skill, .freight: return "Low"
+        }
+    }
+
+    /// The legend's word for the full end.
+    var high: String {
+        switch self {
+        case .presence: return "Most plants"
+        case .share: return "Leading"
+        case .competition: return "Crowded"
+        case .room: return "Most imports"
+        case .wages, .land: return "Dear"
+        case .infrastructure: return "Good"
+        case .population: return "Large"
+        case .demand, .skill, .freight: return "High"
         }
     }
 
@@ -551,10 +591,15 @@ enum MapLayer: String, CaseIterable, Identifiable {
     /// `tint` as components, for shading raised tiles.
     var tintRGB: RGB {
         switch self {
-        case .presence, .freight: return .gold
+        case .presence, .share, .freight: return .gold
+        case .competition: return RGB(hex: 0xE5605E)
         case .room: return .positive
-        case .wages: return .copper
-        case .skill: return .blue
+        case .demand: return RGB(hex: 0x7E57C2)
+        case .wages: return RGB(hex: 0x42A5F5)
+        case .skill: return RGB(hex: 0x26C6DA)
+        case .infrastructure: return RGB(hex: 0x90A4AE)
+        case .land: return RGB(hex: 0xFF8A65)
+        case .population: return RGB(hex: 0xEC407A)
         }
     }
 }
@@ -585,6 +630,14 @@ struct MapLook: Equatable {
     var ultra: Bool
     /// The satellite Earth under the map; the regions then lie flat and see-through over it.
     var earth = false
+    /// Trees, fields, barns and houses on the ground up close.
+    var countryside = true
+    /// Rivals' plants as buildings up close.
+    var rivals = true
+    /// The drawn interstates.
+    var interstates = true
+    /// Names on the map: 0 none, 1 cities, 2 cities and regions.
+    var labels = 2
 
     /// Whether the regions stand as raised tiles at a flatness: not over the satellite Earth.
     func raised(_ t: Double) -> Bool { extrude && t > 0.05 && !earth }
@@ -704,7 +757,7 @@ struct MapScene {
             // than the player's buildings so those stay the stars; then the divisions, nearest last.
             var cityTops: [Int: CGFloat] = [:]
             // The diorama up close: trees, fields, barns, rocks and the houses round each city.
-            if look.buildings >= 2 && look.earth && g.closeUp && t > 0.5 {
+            if look.countryside && look.buildings >= 2 && look.earth && g.closeUp && t > 0.5 {
                 let voxel = max(Voxels.scale(g.scale, displayScale: displayScale) - 1, 1)
                 Countryside.draw(in: &context, projection: p, map: map, week: week, scale: voxel, displayScale: displayScale,
                                  lift: plinth, economyPhase: economyPhase, size: size)
@@ -731,7 +784,7 @@ struct MapScene {
                 // Rivals' plants first, a size smaller and muted, so the player's own stand over them.
                 let rivalScale = max(Voxels.scale(g.scale, displayScale: displayScale) - 1, 1)
                 let rivalStates = PlantState.of(plants.filter { !$0.player }, byFirm: true)
-                for b in g.rivalBuildings(plants, ground) {
+                for b in look.rivals ? g.rivalBuildings(plants, ground) : [] {
                     let base = p.lift(CGPoint(x: b.gx, y: b.gy), b.floor)
                     switch rivalStates[b.key] {
                     case .site:
@@ -797,7 +850,7 @@ struct MapScene {
                 GlobeLighting.cityLights(in: &context, cities: map.cities, projection: p, sun: light, lift: plinth, scale: 1)
             }
             // City names last, with the region names below, so no building ever covers them.
-            for (index, city) in map.cities.prefix(close ? 40 : 14).enumerated() {
+            for (index, city) in map.cities.prefix(look.labels >= 1 ? (close ? 40 : 14) : 0).enumerated() {
                 if !close && city.country != "USA" { continue }
                 let geo = GeoPoint(e4: city.x, city.y)
                 guard let at = p.at(lon: geo.lon, lat: geo.lat, height: g.cityFloor(index, ground)) else { continue }
@@ -810,7 +863,7 @@ struct MapScene {
         } else if look.cityLights && lit && t < 1 {
             GlobeLighting.cityLights(in: &context, cities: map.cities, projection: p, sun: light, lift: 0, scale: 0.7)
         }
-        if zoom > 14 {
+        if zoom > 14 && look.labels >= 2 {
             for region in map.regions {
                 guard let anchor = map.anchor(of: region.code),
                       let at = p.at(lon: anchor.lon, lat: anchor.lat, height: g.regionLift(region.code, ground)) else { continue }
@@ -921,7 +974,6 @@ struct MapScene {
         lifted.translateBy(x: 0, y: up)
         if detail > 0 {
             lifted.stroke(g.rivers, with: .color(water.opacity(0.9 * detail)), lineWidth: 1.4)
-            lifted.stroke(g.interstates, with: .color(RGB(hex: 0xC68A3D).color(0.35 * detail)), lineWidth: 1)
         }
         if !raised {
             for region in g.regionPaths {
@@ -933,6 +985,20 @@ struct MapScene {
             // A cool rim light along the scenario's states when lit.
             if lit && t > 0.5 { lifted.stroke(state, with: .color(RGB(hex: 0x8EC5FF).color(0.10)), lineWidth: 4) }
             lifted.stroke(state, with: .color(RGB(hex: 0xD2DEEA).color(0.85)), lineWidth: zoom > 3 ? 2 : 1)
+        }
+        // Interstates over the regions and their shading, under the traffic and the buildings: an
+        // 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line.
+        let highways = look.detail == 0 ? 0 : smoothstep(0.85, 1.2, g.zoomRatio)
+        if look.interstates && highways > 0 && t > 0.5 {
+            let wide = 1.6 + 1.2 * min(g.scale, 2.5)
+            lifted.stroke(g.interstates, with: .color(RGB(hex: 0x1C2228).color(0.9 * highways)),
+                          style: StrokeStyle(lineWidth: wide + 2, lineCap: .square))
+            lifted.stroke(g.interstates, with: .color(RGB(hex: 0x6E757D).color(highways)),
+                          style: StrokeStyle(lineWidth: wide, lineCap: .square))
+            if g.closeUp {
+                lifted.stroke(g.interstates, with: .color(Theme.gold.opacity(0.85 * highways)),
+                              style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+            }
         }
         // Night falls on the globe whenever it is lit, and on the flat map with day and night on.
         // With the globe's shading, the haze and the vignette it is soft, so it all goes in one
@@ -1400,6 +1466,11 @@ struct WorldMapView: View {
     @AppStorage(GraphicsKeys.buildings) private var buildings = 2
     @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
     @AppStorage(GraphicsKeys.showFps) private var showFps = false
+    @AppStorage(GraphicsKeys.countryside) private var countryside = true
+    @AppStorage(GraphicsKeys.rivals) private var rivals = true
+    @AppStorage(GraphicsKeys.interstates) private var interstates = true
+    @AppStorage(GraphicsKeys.seasons) private var seasons = true
+    @AppStorage(GraphicsKeys.labels) private var labels = 2
     let shading: [String: Double]
     let layer: MapLayer
     let divisions: [DivisionMarker]
@@ -1445,9 +1516,13 @@ struct WorldMapView: View {
             detail: detailLevel, tilt: GraphicsSettings.pitch(forTilt: tiltSetting), extrude: extrude,
             lighting: lighting, dayNight: dayNight, cityLights: cityLights, clouds: clouds, traffic: traffic,
             buildings: buildings, frameRate: frameRate, animations: animations, showFps: showFps,
-            ultra: preset == GraphicsPreset.ultra.rawValue, earth: earth
+            ultra: preset == GraphicsPreset.ultra.rawValue, earth: earth, countryside: countryside, rivals: rivals,
+            interstates: interstates, labels: labels
         )
     }
+
+    /// The week of the year for the seasons: midsummer with seasons off.
+    private var seasonWeek: Int { seasons ? Earth.week(of: weekLabel) : 28 }
 
     private var animate: Bool { animations && !reduceMotion }
     /// Whether moving effects may run at all.
@@ -1475,7 +1550,7 @@ struct WorldMapView: View {
                         }
                         .drawingGroup()
                     }
-                    EarthLayer(view: EarthView(camera: current, size: size, tilt: look.tilt, week: Earth.week(of: weekLabel),
+                    EarthLayer(view: EarthView(camera: current, size: size, tilt: look.tilt, week: seasonWeek,
                                                bounds: map.playBounds, scenario: map.scenarioId))
                         .allowsHitTesting(false)
                 }
@@ -1617,6 +1692,15 @@ struct WorldMapView: View {
                 }
                 selected = hit == selected ? nil : hit
             }
+            .overlay(alignment: .bottomLeading) {
+                // What the colours mean for the active mode.
+                if layer != .freight {
+                    MapLegend(layer: layer)
+                        .padding(.leading, 12)
+                        .padding(.bottom, controlsAtTop ? 24 : 40)
+                        .allowsHitTesting(false)
+                }
+            }
             .overlay(alignment: controlsAtTop ? .topTrailing : .bottomTrailing) {
                 // Up top they sit below the layer chips.
                 zoomControls(current: current, size: size)
@@ -1659,7 +1743,7 @@ struct WorldMapView: View {
             heights: layer == .freight ? [:] : ease.value(at: now, target: shading),
             selected: selected, divisions: divisions, lanes: lanes, freightLayer: layer == .freight, pickedLane: pickedLane,
             sun: look.dayNight ? MapSun.moving(gameSeconds(now)) : nil, plants: plants, economyPhase: economyPhase,
-            acquired: acquired, week: Earth.week(of: weekLabel), displayScale: displayScale
+            acquired: acquired, week: seasonWeek, displayScale: displayScale
         )
     }
 
@@ -1721,7 +1805,8 @@ struct WorldMapView: View {
             // A mix that happens to match a preset shows as that preset.
             let now = GraphicsSettings(mapDetail: detailLevel, tilt: tiltSetting, extrude: extrude, lighting: lighting,
                                        dayNight: dayNight, cityLights: cityLights, earth: earth, clouds: clouds, traffic: traffic,
-                                       buildings: buildings, frameRate: frameRate)
+                                       buildings: buildings, frameRate: frameRate, countryside: countryside, rivals: rivals,
+                                       interstates: interstates, seasons: seasons, labels: labels)
             preset = (GraphicsPreset.choices.first { $0.values == now } ?? .custom).rawValue
         } label: {
             Group {
@@ -1869,5 +1954,41 @@ private struct SecondaryDrag: UIViewRepresentable {
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
             true
         }
+    }
+}
+
+/// The active mode's name over a strip from its low colour to its high one.
+struct MapLegend: View {
+    let layer: MapLayer
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(layer.rawValue.uppercased())
+                .font(Pixel.font(10))
+                .foregroundStyle(Theme.primaryText)
+                .lineLimit(1)
+            // Stepped, like the rest of the 8-bit look: five blocks from faint to full.
+            HStack(spacing: 2) {
+                ForEach(0..<5, id: \.self) { k in
+                    Rectangle()
+                        .fill(RGB(hex: 0x33475A).mixed(with: layer.tintRGB, 0.15 + 0.6 * Double(k) / 4).color())
+                }
+            }
+            .frame(height: 10)
+            HStack(spacing: 4) {
+                Text(layer.low)
+                Spacer(minLength: 0)
+                Text(layer.high)
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(Theme.secondary)
+            .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(width: 167, alignment: .leading)
+        .pixelFrame(Theme.panel.opacity(0.94))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(layer.rawValue) legend, \(layer.low) to \(layer.high)")
     }
 }
