@@ -38,15 +38,15 @@ class GraphicsRenderTest {
         MapDivisionDto(1uL, "IL-CHI", "logistics", 4u, 4u),
     )
 
-    private fun lane(a: String, b: String, mode: String, lots: Int) = LaneDto(
+    private fun lane(a: String, b: String, mode: String, lots: Int, mine: Int = 0) = LaneDto(
         a = a, b = b, aName = a, bName = b, mode = 0u, modeId = mode, modeName = mode, km = 300u,
         capacityLots = lots, usedLots = lots / 2, heldLots = 0, outsideLots = 0, fillBps = 5000,
         rateCentsPerLot = 100, outsideRateCentsPerLot = 120, hotWeeks = 0u, owners = emptyList(), contracts = 0u,
-        myCapacityLots = 0, myShippedLots = 0, myContractLots = 0, reservableLots = 0,
+        myCapacityLots = 0, myShippedLots = mine, myContractLots = 0, reservableLots = 0,
     )
 
     private val lanes = listOf(
-        lane("OH-CEN", "MI-DET", "road", 40), lane("OH-CEN", "PA-WES", "rail", 30), lane("IL-CHI", "MI-DET", "sea", 20),
+        lane("OH-CEN", "MI-DET", "road", 40, mine = 6), lane("OH-CEN", "PA-WES", "rail", 30, mine = 4), lane("IL-CHI", "MI-DET", "sea", 20),
         lane("OH-NE", "NY-WES", "road", 25), lane("IN-CEN", "IL-CHI", "rail", 35), lane("PA-PHL", "NY-NYC", "road", 50),
     )
 
@@ -74,6 +74,7 @@ class GraphicsRenderTest {
             "scenario" to scenario,
             "close" to scenario.zoomed(3.0),
             "turned" to scenario.zoomed(2.0).rotated(35.0),
+            "vehicles" to scenario.zoomed(5.0),
         )
         val sun = Sun.moving(40.0)
         for (preset in GraphicsPreset.entries) {
@@ -103,6 +104,22 @@ class GraphicsRenderTest {
                 out?.let { File(it, "${preset.name.lowercase()}-$name.png").writeBytes(image.encodeToData(EncodedImageFormat.PNG)!!.bytes) }
             }
         }
+    }
+
+    @Test
+    fun vehiclesFaceTheWayTheyMoveOnScreen() {
+        assertEquals("E", Vehicles.heading(10f, 0f))
+        assertEquals("N", Vehicles.heading(0f, -10f))
+        assertEquals("SW", Vehicles.heading(-10f, 5f))
+        assertEquals("NW", Vehicles.heading(-10f, -5f))
+        // Every type, livery and heading has a frame at every scale.
+        for (type in listOf("truck", "car", "loco", "wagon", "ship", "plane")) for (mine in listOf(false, true)) {
+            for (h in listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")) for (scale in 1..3) assertNotNull(Vehicles.frame(type, mine, h, scale))
+        }
+        // A truck is smaller than the smallest division building at the same scale.
+        val truck = assertNotNull(Vehicles.frame("truck", false, "E", 2))
+        val shop = assertNotNull(Voxels.frame("retail", 0, 2))
+        assertTrue(truck.w * truck.h < shop.w * shop.h)
     }
 
     @Test
