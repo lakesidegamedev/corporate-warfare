@@ -126,7 +126,7 @@ struct StoreGoodPanel: View {
                             Spacer()
                             Button("Release all") { Task { rejection = await send("SellFromStore", ["lots": 0]) } }
                                 .font(.caption.weight(.semibold))
-                                .buttonStyle(.bordered)
+                                .buttonStyle(PixelButtonStyle())
                                 .tint(Theme.gold)
                         }
                     }
@@ -141,7 +141,7 @@ struct StoreGoodPanel: View {
                     } label: {
                         PixelLabel("Buy to store", icon: "buy").font(.callout.weight(.semibold)).frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PixelButtonStyle(prominent: true))
                     .tint(Theme.gold)
                     .foregroundStyle(Theme.ink)
                     if let rejection {

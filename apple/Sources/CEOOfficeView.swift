@@ -27,7 +27,7 @@ struct CEOOfficeView: View {
                         PixelIcon("chevron_right", size: 14)
                     }
                     .padding(12)
-                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(Theme.panel, in: Pixel.shape)
                 }
                 .tint(Theme.gold)
                 NavigationLink {
@@ -40,7 +40,7 @@ struct CEOOfficeView: View {
                         PixelIcon("chevron_right", size: 12)
                     }
                     .padding(12)
-                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(Theme.panel, in: Pixel.shape)
                 }
                 .tint(Theme.gold)
                 NavigationLink {
@@ -53,7 +53,7 @@ struct CEOOfficeView: View {
                         PixelIcon("chevron_right", size: 12)
                     }
                     .padding(12)
-                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(Theme.panel, in: Pixel.shape)
                 }
                 .tint(Theme.gold)
                 if !store.cfoAdvice.isEmpty {
@@ -83,7 +83,7 @@ struct CEOOfficeView: View {
                         PixelIcon("chevron_right", size: 14)
                     }
                     .padding(12)
-                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(Theme.panel, in: Pixel.shape)
                 }
                 .tint(Theme.gold)
             } else if store.controlledFirms.isEmpty {
@@ -301,13 +301,13 @@ struct CEOOfficeView: View {
                     }
                     Button("Details") { store.openDivision = division }
                         .font(.caption.weight(.semibold))
-                        .buttonStyle(.bordered)
+                        .buttonStyle(PixelButtonStyle())
                         .tint(Theme.gold)
                     Spacer()
                     if let first = plants.first {
                         Button("Retool division") { retooling = first }
                             .font(.caption.weight(.semibold))
-                            .buttonStyle(.bordered)
+                            .buttonStyle(PixelButtonStyle())
                             .tint(Theme.gold)
                             .disabled(division.retooling || plants.contains { $0.status != "operating" && $0.status != "mothballed" })
                     }
@@ -334,13 +334,13 @@ struct CEOOfficeView: View {
                 if plant.status == "operating" {
                     Button("Mothball") { Task { rejection = await store.submit(CommandJSON.command("MothballFacility", ["facility": plant.handle])) } }
                         .font(.caption.weight(.semibold))
-                        .buttonStyle(.bordered)
+                        .buttonStyle(PixelButtonStyle())
                         .tint(Theme.secondary)
                         .accessibilityHint("Stops the plant and releases its staff until you reopen it")
                 } else if plant.status == "mothballed" {
                     Button("Reopen \(Format.moneyCompact(plant.reopenCostCents))") { Task { rejection = await store.submit(CommandJSON.command("ReopenFacility", ["facility": plant.handle])) } }
                         .font(.caption.weight(.semibold))
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PixelButtonStyle(prominent: true))
                         .tint(Theme.gold)
                         .accessibilityHint("Restarts the plant; staff are hired again over the following weeks")
                 }

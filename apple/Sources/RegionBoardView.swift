@@ -50,7 +50,7 @@ struct RegionBoardView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PixelButtonStyle(prominent: true))
                 .tint(Theme.gold)
                 .foregroundStyle(Theme.ink)
                 .disabled(store.overview?.primaryFirm == nil)
@@ -229,7 +229,7 @@ struct RegionBoardView: View {
                             }
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Theme.panelRaised, in: Capsule())
+                            .background(Theme.panelRaised, in: Pixel.small)
                         }
                     }
                     .padding(.top, 2)
@@ -263,7 +263,7 @@ struct RegionBoardView: View {
             }
             Spacer()
             Button(ready ? "Raid" : "Week \(option.readyWeek)") { raiding = option }
-                .buttonStyle(.bordered)
+                .buttonStyle(PixelButtonStyle())
                 .tint(Theme.negative)
                 .disabled(!ready || store.isBusy)
         }
@@ -383,7 +383,7 @@ struct RaidSheet: View {
                         PixelLabel("Launch campaign", icon: "flag")
                             .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PixelButtonStyle(prominent: true))
                     .tint(Theme.negative)
                     .disabled(store.isBusy || result != nil)
                 }

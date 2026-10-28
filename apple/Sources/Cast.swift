@@ -30,8 +30,8 @@ struct PixelPortrait: View {
             )
         }
         .frame(width: size, height: size)
-        .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 4))
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .background(Theme.panelRaised, in: Pixel.small)
+        .clipShape(Pixel.small)
         .accessibilityHidden(true)
     }
 }

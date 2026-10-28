@@ -30,7 +30,7 @@ private func changeText(_ bps: Int32) -> String {
 struct FreightLegend: View {
     private func dot(_ color: Color, _ text: String) -> some View {
         HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 8, height: 8)
+            Pixel.small.fill(color).frame(width: 8, height: 8)
             Text(text).font(.caption2).foregroundStyle(Theme.secondary)
         }
     }
@@ -213,7 +213,7 @@ private struct LaneDetail: View {
             } label: {
                 PixelLabel("Reserve \(Int(lots).formatted()) loads", icon: "lane").font(.callout.weight(.semibold)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PixelButtonStyle(prominent: true))
             .tint(Theme.gold)
             .foregroundStyle(Theme.ink)
         }
@@ -338,11 +338,11 @@ struct DivisionShipping: View {
                         Button {
                             Task { rejection = await set(plant, kind: Int(division.shipKind), mode: option.id) }
                         } label: {
-                            Text(option.label + modeTail(option)).font(.caption.weight(.semibold))
+                            Text((option.label + modeTail(option)).uppercased()).font(Pixel.font(11))
                                 .padding(.horizontal, 10).padding(.vertical, 5)
                                 .foregroundStyle(option.selected ? Theme.ink : Theme.primaryText)
-                                .background(option.selected ? Theme.gold : Theme.panel, in: Capsule())
-                                .overlay(Capsule().stroke(Theme.stroke, lineWidth: option.selected ? 0 : 1))
+                                .background(option.selected ? Theme.gold : Theme.panel, in: Pixel.small)
+                                .overlay(Pixel.small.stroke(Theme.stroke, lineWidth: option.selected ? 0 : 1))
                         }
                         .buttonStyle(.plain)
                         .accessibilityAddTraits(option.selected ? .isSelected : [])
@@ -381,7 +381,7 @@ struct DivisionShipping: View {
                 }
             }
             .padding(.horizontal, 8).padding(.vertical, 5)
-            .background(option.selected ? Theme.gold.opacity(0.14) : Theme.panel.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(option.selected ? Theme.gold.opacity(0.14) : Theme.ink, in: Pixel.shape)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(option.selected ? .isSelected : [])
@@ -399,7 +399,7 @@ struct DivisionShipping: View {
             } label: {
                 PixelLabel("Review this build", icon: "lane").font(.callout.weight(.semibold)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PixelButtonStyle(prominent: true))
             .tint(Theme.gold)
             .foregroundStyle(Theme.ink)
         }
@@ -409,7 +409,7 @@ struct DivisionShipping: View {
             } label: {
                 PixelLabel("Reserve \(s.lots) loads for 13 weeks", icon: "lane").font(.callout.weight(.semibold)).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PixelButtonStyle(prominent: true))
             .tint(Theme.gold)
             .foregroundStyle(Theme.ink)
         }

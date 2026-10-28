@@ -40,6 +40,11 @@ heading.
 - A sharper 8-bit look: stepped corners, hard bevelled edges and hard shadows on panels and
   buttons, and a pixel font (Silkscreen, SIL Open Font License) for headings, labels, buttons and
   tabs. Body text and figures stay in the regular font so they are easy to read. No glass or blur.
+  On iPhone, iPad and Mac the app no longer uses iOS 26's Liquid Glass: system bars, buttons and
+  sheets are solid and gold-accented to match.
+- iPad Split View and Slide Over are checked at a third, a half and two thirds of the screen in
+  both orientations; the week controls stay pinned on screen at every width, where at half width
+  Next week used to scroll out of reach. Snapshots are kept in `evidence/ipad-multitasking/`.
 - The main menu's globe now turns in sunlight with its night side lit by cities, gold trade
   routes arc between the world's great cities, satellites circle it, the sun glares from the
   side, and a band of light crosses the logo.

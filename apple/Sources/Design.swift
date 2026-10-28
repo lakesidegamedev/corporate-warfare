@@ -85,13 +85,13 @@ struct Eyebrow: View {
     let text: String
     var body: some View {
         Text(text.uppercased())
-            .font(.caption2.weight(.semibold))
-            .tracking(0.8)
+            .font(Pixel.font(12))
+            .tracking(0.6)
             .foregroundStyle(Theme.secondary)
     }
 }
 
-/// A raised dark panel with a hairline stroke.
+/// A raised dark panel: hard bevelled edges and a hard shadow, the 8-bit look shared with Android.
 struct Panel<Content: View>: View {
     var padding: CGFloat = 14
     @ViewBuilder var content: Content
@@ -99,8 +99,7 @@ struct Panel<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+            .pixelFrame(Theme.panel)
     }
 }
 
@@ -173,8 +172,8 @@ struct SectorBadge: View {
             PixelIcons.drawBitmap(image, in: &context, rect: CGRect(x: inset, y: inset, width: cell * 12, height: cell * 12))
         }
         .frame(width: size, height: size)
-        .background(Theme.ink, in: RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous).stroke(Sector.color(sector), lineWidth: max(1, size / 18)))
+        .background(Theme.ink, in: PixelShape(cut: size * 0.12))
+        .overlay(PixelShape(cut: size * 0.12).stroke(Sector.color(sector), lineWidth: max(1, size / 18)))
         .accessibilityLabel(Sector.name(sector))
     }
 }
@@ -195,8 +194,8 @@ struct ConditionBar: View {
             }
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Theme.stroke)
-                    Capsule()
+                    Pixel.small.fill(Theme.stroke)
+                    Pixel.small
                         .fill(quality > 0.6 ? Theme.positive : quality > 0.35 ? Theme.warning : Theme.negative)
                         .frame(width: proxy.size.width * share)
                 }
@@ -352,7 +351,7 @@ struct MetricTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(Theme.surface(for: scheme))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(Pixel.shape)
         .accessibilityElement(children: .combine)
         .accessibilityHint("Activate the related row to open the ledger-backed explanation.")
     }
@@ -455,9 +454,12 @@ struct ScreenHeader<Trailing: View>: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.title2.weight(.bold))
+                Text(title.uppercased())
+                    .font(Pixel.font(24, bold: true))
                     .foregroundStyle(Theme.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .accessibilityLabel(title)
                     .accessibilityAddTraits(.isHeader)
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
@@ -497,7 +499,7 @@ struct StatGroup: View {
                 if let headline {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(headline.value)
-                            .font(.title.weight(.bold).monospacedDigit())
+                            .font(Pixel.font(28, bold: true))
                             .foregroundStyle(headline.tone)
                             .minimumScaleFactor(0.7)
                             .lineLimit(1)
@@ -549,7 +551,7 @@ struct SignalPill: View {
             .foregroundStyle(tint)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(tint.opacity(0.14), in: Capsule())
+            .background(tint.opacity(0.14), in: Pixel.small)
             .lineLimit(1)
             .fixedSize()
     }
@@ -572,8 +574,8 @@ struct CalloutRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(tint.opacity(0.25), lineWidth: 1))
+        .background(tint.opacity(0.10), in: Pixel.shape)
+        .overlay(Pixel.shape.stroke(tint.opacity(0.25), lineWidth: 1))
         .accessibilityElement(children: .combine)
     }
 }
@@ -645,7 +647,7 @@ struct ProfitDrivers: View {
                 .frame(width: 108, alignment: .leading)
                 .lineLimit(1)
             GeometryReader { proxy in
-                Capsule()
+                Pixel.small
                     .fill(tint)
                     .frame(width: max(2, proxy.size.width * min(abs(Double(cents)) / scale, 1)))
                     .frame(maxHeight: .infinity, alignment: .center)
@@ -694,7 +696,7 @@ struct CfoPanel: View {
                         Button(item.actionLabel) {
                             Task { rejection = await store.applyAdvice(item) }
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(PixelButtonStyle())
                         .tint(Theme.gold)
                         .accessibilityHint(item.detail)
                     }
@@ -741,14 +743,14 @@ struct ValueSlider: View {
                 let x = inset + position(value, width)
                 let start = inset + position(origin ?? range.lowerBound, width)
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Theme.panelRaised).frame(width: width, height: 8).offset(x: inset)
+                    Pixel.small.fill(Theme.panelRaised).frame(width: width, height: 8).offset(x: inset)
                     ForEach(0...ticks, id: \.self) { index in
                         Rectangle()
                             .fill(Theme.secondary.opacity(index % 5 == 0 ? 0.55 : 0.3))
                             .frame(width: 1, height: index % 5 == 0 ? 16 : 10)
                             .offset(x: inset + width * CGFloat(index) / CGFloat(ticks))
                     }
-                    Capsule()
+                    Pixel.small
                         .fill(LinearGradient(colors: [tint.opacity(0.55), tint], startPoint: .leading, endPoint: .trailing))
                         .frame(width: abs(x - start), height: 8)
                         .offset(x: min(x, start))
@@ -803,7 +805,7 @@ struct ValueSlider: View {
         } label: {
             PixelIcon(icon, size: 14)
                 .frame(width: 30, height: 30)
-                .background(Theme.panelRaised, in: Circle())
+                .background(Theme.panelRaised, in: Pixel.small)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(icon == "plus" ? "Increase" : "Decrease")

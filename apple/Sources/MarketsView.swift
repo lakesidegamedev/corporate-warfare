@@ -132,8 +132,8 @@ struct RegionMarketsSection: View {
             .foregroundStyle(Theme.primaryText)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Theme.panelRaised, in: Capsule())
-            .overlay(Capsule().stroke(Theme.stroke, lineWidth: 1))
+            .background(Theme.panelRaised, in: Pixel.small)
+            .overlay(Pixel.small.stroke(Theme.stroke, lineWidth: 1))
         }
         .accessibilityLabel("Region: \(state?.name ?? "none")")
     }
@@ -145,13 +145,13 @@ struct RegionMarketsSection: View {
                     Button {
                         filter = option
                     } label: {
-                        Text(option.title)
-                            .font(.caption.weight(.semibold))
+                        Text(option.title.uppercased())
+                            .font(Pixel.font(11))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .foregroundStyle(filter == option ? Theme.ink : Theme.primaryText)
-                            .background(filter == option ? Theme.gold : Theme.panel, in: Capsule())
-                            .overlay(Capsule().stroke(Theme.stroke, lineWidth: filter == option ? 0 : 1))
+                            .background(filter == option ? Theme.gold : Theme.panel, in: Pixel.small)
+                            .overlay(Pixel.small.stroke(Theme.stroke, lineWidth: filter == option ? 0 : 1))
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(filter == option ? .isSelected : [])
@@ -308,13 +308,13 @@ private struct BoardRow: View {
             if yours {
                 Button("Set your price", action: onSetPrice)
                     .font(.caption.weight(.semibold))
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PixelButtonStyle(prominent: true))
                     .tint(Theme.gold)
                     .foregroundStyle(Theme.ink)
             }
         }
         .padding(10)
-        .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Theme.panelRaised, in: Pixel.shape)
     }
 
     private var advice: String {

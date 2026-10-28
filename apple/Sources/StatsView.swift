@@ -116,10 +116,7 @@ struct StatsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Picker("Period", selection: $period) {
-                    ForEach(StatsPeriod.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
+                PixelChoices(options: StatsPeriod.allCases.map { ($0, $0.rawValue) }, selection: $period, label: "Period")
 
                 if buckets.isEmpty {
                     EmptyNote(text: "Results appear after the first week closes.")
@@ -186,7 +183,7 @@ struct StatsView: View {
 
     private func legend(_ color: Color, _ text: String) -> some View {
         HStack(spacing: 5) {
-            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 10, height: 10)
+            Pixel.small.fill(color).frame(width: 10, height: 10)
             Text(text).font(.caption2).foregroundStyle(Theme.secondary)
         }
     }
@@ -314,8 +311,8 @@ struct StatsView: View {
                     }
                     GeometryReader { proxy in
                         ZStack(alignment: .leading) {
-                            Capsule().fill(Theme.stroke)
-                            Capsule().fill(Theme.gold).frame(width: proxy.size.width * share)
+                            Pixel.small.fill(Theme.stroke)
+                            Pixel.small.fill(Theme.gold).frame(width: proxy.size.width * share)
                         }
                     }
                     .frame(height: 5)

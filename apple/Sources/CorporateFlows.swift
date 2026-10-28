@@ -78,12 +78,12 @@ struct DealsView: View {
                             json: CommandJSON.command("FundTender", ["deal": deal.handle])
                         )
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(PixelButtonStyle())
                     .frame(minHeight: 44)
                 }
                 if deal.state == "review" {
                     Button("Submit remedy") { remedyDeal = deal }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(PixelButtonStyle())
                         .frame(minHeight: 44)
                 }
                 if deal.state == "settled" {
@@ -96,7 +96,7 @@ struct DealsView: View {
                             json: CommandJSON.command("ProposeMerger", ["deal": deal.handle])
                         )
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(PixelButtonStyle())
                     .frame(minHeight: 44)
                 }
                 if !dealIsTerminal(deal.state) {
@@ -109,7 +109,7 @@ struct DealsView: View {
                             json: CommandJSON.command("WithdrawOffer", ["deal": deal.handle])
                         )
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(PixelButtonStyle())
                     .frame(minHeight: 44)
                 }
             }
@@ -247,7 +247,7 @@ struct InsuranceView: View {
                                             json: CommandJSON.command("CancelPolicy", ["policy": policy.handle])
                                         )
                                     }
-                                    .buttonStyle(.bordered)
+                                    .buttonStyle(PixelButtonStyle())
                                     .frame(minHeight: 44)
                                     .font(.caption)
                                 }
@@ -293,7 +293,7 @@ struct InsuranceView: View {
                                 ])
                             )
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(PixelButtonStyle())
                         .frame(minHeight: 44)
                         .font(.caption)
                     }

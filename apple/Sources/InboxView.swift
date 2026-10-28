@@ -104,8 +104,8 @@ struct DecisionCard: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 9)
                             .foregroundStyle(Theme.primaryText)
-                            .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+                            .background(Theme.panelRaised, in: Pixel.shape)
+                            .overlay(Pixel.shape.stroke(Theme.stroke, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .disabled(store.isBusy)

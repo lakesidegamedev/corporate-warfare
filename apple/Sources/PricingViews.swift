@@ -223,7 +223,7 @@ struct PostureSheet: View {
                 Spacer(minLength: 0)
             }
             .padding(12)
-            .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(Theme.panelRaised, in: Pixel.shape)
         }
         .buttonStyle(.plain)
         .disabled(store.isBusy)
