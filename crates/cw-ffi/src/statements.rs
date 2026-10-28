@@ -213,7 +213,7 @@ impl SessionHandle {
         let Some(entity) = world.firms.get(handle) else {
             return Vec::new();
         };
-        let listed = entity.shares.issued > 0 && entity.operative();
+        let listed = entity.on_board();
         if !listed && !session.can_inspect(firm) {
             return Vec::new();
         }
@@ -415,6 +415,41 @@ mod tests {
             assert_eq!(pair[1].cash_opening_cents, pair[0].cash_closing_cents);
         }
         assert!(!session.corridor_index_history().is_empty());
+    }
+
+    /// Every company on the stock board shows its quarters, floated or not, before and after a
+    /// save. Statements once required a completed float, which hid half the board.
+    #[test]
+    fn every_firm_on_the_board_has_statements() {
+        let session = SessionHandle::start(crate::NewGameDto {
+            seed: 7,
+            scenario_id: "great-lakes-2000".to_owned(),
+            guided: true,
+            five_year: false,
+            difficulty: "standard".to_owned(),
+            economy: "historic".to_owned(),
+            starting_capital_cents: None,
+            price_path: "historical".to_owned(),
+        })
+        .unwrap();
+        let mut guard = 0;
+        while session.overview().tick < 30 && guard < 40 {
+            session.dismiss_pause();
+            session.advance(26);
+            guard += 1;
+        }
+        // A saved and reopened career keeps the same history.
+        let reopened = crate::import_save(session.export_save().unwrap()).unwrap();
+        for session in [&session, &reopened] {
+            let board = session.stock_board();
+            assert!(board.len() > 10, "{} on the board", board.len());
+            let missing: Vec<String> = board
+                .iter()
+                .filter(|s| session.statements(s.firm, "quarter".into()).len() < 3)
+                .map(|s| s.name.clone())
+                .collect();
+            assert!(missing.is_empty(), "missing quarters: {missing:?}");
+        }
     }
 
     #[test]

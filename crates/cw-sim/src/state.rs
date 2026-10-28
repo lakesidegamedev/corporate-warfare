@@ -627,6 +627,12 @@ impl Firm {
         self.status.operative()
     }
 
+    /// On the corridor stock board: operating with shares in issue, floated or not. The board,
+    /// company pages and statements all use this, so a firm on the board always has its figures.
+    pub fn on_board(&self) -> bool {
+        self.operative() && self.shares.issued > 0
+    }
+
     pub fn stock(&self, product: u16, region: u8) -> MilliLots {
         self.inventory
             .get(&(product, region))

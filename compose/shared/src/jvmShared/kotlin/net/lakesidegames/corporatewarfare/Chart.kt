@@ -208,25 +208,30 @@ fun Chart(
                         }
                     }
                 }
-                ChartKind.Line, ChartKind.Area -> shown.forEach { s ->
+                ChartKind.Line, ChartKind.Area -> {
                     // A stepped path: across at each value, then straight down or up to the next.
-                    val path = Path()
-                    s.points.forEachIndexed { i, p ->
-                        val px0 = x(p.week)
-                        if (i == 0) path.moveTo(px0, y(p.value)) else {
-                            path.lineTo(px0, y(s.points[i - 1].value)); path.lineTo(px0, y(p.value))
+                    val paths = shown.map { s ->
+                        val path = Path()
+                        s.points.forEachIndexed { i, p ->
+                            val px0 = x(p.week)
+                            if (i == 0) path.moveTo(px0, y(p.value)) else {
+                                path.lineTo(px0, y(s.points[i - 1].value)); path.lineTo(px0, y(p.value))
+                            }
                         }
+                        val endX = x(s.points.last().week + step).coerceAtMost(size.width - px)
+                        path.lineTo(endX, y(s.points.last().value))
+                        Triple(s, path, endX)
                     }
-                    val endX = x(s.points.last().week + step).coerceAtMost(size.width - px)
-                    path.lineTo(endX, y(s.points.last().value))
-                    if (kind == ChartKind.Area) {
+                    // Fills first, the largest at the back, so no fill hides a smaller series; then
+                    // every line on top.
+                    if (kind == ChartKind.Area) paths.sortedByDescending { (s) -> s.points.sumOf { abs(it.value) } }.forEach { (s, path, endX) ->
                         val fill = Path().apply {
                             addPath(path)
                             lineTo(endX, zero); lineTo(x(s.points.first().week), zero); close()
                         }
                         drawPath(fill, lerp(Palette.panel, s.color, 0.35f))
                     }
-                    drawPath(path, s.color, style = Stroke(px))
+                    paths.forEach { (s, path) -> drawPath(path, s.color, style = Stroke(px)) }
                 }
             }
             // The pointer's week, as a hard vertical rule.

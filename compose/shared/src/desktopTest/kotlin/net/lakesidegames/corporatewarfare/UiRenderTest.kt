@@ -69,6 +69,8 @@ class UiRenderTest {
                 var guard = 0
                 while (h.overview().tick < 30u && guard++ < 40) { h.dismissPause(); h.advance(26u) }
                 val me = h.overview().primaryFirm!!
+                val missing = h.stockBoard().filter { h.statements(it.firm, "quarter").isEmpty() }.map { it.name }
+                check(missing.isEmpty()) { "companies on the board without statements: $missing" }
                 loadFinancials(h, me, h.overview().primaryName, h.firm(me)!!.industry) to h.goodPriceHistory(0u)
             }
         } else null

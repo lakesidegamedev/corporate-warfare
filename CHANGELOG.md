@@ -43,6 +43,9 @@ heading.
 - Longer history: ten years of weekly share and goods prices, a year of weekly statements and
   quarterly statements for the whole career. Saves from earlier versions still load and start
   their longer history from the year of prices they already hold.
+- Every company on the stock board shows its statements, floated or not, and area charts draw the
+  largest series at the back with every line on top, so a balance sheet shows assets, liabilities
+  and equity together.
 
 - Seven more map modes: your share, competition, demand, workforce skill, infrastructure (roads,
   power and broadband), land price and population, each with a legend showing what its colours
