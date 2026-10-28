@@ -1,5 +1,9 @@
 package net.lakesidegames.corporatewarfare
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -172,7 +176,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
             ),
         )
         Column(
-            Modifier.fillMaxHeight().width(if (wide) 460.dp else maxWidth).verticalScroll(rememberScrollState())
+            Modifier.fillMaxHeight().width(if (wide) 460.dp else maxWidth).windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
                 .padding(horizontal = if (wide) 48.dp else 24.dp, vertical = 40.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -322,6 +326,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
         return
     }
     var step by remember { mutableStateOf(startStep) }
+    BackAction { if (step == 0) onBack() else step = 0 }
     var mode by remember { mutableStateOf(Mode.Guided) }
     var level by remember { mutableStateOf(Level.Standard) }
     var economy by remember { mutableStateOf(Economy.Historic) }
@@ -330,7 +335,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
     var capital by remember { mutableStateOf(capitalOf(Level.Standard)) }
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Row(
                 Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,

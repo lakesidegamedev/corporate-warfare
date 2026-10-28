@@ -1,5 +1,9 @@
 package net.lakesidegames.corporatewarfare
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -91,10 +95,11 @@ object Saves {
 /** Every save, newest first: open one, or delete it. */
 @Composable
 fun LoadGameScreen(store: GameStore, onBack: () -> Unit) {
+    BackAction(onBack = onBack)
     var slots by remember { mutableStateOf(store.saveSlots()) }
     var confirm by remember { mutableStateOf<SaveSlot?>(null) }
     val format = remember { SimpleDateFormat("MMM d, yyyy h:mm a", Locale.US) }
-    Box(Modifier.fillMaxSize().background(Palette.ink), contentAlignment = Alignment.TopCenter) {
+    Box(Modifier.fillMaxSize().background(Palette.ink).windowInsetsPadding(WindowInsets.safeDrawing), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier.widthIn(max = 760.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),

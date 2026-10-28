@@ -197,16 +197,18 @@ private fun LinkedRows(title: String, rows: List<LinkedFirmDto>, onOpen: (ULong)
 @Composable
 fun CompanyPageDialog(store: GameStore, firm: ULong, onClose: () -> Unit) {
     var current by remember(firm) { mutableStateOf(firm) }
+    // Companies opened from this page, so back steps to the previous one before closing.
+    val history = remember(firm) { mutableListOf<ULong>() }
     var page by remember { mutableStateOf<CompanyPageDto?>(null) }
     var trade by remember { mutableStateOf(false) }
     LaunchedEffect(current) { page = null; store.companyPage(current) { page = it } }
     AlertDialog(
-        onDismissRequest = onClose,
+        onDismissRequest = { if (history.isNotEmpty()) current = history.removeAt(history.lastIndex) else onClose() },
         containerColor = Palette.panel,
         title = { Text(page?.name ?: "Company") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                page?.let { CompanyPageBody(store, it, onOpenFirm = { f -> current = f }, onTrade = if (it.stock != null) ({ trade = true }) else null) }
+                page?.let { CompanyPageBody(store, it, onOpenFirm = { f -> history += current; current = f }, onTrade = if (it.stock != null) ({ trade = true }) else null) }
                     ?: Text("Loading", color = Palette.secondary)
             }
         },

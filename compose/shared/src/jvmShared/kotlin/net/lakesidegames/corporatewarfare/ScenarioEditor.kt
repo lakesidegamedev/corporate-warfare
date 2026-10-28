@@ -2,6 +2,10 @@
 
 package net.lakesidegames.corporatewarfare
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -64,6 +68,7 @@ private val Paths = listOf("historical" to "Historical", "historical_variance" t
  */
 @Composable
 internal fun ScenarioEditorScreen(store: GameStore, baseId: String?, existing: CustomScenarioDto?, onBack: () -> Unit) {
+    BackAction(onBack = onBack)
     val ranges = remember { customScenarioRanges() }
     val builtIns = remember { scenarios().filter { it.available } }
     var saved by remember { mutableStateOf(customScenarioList(store.customDir)) }
@@ -101,7 +106,7 @@ internal fun ScenarioEditorScreen(store: GameStore, baseId: String?, existing: C
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Row(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { if (current == null || baseId != null || existing != null) onBack() else draft = null }) { Text("‹ Back", color = Palette.secondary) }
                 Spacer(Modifier.width(8.dp))
