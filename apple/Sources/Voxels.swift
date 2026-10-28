@@ -2,7 +2,8 @@ import SwiftUI
 import UIKit
 
 /// The player's divisions as cel-shaded voxel buildings, one model per industry in three sizes,
-/// baked by tools/voxel_sprites.py into atlases at 1, 2 and 3 pixels per half voxel. The map picks
+/// plus a "city" block in three sizes, rendered front on (roof and front face, square to the map)
+/// and baked by tools/voxel_sprites.py into atlases at 1, 2 and 3 pixels per half voxel. The map picks
 /// the scale for the zoom and screen density and draws the sprite one pixel to one pixel, with no
 /// smoothing, so it stays crisp.
 enum Voxels {
@@ -35,7 +36,7 @@ enum Voxels {
         return out
     }()
 
-    /// Cut sprites, kept: there are 45 frames at each of three scales.
+    /// Cut sprites, kept: there are 48 frames at each of three scales.
     private static var cut: [String: CGImage] = [:]
     private static let lock = NSLock()
 
@@ -44,9 +45,10 @@ enum Voxels {
         plants <= 3 ? 0 : plants <= 8 ? 1 : 2
     }
 
-    /// The pixel scale for a map drawn at `zoomScale` on a screen of `displayScale` pixels a point.
+    /// The pixel scale for a map drawn at `zoomScale` on a screen of `displayScale` pixels a point:
+    /// the smallest just past the zoom where models appear, growing as you zoom further in.
     static func scale(_ zoomScale: Double, displayScale: Double) -> Int {
-        min(max(Int((zoomScale * displayScale).rounded()), 1), 3)
+        min(max(Int((zoomScale * displayScale * 0.6).rounded()), 1), 3)
     }
 
     static func frame(_ sector: String, size: Int, scale: Int) -> Frame? {
