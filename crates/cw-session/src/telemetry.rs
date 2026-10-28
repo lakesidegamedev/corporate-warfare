@@ -22,7 +22,13 @@ pub struct GoodLine {
     pub imported_lots: i64,
     pub exported_lots: i64,
     pub stock_lots: i64,
+    /// Middle asking price over every operating firm that prices the good, idle makers included.
+    /// Kept unchanged for older servers and app versions.
     pub median_ask_cents: i64,
+    /// Average asking price weighted by the lots each seller sold in its last closed week, so it
+    /// reads what buyers actually paid sellers. The reference price when nothing sold. Added in
+    /// 1.8 preview 3 alongside, not instead of, `median_ask_cents`.
+    pub sold_ask_cents: i64,
     pub reference_cents: i64,
     pub household_spend_cents: i64,
 }
@@ -385,6 +391,35 @@ fn structure_line(world: &cw_sim::state::World) -> StructureLine {
 }
 
 /// True on the weeks a snapshot is due.
+/// Asking price of a good weighted by the lots each operating seller sold of it in its last
+/// closed week, or `reference` when no seller sold any.
+pub fn sold_ask_cents(world: &cw_sim::state::World, code: u16, reference: i64) -> i64 {
+    let (mut value, mut lots) = (0i128, 0i128);
+    for (_, firm) in world.firms.iter().filter(|(_, f)| f.operative()) {
+        let Some(price) = firm.policies.prices.get(&code).copied() else {
+            continue;
+        };
+        let sold: i64 = firm
+            .last_closed_sales()
+            .map(|week| {
+                week.iter()
+                    .filter(|((_, p), _)| *p == code)
+                    .map(|(_, q)| *q)
+                    .sum()
+            })
+            .unwrap_or(0);
+        if sold > 0 {
+            value += price as i128 * sold as i128;
+            lots += sold as i128;
+        }
+    }
+    if lots > 0 {
+        (value / lots) as i64
+    } else {
+        reference
+    }
+}
+
 pub fn due(week: u32) -> bool {
     week > 0 && week.is_multiple_of(SNAPSHOT_EVERY_WEEKS)
 }
@@ -435,6 +470,7 @@ impl Session {
                 .collect();
             asks.sort_unstable();
             let reference = dataset.reference_price(code);
+            let sold_ask = sold_ask_cents(world, code, reference);
             let spend: i64 = world
                 .regions
                 .iter()
@@ -448,6 +484,7 @@ impl Session {
                 exported_lots: exported,
                 stock_lots: stock,
                 median_ask_cents: asks.get(asks.len() / 2).copied().unwrap_or(reference),
+                sold_ask_cents: sold_ask,
                 reference_cents: reference,
                 household_spend_cents: spend,
             });
@@ -589,6 +626,63 @@ fn rivalry_line(world: &cw_sim::state::World, dataset: &cw_data::Dataset) -> Riv
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_sold_ask_weights_each_seller_by_the_lots_it_sold() {
+        let mut session = Session::create(crate::ScenarioConfig {
+            seed: 9,
+            scenario: cw_sim::state::ScenarioKind::Guided,
+            mode: cw_sim::state::ScenarioMode::Sandbox,
+            dataset_hash: String::new(),
+            difficulty: cw_data::Difficulty::Standard,
+            economy_start: Default::default(),
+            starting_capital_cents: None,
+            prices: Default::default(),
+        })
+        .unwrap();
+        let steel = session.dataset.product_index["steel"];
+        let handles: Vec<cw_core::ids::Handle> = session
+            .world
+            .firms
+            .iter()
+            .filter(|(_, f)| f.operative())
+            .map(|(h, _)| h)
+            .collect();
+        // Clear every firm's steel, then two sellers: 30 lots at 100,000 and 10 at 140,000.
+        for handle in &handles {
+            let firm = session.world.firms.get_mut(*handle).unwrap();
+            firm.policies.prices.remove(&steel);
+            firm.sales_history = vec![Default::default()];
+        }
+        for (handle, price, lots) in [(handles[0], 100_000, 30), (handles[1], 140_000, 10)] {
+            let firm = session.world.firms.get_mut(handle).unwrap();
+            firm.policies.prices.insert(steel, price);
+            firm.sales_history = vec![[((0u8, steel), lots)].into_iter().collect()];
+        }
+        // A third firm asks far more but sold nothing, so it does not count.
+        session
+            .world
+            .firms
+            .get_mut(handles[2])
+            .unwrap()
+            .policies
+            .prices
+            .insert(steel, 500_000);
+        // (30 x 100,000 + 10 x 140,000) / 40 = 110,000.
+        assert_eq!(sold_ask_cents(&session.world, steel, 1), 110_000);
+        let line = session
+            .market_snapshot()
+            .goods
+            .into_iter()
+            .find(|g| g.id == "steel")
+            .unwrap();
+        assert_eq!(line.sold_ask_cents, 110_000);
+        // Nothing sold: the reference.
+        for handle in &handles {
+            session.world.firms.get_mut(*handle).unwrap().sales_history = vec![Default::default()];
+        }
+        assert_eq!(sold_ask_cents(&session.world, steel, 7), 7);
+    }
 
     #[test]
     fn a_snapshot_names_no_one_and_covers_every_priced_good() {

@@ -273,6 +273,8 @@ fn build_regions(world: &mut World, dataset: &Dataset) {
                 baseline_lots: BTreeMap::new(),
                 last_sale_price_cents: BTreeMap::new(),
                 spend_cents: BTreeMap::new(),
+                wanted_milli: BTreeMap::new(),
+                unmet_milli: BTreeMap::new(),
             },
             policy: RegionPolicy::default(),
             demand_modifiers: Vec::new(),
@@ -718,6 +720,7 @@ fn open_facility(
         stock_plan: Default::default(),
         ship: Default::default(),
         serves: Vec::new(),
+        cut_bps: Vec::new(),
     };
     if recipe.depletes() {
         facility.deposit_remaining =

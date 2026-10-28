@@ -25,6 +25,14 @@ heading.
   those imports. Building one yourself is now a clearer opportunity.
 - Freight carriers trim their running rate sooner when their lanes run under 60 percent full, so
   less carrying capacity goes to waste.
+- Refineries and gas plants shift their output toward the products that sell. A refinery can move
+  up to a quarter of a product's share of its run to the others, for example from gasoline that can
+  only be exported toward fuel the corridor imports. Its total output never grows.
+- A refinery's or mill's by-products can always leave through the region's export market, even
+  when the plant was built after the game started. Gasoline no longer piles up unsold for years.
+- Goods that shoppers buy, such as food and retail goods, now rise in price when shoppers find
+  shelves empty, and stay put when they find what they want. Goods nobody at home buys, that only
+  leave as exports, no longer creep up in price because the seller's shelf is empty.
 - Buildings, city blocks, the countryside and every vehicle are true 3D voxel models, drawn from the
   camera's angle each frame: turn the map and you see their sides, vehicles turn as they follow the
   road, and the sun lights a fixed side of each building as you go round it.
@@ -37,6 +45,10 @@ heading.
   road or track simply shows no vehicles.
 
 ### Added
+
+- Market analytics report a new sales-weighted asking price for each good, which shows what sellers
+  that actually sold were asking. The existing median asking price is unchanged, so older servers
+  and app versions keep working.
 
 - Seven more map modes: your share, competition, demand, workforce skill, infrastructure (roads,
   power and broadband), land price and population, each with a legend showing what its colours

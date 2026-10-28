@@ -1,7 +1,8 @@
 //! Diagnostic for market dynamics (1.8 preview 3): runs a guided career headless for several
 //! seeds and reports, per good, the averages over the last year of what the corridor made and
 //! sold a week, the stock it held split into sellers' unsold stock and buyers' input cover,
-//! weeks of cover (unsold stock over weekly sales), the median asking price against reference,
+//! weeks of cover (unsold stock over weekly sales), the median asking price and the
+//! sales-weighted asking price (`sold_ask_cents`) against reference,
 //! imports against domestic output, and the share of operating firms that lost money over their
 //! last thirteen weeks.
 //!
@@ -13,9 +14,11 @@ struct Row {
     made: i64,
     sold: i64,
     imported: i64,
+    exported: i64,
     unsold: i64,
     cover: i64,
     ask_bps: i64,
+    sold_ask_bps: i64,
     samples: i64,
 }
 
@@ -89,6 +92,8 @@ fn main() {
                 row.made += good.made_lots;
                 row.sold += good.sold_lots;
                 row.imported += good.imported_lots;
+                row.exported += good.exported_lots;
+                row.sold_ask_bps += good.sold_ask_cents * 10_000 / good.reference_cents.max(1);
                 row.unsold += unsold;
                 row.cover += good.stock_lots - unsold;
                 row.ask_bps += good.median_ask_cents * 10_000 / good.reference_cents.max(1);
@@ -98,8 +103,8 @@ fn main() {
     }
     println!("{seeds} seeds x {weeks} weeks, guided; averages over the final 52 weeks");
     println!(
-        "{:22} {:>7} {:>7} {:>7} {:>8} {:>8} {:>7} {:>7}",
-        "good", "made", "sold", "import", "unsold", "inputs", "cover", "ask%"
+        "{:22} {:>7} {:>7} {:>7} {:>7} {:>8} {:>8} {:>7} {:>7} {:>7}",
+        "good", "made", "sold", "import", "export", "unsold", "inputs", "cover", "ask%", "sold%"
     );
     for (id, r) in &rows {
         let n = r.samples.max(1);
@@ -114,15 +119,17 @@ fn main() {
             "-".to_owned()
         };
         println!(
-            "{:22} {:>7} {:>7} {:>7} {:>8} {:>8} {:>7} {:>+7}",
+            "{:22} {:>7} {:>7} {:>7} {:>7} {:>8} {:>8} {:>7} {:>+7} {:>+7}",
             id,
             r.made / n,
             sold,
             r.imported / n,
+            r.exported / n,
             r.unsold / n,
             r.cover / n,
             cover,
-            (r.ask_bps / n - 10_000) / 100
+            (r.ask_bps / n - 10_000) / 100,
+            (r.sold_ask_bps / n - 10_000) / 100
         );
     }
     println!(

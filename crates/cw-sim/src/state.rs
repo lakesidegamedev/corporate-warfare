@@ -338,6 +338,11 @@ pub struct Facility {
     /// A carrier's pinned lanes, as the other region of each. Empty means automatic.
     #[serde(default)]
     pub serves: Vec<u8>,
+    /// Last week's yield of each output in the recipe's order (primary first), in basis points
+    /// of the recipe's split, for a plant that shifted its cut between co-products (see
+    /// `production::cut_yields`). Empty means the recipe's fixed split; older saves load empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cut_bps: Vec<i32>,
 }
 
 impl Facility {
@@ -361,7 +366,8 @@ impl Facility {
     }
 
     /// Last week's physical output of one product: the primary output as recorded, or a
-    /// by-product in its fixed yield to the primary. Zero when the plant does not make it.
+    /// by-product in its yield to the primary, after any shift of the plant's cut. Zero when the
+    /// plant does not make it.
     pub fn last_made(&self, dataset: &Dataset, product: &str) -> MilliLots {
         let recipe = &dataset.recipes[self.recipe as usize];
         if recipe.output == product {
@@ -371,7 +377,15 @@ impl Facility {
         if by <= 0 || recipe.weekly_output_lots <= 0 {
             return MilliLots::ZERO;
         }
-        MilliLots(self.last_output.0 * by / recipe.weekly_output_lots)
+        let index = recipe.outputs().position(|(id, _)| id == product);
+        match (self.cut_bps.first(), index.and_then(|i| self.cut_bps.get(i))) {
+            (Some(primary), Some(own)) if *primary > 0 => MilliLots(
+                (self.last_output.0 as i128 * by as i128 * *own as i128
+                    / (recipe.weekly_output_lots as i128 * *primary as i128))
+                    as i64,
+            ),
+            _ => MilliLots(self.last_output.0 * by / recipe.weekly_output_lots),
+        }
     }
 }
 
@@ -765,6 +779,13 @@ pub struct Household {
     pub baseline_lots: BTreeMap<u16, i64>,
     pub last_sale_price_cents: BTreeMap<u16, i64>,
     pub spend_cents: BTreeMap<u16, i64>,
+    /// Milli-lots of each good households asked for last week, and of those the milli-lots no
+    /// seller had on the shelf (unmet household demand). Demand a household's budget could not
+    /// pay for is not unmet: it is the price doing its work. Older saves load empty.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub wanted_milli: BTreeMap<u16, i64>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub unmet_milli: BTreeMap<u16, i64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]

@@ -583,3 +583,51 @@ fn an_import_dependent_good_prices_just_under_the_import() {
     }
     assert!(pricing::target_price(&world, &dataset, firm, food) < 10_000);
 }
+
+#[test]
+fn a_refinery_cut_moves_toward_the_dearer_fractions_within_bounds() {
+    use cw_sim::economy::production::shift_cut;
+    // A refinery block's recipe: fuel 26, gasoline 36, jet fuel 8, feedstock 12 lots. Fuel asks
+    // 10 percent over reference, feedstock 15 over; gasoline and jet fuel leave at an export bid
+    // of 85 percent.
+    let bases = [26, 36, 8, 12];
+    let scores = [11_000, 8_500, 8_500, 11_500];
+    // Worked by hand: the yield-weighted mean score is 798,000 / 82 = 9,731. Gasoline and jet
+    // fuel sit 1,231 under it, so each gives 2,462 basis points of its yield (under the 2,500
+    // bound): 44 x 2,462 = 108,328 lot-basis-points. Fuel weighs 26 x 1,269 = 32,994 and
+    // feedstock 12 x 1,769 = 21,228 of 54,222; fuel takes 108,328 x 32,994 / 54,222 / 26 =
+    // 2,535 and feedstock 3,534 basis points.
+    let cut = shift_cut(&bases, &scores);
+    assert_eq!(cut, vec![12_535, 7_538, 7_538, 13_534]);
+    // Mass: the plant never makes more lots than its recipe, and loses under a lot to rounding.
+    let made: i64 = bases.iter().zip(&cut).map(|(b, c)| b * *c as i64).sum();
+    assert!(made <= 82 * 10_000 && made > 82 * 10_000 - 10_000, "{made}");
+    // Equal scores keep the recipe split.
+    assert_eq!(shift_cut(&bases, &[10_000; 4]), vec![10_000; 4]);
+    // A small taker is held to half again its yield and the giver gives only what it can take:
+    // mean (10 x 5,000 + 1 x 20,000) / 11 = 6,363; the giver would give the full 2,500 (25,000
+    // lot-bps), which would lift the taker 25,000 bps, so everything scales to 5,000 / 25,000:
+    // the giver gives 500 bps, the taker takes 5,000.
+    assert_eq!(shift_cut(&[10, 1], &[5_000, 20_000]), vec![9_500, 15_000]);
+}
+
+#[test]
+fn unmet_household_demand_lifts_a_household_good_like_short_buyers() {
+    let dataset = Dataset::load().unwrap();
+    let mut world = seed::build(&dataset, 3, ScenarioKind::Guided, ScenarioMode::Sandbox);
+    let food = dataset.product_index["food_retail"];
+    // Two regions: 30 + 20 lots of 60 + 40 asked for found no seller.
+    world.regions[0].households.wanted_milli.insert(food, 60_000);
+    world.regions[0].households.unmet_milli.insert(food, 30_000);
+    world.regions[1].households.wanted_milli.insert(food, 40_000);
+    world.regions[1].households.unmet_milli.insert(food, 20_000);
+    assert_eq!(pricing::household_unmet(&world, food), (50, 100));
+    // Half a week of demand unmet counts as half the two-week target short: 50 x 200 / 100 =
+    // 100 lots short against 100 a week, one week, six percent over reference.
+    assert_eq!(pricing::goods_wanted_bps(200, 200, 100, 100), 10_600);
+    // A week of trade records what households asked for, and never more unmet than asked.
+    let mut session_world = seed::build(&dataset, 3, ScenarioKind::Guided, ScenarioMode::Sandbox);
+    cw_sim::tick::advance(&mut session_world, &dataset);
+    let (unmet, wanted) = pricing::household_unmet(&session_world, food);
+    assert!(wanted > 0 && (0..=wanted).contains(&unmet), "{unmet} of {wanted}");
+}

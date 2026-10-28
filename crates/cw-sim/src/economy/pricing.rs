@@ -182,8 +182,51 @@ fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> O
     let cover = stock.saturating_mul(100) / sold;
     let target = cover_target_hundredths(dataset, product)
         + harvest_glut_extra(world, dataset, product) * 100;
-    let (short, need) = buyer_shortfall(world, dataset, product);
+    let (mut short, mut need) = buyer_shortfall(world, dataset, product);
+    // Households keep no stock: a week of their demand that found nothing on the shelf counts
+    // as being short the seller's whole target cover, so a good households cannot find reads as
+    // scarce the way an empty shelf used to.
+    let (unmet, wanted) = household_unmet(world, product);
+    if wanted > 0 {
+        need = need.saturating_add(wanted);
+        short = short.saturating_add(unmet.saturating_mul(target) / 100);
+    }
+    // A good no plant or household at home buys, that the corridor exports, has an empty shelf
+    // because its surplus left at the export price, not because buyers went without: it does
+    // not read as scarce.
+    let cover = if need <= 0 && exported(world, product) {
+        cover.max(target)
+    } else {
+        cover
+    };
     Some(goods_wanted_bps(cover, target, short, need))
+}
+
+/// Whole lots of a good households across the corridor found no seller for last week, and the
+/// lots they asked for. Zero and zero for a good households do not buy.
+pub fn household_unmet(world: &World, product: u16) -> (i64, i64) {
+    let (mut unmet, mut wanted) = (0i64, 0i64);
+    for region in &world.regions {
+        let households = &region.households;
+        unmet = unmet.saturating_add(households.unmet_milli.get(&product).copied().unwrap_or(0));
+        wanted =
+            wanted.saturating_add(households.wanted_milli.get(&product).copied().unwrap_or(0));
+    }
+    (unmet / 1_000, wanted / 1_000)
+}
+
+/// Whether any of the good left the corridor through a gateway last week.
+pub fn exported(world: &World, product: u16) -> bool {
+    world
+        .gateways
+        .iter()
+        .any(|gateway| gateway.product == product && gateway.last_export_lots > 0)
+}
+
+/// Whether some plant or household at home buys the good. A good with no home buyer that the
+/// corridor exports is worth its export bid to the plant that makes it, whatever it asks.
+pub fn home_buyers(world: &World, dataset: &Dataset, product: u16) -> bool {
+    buyer_shortfall(world, dataset, product).1 > 0 || household_unmet(world, product).1 > 0
 }
 
 /// The price a seller of a good wants, in basis points of reference, from its weeks of unsold

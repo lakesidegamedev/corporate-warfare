@@ -3155,6 +3155,7 @@ fn start_facility(
         stock_plan: Default::default(),
         ship: Default::default(),
         serves: Vec::new(),
+        cut_bps: Vec::new(),
     }
 }
 
