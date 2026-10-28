@@ -21,6 +21,7 @@ mod catalogue;
 mod company;
 mod custom;
 mod statements;
+mod systems;
 pub use cast::{
     DossierDto, MoveDto, PersonDto, PostDto, RivalMoveFeedDto, RivalSummaryDto, RivalTagDto,
 };

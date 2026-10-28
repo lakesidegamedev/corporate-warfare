@@ -1544,6 +1544,11 @@ pub struct World {
     /// See `economy::history`.
     #[serde(skip)]
     pub archive: crate::economy::history::Archive,
+    /// Weekly systems history for the market, region, division, freight and economy displays.
+    /// Outside the encoding and the hash like the archive, in its own save trailer. See
+    /// `economy::systems`.
+    #[serde(skip)]
+    pub systems: crate::economy::systems::SystemsHistory,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.
