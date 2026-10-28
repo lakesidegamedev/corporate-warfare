@@ -169,8 +169,13 @@ nearly empty after trade even when every buyer is full. So only buyers left shor
 6 percent of reference for every week of their weekly use they lack after this week's trade
 (each firm and state counted once against the sum of its plants' cover targets), and only unsold
 stock beyond the seller's target cuts it, 6 percent for every week over. A seller that sells what
-it makes to full buyers asks reference. A good no plant buys reads the seller's own cover against
-its target both ways: a week too little wants 6 percent more. The gap is held to five weeks either
+it makes to full buyers asks reference. Households count as buyers too: they keep no stock, so the
+lots they asked for in a week that no seller had on the shelf (unmet household demand; demand
+their budget could not pay for is not unmet) count as being short the seller's whole target cover
+against their weekly asks. A good that no plant or household at home buys, that the corridor
+exported last week, is never read as scarce: its shelf is empty because the surplus left at the
+export bid. Any other good no plant or household buys reads the seller's own cover against its
+target both ways: a week too little wants 6 percent more. The gap is held to five weeks either
 way (30 percent). The price then moves a sixth of the way there, at most 2 percent in a week, within
 half to twice reference and never above 95 percent of the cheapest import, so local goods beat
 imports once normal freight is added. Where the corridor's gateways import at least a quarter more
@@ -194,7 +199,12 @@ it neither wastes a third of its output nor stays throttled below demand; a carr
 lanes ran under 60 percent full and raises from 90 percent; a plant whose good has not sold yet
 holds. A plant run down to its floor keeps at least one worker of every tier its recipe uses.
 Rivals always plan this way; the player's companies do too until the player sets a price or target
-by hand, and either can be handed back to automatic. Contract deliveries, power dispatched to the
+by hand, and either can be handed back to automatic. A hand-set target holds goods plants at that
+rate, but service and carrier plants, whose unsold output expires, keep following this plan under
+it as a ceiling, unless the player locks the target (`SetProductionTarget` with `lock`, absent and
+false in older commands). The CFO names any service or carrier division of a hand-planned company
+that made at least one and a half times what it sold last week, with the weekly cost of the excess
+and a button that hands production back to the plan. Contract deliveries, power dispatched to the
 grid and construction services all count as sales.
 
 The corridor price on the Markets board is the average asking price of the firms that make a good,
@@ -288,10 +298,21 @@ cents, avoiding independent rounded postings whose debits/credits disagree.
 A recipe has one primary output and may list `by_products`, each a fixed number of lots per
 block per week at full capacity. Every product of a plant scales together with the plant's run
 rate, the farm season and supply events, so a refinery never makes gasoline without its diesel.
+A refinery or gas plant (industry `chemical_industries`) can shift its cut each week: each output
+scores its owner's ask against reference (the region's export bid, if lower, for a good no plant
+or household at home buys and the corridor exports), less 4 basis points per hundredth of a week
+of unsold stock beyond its glut cover (at most 20 percent). An output scoring under the
+yield-weighted average gives up 2 basis points of its recipe yield per point under, at most a
+quarter; the lots given go to the outputs scoring above the average in proportion to their lots
+times how far above, each at most half again its recipe yield (all shifts scale down together
+to keep that bound). Total lots never exceed the recipe. Fixed-proportion by-products (scrap,
+livestock, natural gas from wells, building materials from furnaces) do not shift.
 Output, price, valuation and planning all read the whole list: pricing and the weekly plan treat
 every by-product as a priced good of the firm, the exchange sells it from stock like any other
 good, gateways carry it (a good with no local buyer still has the outside buyer at reference
-less 15 percent), and AI build and retool value a plant by all its products, counting a plant as
+less 15 percent, and a region's gateway always has export room for at least what its operating
+plants make of the good as a by-product, so a co-product of a plant built after the gateway was
+sized never piles up unsold), and AI build and retool value a plant by all its products, counting a plant as
 having room when imports cover its primary output (a by-product nobody imports is still sold, so it
 never hides the room: a refinery is built when the corridor imports fuel). Nothing a
 plant makes is left without a price or a buyer.
