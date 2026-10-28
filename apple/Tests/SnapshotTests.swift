@@ -139,7 +139,7 @@ final class SnapshotTests: XCTestCase {
         var stand: [UIView] = []
         for view in metalViews(in: window) {
             guard let painter = view.delegate as? CloudPainter, let sky = painter.sky else { continue }
-            XCTAssertGreaterThan(painter.drawn, 0, "the cloud layer in \(name) drew in the window")
+            XCTAssertGreaterThan(painter.drawn, 0, "the cloud layer in \(name) drew in the window (\(painter.missed) draws found no drawable)")
             guard let frame = painter.snapshot(sky) else { continue }
             let still = UIImageView(image: UIImage(cgImage: frame))
             still.frame = view.bounds

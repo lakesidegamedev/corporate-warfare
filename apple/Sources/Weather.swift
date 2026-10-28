@@ -83,7 +83,7 @@ struct CloudLayer: UIViewRepresentable {
             view.isUserInteractionEnabled = false
             return view
         }
-        let view = MTKView(frame: .zero, device: renderer.device)
+        let view = CloudView(frame: .zero, device: renderer.device)
         view.isOpaque = false
         view.layer.isOpaque = false
         view.backgroundColor = .clear
@@ -96,6 +96,7 @@ struct CloudLayer: UIViewRepresentable {
         view.presentsWithTransaction = true
         view.isUserInteractionEnabled = false
         view.delegate = context.coordinator
+        view.painter = context.coordinator
         context.coordinator.view = view
         return view
     }
@@ -110,8 +111,9 @@ struct CloudLayer: UIViewRepresentable {
 final class CloudPainter: NSObject, MTKViewDelegate {
     weak var view: MTKView?
     var sky: CloudSky?
-    /// Frames drawn with clouds in them, for tests.
+    /// Frames drawn with clouds in them, and draws that found no drawable, for tests.
     private(set) var drawn = 0
+    private(set) var missed = 0
     private let regionCloud = CloudGrid()
     private let regionShadow = CloudGrid()
     private let worldCloud = CloudGrid()
@@ -131,7 +133,7 @@ final class CloudPainter: NSObject, MTKViewDelegate {
     }
 
     func redraw() {
-        guard let view, view.bounds.width >= 1, view.bounds.height >= 1 else { return }
+        guard let view, view.window != nil, view.bounds.width >= 1, view.bounds.height >= 1 else { return }
         view.draw()
     }
 
@@ -142,7 +144,10 @@ final class CloudPainter: NSObject, MTKViewDelegate {
     func draw(in view: MTKView) {
         guard let renderer = CloudRenderer.shared, let drawable = view.currentDrawable,
               let pass = view.currentRenderPassDescriptor, let buffer = renderer.queue.makeCommandBuffer(),
-              let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { return }
+              let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else {
+            missed += 1
+            return
+        }
         encoder.setRenderPipelineState(renderer.pipeline)
         if let sky, sky.amount > 0 {
             encode(sky, renderer, encoder)
@@ -271,6 +276,22 @@ final class CloudPainter: NSObject, MTKViewDelegate {
                 grid.draw(encoder, uniforms: u, texture: world, sampler: renderer.repeatX)
             }
         }
+    }
+}
+
+/// The Metal view, redrawn once it has a size and a window: SwiftUI may hand it its first sky
+/// before either.
+final class CloudView: MTKView {
+    weak var painter: CloudPainter?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        painter?.redraw()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        painter?.redraw()
     }
 }
 
