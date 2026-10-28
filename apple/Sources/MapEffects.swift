@@ -52,6 +52,14 @@ func stableHash(_ text: String) -> Int {
     return Int(h & 0x7FFFFFFF)
 }
 
+/// Seconds since the app first drew a moving scene, shared by every moving thing so they stay in
+/// step. The sun starts over the Americas at noon.
+enum MapClock {
+    private static let start = Date().timeIntervalSinceReferenceDate
+    static var now: Double { seconds(Date()) }
+    static func seconds(_ date: Date) -> Double { date.timeIntervalSinceReferenceDate - start }
+}
+
 func fract(_ x: Double) -> Double { x - floor(x) }
 
 func smoothstep(_ edge0: Double, _ edge1: Double, _ x: Double) -> Double {

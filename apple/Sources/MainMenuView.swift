@@ -62,7 +62,7 @@ struct GlobeBackdrop: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: GraphicsSettings.frameInterval(frameRate), paused: !animate)) { timeline in
             Canvas { context, size in
-                let seconds = animate ? timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 86_400 * 7) : 0
+                let seconds = animate ? MapClock.seconds(timeline.date) : 0
                 draw(&context, size: size, seconds: seconds)
             }
             .drawingGroup()

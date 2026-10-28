@@ -950,7 +950,7 @@ struct WorldMapView: View {
                 TimelineView(.animation(minimumInterval: easing ? interval : 1.0 / 3.0,
                                         paused: !(easing || (look.dayNight && clockAllowed)))) { timeline in
                     Canvas { context, canvasSize in
-                        let now = timeline.date.timeIntervalSinceReferenceDate
+                        let now = MapClock.seconds(timeline.date)
                         let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
                         scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g)
                     }
@@ -959,7 +959,7 @@ struct WorldMapView: View {
                 if look.moves || look.showFps || selected != nil {
                     TimelineView(.animation(minimumInterval: interval, paused: !running)) { timeline in
                         Canvas { context, canvasSize in
-                            let now = timeline.date.timeIntervalSinceReferenceDate
+                            let now = MapClock.seconds(timeline.date)
                             let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
                             let moving = scene(camera: current, look: look, now: now)
                             if look.moves {
@@ -1008,7 +1008,7 @@ struct WorldMapView: View {
                 fly(from: current, to: target)
             }
             .onTapGesture(coordinateSpace: .local) { location in
-                let now = Date().timeIntervalSinceReferenceDate
+                let now = MapClock.now
                 let g = geometry.of(map: map, camera: current, size: size, tilt: look.tilt, detail: look.detail)
                 let tapped = scene(camera: current, look: look, now: now)
                 if layer == .freight, let onLane {
@@ -1042,7 +1042,7 @@ struct WorldMapView: View {
             .accessibilityAction(named: "Show the scenario") { fly(from: current, to: MapCamera.scenario(in: size, map: map)) }
         }
         .onChange(of: shading) { old, new in
-            ease.retarget(from: old, to: new, now: Date().timeIntervalSinceReferenceDate, animate: animate && extrude)
+            ease.retarget(from: old, to: new, now: MapClock.now, animate: animate && extrude)
             guard animate && extrude else { return }
             easing = true
             Task { @MainActor in
@@ -1051,7 +1051,7 @@ struct WorldMapView: View {
             }
         }
         .onChange(of: week) { _, _ in
-            rippleStart = Date().timeIntervalSinceReferenceDate
+            rippleStart = MapClock.now
         }
     }
 
