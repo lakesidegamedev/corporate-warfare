@@ -101,6 +101,13 @@ struct GeoPoint {
         cosLat = cos(lat)
     }
 
+    init(lonRadians: Double, latRadians: Double) {
+        lon = lonRadians
+        lat = latRadians
+        sinLat = sin(latRadians)
+        cosLat = cos(latRadians)
+    }
+
     /// Unit vector, for angular distances.
     var unit: (Double, Double, Double) { (cosLat * cos(lon), cosLat * sin(lon), sinLat) }
 }
@@ -590,116 +597,92 @@ struct MapProjection {
                 v.0 * east.2 + v.1 * north.2 + v.2 * view.2)
     }
 
-    /// The night side for a sun at `sunLon`, `sunLat` degrees: everything where the sun's
-    /// direction dotted with the point is below `offset`. A ring along the terminator from one
-    /// side of the view to the other, closed round the night pole, ready for `addPolygon`.
-    static func nightRing(sunLon: Double, sunLat: Double, offset c: Double, centerLon lon0: Double) -> GeoRing {
-        let ls = sunLon * .pi / 180
-        var dsDeg = sunLat
-        if abs(dsDeg) < 2 { dsDeg = dsDeg < 0 ? -2 : 2 }
-        let ds = dsDeg * .pi / 180
-        let nightPole = ds > 0 ? -89.9 : 89.9
-        let dayPole = -nightPole
-        var flat: [Int] = []
-        let first = Int((lon0 - 180).rounded())
-        let last = Int((lon0 + 180).rounded())
-        for lonDeg in stride(from: first, through: last, by: 3) {
-            let lon = Double(lonDeg) * .pi / 180
-            let a = cos(ds) * cos(lon - ls)
-            let b = sin(ds)
-            let rr = (a * a + b * b).squareRoot()
-            let lat: Double
-            if abs(c) > rr {
-                // The whole column is on one side: night when even the sunniest point is below c.
-                lat = c > rr ? dayPole : nightPole
-            } else {
-                let alpha = atan2(b, a)
-                let spread = acos(c / rr)
-                var roots: [Double] = []
-                for candidate in [alpha + spread, alpha - spread] {
-                    var deg = candidate * 180 / .pi
-                    while deg > 180 { deg -= 360 }
-                    while deg <= -180 { deg += 360 }
-                    if deg >= -90 && deg <= 90 { roots.append(deg) }
-                }
-                if roots.isEmpty {
-                    // Neither root is on the globe: the column is all night or all day.
-                    lat = a < c ? dayPole : nightPole
-                } else {
-                    // Night lies between the boundary and the night pole: take the root nearest it.
-                    lat = ds > 0 ? roots.min() ?? nightPole : roots.max() ?? nightPole
-                }
+    /// A place in radians in view space.
+    func toView(lon: Double, lat: Double) -> (Double, Double, Double) {
+        let cosLat = cos(lat)
+        return toView((cosLat * cos(lon), cosLat * sin(lon), sin(lat)))
+    }
+
+    /// Longitude and latitude in radians of a view-space direction.
+    func fromView(_ x: Double, _ y: Double, _ z: Double) -> (lon: Double, lat: Double) {
+        let w = toGeo((x, y, z))
+        let n = max((w.0 * w.0 + w.1 * w.1 + w.2 * w.2).squareRoot(), 1e-9)
+        return (atan2(w.1, w.0), asin(min(max(w.2 / n, -1), 1)))
+    }
+
+    /// The untilted screen point of a place in radians, or nil when it is behind the globe.
+    func ground(lon: Double, lat: Double) -> CGPoint? {
+        let (point, visible) = flat(GeoPoint(lonRadians: lon, latRadians: lat))
+        return visible ? point : nil
+    }
+
+    /// Screen point of a place in radians `h` points up, or nil when it is behind the globe.
+    func at(lon: Double, lat: Double, height h: Double = 0) -> CGPoint? {
+        ground(lon: lon, lat: lat).map { lift($0, h) }
+    }
+
+    /// The visible side walls of rings raised `h` points, one path per light level (dark, mid,
+    /// lit). A wall shows when it faces the viewer; its light depends on how squarely its screen
+    /// normal faces the light in the upper left.
+    func walls(_ rings: [GeoRing], height h: Double) -> [Path] {
+        var out = [Path(), Path(), Path()]
+        for ring in rings {
+            guard let flat = flatRing(ring) else { continue }
+            let bottom = flat.map { lift($0, 0) }
+            let upper = flat.map { lift($0, h) }
+            let n = bottom.count
+            var area = 0.0
+            for i in 0..<n {
+                let j = (i + 1) % n
+                area += Double(bottom[i].x * bottom[j].y - bottom[j].x * bottom[i].y)
             }
-            flat.append(lonDeg * 10_000)
-            flat.append(Int((min(max(lat, -89.9), 89.9) * 10_000).rounded()))
+            let sign = area >= 0 ? 1.0 : -1.0
+            for i in 0..<n {
+                let j = (i + 1) % n
+                let ex = Double(bottom[j].x - bottom[i].x)
+                let ey = Double(bottom[j].y - bottom[i].y)
+                let length = (ex * ex + ey * ey).squareRoot()
+                guard length >= 0.3 else { continue }
+                let nx = sign * ey / length
+                let ny = -sign * ex / length
+                guard ny >= -0.05 else { continue }
+                let light = nx * -0.55 + ny * -0.83
+                let level = light > 0.35 ? 2 : light > -0.2 ? 1 : 0
+                out[level].move(to: bottom[i])
+                out[level].addLine(to: bottom[j])
+                out[level].addLine(to: upper[j])
+                out[level].addLine(to: upper[i])
+                out[level].closeSubpath()
+            }
         }
-        for lonDeg in stride(from: last, through: first, by: -3) {
-            flat.append(lonDeg * 10_000)
-            flat.append(Int((nightPole * 10_000).rounded()))
-        }
-        return GeoRing(flat)
+        return out
     }
 }
 
-/// Which region each county, lake, river, highway, state border and city of a map belongs to,
-/// so a raised region can draw its own detail on its top face. Built once per map.
+/// Which region each city of a map stands in, so it can stand on its region's tile. Built once
+/// per map.
 final class RegionIndex {
     /// Region bounding boxes in radians.
     private let boxes: [(west: Double, south: Double, east: Double, north: Double)]
     private let regions: [WorldMap.RegionFeature]
-    let counties: [[Int]]
-    let lakes: [[Int]]
-    let rivers: [[Int]]
-    let interstates: [[Int]]
-    let states: [[Int]]
     /// The region index each city sits in, or -1 outside the scenario.
     let cityRegion: [Int]
-    /// City indices, most populous first.
-    let byPopulation: [Int]
-    private let interstateRings: [GeoRing]
-    /// The region index of every highway point, for traffic on raised regions.
-    lazy var interstatePoints: [[Int]] = interstateRings.map { ring in ring.points.map { region(at: $0) } }
 
     init(map: WorldMap) {
         regions = map.regions
-        func box(_ rings: [GeoRing]) -> (west: Double, south: Double, east: Double, north: Double) {
+        let regionBoxes = map.regions.map { region -> (west: Double, south: Double, east: Double, north: Double) in
             var b = (west: Double.infinity, south: Double.infinity, east: -Double.infinity, north: -Double.infinity)
-            for ring in rings {
+            for ring in region.rings {
                 for p in ring.points {
                     b = (min(b.west, p.lon), min(b.south, p.lat), max(b.east, p.lon), max(b.north, p.lat))
                 }
             }
             return b
         }
-        let regionBoxes = map.regions.map { box($0.rings) }
         boxes = regionBoxes
-        func assign(_ rings: [GeoRing]) -> [[Int]] {
-            var result = Array(repeating: [Int](), count: regionBoxes.count)
-            for (index, ring) in rings.enumerated() {
-                let b = box([ring])
-                for (r, rb) in regionBoxes.enumerated()
-                where b.west <= rb.east && b.east >= rb.west && b.south <= rb.north && b.north >= rb.south {
-                    result[r].append(index)
-                }
-            }
-            return result
+        cityRegion = map.cities.map {
+            RegionIndex.find(GeoPoint(e4: $0.x, $0.y), boxes: regionBoxes, regions: map.regions)
         }
-        counties = assign(map.counties)
-        lakes = assign(map.lakes)
-        rivers = assign(map.rivers)
-        interstates = assign(map.interstates)
-        // A state's border belongs to the regions inside it.
-        states = map.regions.map { region in
-            map.playStates.indices.filter { map.playStates[$0].code == region.state }
-        }
-        var cities: [Int] = []
-        cities.reserveCapacity(map.cities.count)
-        for city in map.cities {
-            cities.append(RegionIndex.find(GeoPoint(e4: city.x, city.y), boxes: regionBoxes, regions: map.regions))
-        }
-        cityRegion = cities
-        byPopulation = map.cities.indices.sorted { map.cities[$0].population > map.cities[$1].population }
-        interstateRings = map.interstates
     }
 
     /// The region a point falls in, or -1.

@@ -307,8 +307,8 @@ struct GraphicsSettingsPanel: View {
                     }
                     .pickerStyle(.segmented)
                     Text(preset == GraphicsPreset.custom.rawValue
-                         ? "Custom. Picking a preset sets every option below."
-                         : "Picking a preset sets every option below. Changing any one shows Custom.")
+                         ? "Custom: your own mix of the options below."
+                         : "Picking a preset sets every option below. Change any of them to make your own mix.")
                         .font(.caption2)
                         .foregroundStyle(Theme.secondary)
                 }
@@ -317,13 +317,15 @@ struct GraphicsSettingsPanel: View {
                        (MapDetailLevel(rawValue: detail) ?? .high).note)
                 choice("3D tilt", custom($tilt), ["Off", "Subtle", "Full"],
                        "Tilts the map as you zoom in, so the ground recedes into the distance.")
-                toggle("Raised regions", custom($extrude),
+                choice("Raised regions", onOff(custom($extrude)), ["Off", "On"],
                        "Regions stand up as tiles, taller where the active layer is stronger.")
                 choice("Lighting", custom($lighting), ["Off", "Standard", "Cinematic"],
                        "Sunlight, shadows and the atmosphere around the globe.")
-                toggle("Day and night", custom($dayNight), "The sun moves across the world and night falls on the map.")
-                toggle("City lights", custom($cityLights), "Cities glow on the night side.")
-                choice("Clouds", custom($clouds), ["Off", "Few", "Many"], "Clouds drift over the map and cast shadows.")
+                choice("Day and night", onOff(custom($dayNight)), ["Off", "On"],
+                       "The sun moves across the world and night falls on the map.")
+                choice("City lights", onOff(custom($cityLights)), ["Off", "On"], "Cities glow on the night side.")
+                choice("Clouds", custom($clouds), ["Off", "Few", "Many"],
+                       "Few: clouds over the globe. Many: also thin high cloud over the map, casting shadows.")
                 choice("Traffic", custom($traffic), ["Off", "Light", "Busy"],
                        "Freight moves along the lanes and cars along the highways.")
                 choice("Buildings", custom($buildings), ["Flat", "Your divisions", "Divisions and cities"],
@@ -339,10 +341,21 @@ struct GraphicsSettingsPanel: View {
                     Text("Lower saves battery.").font(.caption2).foregroundStyle(Theme.secondary)
                 }
                 Divider().overlay(Theme.stroke)
-                toggle("Animations", $animations, "Camera flights, the menu and moving effects.")
-                toggle("Show frame rate", $showFps, "A frame counter in the corner of the map.")
+                choice("Animations", onOff($animations), ["Off", "On"], "Camera flights, the menu and moving effects.")
+                choice("Show frame rate", onOff($showFps), ["Off", "On"], "A frame counter in the corner of the map.")
             }
         }
+    }
+
+    /// The options as they stand, for matching against the presets.
+    private var current: GraphicsSettings {
+        GraphicsSettings(mapDetail: detail, tilt: tilt, extrude: extrude, lighting: lighting, dayNight: dayNight,
+                         cityLights: cityLights, clouds: clouds, traffic: traffic, buildings: buildings, frameRate: frameRate)
+    }
+
+    /// An on and off option as a two-way choice.
+    private func onOff(_ binding: Binding<Bool>) -> Binding<Int> {
+        Binding(get: { binding.wrappedValue ? 1 : 0 }, set: { binding.wrappedValue = $0 == 1 })
     }
 
     /// Picking a preset writes every option it covers.
@@ -373,7 +386,9 @@ struct GraphicsSettingsPanel: View {
             set: { value in
                 guard value != binding.wrappedValue else { return }
                 binding.wrappedValue = value
-                preset = GraphicsPreset.custom.rawValue
+                // A mix that happens to match a preset shows as that preset.
+                let now = current
+                preset = (GraphicsPreset.choices.first { $0.values == now } ?? .custom).rawValue
             }
         )
     }
@@ -389,16 +404,6 @@ struct GraphicsSettingsPanel: View {
             .pickerStyle(.segmented)
             Text(note).font(.caption2).foregroundStyle(Theme.secondary)
         }
-    }
-
-    private func toggle(_ title: String, _ isOn: Binding<Bool>, _ note: String) -> some View {
-        Toggle(isOn: isOn) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.callout).foregroundStyle(Theme.primaryText)
-                Text(note).font(.caption2).foregroundStyle(Theme.secondary)
-            }
-        }
-        .tint(Theme.gold)
     }
 }
 
