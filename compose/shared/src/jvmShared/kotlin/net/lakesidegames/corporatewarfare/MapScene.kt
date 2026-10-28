@@ -746,7 +746,7 @@ private fun DrawScope.drawRailTrack(lane: LaneTrack, p: MapProjection, plinth: D
     var t = 0f
     while (t < len) {
         val at = a + u * t
-        drawLine(Sleeper, at - n * (gauge + 1.2f), at + n * (gauge + 1.2f), 1f)
+        if (at.x in -8f..size.width + 8f && at.y in -8f..size.height + 8f) drawLine(Sleeper, at - n * (gauge + 1.2f), at + n * (gauge + 1.2f), 1f)
         t += 5f
     }
     drawLine(Rail, a - n * gauge, b - n * gauge, 1f)
@@ -814,8 +814,10 @@ private fun waterAlong(map: WorldMap, a: String, b: String): BooleanArray? = wat
     val from = map.anchor(a) ?: return@getOrPut null
     val to = map.anchor(b) ?: return@getOrPut null
     val lon0 = from.lon[0]; val lat0 = from.lat[0]; val lon1 = to.lon[0]; val lat1 = to.lat[0]
-    val lakes = map.lakes
-    val land = map.countries.flatMap { it.rings }
+    // Only the rings whose box the lane passes through.
+    val box = doubleArrayOf(min(lon0, lon1), max(lon0, lon1), min(lat0, lat1), max(lat0, lat1))
+    val lakes = map.lakes.filter { it.overlaps(box) }
+    val land = map.countries.flatMap { it.rings }.filter { it.overlaps(box) }
     BooleanArray(WaterSamples) { i ->
         val t = i / (WaterSamples - 1.0)
         val lon = lon0 + (lon1 - lon0) * t
@@ -823,6 +825,9 @@ private fun waterAlong(map: WorldMap, a: String, b: String): BooleanArray? = wat
         lakes.any { geoInside(it, lon, lat) } || land.none { geoInside(it, lon, lat) }
     }
 }
+
+private fun GeoRing.overlaps(box: DoubleArray): Boolean =
+    size >= 3 && lon.max() >= box[0] && lon.min() <= box[1] && lat.max() >= box[2] && lat.min() <= box[3]
 
 /** Even-odd test of a place against one ring, on longitude and latitude. */
 private fun geoInside(ring: GeoRing, lon: Double, lat: Double): Boolean {
