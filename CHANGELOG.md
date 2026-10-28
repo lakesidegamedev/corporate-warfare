@@ -72,6 +72,9 @@ heading.
 
 ### Fixed
 
+- On iPhone and iPad the roads, borders and buildings no longer slide against the satellite ground
+  as you pan, tilt or turn the map: the photo is now laid on in true perspective, raised regions
+  carry their own roads, and buildings are placed along the ground rather than across the screen.
 - No more pulsing: the rings round buildings, the weekly ripple, the breathing selection outline
   and the menu's pulsing scenario glow are gone; rooftop lights are steady.
 - Traffic, planes, clouds and the sun stop when the game is paused and run faster at higher
