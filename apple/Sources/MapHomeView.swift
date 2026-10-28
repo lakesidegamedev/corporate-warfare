@@ -192,6 +192,27 @@ struct CompanyHUD: View {
     }
 }
 
+/// The week and the time controls in one slim bar, over every phone screen that is not the map
+/// (the map has its own in the HUD), so time can always be paused or slowed where you are.
+struct TimeStrip: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(store.overview?.weekLabel ?? "")
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(Theme.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            SpeedControl(compact: true)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 40)
+        .background(Theme.panel)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.stroke).frame(height: 1) }
+    }
+}
+
 /// Time controls folded into one pill: the speed it is running at, tap to open Next week and the
 /// speed buttons, tap again to fold.
 struct TimeBar: View {
@@ -216,9 +237,12 @@ struct TimeBar: View {
             Button {
                 withAnimation(.easeOut(duration: 0.15)) { open.toggle() }
             } label: {
+                // One width whatever the speed, so nothing beside it moves under the finger.
                 HStack(spacing: 4) {
                     PixelIcon(store.runSpeed > 0 ? "play" : "pause")
-                    if store.runSpeed > 0 { Text("\(Int(store.runSpeed))x").monospacedDigit() }
+                    Text(store.runSpeed > 0 ? "\(Int(store.runSpeed))x" : "")
+                        .monospacedDigit()
+                        .frame(width: 20, alignment: .leading)
                     PixelIcon(open ? "chevron_right" : "chevron_left", size: 12)
                 }
                 .font(.caption.weight(.bold))

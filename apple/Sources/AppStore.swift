@@ -99,7 +99,7 @@ final class AppStore: ObservableObject {
         }
     }
 
-    struct MarketRow: Identifiable {
+    struct MarketRow: Identifiable, Equatable {
         let product: ProductDto
         let market: MarketDto?
         var id: UInt32 { product.index }
@@ -237,28 +237,14 @@ final class AppStore: ObservableObject {
         recoveryNotice = nil
     }
 
-    /// Settle weeks. A tick of the run loop runs in the background: it does not mark the app
-    /// busy, so buttons stay put while time runs instead of flashing disabled every week.
+    /// Settle weeks by hand (Next week). The run loop settles its weeks through `runWeek`.
     func advance(weeks: UInt32, background: Bool = false) async {
         guard sessionReady else { return }
-        let weekBefore = overview?.tick ?? 0
         let body: () async -> Void = {
-            if let result = await self.engine.advance(weeks: weeks) {
-                if result.pause != nil {
-                    self.statusLine = "Paused: \(self.overview?.pauseInfo?.title ?? "waiting for you")"
-                } else {
-                    self.statusLine = "Advanced \(result.weeksAdvanced) week(s)."
-                }
-            }
+            let result = await self.engine.advance(weeks: weeks)
             await self.reload()
-            // Anonymous market-balance analytics every five weeks, in the background.
-            if let overview = self.overview, Telemetry.crossed(from: weekBefore, to: overview.tick), Telemetry.enabled {
-                Telemetry.send(snapshotJSON: await self.engine.marketSnapshotJSON())
-            }
-            // Autosave on the four-week boundary only; background and manual saves cover the rest.
-            if let overview = self.overview, overview.tick % 4 == 0 {
-                await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
-            }
+            self.staleWeeks = false
+            await self.settled(result, tick: self.overview?.tick)
         }
         if background {
             await body()
@@ -267,41 +253,110 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// One week of the run loop. It does not mark the app busy, so buttons stay put while time
+    /// runs. With `refresh` off the week settles without republishing anything; the screens
+    /// catch up on the next refreshed week. Returns true when time should stop.
+    private func runWeek(refresh: Bool, speed: Double, generation: Int) async -> Bool {
+        guard sessionReady else { return true }
+        guard let result = await engine.advance(weeks: 1) else { return true }
+        let paused = result.pause != nil
+        let tick: UInt32?
+        if refresh || paused {
+            await reload()
+            staleWeeks = false
+            // Stop in the same step that shows the pause, so Continue never meets a loop that
+            // is still winding down.
+            if paused && runGeneration == generation {
+                pausedSpeed = speed
+                runTask = nil
+                put(\.runSpeed, 0)
+            }
+            tick = overview?.tick
+        } else {
+            staleWeeks = true
+            tick = await engine.overview()?.tick
+        }
+        await settled(result, tick: tick)
+        return paused
+    }
+
+    /// The status line, market analytics every five weeks and the four-week autosave.
+    private func settled(_ result: AdvanceDto?, tick: UInt32?) async {
+        guard let result else { return }
+        put(\.statusLine, result.pause != nil
+            ? "Paused: \(overview?.pauseInfo?.title ?? "waiting for you")"
+            : "Advanced \(result.weeksAdvanced) week(s).")
+        guard let tick, result.weeksAdvanced > 0 else { return }
+        let before = tick >= result.weeksAdvanced ? tick - result.weeksAdvanced : 0
+        // Anonymous market-balance analytics every five weeks, in the background.
+        if Telemetry.crossed(from: before, to: tick), Telemetry.enabled {
+            Telemetry.send(snapshotJSON: await engine.marketSnapshotJSON())
+        }
+        // Autosave on the four-week boundary only; background and manual saves cover the rest.
+        if tick % 4 == 0 {
+            await save(slot: SaveManager.autosaveSlot(week: tick), kind: .autosave)
+        }
+    }
+
     /// Play or pause at 1x. Kept for the single play button.
     func toggleRun() {
         setSpeed(runTask == nil ? 1 : 0)
     }
 
+    /// The fewest seconds between screen refreshes while time runs above 1x. The engine still
+    /// settles every week; only publishing is coalesced, latest week wins.
+    nonisolated static let runRefreshInterval = 0.4
+
     /// Time runs at `speed` weeks a second: 0 pauses, 1, 2 or 4 play. Changing speed while
     /// running takes effect from the next week without restarting the loop.
+    ///
+    /// The loop itself runs off the main actor and only hops onto it to publish a week, so at
+    /// 4x the main thread stays free for navigation, sheets and the time controls.
     func setSpeed(_ speed: Double) {
         guard speed > 0 else {
             stopRunLoop()
             return
         }
-        runSpeed = speed
+        put(\.runSpeed, speed)
         if runTask != nil { return }
         runGeneration += 1
         let generation = runGeneration
-        runTask = Task { [weak self] in
-            guard let self else { return }
+        runTask = Task.detached(priority: .userInitiated) { [weak self] in
+            var lastRefresh = -Double.infinity
             while !Task.isCancelled {
-                await self.advance(weeks: 1, background: true)
-                if self.overview?.pause != nil { break }
-                let pace = max(self.runSpeed, 1)
+                guard let self else { return }
+                let pace = max(await self.runSpeed, 1)
+                let now = ProcessInfo.processInfo.systemUptime
+                let refresh = pace <= 1 || now - lastRefresh >= AppStore.runRefreshInterval
+                if refresh { lastRefresh = now }
+                if await self.runWeek(refresh: refresh, speed: pace, generation: generation) { break }
                 try? await Task.sleep(nanoseconds: UInt64(1_000_000_000 / pace))
             }
-            await MainActor.run {
-                guard self.runGeneration == generation else { return }
-                self.runTask = nil
-                self.runSpeed = 0
-            }
+            await self?.runEnded(generation)
+        }
+    }
+
+    /// Weeks settled without being published yet.
+    private var staleWeeks = false
+    /// The speed time was running at when a pause stopped it, for Continue to resume.
+    private var pausedSpeed = 0.0
+
+
+    private func runEnded(_ generation: Int) async {
+        if runGeneration == generation {
+            runTask = nil
+            put(\.runSpeed, 0)
+        }
+        if staleWeeks && sessionReady {
+            staleWeeks = false
+            await reload()
         }
     }
 
     /// Stop the run loop without touching the session. Cancellation is checked between weeks only,
     /// never inside settlement.
     func stopRunLoop() {
+        pausedSpeed = 0
         runGeneration += 1
         runTask?.cancel()
         runTask = nil
@@ -315,86 +370,156 @@ final class AppStore: ObservableObject {
         await reload()
     }
 
+    /// Reads the whole session, then publishes it in one step. Every read happens first, off the
+    /// main actor inside the engine, and only values that changed are republished, so a week
+    /// costs SwiftUI one update instead of one per property, and none for screens it left alone.
     func reload() async {
-        overview = await engine.overview()
-        if let year = overview?.startYear { ResultBuckets.startYear = Int(year) }
-        firms = await engine.firms()
-        regions = await engine.regions(selected: selectedRegionCode)
-        boards = await engine.regionBoards(firm: selectedFirm ?? overview?.primaryFirm)
-        mapPlants = await engine.mapPlants()
-        mapDivisions = await engine.mapDivisions()
-        recentRaids = await engine.recentRaids()
-        rivalFeed = await engine.rivalFeed(limit: 12)
-        objective = await engine.objective()
-        objectiveHistory = await engine.objectiveHistory()
+        let overview = await engine.overview()
+        let firms = await engine.firms()
+        let regions = await engine.regions(selected: selectedRegionCode)
+        let boards = await engine.regionBoards(firm: selectedFirm ?? overview?.primaryFirm)
+        let mapPlants = await engine.mapPlants()
+        let mapDivisions = await engine.mapDivisions()
+        let recentRaids = await engine.recentRaids()
+        let rivalFeed = await engine.rivalFeed(limit: 12)
+        let objective = await engine.objective()
+        let objectiveHistory = await engine.objectiveHistory()
         let scenario = await engine.scenarioId()
+        var catalogues: (strategies: [StrategyDto], recipes: [RecipeDto], products: [ProductDto])?
         if strategyCatalogue.isEmpty || productCatalogue.isEmpty || scenario != catalogueScenario {
-            strategyCatalogue = await engine.strategies()
-            recipeOptions = await engine.recipes()
-            productCatalogue = await engine.products()
+            catalogues = (await engine.strategies(), await engine.recipes(), await engine.products())
+        }
+        let events = await engine.events()
+        let economy = await engine.economy()
+        let commodities = await engine.commodityBoard()
+        let stocks = await engine.stockBoard()
+        let deals = await engine.deals()
+        let groupTree = await engine.groupTree()
+        let institutions = await engine.institutions()
+        let recovery = await engine.recovery()
+        let fundingBuyers = await engine.fundingBuyers()
+        let firm = await firmState()
+        let score = await engine.score()
+        let products = catalogues?.products ?? productCatalogue
+        let marketCode = selectedRegionCode
+            ?? selectedFirm.flatMap { handle in firms.first { $0.handle == handle } }
+                .flatMap { firm in boards.first { $0.name == firm.region }?.code }
+            ?? boards.first?.code
+        let rows = await marketRows(code: marketCode, regions: regions, products: products)
+        let saves = saveManager.list()
+
+        if let year = overview?.startYear { ResultBuckets.startYear = Int(year) }
+        Format.configure(fx: economy?.fx)
+        put(\.overview, overview)
+        put(\.firms, firms)
+        put(\.regions, regions)
+        put(\.boards, boards)
+        put(\.mapPlants, mapPlants)
+        put(\.mapDivisions, mapDivisions)
+        put(\.recentRaids, recentRaids)
+        put(\.rivalFeed, rivalFeed)
+        put(\.objective, objective)
+        put(\.objectiveHistory, objectiveHistory)
+        if let catalogues {
+            put(\.strategyCatalogue, catalogues.strategies)
+            put(\.recipeOptions, catalogues.recipes)
+            put(\.productCatalogue, catalogues.products)
             catalogueScenario = scenario
         }
-        events = await engine.events()
-        economy = await engine.economy()
-        Format.configure(fx: economy?.fx)
-        commodities = await engine.commodityBoard()
-        stocks = await engine.stockBoard()
-        deals = await engine.deals()
-        groupTree = await engine.groupTree()
-        institutions = await engine.institutions()
-        recovery = await engine.recovery()
-        fundingBuyers = await engine.fundingBuyers()
-        if let selectedFirm {
-            facilities = await engine.facilities(firm: selectedFirm)
-            finance = await engine.finance(firm: selectedFirm)
-            productLines = await engine.productLines(firm: selectedFirm)
-            ownership = await engine.ownership(firm: selectedFirm)
-            history = await engine.history(firm: selectedFirm)
-            contracts = await engine.contracts(firm: selectedFirm)
-            loans = await engine.loans(firm: selectedFirm)
-            insurance = await engine.insurance(firm: selectedFirm)
-            boardVotes = await engine.boardVotes(firm: selectedFirm)
-            labour = await engine.labour(firm: selectedFirm)
-            policyState = await engine.policyState(firm: selectedFirm)
-            firmOps = await engine.firmOps(firm: selectedFirm)
-            divisions = await engine.divisions(firm: selectedFirm)
-            held = await engine.heldStock(firm: selectedFirm)
-            lanes = await engine.lanes()
-            laneContracts = await engine.laneContracts()
-            freight = await engine.freightSummary()
-            structure = await engine.structureView()
-            raidTargets = await engine.raidTargets(firm: selectedFirm)
-            rivals = await engine.rivals(firm: selectedFirm)
-            research = await engine.research(firm: selectedFirm)
-            cfoAdvice = await engine.cfoAdvice(firm: selectedFirm)
-        } else {
-            research = nil
-            cfoAdvice = []
-            firmOps = nil
-            divisions = []
-            held = []
-            lanes = []
-            laneContracts = []
-            freight = nil
-            structure = nil
-            raidTargets = []
-            rivals = []
-            facilities = []
-            finance = nil
-            productLines = []
-            ownership = nil
-            history = []
-            contracts = []
-            loans = []
-            insurance = []
-            boardVotes = []
-            labour = nil
-            policyState = nil
-        }
-        saves = saveManager.list()
-        score = await engine.score()
+        put(\.events, events)
+        put(\.economy, economy)
+        put(\.commodities, commodities)
+        put(\.stocks, stocks)
+        put(\.deals, deals)
+        put(\.groupTree, groupTree)
+        put(\.institutions, institutions)
+        put(\.recovery, recovery)
+        put(\.fundingBuyers, fundingBuyers)
+        put(\.facilities, firm.facilities)
+        put(\.finance, firm.finance)
+        put(\.productLines, firm.productLines)
+        put(\.ownership, firm.ownership)
+        put(\.history, firm.history)
+        put(\.contracts, firm.contracts)
+        put(\.loans, firm.loans)
+        put(\.insurance, firm.insurance)
+        put(\.boardVotes, firm.boardVotes)
+        put(\.labour, firm.labour)
+        put(\.policyState, firm.policyState)
+        put(\.firmOps, firm.firmOps)
+        put(\.divisions, firm.divisions)
+        put(\.held, firm.held)
+        put(\.lanes, firm.lanes)
+        put(\.laneContracts, firm.laneContracts)
+        put(\.freight, firm.freight)
+        put(\.structure, firm.structure)
+        put(\.raidTargets, firm.raidTargets)
+        put(\.rivals, firm.rivals)
+        put(\.research, firm.research)
+        put(\.cfoAdvice, firm.cfoAdvice)
+        put(\.saves, saves)
+        put(\.score, score)
+        put(\.marketRows, rows)
         if let tick = overview?.tick { tutorial.week(tick) }
-        await loadMarkets()
+    }
+
+    /// Assigns a published value only when it changed, so an unchanged screen does not redraw.
+    private func put<Value: Equatable>(_ path: ReferenceWritableKeyPath<AppStore, Value>, _ value: Value) {
+        if self[keyPath: path] != value { self[keyPath: path] = value }
+    }
+
+    /// Everything about the selected company, read in one pass; empty with no company selected.
+    private struct FirmState {
+        var facilities: [FacilityDto] = []
+        var finance: FinanceDto?
+        var productLines: [ProductLineDto] = []
+        var ownership: OwnershipDto?
+        var history: [PeriodDto] = []
+        var contracts: [ContractDto] = []
+        var loans: [LoanDto] = []
+        var insurance: [InsuranceDto] = []
+        var boardVotes: [BoardVoteDto] = []
+        var labour: LabourDto?
+        var policyState: PolicyStateDto?
+        var firmOps: FirmOpsDto?
+        var divisions: [DivisionDto] = []
+        var held: [HeldStockDto] = []
+        var lanes: [LaneDto] = []
+        var laneContracts: [LaneContractDto] = []
+        var freight: FreightSummaryDto?
+        var structure: StructureViewDto?
+        var raidTargets: [RaidOptionDto] = []
+        var rivals: [RivalSummaryDto] = []
+        var research: ResearchDto?
+        var cfoAdvice: [CfoAdviceDto] = []
+    }
+
+    private func firmState() async -> FirmState {
+        var state = FirmState()
+        guard let selectedFirm else { return state }
+        state.facilities = await engine.facilities(firm: selectedFirm)
+        state.finance = await engine.finance(firm: selectedFirm)
+        state.productLines = await engine.productLines(firm: selectedFirm)
+        state.ownership = await engine.ownership(firm: selectedFirm)
+        state.history = await engine.history(firm: selectedFirm)
+        state.contracts = await engine.contracts(firm: selectedFirm)
+        state.loans = await engine.loans(firm: selectedFirm)
+        state.insurance = await engine.insurance(firm: selectedFirm)
+        state.boardVotes = await engine.boardVotes(firm: selectedFirm)
+        state.labour = await engine.labour(firm: selectedFirm)
+        state.policyState = await engine.policyState(firm: selectedFirm)
+        state.firmOps = await engine.firmOps(firm: selectedFirm)
+        state.divisions = await engine.divisions(firm: selectedFirm)
+        state.held = await engine.heldStock(firm: selectedFirm)
+        state.lanes = await engine.lanes()
+        state.laneContracts = await engine.laneContracts()
+        state.freight = await engine.freightSummary()
+        state.structure = await engine.structureView()
+        state.raidTargets = await engine.raidTargets(firm: selectedFirm)
+        state.rivals = await engine.rivals(firm: selectedFirm)
+        state.research = await engine.research(firm: selectedFirm)
+        state.cfoAdvice = await engine.cfoAdvice(firm: selectedFirm)
+        return state
     }
 
     /// The region Markets shows: the chosen one, else the selected company's home region.
@@ -413,22 +538,30 @@ final class AppStore: ObservableObject {
     }
 
     func loadMarkets() async {
-        let code = marketRegionCode
+        let rows = await marketRows(code: marketRegionCode, regions: regions, products: productCatalogue)
+        put(\.marketRows, rows)
+    }
+
+    private func marketRows(code: String?, regions: [RegionDto], products: [ProductDto]) async -> [MarketRow] {
         let regionIndex = regions.first { $0.code == code }?.index ?? regions.first?.index ?? 0
         var rows: [MarketRow] = []
-        for product in productCatalogue {
+        for product in products {
             let market = await engine.market(region: regionIndex, product: product.index)
             rows.append(MarketRow(product: product, market: market))
         }
-        marketRows = rows
+        return rows
     }
 
     /// Leave the week-260 score sheet and continue the same career in sandbox.
+    /// Continue past a pause. When the pause stopped running time, time runs on at the same speed.
     func continueCareer() async {
+        let resume = pausedSpeed
+        pausedSpeed = 0
         await perform {
             await self.engine.dismissPause()
             await self.reload()
         }
+        if resume > 0 && overview?.pause == nil && sessionReady { setSpeed(resume) }
     }
 
     func selectFirm(_ handle: UInt64) async {
