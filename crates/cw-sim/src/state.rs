@@ -627,6 +627,12 @@ impl Firm {
         self.status.operative()
     }
 
+    /// On the corridor stock board: operating with shares in issue, floated or not. The board,
+    /// company pages and statements all use this, so a firm on the board always has its figures.
+    pub fn on_board(&self) -> bool {
+        self.operative() && self.shares.issued > 0
+    }
+
     pub fn stock(&self, product: u16, region: u8) -> MilliLots {
         self.inventory
             .get(&(product, region))
@@ -1538,6 +1544,12 @@ pub struct World {
     /// and `canonical_hash` folds it in. See `economy::fx`.
     #[serde(skip)]
     pub fx: crate::economy::fx::FxState,
+    /// Long presentation history: ten years of weekly closes and each firm's weekly and
+    /// quarterly statements with cash flow and divisions. Outside the postcard encoding and the
+    /// hash; saved in its own trailer, so an older save loads with it empty. No rule reads it.
+    /// See `economy::history`.
+    #[serde(skip)]
+    pub archive: crate::economy::history::Archive,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.

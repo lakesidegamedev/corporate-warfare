@@ -124,6 +124,14 @@ fun StatsScreen(store: GameStore, onBack: () -> Unit) {
                 }
             }
         }
+        if (firm != null) {
+            item {
+                Panel {
+                    Eyebrow("Financial statements")
+                    rememberFinancials(store, firm.handle, firm.name, firm.industry)?.let { CompanyFinancials(it, columns = 3) }
+                }
+            }
+        }
         if (buckets.isEmpty()) {
             item { Callout("Results appear after the first week closes.") }
         } else {
@@ -175,14 +183,7 @@ fun StatsScreen(store: GameStore, onBack: () -> Unit) {
                     ),
                 )
             }
-            if (stock.historyCents.size > 1) {
-                item {
-                    Panel {
-                        Eyebrow("Share price, last ${stock.historyCents.size} weeks")
-                        LineChart(listOf(Palette.gold to stock.historyCents))
-                    }
-                }
-            }
+            item { Panel { StockHistoryChart(store, stock.firm, height = 160.dp) } }
         }
         val ownership = store.ownership
         if (ownership != null && ownership.firm == firm?.handle) {

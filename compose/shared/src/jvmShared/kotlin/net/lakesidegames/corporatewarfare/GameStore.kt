@@ -405,6 +405,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         scope.launch { onResult(withContext(engine) { handle.dossier(firm) }) }
     }
 
+    /** Read anything from the engine off the main thread; null without a session. */
+    suspend fun <T> read(block: (SessionHandle) -> T): T? {
+        val handle = session ?: return null
+        return withContext(engine) { block(handle) }
+    }
+
     /** A company's full page, with what the investor may see of it. */
     fun companyPage(firm: ULong, onResult: (uniffi.cw_ffi.CompanyPageDto?) -> Unit) {
         val handle = session ?: return

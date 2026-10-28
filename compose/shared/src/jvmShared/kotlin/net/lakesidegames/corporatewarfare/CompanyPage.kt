@@ -103,8 +103,12 @@ fun CompanyPageBody(store: GameStore, p: CompanyPageDto, onOpenFirm: (ULong) -> 
                     Stat("You hold", Format.count(s.yourShares), note = Format.compact(s.yourShares * s.priceCents)),
                 ),
             )
-            if (s.historyCents.size > 1) Sparkline(s.historyCents, changeTint(s.changeQuarterBps), Modifier.fillMaxWidth().height(90.dp))
+            StockHistoryChart(store, p.firm)
             if (onTrade != null) TextButton(onClick = onTrade) { Text("Buy or sell shares") }
+        }
+        if (p.finance != null || p.kind == "listed") {
+            Eyebrow("Financials")
+            rememberFinancials(store, p.firm, p.name, p.industry)?.let { CompanyFinancials(it) }
         }
         p.finance?.let { f ->
             Eyebrow("Financial summary (trailing year)")
