@@ -46,6 +46,19 @@ signing, verifies bundle/version/architectures/privacy manifest/icon/signature, 
 then polls Apple for up to fifteen minutes. `PROCESSING_AT_DEADLINE` exits 3 and is **not**
 success. `INVALID`/`FAILED`/`EXPIRED` exit 2.
 
+## Screenshots
+
+The `Apple smoke` workflow renders the App Store sets from a real career and uploads them as the
+`store-screenshots` artifact (30 days). `SnapshotTests.testRenderStoreScreenshots` writes
+`cw-store-iphone-*.png` at 1320 x 2868 (440 x 956 pt at 3x) and `cw-store-ipad-*.png` at
+2064 x 2752 (1032 x 1376 pt at 2x), which are the iPhone Dynamic Island (large) and 13-inch iPad
+sizes App Store Connect accepts. Each file is flattened to RGB, because Connect rejects a
+screenshot that carries an alpha channel, and the test asserts the PNG colour type is 2.
+
+Regenerate from the tested commit before a submission, then upload the iPhone and iPad sets to
+the version record. Do not edit the images after export; the screenshots must match the shipped
+build. A Mac Catalyst listing additionally needs 16:10 screenshots (for example 2880 x 1800).
+
 ## After upload
 
 1. Read `processing.json`; record the build id and state.

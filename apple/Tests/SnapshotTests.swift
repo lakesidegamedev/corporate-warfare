@@ -1,3 +1,4 @@
+import ImageIO
 import SwiftUI
 import UIKit
 import XCTest
@@ -75,6 +76,96 @@ final class SnapshotTests: XCTestCase {
     }
 
     private func render<V: View>(_ name: String, _ size: CGSize, compact: Bool, _ view: V) {
+        let image = capture(size, scale: UIScreen.main.scale, opaque: false, compact: compact, view)
+        guard let data = image.pngData() else {
+            return XCTFail("snapshot \(name) did not encode")
+        }
+        XCTAssertGreaterThan(distinctShades(image), 8, "snapshot \(name) rendered a blank image")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("cw-snapshot-\(name).png")
+        try? data.write(to: url)
+        let attachment = XCTAttachment(image: image)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    /// App Store screenshots at Apple's required display sizes. The iPhone is 440 x 956 pt at 3x
+    /// (1320 x 2868) and the iPad 1032 x 1376 pt at 2x (2064 x 2752). App Store Connect rejects a
+    /// PNG that carries an alpha channel, so each image is flattened to RGB before it is written.
+    func testRenderStoreScreenshots() async throws {
+        let store = AppStore(saveManager: SaveManager(directory: directory))
+        await store.newCareer(guided: true, fiveYear: false, seed: 7)
+        XCTAssertTrue(store.sessionReady)
+        // Ten weeks so plants run, gateways record imports and the map has room to show.
+        for _ in 0..<10 {
+            await store.advance(weeks: 1)
+            await store.continueCareer()
+        }
+        if let primary = store.overview?.primaryFirm {
+            await store.selectFirm(primary)
+        }
+        XCTAssertFalse(store.mapPlants.isEmpty, "the map has plants")
+
+        let phone = CGSize(width: 440, height: 956)
+        let pad = CGSize(width: 1032, height: 1376)
+        let controlled = store.stocks.first { $0.controlledByYou } ?? store.stocks.first
+
+        storeShot("iphone", "01-map", phone, 3, compact: true, RootView(initialTab: .map).environmentObject(store))
+        storeShot("iphone", "02-office", phone, 3, compact: true, RootView(initialTab: .office).environmentObject(store))
+        storeShot("iphone", "03-markets", phone, 3, compact: true, RootView(initialTab: .markets).environmentObject(store))
+        if let stock = controlled {
+            storeShot("iphone", "04-company", phone, 3, compact: true, StockSheet(stock: stock).environmentObject(store))
+        }
+        storeShot("iphone", "05-inbox", phone, 3, compact: true, RootView(initialTab: .inbox).environmentObject(store))
+        storeShot("iphone", "06-portfolio", phone, 3, compact: true, RootView(initialTab: .portfolio).environmentObject(store))
+
+        storeShot("ipad", "01-map", pad, 2, compact: false, RootView(initialTab: .map).environmentObject(store))
+        storeShot("ipad", "02-office", pad, 2, compact: false, RootView(initialTab: .office).environmentObject(store))
+        storeShot("ipad", "03-markets", pad, 2, compact: false, RootView(initialTab: .markets).environmentObject(store))
+    }
+
+    private func storeShot<V: View>(_ device: String, _ name: String, _ size: CGSize, _ scale: CGFloat, compact: Bool, _ view: V) {
+        let image = capture(size, scale: scale, opaque: true, compact: compact, view)
+        let pixels = CGSize(width: size.width * scale, height: size.height * scale)
+        guard let data = storePNG(image, pixels: pixels) else {
+            return XCTFail("store screenshot \(device)-\(name) did not encode")
+        }
+        // PNG header: width and height follow the 16-byte signature and chunk header, then bit
+        // depth and colour type. Colour type 2 is RGB; 6 would mean the alpha channel survived.
+        let width = data[16..<20].reduce(0) { $0 << 8 | Int($1) }
+        let height = data[20..<24].reduce(0) { $0 << 8 | Int($1) }
+        XCTAssertEqual(width, Int(pixels.width), "\(device)-\(name) width")
+        XCTAssertEqual(height, Int(pixels.height), "\(device)-\(name) height")
+        XCTAssertEqual(data[25], UInt8(2), "\(device)-\(name) must be RGB without an alpha channel")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("cw-store-\(device)-\(name).png")
+        try? data.write(to: url)
+    }
+
+    /// Redraw onto an opaque RGB canvas; App Store Connect rejects screenshots with transparency.
+    private func storePNG(_ image: UIImage, pixels: CGSize) -> Data? {
+        guard let cg = image.cgImage,
+              let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                  data: nil, width: Int(pixels.width), height: Int(pixels.height),
+                  bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+              ) else { return nil }
+        let bounds = CGRect(origin: .zero, size: pixels)
+        context.setFillColor(UIColor.black.cgColor)
+        context.fill(bounds)
+        context.interpolationQuality = .high
+        context.draw(cg, in: bounds)
+        guard let flat = context.makeImage() else { return nil }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, "public.png" as CFString, 1, nil) else {
+            return nil
+        }
+        CGImageDestinationAddImage(destination, flat, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return data as Data
+    }
+
+    private func capture<V: View>(_ size: CGSize, scale: CGFloat, opaque: Bool, compact: Bool, _ view: V) -> UIImage {
         let root = view
             .environment(\.horizontalSizeClass, compact ? .compact : .regular)
             .preferredColorScheme(.dark)
@@ -91,20 +182,14 @@ final class SnapshotTests: XCTestCase {
         host.view.frame = window.bounds
         host.view.layoutIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.6))
-        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = scale
+        format.opaque = opaque
+        let image = UIGraphicsImageRenderer(bounds: window.bounds, format: format).image { _ in
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }
-        guard let data = image.pngData() else {
-            return XCTFail("snapshot \(name) did not encode")
-        }
-        XCTAssertGreaterThan(distinctShades(image), 8, "snapshot \(name) rendered a blank image")
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("cw-snapshot-\(name).png")
-        try? data.write(to: url)
-        let attachment = XCTAttachment(image: image)
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
         window.isHidden = true
+        return image
     }
 
     /// Distinct grey levels across a coarse grid of samples. A blank or unrendered window has one.
