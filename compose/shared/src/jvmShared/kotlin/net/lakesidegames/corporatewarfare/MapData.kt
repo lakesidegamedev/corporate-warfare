@@ -2,6 +2,7 @@ package net.lakesidegames.corporatewarfare
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import kotlinx.serialization.Serializable
@@ -197,12 +198,12 @@ data class MapCamera(val lon: Double, val lat: Double, val zoom: Double) {
 
     fun radius(size: Size): Double = zoom * 0.45 * min(size.width, size.height)
 
-    /** Moves the centre by a screen drag, so the ground follows the finger. */
-    fun panned(delta: Offset, size: Size): MapCamera {
+    /** Moves the centre by a screen drag, so the ground follows the finger, tilted or not. */
+    fun panned(delta: Offset, size: Size, pitch: Double = 0.0): MapCamera {
         val r = radius(size)
         val east = 1 + flatness * (max(cos(lat * PI / 180), 0.2) - 1)
         val nextLon = lon - delta.x / (r * east) * 180 / PI
-        val nextLat = (lat + delta.y / r * 180 / PI).coerceIn(-80.0, 80.0)
+        val nextLat = (lat + delta.y / cos(pitch * flatness) / r * 180 / PI).coerceIn(-80.0, 80.0)
         return copy(lon = ((nextLon + 540) % 360) - 180, lat = nextLat)
     }
 
@@ -241,21 +242,30 @@ data class MapCamera(val lon: Double, val lat: Double, val zoom: Double) {
 
 /**
  * Orthographic globe blended into a flat equirectangular map around the camera centre. The two
- * agree at the centre, so the blend reads as the globe unrolling rather than a cut.
+ * agree at the centre, so the blend reads as the globe unrolling rather than a cut. Once flat the
+ * plane can tilt away from the viewer by [pitchSetting] radians, in perspective, and points can
+ * stand [lift]ed above the ground.
  */
-class MapProjection(camera: MapCamera, size: Size) {
+class MapProjection(camera: MapCamera, size: Size, pitchSetting: Double = 0.0) {
     val r = camera.radius(size)
     val t = camera.flatness
     val cx = size.width / 2.0
     val cy = size.height / 2.0
-    private val lon0 = camera.lon * PI / 180
-    private val lat0 = camera.lat * PI / 180
+    /** The tilt actually applied: none on the globe, the full setting once flat. */
+    val pitch = pitchSetting * t
+    private val sinP = sin(pitch)
+    private val cosP = cos(pitch)
+    private val focal = 1.6 * max(size.width, size.height)
+    /** How far a height shows on screen; an untilted map keeps a slight oblique view of it. */
+    private val rise = max(sinP, 0.40 * t)
+    val lon0 = camera.lon * PI / 180
+    val lat0 = camera.lat * PI / 180
     private val sin0 = sin(lat0)
     private val cos0 = cos(lat0)
     private val vx = cos0 * cos(lon0)
     private val vy = cos0 * sin(lon0)
     private val vz = sin0
-    private val reach = min(PI / 2 + 0.05 + t, sqrt((size.width * size.width + size.height * size.height).toDouble()) / 2 / r * 1.4 + 0.05)
+    private val reach = min(PI / 2 + 0.05 + t, sqrt((size.width * size.width + size.height * size.height).toDouble()) / 2 / r * 1.4 * (1 + 1.5 * sinP) + 0.05)
 
     /** How squarely a ring's centre faces the viewer: 1 dead centre, 0 at the horizon, negative behind. */
     fun facing(ring: GeoRing): Double = ring.cx * vx + ring.cy * vy + ring.cz * vz
@@ -273,7 +283,7 @@ class MapProjection(camera: MapCamera, size: Size) {
     private var front = true
 
     /** Screen point for vertex [i]; hidden points sit on the globe's edge. Sets [front]. */
-    private fun at(ring: GeoRing, i: Int, dl: Double): Offset {
+    private fun at(ring: GeoRing, i: Int, dl: Double, h: Double = 0.0): Offset {
         val cosDl = cos(dl)
         val cosc = sin0 * ring.sinLat[i] + cos0 * ring.cosLat[i] * cosDl
         var ox = ring.cosLat[i] * sin(dl)
@@ -285,7 +295,56 @@ class MapProjection(camera: MapCamera, size: Size) {
         }
         val fx = dl * cos0
         val fy = ring.lat[i] - lat0
-        return Offset((cx + r * (ox + t * (fx - ox))).toFloat(), (cy - r * (oy + t * (fy - oy))).toFloat())
+        return lift(r * (ox + t * (fx - ox)), -r * (oy + t * (fy - oy)), h)
+    }
+
+    /**
+     * Screen point for a ground offset (dx, dy) from the view centre, [h] pixels above the ground,
+     * through the tilt and its perspective.
+     */
+    fun lift(dx: Double, dy: Double, h: Double): Offset {
+        if (pitch == 0.0 && h == 0.0) return Offset((cx + dx).toFloat(), (cy + dy).toFloat())
+        val s = focal / max(focal - dy * sinP, 0.25 * focal)
+        return Offset((cx + dx * s).toFloat(), (cy + (dy * cosP - h * rise) * s).toFloat())
+    }
+
+    /** The ground offset from the view centre of a point in radians, before the tilt; NaN when behind the globe. */
+    fun ground(lon: Double, lat: Double): Offset {
+        val dl = wrap(lon - lon0)
+        val sinLat = sin(lat)
+        val cosLat = cos(lat)
+        val cosDl = cos(dl)
+        val cosc = sin0 * sinLat + cos0 * cosLat * cosDl
+        if (cosc < 0 && t <= 0.5) return Offset.Unspecified
+        var ox = cosLat * sin(dl)
+        var oy = cos0 * sinLat - sin0 * cosLat * cosDl
+        if (cosc < 0) {
+            val n = sqrt(ox * ox + oy * oy)
+            if (n > 1e-9) { ox /= n; oy /= n }
+        }
+        return Offset((r * (ox + t * (dl * cos0 - ox))).toFloat(), (-r * (oy + t * (lat - lat0 - oy))).toFloat())
+    }
+
+    /** Screen point of a place in radians [h] pixels up, or [Offset.Unspecified] when behind the globe. */
+    fun at(lon: Double, lat: Double, h: Double = 0.0): Offset {
+        val g = ground(lon, lat)
+        return if (g.isSpecified) lift(g.x.toDouble(), g.y.toDouble(), h) else g
+    }
+
+    /** A direction on the sphere in view space: x right, y up, z towards the viewer. */
+    fun toView(lon: Double, lat: Double): DoubleArray {
+        val dl = lon - lon0
+        val cosLat = cos(lat)
+        return doubleArrayOf(cosLat * sin(dl), cos0 * sin(lat) - sin0 * cosLat * cos(dl), sin0 * sin(lat) + cos0 * cosLat * cos(dl))
+    }
+
+    /** Longitude and latitude in radians of a view-space direction. */
+    fun fromView(x: Double, y: Double, z: Double): DoubleArray {
+        // World = x * east + y * north + z * centre.
+        val wx = -sin(lon0) * x - sin0 * cos(lon0) * y + vx * z
+        val wy = cos(lon0) * x - sin0 * sin(lon0) * y + vy * z
+        val wz = cos0 * y + vz * z
+        return doubleArrayOf(kotlin.math.atan2(wy, wx), kotlin.math.asin((wz / max(sqrt(wx * wx + wy * wy + wz * wz), 1e-9)).coerceIn(-1.0, 1.0)))
     }
 
     /** A single point, or null when it is behind the globe. */
@@ -294,8 +353,14 @@ class MapProjection(camera: MapCamera, size: Size) {
         return if (front) p else null
     }
 
-    /** Filled rings, longitude unwrapped along each ring so the flat map never tears it. */
-    fun addPolygons(rings: List<GeoRing>, path: Path) {
+    /** A single point [h] pixels above the ground, or null when it is behind the globe. */
+    fun project(point: GeoRing, h: Double): Offset? {
+        val g = ground(point.lon[0], point.lat[0])
+        return if (g.isSpecified) lift(g.x.toDouble(), g.y.toDouble(), h) else null
+    }
+
+    /** Filled rings, longitude unwrapped along each ring so the flat map never tears it; [h] pixels up. */
+    fun addPolygons(rings: List<GeoRing>, path: Path, h: Double = 0.0) {
         for (ring in rings) {
             if (ring.size < 3 || !mayShow(ring)) continue
             var previous = 0.0
@@ -306,16 +371,64 @@ class MapProjection(camera: MapCamera, size: Size) {
                     while (dl - previous < -PI) dl += 2 * PI
                 }
                 previous = dl
-                val p = at(ring, i, dl)
+                val p = at(ring, i, dl, h)
                 if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
             }
             path.close()
         }
     }
 
-    fun polygons(rings: List<GeoRing>): Path = Path().apply {
+    fun polygons(rings: List<GeoRing>, h: Double = 0.0): Path = Path().apply {
         fillType = PathFillType.EvenOdd
-        addPolygons(rings, this)
+        addPolygons(rings, this, h)
+    }
+
+    /**
+     * The visible side walls of rings raised [h] pixels, as one path per light level (dark, mid,
+     * lit). A wall shows when it faces the viewer; its light depends on how squarely it faces the
+     * sun in the upper left.
+     */
+    fun walls(rings: List<GeoRing>, h: Double, out: Array<Path>) {
+        for (ring in rings) {
+            if (ring.size < 3 || !mayShow(ring)) continue
+            val xs = FloatArray(ring.size * 2)
+            val ys = FloatArray(ring.size * 2)
+            var previous = 0.0
+            var area = 0.0
+            for (i in 0 until ring.size) {
+                var dl = ring.lon[i] - lon0
+                if (i == 0) dl = wrap(dl) else {
+                    while (dl - previous > PI) dl -= 2 * PI
+                    while (dl - previous < -PI) dl += 2 * PI
+                }
+                previous = dl
+                val b = at(ring, i, dl, 0.0)
+                val top = at(ring, i, dl, h)
+                xs[2 * i] = b.x; ys[2 * i] = b.y; xs[2 * i + 1] = top.x; ys[2 * i + 1] = top.y
+            }
+            for (i in 0 until ring.size) {
+                val j = (i + 1) % ring.size
+                area += xs[2 * i].toDouble() * ys[2 * j] - xs[2 * j].toDouble() * ys[2 * i]
+            }
+            val sign = if (area >= 0) 1f else -1f
+            for (i in 0 until ring.size) {
+                val j = (i + 1) % ring.size
+                val ex = xs[2 * j] - xs[2 * i]
+                val ey = ys[2 * j] - ys[2 * i]
+                val len = sqrt(ex * ex + ey * ey)
+                if (len < 0.3f) continue
+                val nx = sign * ey / len
+                val ny = -sign * ex / len
+                if (ny < -0.05f) continue
+                val light = nx * -0.55f + ny * -0.83f
+                val path = out[if (light > 0.35f) 2 else if (light > -0.2f) 1 else 0]
+                path.moveTo(xs[2 * i], ys[2 * i])
+                path.lineTo(xs[2 * j], ys[2 * j])
+                path.lineTo(xs[2 * j + 1], ys[2 * j + 1])
+                path.lineTo(xs[2 * i + 1], ys[2 * i + 1])
+                path.close()
+            }
+        }
     }
 
     /** Stroked lines, broken where they pass behind the globe or across the date line. */
@@ -334,8 +447,8 @@ class MapProjection(camera: MapCamera, size: Size) {
         }
     }
 
-    /** Even-odd test of a screen point against a feature's projected rings. */
-    fun contains(rings: List<GeoRing>, point: Offset): Boolean {
+    /** Even-odd test of a screen point against a feature's projected rings, raised [h] pixels. */
+    fun contains(rings: List<GeoRing>, point: Offset, h: Double = 0.0): Boolean {
         var inside = false
         for (ring in rings) {
             if (ring.size < 3 || !mayShow(ring)) continue
@@ -349,7 +462,7 @@ class MapProjection(camera: MapCamera, size: Size) {
                     while (dl - previous < -PI) dl += 2 * PI
                 }
                 previous = dl
-                val p = at(ring, i, dl)
+                val p = at(ring, i, dl, h)
                 xs[i] = p.x; ys[i] = p.y
             }
             var j = ring.size - 1

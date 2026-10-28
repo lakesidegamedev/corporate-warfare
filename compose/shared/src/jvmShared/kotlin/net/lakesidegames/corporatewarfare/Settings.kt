@@ -46,8 +46,13 @@ val Resolutions = listOf(1280 to 720, 1366 to 768, 1600 to 900, 1920 to 1080, 25
 class AppSettings(private val file: File) {
     private val props = Properties().apply { if (file.exists()) file.inputStream().use { load(it) } }
 
-    var mapDetail by mutableStateOf(enumOr(props.getProperty("mapDetail"), MapDetail.High)); private set
-    var animations by mutableStateOf(props.getProperty("animations")?.toBoolean() ?: true); private set
+    /**
+     * The graphics options. A settings file from before presets keeps its map detail and
+     * animations and takes High for the rest.
+     */
+    var graphics by mutableStateOf(loadGraphics()); private set
+    val mapDetail: MapDetail get() = graphics.detail
+    val animations: Boolean get() = graphics.animations
     var autoUpdate by mutableStateOf(props.getProperty("autoUpdate")?.toBoolean() ?: true); private set
     var tutorialDone: Set<String> = props.getProperty("tutorial.done")?.split(',')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet(); private set
     var tutorialHidden: Boolean = props.getProperty("tutorial.hidden")?.toBoolean() ?: false; private set
@@ -67,8 +72,8 @@ class AppSettings(private val file: File) {
     val installId: String = props.getProperty("installId")?.takeIf { it.length == 36 }
         ?: java.util.UUID.randomUUID().toString().also { props.setProperty("installId", it); store() }
 
-    fun chooseMapDetail(value: MapDetail) { mapDetail = value; store() }
-    fun chooseAnimations(value: Boolean) { animations = value; store() }
+    fun chooseGraphics(value: GraphicsConfig) { graphics = value; store() }
+    fun choosePreset(preset: GraphicsPreset) = chooseGraphics(preset.config(graphics.animations, graphics.showFps))
     fun chooseAutoUpdate(value: Boolean) { autoUpdate = value; store() }
     fun chooseAnalytics(value: Boolean) { analytics = value; store() }
     fun chooseTutorial(done: Set<String>, hidden: Boolean) { tutorialDone = done; tutorialHidden = hidden; store() }
@@ -79,8 +84,21 @@ class AppSettings(private val file: File) {
     fun chooseResolution(value: Pair<Int, Int>) { resolution = value; store() }
 
     private fun store() {
-        props.setProperty("mapDetail", mapDetail.name)
-        props.setProperty("animations", animations.toString())
+        graphics.let { g ->
+            props.setProperty("mapDetail", g.detail.name)
+            props.setProperty("animations", g.animations.toString())
+            props.setProperty("preset", g.preset?.name?.lowercase() ?: "custom")
+            props.setProperty("tilt", g.tilt.toString())
+            props.setProperty("extrude", g.extrude.toString())
+            props.setProperty("lighting", g.lighting.toString())
+            props.setProperty("dayNight", g.dayNight.toString())
+            props.setProperty("cityLights", g.cityLights.toString())
+            props.setProperty("clouds", g.clouds.toString())
+            props.setProperty("traffic", g.traffic.toString())
+            props.setProperty("buildings", g.buildings.toString())
+            props.setProperty("frameRate", g.frameRate.toString())
+            props.setProperty("showFps", g.showFps.toString())
+        }
         props.setProperty("autoUpdate", autoUpdate.toString())
         props.setProperty("analytics", analytics.toString())
         props.setProperty("tutorial.done", tutorialDone.joinToString(","))
@@ -94,6 +112,28 @@ class AppSettings(private val file: File) {
             file.parentFile?.mkdirs()
             file.outputStream().use { props.store(it, "Corporate Warfare settings") }
         }
+    }
+
+    private fun loadGraphics(): GraphicsConfig {
+        val base = GraphicsConfig.Default.copy(
+            detail = enumOr(props.getProperty("mapDetail"), MapDetail.High),
+            animations = props.getProperty("animations")?.toBoolean() ?: true,
+        )
+        if (props.getProperty("preset") == null) return base
+        fun int(key: String, fallback: Int, range: IntRange) = props.getProperty(key)?.toIntOrNull()?.takeIf { it in range } ?: fallback
+        fun bool(key: String, fallback: Boolean) = props.getProperty(key)?.toBooleanStrictOrNull() ?: fallback
+        return base.copy(
+            tilt = int("tilt", base.tilt, 0..2),
+            extrude = bool("extrude", base.extrude),
+            lighting = int("lighting", base.lighting, 0..2),
+            dayNight = bool("dayNight", base.dayNight),
+            cityLights = bool("cityLights", base.cityLights),
+            clouds = int("clouds", base.clouds, 0..2),
+            traffic = int("traffic", base.traffic, 0..2),
+            buildings = int("buildings", base.buildings, 0..2),
+            frameRate = props.getProperty("frameRate")?.toIntOrNull()?.takeIf { it in listOf(0, 30, 60) } ?: base.frameRate,
+            showFps = bool("showFps", base.showFps),
+        )
     }
 
     private inline fun <reified T : Enum<T>> enumOr(name: String?, fallback: T): T =
@@ -148,20 +188,7 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
         item {
             Panel {
                 Eyebrow("Graphics")
-                Text("Map detail", color = Palette.primaryText)
-                Choices(MapDetail.entries, settings.mapDetail, { it.title }) { settings.chooseMapDetail(it) }
-                Text(settings.mapDetail.note, color = Palette.secondary, fontSize = 12.sp)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Animations", color = Palette.primaryText)
-                        Text("Map flights between the globe and the scenario.", color = Palette.secondary, fontSize = 12.sp)
-                    }
-                    Switch(
-                        checked = settings.animations,
-                        onCheckedChange = { settings.chooseAnimations(it) },
-                        colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
-                    )
-                }
+                GraphicsChoices(settings)
                 Text("Interface size", color = Palette.primaryText)
                 Choices(listOf(0.85f, 1f, 1.15f, 1.3f), settings.uiScale, { "${(it * 100).toInt()}%" }) { settings.chooseUiScale(it) }
             }
@@ -240,6 +267,25 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                 Text("Corporate Warfare ${BuildInfo.VERSION} · engine ${info.version}", color = Palette.secondary, fontSize = 12.sp)
                 Text("Institutions are simplified game rules, not legal, tax or investment advice.", color = Palette.secondary, fontSize = 11.sp)
             }
+        }
+    }
+}
+
+/** The quality preset, then every graphics option with its note. */
+@Composable
+private fun GraphicsChoices(settings: AppSettings) {
+    val g = settings.graphics
+    Text("Quality", color = Palette.primaryText)
+    Choices<GraphicsPreset?>(GraphicsPreset.entries, g.preset, { it?.title.orEmpty() }) { it?.let(settings::choosePreset) }
+    Text(
+        if (g.preset == null) "Custom: your own mix of the options below." else "Picking a preset sets every option below. Change any of them to make your own mix.",
+        color = Palette.secondary, fontSize = 12.sp,
+    )
+    graphicsOptions.forEach { option ->
+        Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(option.title, color = Palette.primaryText)
+            Choices(option.choices.indices.toList(), option.get(g), { option.choices[it] }) { settings.chooseGraphics(option.set(g, it)) }
+            Text(option.note(g), color = Palette.secondary, fontSize = 12.sp)
         }
     }
 }
