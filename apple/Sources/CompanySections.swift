@@ -225,10 +225,10 @@ struct OwnershipView: View {
                                     if !vote.resolved {
                                         HStack {
                                             Button("Vote yes") { castingVote = vote }
-                                                .buttonStyle(.bordered)
+                                                .buttonStyle(PixelButtonStyle())
                                                 .frame(minHeight: 44)
                                             Button("Vote no") { castingVote = vote }
-                                                .buttonStyle(.bordered)
+                                                .buttonStyle(PixelButtonStyle())
                                                 .frame(minHeight: 44)
                                         }
                                         .font(.caption)
@@ -264,7 +264,7 @@ struct OwnershipView: View {
                                                 asInvestor: true
                                             )
                                         }
-                                        .buttonStyle(.bordered)
+                                        .buttonStyle(PixelButtonStyle())
                                         .frame(minHeight: 44)
                                         Button("Decline") {
                                             confirm = ConfirmRequest(
@@ -279,7 +279,7 @@ struct OwnershipView: View {
                                                 asInvestor: true
                                             )
                                         }
-                                        .buttonStyle(.bordered)
+                                        .buttonStyle(PixelButtonStyle())
                                         .frame(minHeight: 44)
                                     }
                                     .font(.caption)
@@ -353,10 +353,10 @@ struct FacilitiesView: View {
                                 .foregroundStyle(Theme.warning)
                             HStack {
                                 Button("Price") { showingPrice = true }
-                                    .buttonStyle(.bordered)
+                                    .buttonStyle(PixelButtonStyle())
                                     .frame(minHeight: 44)
                                 Button("Wages") { showingWage = true }
-                                    .buttonStyle(.bordered)
+                                    .buttonStyle(PixelButtonStyle())
                                     .frame(minHeight: 44)
                             }
                             .frame(minHeight: 44)

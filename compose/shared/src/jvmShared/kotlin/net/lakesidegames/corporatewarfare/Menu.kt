@@ -26,8 +26,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,6 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -66,81 +66,8 @@ object Images {
     private val cache = mutableMapOf<String, ImageBitmap?>()
 
     fun load(name: String): ImageBitmap? = cache.getOrPut(name) {
-        val bytes = Images::class.java.getResourceAsStream("/$name.png")?.use { it.readBytes() } ?: return@getOrPut null
+        val bytes = Images::class.java.getResourceAsStream(if ('.' in name) "/$name" else "/$name.png")?.use { it.readBytes() } ?: return@getOrPut null
         runCatching { decode(bytes) }.getOrNull()
-    }
-}
-
-private fun scenarioTint(id: String): Color = when (id) {
-    "texas-1981" -> Color(0xFFE5605E)
-    "silicon-valley-1995" -> Color(0xFF42A5F5)
-    "ruhr-rhine-1991" -> Color(0xFF3FBF8A)
-    else -> Palette.gold
-}
-
-private val scenarioNames: Map<String, String> by lazy { runCatching { scenarios().associate { it.id to it.name } }.getOrDefault(emptyMap()) }
-
-/** A slowly turning globe behind the menu, centred on the first scenario's region. */
-@Composable
-fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
-    val map = WorldMap.shared ?: return
-    val measurer = rememberTextMeasurer()
-    val animate = LocalAppSettings.current?.animations != false
-    var lon by remember { mutableDoubleStateOf(-82.0) }
-    LaunchedEffect(animate) {
-        if (!animate) return@LaunchedEffect
-        var last = 0L
-        while (true) {
-            withFrameNanos { now ->
-                if (last != 0L) lon += (now - last) / 1e9 * 2.2
-                last = now
-            }
-        }
-    }
-    Canvas(modifier) {
-        // A fixed field of faint stars, then an atmosphere glow behind the globe.
-        val stars = java.util.Random(7)
-        repeat(160) {
-            val x = stars.nextFloat() * size.width
-            val y = stars.nextFloat() * size.height
-            val r = 0.6f + stars.nextFloat() * 1.4f
-            drawCircle(Color.White.copy(alpha = 0.08f + stars.nextFloat() * 0.35f), r, androidx.compose.ui.geometry.Offset(x, y))
-        }
-        val radius = 1.25f * 0.45f * minOf(size.width, size.height)
-        val centre = androidx.compose.ui.geometry.Offset(size.width * (0.5f + offsetX), size.height * 0.58f)
-        drawCircle(
-            Brush.radialGradient(
-                0.0f to Color(0x332E6FB0), 0.85f to Color(0x222E6FB0), 1f to Color.Transparent,
-                center = centre, radius = radius * 1.25f,
-            ),
-            radius * 1.25f,
-            centre,
-        )
-        translate(left = size.width * offsetX, top = size.height * 0.08f) {
-            val camera = MapCamera(((lon + 540) % 360) - 180, 28.0, 1.25)
-            drawWorldMap(map, camera, Palette.gold, emptyMap(), null, emptyList(), measurer, MapDetail.Low, space = false)
-            // Each scenario glows as it turns to face the viewer and fades as it rotates away.
-            val projection = MapProjection(camera, size)
-            for ((id, rings) in map.scenarioAreas) {
-                val facing = rings.maxOfOrNull { projection.facing(it) } ?: continue
-                val glow = ((facing - 0.35) / 0.5).coerceIn(0.0, 1.0).toFloat().let { it * it * (3 - 2 * it) }
-                if (glow <= 0f) continue
-                val tint = scenarioTint(id)
-                val path = projection.polygons(rings)
-                for (width in listOf(22f, 14f, 8f)) {
-                    drawPath(path, tint.copy(alpha = 0.10f * glow), style = Stroke(width))
-                }
-                drawPath(path, tint.copy(alpha = 0.55f * glow))
-                drawPath(path, Color.White.copy(alpha = 0.75f * glow), style = Stroke(1.6f))
-                val anchor = rings.maxByOrNull { it.size } ?: continue
-                val at = projection.project(GeoRing.point(Math.toDegrees(kotlin.math.atan2(anchor.cy, anchor.cx)), Math.toDegrees(kotlin.math.asin(anchor.cz.coerceIn(-1.0, 1.0)))))
-                if (at != null) {
-                    val name = scenarioNames[id] ?: continue
-                    val label = measurer.measure(name, androidx.compose.ui.text.TextStyle(color = Color.White.copy(alpha = glow), fontSize = 13.sp, fontWeight = FontWeight.Bold))
-                    drawText(label, topLeft = at + androidx.compose.ui.geometry.Offset(-label.size.width / 2f, -label.size.height - 6f))
-                }
-            }
-        }
     }
 }
 
@@ -181,7 +108,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
             verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            LogoArt(Modifier.width(if (wide) 300.dp else 240.dp))
+            ShiningLogo(Modifier.width(if (wide) 300.dp else 240.dp))
             FlyingBadges(spread = if (wide) 1f else 0.45f)
             Spacer(Modifier.height(10.dp))
             if (store.hasAutosave) {
@@ -195,8 +122,8 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
             Spacer(Modifier.height(6.dp))
             if (updater != null) {
                 Column(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.panel.copy(alpha = 0.85f))
-                        .border(1.dp, Palette.stroke, RoundedCornerShape(12.dp)).padding(12.dp),
+                    Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.panel.copy(alpha = 0.85f))
+                        .border(1.dp, Palette.stroke, Pixel.shape).padding(12.dp),
                 ) { UpdatePanel(updater) }
             }
             Text(
@@ -209,18 +136,45 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
     }
 }
 
+/** The logo with a band of light sweeping across it every six seconds. */
+@Composable
+private fun ShiningLogo(modifier: Modifier) {
+    val graphics = LocalAppSettings.current?.graphics ?: GraphicsConfig.Default
+    val shine = graphics.animations && graphics.lighting > 0
+    val clock = rememberFrameSeconds(shine, graphics.frameRate)
+    LogoArt(
+        modifier.graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                if (!shine) return@drawWithContent
+                val phase = ((clock.value % 6.0) / 1.3).toFloat()
+                if (phase >= 1f) return@drawWithContent
+                val band = size.width * 0.3f
+                val x = -band + phase * (size.width + band * 2)
+                drawRect(
+                    Brush.linearGradient(
+                        0f to Color.Transparent, 0.5f to Color.White.copy(alpha = 0.55f), 1f to Color.Transparent,
+                        start = androidx.compose.ui.geometry.Offset(x, 0f), end = androidx.compose.ui.geometry.Offset(x + band, size.height),
+                    ),
+                    blendMode = androidx.compose.ui.graphics.BlendMode.SrcAtop,
+                )
+            },
+    )
+}
+
 @Composable
 private fun MenuButton(title: String, primary: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = Pixel.shape
     Box(
-        Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.5f).clip(shape)
-            .background(if (primary) Palette.gold else Palette.panel.copy(alpha = 0.88f))
-            .border(1.dp, if (primary) Palette.gold else Palette.stroke, shape)
+        Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.5f)
+            .padding(end = 3.dp, bottom = 3.dp)
+            .pixelFrame(if (primary) Palette.gold else Palette.panel, if (primary) Color(0xFF8A6420) else Palette.stroke)
+            .clip(shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 15.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(title.uppercase(), color = if (primary) Palette.ink else Palette.primaryText, fontSize = 17.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+        Text(title.uppercase(), color = if (primary) Palette.ink else Palette.primaryText, fontSize = 16.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
     }
 }
 
@@ -342,7 +296,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
             ) {
                 TextButton(onClick = { if (step == 0) onBack() else step = 0 }) { BackLabel("Back", Palette.secondary) }
                 Spacer(Modifier.width(8.dp))
-                Text("New game", color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("New game", color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 StepDot(1, "Scenario", step == 0)
                 Spacer(Modifier.width(14.dp))
                 StepDot(2, "Setup", step == 1)
@@ -353,7 +307,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     if (step == 0) {
-                        Text("Choose a scenario", color = Palette.primaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("Choose a scenario", color = Palette.primaryText, fontSize = 22.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                         val columns = if (wide) 2 else 1
                         catalogue.chunked(columns).forEach { row ->
                             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -374,11 +328,11 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                         }
                         if (customs.isNotEmpty()) {
                             Spacer(Modifier.height(4.dp))
-                            Text("Your scenarios", color = Palette.primaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            Text("Your scenarios", color = Palette.primaryText, fontSize = 22.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 customs.forEach { custom ->
                                     val on = chosenCustom?.id == custom.id
-                                    val shape = RoundedCornerShape(12.dp)
+                                    val shape = Pixel.shape
                                     Column(
                                         Modifier.width(if (wide) 380.dp else 320.dp).clip(shape)
                                             .background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.panel)
@@ -398,7 +352,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                         }
                     } else if (chosenCustom != null) {
                         val custom = chosenCustom!!
-                        Text(custom.name, color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text(custom.name, color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                         Text(
                             "Difficulty, economy, capital, rivals and laws come from this scenario. Open the editor to change them.",
                             color = Palette.secondary, fontSize = 13.sp,
@@ -411,11 +365,11 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                         if (scenario != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Images.load(scenario.image)?.let {
-                                    Image(it, null, Modifier.width(160.dp).aspectRatio(1200f / 640f).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                                    Image(it, null, Modifier.width(160.dp).aspectRatio(1200f / 640f).clip(Pixel.shape), contentScale = ContentScale.Crop)
                                     Spacer(Modifier.width(14.dp))
                                 }
                                 Column {
-                                    Text(scenario.name, color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                    Text(scenario.name, color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                                     Text("${scenario.region} · starts ${scenario.startYear} · ${scenario.currency}", color = Palette.secondary, fontSize = 13.sp)
                                 }
                             }
@@ -495,7 +449,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
 private fun StepDot(number: Int, label: String, active: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.width(22.dp).height(22.dp).clip(CircleShape).background(if (active) Palette.gold else Palette.panelRaised),
+            Modifier.width(22.dp).height(22.dp).clip(Pixel.small).background(if (active) Palette.gold else Palette.panelRaised),
             contentAlignment = Alignment.Center,
         ) { Text("$number", color = if (active) Palette.ink else Palette.secondary, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
         Spacer(Modifier.width(6.dp))
@@ -517,7 +471,7 @@ private fun <T> Options(items: List<T>, selected: T, title: (T) -> String, note:
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         items.forEach { item ->
             val on = item == selected
-            val shape = RoundedCornerShape(12.dp)
+            val shape = Pixel.shape
             Column(
                 Modifier.width(if (wide) 250.dp else 320.dp).clip(shape)
                     .background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.panel)
@@ -535,7 +489,7 @@ private fun <T> Options(items: List<T>, selected: T, title: (T) -> String, note:
 /** One scenario: its art, name, region, year and currency, or a coming-soon card. */
 @Composable
 private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Modifier, onCustomize: (() -> Unit)? = null, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = Pixel.shape
     Column(
         modifier.clip(shape).background(Palette.panel)
             .border(if (selected) 3.dp else 1.dp, if (selected) Palette.gold else Palette.stroke, shape)
@@ -557,7 +511,7 @@ private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Mod
                 ),
             )
             Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
-                Text(scenario.name, color = Palette.primaryText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(scenario.name, color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                 Text("${scenario.region} · ${scenario.startYear}", color = Palette.secondary, fontSize = 12.sp)
             }
             if (scenario.available && onCustomize != null) {
@@ -566,7 +520,7 @@ private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Mod
                     color = Palette.primaryText,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.TopStart).padding(12.dp).clip(CircleShape)
+                    modifier = Modifier.align(Alignment.TopStart).padding(12.dp).clip(Pixel.small)
                         .background(Palette.panelRaised.copy(alpha = 0.9f))
                         .clickable(onClick = onCustomize)
                         .padding(horizontal = 10.dp, vertical = 4.dp),
@@ -577,7 +531,7 @@ private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Mod
                 color = if (scenario.available) Palette.ink else Palette.primaryText,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).clip(CircleShape)
+                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).clip(Pixel.small)
                     .background(if (scenario.available) Palette.gold else Palette.panelRaised.copy(alpha = 0.9f))
                     .padding(horizontal = 10.dp, vertical = 4.dp),
             )

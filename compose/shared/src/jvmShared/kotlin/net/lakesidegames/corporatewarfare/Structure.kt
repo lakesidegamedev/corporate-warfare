@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
@@ -55,7 +54,7 @@ private fun outcomeText(key: String) = when (key) {
 private fun SmallButton(text: String, tint: androidx.compose.ui.graphics.Color = Palette.gold, onClick: () -> Unit) {
     Text(
         text, color = Palette.ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clip(CircleShape).background(tint).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 4.dp),
+        modifier = Modifier.clip(Pixel.small).background(tint).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 4.dp),
     )
 }
 
@@ -109,7 +108,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 @Composable
 private fun CampaignCard(store: GameStore, c: CampaignDto) {
     Column(
-        Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).background(Palette.panelRaised).padding(10.dp),
+        Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.panelRaised).padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text("${c.firmName}: ${reasonText(c.reason)}.", color = Palette.primaryText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -172,7 +171,7 @@ private fun Reputation(view: StructureViewDto) {
     view.reputations.take(10).forEach { r ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${r.firmName} · ${Sectors.name(r.industry)} · ${r.region}", color = Palette.primaryText, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
-            Row(Modifier.width(90.dp).height(6.dp).clip(CircleShape).background(Palette.panelRaised)) {
+            Row(Modifier.width(90.dp).height(6.dp).clip(Pixel.small).background(Palette.panelRaised)) {
                 Row(Modifier.fillMaxWidth(r.reputationBps / 10_000f).height(6.dp).background(Palette.gold)) {}
             }
             Text(

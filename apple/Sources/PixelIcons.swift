@@ -1,5 +1,6 @@
-import SwiftUI
 import CoreGraphics
+import SwiftUI
+import UIKit
 
 /// The 8-bit UI icon set, shared with every platform (Resources/pixel-icons.json): a 16 by 16
 /// grid per icon, each letter a colour from that icon's own palette, '.' transparent.
@@ -42,6 +43,23 @@ enum PixelIcons {
             if let ch = key.first { out[ch] = min(max(value / top, 0.5), 1) }
         }
         return out
+    }
+
+    /// An icon for a tab bar item, scaled up with hard pixel edges and tinted by the bar. The bar
+    /// only reads a plain Image and Text from a tab item, so a custom label loses its title.
+    static func tabImage(_ name: String) -> Image {
+        guard let cg = cgImage(name, mono: true) else { return Image(systemName: "square") }
+        let side: CGFloat = 24
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 3
+        let image = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { context in
+            let c = context.cgContext
+            c.interpolationQuality = .none
+            c.translateBy(x: 0, y: side)
+            c.scaleBy(x: 1, y: -1)
+            c.draw(cg, in: CGRect(x: 0, y: 0, width: side, height: side))
+        }
+        return Image(uiImage: image.withRenderingMode(.alwaysTemplate))
     }
 
     /// The exact pixels as a bitmap. `mono` keeps only coverage so the view tints it like a symbol.

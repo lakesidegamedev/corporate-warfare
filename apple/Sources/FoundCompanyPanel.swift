@@ -115,7 +115,7 @@ struct FoundCompanyPanel: View {
                 } label: {
                     Text("Found the company").frame(minWidth: 160)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PixelButtonStyle(prominent: true))
                 .tint(Theme.gold)
                 .foregroundStyle(Theme.ink)
                 .controlSize(.large)
@@ -203,8 +203,8 @@ struct FoundCompanyPanel: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(on ? Theme.gold.opacity(0.14) : Theme.ink, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(on ? Theme.gold : Theme.stroke, lineWidth: on ? 2 : 1))
+            .background(on ? Theme.gold.opacity(0.14) : Theme.ink, in: Pixel.shape)
+            .overlay(Pixel.shape.stroke(on ? Theme.gold : Theme.stroke, lineWidth: on ? 2 : 1))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])
@@ -236,7 +236,7 @@ struct FoundCompanyPanel: View {
                 }
             }
             .padding(10)
-            .background(on ? Theme.gold.opacity(0.14) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(on ? Theme.gold.opacity(0.14) : Color.clear, in: Pixel.shape)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

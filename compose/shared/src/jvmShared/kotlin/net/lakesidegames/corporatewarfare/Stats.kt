@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -117,8 +115,8 @@ fun StatsScreen(store: GameStore, onBack: () -> Unit) {
                         option.title,
                         color = if (period == option) Palette.ink else Palette.primaryText,
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clip(CircleShape)
+                        fontFamily = Pixel.font,
+                        modifier = Modifier.clip(Pixel.small)
                             .background(if (period == option) Palette.gold else Palette.panel)
                             .clickable { period = option }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -197,8 +195,8 @@ fun StatsScreen(store: GameStore, onBack: () -> Unit) {
                             Text(holder.holder, color = Palette.primaryText, fontSize = 13.sp, modifier = Modifier.weight(1f))
                             Text("%.1f%% · %.1f%% of votes".format(share * 100, holder.votesBps / 100.0), color = Palette.primaryText, fontSize = 13.sp)
                         }
-                        Box(Modifier.fillMaxWidth().height(5.dp).clip(CircleShape).background(Palette.stroke)) {
-                            Box(Modifier.fillMaxWidth(share.coerceIn(0f, 1f)).height(5.dp).clip(CircleShape).background(Palette.gold))
+                        Box(Modifier.fillMaxWidth().height(5.dp).clip(Pixel.small).background(Palette.stroke)) {
+                            Box(Modifier.fillMaxWidth(share.coerceIn(0f, 1f)).height(5.dp).clip(Pixel.small).background(Palette.gold))
                         }
                     }
                     ownership.controller?.let { Text("Controlled by $it", color = Palette.secondary, fontSize = 12.sp) }
@@ -211,7 +209,7 @@ fun StatsScreen(store: GameStore, onBack: () -> Unit) {
 @Composable
 internal fun Legend(color: Color, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(color))
+        Box(Modifier.size(10.dp).clip(Pixel.small).background(color))
         Spacer(Modifier.width(5.dp))
         Text(text, color = Palette.secondary, fontSize = 11.sp)
     }

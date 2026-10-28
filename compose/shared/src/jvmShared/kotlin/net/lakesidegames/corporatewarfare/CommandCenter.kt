@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
@@ -81,10 +79,10 @@ fun CommandCenterScreen(store: GameStore, initialQuery: String = "", onClose: ((
         Row(Modifier.fillMaxSize().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(
                 Modifier.then(if (wide) Modifier.width(440.dp) else Modifier.fillMaxWidth()).fillMaxHeight()
-                    .clip(RoundedCornerShape(10.dp)).background(Palette.panel).border(1.dp, Palette.stroke, RoundedCornerShape(10.dp)),
+                    .clip(Pixel.shape).background(Palette.panel).border(1.dp, Palette.stroke, Pixel.shape),
             ) {
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Actions", color = Palette.primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("Actions", color = Palette.primaryText, fontSize = 18.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     Text("${matches.size} of ${all.size}", color = Palette.secondary, fontSize = 12.sp)
                     if (onClose != null) TextButton(onClick = onClose) { Text("Done", color = Palette.gold) }
                 }
@@ -142,7 +140,7 @@ fun CommandCenterScreen(store: GameStore, initialQuery: String = "", onClose: ((
 @Composable
 private fun Chip(text: String, on: Boolean, icon: String? = null, onClick: () -> Unit) {
     Row(
-        Modifier.clip(CircleShape).background(if (on) Palette.gold else Palette.panelRaised).clickable(onClick = onClick)
+        Modifier.clip(Pixel.small).background(if (on) Palette.gold else Palette.panelRaised).clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -243,7 +241,7 @@ private fun ActionForm(store: GameStore, action: ActionDto, modifier: Modifier, 
         store.preview(json) { preview = it }
     }
     Column(
-        modifier.clip(RoundedCornerShape(10.dp)).background(Palette.panel).border(1.dp, Palette.stroke, RoundedCornerShape(10.dp))
+        modifier.clip(Pixel.shape).background(Palette.panel).border(1.dp, Palette.stroke, Pixel.shape)
             .verticalScroll(rememberScrollState()).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -255,13 +253,13 @@ private fun ActionForm(store: GameStore, action: ActionDto, modifier: Modifier, 
             }
             Column(Modifier.weight(1f)) {
                 Eyebrow(action.category)
-                Text(action.title, color = Palette.primaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text(action.title, color = Palette.primaryText, fontSize = 22.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
             }
         }
         Text(action.summary, color = Palette.secondary, fontSize = 14.sp)
         action.fields.forEach { field -> FieldControl(store, field, values, pickers, firm) }
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.ink).padding(12.dp),
+            Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.ink).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Eyebrow("What it would do")
@@ -333,7 +331,7 @@ private fun Dropdown(options: List<Pick>, selected: String, onPick: (String) -> 
     val label = options.firstOrNull { it.value == selected }?.label ?: if (options.isEmpty()) "Nothing to choose yet" else "Choose…"
     Box {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Palette.ink).border(1.dp, Palette.stroke, RoundedCornerShape(8.dp))
+            Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.ink).border(1.dp, Palette.stroke, Pixel.shape)
                 .clickable(enabled = options.isNotEmpty()) { open = true }.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

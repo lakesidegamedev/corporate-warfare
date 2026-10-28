@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -120,7 +119,7 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Eyebrow("Market index")
-                        Text(Format.count(last), color = Palette.primaryText, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                        Text(Format.count(last), color = Palette.primaryText, fontSize = 26.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                         Text("${changeText(week)} this week · ${store.stocks.size} companies", color = changeTint(week), fontSize = 12.sp)
                     }
                     Sparkline(index, changeTint(last - index.first()), Modifier.width(140.dp).height(44.dp))
@@ -135,8 +134,8 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
                     option.title,
                     color = if (sort == option) Palette.ink else Palette.primaryText,
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clip(CircleShape).background(if (sort == option) Palette.gold else Palette.panel)
+                    fontFamily = Pixel.font,
+                    modifier = Modifier.clip(Pixel.small).background(if (sort == option) Palette.gold else Palette.panel)
                         .clickable { onSort(option) }.padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }

@@ -107,7 +107,7 @@ struct DivisionDetailSheet: View {
         let peak = Double(max(values.max() ?? 1, 1))
         return HStack(alignment: .bottom, spacing: 2) {
             ForEach(Array(values.enumerated()), id: \.offset) { _, value in
-                RoundedRectangle(cornerRadius: 2)
+                Pixel.small
                     .fill(Theme.gold)
                     .frame(height: max(36 * Double(value) / peak, 1))
             }
@@ -131,7 +131,7 @@ struct DivisionDetailSheet: View {
                 line("Pricing", postureText(d))
                 if let product = store.productLines.first(where: { $0.product == d.primaryProduct }) {
                     Button("Change") { posture = product }
-                        .font(.caption.weight(.semibold)).buttonStyle(.bordered).tint(Theme.gold)
+                        .font(.caption.weight(.semibold)).buttonStyle(PixelButtonStyle()).tint(Theme.gold)
                 }
             }
             if d.hasGroupBuyers {
@@ -239,7 +239,7 @@ struct DivisionDetailSheet: View {
                                 ]))
                             }
                         }
-                        .font(.caption.weight(.semibold)).buttonStyle(.bordered).tint(Theme.gold)
+                        .font(.caption.weight(.semibold)).buttonStyle(PixelButtonStyle()).tint(Theme.gold)
                     }
                 }
             }

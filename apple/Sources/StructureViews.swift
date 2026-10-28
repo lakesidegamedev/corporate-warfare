@@ -79,7 +79,7 @@ struct StructureSection: View {
             Text(title).font(.caption.weight(.semibold))
                 .padding(.horizontal, 10).padding(.vertical, 5)
                 .foregroundStyle(Theme.ink)
-                .background(tint, in: Capsule())
+                .background(tint, in: Pixel.small)
         }
         .buttonStyle(.plain)
     }
@@ -153,8 +153,8 @@ struct StructureSection: View {
                 Spacer(minLength: 4)
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Theme.panelRaised)
-                        Capsule().fill(Theme.gold).frame(width: proxy.size.width * min(max(Double(r.reputationBps) / 10_000, 0), 1))
+                        Pixel.small.fill(Theme.panelRaised)
+                        Pixel.small.fill(Theme.gold).frame(width: proxy.size.width * min(max(Double(r.reputationBps) / 10_000, 0), 1))
                     }
                 }
                 .frame(width: 70, height: 6)

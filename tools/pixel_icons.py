@@ -769,6 +769,34 @@ def _(g):
     g.px(6, 9, 'g').px(9, 8, 'g')
 
 
+# ---- map controls ------------------------------------------------------------------------
+
+@icon('cloud')
+def _(g):
+    g.art(1, 5, [
+        '.....wwww.....',
+        '....wwwwww....',
+        '..wwwwwwwwww..',
+        '.wwwwwwwwwwwww',
+        'wwwwwwwwwwwwww',
+        'wwwwwwwwwwwwww',
+        'sssssssssssss.',
+    ])
+
+
+@icon('cloud_off')
+def _(g):
+    g.art(1, 5, [
+        '.....ssss.....',
+        '....ssssss....',
+        '..ssssssssss..',
+        '.sssssssssssss',
+        'ssssssssssssss',
+        'ssssssssssssss',
+    ])
+    g.line(1, 14, 14, 3, 'r').line(2, 14, 15, 3, 'r')
+
+
 def build():
     icons = {}
     for name in sorted(ICONS):

@@ -31,7 +31,7 @@ struct FirmLogo: View {
             )
         }
         .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: 3))
+        .clipShape(Pixel.small)
         .accessibilityHidden(true)
     }
 }
@@ -103,7 +103,7 @@ struct CompanyPageBody: View {
                     PriceChart(values: s.historyCents, tint: Change.tint(s.changeQuarterBps))
                 }
                 if let onTrade {
-                    Button("Buy or sell shares", action: onTrade).buttonStyle(.bordered)
+                    Button("Buy or sell shares", action: onTrade).buttonStyle(PixelButtonStyle())
                 }
             }
             if let f = page.finance {

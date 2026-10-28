@@ -10,7 +10,7 @@ struct TemperamentTag: View {
             .foregroundStyle(Theme.gold)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(Theme.panelRaised, in: Capsule())
+            .background(Theme.panelRaised, in: Pixel.small)
             .accessibilityLabel("Temperament \(temperamentLabel(key))")
     }
 }
@@ -89,7 +89,7 @@ struct RaidMarketButton: View {
         Button { open = true } label: {
             PixelLabel("Raid", icon: "flag").font(compact ? .caption.weight(.semibold) : .callout.weight(.semibold))
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(PixelButtonStyle())
         .tint(Theme.negative)
         .disabled(store.isBusy)
         .accessibilityLabel("Raid \(Sector.name(industry)) in \(WorldMap.shared.regionName(region))")
@@ -129,7 +129,7 @@ struct RaidPanel: View {
                                             PixelLabel("Build in \(WorldMap.shared.regionName(region))", icon: "plus")
                                                 .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
                                         }
-                                        .buttonStyle(.borderedProminent)
+                                        .buttonStyle(PixelButtonStyle(prominent: true))
                                         .tint(Theme.gold)
                                         .foregroundStyle(Theme.ink)
                                     }
@@ -228,7 +228,7 @@ struct RivalsCard: View {
                                         Text("\(Sector.name(option.industry))").font(.caption2).foregroundStyle(Theme.secondary)
                                     }
                                     Button("Raid") { raiding = option }
-                                        .buttonStyle(.bordered).tint(Theme.negative).disabled(store.isBusy)
+                                        .buttonStyle(PixelButtonStyle()).tint(Theme.negative).disabled(store.isBusy)
                                 }
                             }
                         }

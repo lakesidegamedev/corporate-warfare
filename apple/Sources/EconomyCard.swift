@@ -27,7 +27,7 @@ struct PhasePill: View {
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 9)
             .padding(.vertical, 2)
-            .background(economyPhaseTint(phase), in: Capsule())
+            .background(economyPhaseTint(phase), in: Pixel.small)
             .fixedSize()
     }
 }
@@ -168,7 +168,7 @@ struct EconomyCard: View {
 
     private func key(_ color: Color, _ text: String) -> some View {
         HStack(spacing: 5) {
-            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 9, height: 9)
+            Pixel.small.fill(color).frame(width: 9, height: 9)
             Text(text).font(.caption2).foregroundStyle(Theme.secondary)
         }
     }
@@ -229,7 +229,7 @@ struct EconomyCard: View {
                     .foregroundStyle(Theme.ink)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
-                    .background(stanceTint(e.chairStance), in: Capsule())
+                    .background(stanceTint(e.chairStance), in: Pixel.small)
             }
             Text("Next meeting \(ResultBuckets.weekLabel(e.nextMeetingWeek)) · term ends \(ResultBuckets.weekLabel(e.chairTermEnds))")
                 .font(.caption)
@@ -276,8 +276,8 @@ struct EconomyCard: View {
             }
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Theme.panelRaised)
-                    Capsule()
+                    Pixel.small.fill(Theme.panelRaised)
+                    Pixel.small
                         .fill(e.approvalBps >= 5_000 ? Theme.positive : Theme.warning)
                         .frame(width: proxy.size.width * CGFloat(min(max(Double(e.approvalBps) / 10_000, 0), 1)))
                 }
@@ -314,7 +314,7 @@ struct EconomyCard: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(heading != nil ? Theme.gold.opacity(0.1) : Theme.ink,
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    in: Pixel.shape)
     }
 
     private func rescueText(_ laws: LawsDto) -> String {
@@ -414,7 +414,7 @@ struct CurrencyPicker: View {
                         .foregroundStyle(on ? Theme.ink : Theme.primaryText)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
-                        .background(on ? Theme.gold : Theme.panelRaised, in: Capsule())
+                        .background(on ? Theme.gold : Theme.panelRaised, in: Pixel.small)
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(on ? .isSelected : [])

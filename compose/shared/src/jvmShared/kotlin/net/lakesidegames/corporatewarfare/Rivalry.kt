@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -41,7 +40,7 @@ import uniffi.cw_ffi.RivalTagDto
 fun TemperamentTag(key: String) {
     Text(
         temperamentLabel(key), color = Palette.gold, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clip(CircleShape).background(Palette.panelRaised).padding(horizontal = 6.dp, vertical = 2.dp),
+        modifier = Modifier.clip(Pixel.small).background(Palette.panelRaised).padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
 

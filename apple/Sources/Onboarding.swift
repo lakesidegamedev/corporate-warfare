@@ -191,7 +191,7 @@ struct OnboardingView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.surface(for: scheme))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(Pixel.shape)
         .accessibilityElement(children: .combine)
     }
 
@@ -207,7 +207,7 @@ struct OnboardingView: View {
                 )
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PixelButtonStyle(prominent: true))
             .controlSize(.large)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -263,7 +263,7 @@ struct OnboardingView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(PixelButtonStyle())
                 .accessibilityLabel("Run \(firm.name) in \(firm.region)")
                 .accessibilityHint("Makes this company the context for every order in the walkthrough.")
             }
@@ -286,7 +286,7 @@ struct OnboardingView: View {
             PixelLabel("Open the cash bridge", icon: "swap")
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(PixelButtonStyle())
         .disabled(!canAct)
         .accessibilityHint("Shows opening cash, receipts, operating payments, investment, financing and tax reconciled to closing cash.")
     }
@@ -310,7 +310,7 @@ struct OnboardingView: View {
             PixelLabel("Open the build form", icon: "hammer")
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(PixelButtonStyle())
         .disabled(!canAct)
         .accessibilityHint("Opens the real facility build form. Choose a template and check the capex before you confirm.")
         Text("Building spends the company's cash, not yours. The form opens on this company's region and previews the construction escrow before you confirm.")
@@ -338,7 +338,7 @@ struct OnboardingView: View {
                 PixelLabel("Offer \(Format.money(tierWage(wageTier) ?? 0)) a week", icon: "user_add")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(PixelButtonStyle())
             .disabled(!canAct || tierWage(wageTier) == nil)
             .accessibilityHint("Sends this weekly wage offer for the selected tier to the company.")
         } else {
@@ -381,7 +381,7 @@ struct OnboardingView: View {
                 PixelLabel("Set asking price", icon: "tag")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(PixelButtonStyle())
             .disabled(!canAct || askingPrice == nil)
             .accessibilityHint("Submits the price for the selected product through the real command path.")
 
@@ -421,7 +421,7 @@ struct OnboardingView: View {
             PixelLabel("Advance one week", icon: "next_week")
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(PixelButtonStyle(prominent: true))
         .disabled(!canAct || store.isBusy)
         .accessibilityHint("Settles one week of the real rules and reports the settled result below.")
 
@@ -442,7 +442,7 @@ struct OnboardingView: View {
             PixelLabel("Save now", icon: "save")
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(PixelButtonStyle(prominent: true))
         .disabled(!canAct || store.isBusy)
         .accessibilityHint("Writes a manual save slot you can resume from the Start screen.")
 

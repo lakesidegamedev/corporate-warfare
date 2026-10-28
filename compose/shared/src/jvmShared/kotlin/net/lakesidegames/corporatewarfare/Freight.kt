@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -82,6 +81,15 @@ internal fun DrawScope.drawLanes(map: WorldMap, projection: MapProjection, lanes
     }
 }
 
+/** The busiest lanes as faint lines under the moving freight, outside the Freight layer. */
+internal fun DrawScope.drawFaintLanes(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>) {
+    busiestLanes(lanes).take(60).forEach { lane ->
+        val a = map.anchor(lane.a)?.let { projection.project(it) } ?: return@forEach
+        val b = map.anchor(lane.b)?.let { projection.project(it) } ?: return@forEach
+        drawLine(laneColor(lane).copy(alpha = 0.10f), a, b, strokeWidth = 1f)
+    }
+}
+
 /** The lane drawn nearest a tap, within a finger's width, or null. */
 internal fun laneAt(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>, tap: Offset): LaneDto? {
     var best: LaneDto? = null
@@ -105,8 +113,8 @@ internal fun laneAt(map: WorldMap, projection: MapProjection, lanes: List<LaneDt
 @Composable
 private fun Pill(text: String, on: Boolean, onClick: () -> Unit) {
     Text(
-        text, color = if (on) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clip(CircleShape).background(if (on) Palette.gold else Palette.panelRaised)
+        text, color = if (on) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontFamily = Pixel.font,
+        modifier = Modifier.clip(Pixel.small).background(if (on) Palette.gold else Palette.panelRaised)
             .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 4.dp),
     )
 }
@@ -128,7 +136,7 @@ private fun changeText(bps: Int): String = when {
 @Composable
 private fun LegendDot(color: Color, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Box(Modifier.size(8.dp).clip(Pixel.small).background(color))
         Spacer(Modifier.width(4.dp))
         Text(text, color = Palette.secondary, fontSize = 11.sp)
     }
@@ -162,7 +170,7 @@ private fun rememberShipping(store: GameStore, facility: ULong?): ShippingSummar
 @Composable
 private fun PolicyRow(store: GameStore, option: PolicyOptionDto, onPick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+        Modifier.fillMaxWidth().clip(Pixel.shape)
             .background(if (option.selected) Palette.gold.copy(alpha = 0.14f) else Palette.panelRaised.copy(alpha = 0.5f))
             .clickable(onClick = onPick).padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,

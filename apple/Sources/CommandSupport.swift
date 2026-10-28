@@ -306,13 +306,13 @@ struct CommandSheet<Fields: View>: View {
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 44)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PixelButtonStyle(prominent: true))
             .controlSize(.large)
             .disabled(!canSubmit || isBusy || submitting)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
-        .background(.regularMaterial)
+        .background(Theme.panel)
     }
 }
 
@@ -350,7 +350,7 @@ struct CompanyLink<Destination: View>: View {
             .frame(minHeight: 44)
             .padding(16)
             .background(Theme.surface(for: scheme))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(Pixel.shape)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(title). \(detail)")
@@ -420,7 +420,7 @@ struct ActionButton: View {
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 44)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(PixelButtonStyle())
         .accessibilityHint(title)
     }
 }

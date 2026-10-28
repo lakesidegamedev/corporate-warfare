@@ -22,6 +22,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asSkiaBitmap
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -81,6 +83,9 @@ private object DesktopUpdates : UpdatePlatform {
 
 fun main() = application {
     Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
+    MeshCanvas.draw = desktopMeshDraw
+    Pixel.font = desktopPixelFont()
+    MeshCanvas.shader = desktopLinearShader
     val settings = remember { AppSettings(File(saveDirectory(), "settings.properties")) }
     var loaded by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
@@ -173,4 +178,34 @@ private fun WindowMode.placement(): WindowPlacement = when (this) {
     WindowMode.Windowed -> WindowPlacement.Floating
     WindowMode.Maximized -> WindowPlacement.Maximized
     WindowMode.Fullscreen -> WindowPlacement.Fullscreen
+}
+
+/** Clouds go to Skia as arrays in one call. */
+internal val desktopMeshDraw: (androidx.compose.ui.graphics.Canvas, FloatArray, FloatArray, IntArray, ShortArray, Int, Int, androidx.compose.ui.graphics.Paint) -> Unit =
+    { canvas, positions, tex, colors, indices, vertices, indexCount, paint ->
+        canvas.nativeCanvas.drawVertices(
+            org.jetbrains.skia.VertexMode.TRIANGLES, positions.copyOf(vertices * 2), colors.copyOf(vertices), tex.copyOf(vertices * 2),
+            indices.copyOf(indexCount), org.jetbrains.skia.BlendMode.MODULATE, paint.asFrameworkPaint(),
+        )
+    }
+
+/** Skia shaders made by Compose sample the nearest texel; clouds need smooth sampling when magnified. */
+internal val desktopLinearShader: (androidx.compose.ui.graphics.ImageBitmap, Boolean) -> androidx.compose.ui.graphics.Shader = { image, repeatX ->
+    org.jetbrains.skia.Image.makeFromBitmap(image.asSkiaBitmap()).makeShader(
+        if (repeatX) org.jetbrains.skia.FilterTileMode.REPEAT else org.jetbrains.skia.FilterTileMode.MIRROR,
+        if (repeatX) org.jetbrains.skia.FilterTileMode.CLAMP else org.jetbrains.skia.FilterTileMode.MIRROR,
+        org.jetbrains.skia.SamplingMode.LINEAR, null,
+    )
+}
+
+/** Silkscreen, the pixel font, from the app's resources. */
+internal fun desktopPixelFont(): androidx.compose.ui.text.font.FontFamily {
+    fun load(name: String, weight: androidx.compose.ui.text.font.FontWeight) =
+        Pixel::class.java.getResourceAsStream("/$name")?.use { it.readBytes() }
+            ?.let { androidx.compose.ui.text.platform.Font(name, it, weight) }
+    val fonts = listOfNotNull(
+        load("Silkscreen-Regular.ttf", androidx.compose.ui.text.font.FontWeight.Normal),
+        load("Silkscreen-Bold.ttf", androidx.compose.ui.text.font.FontWeight.Bold),
+    )
+    return if (fonts.isEmpty()) androidx.compose.ui.text.font.FontFamily.Default else androidx.compose.ui.text.font.FontFamily(fonts)
 }

@@ -84,8 +84,8 @@ struct OverviewView: View {
                     PixelIcon("chevron_right", size: 14).foregroundStyle(Theme.secondary)
                 }
                 .padding(12)
-                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+                .background(Theme.panel, in: Pixel.shape)
+                .overlay(Pixel.shape.stroke(Theme.stroke, lineWidth: 1))
             }
             .buttonStyle(.plain)
         }
@@ -117,7 +117,7 @@ struct OverviewView: View {
             PixelLabel("Continue this career in sandbox", icon: "arrow_right")
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(PixelButtonStyle(prominent: true))
         .controlSize(.large)
     }
 
@@ -230,10 +230,22 @@ struct AnalyticsPanel: View {
     }
 }
 
-/// Keys for the graphics settings, read by the map.
+/// Keys for the graphics settings, read by the map and the main menu. The same keys on every
+/// platform.
 enum GraphicsKeys {
+    static let preset = "graphics.preset"
     static let mapDetail = "graphics.mapDetail"
+    static let tilt = "graphics.tilt"
+    static let extrude = "graphics.extrude"
+    static let lighting = "graphics.lighting"
+    static let dayNight = "graphics.dayNight"
+    static let cityLights = "graphics.cityLights"
+    static let clouds = "graphics.clouds"
+    static let traffic = "graphics.traffic"
+    static let buildings = "graphics.buildings"
+    static let frameRate = "graphics.frameRate"
     static let animations = "graphics.animations"
+    static let showFps = "graphics.showFps"
 }
 
 /// How much the map draws: 0 low, 1 medium, 2 high.
@@ -268,31 +280,116 @@ struct PauseSettingsPanel: View {
     }
 }
 
-/// Map detail and animation settings.
+/// The graphics options: a quality preset that sets everything, then each option on its own.
 struct GraphicsSettingsPanel: View {
+    @AppStorage(GraphicsKeys.preset) private var preset = GraphicsPreset.high.rawValue
     @AppStorage(GraphicsKeys.mapDetail) private var detail = MapDetailLevel.high.rawValue
+    @AppStorage(GraphicsKeys.tilt) private var tilt = 1
+    @AppStorage(GraphicsKeys.extrude) private var extrude = true
+    @AppStorage(GraphicsKeys.lighting) private var lighting = 2
+    @AppStorage(GraphicsKeys.dayNight) private var dayNight = true
+    @AppStorage(GraphicsKeys.cityLights) private var cityLights = true
+    @AppStorage(GraphicsKeys.clouds) private var clouds = 1
+    @AppStorage(GraphicsKeys.traffic) private var traffic = 1
+    @AppStorage(GraphicsKeys.buildings) private var buildings = 2
+    @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
     @AppStorage(GraphicsKeys.animations) private var animations = true
+    @AppStorage(GraphicsKeys.showFps) private var showFps = false
 
     var body: some View {
         Panel(padding: 12) {
             VStack(alignment: .leading, spacing: 10) {
                 Eyebrow(text: "Graphics")
-                Picker("Map detail", selection: $detail) {
-                    ForEach(MapDetailLevel.allCases) { Text($0.title).tag($0.rawValue) }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Quality").font(.callout).foregroundStyle(Theme.primaryText)
+                    PixelChoices(options: GraphicsPreset.choices.map { ($0.rawValue, $0.title) }, selection: presetBinding, label: "Quality")
+                    Text(preset == GraphicsPreset.custom.rawValue
+                         ? "Custom: your own mix of the options below."
+                         : "Picking a preset sets every option below. Change any of them to make your own mix.")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.secondary)
                 }
-                .pickerStyle(.segmented)
-                Text((MapDetailLevel(rawValue: detail) ?? .high).note)
-                    .font(.caption2)
-                    .foregroundStyle(Theme.secondary)
                 Divider().overlay(Theme.stroke)
-                Toggle(isOn: $animations) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Animations").font(.callout).foregroundStyle(Theme.primaryText)
-                        Text("Map flights between the globe and the scenario.").font(.caption2).foregroundStyle(Theme.secondary)
-                    }
+                choice("Map detail", custom($detail), MapDetailLevel.allCases.map(\.title),
+                       (MapDetailLevel(rawValue: detail) ?? .high).note)
+                choice("3D tilt", custom($tilt), ["Off", "Subtle", "Full"],
+                       "Tilts the map as you zoom in, so the ground recedes into the distance.")
+                choice("Raised regions", onOff(custom($extrude)), ["Off", "On"],
+                       "Regions stand up as tiles, taller where the active layer is stronger.")
+                choice("Lighting", custom($lighting), ["Off", "Standard", "Cinematic"],
+                       "Sunlight, shadows and the atmosphere around the globe.")
+                choice("Day and night", onOff(custom($dayNight)), ["Off", "On"],
+                       "The sun moves across the world and night falls on the map.")
+                choice("City lights", onOff(custom($cityLights)), ["Off", "On"], "Cities glow on the night side.")
+                choice("Clouds", custom($clouds), ["Off", "Thin", "Light", "Heavy"],
+                       "Real satellite clouds that drift with the trade winds and westerlies. Heavy clouds cast shadows. The cloud button on the map steps through these.")
+                choice("Traffic", custom($traffic), ["Off", "Light", "Busy"],
+                       "Freight moves along the lanes and cars along the highways.")
+                choice("Buildings", custom($buildings), ["Flat", "Your divisions", "Divisions and cities"],
+                       "Shows your divisions as buildings, and city skylines.")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Frame rate").font(.callout).foregroundStyle(Theme.primaryText)
+                    PixelChoices(options: [(30, "30"), (60, "60"), (0, "Unlimited")], selection: custom($frameRate), label: "Frame rate")
+                    Text("Lower saves battery.").font(.caption2).foregroundStyle(Theme.secondary)
                 }
-                .tint(Theme.gold)
+                Divider().overlay(Theme.stroke)
+                choice("Animations", onOff($animations), ["Off", "On"], "Camera flights, the menu and moving effects.")
+                choice("Show frame rate", onOff($showFps), ["Off", "On"], "A frame counter in the corner of the map.")
             }
+        }
+    }
+
+    /// The options as they stand, for matching against the presets.
+    private var current: GraphicsSettings {
+        GraphicsSettings(mapDetail: detail, tilt: tilt, extrude: extrude, lighting: lighting, dayNight: dayNight,
+                         cityLights: cityLights, clouds: clouds, traffic: traffic, buildings: buildings, frameRate: frameRate)
+    }
+
+    /// An on and off option as a two-way choice.
+    private func onOff(_ binding: Binding<Bool>) -> Binding<Int> {
+        Binding(get: { binding.wrappedValue ? 1 : 0 }, set: { binding.wrappedValue = $0 == 1 })
+    }
+
+    /// Picking a preset writes every option it covers.
+    private var presetBinding: Binding<String> {
+        Binding(
+            get: { preset },
+            set: { id in
+                guard let chosen = GraphicsPreset(rawValue: id), let values = chosen.values else { return }
+                detail = values.mapDetail
+                tilt = values.tilt
+                extrude = values.extrude
+                lighting = values.lighting
+                dayNight = values.dayNight
+                cityLights = values.cityLights
+                clouds = values.clouds
+                traffic = values.traffic
+                buildings = values.buildings
+                frameRate = values.frameRate
+                preset = chosen.rawValue
+            }
+        )
+    }
+
+    /// An option binding that marks the preset Custom when the player changes it.
+    private func custom<Value: Equatable>(_ binding: Binding<Value>) -> Binding<Value> {
+        Binding(
+            get: { binding.wrappedValue },
+            set: { value in
+                guard value != binding.wrappedValue else { return }
+                binding.wrappedValue = value
+                // A mix that happens to match a preset shows as that preset.
+                let now = current
+                preset = (GraphicsPreset.choices.first { $0.values == now } ?? .custom).rawValue
+            }
+        )
+    }
+
+    private func choice(_ title: String, _ selection: Binding<Int>, _ labels: [String], _ note: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.callout).foregroundStyle(Theme.primaryText)
+            PixelChoices(options: labels.enumerated().map { ($0.offset, $0.element) }, selection: selection, label: title)
+            Text(note).font(.caption2).foregroundStyle(Theme.secondary)
         }
     }
 }
@@ -317,13 +414,13 @@ struct PauseBanner: View {
                     Spacer(minLength: 6)
                     if info.action == "answer", event != nil {
                         Button(info.actionLabel) { showingCard = true }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(PixelButtonStyle(prominent: true))
                             .tint(Theme.gold)
                             .foregroundStyle(Theme.ink)
                             .disabled(store.isBusy)
                     } else {
                         Button("Continue") { Task { await store.continueCareer() } }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(PixelButtonStyle(prominent: true))
                             .tint(Theme.gold)
                             .foregroundStyle(Theme.ink)
                             .disabled(store.isBusy)
@@ -337,7 +434,7 @@ struct PauseBanner: View {
             .padding(12)
             .foregroundStyle(.white)
             .background(info.kind == "decision" ? Theme.warning : Theme.panelRaised)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(Pixel.shape)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .sheet(isPresented: Binding(get: { showingCard && event != nil }, set: { showingCard = $0 })) {
@@ -365,7 +462,7 @@ struct DecisionBanner: View {
         .padding(12)
         .foregroundStyle(.white)
         .background(Theme.warning)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(Pixel.shape)
     }
 }
 
@@ -469,6 +566,12 @@ struct SettingsView: View {
                                 .font(.caption.monospaced())
                                 .foregroundStyle(Theme.secondary)
                             Text("Institutions are simplified game rules, not legal, tax or investment advice.")
+                                .font(.caption)
+                                .foregroundStyle(Theme.secondary)
+                            Text("Clouds: Solar System Scope, CC BY 4.0, based on NASA Blue Marble imagery.")
+                                .font(.caption)
+                                .foregroundStyle(Theme.secondary)
+                            Text("Pixel font: Silkscreen, The Silkscreen Project Authors, SIL Open Font License 1.1.")
                                 .font(.caption)
                                 .foregroundStyle(Theme.secondary)
                         }

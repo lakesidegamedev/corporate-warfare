@@ -22,12 +22,7 @@ struct MarketsView: View {
     var body: some View {
         TabScreen(title: "Markets", subtitle: store.overview?.weekLabel) {
             EconomyCard(collapsible: sizeClass != .regular)
-            Picker("Section", selection: $section) {
-                ForEach(MarketSection.allCases) { option in
-                    Text(option.rawValue).tag(option)
-                }
-            }
-            .pickerStyle(.segmented)
+            PixelChoices(options: MarketSection.allCases.map { ($0, $0.rawValue) }, selection: $section, label: "Section")
             switch section {
             case .stocks: StocksSection()
             case .commodities: CommoditiesSection()
@@ -160,13 +155,13 @@ struct StocksSection: View {
             HStack(spacing: 6) {
                 ForEach(StockSort.allCases) { option in
                     Button { sort = option } label: {
-                        Text(option.rawValue)
-                            .font(.caption.weight(.semibold))
+                        Text(option.rawValue.uppercased())
+                            .font(Pixel.font(11))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .foregroundStyle(sort == option ? Theme.ink : Theme.primaryText)
-                            .background(sort == option ? Theme.gold : Theme.panel, in: Capsule())
-                            .overlay(Capsule().stroke(Theme.stroke, lineWidth: sort == option ? 0 : 1))
+                            .background(sort == option ? Theme.gold : Theme.panel, in: Pixel.small)
+                            .overlay(Pixel.small.stroke(Theme.stroke, lineWidth: sort == option ? 0 : 1))
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(sort == option ? .isSelected : [])
@@ -281,16 +276,12 @@ struct StockSheet: View {
                     }
                     DossierSection(firm: stock.firm)
                     if showPage {
-                        Button("Open company page") { showCompany = true }.buttonStyle(.bordered)
+                        Button("Open company page") { showCompany = true }.buttonStyle(PixelButtonStyle())
                     }
                     Panel(padding: 12) {
                         VStack(alignment: .leading, spacing: 10) {
                             Eyebrow(text: "Order")
-                            Picker("Side", selection: $buy) {
-                                Text("Buy").tag(true)
-                                Text("Sell").tag(false)
-                            }
-                            .pickerStyle(.segmented)
+                            PixelChoices(options: [(true, "Buy"), (false, "Sell")], selection: $buy, label: "Side")
                             HStack {
                                 Text("Shares").foregroundStyle(Theme.secondary)
                                 Spacer()
@@ -318,7 +309,7 @@ struct StockSheet: View {
                                     .font(.callout.weight(.semibold))
                                     .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(PixelButtonStyle(prominent: true))
                             .tint(Theme.gold)
                             .foregroundStyle(Theme.ink)
                             .disabled(quantity == nil || store.isBusy)
@@ -482,7 +473,7 @@ private struct CommoditySheet: View {
                                 .font(.callout.weight(.semibold))
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PixelButtonStyle(prominent: true))
                         .tint(Theme.gold)
                         .foregroundStyle(Theme.ink)
                     }

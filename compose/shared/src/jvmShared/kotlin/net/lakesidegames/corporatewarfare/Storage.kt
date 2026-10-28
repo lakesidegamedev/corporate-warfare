@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -99,8 +98,8 @@ internal fun StoreGoodSection(store: GameStore, line: CommodityDto) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             places.forEach { (code, name) ->
                 Text(
-                    name, color = if (code == where) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clip(CircleShape).background(if (code == where) Palette.gold else Palette.panelRaised)
+                    name, color = if (code == where) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontFamily = Pixel.font,
+                    modifier = Modifier.clip(Pixel.small).background(if (code == where) Palette.gold else Palette.panelRaised)
                         .clickable { where = code }.padding(horizontal = 10.dp, vertical = 4.dp),
                 )
             }

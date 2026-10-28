@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -54,7 +53,7 @@ object FirmLogos {
 @Composable
 fun FirmLogo(name: String, modifier: Modifier = Modifier, size: Dp = 32.dp) {
     val art = remember(name) { FirmLogos.of(name) }
-    Canvas(modifier.size(size).clip(RoundedCornerShape(3.dp))) { drawPixelIcon(art, null) }
+    Canvas(modifier.size(size).clip(Pixel.small)) { drawPixelIcon(art, null) }
 }
 
 /** A company's page: who runs it, how big it is and, by what the investor may see, the rest. */

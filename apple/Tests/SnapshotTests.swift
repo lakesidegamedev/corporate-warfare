@@ -1,4 +1,5 @@
 import ImageIO
+import MetalKit
 import SwiftUI
 import UIKit
 import XCTest
@@ -46,6 +47,15 @@ final class SnapshotTests: XCTestCase {
         XCTAssertEqual(store.stocks.first?.historyCents.count, 10, "ten weekly closes after ten weeks")
         XCTAssertEqual(store.divisions.count, 1)
 
+        // The cloud textures load in the background; wait for them so the map shows its clouds.
+        Pixel.configureSystemBars()
+        for _ in 0..<100 {
+            if CloudRenderer.shared?.ready(["clouds", "clouds-great-lakes-2000"]) ?? true { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        XCTAssertNotNil(CloudRenderer.shared, "Metal is available for the clouds")
+        XCTAssertTrue(CloudRenderer.shared?.ready(["clouds", "clouds-great-lakes-2000"]) ?? false, "the cloud textures load")
+        renderClouds()
         let phone = CGSize(width: 393, height: 852)
         let pad = CGSize(width: 1180, height: 820)
         let home = store.boards.first { $0.code == store.divisions.first?.region }
@@ -73,6 +83,69 @@ final class SnapshotTests: XCTestCase {
         render("tab-markets-phone", phone, compact: true, RootView(initialTab: .markets).environmentObject(store))
         render("tab-inbox-phone", phone, compact: true, RootView(initialTab: .inbox).environmentObject(store))
         render("tab-portfolio-phone", phone, compact: true, RootView(initialTab: .portfolio).environmentObject(store))
+        // The menu's globe with its clouds, and the settings with the Clouds option and credits.
+        render("menu-phone", phone, compact: true, StartView().environmentObject(store))
+        render("menu-pad", pad, compact: false, StartView().environmentObject(store))
+        render("settings-phone", phone, compact: true,
+               ScrollView { GraphicsSettingsPanel().padding(16) }.background(Theme.ink))
+        if let home { renderSplitView(store, region: home.code) }
+    }
+
+    /// The app in iPad Split View and Slide Over on a 13-inch iPad (1032 by 1376 points): a third,
+    /// a half and two thirds of the screen in portrait and landscape, with the size class iPadOS
+    /// gives each. Compact slices use the phone layout, regular ones the sidebar shell.
+    private func renderSplitView(_ store: AppStore, region: String) {
+        let slices: [(name: String, size: CGSize, compact: Bool)] = [
+            ("portrait-third", CGSize(width: 320, height: 1376), true),
+            ("portrait-half", CGSize(width: 507, height: 1376), true),
+            ("portrait-two-thirds", CGSize(width: 694, height: 1376), true),
+            ("landscape-third", CGSize(width: 375, height: 1032), true),
+            ("landscape-half", CGSize(width: 683, height: 1032), false),
+            ("landscape-two-thirds", CGSize(width: 993, height: 1032), false),
+        ]
+        let firm = store.selectedFirm ?? store.overview?.primaryFirm
+        for slice in slices {
+            let name = "split-\(slice.name)"
+            if slice.compact {
+                render("\(name)-map", slice.size, compact: true, RootView(initialTab: .map).environmentObject(store))
+                render("\(name)-markets", slice.size, compact: true, RootView(initialTab: .markets).environmentObject(store))
+            } else {
+                render("\(name)-map", slice.size, compact: false, DesktopShell(initialPage: .map).environmentObject(store))
+                render("\(name)-markets", slice.size, compact: false, DesktopShell(initialPage: .markets).environmentObject(store))
+            }
+            if let firm {
+                render("\(name)-company", slice.size, compact: slice.compact, CompanyPageSheet(firm: firm).environmentObject(store))
+            }
+            render("\(name)-build", slice.size, compact: slice.compact, BuildFlowView(regionCode: region).environmentObject(store))
+        }
+    }
+
+    /// The clouds alone, drawn off screen over a dark sea, on the globe and over the scenario.
+    private func renderClouds() {
+        let size = CGSize(width: 600, height: 400)
+        let map = WorldMap.shared
+        let painter = CloudPainter()
+        let cameras = [("clouds-globe", MapCamera(lon: -88, lat: 38, zoom: 1.2)),
+                       ("clouds-scenario", MapCamera.scenario(in: size, map: map))]
+        for (name, camera) in cameras {
+            let p = MapProjection(camera: camera, size: size, tilt: 28 * .pi / 180)
+            let sky = CloudSky(camera: camera, size: size, tilt: 28 * .pi / 180, sun: MapSun.fixed(p), seconds: 20,
+                               amount: 3, bounds: map.playBounds, altitude: 46 * p.t, zoom: camera.zoom,
+                               shadows: true, scenario: map.scenarioId)
+            guard let clouds = painter.snapshot(sky) else {
+                XCTFail("\(name) did not render")
+                continue
+            }
+            let image = UIGraphicsImageRenderer(size: size).image { context in
+                UIColor(red: 0.086, green: 0.208, blue: 0.333, alpha: 1).setFill()
+                context.fill(CGRect(origin: .zero, size: size))
+                UIImage(cgImage: clouds).draw(in: CGRect(origin: .zero, size: size))
+            }
+            XCTAssertGreaterThan(distinctShades(image), 8, "\(name) shows clouds")
+            if let data = image.pngData() {
+                try? data.write(to: FileManager.default.temporaryDirectory.appendingPathComponent("cw-snapshot-\(name).png"))
+            }
+        }
     }
 
     private func render<V: View>(_ name: String, _ size: CGSize, compact: Bool, _ view: V) {
@@ -182,14 +255,31 @@ final class SnapshotTests: XCTestCase {
         host.view.frame = window.bounds
         host.view.layoutIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        // A window snapshot cannot read a Metal layer, so each cloud layer's own last frame is
+        // shown in an image view inside it for the capture, at the layer's place in the stack.
+        var stand: [UIView] = []
+        for view in metalViews(in: window) {
+            guard let painter = view.delegate as? CloudPainter, let sky = painter.sky else { continue }
+            XCTAssertGreaterThan(painter.drawn, 0, "the cloud layer drew in the window (\(painter.missed) draws found no drawable)")
+            guard let frame = painter.snapshot(sky) else { continue }
+            let still = UIImageView(image: UIImage(cgImage: frame))
+            still.frame = view.bounds
+            view.addSubview(still)
+            stand.append(still)
+        }
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = scale
         format.opaque = opaque
         let image = UIGraphicsImageRenderer(bounds: window.bounds, format: format).image { _ in
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }
+        stand.forEach { $0.removeFromSuperview() }
         window.isHidden = true
         return image
+    }
+
+    private func metalViews(in view: UIView) -> [MTKView] {
+        (view as? MTKView).map { [$0] } ?? view.subviews.flatMap { metalViews(in: $0) }
     }
 
     /// Distinct grey levels across a coarse grid of samples. A blank or unrendered window has one.

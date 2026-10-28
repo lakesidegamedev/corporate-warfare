@@ -199,7 +199,7 @@ struct NewGameView: View {
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(active ? Theme.ink : Theme.secondary)
                 .frame(width: 22, height: 22)
-                .background(active ? Theme.gold : Theme.panelRaised, in: Circle())
+                .background(active ? Theme.gold : Theme.panelRaised, in: Pixel.small)
             Text(label)
                 .font(.footnote)
                 .foregroundStyle(active ? Theme.primaryText : Theme.secondary)
@@ -236,7 +236,7 @@ struct NewGameView: View {
                                 .foregroundStyle(Theme.primaryText)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .background(Theme.panelRaised.opacity(0.92), in: Capsule())
+                                .background(Theme.panelRaised, in: Pixel.small)
                         }
                         .buttonStyle(.plain)
                         .padding(12)
@@ -264,9 +264,9 @@ struct NewGameView: View {
                             }
                             .padding(14)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(on ? Theme.gold.opacity(0.14) : Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .background(on ? Theme.gold.opacity(0.14) : Theme.panel, in: Pixel.shape)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                Pixel.shape
                                     .stroke(on ? Theme.gold : Theme.stroke, lineWidth: on ? 2 : 1)
                             )
                         }
@@ -279,7 +279,7 @@ struct NewGameView: View {
                                 .foregroundStyle(Theme.primaryText)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .background(Theme.panelRaised.opacity(0.92), in: Capsule())
+                                .background(Theme.panelRaised, in: Pixel.small)
                         }
                         .buttonStyle(.plain)
                         .padding(10)
@@ -307,7 +307,7 @@ struct NewGameView: View {
             HStack(spacing: 14) {
                 ScenarioArt(name: scenario.image)
                     .frame(width: 150, height: 150 * 640 / 1200)
-                    .clipShape(RoundedCornerShape(radius: 8))
+                    .clipShape(Pixel.shape)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(scenario.name).font(.title3.weight(.bold)).foregroundStyle(Theme.primaryText)
                     Text("\(scenario.region) · starts \(String(scenario.startYear)) · \(scenario.currency)")
@@ -397,7 +397,7 @@ struct NewGameView: View {
         Button(action: action) {
             Text(title).font(.callout.weight(.bold)).padding(.horizontal, 10)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(PixelButtonStyle(prominent: true))
         .tint(Theme.gold)
         .foregroundStyle(Theme.ink)
         .controlSize(.large)
@@ -421,15 +421,6 @@ struct NewGameView: View {
             pricePath: pricePathPick?.rawValue ?? ""
         )
         Task { await store.startCareer(options) }
-    }
-}
-
-/// A rounded clip shape with a single radius, usable where `clipShape` needs a concrete type.
-struct RoundedCornerShape: Shape {
-    var radius: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        Path(roundedRect: rect, cornerRadius: radius, style: .continuous)
     }
 }
 
@@ -457,8 +448,8 @@ private struct OptionGrid<T: WizardOption>: View {
                     }
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(on ? Theme.gold.opacity(0.14) : Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(on ? Theme.gold : Theme.stroke, lineWidth: on ? 2 : 1))
+                    .background(on ? Theme.gold.opacity(0.14) : Theme.panel, in: Pixel.shape)
+                    .overlay(Pixel.shape.stroke(on ? Theme.gold : Theme.stroke, lineWidth: on ? 2 : 1))
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(on ? .isSelected : [])
@@ -502,7 +493,7 @@ struct ScenarioTile: View {
                     .foregroundStyle(scenario.available ? Theme.ink : Theme.primaryText)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(scenario.available ? Theme.gold : Theme.panelRaised.opacity(0.9), in: Capsule())
+                    .background(scenario.available ? Theme.gold : Theme.panelRaised, in: Pixel.small)
                     .padding(12)
             }
             VStack(alignment: .leading, spacing: 6) {
@@ -522,8 +513,8 @@ struct ScenarioTile: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.panel)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(selected ? Theme.gold : Theme.stroke, lineWidth: selected ? 3 : 1))
+        .clipShape(Pixel.shape)
+        .overlay(Pixel.shape.stroke(selected ? Theme.gold : Theme.stroke, lineWidth: selected ? 3 : 1))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
     }

@@ -208,7 +208,7 @@ struct TutorialPanel: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(Theme.ink)
                         .frame(width: 22, height: 22)
-                        .background(Theme.gold, in: Circle())
+                        .background(Theme.gold, in: Pixel.small)
                     Text(step.title)
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(Theme.primaryText)
@@ -235,33 +235,33 @@ struct TutorialPanel: View {
                 }
                 HStack(spacing: 6) {
                     ForEach(TutorialModel.steps) { item in
-                        Circle()
+                        Pixel.small
                             .fill(tutorial.done.contains(item.id) ? Theme.positive : (item.id == step.id ? Theme.gold : Theme.stroke))
                             .frame(width: 7, height: 7)
                     }
                     Spacer()
-                    Button("Hide") { tutorial.hide() }
-                        .font(.caption)
+                    Button("HIDE") { tutorial.hide() }
+                        .font(Pixel.font(11))
                         .foregroundStyle(Theme.secondary)
                         .buttonStyle(.plain)
                     Button {
                         tutorial.requestedPage = step.page
                     } label: {
-                        Text("Show me")
-                            .font(.footnote.weight(.bold))
+                        Text("SHOW ME")
+                            .font(Pixel.font(12, bold: true))
                             .foregroundStyle(Theme.ink)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(Theme.gold, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(Theme.gold, in: Pixel.shape)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, compact ? 8 : 12)
-            .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: compact ? 0 : 14, style: .continuous))
+            .background(Theme.panelRaised, in: PixelShape(cut: compact ? 0 : Pixel.cut))
             .overlay(
-                RoundedRectangle(cornerRadius: compact ? 0 : 14, style: .continuous)
+                PixelShape(cut: compact ? 0 : Pixel.cut)
                     .stroke(Theme.gold.opacity(0.6), lineWidth: 1)
             )
             .accessibilityElement(children: .contain)

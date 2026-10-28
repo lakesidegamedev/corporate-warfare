@@ -47,7 +47,7 @@ struct RegionsView: View {
                                     showingBuild = true
                                 }
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(PixelButtonStyle())
                         }
                     }
                 }
