@@ -75,6 +75,8 @@ class GeoRing(flat: List<Int>) {
     val lat = DoubleArray(size) { flat[2 * it + 1] / 10_000.0 * PI / 180 }
     val sinLat = DoubleArray(size) { sin(lat[it]) }
     val cosLat = DoubleArray(size) { cos(lat[it]) }
+    val sinLon = DoubleArray(size) { sin(lon[it]) }
+    val cosLon = DoubleArray(size) { cos(lon[it]) }
     val cx: Double
     val cy: Double
     val cz: Double
@@ -247,6 +249,11 @@ data class MapCamera(val lon: Double, val lat: Double, val zoom: Double) {
  * stand [lift]ed above the ground.
  */
 class MapProjection(camera: MapCamera, size: Size, pitchSetting: Double = 0.0) {
+    private companion object {
+        /** The shortest step, in pixels across plus down, worth adding to a path. */
+        const val MIN_STEP = 0.8f
+    }
+
     val r = camera.radius(size)
     val t = camera.flatness
     val cx = size.width / 2.0
@@ -260,6 +267,8 @@ class MapProjection(camera: MapCamera, size: Size, pitchSetting: Double = 0.0) {
     private val rise = max(sinP, 0.40 * t)
     val lon0 = camera.lon * PI / 180
     val lat0 = camera.lat * PI / 180
+    private val sinLon0 = sin(lon0)
+    private val cosLon0 = cos(lon0)
     private val sin0 = sin(lat0)
     private val cos0 = cos(lat0)
     private val vx = cos0 * cos(lon0)
@@ -284,9 +293,12 @@ class MapProjection(camera: MapCamera, size: Size, pitchSetting: Double = 0.0) {
 
     /** Screen point for vertex [i]; hidden points sit on the globe's edge. Sets [front]. */
     private fun at(ring: GeoRing, i: Int, dl: Double, h: Double = 0.0): Offset {
-        val cosDl = cos(dl)
+        // The angle-difference identities give cos and sin of dl from values kept on the ring,
+        // whichever way round the world dl was unwrapped: no trigonometry per point.
+        val cosDl = ring.cosLon[i] * cosLon0 + ring.sinLon[i] * sinLon0
+        val sinDl = ring.sinLon[i] * cosLon0 - ring.cosLon[i] * sinLon0
         val cosc = sin0 * ring.sinLat[i] + cos0 * ring.cosLat[i] * cosDl
-        var ox = ring.cosLat[i] * sin(dl)
+        var ox = ring.cosLat[i] * sinDl
         var oy = cos0 * ring.sinLat[i] - sin0 * ring.cosLat[i] * cosDl
         front = cosc >= 0 || t > 0.5
         if (cosc < 0) {
@@ -361,6 +373,8 @@ class MapProjection(camera: MapCamera, size: Size, pitchSetting: Double = 0.0) {
 
     /** Filled rings, longitude unwrapped along each ring so the flat map never tears it; [h] pixels up. */
     fun addPolygons(rings: List<GeoRing>, path: Path, h: Double = 0.0) {
+        var lastX = 0f
+        var lastY = 0f
         for (ring in rings) {
             if (ring.size < 3 || !mayShow(ring)) continue
             var previous = 0.0
@@ -372,7 +386,14 @@ class MapProjection(camera: MapCamera, size: Size, pitchSetting: Double = 0.0) {
                 }
                 previous = dl
                 val p = at(ring, i, dl, h)
-                if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
+                if (i == 0) {
+                    path.moveTo(p.x, p.y)
+                    lastX = p.x; lastY = p.y
+                } else if (i == ring.size - 1 || abs(p.x - lastX) + abs(p.y - lastY) >= MIN_STEP) {
+                    // Points closer than a pixel to the last one add nothing but work.
+                    path.lineTo(p.x, p.y)
+                    lastX = p.x; lastY = p.y
+                }
             }
             path.close()
         }
@@ -441,7 +462,11 @@ class MapProjection(camera: MapCamera, size: Size, pitchSetting: Double = 0.0) {
             for (i in 0 until ring.size) {
                 val p = at(ring, i, wrap(ring.lon[i] - lon0))
                 if (!front) { drawing = false; continue }
-                if (drawing && abs(p.x - last.x) + abs(p.y - last.y) < jump) lineTo(p.x, p.y) else { moveTo(p.x, p.y); drawing = true }
+                val step = abs(p.x - last.x) + abs(p.y - last.y)
+                if (drawing && step < jump) {
+                    if (step < MIN_STEP && i != ring.size - 1) continue
+                    lineTo(p.x, p.y)
+                } else { moveTo(p.x, p.y); drawing = true }
                 last = p
             }
         }

@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -122,6 +123,41 @@ internal fun DrawScope.stamp(
     )
 }
 
+/**
+ * Soft light drawn at a quarter of the view's width and height and stretched over it: night,
+ * the globe's shading, the atmosphere, the vignette. These change smoothly across the screen, so
+ * a sixteenth of the pixels looks the same and costs a fraction. Redrawn only when [key] changes.
+ */
+internal class LightLayer {
+    private var key: Any? = null
+    private var image: ImageBitmap? = null
+
+    fun draw(scope: DrawScope, key: Any, build: DrawScope.(full: Size) -> Unit) = with(scope) {
+        val full = size
+        val w = max(1, (full.width / 4).toInt() + 1)
+        val h = max(1, (full.height / 4).toInt() + 1)
+        var held = image
+        if (held == null || held.width != w || held.height != h) {
+            held = ImageBitmap(w, h)
+            image = held
+            this@LightLayer.key = null
+        }
+        if (key != this@LightLayer.key) {
+            val canvas = androidx.compose.ui.graphics.Canvas(held)
+            // Start clear: the bitmap is reused between frames.
+            canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), androidx.compose.ui.graphics.Paint().apply { blendMode = BlendMode.Clear })
+            CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, canvas, Size(w.toFloat(), h.toFloat())) {
+                scale(0.25f, 0.25f, pivot = Offset.Zero) { build(full) }
+            }
+            this@LightLayer.key = key
+        }
+        drawImage(
+            held, srcOffset = IntOffset.Zero, srcSize = IntSize(w, h), dstOffset = IntOffset.Zero,
+            dstSize = IntSize(w * 4, h * 4), filterQuality = androidx.compose.ui.graphics.FilterQuality.Low,
+        )
+    }
+}
+
 // MARK: Static layer pieces
 
 /** Land colours by climate, so the globe reads as a planet rather than a silhouette. */
@@ -201,7 +237,8 @@ internal class StarField(count: Int, seed: Long) {
 internal val SharedStars = StarField(220, 7)
 
 /** The globe's light: atmosphere behind, then the ocean lit from the sun. */
-internal fun DrawScope.drawGlobeBack(p: MapProjection, sun: Sun, g: GraphicsConfig) {
+/** The glow of the atmosphere behind the globe. Soft, so it is drawn into a small [LightLayer]. */
+internal fun DrawScope.drawAtmosphere(p: MapProjection, sun: Sun, g: GraphicsConfig) {
     val t = p.t
     val center = Offset(p.cx.toFloat(), p.cy.toFloat())
     val r = p.r.toFloat()
@@ -226,6 +263,14 @@ internal fun DrawScope.drawGlobeBack(p: MapProjection, sun: Sun, g: GraphicsConf
             )
         }
     }
+}
+
+/** The ocean, lit from the sun: a crisp disc that grows to fill the view as the map flattens. */
+internal fun DrawScope.drawGlobeBack(p: MapProjection, sun: Sun, g: GraphicsConfig) {
+    val t = p.t
+    val center = Offset(p.cx.toFloat(), p.cy.toFloat())
+    val r = p.r.toFloat()
+    val sv = p.toView(sun.lon, sun.lat)
     val oceanRadius = (p.r / max(1 - t, 0.03)).toFloat()
     if (t >= 0.999) {
         drawRect(Color(0xFF0E2840))
