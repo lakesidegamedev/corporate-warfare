@@ -124,9 +124,11 @@ internal fun DrawScope.stamp(
 }
 
 /**
- * Soft light drawn at a quarter of the view's width and height and stretched over it: night,
- * the globe's shading, the atmosphere, the vignette. These change smoothly across the screen, so
- * a sixteenth of the pixels looks the same and costs a fraction. Redrawn only when [key] changes.
+ * Soft light drawn at half the view's width and height and stretched over it: night, the globe's
+ * shading, the atmosphere, the vignette. These change smoothly across the screen, so a quarter of
+ * the pixels looks the same and costs a fraction. It covers a margin round the view too, so a
+ * translated drawing (the menu's globe sits off centre) never shows its edge. Redrawn only when
+ * [key] changes.
  */
 internal class LightLayer {
     private var key: Any? = null
@@ -134,8 +136,9 @@ internal class LightLayer {
 
     fun draw(scope: DrawScope, key: Any, build: DrawScope.(full: Size) -> Unit) = with(scope) {
         val full = size
-        val w = max(1, (full.width / 4).toInt() + 1)
-        val h = max(1, (full.height / 4).toInt() + 1)
+        val pad = (max(full.width, full.height) * 0.25f).toInt()
+        val w = max(1, ((full.width + 2 * pad) / FACTOR).toInt() + 1)
+        val h = max(1, ((full.height + 2 * pad) / FACTOR).toInt() + 1)
         var held = image
         if (held == null || held.width != w || held.height != h) {
             held = ImageBitmap(w, h)
@@ -147,14 +150,18 @@ internal class LightLayer {
             // Start clear: the bitmap is reused between frames.
             canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), androidx.compose.ui.graphics.Paint().apply { blendMode = BlendMode.Clear })
             CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, canvas, Size(w.toFloat(), h.toFloat())) {
-                scale(0.25f, 0.25f, pivot = Offset.Zero) { build(full) }
+                scale(1f / FACTOR, 1f / FACTOR, pivot = Offset.Zero) { translate(pad.toFloat(), pad.toFloat()) { build(full) } }
             }
             this@LightLayer.key = key
         }
         drawImage(
-            held, srcOffset = IntOffset.Zero, srcSize = IntSize(w, h), dstOffset = IntOffset.Zero,
-            dstSize = IntSize(w * 4, h * 4), filterQuality = androidx.compose.ui.graphics.FilterQuality.Low,
+            held, srcOffset = IntOffset.Zero, srcSize = IntSize(w, h), dstOffset = IntOffset(-pad, -pad),
+            dstSize = IntSize(w * FACTOR, h * FACTOR), filterQuality = androidx.compose.ui.graphics.FilterQuality.Low,
         )
+    }
+
+    private companion object {
+        const val FACTOR = 2
     }
 }
 
@@ -245,12 +252,12 @@ internal fun DrawScope.drawAtmosphere(p: MapProjection, sun: Sun, g: GraphicsCon
     val sv = p.toView(sun.lon, sun.lat)
     val fade = (1 - t).toFloat()
     if (g.lighting > 0 && fade > 0.01f) {
-        val outer = r * 1.12f
+        val outer = r * 1.06f
         val edge = r / outer
         drawCircle(
             Brush.radialGradient(
-                0f to Color.Transparent, edge * 0.97f to Color(0xFF6FA0E0).copy(alpha = 0.50f * fade),
-                edge + (1 - edge) * 0.2f to Color(0xFF4F80C0).copy(alpha = 0.16f * fade), 1f to Color.Transparent,
+                0f to Color.Transparent, edge * 0.985f to Color(0xFF7FB0F0).copy(alpha = 0.55f * fade),
+                edge + (1 - edge) * 0.25f to Color(0xFF4F80C0).copy(alpha = 0.14f * fade), 1f to Color.Transparent,
                 center = center, radius = outer,
             ),
             outer, center,
@@ -258,7 +265,7 @@ internal fun DrawScope.drawAtmosphere(p: MapProjection, sun: Sun, g: GraphicsCon
         if (g.lighting == 2) {
             val warm = center + Offset((sv[0] * 0.06 * r).toFloat(), (-sv[1] * 0.06 * r).toFloat())
             drawCircle(
-                Brush.radialGradient(0f to Color.Transparent, 0.84f to Color(0xFFFFD8A0).copy(alpha = 0.14f * fade), 1f to Color.Transparent, center = warm, radius = outer),
+                Brush.radialGradient(0f to Color.Transparent, 0.93f to Color(0xFFFFD8A0).copy(alpha = 0.10f * fade), 1f to Color.Transparent, center = warm, radius = outer),
                 outer, warm,
             )
         }
@@ -440,6 +447,8 @@ private fun nightBands(sun: Sun, lon0: Double): List<GeoRing> {
 private val NightEdges = List(20) { 0.16 - 0.46 * it / 19.0 }
 
 internal fun DrawScope.drawNight(paths: List<Path>) {
+    // Dusk first: a warm band along the edge of night, which the darker steps then cover.
+    paths.take(6).forEach { drawPath(it, Color(0xFFFF9A4A).copy(alpha = 0.018f)) }
     paths.forEach { drawPath(it, Color(0xFF02060F).copy(alpha = 0.065f)) }
 }
 
@@ -452,7 +461,7 @@ internal fun DrawScope.drawCityLights(cities: List<Pair<WorldMapFile.City, GeoRi
         val at = p.at(point.lon[0], point.lat[0], lift)
         if (!at.isSpecified) return@forEach
         val radius = (2f + 2.5f * log10(max(city.population / 1e5, 1.0)).toFloat()) * scale
-        stamp(Sprites.glow, at, radius * 2.4f, Color(0xFFFFC872), 0.55f * light, BlendMode.Plus)
+        stamp(Sprites.glow, at, radius * 1.3f, Color(0xFFFFC872), 0.6f * light, BlendMode.Plus)
         drawCircle(Color(0xFFFFE6B0).copy(alpha = 0.9f * light), 1f * scale, at)
     }
 }
@@ -517,6 +526,8 @@ internal class OverlayGeometry(
     val selectedTop: Path?,
     val scale: Float,
     val plinth: Double,
+    /** Ground points of the biggest cities, where planes fly between. */
+    val airports: List<Offset> = emptyList(),
 )
 
 internal class LaneTrack(val a: Offset, val b: Offset, val mode: String, val weight: Float, val length: Float, val seed: Float)
@@ -557,74 +568,8 @@ private fun Polyline.pointAt(d: Float): Offset {
     return Offset(xs[lo] + (xs[hi] - xs[lo]) * f, ys[lo] + (ys[hi] - ys[lo]) * f)
 }
 
-/** Where world clouds drift: everywhere but the poles. */
-internal val WorldBounds = doubleArrayOf(-174.0, -50.0, 174.0, 66.0)
-
 private val ModeColors = mapOf("road" to Color(0xFFE0A040), "rail" to Color(0xFF7FD3FF), "sea" to Color(0xFF9AF0E0))
 private val ModeSpeed = mapOf("road" to 40f, "rail" to 55f, "sea" to 22f)
-
-/** Clouds: fixed seeds that drift east and wrap round their box. */
-internal class CloudField(count: Int, seed: Long) {
-    val lon = DoubleArray(count)
-    val lat = DoubleArray(count)
-    val size = DoubleArray(count)
-    val lobes = Array(count) { FloatArray(18) }
-
-    init {
-        val rng = java.util.Random(seed)
-        for (i in 0 until count) {
-            lon[i] = rng.nextDouble(); lat[i] = rng.nextDouble(); size[i] = 0.18 + 0.4 * rng.nextDouble() * rng.nextDouble()
-            // Six lobes spread wide and flat, each its own size, so a cloud reads as a bank.
-            for (k in 0 until 6) {
-                lobes[i][3 * k] = (rng.nextFloat() - 0.5f) * 3.2f
-                lobes[i][3 * k + 1] = (rng.nextFloat() - 0.5f) * 0.9f
-                lobes[i][3 * k + 2] = 0.45f + rng.nextFloat() * 0.55f
-            }
-        }
-    }
-}
-
-private val SharedClouds = CloudField(90, 19)
-private val WorldClouds = CloudField(90, 23)
-
-/**
- * Clouds over [bounds] (west, south, east, north in degrees), drifting east. [altitude] lifts them
- * off a tilted map so their shadows fall apart from them. [scale] sizes them, 1 for the scenario.
- */
-internal fun DrawScope.drawClouds(
-    p: MapProjection, sun: Sun?, seconds: Double, count: Int, bounds: DoubleArray, altitude: Double, zoom: Double, shadows: Boolean,
-    scale: Double = 1.0, alpha: Float = 1f, world: Boolean = false,
-) {
-    val field = if (world) WorldClouds else SharedClouds
-    val w = bounds[0] - 6; val s = bounds[1] - 6; val e = bounds[2] + 6; val n = bounds[3] + 6
-    val spanLon = e - w
-    val fade = (1.4 - zoom / 30).coerceIn(0.25, 1.0).toFloat()
-    val rScale = (PI / 180 * p.r).toFloat()
-    for (i in 0 until min(count, field.lon.size)) {
-        var lonDeg = w + (field.lon[i] * spanLon + seconds * 0.25) % spanLon
-        if (lonDeg > e) lonDeg -= spanLon
-        val latDeg = s + field.lat[i] * (n - s)
-        val lon = lonDeg * PI / 180
-        val lat = latDeg * PI / 180
-        val ground = p.ground(lon, lat)
-        if (!ground.isSpecified) continue
-        val night = if (sun != null && sun.facing(lon, lat) < -0.05) 0.4f else 1f
-        val radius = (field.size[i] * scale * rScale).toFloat()
-        if (radius < 1.5f) continue
-        val lobes = field.lobes[i]
-        val cloudAt = p.lift(ground.x.toDouble(), ground.y.toDouble(), altitude)
-        if (cloudAt.x < -radius * 3 || cloudAt.x > size.width + radius * 3 || cloudAt.y < -radius * 3 || cloudAt.y > size.height + radius * 3) continue
-        if (shadows && altitude > 0) {
-            val shadowAt = p.lift(ground.x.toDouble(), ground.y.toDouble(), 0.0) + Offset(radius * 0.35f, radius * 0.25f)
-            for (k in 0 until 6) {
-                stamp(Sprites.cloud, shadowAt + Offset(lobes[3 * k] * radius, lobes[3 * k + 1] * radius), radius * lobes[3 * k + 2], Color.Black, 0.10f * fade * alpha, aspect = 2.6f)
-            }
-        }
-        for (k in 0 until 6) {
-            stamp(Sprites.cloud, cloudAt + Offset(lobes[3 * k] * radius, lobes[3 * k + 1] * radius * 0.5f), radius * lobes[3 * k + 2] * 0.7f, Color.White, 0.30f * fade * night * alpha, aspect = 2.6f)
-        }
-    }
-}
 
 /** Everything that moves on the map, for one frame. */
 internal fun DrawScope.drawMapOverlay(
@@ -684,18 +629,17 @@ internal fun DrawScope.drawMapOverlay(
         }
     }
     // Clouds and their shadows.
-    if (g.clouds > 0) {
-        val count = if (g.clouds >= 2) 60 else 24
-        val t = p.t.toFloat()
-        if (t < 1f) drawClouds(p, sun, seconds * 4, count, WorldBounds, 0.0, zoom, false, 3.0, 1f - t, world = true)
-        // Over the scenario itself only on Many, thin and high, so they never fog the map.
-        if (t > 0f && g.clouds >= 2) drawClouds(p, sun, seconds, 30, bounds, 46.0 * o.scale * p.t, zoom, g.lighting > 0, 1.0, 0.7f * t)
-    }
+    with(Weather) { drawWeather(p, sun, seconds, g.clouds, bounds, 46.0 * o.scale * p.t, zoom, g.lighting > 0) }
     // Building beacons, smoke and the week's ripple.
     if (g.buildings > 0) {
         o.buildings.forEach { b ->
             val phase = ((time / 2.4f) + b.seed) % 1f
             drawCircle(b.color.copy(alpha = 0.45f * (1 - phase)), (6f + 20f * phase) * o.scale, b.base, style = Stroke(1.4f))
+            // An aircraft warning light blinks on every rooftop.
+            if (sin(time * 3f + b.seed * 20f) > 0.55f) {
+                stamp(Sprites.glow, b.top, 5f, Color(0xFFFF4A3A), 0.7f, BlendMode.Plus)
+                drawCircle(Color(0xFFFF6A5A), 1.3f, b.top)
+            }
             if (b.smoke && (g.traffic >= 2 || g.preset == GraphicsPreset.Ultra)) {
                 for (k in 0 until 3) {
                     val f = ((time / 3f) + k / 3f + b.seed) % 1f
@@ -706,6 +650,35 @@ internal fun DrawScope.drawMapOverlay(
             if (rippleAge in 0.0..1.2) {
                 val f = (rippleAge / 1.2).toFloat()
                 drawCircle(Palette.gold.copy(alpha = 0.6f * (1 - f)), 60f * f * o.scale, b.base, style = Stroke(2f))
+            }
+        }
+    }
+    // Planes between the big cities, high over the map, trailing contrails with shadows below.
+    if (g.traffic > 0 && o.airports.size >= 2) {
+        val planes = if (g.traffic >= 2) 10 else 5
+        val n = o.airports.size
+        for (k in 0 until planes) {
+            val life = 14f
+            val local = time + k * 3.1f
+            val cycle = floor(local / life).toInt()
+            val f = (local - cycle * life) / life
+            val hash = stableHash("plane$k/$cycle")
+            val a = o.airports[hash % n]
+            val b = o.airports[(hash % n + 1 + (hash / n) % (n - 1)) % n]
+            val fade = (min(f, 1 - f) * 8).coerceAtMost(1f)
+            for (trail in 12 downTo 0) {
+                val ft = (f - trail * 0.006f).coerceIn(0f, 1f)
+                val gx = (a.x + (b.x - a.x) * ft).toDouble()
+                val gy = (a.y + (b.y - a.y) * ft).toDouble()
+                val up = (40 + 50 * sin(PI * ft)) * o.scale
+                val at = p.lift(gx, gy, up)
+                if (trail == 0) {
+                    drawCircle(Color.Black.copy(alpha = 0.25f * fade), 1.8f, p.lift(gx, gy, o.plinth) + Offset(3f, 2f))
+                    drawCircle(Color.White.copy(alpha = fade), 1.7f, at)
+                    if ((time * 2 + k) % 1f < 0.15f) drawCircle(Color(0xFFFF5040).copy(alpha = fade), 1.2f, at + Offset(0f, 2.5f))
+                } else {
+                    drawCircle(Color.White.copy(alpha = 0.22f * fade * (1 - trail / 13f)), 1.1f + trail * 0.08f, at)
+                }
             }
         }
     }

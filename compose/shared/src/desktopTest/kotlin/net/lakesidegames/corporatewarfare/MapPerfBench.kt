@@ -1,5 +1,7 @@
 package net.lakesidegames.corporatewarfare
 
+import androidx.compose.ui.graphics.toComposeImageBitmap
+
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
@@ -17,6 +19,11 @@ import kotlin.test.Test
  * globe. Software raster, so absolute numbers are higher than on a GPU; compare runs.
  */
 class MapPerfBench {
+    init {
+        Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
+        MeshCanvas.draw = desktopMeshDraw
+    }
+
     private val divisions = listOf(
         MapDivisionDto(1uL, "OH-CEN", "manufacturing", 6u, 6u), MapDivisionDto(1uL, "MI-DET", "energy", 9u, 9u),
         MapDivisionDto(1uL, "PA-WES", "technology", 2u, 2u), MapDivisionDto(1uL, "IL-CHI", "logistics", 4u, 4u),

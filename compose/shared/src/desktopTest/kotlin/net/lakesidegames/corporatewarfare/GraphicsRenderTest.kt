@@ -1,5 +1,7 @@
 package net.lakesidegames.corporatewarfare
 
+import androidx.compose.ui.graphics.toComposeImageBitmap
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +24,11 @@ import kotlin.test.assertTrue
  * moving one. Set CW_MAP_RENDER_DIR to keep the pictures.
  */
 class GraphicsRenderTest {
+    init {
+        Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
+        MeshCanvas.draw = desktopMeshDraw
+    }
+
     private val divisions = listOf(
         MapDivisionDto(1uL, "OH-CEN", "manufacturing", 6u, 6u),
         MapDivisionDto(1uL, "OH-CEN", "retail", 3u, 3u),

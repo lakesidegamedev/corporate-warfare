@@ -1,5 +1,7 @@
 package net.lakesidegames.corporatewarfare
 
+import androidx.compose.ui.graphics.nativeCanvas
+
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -13,6 +15,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        MeshCanvas.draw = { canvas, positions, tex, colors, indices, vertices, indexCount, paint ->
+            // Clouds go to the graphics chip as arrays in one call.
+            canvas.nativeCanvas.drawVertices(
+                android.graphics.Canvas.VertexMode.TRIANGLES, vertices * 2, positions, 0, tex, 0, colors, 0, indices, 0, indexCount,
+                paint.asFrameworkPaint(),
+            )
+        }
         Images.decode = { bytes ->
             android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
         }

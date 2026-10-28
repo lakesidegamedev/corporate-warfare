@@ -70,9 +70,7 @@ fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
                 map, camera, Palette.gold, emptyMap(), null, emptyList(), measurer, space = false, geometry = geometry,
                 graphics = graphics.copy(detail = MapDetail.Low, extrude = false, buildings = 0, traffic = 0), sun = sun,
             )
-            if (graphics.clouds > 0) {
-                drawClouds(p, sun, seconds * 4, if (graphics.clouds >= 2) 90 else 55, WorldBounds, 0.0, 1.0, false, 3.0, world = true)
-            }
+            with(Weather) { drawWeather(p, sun, seconds * 2, graphics.clouds, map.playBounds, 0.0, 1.0, false) }
             if (graphics.cityLights && graphics.lighting > 0) drawHubLights(world, p, sun)
             drawScenarioGlow(map, p, seconds, measurer)
             if (graphics.lighting > 0) {
@@ -124,8 +122,8 @@ private fun DrawScope.drawHubLights(world: WorldCities, p: MapProjection, sun: S
         val at = p.at(world.lon[i], world.lat[i])
         if (!at.isSpecified) continue
         val radius = 3f + 2.2f * kotlin.math.ln(1 + world.people[i]).toFloat()
-        stamp(Sprites.glow, at, radius * 2.2f, Color(0xFFFFC872), 0.65f * light, BlendMode.Plus)
-        drawCircle(Color(0xFFFFEBC0).copy(alpha = 0.9f * light), 1.3f, at)
+        stamp(Sprites.glow, at, radius * 1.1f, Color(0xFFFFC872), 0.7f * light, BlendMode.Plus)
+        drawCircle(Color(0xFFFFF1D0).copy(alpha = light), 1.6f, at)
     }
 }
 
@@ -136,17 +134,18 @@ private fun DrawScope.drawGlare(p: MapProjection, sun: Sun) {
     val r = p.r.toFloat()
     val centre = Offset(p.cx.toFloat(), p.cy.toFloat())
     val at = centre + Offset((sv[0] / n * r * 1.25).toFloat(), (-sv[1] / n * r * 1.25).toFloat())
+    // A small hard sun with a tight glow, not a wash of light across the scene.
     drawCircle(
         Brush.radialGradient(
-            0f to Color(0xFFFFF8E8).copy(alpha = 0.9f), 0.05f to Color(0xFFFFE2B0).copy(alpha = 0.45f), 0.2f to Color(0xFFFFC870).copy(alpha = 0.06f), 1f to Color.Transparent,
-            center = at, radius = r * 0.9f,
+            0f to Color(0xFFFFFBF0), 0.16f to Color(0xFFFFF0D0).copy(alpha = 0.9f), 0.3f to Color(0xFFFFD890).copy(alpha = 0.10f), 1f to Color.Transparent,
+            center = at, radius = r * 0.22f,
         ),
-        r * 0.9f, at,
+        r * 0.22f, at,
     )
     val axis = centre - at
     listOf(0.6f to 0.05f, 1.35f to 0.09f, 1.8f to 0.03f).forEach { (along, radius) ->
         val ghost = at + axis * along
-        drawCircle(Color(0xFFFFE2B0).copy(alpha = 0.06f), r * radius, ghost)
+        drawCircle(Color(0xFFFFE2B0).copy(alpha = 0.035f), r * radius, ghost)
     }
 }
 
@@ -159,7 +158,7 @@ private fun DrawScope.drawScenarioGlow(map: WorldMap, projection: MapProjection,
         if (glow <= 0f) continue
         val tint = scenarioTint(id)
         val path = projection.polygons(rings)
-        for (width in listOf(22f, 14f, 8f)) drawPath(path, tint.copy(alpha = 0.10f * glow), style = Stroke(width))
+        drawPath(path, tint.copy(alpha = 0.16f * glow), style = Stroke(6f))
         drawPath(path, tint.copy(alpha = 0.55f * glow))
         drawPath(path, Color.White.copy(alpha = 0.75f * glow), style = Stroke(1.6f))
         val anchor = rings.maxByOrNull { it.size } ?: continue

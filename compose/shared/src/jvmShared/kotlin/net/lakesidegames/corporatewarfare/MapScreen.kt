@@ -399,7 +399,12 @@ internal fun DrawScope.drawWorldMap(
     if (t < 1) drawPath(g.graticule, Palette.primaryText.copy(alpha = (0.06 * (1 - t)).toFloat()), style = Stroke(0.6f))
     // Outside the scenario the world is muted: climate-tinted land on the globe that greys as the
     // map flattens, grey borders and roads. The scenario's regions are drawn over it in colour.
-    if (lit) drawBiomes(g.biomes, (0.25 + 0.6 * t).toFloat()) else drawPath(g.land, OutsideLand)
+    if (lit) {
+        // Shallow water: a lighter band of sea hugging every coast, under the land.
+        val shallows = (2 + cam.zoom * 0.35).coerceIn(2.0, 9.0).toFloat()
+        g.biomes.forEach { drawPath(it, Color(0xFF2F6F9A).copy(alpha = 0.30f), style = Stroke(shallows)) }
+        drawBiomes(g.biomes, (0.25 + 0.6 * t).toFloat())
+    } else drawPath(g.land, OutsideLand)
     MapProfiler.mark("landfill")
     val provinces = if (detailLevel == MapDetail.Low) 0f else ((cam.zoom - 1.4) / 1.2).coerceIn(0.0, 1.0).toFloat()
     if (provinces > 0) drawPath(g.provinces, OutsideBorder.copy(alpha = 0.7f * provinces), style = Stroke(0.5f))
@@ -431,6 +436,11 @@ internal fun DrawScope.drawWorldMap(
             drawPath(solid.walls[1], top.shade(0.68f))
             drawPath(solid.walls[2], top.shade(0.88f))
             drawPath(solid.top, top)
+            // Tops catch the light from the upper left and fall off away from it.
+            if (lit) {
+                val b = solid.bounds
+                drawPath(solid.top, Brush.linearGradient(0f to Color.White.copy(alpha = 0.09f), 0.5f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.12f), start = b.topLeft, end = b.bottomRight))
+            }
             if (solid.code == selected) drawPath(solid.top, Palette.gold.copy(alpha = 0.35f))
             drawPath(solid.top, if (lit) Color(0xFF9FB4C8).copy(alpha = 0.55f) else Palette.stroke, style = Stroke(1f))
         }
@@ -587,7 +597,9 @@ private val RegionLand = Color(0xFF33475A)
 private val SkylineColor = Color(0xFF4A5A6C)
 
 /** One raised region: its ground footprint, top, lit walls and height in pixels. */
-internal class RegionSolid(val code: String, val ground: Path, val top: Path, val walls: Array<Path>, val h: Double, val lift: Double)
+internal class RegionSolid(val code: String, val ground: Path, val top: Path, val walls: Array<Path>, val h: Double, val lift: Double) {
+    val bounds: Rect = top.getBounds()
+}
 
 /** A building standing on the map: ground offsets from the view centre, floor and top in pixels. */
 internal class Building(
@@ -770,7 +782,9 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
             val region = map.regions.firstOrNull { it.code == code } ?: return@let null
             p.polygons(region.rings, regionLift(code, ground))
         }
-        return OverlayGeometry(p, tracks, roadLines, spots, top, scale, if (raised) plinth else 0.0).also {
+        val airports = if (graphics.traffic > 0 && p.t > 0.5) map.cities.sortedByDescending { it.first.population }.take(14)
+            .mapNotNull { (_, point) -> p.ground(point.lon[0], point.lat[0]).takeIf { it.isSpecified } } else emptyList()
+        return OverlayGeometry(p, tracks, roadLines, spots, top, scale, if (raised) plinth else 0.0, airports).also {
             overlayValue = it
             overlayKey = key
         }
