@@ -26,6 +26,23 @@ heading.
 
 ### Added
 
+- Deeper company financials: every company page and the Stats page have tabs for an overview,
+  the income statement, the balance sheet, the cash flow statement, divisions and ratios. Pick
+  weekly, quarterly or yearly periods and compare the last several side by side. Ratios cover
+  gross and net margin, return on equity and on assets, debt to equity, the current ratio,
+  interest cover and revenue growth.
+- A cash flow statement for every period: opening cash, operating, investing, financing and tax,
+  and closing cash, worked out from the company's own books so it always adds up.
+- Division results by quarter: revenue, costs, profit, plants and market share for each division.
+- New charts across the app (company pages, Stats, share and goods details, the economy panel): line,
+  bar or area, date ranges from four weeks to everything kept, weekly, quarterly or yearly points,
+  several series at once with a legend (your revenue against rivals, a share against the corridor
+  index, a good against its reference price), the value under the pointer or finger, and dates
+  such as 2001 Q3 along the bottom.
+- Longer history: ten years of weekly share and goods prices, two years of weekly statements and
+  quarterly statements for the whole career. Saves from earlier versions still load and start
+  their longer history from the year of prices they already hold.
+
 - Seven more map modes: your share, competition, demand, workforce skill, infrastructure (roads,
   power and broadband), land price and population, each with a legend showing what its colours
   mean.
