@@ -122,7 +122,9 @@ final class SnapshotTests: XCTestCase {
     }
 
     /// The still map past the zoom where models stand, north up and turned, so the voxel
-    /// buildings, the city blocks and the bearing are reviewed. Labels must stay on top.
+    /// buildings, the rivals' muted ones, the city blocks, the vehicles, the countryside on the
+    /// satellite Earth and the bearing are reviewed; once more in midwinter and once with the
+    /// Earth off. Labels must stay on top.
     private func renderCloseMaps(_ store: AppStore, _ size: CGSize) {
         let map = WorldMap.forRegions(store.boards.map(\.code))
         let grouped = Dictionary(grouping: store.mapDivisions) { $0.region + "/" + $0.industry }
@@ -131,21 +133,43 @@ final class SnapshotTests: XCTestCase {
             return DivisionMarker(region: first.region, sector: first.industry, plants: Int(items.reduce(UInt32(0)) { $0 + $1.blocks }))
         }
         let home = divisions.first.flatMap { map.anchor(of: $0.region) }
-        let look = MapLook(detail: 2, tilt: GraphicsSettings.pitch(forTilt: 1), extrude: true, lighting: 2, dayNight: false,
+        var look = MapLook(detail: 2, tilt: GraphicsSettings.pitch(forTilt: 1), extrude: true, lighting: 2, dayNight: false,
                            cityLights: true, clouds: 0, traffic: 1, buildings: 2, frameRate: 60, animations: false,
-                           showFps: false, ultra: false)
+                           showFps: false, ultra: false, earth: true)
         var framed = MapCamera.scenario(in: size, map: map).zoomed(by: 2)
         if let home {
             framed.lon = home.lon * 180 / .pi
             framed.lat = home.lat * 180 / .pi
         }
-        for (name, camera) in [("map-close-pad", framed), ("map-turned-pad", framed.rotated(by: 35))] {
+        Countryside.prepare(map)
+        let now = Earth.week(of: store.overview?.weekLabel)
+        let shots: [(String, MapCamera, Int, Bool)] = [
+            ("map-close-pad", framed, now, true), ("map-turned-pad", framed.rotated(by: 35), now, true),
+            ("map-vehicles-pad", framed.zoomed(by: 1.6), now, true), ("map-winter-pad", framed, 2, true),
+            ("map-close-plain-pad", framed, now, false),
+        ]
+        for (name, camera, week, earth) in shots {
+            look.earth = earth
             let scene = MapScene(map: map, camera: camera, look: look, tint: MapLayer.presence.tintRGB, shading: [:], heights: [:],
-                                 selected: nil, divisions: divisions, sun: nil, displayScale: UIScreen.main.scale)
+                                 selected: nil, divisions: divisions, lanes: store.lanes, sun: nil, plants: store.mapPlants,
+                                 economyPhase: store.economy?.phase, week: week, displayScale: UIScreen.main.scale)
             let geometry = MapGeometry(map: map, camera: camera, size: size, tilt: look.tilt, detail: look.detail)
             XCTAssertTrue(geometry.closeUp, "\(name) is close enough for models")
-            render(name, size, compact: false, Canvas { context, _ in
-                scene.drawStatic(in: &context, geometry: geometry)
+            let ground = EarthPainter().snapshot(EarthView(camera: camera, size: size, tilt: look.tilt, week: week,
+                                                           bounds: map.playBounds, scenario: map.scenarioId),
+                                                 scale: UIScreen.main.scale)
+            if earth { XCTAssertNotNil(ground, "\(name) has the satellite Earth") }
+            render(name, size, compact: false, ZStack {
+                Canvas { context, _ in scene.drawStatic(in: &context, geometry: geometry, phase: .sky) }
+                if earth, let ground {
+                    Image(decorative: ground, scale: UIScreen.main.scale).resizable().frame(width: size.width, height: size.height)
+                }
+                Canvas { context, _ in
+                    scene.drawStatic(in: &context, geometry: geometry, phase: .ground)
+                    scene.drawOverlay(in: &context, geometry: geometry, seconds: 20, part: .traffic)
+                    scene.drawStatic(in: &context, geometry: geometry, phase: .structures)
+                    scene.drawOverlay(in: &context, geometry: geometry, seconds: 20, part: .effects)
+                }
             }.background(MapScene.spaceColor.color()))
         }
     }

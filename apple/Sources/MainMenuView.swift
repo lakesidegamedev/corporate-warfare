@@ -128,7 +128,7 @@ struct GlobeBackdrop: View {
         let at = origin(size)
         scene.translateBy(x: at.x, y: at.y)
         let p = geometry.of(map: map, camera: Self.camera(seconds), size: size, tilt: 0, detail: 0).projection
-        drawScenarios(&scene, projection: p, pulse: 0.85 + 0.15 * sin(seconds * 2), clearOf: menuEdge - at.x)
+        drawScenarios(&scene, projection: p, clearOf: menuEdge - at.x)
         if look.lighting > 0 {
             drawArcs(&scene, projection: p, seconds: seconds)
             drawSatellites(&scene, projection: p, seconds: seconds)
@@ -176,9 +176,9 @@ struct GlobeBackdrop: View {
         }
     }
 
-    /// Each scenario's area glows and is named as it turns to face the viewer, with a slow pulse.
+    /// Each scenario's area glows and is named as it turns to face the viewer.
     /// Names fade out as they reach `edge`, the menu column's edge in the globe's coordinates.
-    private func drawScenarios(_ context: inout GraphicsContext, projection p: MapProjection, pulse: Double, clearOf edge: CGFloat) {
+    private func drawScenarios(_ context: inout GraphicsContext, projection p: MapProjection, clearOf edge: CGFloat) {
         for area in map.scenarioAreas {
             var facing = -1.0
             for ring in area.rings {
@@ -186,7 +186,7 @@ struct GlobeBackdrop: View {
                 facing = max(facing, c.0 * p.view.0 + c.1 * p.view.1 + c.2 * p.view.2)
             }
             let x = min(max((facing - 0.35) / 0.5, 0), 1)
-            let glow = x * x * (3 - 2 * x) * pulse
+            let glow = x * x * (3 - 2 * x)
             if glow <= 0 { continue }
             let tint = scenarioTint(area.id)
             let path = p.path(area.rings)

@@ -16,16 +16,16 @@ enum GraphicsPreset: String, CaseIterable, Identifiable {
         switch self {
         case .low:
             return GraphicsSettings(mapDetail: 0, tilt: 0, extrude: false, lighting: 0, dayNight: false, cityLights: false,
-                                    clouds: 0, traffic: 0, buildings: 0, frameRate: 30)
+                                    earth: false, clouds: 0, traffic: 0, buildings: 0, frameRate: 30)
         case .medium:
             return GraphicsSettings(mapDetail: 1, tilt: 1, extrude: true, lighting: 1, dayNight: false, cityLights: true,
-                                    clouds: 1, traffic: 1, buildings: 1, frameRate: 30)
+                                    earth: true, clouds: 1, traffic: 1, buildings: 1, frameRate: 30)
         case .high:
             return GraphicsSettings(mapDetail: 2, tilt: 1, extrude: true, lighting: 2, dayNight: true, cityLights: true,
-                                    clouds: 2, traffic: 1, buildings: 2, frameRate: 60)
+                                    earth: true, clouds: 2, traffic: 1, buildings: 2, frameRate: 60)
         case .ultra:
             return GraphicsSettings(mapDetail: 2, tilt: 2, extrude: true, lighting: 2, dayNight: true, cityLights: true,
-                                    clouds: 3, traffic: 2, buildings: 2, frameRate: 0)
+                                    earth: true, clouds: 3, traffic: 2, buildings: 2, frameRate: 0)
         case .custom:
             return nil
         }
@@ -40,6 +40,8 @@ struct GraphicsSettings: Equatable {
     var lighting: Int
     var dayNight: Bool
     var cityLights: Bool
+    /// The real Earth from NASA's Blue Marble under the map, with the seasons; off paints it flat.
+    var earth: Bool
     /// Clouds from the satellite cloud map: 0 off, 1 thin, 2 light, 3 heavy.
     var clouds: Int
     var traffic: Int
@@ -68,6 +70,7 @@ struct GraphicsSettings: Equatable {
         defaults.set(lighting, forKey: GraphicsKeys.lighting)
         defaults.set(dayNight, forKey: GraphicsKeys.dayNight)
         defaults.set(cityLights, forKey: GraphicsKeys.cityLights)
+        defaults.set(earth, forKey: GraphicsKeys.earth)
         defaults.set(clouds, forKey: GraphicsKeys.clouds)
         defaults.set(traffic, forKey: GraphicsKeys.traffic)
         defaults.set(buildings, forKey: GraphicsKeys.buildings)
@@ -85,6 +88,10 @@ struct GraphicsSettings: Equatable {
         }
         // Clouds gained a thin level, so the top is now 3; anything stored above that is heavy.
         if defaults.integer(forKey: GraphicsKeys.clouds) > 3 { defaults.set(3, forKey: GraphicsKeys.clouds) }
+        // The satellite Earth came after presets were stored: on for every preset but Low.
+        if defaults.object(forKey: GraphicsKeys.earth) == nil, let stored = defaults.string(forKey: GraphicsKeys.preset) {
+            defaults.set(GraphicsPreset(rawValue: stored)?.values?.earth ?? true, forKey: GraphicsKeys.earth)
+        }
         guard defaults.string(forKey: GraphicsKeys.preset) == nil, var high = GraphicsPreset.high.values else { return }
         var preset = GraphicsPreset.high
         if defaults.object(forKey: GraphicsKeys.mapDetail) != nil {
