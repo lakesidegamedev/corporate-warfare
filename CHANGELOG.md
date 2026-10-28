@@ -34,6 +34,11 @@ heading.
   up as the camera moves.
 - Cars and freight run under buildings, and buildings and labels stand above the clouds, instead
   of traffic being drawn over everything.
+- On iPhone and iPad the pause banner no longer jumps or resizes, answering a decision card no
+  longer tears its sheet down mid-close, and Continue resumes time at the speed it was running.
+- On iPhone and iPad the app no longer stalls at the top speed: the game runs off the interface
+  thread and the screen refreshes at most a few times a second at high speed. Every tab now has
+  the pause and speed buttons, not only the map.
 
 ### Added
 
