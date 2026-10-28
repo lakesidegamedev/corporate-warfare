@@ -320,6 +320,7 @@ fun WorldMapView(
                     map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shaded, selected, store.mapDivisions, measurer,
                     lanes = store.lanes, freightLayer = layer == MapLayer.Freight, pickedLane = pickedLane,
                     geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Structures,
+                    plants = store.mapPlants,
                 )
             }
             Canvas(Modifier.fillMaxSize()) {
@@ -463,6 +464,7 @@ internal fun DrawScope.drawWorldMap(
     sun: Sun? = null,
     heights: Map<String, Double> = shading,
     phase: MapPhase = MapPhase.All,
+    plants: List<uniffi.cw_ffi.MapPlantDto> = emptyList(),
 ) {
     MapProfiler.start()
     val detailLevel = graphics.detail
@@ -602,6 +604,11 @@ internal fun DrawScope.drawWorldMap(
             }
         }
         if (graphics.buildings > 0 && g.closeUp && t > 0.5) {
+            // Rivals' plants first, a size smaller and muted, so the player's own stand over them.
+            val rivalScale = (Voxels.scale(g.scale, density) - 1).coerceAtLeast(1)
+            g.rivalBuildings(plants, ground).forEach { b ->
+                with(Voxels) { drawBuilding(b.sector, b.plants, p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor), rivalScale, Voxels.Muted) }
+            }
             val voxelScale = Voxels.scale(g.scale, density)
             g.buildings(divisions, ground).forEach { b ->
                 // Each division is a voxel building for its industry; a plain box if the sprite is missing.
@@ -869,6 +876,37 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
             skylineKey = heights
         }
         return skylineValue
+    }
+
+    private var rivalsKey: Pair<List<uniffi.cw_ffi.MapPlantDto>, Map<String, Double>>? = null
+    private var rivalsValue: List<Building> = emptyList()
+
+    /**
+     * Rivals' plants as buildings: each rival's plants in an industry and region together, the four
+     * biggest per region, set in a row behind the region's hub (north of it, where the player's own
+     * stand to the south), far ones first.
+     */
+    fun rivalBuildings(plants: List<uniffi.cw_ffi.MapPlantDto>, heights: Map<String, Double>): List<Building> {
+        if (rivalsKey?.first !== plants || rivalsKey?.second !== heights) {
+            rivalsValue = plants.filter { !it.player }
+                .groupBy { Triple(it.region, it.industry, it.firm) }
+                .map { (key, items) -> key to items.sumOf { it.blocks.toInt() } }
+                .groupBy { it.first.first }
+                .flatMap { (region, firms) ->
+                    val anchor = map.anchor(region) ?: return@flatMap emptyList()
+                    val ground = p.ground(anchor.lon[0], anchor.lat[0])
+                    if (!ground.isSpecified) return@flatMap emptyList()
+                    firms.sortedByDescending { it.second }.take(4).mapIndexed { i, (key, blocks) ->
+                        val gx = ground.x + (i - 1.5f) * 26f * scale
+                        val gy = ground.y - (14f + (i % 2) * 10f) * scale
+                        val floor = regionLift(region, heights)
+                        Building(key.second, blocks, gx, gy, 6f * scale, floor, floor + 10 * scale, anchor.lon[0], anchor.lat[0], "$region/${key.second}/${key.third}")
+                    }
+                }
+                .sortedBy { it.gy }
+            rivalsKey = plants to heights
+        }
+        return rivalsValue
     }
 
     private var blocksKey: Map<String, Double>? = null

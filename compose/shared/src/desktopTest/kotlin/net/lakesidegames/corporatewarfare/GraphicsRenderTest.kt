@@ -50,6 +50,16 @@ class GraphicsRenderTest {
         lane("OH-NE", "NY-WES", "road", 25), lane("IN-CEN", "IL-CHI", "rail", 35), lane("PA-PHL", "NY-NYC", "road", 50),
     )
 
+    private fun plant(firm: ULong, region: String, industry: String, blocks: UInt) = uniffi.cw_ffi.MapPlantDto(
+        handle = firm * 100uL + blocks, firm = firm, firmName = "Rival $firm", player = false, region = region, industry = industry,
+        strategy = "standard", blocks = blocks, status = "running", utilisationBps = 8000,
+    )
+
+    private val rivals = listOf(
+        plant(7uL, "MI-DET", "manufacturing", 8u), plant(8uL, "MI-DET", "logistics", 3u), plant(9uL, "OH-CEN", "retail", 5u),
+        plant(7uL, "OH-CEN", "chemical_industries", 4u), plant(10uL, "PA-WES", "extraction", 6u), plant(11uL, "OH-NE", "healthcare", 3u),
+    )
+
     private val shading = mapOf("OH-CEN" to 1.0, "MI-DET" to 0.8, "PA-WES" to 0.3, "IL-CHI" to 0.5)
 
     @Test
@@ -77,6 +87,7 @@ class GraphicsRenderTest {
                         fun still(phase: MapPhase) = drawWorldMap(
                             map, camera, Palette.gold, shading, "MI-DET", divisions, measurer, lanes = lanes, freightLayer = false,
                             geometry = geometry, graphics = graphics, sun = if (graphics.dayNight) sun else null, phase = phase,
+                            plants = rivals,
                         )
                         still(MapPhase.Ground)
                         val g = geometry.of(map, camera, size, graphics.detail, graphics.pitch)

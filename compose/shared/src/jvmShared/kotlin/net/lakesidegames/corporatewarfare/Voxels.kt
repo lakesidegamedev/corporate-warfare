@@ -1,6 +1,8 @@
 package net.lakesidegames.corporatewarfare
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.IntOffset
@@ -47,14 +49,22 @@ internal object Voxels {
      * Draws a building with its ground anchor at [ground]; returns the top of the sprite on
      * screen, or null when there is no sprite for it (the caller falls back to a plain box).
      */
-    fun DrawScope.drawBuilding(sector: String, plants: Int, ground: Offset, scale: Int): Float? {
+    /** Rivals' buildings: colour drained and a little darker, so the player's own stand out. */
+    val Muted: ColorFilter = ColorFilter.colorMatrix(
+        ColorMatrix().apply {
+            setToSaturation(0.2f)
+            timesAssign(ColorMatrix(floatArrayOf(0.78f, 0f, 0f, 0f, 0f, 0f, 0.8f, 0f, 0f, 0f, 0f, 0f, 0.86f, 0f, 0f, 0f, 0f, 0f, 1f, 0f)))
+        },
+    )
+
+    fun DrawScope.drawBuilding(sector: String, plants: Int, ground: Offset, scale: Int, filter: ColorFilter? = null): Float? {
         val f = frame(sector, size(plants), scale) ?: return null
         val image = Images.load("voxels-$scale") ?: return null
         val left = (ground.x - f.ax).roundToInt()
         val top = (ground.y - f.ay).roundToInt()
         drawImage(
             image, srcOffset = IntOffset(f.x, f.y), srcSize = IntSize(f.w, f.h),
-            dstOffset = IntOffset(left, top), dstSize = IntSize(f.w, f.h), filterQuality = FilterQuality.None,
+            dstOffset = IntOffset(left, top), dstSize = IntSize(f.w, f.h), filterQuality = FilterQuality.None, colorFilter = filter,
         )
         return top.toFloat()
     }

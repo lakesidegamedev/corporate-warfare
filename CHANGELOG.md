@@ -20,6 +20,7 @@ heading.
   three sizes that grow with the division's plants. Cities on the map are voxel city blocks too,
   a town, a city or a metropolis by population, a step smaller so your buildings stand out.
   At the scenario's framing they are small badges instead, and further out nothing marks them.
+  Zoomed in, rivals' plants stand there too, smaller and greyed, so you can see who you face where.
   `tools/voxel_sprites.py` bakes them.
 
 - Turn the map: twist with two fingers, or drag with the right mouse button on desktop. Buildings
