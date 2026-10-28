@@ -46,7 +46,11 @@ struct MapHomeView: View {
             }
             VStack(spacing: 10) {
                 if !embedded { CompanyHUD() }
+                // Inside the shell the row starts right of the outliner and stops short of the map
+                // controls, one scrolling line however many modes there are.
                 LayerChips(layer: $layer)
+                    .padding(.leading, embedded ? 300 : 0)
+                    .padding(.trailing, embedded ? 52 : 0)
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -114,12 +118,42 @@ struct MapHomeView: View {
             let low = values.min() ?? 0
             let high = values.max() ?? 1
             return Dictionary(uniqueKeysWithValues: store.boards.map { ($0.code, (Double($0.wageIndexBps) - low) / max(high - low, 1)) })
+        case .share:
+            var out: [String: Double] = [:]
+            for board in store.boards {
+                let own = board.sectors.filter { $0.ownBlocks > 0 }
+                let value = Double(own.map(\.ownShareBps).max() ?? 0) / 10_000
+                if value > 0 { out[board.code] = value }
+            }
+            return out
+        case .competition:
+            // Rivals' strength: the biggest share any rival leads with in the region's industries.
+            let firm = store.selectedFirm
+            return spread { board in
+                Double(board.sectors.filter { $0.leaderFirm != 0 && $0.leaderFirm != firm }
+                    .reduce(Int64(0)) { $0 + Int64($1.leaderShareBps) * Int64($1.operators) })
+            }
+        case .demand:
+            return spread { Double($0.demandIndexBps) }
         case .skill:
-            return Dictionary(uniqueKeysWithValues: store.boards.map { ($0.code, Double($0.skillBps) / 10_000) })
+            return spread { Double($0.skillBps) }
+        case .infrastructure:
+            return spread { Double(Int64($0.roadBps) + Int64($0.powerGridBps) + Int64($0.broadbandBps)) }
+        case .land:
+            return spread { Double($0.landIndexBps) }
+        case .population:
+            return spread { Double($0.population2000) }
         case .freight:
             // Lanes are drawn over the land instead of shading it.
             return [:]
         }
+    }
+
+    /// Each region's value scaled so the lowest is 0 and the highest 1.
+    private func spread(_ value: (RegionBoardDto) -> Double) -> [String: Double] {
+        let values = store.boards.map { ($0.code, value($0)) }
+        guard let low = values.map { $0.1 }.min(), let high = values.map { $0.1 }.max() else { return [:] }
+        return Dictionary(values, uniquingKeysWith: { a, _ in a }).mapValues { high > low ? ($0 - low) / (high - low) : 0 }
     }
 }
 

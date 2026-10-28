@@ -245,6 +245,11 @@ enum GraphicsKeys {
     static let traffic = "graphics.traffic"
     static let buildings = "graphics.buildings"
     static let frameRate = "graphics.frameRate"
+    static let countryside = "graphics.countryside"
+    static let rivals = "graphics.rivals"
+    static let interstates = "graphics.interstates"
+    static let seasons = "graphics.seasons"
+    static let labels = "graphics.labels"
     static let animations = "graphics.animations"
     static let showFps = "graphics.showFps"
 }
@@ -295,6 +300,11 @@ struct GraphicsSettingsPanel: View {
     @AppStorage(GraphicsKeys.traffic) private var traffic = 1
     @AppStorage(GraphicsKeys.buildings) private var buildings = 2
     @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
+    @AppStorage(GraphicsKeys.countryside) private var countryside = true
+    @AppStorage(GraphicsKeys.rivals) private var rivals = true
+    @AppStorage(GraphicsKeys.interstates) private var interstates = true
+    @AppStorage(GraphicsKeys.seasons) private var seasons = true
+    @AppStorage(GraphicsKeys.labels) private var labels = 2
     @AppStorage(GraphicsKeys.animations) private var animations = true
     @AppStorage(GraphicsKeys.showFps) private var showFps = false
 
@@ -331,6 +341,14 @@ struct GraphicsSettingsPanel: View {
                        "Freight moves along the lanes and cars along the highways.")
                 choice("Buildings", custom($buildings), ["Flat", "Your divisions", "Divisions and cities"],
                        "Shows your divisions as buildings, and cities as blocks, when zoomed in.")
+                choice("Countryside", onOff(custom($countryside)), ["Off", "On"],
+                       "Trees, fields, barns and houses on the ground when zoomed in.")
+                choice("Rivals' buildings", onOff(custom($rivals)), ["Off", "On"],
+                       "Rivals' plants stand on the map, greyed, when zoomed in.")
+                choice("Interstates", onOff(custom($interstates)), ["Off", "On"], "The highways drawn over the map.")
+                choice("Seasons", onOff(custom($seasons)), ["Off", "On"],
+                       "Snow in winter and autumn colours, following the game's calendar.")
+                choice("Labels", custom($labels), ["Off", "Cities", "All"], "Names on the map.")
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Frame rate").font(.callout).foregroundStyle(Theme.primaryText)
                     PixelChoices(options: [(30, "30"), (60, "60"), (0, "Unlimited")], selection: custom($frameRate), label: "Frame rate")
@@ -347,7 +365,8 @@ struct GraphicsSettingsPanel: View {
     private var current: GraphicsSettings {
         GraphicsSettings(mapDetail: detail, tilt: tilt, extrude: extrude, lighting: lighting, dayNight: dayNight,
                          cityLights: cityLights, earth: earth, clouds: clouds, traffic: traffic, buildings: buildings,
-                         frameRate: frameRate)
+                         frameRate: frameRate, countryside: countryside, rivals: rivals, interstates: interstates,
+                         seasons: seasons, labels: labels)
     }
 
     /// An on and off option as a two-way choice.
@@ -372,6 +391,11 @@ struct GraphicsSettingsPanel: View {
                 traffic = values.traffic
                 buildings = values.buildings
                 frameRate = values.frameRate
+                countryside = values.countryside
+                rivals = values.rivals
+                interstates = values.interstates
+                seasons = values.seasons
+                labels = values.labels
                 preset = chosen.rawValue
             }
         )
