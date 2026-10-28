@@ -1005,3 +1005,49 @@ fn a_reserve_quote_is_the_fee_the_contract_then_charges() {
     );
     assert!(lg::reserve_quote(&w, &dataset, shipper, empty, 50, 13).is_none());
 }
+
+#[test]
+fn a_carrier_trims_toward_85_percent_only_while_its_lanes_keep_their_freight() {
+    // One carrier pinned to one truck lane, run at 80 percent. The plan reads last week's fill by
+    // lot-km and the lane's outside overflow; worked by hand from the rule in MARKETS.md:
+    // under 85 percent full cuts 15 points, from 90 raises 15, and an overflow of 40 percent or
+    // more of the lane's lots blocks the cut (but not the raise).
+    let (mut w, dataset) = world(15);
+    let (owner, _) = two_firms(&w);
+    let home = region(&dataset, "OH-CEN");
+    let near = region(&dataset, "OH-SE");
+    let plant = add_plant(&mut w, &dataset, owner, home, "carrier");
+    lg::set_serves(&mut w, &dataset, plant, vec![near]).unwrap();
+    lg::begin_week(&mut w, &dataset);
+    let key = LaneKey::new(home, near, TRUCK);
+    let index = w
+        .logistics
+        .carriers
+        .iter()
+        .position(|c| c.facility == plant)
+        .unwrap();
+    let full_km = w.logistics.carriers[index].cap as i64 * lg::REF_KM;
+    let target = |w: &mut World, fill_pct: i64, used: i32, outside: i32| {
+        w.facilities.get_mut(plant).unwrap().target_bps = 8_000;
+        w.logistics.carriers[index].used_lot_km = full_km * fill_pct / 100;
+        let lane = w.logistics.lanes.get_mut(&key).unwrap();
+        lane.allocs[0].used = used;
+        lane.outside = outside;
+        cw_sim::economy::pricing::plant_targets(w, &dataset, owner)
+            .into_iter()
+            .find(|(h, _)| *h == plant)
+            .unwrap()
+            .1
+    };
+    // 80 percent full, nothing overflowed: under 85, so it cuts. The old 60 percent band held.
+    assert_eq!(target(&mut w, 80, 100, 0), 6_500);
+    // 88 percent full: inside the band, holds.
+    assert_eq!(target(&mut w, 88, 100, 0), 8_000);
+    // 80 percent full but 50 of 100 lots went outside (50 percent): the freight is wanted, holds.
+    assert_eq!(target(&mut w, 80, 50, 50), 8_000);
+    // Exactly 40 percent outside (40 of 100) still holds; 39 of 100 does not.
+    assert_eq!(target(&mut w, 80, 60, 40), 8_000);
+    assert_eq!(target(&mut w, 80, 61, 39), 6_500);
+    // 95 percent full with heavy overflow raises.
+    assert_eq!(target(&mut w, 95, 50, 50), 9_500);
+}

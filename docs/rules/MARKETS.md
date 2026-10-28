@@ -196,7 +196,8 @@ good sold, floor 30 percent, so one product's glut never idles a firm's other pl
 plant with more than four weeks of unsold stock cuts, one under a week and a half raises; a
 service plant moves toward what the firm sold of it plus a tenth, between 10 percent and full, so
 it neither wastes a third of its output nor stays throttled below demand; a carrier cuts when its
-lanes ran under 60 percent full and raises from 90 percent; a plant whose good has not sold yet
+capacity ran under 85 percent full by lot-km, unless its own lanes sent 40 percent or more of their
+lots to outside carriers, and raises from 90 percent (see Carrier planning); a plant whose good has not sold yet
 holds. A plant run down to its floor keeps at least one worker of every tier its recipe uses.
 Rivals always plan this way; the player's companies do too until the player sets a price or target
 by hand, and either can be handed back to automatic. A hand-set target holds goods plants at that
@@ -477,8 +478,14 @@ nets a saving at last week's volume. A reservation quote is the fee `reserve_lan
 **Alerts** are sent only for lanes the player ships on: a lane full for four weeks, a carrier rate
 hike of a fifth over four weeks, a rival reserving the lane.
 
-**Carrier planning.** A carrier follows how full its lanes ran: under 40 percent of capacity cuts
-its run rate, over 85 percent raises it.
+**Carrier planning.** A carrier reads last week's fill by lot-km (lot-km moved over capacity times
+the 400 km reference haul) and the lanes it had capacity on. Under 85 percent full it cuts its run
+rate 15 points, from 90 percent it raises 15 points, and between them it holds. When its lanes sent
+40 percent or more of their lots (own, contract and outside) to outside carriers it does not cut,
+since that freight is wanted, but it still raises from 90 percent. Overflow alone does not raise:
+in a 16-seed, five-year trial that spread capacity onto lanes the overflow was not on, carrier fill
+fell from 69 to 49 percent and the outside share rose. With this rule fill was 74 percent against
+69 and the outside share 47 percent against 49 (final year, 16 seeds).
 
 **Rivals** set policies (own carriers first when they own any), build a carrier on the lane with
 the most outside overflow when they earn and have cash (a terminal first where the lane has none),

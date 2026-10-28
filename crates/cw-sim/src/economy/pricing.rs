@@ -151,8 +151,12 @@ const WANT_BPS_PER_HUNDREDTH_WEEK: i64 = 6;
 const PRICE_LAG_WEEKS: i64 = 6;
 /// No firm moves a price more than this share in a week, in basis points.
 const MAX_WEEKLY_MOVE_BPS: i64 = 200;
-/// A carrier running its lanes under this share full cuts its run rate, in basis points.
-pub const CARRIER_CUT_BPS: i32 = 6_000;
+/// A carrier running its lanes under this share full by lot-km cuts its run rate, in basis
+/// points, unless its lanes overflowed to outside carriers.
+pub const CARRIER_CUT_BPS: i32 = 8_500;
+/// A carrier whose lanes sent at least this share of their lots to outside carriers does not cut
+/// its run rate, in basis points.
+pub const CARRIER_OVERFLOW_BPS: i64 = 4_000;
 /// A carrier running its lanes at least this full raises its run rate, in basis points.
 pub const CARRIER_RAISE_BPS: i32 = 9_000;
 /// Weeks a price that has no sales signal takes to ease back toward reference.
@@ -471,12 +475,23 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
                 .get(handle)
                 .is_some_and(|p| dataset.recipes[p.recipe as usize].transport_mode.is_some());
             let (glut, tight) = if carrier {
-                // A carrier follows how full its lanes ran: under 60 percent cuts, from 90
-                // raises. Unused carrying capacity expires each week like any service, so a
-                // carrier no longer idles at half full.
-                match crate::economy::logistics::carrier_utilisation_bps(world, handle) {
-                    Some(use_bps) => (use_bps < CARRIER_CUT_BPS, use_bps >= CARRIER_RAISE_BPS),
-                    None => (false, false),
+                // A carrier trims toward 85 percent full by lot-km and raises from 90, but never
+                // trims while its own lanes turn much freight away to outside carriers: that
+                // capacity is wanted, only not where the plan put it. Unused carrying capacity
+                // expires each week like any service, so a carrier no longer idles at half full.
+                // Raising on overflow alone was tried and spread capacity onto lanes nobody used
+                // (fill fell to 49 percent and the outside share rose), so overflow only holds.
+                let used = crate::economy::logistics::carrier_utilisation_bps(world, handle);
+                let overflow = crate::economy::logistics::carrier_overflow(world, handle);
+                match (used, overflow) {
+                    (Some(use_bps), Some((outside, moved)))
+                        if outside as i64 * 10_000 >= moved as i64 * CARRIER_OVERFLOW_BPS
+                            && outside > 0 =>
+                    {
+                        (false, use_bps >= CARRIER_RAISE_BPS)
+                    }
+                    (Some(use_bps), _) => (use_bps < CARRIER_CUT_BPS, use_bps >= CARRIER_RAISE_BPS),
+                    (None, _) => (false, false),
                 }
             } else if dataset.products[product as usize].kind.is_service() {
                 // A service that goes unsold expires, so the plant is run toward what sold plus

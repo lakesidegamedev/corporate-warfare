@@ -23,8 +23,10 @@ heading.
 - Goods the corridor mostly imports, such as fuel and petrochemical feedstock, now sell at home for
   just under the import price, and rival companies are more willing to build plants that replace
   those imports. Building one yourself is now a clearer opportunity.
-- Freight carriers trim their running rate sooner when their lanes run under 60 percent full, so
-  less carrying capacity goes to waste.
+- Freight carriers trim their running rate when they run under 85 percent full, measured by how
+  far loads actually travel, but never while their own routes are turning much freight away to
+  outside carriers. Less carrying capacity goes to waste and slightly less freight has to go
+  outside.
 - Refineries and gas plants shift their output toward the products that sell. A refinery can move
   up to a quarter of a product's share of its run to the others, for example from gasoline that can
   only be exported toward fuel the corridor imports. Its total output never grows.
