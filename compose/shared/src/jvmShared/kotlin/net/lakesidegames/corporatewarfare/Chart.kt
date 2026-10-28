@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.max
-import kotlin.math.roundToInt
 
 /** How a chart draws its series. */
 enum class ChartKind(val title: String) { Line("Line"), Bar("Bar"), Area("Area") }
@@ -65,6 +64,9 @@ object GameDates {
         ChartPeriod.Quarterly -> "${year(week)} Q${quarter(week)}"
         ChartPeriod.Weekly -> "W%02d %d".format((max(week, 1) - 1) % 52 + 1, year(week))
     }
+
+    /** Whether the bucket holding [lastWeek], the latest closed week, still has weeks to come. */
+    fun partial(lastWeek: Int, period: ChartPeriod): Boolean = period != ChartPeriod.Weekly && max(lastWeek, 1) % period.weeks != 0
 
     /** Fold weekly closes into quarters or years, keeping each bucket's last close. */
     fun lastClose(points: List<ChartPoint>, period: ChartPeriod): List<ChartPoint> {
@@ -104,7 +106,8 @@ fun ChartChips(options: List<String>, selected: String, onPick: (String) -> Unit
  * solid fills mixed toward the panel colour rather than translucent, labels in the pixel font.
  *
  * [period] and [onPeriod] show the period chips; [periods] limits them. Points must be in week
- * order. [format] writes a value for the axis and the read-out.
+ * order. [format] writes a value for the axis and the read-out. [partialLast] marks the latest
+ * period as still open, labelled "to date" in the read-out and on the axis.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -121,6 +124,7 @@ fun Chart(
     onPeriod: ((ChartPeriod) -> Unit)? = null,
     height: Dp = 170.dp,
     format: (Long) -> String = { Format.compact(it) },
+    partialLast: Boolean = false,
 ) {
     var kind by remember(kinds) { mutableStateOf(initialKind) }
     var range by remember { mutableStateOf(initialRange) }
@@ -138,10 +142,11 @@ fun Chart(
             Text("No history in this range yet.", color = Palette.secondary, fontSize = 11.sp, modifier = Modifier.padding(vertical = 12.dp))
             return@Column
         }
-        // The read-out: the week nearest the pointer, else the latest.
-        val readWeek = pointer?.let { f -> weeks[(f * (weeks.size - 1)).roundToInt().coerceIn(0, weeks.size - 1)] } ?: weeks.last()
+        // The read-out: the period under the pointer, else the latest.
+        val readWeek = pointer?.let { f -> weeks[(f * weeks.size).toInt().coerceIn(0, weeks.size - 1)] } ?: weeks.last()
+        fun dated(week: Int, label: String) = if (partialLast && week == weeks.last()) "$label to date" else label
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(GameDates.label(readWeek, period), color = Palette.gold, fontSize = 10.sp, fontFamily = Pixel.font)
+            Text(dated(readWeek, GameDates.label(readWeek, period)), color = Palette.gold, fontSize = 10.sp, fontFamily = Pixel.font)
             shown.forEach { s ->
                 val v = s.points.lastOrNull { it.week <= readWeek }?.value
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -176,11 +181,15 @@ fun Chart(
             val first = weeks.first()
             val last = weeks.last()
             val slot = size.width / weeks.size
-            fun x(week: Int): Float = when {
-                kind == ChartKind.Bar -> snap(weeks.indexOf(week).coerceAtLeast(0) * slot)
-                last == first -> size.width / 2
-                else -> snap((week - first).toFloat() / (last - first) * (size.width - px))
+            // Every point holds its value across its own period, so the latest one is drawn across
+            // the last stretch of the plot rather than as a bare edge at the right.
+            val step = weeks.zipWithNext { a, b -> b - a }.minOrNull() ?: period.weeks
+            val stretch = (last + step - first).toFloat()
+            fun x(week: Int): Float = when (kind) {
+                ChartKind.Bar -> snap(weeks.indexOf(week).coerceAtLeast(0) * slot)
+                else -> snap((week - first) / stretch * size.width)
             }
+            fun centre(week: Int): Float = if (kind == ChartKind.Bar) x(week) + slot / 2 else x(week) + step / stretch * size.width / 2
             // Grid: zero, top and the middle, labelled at the left.
             listOf(top, (top + bottom) / 2, bottom).distinct().forEach { v ->
                 drawRect(if (v == 0L) Palette.stroke else lerp(Palette.panel, Palette.stroke, 0.5f), Offset(0f, y(v)), Size(size.width, px / 2))
@@ -199,36 +208,45 @@ fun Chart(
                         }
                     }
                 }
-                ChartKind.Line, ChartKind.Area -> shown.forEach { s ->
+                ChartKind.Line, ChartKind.Area -> {
                     // A stepped path: across at each value, then straight down or up to the next.
-                    val path = Path()
-                    s.points.forEachIndexed { i, p ->
-                        val px0 = x(p.week)
-                        if (i == 0) path.moveTo(px0, y(p.value)) else {
-                            path.lineTo(px0, y(s.points[i - 1].value)); path.lineTo(px0, y(p.value))
+                    val paths = shown.map { s ->
+                        val path = Path()
+                        s.points.forEachIndexed { i, p ->
+                            val px0 = x(p.week)
+                            if (i == 0) path.moveTo(px0, y(p.value)) else {
+                                path.lineTo(px0, y(s.points[i - 1].value)); path.lineTo(px0, y(p.value))
+                            }
                         }
+                        val endX = x(s.points.last().week + step).coerceAtMost(size.width - px)
+                        path.lineTo(endX, y(s.points.last().value))
+                        Triple(s, path, endX)
                     }
-                    val endX = if (s.points.size == 1) x(s.points.last().week) + slot else x(s.points.last().week)
-                    path.lineTo(endX, y(s.points.last().value))
-                    if (kind == ChartKind.Area) {
+                    // Fills first, the largest at the back, so no fill hides a smaller series; then
+                    // every line on top.
+                    if (kind == ChartKind.Area) paths.sortedByDescending { (s) -> s.points.sumOf { abs(it.value) } }.forEach { (s, path, endX) ->
                         val fill = Path().apply {
                             addPath(path)
                             lineTo(endX, zero); lineTo(x(s.points.first().week), zero); close()
                         }
                         drawPath(fill, lerp(Palette.panel, s.color, 0.35f))
                     }
-                    drawPath(path, s.color, style = Stroke(px))
+                    paths.forEach { (s, path) -> drawPath(path, s.color, style = Stroke(px)) }
                 }
             }
             // The pointer's week, as a hard vertical rule.
-            pointer?.let { drawRect(Palette.gold, Offset(snap(x(readWeek) + if (kind == ChartKind.Bar) slot / 2 else 0f), 0f), Size(px / 2, plotH)) }
+            pointer?.let { drawRect(Palette.gold, Offset(snap(centre(readWeek)), 0f), Size(px / 2, plotH)) }
             // Axis dates: up to five, spread evenly.
             val ticks = minOf(5, weeks.size)
             val used = mutableListOf<Float>()
+            val labels = mutableSetOf<String>()
             for (t in 0 until ticks) {
                 val week = weeks[if (ticks == 1) 0 else t * (weeks.size - 1) / (ticks - 1)]
-                val text = measurer.measure(GameDates.label(week, if (period == ChartPeriod.Weekly && last - first > 26) ChartPeriod.Quarterly else period), labelStyle)
-                val tx = (x(week) - text.size.width / 2f).coerceIn(0f, size.width - text.size.width)
+                val label = dated(week, GameDates.label(week, if (period == ChartPeriod.Weekly && last - first > 26) ChartPeriod.Quarterly else period))
+                // Weekly points labelled by quarter would repeat a quarter; each is written once.
+                if (!labels.add(label)) continue
+                val text = measurer.measure(label, labelStyle)
+                val tx = (centre(week) - text.size.width / 2f).coerceIn(0f, size.width - text.size.width)
                 if (used.any { abs(it - tx) < text.size.width + 4 }) continue
                 used += tx
                 drawText(text, topLeft = Offset(tx, size.height - text.size.height))
@@ -256,7 +274,7 @@ fun StockHistoryChart(store: GameStore, firm: ULong, height: Dp = 150.dp) {
             ChartSeries("Corridor index", Palette.secondary, GameDates.lastClose(rebase(index.filter { it.week >= share.first().week }), period)),
         ),
         title = "Price history (100 at start)", initialRange = ChartRange.Y1, period = period, periods = ChartPeriod.entries, onPeriod = { period = it },
-        height = height, format = { "%.1f".format(it / 100.0) },
+        height = height, format = { "%.1f".format(it / 100.0) }, partialLast = GameDates.partial(share.last().week, period),
     )
 }
 
@@ -276,6 +294,6 @@ fun GoodHistoryChart(store: GameStore, product: UInt, referenceCents: Long, heig
             ChartSeries("Reference", Palette.secondary, GameDates.lastClose(price.map { ChartPoint(it.week, referenceCents) }, period)),
         ),
         title = "Price per lot", initialRange = ChartRange.Y1, period = period, periods = ChartPeriod.entries, onPeriod = { period = it },
-        height = height, format = { Format.money(it) },
+        height = height, format = { Format.money(it) }, partialLast = GameDates.partial(price.last().week, period),
     )
 }
