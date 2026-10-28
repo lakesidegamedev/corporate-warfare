@@ -171,6 +171,16 @@ class Updater(private val platform: UpdatePlatform, private val scope: Coroutine
     companion object {
         const val FEED = "https://api.github.com/repos/lakesidegamedev/corporate-warfare/releases/latest"
         const val LIST = "https://api.github.com/repos/lakesidegamedev/corporate-warfare/releases?per_page=30"
+
+        /** The Play Store's installer package. */
+        const val PLAY_STORE = "com.android.vending"
+
+        /**
+         * Play policy: an app installed from Google Play updates through Play, never by sending the
+         * player to a download page. Every other distribution, and a null installer for platforms
+         * without one, keeps the self-updater.
+         */
+        fun selfUpdateAllowed(installerPackage: String?): Boolean = installerPackage != PLAY_STORE
         private val json = Json { ignoreUnknownKeys = true }
 
         /** True when [candidate] is later than [installed]: MAJOR.MINOR.PATCH, then a release beats

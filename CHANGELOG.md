@@ -11,6 +11,19 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- Google Play can take a release: the release workflow builds a signed Android App Bundle, verifies its signature, manifest and arm64 library, and attaches it to the release. The APK stays for direct downloads.
+- Notes for Review for the first App Store submission: the offline game, the anonymous market snapshot and its switch, and the absence of purchases.
+
+### Fixed
+
+- A build installed from Google Play no longer offers the GitHub self-updater, because Play requires updates to come through Play. The direct-download APK still updates itself.
+
+### Changed
+
+- The requirement ledger and release evidence now record every uploaded TestFlight build from 5 to 15 in `evidence/releases/testflight-builds-5-15.md`.
+
 ## [1.7.1] - 2026-10-28
 
 Fixes and depth from the first week of Lone Star: no instant raids on new players, no stuck pauses, plant crews and research that no longer bleed a new company, every market trading with smooth prices, company pages with logos and a face for every CEO, division detail, readable freight, raid buttons and visible rival personalities, a CFO who says why you are losing money, faster weeks, scenario dates, and every screen on iPhone, iPad and Android. Saves from 1.7.0 do not load in 1.7.1.

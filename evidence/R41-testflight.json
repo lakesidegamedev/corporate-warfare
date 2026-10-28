@@ -1,0 +1,16 @@
+{
+  "requirement": "R41",
+  "result": "pass",
+  "commit": "685b1ada8955f5e76f3652811b242d7712e9dc70",
+  "procedure": "Release workflow run 40615251714 archived v1.7.1, uploaded it with altool and polled App Store Connect until processing finished. processing.json returned state VALID, build 15, app_id 6826923645, internal_build_state READY_FOR_BETA_TESTING and external_build_state READY_FOR_BETA_SUBMISSION. The same read-back was done for builds 5 and 7 to 15 from each run's release-artifacts artifact and archived Info.plist; all were VALID.",
+  "artifacts": [
+    "evidence/releases/testflight-builds-5-15.md",
+    ".github/workflows/release.yml",
+    "apple/scripts/asc_status.py"
+  ],
+  "limitations": "Upload and processing only. This row stays pending because its declared dependencies are open: R40 (reproducible archive review) and R38 (independent playtests). Installation and the acceptance flight on a physical device remain R42, and no build has been submitted for App Store review.",
+  "build": "15",
+  "apple_status": "VALID",
+  "verified_at": "2026-10-28",
+  "verifier": "GitHub Actions macos-26 Release run 40615251714"
+}

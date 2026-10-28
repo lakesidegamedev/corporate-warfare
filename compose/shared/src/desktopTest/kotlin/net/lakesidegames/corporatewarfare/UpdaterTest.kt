@@ -19,4 +19,12 @@ class UpdaterTest {
         assertTrue(Updater.isNewer("1.6.0-preview.2", "1.5.0"))
         assertFalse(Updater.isNewer("1.6.0-preview.2", "1.6.0"))
     }
+
+    @Test
+    fun playInstallsNeverPointPlayersOffStore() {
+        assertFalse(Updater.selfUpdateAllowed(Updater.PLAY_STORE))
+        assertTrue(Updater.selfUpdateAllowed("com.android.vending.other"))
+        assertTrue(Updater.selfUpdateAllowed("com.google.android.packageinstaller"))
+        assertTrue(Updater.selfUpdateAllowed(null))
+    }
 }
