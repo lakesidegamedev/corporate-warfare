@@ -22,6 +22,10 @@ heading.
   At the scenario's framing they are small badges instead, and further out nothing marks them.
   `tools/voxel_sprites.py` bakes them.
 
+- Turn the map: twist with two fingers, or drag with the right mouse button on desktop. Buildings
+  and labels stay upright, and an N button turns it back to north. Dragging now reaches almost to
+  the poles.
+
 ### Fixed
 
 - Traffic, planes, clouds and the sun stop when the game is paused and run faster at higher

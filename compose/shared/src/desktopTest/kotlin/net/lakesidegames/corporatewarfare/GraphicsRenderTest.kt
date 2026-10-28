@@ -63,6 +63,7 @@ class GraphicsRenderTest {
             "unrolling" to scenario.copy(zoom = 3.5),
             "scenario" to scenario,
             "close" to scenario.zoomed(3.0),
+            "turned" to scenario.zoomed(2.0).rotated(35.0),
         )
         val sun = Sun.moving(40.0)
         for (preset in GraphicsPreset.entries) {
@@ -121,6 +122,23 @@ class GraphicsRenderTest {
         val top = assertNotNull(g.p.project(hub, solid.h))
         assertTrue(g.p.contains(region.rings, top, solid.h), "the hub on the tile's top is inside the raised region")
         assertEquals(31, g.raised(shading).size)
+    }
+
+    @Test
+    fun aTapOnATurnedMapSelectsTheRegionUnderIt() {
+        val map = assertNotNull(WorldMap.shared)
+        val size = Size(1200f, 800f)
+        for (bearing in listOf(0.0, 35.0, 120.0, 270.0)) {
+            val camera = MapCamera.scenario(size, map).zoomed(1.5).rotated(bearing)
+            val p = MapProjection(camera, size, 28 * kotlin.math.PI / 180)
+            val tap = assertNotNull(p.project(assertNotNull(map.anchor("OH-CEN"))))
+            assertEquals("OH-CEN", map.regions.firstOrNull { p.contains(it.rings, tap) }?.code, "a tap on Columbus at bearing $bearing")
+            // Turning and dragging: a drag to the right moves the centre west on screen whatever the bearing.
+            val moved = camera.panned(androidx.compose.ui.geometry.Offset(100f, 0f), size)
+            val before = p.project(GeoRing.point(camera.lon, camera.lat))!!
+            val after = MapProjection(moved, size, 28 * kotlin.math.PI / 180).project(GeoRing.point(camera.lon, camera.lat))!!
+            assertTrue(after.x - before.x > 50f, "the ground follows the finger at bearing $bearing")
+        }
     }
 
     @Test

@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextMeasurer
@@ -229,16 +230,27 @@ fun WorldMapView(
                 Modifier.fillMaxSize().graphicsLayer()
                     .onSizeChanged { viewSize = Size(it.width.toFloat(), it.height.toFloat()) }
                     .pointerInput(Unit) {
-                        detectTransformGestures { _, panChange, zoomChange, _ ->
+                        detectTransformGestures { _, panChange, zoomChange, rotationChange ->
                             flight?.cancel()
                             val now = current() ?: return@detectTransformGestures
-                            camera = now.zoomed(zoomChange.toDouble()).panned(panChange, viewSize, pitch)
+                            // A two-finger twist turns the map; drags go any way, almost to the poles.
+                            camera = now.zoomed(zoomChange.toDouble()).rotated(rotationChange.toDouble()).panned(panChange, viewSize, pitch)
                         }
                     }
                     .pointerInput(Unit) {
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent()
+                                // On desktop, dragging with the right button turns the map.
+                                if (event.type == PointerEventType.Move && event.buttons.isSecondaryPressed) {
+                                    val dx = event.changes.firstOrNull()?.let { it.position.x - it.previousPosition.x } ?: 0f
+                                    val now = current()
+                                    if (now != null && dx != 0f) {
+                                        flight?.cancel()
+                                        camera = now.rotated(dx * 0.4)
+                                    }
+                                    event.changes.forEach { it.consume() }
+                                }
                                 if (event.type == PointerEventType.Scroll) {
                                     val dy = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
                                     val now = current()
@@ -351,6 +363,13 @@ fun WorldMapView(
                         contentAlignment = Alignment.Center,
                     ) {
                         PixelIcon(if (graphics.clouds == 0) "cloud_off" else "cloud", size = 22.dp, tint = if (graphics.clouds == 0) null else Palette.primaryText.copy(alpha = 0.4f + 0.2f * graphics.clouds))
+                    }
+                }
+                // Turned away from north: one tap turns it back.
+                val bearing = current()?.bearing ?: 0.0
+                if (bearing > 0.5 && bearing < 359.5) {
+                    Box(Modifier.size(40.dp).clickable { current()?.let { fly(it.copy(bearing = 0.0)) } }, contentAlignment = Alignment.Center) {
+                        Text("N", color = Palette.gold, fontSize = 13.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                     }
                 }
                 if (graphics.tilt > 0) {
