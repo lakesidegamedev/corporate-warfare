@@ -1294,7 +1294,7 @@ struct MapScene {
                         let dy = ahead.y - at.y
                         let len = max(hypot(dx, dy), 1e-3)
                         if len > 0.01 && fade > 0.5 {
-                            let side = 2.4 * o.vehicleUnit * sign
+                            let side = CGFloat(2.4 * o.vehicleUnit) * sign
                             vehicles!.append(VehicleSpot(type: "car", mine: false,
                                                          ground: CGPoint(x: at.x - dy / len * side, y: at.y + dx / len * side),
                                                          dir: CGVector(dx: dx, dy: dy)))

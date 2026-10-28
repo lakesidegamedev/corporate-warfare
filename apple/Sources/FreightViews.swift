@@ -31,14 +31,20 @@ private func changeText(_ bps: Int32) -> String {
 struct FreightLegend: View {
     let lanes: [LaneDto]
 
-    private var carriers: [(firm: UInt64, name: String, mine: Bool)] {
+    private struct Carrier: Identifiable {
+        let id: UInt64
+        let name: String
+        let mine: Bool
+    }
+
+    private var carriers: [Carrier] {
         var lots: [UInt64: (name: String, mine: Bool, lots: Int)] = [:]
         for owner in FreightArcs.busiest(lanes).flatMap(\.owners) where owner.lots > 0 {
             let held = lots[owner.firm] ?? (owner.mine ? "You" : owner.name, owner.mine, 0)
             lots[owner.firm] = (held.name, held.mine, held.lots + Int(owner.lots))
         }
         return lots.sorted { $0.value.mine != $1.value.mine ? $0.value.mine : $0.value.lots > $1.value.lots }
-            .prefix(5).map { (firm: $0.key, name: $0.value.name, mine: $0.value.mine) }
+            .prefix(5).map { Carrier(id: $0.key, name: $0.value.name, mine: $0.value.mine) }
     }
 
     private func row(_ color: RGB, _ text: String) -> some View {
@@ -51,8 +57,8 @@ struct FreightLegend: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("FREIGHT").font(Pixel.font(10)).foregroundStyle(Theme.primaryText)
-            ForEach(carriers, id: \.firm) { carrier in
-                row(FreightArcs.companyColor(carrier.firm, mine: carrier.mine), carrier.name)
+            ForEach(carriers) { carrier in
+                row(FreightArcs.companyColor(carrier.id, mine: carrier.mine), carrier.name)
             }
             row(FreightArcs.outsideCarriers, "Outside carriers")
             Text("Wider: more freight. Dashed: by water.")
