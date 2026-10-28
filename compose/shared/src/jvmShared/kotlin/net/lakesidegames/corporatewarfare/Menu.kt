@@ -39,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -64,79 +66,6 @@ object Images {
     fun load(name: String): ImageBitmap? = cache.getOrPut(name) {
         val bytes = Images::class.java.getResourceAsStream("/$name.png")?.use { it.readBytes() } ?: return@getOrPut null
         runCatching { decode(bytes) }.getOrNull()
-    }
-}
-
-private fun scenarioTint(id: String): Color = when (id) {
-    "texas-1981" -> Color(0xFFE5605E)
-    "silicon-valley-1995" -> Color(0xFF42A5F5)
-    "ruhr-rhine-1991" -> Color(0xFF3FBF8A)
-    else -> Palette.gold
-}
-
-private val scenarioNames: Map<String, String> by lazy { runCatching { scenarios().associate { it.id to it.name } }.getOrDefault(emptyMap()) }
-
-/** A slowly turning globe behind the menu, centred on the first scenario's region. */
-@Composable
-fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
-    val map = WorldMap.shared ?: return
-    val measurer = rememberTextMeasurer()
-    val animate = LocalAppSettings.current?.animations != false
-    var lon by remember { mutableDoubleStateOf(-82.0) }
-    LaunchedEffect(animate) {
-        if (!animate) return@LaunchedEffect
-        var last = 0L
-        while (true) {
-            withFrameNanos { now ->
-                if (last != 0L) lon += (now - last) / 1e9 * 2.2
-                last = now
-            }
-        }
-    }
-    Canvas(modifier) {
-        // A fixed field of faint stars, then an atmosphere glow behind the globe.
-        val stars = java.util.Random(7)
-        repeat(160) {
-            val x = stars.nextFloat() * size.width
-            val y = stars.nextFloat() * size.height
-            val r = 0.6f + stars.nextFloat() * 1.4f
-            drawCircle(Color.White.copy(alpha = 0.08f + stars.nextFloat() * 0.35f), r, androidx.compose.ui.geometry.Offset(x, y))
-        }
-        val radius = 1.25f * 0.45f * minOf(size.width, size.height)
-        val centre = androidx.compose.ui.geometry.Offset(size.width * (0.5f + offsetX), size.height * 0.58f)
-        drawCircle(
-            Brush.radialGradient(
-                0.0f to Color(0x332E6FB0), 0.85f to Color(0x222E6FB0), 1f to Color.Transparent,
-                center = centre, radius = radius * 1.25f,
-            ),
-            radius * 1.25f,
-            centre,
-        )
-        translate(left = size.width * offsetX, top = size.height * 0.08f) {
-            val camera = MapCamera(((lon + 540) % 360) - 180, 28.0, 1.25)
-            drawWorldMap(map, camera, Palette.gold, emptyMap(), null, emptyList(), measurer, MapDetail.Low, space = false)
-            // Each scenario glows as it turns to face the viewer and fades as it rotates away.
-            val projection = MapProjection(camera, size)
-            for ((id, rings) in map.scenarioAreas) {
-                val facing = rings.maxOfOrNull { projection.facing(it) } ?: continue
-                val glow = ((facing - 0.35) / 0.5).coerceIn(0.0, 1.0).toFloat().let { it * it * (3 - 2 * it) }
-                if (glow <= 0f) continue
-                val tint = scenarioTint(id)
-                val path = projection.polygons(rings)
-                for (width in listOf(22f, 14f, 8f)) {
-                    drawPath(path, tint.copy(alpha = 0.10f * glow), style = Stroke(width))
-                }
-                drawPath(path, tint.copy(alpha = 0.55f * glow))
-                drawPath(path, Color.White.copy(alpha = 0.75f * glow), style = Stroke(1.6f))
-                val anchor = rings.maxByOrNull { it.size } ?: continue
-                val at = projection.project(GeoRing.point(Math.toDegrees(kotlin.math.atan2(anchor.cy, anchor.cx)), Math.toDegrees(kotlin.math.asin(anchor.cz.coerceIn(-1.0, 1.0)))))
-                if (at != null) {
-                    val name = scenarioNames[id] ?: continue
-                    val label = measurer.measure(name, androidx.compose.ui.text.TextStyle(color = Color.White.copy(alpha = glow), fontSize = 13.sp, fontWeight = FontWeight.Bold))
-                    drawText(label, topLeft = at + androidx.compose.ui.geometry.Offset(-label.size.width / 2f, -label.size.height - 6f))
-                }
-            }
-        }
     }
 }
 
@@ -177,7 +106,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
             verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            LogoArt(Modifier.width(if (wide) 300.dp else 240.dp))
+            ShiningLogo(Modifier.width(if (wide) 300.dp else 240.dp))
             FlyingBadges(spread = if (wide) 1f else 0.45f)
             Spacer(Modifier.height(10.dp))
             if (store.hasAutosave) {
@@ -205,12 +134,42 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
     }
 }
 
+/** The logo with a band of light sweeping across it every six seconds. */
+@Composable
+private fun ShiningLogo(modifier: Modifier) {
+    val graphics = LocalAppSettings.current?.graphics ?: GraphicsConfig.Default
+    val shine = graphics.animations && graphics.lighting > 0
+    val clock = rememberFrameSeconds(shine, graphics.frameRate)
+    LogoArt(
+        modifier.graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                if (!shine) return@drawWithContent
+                val phase = ((clock.value % 6.0) / 1.3).toFloat()
+                if (phase >= 1f) return@drawWithContent
+                val band = size.width * 0.3f
+                val x = -band + phase * (size.width + band * 2)
+                drawRect(
+                    Brush.linearGradient(
+                        0f to Color.Transparent, 0.5f to Color.White.copy(alpha = 0.55f), 1f to Color.Transparent,
+                        start = androidx.compose.ui.geometry.Offset(x, 0f), end = androidx.compose.ui.geometry.Offset(x + band, size.height),
+                    ),
+                    blendMode = androidx.compose.ui.graphics.BlendMode.SrcAtop,
+                )
+            },
+    )
+}
+
 @Composable
 private fun MenuButton(title: String, primary: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     Box(
-        Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.5f).clip(shape)
-            .background(if (primary) Palette.gold else Palette.panel.copy(alpha = 0.88f))
+        Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.5f)
+            .then(if (primary) Modifier.shadow(14.dp, shape, ambientColor = Palette.gold, spotColor = Palette.gold) else Modifier)
+            .clip(shape)
+            .background(if (primary) Palette.gold else Palette.panel.copy(alpha = 0.72f))
+            // Glass: a soft highlight across the top half.
+            .background(Brush.verticalGradient(0f to Color.White.copy(alpha = if (primary) 0.22f else 0.10f), 0.5f to Color.Transparent))
             .border(1.dp, if (primary) Palette.gold else Palette.stroke, shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 15.dp),

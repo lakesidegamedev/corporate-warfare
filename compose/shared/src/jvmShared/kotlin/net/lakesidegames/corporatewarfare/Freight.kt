@@ -82,6 +82,15 @@ internal fun DrawScope.drawLanes(map: WorldMap, projection: MapProjection, lanes
     }
 }
 
+/** The busiest lanes as faint lines under the moving freight, outside the Freight layer. */
+internal fun DrawScope.drawFaintLanes(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>) {
+    busiestLanes(lanes).take(60).forEach { lane ->
+        val a = map.anchor(lane.a)?.let { projection.project(it) } ?: return@forEach
+        val b = map.anchor(lane.b)?.let { projection.project(it) } ?: return@forEach
+        drawLine(laneColor(lane).copy(alpha = 0.10f), a, b, strokeWidth = 1f)
+    }
+}
+
 /** The lane drawn nearest a tap, within a finger's width, or null. */
 internal fun laneAt(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>, tap: Offset): LaneDto? {
     var best: LaneDto? = null
