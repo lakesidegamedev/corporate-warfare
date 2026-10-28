@@ -56,6 +56,11 @@ struct LaneTrack {
     let seed: Double
     /// The lane's length on the ground, so freight keeps its pace at any zoom.
     let km: Double
+    /// The player owns or ships on it, so its vehicles wear the gold livery.
+    var mine = false
+    /// Whether each of `LaneWater.samples` points from a to b is over water, so ships never sail
+    /// over land and trucks never drive on a lake.
+    var water: [Bool]?
 }
 
 /// Where a building's rooftop light and smoke sit on screen.
@@ -77,6 +82,10 @@ struct OverlayGeometry {
     let plinth: Double
     /// Untilted ground points of the biggest cities, where planes fly between.
     let airports: [CGPoint]
+    /// Zoomed in past the framing: freight, cars and planes are drawn as voxel vehicles.
+    var closeUp = false
+    /// The vehicles' pixel scale, a step under the player's buildings.
+    var vehicleScale = 1
 }
 
 /// The map projected for one camera, view size and tilt. Each path is built the first time it is
@@ -356,7 +365,8 @@ final class MapGeometry {
                 return p.ground(lon: geo.lon, lat: geo.lat)
             } : []
         let held = OverlayGeometry(lanes: tracks, roads: roadLines, buildings: spots, selectedTop: top, scale: scale,
-                                   plinth: raised ? plinth : 0, airports: airports)
+                                   plinth: raised ? plinth : 0, airports: airports, closeUp: closeUp && p.t > 0.5,
+                                   vehicleScale: max(Voxels.scale(scale, displayScale: displayScale) - 1, 1))
         overlayHeld = held
         overlayKey = key
         return held
@@ -373,7 +383,8 @@ final class MapGeometry {
                   let b = map.anchor(of: lane.b).flatMap({ p.ground(lon: $0.lon, lat: $0.lat) }) else { return nil }
             let length = max(Double(hypot(b.x - a.x, b.y - a.y)), 8)
             return LaneTrack(a: a, b: b, mode: lane.modeId, weight: Double(lane.capacityLots + lane.outsideLots) / top,
-                             length: length, seed: Double(stableHash(lane.a + lane.b) % 1000) / 1000, km: max(Double(lane.km), 20))
+                             length: length, seed: Double(stableHash(lane.a + lane.b) % 1000) / 1000, km: max(Double(lane.km), 20),
+                             mine: laneIsMine(lane), water: LaneWater.along(map, lane.a, lane.b))
         }
     }
 }
@@ -389,6 +400,64 @@ final class MapGeometryCache {
         let fresh = MapGeometry(map: map, camera: camera, size: size, tilt: tilt, detail: detail)
         held = fresh
         return fresh
+    }
+}
+
+/// Which points along a lane's straight line are over water, kept per pair of places since it
+/// never changes with the camera.
+enum LaneWater {
+    static let samples = 48
+    private static var held: [String: [Bool]] = [:]
+    private static let lock = NSLock()
+
+    /// Whether each of `samples` points between two places is in a lake or outside every country.
+    static func along(_ map: WorldMap, _ a: String, _ b: String) -> [Bool]? {
+        let key = "\(map.scenarioId ?? "")/\(a)>\(b)"
+        lock.lock()
+        defer { lock.unlock() }
+        if let hit = held[key] { return hit }
+        guard let from = map.anchor(of: a), let to = map.anchor(of: b) else { return nil }
+        let lon0 = from.lon, lat0 = from.lat, lon1 = to.lon, lat1 = to.lat
+        // Only the rings whose box the lane passes through.
+        let box = (min(lon0, lon1), max(lon0, lon1), min(lat0, lat1), max(lat0, lat1))
+        func overlaps(_ ring: GeoRing) -> Bool {
+            guard ring.points.count >= 3 else { return false }
+            var w = Double.infinity, e = -Double.infinity, s = Double.infinity, n = -Double.infinity
+            for point in ring.points {
+                w = min(w, point.lon)
+                e = max(e, point.lon)
+                s = min(s, point.lat)
+                n = max(n, point.lat)
+            }
+            return e >= box.0 && w <= box.1 && n >= box.2 && s <= box.3
+        }
+        let lakes = map.lakes.filter(overlaps)
+        let land = map.countries.flatMap(\.rings).filter(overlaps)
+        let out = (0..<samples).map { i -> Bool in
+            let t = Double(i) / Double(samples - 1)
+            let lon = lon0 + (lon1 - lon0) * t
+            let lat = lat0 + (lat1 - lat0) * t
+            return lakes.contains { inside($0, lon, lat) } || !land.contains { inside($0, lon, lat) }
+        }
+        held[key] = out
+        return out
+    }
+
+    /// Even-odd test of a place against one ring, on longitude and latitude.
+    private static func inside(_ ring: GeoRing, _ lon: Double, _ lat: Double) -> Bool {
+        let points = ring.points
+        guard points.count >= 3 else { return false }
+        var inside = false
+        var j = points.count - 1
+        for i in 0..<points.count {
+            let yi = points[i].lat
+            let yj = points[j].lat
+            if (yi > lat) != (yj > lat) && lon < (points[j].lon - points[i].lon) * (lat - yi) / (yj - yi) + points[i].lon {
+                inside.toggle()
+            }
+            j = i
+        }
+        return inside
     }
 }
 
@@ -1025,6 +1094,8 @@ struct MapScene {
         let zoom = camera.zoom
         let traffic = part != .effects
         let effects = part != .traffic
+        // Up close the freight, cars and planes are little voxel vehicles; further out, dots.
+        var vehicles: [VehicleSpot]? = o.closeUp && traffic ? [] : nil
         // Freight along the lanes, both ways, at kilometres a second of game time.
         if traffic && (look.traffic > 0 || freightLayer) {
             let per = look.traffic >= 2 ? 9.0 : 4.0
@@ -1032,6 +1103,11 @@ struct MapScene {
             var glow = context
             glow.blendMode = .plusLighter
             var drawn = 0
+            if vehicles != nil {
+                for lane in o.lanes where lane.mode == "rail" {
+                    MapScene.drawRailTrack(in: &context, lane: lane, projection: p, plinth: o.plinth, size: g.size)
+                }
+            }
             laneLoop: for lane in o.lanes {
                 let count = 1 + Int(lane.weight * per)
                 let color = MapScene.modeColors[lane.mode] ?? RGB(hex: 0xE8E8E8)
@@ -1042,6 +1118,13 @@ struct MapScene {
                         if drawn >= 600 { break laneLoop }
                         var f = fract(seconds * speed / lane.km + lane.seed + Double(k) / Double(count) + Double(dir) * 0.37)
                         if dir == 1 { f = 1 - f }
+                        if vehicles != nil {
+                            if vehicles!.count >= MapScene.maxFreightVehicles { break laneLoop }
+                            MapScene.laneVehicles(lane, f: f, forward: dir == 0, projection: p, plinth: o.plinth,
+                                                  scale: o.vehicleScale, displayScale: displayScale, into: &vehicles!)
+                            drawn += 1
+                            continue
+                        }
                         let gx = Double(lane.a.x) + Double(lane.b.x - lane.a.x) * f
                         let gy = Double(lane.a.y) + Double(lane.b.y - lane.a.y) * f
                         let at = p.lift(CGPoint(x: gx, y: gy), o.plinth + 2)
@@ -1057,7 +1140,7 @@ struct MapScene {
         // the ground, in degrees, so cars hold their pace and places while the camera moves; closer
         // in they simply look further apart and faster.
         if traffic && look.traffic > 0 && look.detail >= 2 && zoom > 9 && !o.roads.isEmpty {
-            let spacing = look.traffic >= 2 ? 0.035 : 0.07
+            let spacing = vehicles != nil ? (look.traffic >= 2 ? 0.12 : 0.24) : look.traffic >= 2 ? 0.035 : 0.07
             let pace = 0.012
             let step = 3 / max(p.r * .pi / 180, 1e-3)
             let detailFade = clamp((zoom - 7) / 5)
@@ -1068,7 +1151,7 @@ struct MapScene {
             roadLoop: for road in o.roads {
                 let n = max(Int(road.total / spacing), 1)
                 for k in 0..<n {
-                    if cars >= 400 { break roadLoop }
+                    if cars >= 400 || (vehicles?.count ?? 0) >= MapScene.maxVehicles { break roadLoop }
                     let forward = k % 2 == 0
                     var d = (Double(k) * spacing + (forward ? 1 : -1) * seconds * pace).truncatingRemainder(dividingBy: road.total)
                     if d < 0 { d += road.total }
@@ -1080,13 +1163,27 @@ struct MapScene {
                     let sign: CGFloat = forward ? 1 : -1
                     let sx = -dy / len * 1.6 * sign
                     let sy = dx / len * 1.6 * sign
-                    heads.addPath(disc(CGPoint(x: ahead.x + sx, y: ahead.y + sy), 1.2))
-                    tails.addPath(disc(CGPoint(x: at.x + sx, y: at.y + sy), 1.1))
+                    if vehicles != nil {
+                        if len > 0.01 && fade > 0.5 {
+                            vehicles!.append(VehicleSpot(type: "car", mine: false, at: CGPoint(x: at.x + sx * 1.5, y: at.y + sy * 1.5),
+                                                         dir: CGVector(dx: dx, dy: dy)))
+                        }
+                    } else {
+                        heads.addPath(disc(CGPoint(x: ahead.x + sx, y: ahead.y + sy), 1.2))
+                        tails.addPath(disc(CGPoint(x: at.x + sx, y: at.y + sy), 1.1))
+                    }
                     cars += 1
                 }
             }
             context.fill(heads, with: .color(RGB(hex: 0xFFF4D8).color(0.95 * fade)))
             context.fill(tails, with: .color(RGB(hex: 0xFF4A3A).color(0.85 * fade)))
+        }
+        if let vehicles {
+            // Nearer vehicles over farther ones.
+            for v in vehicles.sorted(by: { $0.at.y < $1.at.y }) {
+                Vehicles.draw(v.type, mine: v.mine, ground: v.at, dir: v.dir, scale: o.vehicleScale, displayScale: displayScale,
+                              in: &context)
+            }
         }
         if !effects { return }
         // Rooftop lights and smoke. No rings or pulses: they read as cheap.
@@ -1116,6 +1213,10 @@ struct MapScene {
                 let a = o.airports[hash % n]
                 let b = o.airports[(hash % n + 1 + (hash / n) % (n - 1)) % n]
                 let fade = min(min(f, 1 - f) * 8, 1)
+                if o.closeUp {
+                    drawCargoPlane(in: &context, from: a, to: b, f: f, fade: fade, overlay: o, projection: p)
+                    continue
+                }
                 for trail in stride(from: 12, through: 0, by: -1) {
                     let ft = min(max(f - Double(trail) * 0.006, 0), 1)
                     let ground = CGPoint(x: a.x + (b.x - a.x) * ft, y: a.y + (b.y - a.y) * ft)
@@ -1136,6 +1237,108 @@ struct MapScene {
         }
         // The selected region: a steady gold outline.
         if let top = o.selectedTop { context.stroke(top, with: .color(Theme.gold), lineWidth: 2.5) }
+    }
+
+    /// Sprites a frame at most: freight first, then the highway cars fill what is left.
+    static let maxVehicles = 250
+    static let maxFreightVehicles = 190
+
+    /// A rail lane up close: sleepers across and two thin rails, under the trains.
+    static func drawRailTrack(in context: inout GraphicsContext, lane: LaneTrack, projection p: MapProjection, plinth: Double,
+                              size: CGSize) {
+        let a = p.lift(lane.a, plinth)
+        let b = p.lift(lane.b, plinth)
+        let dx = Double(b.x - a.x)
+        let dy = Double(b.y - a.y)
+        let len = hypot(dx, dy)
+        guard len >= 4 else { return }
+        let ux = dx / len
+        let uy = dy / len
+        let nx = -uy
+        let ny = ux
+        // The ground is seen at a slant, so the gauge narrows as the track turns away from the viewer.
+        let gauge = 1.5 * (0.5 + 0.5 * abs(ux))
+        let screen = CGRect(origin: .zero, size: size).insetBy(dx: -8, dy: -8)
+        var sleepers = Path()
+        var t = 0.0
+        while t < len {
+            let x = Double(a.x) + ux * t
+            let y = Double(a.y) + uy * t
+            if screen.contains(CGPoint(x: x, y: y)) {
+                sleepers.move(to: CGPoint(x: x - nx * (gauge + 1.2), y: y - ny * (gauge + 1.2)))
+                sleepers.addLine(to: CGPoint(x: x + nx * (gauge + 1.2), y: y + ny * (gauge + 1.2)))
+            }
+            t += 5
+        }
+        context.stroke(sleepers, with: .color(RGB(hex: 0x5A4636).color()), lineWidth: 1)
+        var rails = Path()
+        for side in [-1.0, 1.0] {
+            rails.move(to: CGPoint(x: Double(a.x) + side * nx * gauge, y: Double(a.y) + side * ny * gauge))
+            rails.addLine(to: CGPoint(x: Double(b.x) + side * nx * gauge, y: Double(b.y) + side * ny * gauge))
+        }
+        context.stroke(rails, with: .color(RGB(hex: 0x8A939C).color()), lineWidth: 1)
+    }
+
+    /// The vehicles for one load on a lane at fraction `f`: a truck, a ship, or a train of a
+    /// locomotive and two wagons. Trucks and trains keep to land, ships to water.
+    static func laneVehicles(_ lane: LaneTrack, f: Double, forward: Bool, projection p: MapProjection, plinth: Double,
+                             scale: Int, displayScale: Double, into out: inout [VehicleSpot]) {
+        func ground(_ t: Double) -> CGPoint {
+            p.lift(CGPoint(x: Double(lane.a.x) + Double(lane.b.x - lane.a.x) * t, y: Double(lane.a.y) + Double(lane.b.y - lane.a.y) * t), plinth)
+        }
+        let sign = forward ? 1.0 : -1.0
+        let step = 2 / max(lane.length, 1)
+        let at = ground(f)
+        let ahead = ground(min(max(f + sign * step, 0), 1))
+        let behind = ground(min(max(f - sign * step, 0), 1))
+        let dir = CGVector(dx: ahead.x - behind.x, dy: ahead.y - behind.y)
+        let dl = hypot(Double(dir.dx), Double(dir.dy))
+        guard dl >= 1e-3 else { return }
+        let ux = Double(dir.dx) / dl
+        let uy = Double(dir.dy) / dl
+        let wet = lane.water.map { $0[Int((f * Double(LaneWater.samples - 1)).rounded())] }
+        switch lane.mode {
+        case "rail":
+            guard wet != true else { return }
+            // Wagons trail the locomotive along the track, spaced by a vehicle's length on the ground.
+            let gap = 14 * Double(scale) / max(displayScale, 1) / max(lane.length, 1)
+            out.append(VehicleSpot(type: "loco", mine: lane.mine, at: at, dir: dir))
+            for w in 1...2 {
+                let t = f - sign * gap * Double(w)
+                if t >= 0 && t <= 1 { out.append(VehicleSpot(type: "wagon", mine: lane.mine, at: ground(t), dir: dir)) }
+            }
+        case "sea":
+            // Ships keep to their own side of the channel.
+            guard wet != false else { return }
+            out.append(VehicleSpot(type: "ship", mine: lane.mine, at: CGPoint(x: Double(at.x) - uy * 5 * sign, y: Double(at.y) + ux * 5 * sign),
+                                   dir: dir))
+        default:
+            guard wet != true else { return }
+            out.append(VehicleSpot(type: "truck", mine: lane.mine,
+                                   at: CGPoint(x: Double(at.x) - uy * 2.5 * sign, y: Double(at.y) + ux * 2.5 * sign), dir: dir))
+        }
+    }
+
+    /// A cargo plane up close: the voxel plane high over the map, its shadow on the ground and a
+    /// short faint contrail.
+    private func drawCargoPlane(in context: inout GraphicsContext, from a: CGPoint, to b: CGPoint, f: Double, fade: Double,
+                                overlay o: OverlayGeometry, projection p: MapProjection) {
+        func flat(_ t: Double) -> CGPoint { CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t) }
+        func air(_ t: Double) -> CGPoint { p.lift(flat(t), (40 + 50 * sin(.pi * t)) * o.scale) }
+        let at = air(f)
+        let ahead = air(min(f + 0.01, 1))
+        let behind = air(max(f - 0.01, 0))
+        let dir = CGVector(dx: ahead.x - behind.x, dy: ahead.y - behind.y)
+        for trail in stride(from: 6, through: 1, by: -1) {
+            context.fill(disc(air(max(f - Double(trail) * 0.005, 0)), 1),
+                         with: .color(.white.opacity(0.12 * fade * (1 - Double(trail) / 7))))
+        }
+        Vehicles.draw("plane", mine: false, ground: p.lift(flat(f), o.plinth), dir: dir, scale: o.vehicleScale,
+                      displayScale: displayScale, alpha: 0.22 * fade, shadow: true, in: &context)
+        if !Vehicles.draw("plane", mine: false, ground: at, dir: dir, scale: o.vehicleScale, displayScale: displayScale,
+                          alpha: fade, in: &context) {
+            context.fill(disc(at, 1.7), with: .color(.white.opacity(fade)))
+        }
     }
 
     /// With nothing moving, only the selected region's outline.
