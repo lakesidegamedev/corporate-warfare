@@ -11,21 +11,17 @@ heading.
 
 ## [Unreleased]
 
-### Fixed
+## [1.7.1] - 2026-10-28
 
-- Market snapshots no longer skip when time runs fast. A snapshot was only sent when the week landed exactly on a multiple of five, so a run that stepped over one sent nothing. iPhone, iPad, Android, Windows and Linux now send when an advance crosses a five-week boundary.
+Fixes and depth from the first week of Lone Star: no instant raids on new players, no stuck pauses, plant crews and research that no longer bleed a new company, every market trading with smooth prices, company pages with logos and a face for every CEO, division detail, readable freight, raid buttons and visible rival personalities, a CFO who says why you are losing money, faster weeks, scenario dates, and every screen on iPhone, iPad and Android. Saves from 1.7.0 do not load in 1.7.1.
 
 ### Added
 
 - Phones and iPad audited against every 1.7.1 desktop screen (stuck-pause banner and pause settings, company pages, division detail, freight sections and lane panel, CFO advisor, Rivals card, raid panel and rival tags, scenario dates, stock target label, tutorial research step). Two gaps closed: on your own company's page, tapping a division opens its detail on iPhone, iPad and Android; and on iPhone and iPad a region board now lists "Your divisions here", each opening its detail, as Android and desktop already did.
 
-### Added
-
 - Company pages. Tap any company in the stock list, the stock dialog, a rival's dossier, a region board or a news item to open its page. Listed companies show the share price chart, valuation, a financial summary, divisions and plants by region, holders, subsidiaries and joint ventures, recent moves, grudges and friends, news and Buy and Sell. Private companies show only what is public: name, logo, chief executive, sector, regions, size band and public moves. Your own companies show everything.
 - Every company has a logo, drawn in 8-bit pixels from its name from a fixed set of plain shapes (stars, arrows, wheat, drops, gears, towers, waves, monograms), the same on every platform. A tool refuses any symbol that looks like a banned shape.
 - Every company has a chief executive with a face. Firms outside the twelve-person cast get a generated, fictional chief with a portrait, name, temperament and background, shown in the stock dialog.
-
-### Added
 
 - Division detail. Tapping a division on the map, in the region board's "Your divisions here",
   in the CEO Office or on the company page opens a detail view with its weekly financials
@@ -37,64 +33,6 @@ heading.
   union state, shortages). Pricing, transfer price, stock target, shipping and wage offers can
   be changed from it. Results are estimated from the plants' last week and your closed sales at
   today's asking prices. The report is read only and does not change world state or hashes.
-
-### Fixed
-
-- Every market trades and prices move smoothly. Goods that sat at a round placeholder price with
-  nothing made or sold (maintenance, research and, in some scenarios, fertilizer, ore, rare
-  earths, timber, vehicles, pharmaceuticals, building materials and natural gas liquids) now have
-  a producer in every scenario, a new Plant Maintenance Services strategy supplies maintenance, and
-  the Markets board no longer lists goods nothing makes or uses (training, water). Prices were
-  swinging up and down every week or two because rivals changed prices only every fourth week on
-  two rules that fought each other; every firm now sets its price every week from its stock cover
-  and sales, a sixth of the way at a time, so prices follow supply and demand and settle. A
-  corridor price no longer jumps when a small seller drops out for a week. Services no longer
-  produce a third more than they sell, and no longer sit throttled below demand. A plant run down
-  to its floor keeps one worker of each tier instead of idling for good, and rivals no longer
-  retool the only plant making a good or reset every plant to 85 percent each review, which made
-  their output swing against the weekly plan. Coastal Generation now opens in Los Angeles, where it has
-  customers. This changes the world state of every scenario, so saves and replays from 1.7.0
-  do not carry over.
-- A division's stock target slider read "Company default" beside "26 weeks of inputs", which was
-  only the slider's maximum. It now shows the real company default, such as "Company default: 4
-  weeks", and notes that perishable inputs keep at most 2. The tutorial's research step told new
-  players to fund research with a budget that lost them money. It now asks for a modest budget and
-  shows one sized to your company: its cost a week, the weeks to the next level and what that
-  level buys. Display only, no change to world state or hashes.
-
-- Market snapshots now arrive from Android, Windows and Linux. Until now only the iPhone build sent
-  its anonymous market-balance snapshot; the Compose app had no sender. It now posts one every five
-  game weeks in the background, with a random install id and nothing else about you, and fails
-  silently. A new Analytics switch in Settings turns it off. The iPhone build already sends the
-  current snapshot format, since the snapshot comes straight from the engine.
-- A new plant no longer pays a full crew for the whole build. Crews are hired in the last four
-  weeks before a plant opens, so it opens staffed without half a year of idle wages. A hardware
-  plant in Silicon Valley cost about $11,000 a week for 24 weeks before making anything.
-- Research no longer burns cash at the technology frontier. A company that already has the best
-  level it is allowed to buy stops spending its research budget until the frontier moves.
-- Research is cheaper to start: the first levels cost $40,000, $160,000 and $360,000 instead of
-  $100,000, $400,000 and $900,000.
-- Faster weeks and a more responsive interface. A game week now takes about 20 to 40 percent
-  less time in every scenario (Ruhr and Rhine 18.8 to 11.6 ms, Silicon Valley 12.8 to 9.4 ms,
-  Texas 13.0 to 10.7 ms, Great Lakes 9.4 to 7.3 ms on the test machine) with identical results:
-  freight route shapes are kept from week to week until the network changes, and rival
-  expansion scoring reads each market once. Pixel icons, sector badges, portraits and the logo
-  are drawn from a bitmap built once instead of hundreds of rectangles a frame, and the map
-  keeps its projected shapes until the view moves, on Android, Windows, Linux and Apple.
-
-- Every scenario now keeps its own calendar. The status bar, elections, chair terms, seasons,
-  price paths, news, saves and chart axes read from the scenario start year, so Texas 1981 no
-  longer shows "2000 W05" on both the Android and iPhone clients.
-- Seed firms open at a fair share price. Their first quarter of earnings is unobserved, and the
-  opening valuation assumed far more than the firms really earn, so shares such as Gulf Broadcast
-  Network sat at several times fair value and slid for weeks. At week 5 the median price over fair
-  value is now about 1.0 in every scenario (was up to 1.6), and firms priced over twice fair value
-  fell from 17 to 20 of about 50 down to 2 to 8. Saved worlds from 1.7.0 are unaffected.
-- Fictional firm and cast names no longer echo real companies or people (for example
-  Anadarko Gas Partners, Lone Star Rail Freight, Bluebonnet Grocers, Golden State Power,
-  Texoma Power and Light and Joel Rosenthal).
-
-### Added
 
 - Raid from where you see a rival. Every rival row (region board, map region sheet, dossier and
   stock page) now carries a Raid button that opens the engine's quote: success chance, plants at
@@ -155,6 +93,62 @@ heading.
   union counter.
 
 ### Fixed
+
+- Market snapshots no longer skip when time runs fast. A snapshot was only sent when the week landed exactly on a multiple of five, so a run that stepped over one sent nothing. iPhone, iPad, Android, Windows and Linux now send when an advance crosses a five-week boundary.
+
+- Every market trades and prices move smoothly. Goods that sat at a round placeholder price with
+  nothing made or sold (maintenance, research and, in some scenarios, fertilizer, ore, rare
+  earths, timber, vehicles, pharmaceuticals, building materials and natural gas liquids) now have
+  a producer in every scenario, a new Plant Maintenance Services strategy supplies maintenance, and
+  the Markets board no longer lists goods nothing makes or uses (training, water). Prices were
+  swinging up and down every week or two because rivals changed prices only every fourth week on
+  two rules that fought each other; every firm now sets its price every week from its stock cover
+  and sales, a sixth of the way at a time, so prices follow supply and demand and settle. A
+  corridor price no longer jumps when a small seller drops out for a week. Services no longer
+  produce a third more than they sell, and no longer sit throttled below demand. A plant run down
+  to its floor keeps one worker of each tier instead of idling for good, and rivals no longer
+  retool the only plant making a good or reset every plant to 85 percent each review, which made
+  their output swing against the weekly plan. Coastal Generation now opens in Los Angeles, where it has
+  customers. This changes the world state of every scenario, so saves and replays from 1.7.0
+  do not carry over.
+- A division's stock target slider read "Company default" beside "26 weeks of inputs", which was
+  only the slider's maximum. It now shows the real company default, such as "Company default: 4
+  weeks", and notes that perishable inputs keep at most 2. The tutorial's research step told new
+  players to fund research with a budget that lost them money. It now asks for a modest budget and
+  shows one sized to your company: its cost a week, the weeks to the next level and what that
+  level buys. Display only, no change to world state or hashes.
+
+- Market snapshots now arrive from Android, Windows and Linux. Until now only the iPhone build sent
+  its anonymous market-balance snapshot; the Compose app had no sender. It now posts one every five
+  game weeks in the background, with a random install id and nothing else about you, and fails
+  silently. A new Analytics switch in Settings turns it off. The iPhone build already sends the
+  current snapshot format, since the snapshot comes straight from the engine.
+- A new plant no longer pays a full crew for the whole build. Crews are hired in the last four
+  weeks before a plant opens, so it opens staffed without half a year of idle wages. A hardware
+  plant in Silicon Valley cost about $11,000 a week for 24 weeks before making anything.
+- Research no longer burns cash at the technology frontier. A company that already has the best
+  level it is allowed to buy stops spending its research budget until the frontier moves.
+- Research is cheaper to start: the first levels cost $40,000, $160,000 and $360,000 instead of
+  $100,000, $400,000 and $900,000.
+- Faster weeks and a more responsive interface. A game week now takes about 20 to 40 percent
+  less time in every scenario (Ruhr and Rhine 18.8 to 11.6 ms, Silicon Valley 12.8 to 9.4 ms,
+  Texas 13.0 to 10.7 ms, Great Lakes 9.4 to 7.3 ms on the test machine) with identical results:
+  freight route shapes are kept from week to week until the network changes, and rival
+  expansion scoring reads each market once. Pixel icons, sector badges, portraits and the logo
+  are drawn from a bitmap built once instead of hundreds of rectangles a frame, and the map
+  keeps its projected shapes until the view moves, on Android, Windows, Linux and Apple.
+
+- Every scenario now keeps its own calendar. The status bar, elections, chair terms, seasons,
+  price paths, news, saves and chart axes read from the scenario start year, so Texas 1981 no
+  longer shows "2000 W05" on both the Android and iPhone clients.
+- Seed firms open at a fair share price. Their first quarter of earnings is unobserved, and the
+  opening valuation assumed far more than the firms really earn, so shares such as Gulf Broadcast
+  Network sat at several times fair value and slid for weeks. At week 5 the median price over fair
+  value is now about 1.0 in every scenario (was up to 1.6), and firms priced over twice fair value
+  fell from 17 to 20 of about 50 down to 2 to 8. Saved worlds from 1.7.0 are unaffected.
+- Fictional firm and cast names no longer echo real companies or people (for example
+  Anadarko Gas Partners, Lone Star Rail Freight, Bluebonnet Grocers, Golden State Power,
+  Texoma Power and Light and Joel Rosenthal).
 
 - Market snapshots now arrive from Android, Windows and Linux. Until now only the iPhone build sent
   its anonymous market-balance snapshot; the Compose app had no sender. It now posts one every five
@@ -1017,7 +1011,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.5.0...v1.6.0
