@@ -58,7 +58,7 @@ struct LaneTrack {
     let km: Double
 }
 
-/// Where a building's beacon, smoke and ripple sit on screen.
+/// Where a building's rooftop light and smoke sit on screen.
 struct BuildingSpot {
     let base: CGPoint
     let top: CGPoint
@@ -877,10 +877,9 @@ struct MapScene {
     // MARK: Moving layer
 
     /// Everything that moves on the map, for one frame: the traffic (under the buildings), the
-    /// effects (over them), or both. `seconds` is game time; `wallSeconds` drives interface
-    /// feedback such as the selection glow, which keeps breathing while the game is paused.
-    func drawOverlay(in context: inout GraphicsContext, geometry g: MapGeometry, seconds: Double, rippleAge: Double,
-                     part: OverlayPart = .all, wallSeconds: Double? = nil) {
+    /// effects (over them), or both. `seconds` is game time.
+    func drawOverlay(in context: inout GraphicsContext, geometry g: MapGeometry, seconds: Double,
+                     part: OverlayPart = .all) {
         let p = g.projection
         let o = g.overlay(lanes: lanes, divisions: divisions, selected: selected, heights: heights, look: look,
                           freightLayer: freightLayer, displayScale: displayScale)
@@ -951,28 +950,17 @@ struct MapScene {
             context.fill(tails, with: .color(RGB(hex: 0xFF4A3A).color(0.85 * fade)))
         }
         if !effects { return }
-        // Building beacons, smoke and the week's ripple.
+        // Rooftop lights and smoke. No rings or pulses: they read as cheap.
         if look.buildings > 0 {
             for b in o.buildings {
-                let phase = fract(seconds / 2.4 + b.seed)
-                context.stroke(disc(b.base, (6 + 20 * phase) * o.scale), with: .color(b.color.opacity(0.45 * (1 - phase))), lineWidth: 1.4)
-                // An aircraft warning light blinks on every rooftop.
-                if sin(seconds * 3 + b.seed * 20) > 0.55 {
-                    var beacon = context
-                    beacon.blendMode = .plusLighter
-                    stamp(&beacon, .glow, at: b.top, radius: 5, color: RGB(hex: 0xFF4A3A), alpha: 0.7)
-                    context.fill(disc(b.top, 1.3), with: .color(RGB(hex: 0xFF6A5A).color()))
-                }
+                // A steady aircraft warning light on every rooftop.
+                context.fill(disc(b.top, 1.3), with: .color(RGB(hex: 0xFF5A4A).color()))
                 if b.smoke && look.smoke {
                     for k in 0..<3 {
                         let f = fract(seconds / 3 + Double(k) / 3 + b.seed)
                         let at = CGPoint(x: b.top.x + 4 * sin(f * 5 + b.seed * 9), y: b.top.y - 30 * f * o.scale)
                         stamp(&context, .cloud, at: at, radius: (2 + 5 * f) * o.scale, color: RGB(hex: 0x9AA3AB), alpha: 0.55 * (1 - f))
                     }
-                }
-                if rippleAge >= 0 && rippleAge <= 1.2 {
-                    let f = rippleAge / 1.2
-                    context.stroke(disc(b.base, 60 * f * o.scale), with: .color(Theme.gold.opacity(0.6 * (1 - f))), lineWidth: 2)
                 }
             }
         }
@@ -1007,12 +995,8 @@ struct MapScene {
                 }
             }
         }
-        // The selected region breathes.
-        if let top = o.selectedTop {
-            let pulse = 0.5 + 0.5 * sin(2 * Double.pi * (wallSeconds ?? seconds) / 1.6)
-            context.stroke(top, with: .color(Theme.gold.opacity(0.18)), lineWidth: 8)
-            context.stroke(top, with: .color(Theme.gold.opacity(0.95)), lineWidth: 2 + 1.5 * pulse)
-        }
+        // The selected region: a steady gold outline.
+        if let top = o.selectedTop { context.stroke(top, with: .color(Theme.gold), lineWidth: 2.5) }
     }
 
     /// With nothing moving, only the selected region's outline.
@@ -1027,7 +1011,7 @@ struct MapScene {
 /// scenario. Drag to turn or pan, pinch or use the buttons to zoom, double-tap to fly between the
 /// globe and the scenario, tap a region to select it. Shading, markers and selection come from
 /// the caller. A still layer holds the land, regions and buildings; a moving layer over it holds
-/// traffic, planes and pulses, and only runs while something on it moves.
+/// traffic, planes and smoke, and only runs while something on it moves.
 struct WorldMapView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -1054,7 +1038,7 @@ struct WorldMapView: View {
     var onLane: ((String?) -> Void)?
     /// The career's region codes, which say which scenario's map to draw.
     var regionCodes: [String] = []
-    /// The game week; a new week sends a ripple out from each building.
+    /// The game week, which sets the season on the satellite Earth.
     var week: UInt32 = 0
     /// Puts the zoom controls at the top right, for the desktop shell where the tutorial card
     /// sits in the bottom corner.
@@ -1071,7 +1055,6 @@ struct WorldMapView: View {
     @State private var geometry = MapGeometryCache()
     @State private var ease = HeightEase()
     @State private var easing = false
-    @State private var rippleStart = -10.0
     @State private var meter = FrameMeter()
     @State private var world = WorldClock()
 
@@ -1116,7 +1099,7 @@ struct WorldMapView: View {
                             let now = MapClock.seconds(timeline.date)
                             let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
                             scene(camera: current, look: look, now: now)
-                                .drawOverlay(in: &context, geometry: g, seconds: gameSeconds(now), rippleAge: now - rippleStart,
+                                .drawOverlay(in: &context, geometry: g, seconds: gameSeconds(now),
                                              part: .traffic)
                         }
                         .drawingGroup()
@@ -1155,8 +1138,8 @@ struct WorldMapView: View {
                             let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
                             let moving = scene(camera: current, look: look, now: now)
                             if look.moves {
-                                moving.drawOverlay(in: &context, geometry: g, seconds: gameSeconds(now), rippleAge: now - rippleStart,
-                                                   part: .effects, wallSeconds: now)
+                                moving.drawOverlay(in: &context, geometry: g, seconds: gameSeconds(now),
+                                                   part: .effects)
                             } else {
                                 moving.drawSelection(in: &context, geometry: g)
                             }
@@ -1259,9 +1242,6 @@ struct WorldMapView: View {
                 try? await Task.sleep(nanoseconds: 650_000_000)
                 easing = false
             }
-        }
-        .onChange(of: week) { _, _ in
-            rippleStart = MapClock.now
         }
     }
 
