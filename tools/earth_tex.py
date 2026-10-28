@@ -10,8 +10,9 @@ Outputs, into apple/Resources (the Compose build copies them):
 
     earth.jpg                 the world at 4096 x 2048, for the globe and the menu
     earth-<scenario>.jpg      each scenario's surroundings at 40 pixels a degree, for close up
-    earth-land.png            a 1024 x 512 land mask (white land, clear sea) that the app tints
-                              white for seasonal snow
+    earth-land.png            a 2048 x 1024 land mask from the game's own country and lake
+                              outlines (white land, clear water) for seasonal snow on the globe
+    earth-land-<scenario>.png the same for each scenario's surroundings at 20 pixels a degree
 
 The seasons are made in the app from this summer image: snow lines that move with the month,
 autumn colour and winter brown in the mid-latitudes.
@@ -22,10 +23,11 @@ autumn colour and winter brown in the mid-latitudes.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -68,14 +70,34 @@ def main() -> None:
     world = Image.open(args.source / "world.200407.3x5400x2700.png").convert("RGB")
     world.resize((4096, 2048), Image.LANCZOS).save(args.out / "earth.jpg", quality=86, optimize=True)
 
-    # Land mask: Blue Marble's sea is dark and blue; land is anything brighter or less blue.
-    small = np.asarray(world.resize((1024, 512), Image.LANCZOS)).astype(np.float32)
-    r, g, b = small[..., 0], small[..., 1], small[..., 2]
-    sea = (b > r * 1.25) & (b > g * 1.02) & ((r + g + b) / 3 < 95)
-    mask = np.zeros((512, 1024, 4), np.uint8)
-    mask[..., :3] = 255
-    mask[..., 3] = np.where(sea, 0, 255)
-    Image.fromarray(mask, "RGBA").save(args.out / "earth-land.png", optimize=True)
+    # Land masks from the game's own map, every country less the lakes: the world for the globe,
+    # and each scenario's surroundings at 20 pixels a degree so coasts stay crisp close up.
+    data = json.loads((ROOT / "apple" / "Resources" / "world-map.json").read_text())
+
+    def land_mask(west, south, east, north, width, height):
+        mask = Image.new("L", (width, height), 0)
+        draw = ImageDraw.Draw(mask)
+
+        def ring(points):
+            return [((points[i] / 10_000 - west) / (east - west) * width, (north - points[i + 1] / 10_000) / (north - south) * height)
+                    for i in range(0, len(points) - 1, 2)]
+
+        for country in data["countries"]:
+            for r in country["rings"]:
+                if len(r) >= 6:
+                    draw.polygon(ring(r), fill=255)
+        for lake in data["lakes"]:
+            for r in lake["rings"]:
+                if len(r) >= 6:
+                    draw.polygon(ring(r), fill=0)
+        rgba = np.zeros((height, width, 4), np.uint8)
+        rgba[..., :3] = 255
+        rgba[..., 3] = np.asarray(mask)
+        return Image.fromarray(rgba, "RGBA")
+
+    land_mask(-180, -90, 180, 90, 2048, 1024).save(args.out / "earth-land.png", optimize=True)
+    for name, (west, south, east, north) in REGIONS.items():
+        land_mask(west, south, east, north, (east - west) * 20, (north - south) * 20).save(args.out / f"earth-land-{name}.png", optimize=True)
 
     for name, (west, south, east, north) in REGIONS.items():
         tile_crop(args.source, west, south, east, north).save(args.out / f"earth-{name}.jpg", quality=84, optimize=True)

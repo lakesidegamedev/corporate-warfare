@@ -49,6 +49,7 @@ internal class Mesh {
         if (positions.size < vertices * 2) {
             positions = FloatArray(vertices * 2); tex = FloatArray(vertices * 2); colors = IntArray(vertices)
             visible = BooleanArray(vertices); indices = ShortArray(vertices * 6)
+            require(vertices <= Short.MAX_VALUE) { "a mesh this big needs splitting" }
         }
         count = vertices; indexCount = 0
     }
@@ -263,7 +264,7 @@ internal object Weather {
             mesh.visible[k] = true
             // Clouds on the night side are lit only faintly; their shadows only fall by day.
             val light = if (sun == null) 1f else (0.18 + 0.82 * smoothstep(-0.15, 0.1, sun.facing(lon, lat))).toFloat()
-            mesh.colors[k] = if (shadow) Color.Black.copy(alpha = (0.30f * a * light).coerceIn(0f, 1f)).toArgb()
+            mesh.colors[k] = if (shadow) Color.Black.copy(alpha = (0.14f * a * light).coerceIn(0f, 1f)).toArgb()
             else Color(light, light, (light * 1.03f).coerceAtMost(1f), a.coerceIn(0f, 1f)).toArgb()
         }
         for (j in 0 until ny - 1) for (i in 0 until nx - 1) {

@@ -81,6 +81,7 @@ class GraphicsRenderTest {
             "scenario" to scenario,
             "close" to scenario.zoomed(3.0),
             "turned" to scenario.zoomed(2.0).rotated(35.0),
+            "winter" to scenario.zoomed(3.0),
             "vehicles" to scenario.zoomed(5.0),
         )
         val sun = Sun.moving(40.0)
@@ -96,6 +97,7 @@ class GraphicsRenderTest {
                             map, camera, Palette.gold, shading, "MI-DET", divisions, measurer, lanes = lanes, freightLayer = false,
                             geometry = geometry, graphics = graphics, sun = if (graphics.dayNight) sun else null, phase = phase,
                             plants = rivals + own, economyPhase = "boom", acquired = setOf("PA-WES/technology"),
+                            week = if (name == "winter") 3 else 28,
                         )
                         still(MapPhase.Ground)
                         val g = geometry.of(map, camera, size, graphics.detail, graphics.pitch)

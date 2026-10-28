@@ -65,8 +65,12 @@ internal object Voxels {
         },
     )
 
-    fun DrawScope.drawBuilding(sector: String, plants: Int, ground: Offset, scale: Int, filter: ColorFilter? = null): Float? {
-        val f = frame(sector, size(plants), scale) ?: return null
+    fun DrawScope.drawBuilding(sector: String, plants: Int, ground: Offset, scale: Int, filter: ColorFilter? = null): Float? =
+        drawVariant(sector, size(plants), ground, scale, filter)
+
+    /** Draws one frame of a model by its variant slot (a size for buildings, a season for props). */
+    fun DrawScope.drawVariant(name: String, variant: Int, ground: Offset, scale: Int, filter: ColorFilter? = null): Float? {
+        val f = frame(name, variant, scale) ?: return null
         val image = Images.load("voxels-$scale") ?: return null
         val left = (ground.x - f.ax).roundToInt()
         val top = (ground.y - f.ay).roundToInt()

@@ -13,6 +13,12 @@ heading.
 
 ### Added
 
+- Zoomed in, the countryside fills in as a voxel diorama on the real ground: forests (pines in the
+  north), farm fields and barns, rocks on dry land, and houses round every city that spread out in
+  a boom and pull in during a recession. Trees turn in the autumn and everything wears snow in
+  winter.
+- Voxel trucks, trains on visible tracks, ships on the lakes and cargo planes carry the freight up
+  close; the lanes you use run in your gold livery.
 - The map tells the story: a plant still going up shows as a building site with scaffold and a
   crane, a division adding or retooling plants has a crane beside it, a mothballed one goes dark,
   and one you have just taken over flies a gold flag for six weeks. Rivals' sites and closures show

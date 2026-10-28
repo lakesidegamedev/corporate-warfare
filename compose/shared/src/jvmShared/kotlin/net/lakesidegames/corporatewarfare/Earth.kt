@@ -57,7 +57,7 @@ internal object Earth {
     /** Snow cover 0 to 1: the line sits near 66 degrees in summer and reaches 40 in midwinter. */
     private fun snow(week: Int, latDeg: Double): Double {
         val line = 68 - 28 * winter(week, latDeg)
-        return smoothstep(line - 3, line + 5, abs(latDeg)) * 0.85
+        return smoothstep(line - 3, line + 5, abs(latDeg)) * 0.6
     }
 
     /**
@@ -92,10 +92,22 @@ internal object Earth {
                 val east = if (close > 0.5f) region!!.east else 180.0
                 val south = if (close > 0.5f) region!!.south else -88.0
                 val north = if (close > 0.5f) region!!.north else 88.0
-                fill(p, west, east, south, north, if (close > 0.5f) 1.0 else 4.0, week, 1f, snowPass = true) { lon, lat, out ->
-                    out[0] = (lon + 180) / 360 * land.width; out[1] = (90 - lat) / 180 * land.height
+                // Close up only the view's own patch, finely enough that coasts stay crisp.
+                val b = bounds
+                val w2 = if (close > 0.5f) b[0] - 6 else west
+                val e2 = if (close > 0.5f) b[2] + 6 else east
+                val s2 = if (close > 0.5f) b[1] - 6 else south
+                val n2 = if (close > 0.5f) b[3] + 6 else north
+                val sharp = if (close > 0.5f) scenario?.let { Images.load("earth-land-$it.png") } else null
+                fill(p, w2, e2, s2, n2, if (close > 0.5f) 0.25 else 4.0, week, 1f, snowPass = true) { lon, lat, out ->
+                    if (sharp != null) {
+                        val r = region!!
+                        out[0] = (lon - r.west) / (r.east - r.west) * sharp.width; out[1] = (r.north - lat) / (r.north - r.south) * sharp.height
+                    } else {
+                        out[0] = (lon + 180) / 360 * land.width; out[1] = (90 - lat) / 180 * land.height
+                    }
                 }
-                mesh.draw(canvas, paint(land, true))
+                mesh.draw(canvas, paint(sharp ?: land, sharp == null))
             }
         }
     }

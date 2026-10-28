@@ -255,10 +255,60 @@ def crane(s):
     return m
 
 
+# ---- the countryside: small props scattered over the satellite ground when zoomed in -------------
+# Sizes here are variants, not growth: 0 summer, 1 autumn, 2 winter (snow), so the seasons show.
+
+def conifer(s):
+    leaf = ("#2E5E3A", "#2E5E3A", "#3E6E4A")[s]
+    m = Model().box(1, 1, 0, 2, 2, 2, "#5A3E2A")
+    m.box(0, 0, 2, 3, 3, 4, leaf).box(0, 0, 4, 3, 3, 5, leaf).box(1, 1, 5, 2, 2, 7, leaf)
+    if s == 2:
+        m.box(0, 0, 4, 3, 3, 5, "#F2F5F8").box(1, 1, 6, 2, 2, 7, "#F2F5F8")
+    return m
+
+
+def broadleaf(s):
+    leaf = ("#4C8A3A", "#D9822B", "#7A6A58")[s]
+    m = Model().box(1, 1, 0, 2, 2, 3, "#5A3E2A")
+    if s < 2:
+        m.box(0, 0, 3, 3, 3, 5, leaf).box(1, 1, 5, 2, 2, 6, leaf)
+    else:
+        m.box(0, 1, 3, 3, 2, 4, leaf).box(1, 0, 4, 2, 3, 5, leaf)
+    return m
+
+
+def field(s):
+    ground = ("#6FA83B", "#B58A3A", "#E8ECEF")[s]
+    row = ("#C9A13A", "#8D6A2A", "#C8D0D6")[s]
+    m = Model().box(0, 0, 0, 6, 4, 1, ground)
+    for i in range(0, 6, 2):
+        m.box(i, 0, 1, i + 1, 4, 2, row)
+    return m
+
+
+def barn(s):
+    roof = ("#7A2620", "#7A2620", "#F2F5F8")[s]
+    return Model().box(0, 0, 0, 4, 3, 3, "#B23A2E").box(0, 0, 3, 4, 3, 4, roof).box(1, 0, 4, 3, 3, 5, roof)
+
+
+def house(s):
+    wall = ("#D8CFC0", "#C9B79C", "#B8C2CA")[s]
+    roof = ("#8E4A3A", "#5A6470", "#F2F5F8")[s]
+    m = Model().box(0, 0, 0, 3, 3, 2, wall).box(0, 0, 2, 3, 3, 3, roof).box(1, 0, 3, 2, 3, 4, roof)
+    m.box(1, 0, 0, 2, 1, 1, "#4A3A2A")
+    return m
+
+
+def rock(s):
+    stone = ("#8A8478", "#8A8478", "#E8ECEF")[s]
+    return Model().box(0, 0, 0, 3, 2, 1, stone).box(1, 0, 1, 2, 2, 2, stone)
+
+
 MODELS = {
     f.__name__: f for f in (
         agriculture, extraction, energy, chemical_industries, manufacturing, construction, logistics,
         retail, healthcare, technology, media, telecommunications, real_estate, defense, financial, city, site, crane,
+        conifer, broadleaf, field, barn, house, rock,
     )
 }
 

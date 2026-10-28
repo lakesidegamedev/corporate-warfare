@@ -326,6 +326,7 @@ fun WorldMapView(
                     lanes = store.lanes, freightLayer = layer == MapLayer.Freight, pickedLane = pickedLane,
                     geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Structures,
                     plants = store.mapPlants, economyPhase = store.economy?.phase, acquired = acquired,
+                    week = Earth.weekOf(store.overview?.weekLabel),
                 )
             }
             Canvas(Modifier.fillMaxSize()) {
@@ -605,6 +606,11 @@ internal fun DrawScope.drawWorldMap(
         val nightNow = sun != null
         // City skylines, then the player's divisions as buildings, nearest drawn last.
         val cityTops = HashMap<String, Float>()
+        // The diorama up close: trees, fields, barns, rocks and the houses round each city.
+        if (graphics.buildings >= 2 && graphics.earth && g.closeUp && t > 0.5) {
+            val propScale = (Voxels.scale(g.scale, density) - 1).coerceAtLeast(1)
+            with(Countryside) { drawCountryside(p, map, week, propScale, { plinth }, economyPhase) }
+        }
         if (graphics.buildings >= 2 && g.closeUp && t > 0.5) {
             // Each big city on screen is a voxel city block sized by its population, a step smaller
             // than the player's buildings so those stay the stars.
