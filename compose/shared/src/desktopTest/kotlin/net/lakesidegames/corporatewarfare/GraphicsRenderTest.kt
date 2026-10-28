@@ -78,6 +78,7 @@ class GraphicsRenderTest {
                         )
                         val g = geometry.of(map, camera, size, graphics.detail, graphics.pitch)
                         val o = g.overlay(lanes, divisions, "MI-DET", shading, graphics, false)
+                        with(Weather) { drawWeather(g.p, sun, 12.5, graphics.clouds, map.playBounds, 46.0 * g.scale * g.p.t, camera.zoom, graphics.lighting > 0, map.scenarioId) }
                         drawMapOverlay(o, graphics, 12.5, false, sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId)
                     }
                 }

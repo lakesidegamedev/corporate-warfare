@@ -172,6 +172,7 @@ fun WorldMapView(
     val heights = animatedHeights(if (layer == MapLayer.Freight) emptyMap() else shaded, graphics.animations)
     val clock = rememberFrameSeconds(graphics.moves || graphics.showFps, graphics.frameRate)
     val sunStep by remember(graphics.dayNight) { derivedStateOf { if (graphics.dayNight) floor(clock.value * 3) else 0.0 } }
+    val cloudTick by remember { derivedStateOf { floor(clock.value * 8) / 8 } }
     val week = store.overview?.weekLabel
     var rippleAt by remember { mutableDoubleStateOf(-10.0) }
     LaunchedEffect(week) { if (week != null) rippleAt = MapClock.now() }
@@ -256,6 +257,18 @@ fun WorldMapView(
                     lanes = store.lanes, freightLayer = layer == MapLayer.Freight, pickedLane = pickedLane,
                     geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights,
                 )
+            }
+            // Clouds drift a fraction of a degree a second, so their layer is redrawn eight times a
+            // second rather than every frame.
+            if (graphics.clouds > 0) {
+                Canvas(Modifier.fillMaxSize().graphicsLayer()) {
+                    val seconds = cloudTick
+                    val cam = camera ?: MapCamera.scenario(size, map)
+                    val g = geometry.of(map, cam, size, graphics.detail, pitch)
+                    with(Weather) {
+                        drawWeather(g.p, sun ?: Sun.fixed(g.p), seconds, graphics.clouds, map.playBounds, 46.0 * g.scale * g.p.t, cam.zoom, graphics.lighting > 0, map.scenarioId)
+                    }
+                }
             }
             Canvas(Modifier.fillMaxSize()) {
                 val seconds = clock.value

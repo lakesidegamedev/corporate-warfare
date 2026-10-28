@@ -628,8 +628,6 @@ internal fun DrawScope.drawMapOverlay(
             }
         }
     }
-    // Clouds and their shadows.
-    with(Weather) { drawWeather(p, sun, seconds, g.clouds, bounds, 46.0 * o.scale * p.t, zoom, g.lighting > 0, scenario) }
     // Building beacons, smoke and the week's ripple.
     if (g.buildings > 0) {
         o.buildings.forEach { b ->

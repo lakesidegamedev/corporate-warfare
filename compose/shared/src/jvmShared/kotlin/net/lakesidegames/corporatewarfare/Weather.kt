@@ -96,8 +96,52 @@ internal val CloudRegions = mapOf(
     "ruhr-rhine-1991" to CloudRegion(-32.0, 28.0, 48.0, 76.0),
 )
 
+/**
+ * The most cloud in each 16 by 16 block of a texture, read once, so mesh cells over clear sky can
+ * be left out and never cost a pixel.
+ */
+internal class CloudMask(image: ImageBitmap) {
+    private val block = 16
+    val w = (image.width + block - 1) / block
+    val h = (image.height + block - 1) / block
+    private val width = image.width
+    private val height = image.height
+    private val most = IntArray(w * h)
+
+    init {
+        val pixels = IntArray(image.width * image.height)
+        image.readPixels(pixels)
+        for (y in 0 until image.height) for (x in 0 until image.width) {
+            val i = (y / block) * w + x / block
+            most[i] = max(most[i], pixels[y * image.width + x] ushr 24)
+        }
+    }
+
+    /** Whether any texel in the texture rectangle holds cloud. [repeatX] wraps east to west; otherwise edges mirror. */
+    fun anyCloud(u0: Float, v0: Float, u1: Float, v1: Float, repeatX: Boolean): Boolean {
+        fun place(u: Float, size: Int, repeat: Boolean): Float {
+            if (repeat) return ((u % size) + size) % size
+            val period = 2f * size
+            val m = ((u % period) + period) % period
+            return if (m < size) m else period - m
+        }
+        val a = place(u0, width, repeatX); val b = place(u1, width, repeatX)
+        // A cell that crosses a wrap or a mirror edge is kept rather than worked out.
+        if (b < a || b - a > (u1 - u0) + 1f) return true
+        val c = place(v0, height, false); val d = place(v1, height, false)
+        if (d < c || d - c > (v1 - v0) + 1f) return true
+        val bx0 = (a / block).toInt().coerceIn(0, w - 1); val bx1 = (b / block).toInt().coerceIn(0, w - 1)
+        val by0 = (c / block).toInt().coerceIn(0, h - 1); val by1 = (d / block).toInt().coerceIn(0, h - 1)
+        for (y in by0..by1) for (x in bx0..bx1) if (most[y * w + x] > 5) return true
+        return false
+    }
+}
+
 internal object Weather {
     private val mesh = Mesh()
+    private val masks = HashMap<ImageBitmap, CloudMask>()
+
+    private fun mask(image: ImageBitmap) = masks.getOrPut(image) { CloudMask(image) }
     private val paints = HashMap<ImageBitmap, Paint>()
 
     private fun paint(image: ImageBitmap, repeatX: Boolean): Paint = paints.getOrPut(image) {
@@ -143,10 +187,11 @@ internal object Weather {
             for (layer in 0..1) {
                 val (slide, weight) = flowPhase(seconds, layer)
                 if (weight < 0.01f) continue
-                val passes = if (shadows && altitude > 0) listOf(true, false) else listOf(false)
+                // Shadows double the cost, so only heavy clouds cast them.
+                val passes = if (shadows && amount >= 2 && altitude > 0) listOf(true, false) else listOf(false)
                 for (shadow in passes) {
                     fill(p, west, east, south, north, step, if (shadow) 0.0 else altitude,
-                        if (shadow) Offset((altitude * 0.5).toFloat(), (altitude * 0.32).toFloat()) else Offset.Zero, sun, shadow) { lon, lat, out ->
+                        if (shadow) Offset((altitude * 0.5).toFloat(), (altitude * 0.32).toFloat()) else Offset.Zero, sun, shadow, mask(image), true) { lon, lat, out ->
                         // Each layer starts from its own place in the map so a restart never shows.
                         out[0] = (lon + 180 - windAt(lat) * slide + layer * 133.0) * tw
                         out[1] = (90 - lat) * th
@@ -174,9 +219,9 @@ internal object Weather {
         val drift = windAt((r.south + r.north) / 2) * seconds
         val canvasPaint = paint(image, false)
         drawIntoCanvas { canvas ->
-            for (shadow in if (shadows && altitude > 0) listOf(true, false) else listOf(false)) {
+            for (shadow in if (shadows && amount >= 2 && altitude > 0) listOf(true, false) else listOf(false)) {
                 fill(p, r.west, r.east, r.south, r.north, 1.0, if (shadow) 0.0 else altitude,
-                    if (shadow) Offset((altitude * 0.5).toFloat(), (altitude * 0.32).toFloat()) else Offset.Zero, sun, shadow) { lon, lat, out ->
+                    if (shadow) Offset((altitude * 0.5).toFloat(), (altitude * 0.32).toFloat()) else Offset.Zero, sun, shadow, mask(image), false) { lon, lat, out ->
                     out[0] = (lon - r.west - drift) * tw
                     out[1] = (r.north - lat) * th
                     // Fade out over the outer five degrees so the layer has no edge.
@@ -190,7 +235,7 @@ internal object Weather {
 
     private inline fun fill(
         p: MapProjection, west: Double, east: Double, south: Double, north: Double, step: Double, up: Double, shift: Offset, sun: Sun?, shadow: Boolean,
-        place: (lon: Double, lat: Double, out: DoubleArray) -> Unit,
+        clouds: CloudMask, repeatX: Boolean, place: (lon: Double, lat: Double, out: DoubleArray) -> Unit,
     ) {
         val out = DoubleArray(3)
         val nx = ((east - west) / step).toInt() + 1
@@ -227,6 +272,11 @@ internal object Weather {
             val x0 = mesh.positions[2 * k]; val y0 = mesh.positions[2 * k + 1]
             if (abs(mesh.positions[2 * c3] - x0) + abs(mesh.positions[2 * c3 + 1] - y0) > jump) continue
             if (abs(mesh.positions[2 * c1] - x0) + abs(mesh.positions[2 * c2 + 1] - y0) > jump) continue
+            // Clear sky costs nothing: leave the cell out when its patch of texture holds no cloud.
+            val t = mesh.tex
+            val u0 = minOf(t[2 * k], t[2 * c1], t[2 * c2], t[2 * c3]); val u1 = maxOf(t[2 * k], t[2 * c1], t[2 * c2], t[2 * c3])
+            val v0 = minOf(t[2 * k + 1], t[2 * c1 + 1], t[2 * c2 + 1], t[2 * c3 + 1]); val v1 = maxOf(t[2 * k + 1], t[2 * c1 + 1], t[2 * c2 + 1], t[2 * c3 + 1])
+            if (!clouds.anyCloud(u0, v0, u1, v1, repeatX)) continue
             val n = mesh.indexCount
             mesh.indices[n] = k.toShort(); mesh.indices[n + 1] = c1.toShort(); mesh.indices[n + 2] = c2.toShort()
             mesh.indices[n + 3] = c1.toShort(); mesh.indices[n + 4] = c3.toShort(); mesh.indices[n + 5] = c2.toShort()

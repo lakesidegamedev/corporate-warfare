@@ -71,7 +71,8 @@ class MapPerfBench {
                     val o = geo.overlay(emptyList(), divisions, "MI-DET", shading, g, false)
                     frame { drawMapOverlay(o, g, i / 60.0, false, sun, map.playBounds, cam.zoom, 0.3, 1f) }
                 }
-                report.append("PERF ${preset.name.padEnd(6)} ${name.padEnd(8)} project %6.1f  pan %6.1f  still %6.1f  overlay %5.1f\n".format(project, pan, still, overlay))
+                val clouds = time(10) { i -> frame { with(Weather) { drawWeather(geo.p, sun, i / 8.0, g.clouds, map.playBounds, 46.0 * geo.scale * geo.p.t, cam.zoom, g.lighting > 0, map.scenarioId) } } }
+                report.append("PERF ${preset.name.padEnd(6)} ${name.padEnd(8)} project %6.1f  pan %6.1f  still %6.1f  overlay %5.1f  clouds %5.1f\n".format(project, pan, still, overlay, clouds))
             }
         }
         // What each effect costs: High with one thing switched off, on a still scenario and globe frame.
