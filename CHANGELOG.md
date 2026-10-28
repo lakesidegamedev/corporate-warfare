@@ -17,6 +17,10 @@ heading.
   shows the icon in a white circle.
 - Google Play listing assets: the 512 pixel icon, a 1024 by 500 feature graphic built from the
   game's own menu and globe, and draft listing copy for review (`store/play/`).
+- Store declaration drafts: one table of what the app sends, mapped onto App Store App Privacy and
+  Google Play Data safety and app content answers (`store/declarations.md`); the privacy policy
+  draft now covers the desktop and direct-download update check and where each platform keeps the
+  analytics switch.
 - App Store screenshots at the sizes Connect accepts, rendered from a real career: iPhone 6.9-inch (1320 x 2868) and 13-inch iPad (2064 x 2752), flattened to RGB because a screenshot with an alpha channel is rejected. The Apple smoke workflow collects them as the `store-screenshots` artifact and the test asserts the PNG carries no alpha.
 
 ### Added
