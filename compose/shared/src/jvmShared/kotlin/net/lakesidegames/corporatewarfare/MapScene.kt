@@ -539,7 +539,37 @@ internal class LaneTrack(
     val a: Offset, val b: Offset, val mode: String, val weight: Float, val length: Float, val seed: Float, val km: Float, val mine: Boolean = false,
     /** Whether each of [WaterSamples] points from a to b is over water, so ships never sail over land and trucks never drive on a lake. */
     val water: BooleanArray? = null,
-)
+    /** The route on the ground (offsets from the view centre) when the lane follows a real road or railway; null for a straight line. */
+    val xs: FloatArray? = null, val ys: FloatArray? = null,
+) {
+    /** Distance along the route as a fraction of its length at each point. */
+    private val along: FloatArray? = xs?.let { x ->
+        val y = ys!!
+        val cum = FloatArray(x.size)
+        for (i in 1 until x.size) cum[i] = cum[i - 1] + sqrt((x[i] - x[i - 1]) * (x[i] - x[i - 1]) + (y[i] - y[i - 1]) * (y[i] - y[i - 1]))
+        val total = cum.last().coerceAtLeast(1e-3f)
+        for (i in cum.indices) cum[i] /= total
+        cum
+    }
+
+    /** True when the lane runs on a real network rather than a straight line. */
+    val routed: Boolean get() = along != null
+
+    /** The ground point [f] of the way along the lane. */
+    fun at(f: Float): Offset {
+        val cum = along ?: return Offset(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f)
+        val x = xs!!; val y = ys!!
+        var lo = 0
+        var hi = cum.size - 1
+        while (hi - lo > 1) {
+            val mid = (lo + hi) / 2
+            if (cum[mid] <= f) lo = mid else hi = mid
+        }
+        val span = (cum[hi] - cum[lo]).coerceAtLeast(1e-6f)
+        val t = ((f - cum[lo]) / span).coerceIn(0f, 1f)
+        return Offset(x[lo] + (x[hi] - x[lo]) * t, y[lo] + (y[hi] - y[lo]) * t)
+    }
+}
 
 /** Which moving things to draw: traffic (under the buildings), effects (over them), or both. */
 internal enum class OverlayPart { Traffic, Effects, All }
@@ -626,9 +656,8 @@ internal fun DrawScope.drawMapOverlay(
                         drawn++
                         continue
                     }
-                    val gx = lane.a.x + (lane.b.x - lane.a.x) * f
-                    val gy = lane.a.y + (lane.b.y - lane.a.y) * f
-                    val at = p.lift(gx.toDouble(), gy.toDouble(), o.plinth + 2)
+                    val g0 = lane.at(f)
+                    val at = p.lift(g0.x.toDouble(), g0.y.toDouble(), o.plinth + 2)
                     stamp(Sprites.glow, at, 4f * boost, color, 0.35f * boost.coerceAtMost(1.5f), BlendMode.Plus)
                     drawCircle(color, 1.6f * boost, at)
                     drawn++
@@ -732,30 +761,40 @@ private const val MaxFreightVehicles = 190
 private val Rail = Color(0xFF8A939C)
 private val Sleeper = Color(0xFF5A4636)
 
-/** A rail lane up close: sleepers across and two thin rails, under the trains. */
+/** A rail lane up close: sleepers across and two thin rails along its route, under the trains. */
 private fun DrawScope.drawRailTrack(lane: LaneTrack, p: MapProjection, plinth: Double) {
-    val a = p.lift(lane.a.x.toDouble(), lane.a.y.toDouble(), plinth)
-    val b = p.lift(lane.b.x.toDouble(), lane.b.y.toDouble(), plinth)
-    val d = b - a
-    val len = d.getDistance()
-    if (len < 4f) return
-    val u = d / len
-    val n = Offset(-u.y, u.x)
-    // The ground is seen at a slant, so the gauge narrows as the track turns away from the viewer.
-    val gauge = 1.5f * (0.5f + 0.5f * abs(u.x))
-    var t = 0f
-    while (t < len) {
-        val at = a + u * t
-        if (at.x in -8f..size.width + 8f && at.y in -8f..size.height + 8f) drawLine(Sleeper, at - n * (gauge + 1.2f), at + n * (gauge + 1.2f), 1f)
-        t += 5f
+    val steps = if (lane.routed) 160 else 1
+    var a = lane.at(0f).let { p.lift(it.x.toDouble(), it.y.toDouble(), plinth) }
+    var carry = 0f
+    for (k in 1..steps) {
+        val b = lane.at(k / steps.toFloat()).let { p.lift(it.x.toDouble(), it.y.toDouble(), plinth) }
+        val d = b - a
+        val len = d.getDistance()
+        if (len >= 0.5f) {
+            val u = d / len
+            val n = Offset(-u.y, u.x)
+            // The ground is seen at a slant, so the gauge narrows as the track turns away from the viewer.
+            val gauge = 1.5f * (0.5f + 0.5f * abs(u.x))
+            val visible = (a.x in -20f..size.width + 20f && a.y in -20f..size.height + 20f) || (b.x in -20f..size.width + 20f && b.y in -20f..size.height + 20f)
+            if (visible) {
+                var t = carry
+                while (t < len) {
+                    val at = a + u * t
+                    drawLine(Sleeper, at - n * (gauge + 1.2f), at + n * (gauge + 1.2f), 1f)
+                    t += 5f
+                }
+                drawLine(Rail, a - n * gauge, b - n * gauge, 1f)
+                drawLine(Rail, a + n * gauge, b + n * gauge, 1f)
+            }
+            carry = ((carry - len) % 5f + 5f) % 5f
+        }
+        a = b
     }
-    drawLine(Rail, a - n * gauge, b - n * gauge, 1f)
-    drawLine(Rail, a + n * gauge, b + n * gauge, 1f)
 }
 
 /** The vehicles for one load on a lane at fraction [f]: a truck, a ship, or a train of a locomotive and two wagons. */
 private fun laneVehicles(lane: LaneTrack, f: Float, forward: Boolean, p: MapProjection, plinth: Double, scale: Int, out: MutableList<VehicleSpot>) {
-    fun ground(t: Float) = p.lift((lane.a.x + (lane.b.x - lane.a.x) * t).toDouble(), (lane.a.y + (lane.b.y - lane.a.y) * t).toDouble(), plinth)
+    fun ground(t: Float) = lane.at(t).let { p.lift(it.x.toDouble(), it.y.toDouble(), plinth) }
     val sign = if (forward) 1f else -1f
     val step = 2f / lane.length.coerceAtLeast(1f)
     val at = ground(f)
@@ -763,7 +802,7 @@ private fun laneVehicles(lane: LaneTrack, f: Float, forward: Boolean, p: MapProj
     if (dir.getDistance() < 1e-3f) return
     val u = dir / dir.getDistance()
     // Trucks and trains keep to land: a straight lane between two hubs can cross a lake.
-    val wet = lane.water?.get((f * (WaterSamples - 1)).roundToInt()) == true
+    val wet = !lane.routed && lane.water?.get((f * (WaterSamples - 1)).roundToInt()) == true
     when (lane.mode) {
         "rail" -> if (!wet) {
             // Wagons trail the locomotive along the track, spaced by a vehicle's length on the ground.
@@ -852,9 +891,28 @@ internal fun laneTracks(map: WorldMap, p: MapProjection, lanes: List<LaneDto>, c
         val a = map.anchor(lane.a)?.let { p.ground(it.lon[0], it.lat[0]) }?.takeIf { it.isSpecified } ?: return@mapNotNull null
         val b = map.anchor(lane.b)?.let { p.ground(it.lon[0], it.lat[0]) }?.takeIf { it.isSpecified } ?: return@mapNotNull null
         val length = (b - a).getDistance().coerceAtLeast(8f)
+        // Trucks and trains follow the real interstates and railways where there is a route.
+        val route = Routes.of(map, lane.modeId, lane.a, lane.b)
+        var xs: FloatArray? = null
+        var ys: FloatArray? = null
+        var routeLength = length
+        if (route != null) {
+            val (lons, lats) = route
+            val px = FloatArray(lons.size); val py = FloatArray(lons.size)
+            var ok = true
+            for (i in lons.indices) {
+                val g = p.ground(lons[i], lats[i])
+                if (!g.isSpecified) { ok = false; break }
+                px[i] = g.x; py[i] = g.y
+            }
+            if (ok) {
+                xs = px; ys = py
+                routeLength = (1 until px.size).sumOf { i -> sqrt(((px[i] - px[i - 1]) * (px[i] - px[i - 1]) + (py[i] - py[i - 1]) * (py[i] - py[i - 1])).toDouble()) }.toFloat()
+            }
+        }
         LaneTrack(
-            a, b, lane.modeId, (lane.capacityLots + lane.outsideLots).toFloat() / top, length, (stableHash(lane.a + lane.b) % 1000) / 1000f,
-            lane.km.toFloat().coerceAtLeast(20f), laneIsMine(lane), waterAlong(map, lane.a, lane.b),
+            a, b, lane.modeId, (lane.capacityLots + lane.outsideLots).toFloat() / top, routeLength.coerceAtLeast(8f), (stableHash(lane.a + lane.b) % 1000) / 1000f,
+            lane.km.toFloat().coerceAtLeast(20f), laneIsMine(lane), waterAlong(map, lane.a, lane.b), xs, ys,
         )
     }
 }

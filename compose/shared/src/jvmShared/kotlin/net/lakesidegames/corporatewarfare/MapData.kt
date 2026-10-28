@@ -35,6 +35,8 @@ data class WorldMapFile(
     val lakes: List<Rings>,
     val rivers: List<Lines> = emptyList(),
     val interstates: List<Lines>,
+    /** Natural Earth railways round each scenario, for the trains. */
+    val railroads: List<Lines> = emptyList(),
     val cities: List<City>,
     val hubs: Map<String, List<Double>>,
     /** The states each scenario plays in; the first is the default scenario. */
@@ -136,6 +138,7 @@ class WorldMap private constructor(val file: WorldMapFile, val scenarioId: Strin
     val lakes = file.lakes.flatMap { l -> l.rings.map(::GeoRing) }
     val rivers = file.rivers.filter { owns(it.scenario) }.flatMap { r -> r.lines.map(::GeoRing) }
     val interstates = file.interstates.filter { owns(it.scenario) }.flatMap { r -> r.lines.map(::GeoRing) }
+    val railroads = file.railroads.filter { owns(it.scenario) }.flatMap { r -> r.lines.map(::GeoRing) }
     val hubs: Map<String, GeoRing> = file.hubs.filterValues { it.size == 2 }
         .mapValues { GeoRing.point(it.value[0] / 10_000, it.value[1] / 10_000) }
     val cities: List<Pair<WorldMapFile.City, GeoRing>> = file.cities.filter { owns(it.scenario) }

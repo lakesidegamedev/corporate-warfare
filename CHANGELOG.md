@@ -26,7 +26,8 @@ heading.
   a boom and pull in during a recession. Trees turn in the autumn and everything wears snow in
   winter.
 - Voxel trucks, trains on visible tracks, ships on the lakes and cargo planes carry the freight up
-  close; the lanes you use run in your gold livery.
+  close; the lanes you use run in your gold livery. Trucks follow the real interstates and trains
+  the real railways (Natural Earth, public domain) between the region hubs, not straight lines.
 - The map tells the story: a plant still going up shows as a building site with scaffold and a
   crane, a division adding or retooling plants has a crane beside it, a mothballed one goes dark,
   and one you have just taken over flies a gold flag for six weeks. Rivals' sites and closures show

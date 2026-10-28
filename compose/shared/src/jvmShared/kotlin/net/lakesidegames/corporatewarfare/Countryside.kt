@@ -29,6 +29,15 @@ internal object Countryside {
         val image = Images.load("earth-$id.jpg") ?: return emptyList()
         val pixels = IntArray(image.width * image.height)
         image.readPixels(pixels)
+        // The land mask from the game's own outlines, so nothing stands in a lake.
+        val land = Images.load("earth-land-$id.png")
+        val landPixels = land?.let { IntArray(it.width * it.height).also { px -> it.readPixels(px) } }
+        fun onLand(lon: Double, lat: Double): Boolean {
+            val m = land ?: return true
+            val u = ((lon - region.west) / (region.east - region.west) * m.width).toInt()
+            val v = ((region.north - lat) / (region.north - region.south) * m.height).toInt()
+            return u in 0 until m.width && v in 0 until m.height && (landPixels!![v * m.width + u] ushr 24) > 128
+        }
         val b = map.playBounds
         val west = b[0] - 3; val east = b[2] + 3; val south = b[1] - 3; val north = b[3] + 3
         val step = 0.14
@@ -46,6 +55,7 @@ internal object Countryside {
                 val x = lon + jx
                 val y = lat + jy
                 val roll = (seed / 7) % 100
+                if (!onLand(x, y)) { lon += step; col++; continue }
                 // Near a city: houses, thicker towards the middle.
                 val near = cities.minOfOrNull { (cx, cy, pop) ->
                     val d = sqrt(((x - cx) * cos(y * PI / 180)).let { it * it } + (y - cy) * (y - cy))
