@@ -61,6 +61,7 @@ final class SnapshotTests: XCTestCase {
         let home = store.boards.first { $0.code == store.divisions.first?.region }
         render("map-phone", phone, compact: true, MapHomeView().environmentObject(store))
         render("map-pad", pad, compact: false, MapHomeView().environmentObject(store))
+        renderCloseMaps(store, pad)
         if let home {
             render("region-phone", phone, compact: true,
                    RegionBoardView(board: home, onBuild: {}, onClose: {}).environmentObject(store))
@@ -117,6 +118,35 @@ final class SnapshotTests: XCTestCase {
                 render("\(name)-company", slice.size, compact: slice.compact, CompanyPageSheet(firm: firm).environmentObject(store))
             }
             render("\(name)-build", slice.size, compact: slice.compact, BuildFlowView(regionCode: region).environmentObject(store))
+        }
+    }
+
+    /// The still map past the zoom where models stand, north up and turned, so the voxel
+    /// buildings, the city blocks and the bearing are reviewed. Labels must stay on top.
+    private func renderCloseMaps(_ store: AppStore, _ size: CGSize) {
+        let map = WorldMap.forRegions(store.boards.map(\.code))
+        let grouped = Dictionary(grouping: store.mapDivisions) { $0.region + "/" + $0.industry }
+        let divisions = grouped.values.compactMap { items -> DivisionMarker? in
+            guard let first = items.first else { return nil }
+            return DivisionMarker(region: first.region, sector: first.industry, plants: Int(items.reduce(UInt32(0)) { $0 + $1.blocks }))
+        }
+        let home = divisions.first.flatMap { map.anchor(of: $0.region) }
+        let look = MapLook(detail: 2, tilt: GraphicsSettings.pitch(forTilt: 1), extrude: true, lighting: 2, dayNight: false,
+                           cityLights: true, clouds: 0, traffic: 1, buildings: 2, frameRate: 60, animations: false,
+                           showFps: false, ultra: false)
+        var framed = MapCamera.scenario(in: size, map: map).zoomed(by: 2)
+        if let home {
+            framed.lon = home.lon * 180 / .pi
+            framed.lat = home.lat * 180 / .pi
+        }
+        for (name, camera) in [("map-close-pad", framed), ("map-turned-pad", framed.rotated(by: 35))] {
+            let scene = MapScene(map: map, camera: camera, look: look, tint: MapLayer.presence.tintRGB, shading: [:], heights: [:],
+                                 selected: nil, divisions: divisions, sun: nil, displayScale: UIScreen.main.scale)
+            let geometry = MapGeometry(map: map, camera: camera, size: size, tilt: look.tilt, detail: look.detail)
+            XCTAssertTrue(geometry.closeUp, "\(name) is close enough for models")
+            render(name, size, compact: false, Canvas { context, _ in
+                scene.drawStatic(in: &context, geometry: geometry)
+            }.background(MapScene.spaceColor.color()))
         }
     }
 

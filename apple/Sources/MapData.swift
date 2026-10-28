@@ -317,7 +317,7 @@ final class WorldMap {
     }
 }
 
-/// Where the map looks: a centre in degrees and a zoom where 1 fits the whole globe.
+/// Where the map looks: a centre in degrees, a zoom where 1 fits the whole globe, and a bearing.
 struct MapCamera: Equatable {
     var lon: Double
     var lat: Double
@@ -325,6 +325,8 @@ struct MapCamera: Equatable {
     /// How much of the player's tilt setting applies: 1 tilted, 0 straight down. The 3D button
     /// flies between the two.
     var tilt: Double = 1
+    /// Degrees the map is turned, clockwise on screen; 0 is north up.
+    var bearing: Double = 0
 
     static let minZoom = 0.8
     static let maxZoom = 90.0
@@ -342,17 +344,21 @@ struct MapCamera: Equatable {
         zoom * 0.45 * Double(min(size.width, size.height))
     }
 
-    /// Moves the centre by a screen drag, so the ground follows the finger. A tilted map
-    /// foreshortens vertical movement by the cosine of its pitch.
+    /// Moves the centre by a screen drag, so the ground follows the finger, tilted or turned. A
+    /// tilted map foreshortens vertical movement by the cosine of its pitch.
     func panned(by delta: CGSize, in size: CGSize, pitch: Double = 0) -> MapCamera {
         let r = radius(in: size)
         let t = flatness
         let latRad = lat * .pi / 180
         let east = 1 + t * (max(cos(latRad), 0.2) - 1)
+        // Turn the drag back into the map's own east and south before moving the centre.
+        let b = bearing * .pi / 180
+        let dx = Double(delta.width) * cos(b) + Double(delta.height) * sin(b)
+        let dy = -Double(delta.width) * sin(b) + Double(delta.height) * cos(b)
         var next = self
-        next.lon -= Double(delta.width) / (r * east) * 180 / .pi
-        next.lat += Double(delta.height) / max(cos(pitch), 0.2) / r * 180 / .pi
-        next.lat = min(max(next.lat, -80), 80)
+        next.lon -= dx / (r * east) * 180 / .pi
+        next.lat += dy / max(cos(pitch), 0.2) / r * 180 / .pi
+        next.lat = min(max(next.lat, -89), 89)
         next.lon = (next.lon + 540).truncatingRemainder(dividingBy: 360) - 180
         return next
     }
@@ -362,6 +368,17 @@ struct MapCamera: Equatable {
         next.zoom = min(max(zoom * factor, MapCamera.minZoom), MapCamera.maxZoom)
         return next
     }
+
+    /// Turned by `degrees`, clockwise on screen.
+    func rotated(by degrees: Double) -> MapCamera {
+        var next = self
+        let turned = (bearing + degrees).truncatingRemainder(dividingBy: 360)
+        next.bearing = turned < 0 ? turned + 360 : turned
+        return next
+    }
+
+    /// Whether the map is turned away from north.
+    var turned: Bool { bearing > 0.5 && bearing < 359.5 }
 
     /// The camera that frames the scenario's playable states.
     static func scenario(in size: CGSize, map: WorldMap = .shared) -> MapCamera {
@@ -379,16 +396,22 @@ struct MapCamera: Equatable {
         return MapCamera(lon: lon, lat: lat, zoom: min(max(zoom, flatEnd), maxZoom))
     }
 
-    /// Steps between two cameras for a fly-to: shortest way round in longitude, even in zoom.
+    /// Steps between two cameras for a fly-to: shortest way round in longitude and bearing, even
+    /// in zoom.
     static func interpolate(_ a: MapCamera, _ b: MapCamera, _ f: Double) -> MapCamera {
         var dLon = b.lon - a.lon
         if dLon > 180 { dLon -= 360 }
         if dLon < -180 { dLon += 360 }
+        var dBearing = b.bearing - a.bearing
+        if dBearing > 180 { dBearing -= 360 }
+        if dBearing < -180 { dBearing += 360 }
+        let bearing = (a.bearing + dBearing * f).truncatingRemainder(dividingBy: 360)
         return MapCamera(
             lon: a.lon + dLon * f,
             lat: a.lat + (b.lat - a.lat) * f,
             zoom: exp(log(a.zoom) + (log(b.zoom) - log(a.zoom)) * f),
-            tilt: a.tilt + (b.tilt - a.tilt) * f
+            tilt: a.tilt + (b.tilt - a.tilt) * f,
+            bearing: bearing < 0 ? bearing + 360 : bearing
         )
     }
 }
@@ -413,6 +436,9 @@ struct MapProjection {
     let sin0: Double
     let cos0: Double
     let view: (Double, Double, Double)
+    /// The camera's bearing, kept as its sine and cosine.
+    let sinB: Double
+    let cosB: Double
     /// Angular radius that can reach the screen; anything farther is culled.
     let reach: Double
     /// Radians the ground is tilted, 0 on the globe and the full setting once flat.
@@ -438,6 +464,8 @@ struct MapProjection {
         sin0 = sin(lat0)
         cos0 = cos(lat0)
         view = (cos0 * cos(lon0), cos0 * sin(lon0), sin0)
+        sinB = sin(camera.bearing * .pi / 180)
+        cosB = cos(camera.bearing * .pi / 180)
         pitch = tilt * min(max(camera.tilt, 0), 1) * t
         cosPitch = cos(pitch)
         sinPitch = sin(pitch)
@@ -480,9 +508,10 @@ struct MapProjection {
         }
         let fx = dl * cos0
         let fy = p.lat - lat0
-        let x = cx + r * (ox + t * (fx - ox))
-        let y = cy - r * (oy + t * (fy - oy))
-        return (CGPoint(x: x, y: y), front || t > 0.5)
+        let gx = r * (ox + t * (fx - ox))
+        let gy = -r * (oy + t * (fy - oy))
+        // Turned by the camera's bearing about the centre, before the tilt (screen y points down).
+        return (CGPoint(x: cx + gx * cosB - gy * sinB, y: cy + gx * sinB + gy * cosB), front || t > 0.5)
     }
 
     /// Perspective scale at an untilted screen height: 1 at the centre, smaller farther away.
@@ -607,23 +636,25 @@ struct MapProjection {
         path(rings, height: height).contains(location, eoFill: true)
     }
 
-    /// A geo direction in view space: x right, y up, z towards the viewer.
+    /// A geo direction in view space: x right, y up, z towards the viewer, turned with the
+    /// bearing as the screen shows it.
     func toView(_ p: (Double, Double, Double)) -> (Double, Double, Double) {
         let sinL = sin(lon0)
         let cosL = cos(lon0)
         let east = (-sinL, cosL, 0.0)
         let north = (-sin0 * cosL, -sin0 * sinL, cos0)
-        return (p.0 * east.0 + p.1 * east.1 + p.2 * east.2,
-                p.0 * north.0 + p.1 * north.1 + p.2 * north.2,
-                p.0 * view.0 + p.1 * view.1 + p.2 * view.2)
+        let x = p.0 * east.0 + p.1 * east.1 + p.2 * east.2
+        let y = p.0 * north.0 + p.1 * north.1 + p.2 * north.2
+        return (x * cosB + y * sinB, -x * sinB + y * cosB, p.0 * view.0 + p.1 * view.1 + p.2 * view.2)
     }
 
     /// A view-space direction back in geo space.
-    func toGeo(_ v: (Double, Double, Double)) -> (Double, Double, Double) {
+    func toGeo(_ turned: (Double, Double, Double)) -> (Double, Double, Double) {
         let sinL = sin(lon0)
         let cosL = cos(lon0)
         let east = (-sinL, cosL, 0.0)
         let north = (-sin0 * cosL, -sin0 * sinL, cos0)
+        let v = (turned.0 * cosB - turned.1 * sinB, turned.0 * sinB + turned.1 * cosB, turned.2)
         return (v.0 * east.0 + v.1 * north.0 + v.2 * view.0,
                 v.0 * east.1 + v.1 * north.1 + v.2 * view.1,
                 v.0 * east.2 + v.1 * north.2 + v.2 * view.2)

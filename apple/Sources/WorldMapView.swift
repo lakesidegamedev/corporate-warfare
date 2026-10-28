@@ -36,11 +36,14 @@ struct Building {
     let key: String
 }
 
-/// The top of a city's tallest tower: untilted point and height.
-struct TopPoint {
-    let x: Double
-    let y: Double
-    let h: Double
+/// A city drawn as a voxel block: its index in the map's cities, untilted ground point, the
+/// tile it stands on, and a stand-in plant count that picks the block size.
+struct CityBlock {
+    let index: Int
+    let gx: Double
+    let gy: Double
+    let floor: Double
+    let plants: Int
 }
 
 /// A lane's ends as untilted points, with its mode and weight.
@@ -88,6 +91,12 @@ final class MapGeometry {
     let projection: MapProjection
     /// How big 3D things are drawn: 1 at the scenario's framing, larger closer in.
     let scale: Double
+    /// The zoom against the scenario's framing, unclamped: 1 at the framing, under 1 further out.
+    let zoomRatio: Double
+
+    /// Zoomed in past the scenario's framing: only then do divisions and cities stand as voxel
+    /// models. Around the framing divisions are small badges; further out nothing marks them.
+    var closeUp: Bool { zoomRatio >= 1.4 }
 
     init(map: WorldMap, camera: MapCamera, size: CGSize, tilt: Double, detail: Int) {
         self.map = map
@@ -97,7 +106,8 @@ final class MapGeometry {
         self.detail = detail
         projection = MapProjection(camera: camera, size: size, tilt: tilt)
         let framed = MapCamera.scenario(in: size, map: map).zoom
-        scale = min(max(camera.zoom / max(framed, 1e-6), 0.6), 2.5)
+        zoomRatio = camera.zoom / max(framed, 1e-6)
+        scale = min(max(zoomRatio, 0.6), 2.5)
     }
 
     /// The height of the scenario's base in points.
@@ -233,56 +243,34 @@ final class MapGeometry {
         return buildingsHeld
     }
 
-    private var skylineBuilt = false
-    private var skylineKey: [String: Double]?
-    private var skylineHeld: [Building] = []
-    private var skylineTops: [Int: TopPoint] = [:]
+    private var blocksBuilt = false
+    private var blocksKey: [String: Double]?
+    private var blocksHeld: [CityBlock] = []
 
-    /// Skylines for the biggest cities on screen, each a small cluster of towers.
-    func skylines(_ heights: [String: Double]?) -> [Building] {
-        if skylineBuilt && skylineKey == heights { return skylineHeld }
+    /// The biggest cities on screen as voxel city blocks, far ones first: thirty, or sixteen
+    /// around the scenario's framing so the map stays readable. Below a million people a town
+    /// block, below four million a city, above that a metropolis.
+    func cityBlocks(_ heights: [String: Double]?) -> [CityBlock] {
+        if blocksBuilt && blocksKey == heights { return blocksHeld }
         let p = projection
-        skylineTops.removeAll()
-        var boxes: [Building] = []
-        let bounds = CGRect(origin: .zero, size: size).insetBy(dx: -40, dy: -40)
+        let bounds = CGRect(origin: .zero, size: size).insetBy(dx: -60, dy: -60)
         let order = map.cities.indices.sorted { map.cities[$0].population > map.cities[$1].population }
-        var shown = 0
+        let most = camera.zoom > 10 ? 30 : 16
+        var blocks: [CityBlock] = []
         for index in order {
-            if shown >= 30 { break }
+            if blocks.count >= most { break }
             let city = map.cities[index]
             let geo = GeoPoint(e4: city.x, city.y)
             guard let ground = p.ground(lon: geo.lon, lat: geo.lat), bounds.contains(p.lift(ground, 0)) else { continue }
-            shown += 1
-            let hash = stableHash(city.name)
-            let count = 3 + hash % 5
-            let floor = cityFloor(index, heights)
-            let tall = (6 + 4 * log10(max(Double(city.population) / 1e5, 1))) * scale
-            var best = 0.0
-            var bestAt = TopPoint(x: Double(ground.x), y: Double(ground.y), h: floor)
-            for k in 0..<count {
-                let h2 = stableHash(city.name + "\(k)")
-                let dx = Double(h2 % 17 - 8) * 1.3 * scale
-                let dy = Double((h2 / 17) % 13 - 6) * 1.1 * scale
-                let h = tall * (0.35 + 0.65 * Double((h2 / 221) % 100) / 100) * (k == 0 ? 1.25 : 1)
-                let gx = Double(ground.x) + dx
-                let gy = Double(ground.y) + dy
-                boxes.append(Building(sector: "", plants: 0, gx: gx, gy: gy, half: (1.6 + Double(h2 % 3)) * scale,
-                                      floor: floor, top: floor + h, geo: geo, key: city.name))
-                if h > best {
-                    best = h
-                    bestAt = TopPoint(x: gx, y: gy, h: floor + h)
-                }
-            }
-            skylineTops[index] = bestAt
+            let stand = city.population < 1_000_000 ? 2 : city.population < 4_000_000 ? 5 : 12
+            blocks.append(CityBlock(index: index, gx: Double(ground.x), gy: Double(ground.y),
+                                    floor: cityFloor(index, heights), plants: stand))
         }
-        skylineHeld = boxes.sorted { $0.gy < $1.gy }
-        skylineKey = heights
-        skylineBuilt = true
-        return skylineHeld
+        blocksHeld = blocks.sorted { $0.gy < $1.gy }
+        blocksKey = heights
+        blocksBuilt = true
+        return blocksHeld
     }
-
-    /// The top of a city's tallest tower, once its skyline has been built.
-    func skylineTop(_ index: Int) -> TopPoint? { skylineTops[index] }
 
     private struct OverlayKey: Equatable {
         let lanes: Int
@@ -316,7 +304,8 @@ final class MapGeometry {
         let tracks = p.t > 0.5 && laneCount > 0 ? laneTracks(lanes, count: laneCount) : []
         let roadLines = look.traffic > 0 && detail >= 2 && camera.zoom > 9
             ? MapPolyline.build(p, map.interstates, lift: raised ? plinth : 0, size: size) : []
-        let spots: [BuildingSpot] = look.buildings > 0 && camera.zoom > 3 && p.t > 0.5
+        // Beacons and smoke only where the models stand.
+        let spots: [BuildingSpot] = look.buildings > 0 && closeUp && p.t > 0.5
             ? buildings(divisions, ground).map { b in
                 let base = p.lift(CGPoint(x: b.gx, y: b.gy), b.floor)
                 // The rooftop light and smoke sit on the sprite's top when there is one.
@@ -520,7 +509,6 @@ struct MapScene {
     private static let outsideBorder = RGB(hex: 0x55595D)
     private static let outsideRoad = RGB(hex: 0x6A6E72)
     private static let regionLand = RGB(hex: 0x33475A)
-    private static let skyline = RGB(hex: 0x4A5A6C)
     private static let modeColors: [String: RGB] = [
         "road": RGB(hex: 0xE0A040), "truck": RGB(hex: 0xE0A040), "rail": RGB(hex: 0x7FD3FF), "sea": RGB(hex: 0x9AF0E0),
     ]
@@ -555,26 +543,20 @@ struct MapScene {
         if zoom > 3 {
             let close = zoom > 14
             let nightNow = sun != nil
-            // City skylines, then the player's divisions as buildings, nearest drawn last.
-            if look.buildings >= 2 && zoom > 6 && t > 0.5 {
-                for box in g.skylines(ground) {
-                    let windows = nightNow && light.facing(box.geo) < 0 ? 0.75 : look.lighting == 2 ? 0.22 : 0
-                    drawBox(&context, projection: p, gx: box.gx, gy: box.gy, half: box.half, floor: box.floor, top: box.top,
-                            color: MapScene.skyline, windows: windows)
+            // Each big city on screen is a voxel city block sized by its population, a step smaller
+            // than the player's buildings so those stay the stars; then the divisions, nearest last.
+            var cityTops: [Int: CGFloat] = [:]
+            if look.buildings >= 2 && g.closeUp && t > 0.5 {
+                let voxel = max(Voxels.scale(g.scale, displayScale: displayScale) - 1, 1)
+                for block in g.cityBlocks(ground) {
+                    let base = p.lift(CGPoint(x: block.gx, y: block.gy), block.floor)
+                    if let top = Voxels.draw("city", plants: block.plants, ground: base, scale: voxel,
+                                             displayScale: displayScale, in: &context) {
+                        cityTops[block.index] = top
+                    }
                 }
             }
-            for (index, city) in map.cities.prefix(close ? 40 : 14).enumerated() {
-                if !close && city.country != "USA" { continue }
-                let geo = GeoPoint(e4: city.x, city.y)
-                guard let at = p.at(lon: geo.lon, lat: geo.lat, height: g.cityFloor(index, ground)) else { continue }
-                let above = g.skylineTop(index).map { p.lift(CGPoint(x: $0.x, y: $0.y), $0.h) }
-                context.fill(disc(at, 2.5), with: .color(Theme.primaryText.opacity(0.85)))
-                labels.draw(
-                    Text(city.name).font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.primaryText.opacity(0.9)),
-                    at: CGPoint(x: at.x + 6, y: min(above?.y ?? at.y, at.y)), anchor: .leading
-                )
-            }
-            if look.buildings > 0 && t > 0.5 {
+            if look.buildings > 0 && g.closeUp && t > 0.5 {
                 let voxel = Voxels.scale(g.scale, displayScale: displayScale)
                 for b in g.buildings(divisions, ground) {
                     // Each division is a voxel building for its industry; a plain box if the sprite is missing.
@@ -595,11 +577,23 @@ struct MapScene {
                     context.fill(disc(badge, max(measured.width, measured.height) / 2 + 3), with: .color(Theme.gold))
                     context.draw(count, at: badge)
                 }
-            } else {
+            } else if t > 0.9 && g.zoomRatio >= 0.7 {
+                // Around the scenario's framing: a small badge per division. Further out, nothing.
                 drawDivisions(in: &context, projection: p, lift: plinth)
             }
             if look.cityLights && lit && (sun != nil || t < 1) {
                 GlobeLighting.cityLights(in: &context, cities: map.cities, projection: p, sun: light, lift: plinth, scale: 1)
+            }
+            // City names last, with the region names below, so no building ever covers them.
+            for (index, city) in map.cities.prefix(close ? 40 : 14).enumerated() {
+                if !close && city.country != "USA" { continue }
+                let geo = GeoPoint(e4: city.x, city.y)
+                guard let at = p.at(lon: geo.lon, lat: geo.lat, height: g.cityFloor(index, ground)) else { continue }
+                context.fill(disc(at, 2.5), with: .color(Theme.primaryText.opacity(0.85)))
+                labels.draw(
+                    Text(city.name).font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.primaryText.opacity(0.9)),
+                    at: CGPoint(x: at.x + 6, y: min(cityTops[index] ?? at.y, at.y)), anchor: .leading
+                )
             }
         } else if look.cityLights && lit && t < 1 {
             GlobeLighting.cityLights(in: &context, cities: map.cities, projection: p, sun: light, lift: 0, scale: 0.7)
@@ -1072,6 +1066,7 @@ struct WorldMapView: View {
     @State private var camera: MapCamera?
     @State private var lastDrag: CGSize = .zero
     @State private var lastPinch: CGFloat = 1
+    @State private var lastTurn: Angle = .zero
     @State private var flight: Task<Void, Never>?
     @State private var geometry = MapGeometryCache()
     @State private var ease = HeightEase()
@@ -1175,17 +1170,33 @@ struct WorldMapView: View {
                 }
             }
             .background(MapScene.spaceColor.color())
+            // A right drag (a Mac, or an iPad with a mouse) turns the map.
+            .background(SecondaryDrag { dx in
+                flight?.cancel()
+                camera = (camera ?? current).rotated(by: Double(dx) * 0.4)
+            })
             .contentShape(Rectangle())
             .gesture(
                 SimultaneousGesture(
-                    MagnifyGesture()
-                        .onChanged { value in
-                            flight?.cancel()
-                            let factor = value.magnification / lastPinch
-                            lastPinch = value.magnification
-                            camera = (camera ?? current).zoomed(by: Double(factor))
-                        }
-                        .onEnded { _ in lastPinch = 1 },
+                    SimultaneousGesture(
+                        MagnifyGesture()
+                            .onChanged { value in
+                                flight?.cancel()
+                                let factor = value.magnification / lastPinch
+                                lastPinch = value.magnification
+                                camera = (camera ?? current).zoomed(by: Double(factor))
+                            }
+                            .onEnded { _ in lastPinch = 1 },
+                        // A two-finger twist turns the map; sprites and labels stay upright.
+                        RotateGesture()
+                            .onChanged { value in
+                                flight?.cancel()
+                                let turn = value.rotation - lastTurn
+                                lastTurn = value.rotation
+                                camera = (camera ?? current).rotated(by: turn.degrees)
+                            }
+                            .onEnded { _ in lastTurn = .zero }
+                    ),
                     DragGesture(minimumDistance: 6)
                         .onChanged { value in
                             flight?.cancel()
@@ -1284,6 +1295,22 @@ struct WorldMapView: View {
             }
             Divider().frame(width: 36).overlay(Theme.stroke)
             cloudButton
+            if current.turned {
+                // Turned away from north: one tap turns it back.
+                Divider().frame(width: 36).overlay(Theme.stroke)
+                Button {
+                    var target = current
+                    target.bearing = 0
+                    fly(from: current, to: target)
+                } label: {
+                    Text("N")
+                        .font(Pixel.font(14, bold: true))
+                        .foregroundStyle(Theme.gold)
+                        .frame(width: 40, height: 40)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Turn the map back to north")
+            }
             if tiltSetting > 0 {
                 Divider().frame(width: 36).overlay(Theme.stroke)
                 Button {
@@ -1370,5 +1397,94 @@ struct WorldMapView: View {
         let box = CGRect(x: 6, y: size.height - measured.height - 14, width: measured.width + 12, height: measured.height + 8)
         context.fill(Path(box), with: .color(.black.opacity(0.55)))
         context.draw(text, at: CGPoint(x: 12, y: size.height - measured.height - 10), anchor: .topLeading)
+    }
+}
+
+/// Turns the map with a secondary-button drag. The recogniser sits on the window, so the map's own
+/// SwiftUI gestures keep every other touch, and it answers only drags that start over this view.
+private struct SecondaryDrag: UIViewRepresentable {
+    let onTurn: (CGFloat) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onTurn: onTurn) }
+
+    func makeUIView(context: Context) -> Host {
+        let view = Host()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateUIView(_ view: Host, context: Context) {
+        context.coordinator.onTurn = onTurn
+    }
+
+    static func dismantleUIView(_ view: Host, coordinator: Coordinator) {
+        coordinator.detach()
+    }
+
+    final class Host: UIView {
+        weak var coordinator: Coordinator?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            coordinator?.attach(to: window, over: self)
+        }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var onTurn: (CGFloat) -> Void
+        private weak var area: UIView?
+        private var pan: UIPanGestureRecognizer?
+        private var last: CGFloat = 0
+
+        init(onTurn: @escaping (CGFloat) -> Void) {
+            self.onTurn = onTurn
+        }
+
+        func attach(to window: UIWindow?, over view: UIView) {
+            detach()
+            guard let window else { return }
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
+            pan.allowedScrollTypesMask = []
+            pan.cancelsTouchesInView = false
+            pan.delegate = self
+            window.addGestureRecognizer(pan)
+            self.pan = pan
+            area = view
+        }
+
+        func detach() {
+            if let pan { pan.view?.removeGestureRecognizer(pan) }
+            pan = nil
+        }
+
+        @objc private func dragged(_ pan: UIPanGestureRecognizer) {
+            let x = pan.translation(in: pan.view).x
+            switch pan.state {
+            case .began:
+                last = x
+            case .changed:
+                onTurn(x - last)
+                last = x
+            default:
+                last = 0
+            }
+        }
+
+        /// Only drags with the secondary button down.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive event: UIEvent) -> Bool {
+            event.type != .touches || event.buttonMask.contains(.secondary)
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard let area, area.window != nil else { return false }
+            return area.bounds.contains(touch.location(in: area))
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            true
+        }
     }
 }

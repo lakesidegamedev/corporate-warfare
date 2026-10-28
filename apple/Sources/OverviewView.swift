@@ -326,7 +326,7 @@ struct GraphicsSettingsPanel: View {
                 choice("Traffic", custom($traffic), ["Off", "Light", "Busy"],
                        "Freight moves along the lanes and cars along the highways.")
                 choice("Buildings", custom($buildings), ["Flat", "Your divisions", "Divisions and cities"],
-                       "Shows your divisions as buildings, and city skylines.")
+                       "Shows your divisions as buildings, and cities as blocks, when zoomed in.")
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Frame rate").font(.callout).foregroundStyle(Theme.primaryText)
                     PixelChoices(options: [(30, "30"), (60, "60"), (0, "Unlimited")], selection: custom($frameRate), label: "Frame rate")
