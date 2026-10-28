@@ -1446,7 +1446,6 @@ private struct SecondaryDrag: UIViewRepresentable {
             detach()
             guard let window else { return }
             let pan = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
-            pan.buttonMaskRequired = .secondary
             pan.allowedScrollTypesMask = []
             pan.cancelsTouchesInView = false
             pan.delegate = self
@@ -1471,6 +1470,11 @@ private struct SecondaryDrag: UIViewRepresentable {
             default:
                 last = 0
             }
+        }
+
+        /// Only drags with the secondary button down.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive event: UIEvent) -> Bool {
+            event.type != .touches || event.buttonMask.contains(.secondary)
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
