@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -124,7 +123,7 @@ fun ValueSlider(
 
 @Composable
 private fun Nudge(symbol: String, onClick: () -> Unit) {
-    Box(Modifier.size(30.dp).clip(CircleShape).background(Palette.panelRaised).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(30.dp).clip(Pixel.small).background(Palette.panelRaised).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
         PixelIcon(symbol, size = 16.dp, tint = Palette.primaryText)
     }
 }

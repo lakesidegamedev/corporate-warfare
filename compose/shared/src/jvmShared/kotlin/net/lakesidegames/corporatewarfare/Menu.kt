@@ -26,8 +26,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -124,8 +122,8 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
             Spacer(Modifier.height(6.dp))
             if (updater != null) {
                 Column(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.panel.copy(alpha = 0.85f))
-                        .border(1.dp, Palette.stroke, RoundedCornerShape(12.dp)).padding(12.dp),
+                    Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.panel.copy(alpha = 0.85f))
+                        .border(1.dp, Palette.stroke, Pixel.shape).padding(12.dp),
                 ) { UpdatePanel(updater) }
             }
             Text(
@@ -166,20 +164,17 @@ private fun ShiningLogo(modifier: Modifier) {
 
 @Composable
 private fun MenuButton(title: String, primary: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = Pixel.shape
     Box(
         Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.5f)
-            .then(if (primary) Modifier.shadow(14.dp, shape, ambientColor = Palette.gold, spotColor = Palette.gold) else Modifier)
+            .padding(end = 3.dp, bottom = 3.dp)
+            .pixelFrame(if (primary) Palette.gold else Palette.panel, if (primary) Color(0xFF8A6420) else Palette.stroke)
             .clip(shape)
-            .background(if (primary) Palette.gold else Palette.panel.copy(alpha = 0.72f))
-            // Glass: a soft highlight across the top half.
-            .background(Brush.verticalGradient(0f to Color.White.copy(alpha = if (primary) 0.22f else 0.10f), 0.5f to Color.Transparent))
-            .border(1.dp, if (primary) Palette.gold else Palette.stroke, shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 15.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(title.uppercase(), color = if (primary) Palette.ink else Palette.primaryText, fontSize = 17.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+        Text(title.uppercase(), color = if (primary) Palette.ink else Palette.primaryText, fontSize = 16.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
     }
 }
 
@@ -337,7 +332,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 customs.forEach { custom ->
                                     val on = chosenCustom?.id == custom.id
-                                    val shape = RoundedCornerShape(12.dp)
+                                    val shape = Pixel.shape
                                     Column(
                                         Modifier.width(if (wide) 380.dp else 320.dp).clip(shape)
                                             .background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.panel)
@@ -370,7 +365,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                         if (scenario != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Images.load(scenario.image)?.let {
-                                    Image(it, null, Modifier.width(160.dp).aspectRatio(1200f / 640f).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                                    Image(it, null, Modifier.width(160.dp).aspectRatio(1200f / 640f).clip(Pixel.shape), contentScale = ContentScale.Crop)
                                     Spacer(Modifier.width(14.dp))
                                 }
                                 Column {
@@ -454,7 +449,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
 private fun StepDot(number: Int, label: String, active: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.width(22.dp).height(22.dp).clip(CircleShape).background(if (active) Palette.gold else Palette.panelRaised),
+            Modifier.width(22.dp).height(22.dp).clip(Pixel.small).background(if (active) Palette.gold else Palette.panelRaised),
             contentAlignment = Alignment.Center,
         ) { Text("$number", color = if (active) Palette.ink else Palette.secondary, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
         Spacer(Modifier.width(6.dp))
@@ -476,7 +471,7 @@ private fun <T> Options(items: List<T>, selected: T, title: (T) -> String, note:
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         items.forEach { item ->
             val on = item == selected
-            val shape = RoundedCornerShape(12.dp)
+            val shape = Pixel.shape
             Column(
                 Modifier.width(if (wide) 250.dp else 320.dp).clip(shape)
                     .background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.panel)
@@ -494,7 +489,7 @@ private fun <T> Options(items: List<T>, selected: T, title: (T) -> String, note:
 /** One scenario: its art, name, region, year and currency, or a coming-soon card. */
 @Composable
 private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Modifier, onCustomize: (() -> Unit)? = null, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = Pixel.shape
     Column(
         modifier.clip(shape).background(Palette.panel)
             .border(if (selected) 3.dp else 1.dp, if (selected) Palette.gold else Palette.stroke, shape)
@@ -525,7 +520,7 @@ private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Mod
                     color = Palette.primaryText,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.TopStart).padding(12.dp).clip(CircleShape)
+                    modifier = Modifier.align(Alignment.TopStart).padding(12.dp).clip(Pixel.small)
                         .background(Palette.panelRaised.copy(alpha = 0.9f))
                         .clickable(onClick = onCustomize)
                         .padding(horizontal = 10.dp, vertical = 4.dp),
@@ -536,7 +531,7 @@ private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Mod
                 color = if (scenario.available) Palette.ink else Palette.primaryText,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).clip(CircleShape)
+                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).clip(Pixel.small)
                     .background(if (scenario.available) Palette.gold else Palette.panelRaised.copy(alpha = 0.9f))
                     .padding(horizontal = 10.dp, vertical = 4.dp),
             )

@@ -33,8 +33,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
@@ -156,7 +154,7 @@ private fun Sidebar(store: GameStore, page: Page, onPage: (Page) -> Unit, onSett
             if (item.group != group) {
                 group = item.group
                 Text(
-                    group.uppercase(), color = Palette.secondary.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
+                    group.uppercase(), color = Palette.secondary.copy(alpha = 0.7f), fontSize = 10.sp, fontFamily = Pixel.font,
                     letterSpacing = 1.sp, modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp),
                 )
             }
@@ -178,7 +176,7 @@ private fun CompanySwitcher(store: GameStore) {
     val controlled = store.firms.filter { it.controlled }
     Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.panelRaised)
+            Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.panelRaised)
                 .clickable(enabled = controlled.size > 1) { open = !open }.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -206,17 +204,17 @@ private fun SidebarItem(icon: String, title: String, shortcut: String, selected:
     val hover = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp).clip(RoundedCornerShape(8.dp))
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp).clip(Pixel.shape)
             .background(if (selected) Palette.panelRaised else if (hovered) Palette.panelRaised.copy(alpha = 0.5f) else Color.Transparent)
             .hoverable(hover).pointerHoverIcon(PointerIcon.Hand)
             .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (selected) Box(Modifier.width(3.dp).height(18.dp).clip(RoundedCornerShape(2.dp)).background(Palette.gold))
+        if (selected) Box(Modifier.width(3.dp).height(18.dp).clip(Pixel.small).background(Palette.gold))
         Spacer(Modifier.width(if (selected) 7.dp else 10.dp))
         PixelIcon(icon, size = 18.dp, tint = if (selected) Palette.gold else Palette.secondary)
         Spacer(Modifier.width(10.dp))
-        Text(title, color = if (selected) Palette.primaryText else Palette.secondary, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.weight(1f))
+        Text(title.uppercase(), color = if (selected) Palette.primaryText else Palette.secondary, fontSize = 12.sp, fontFamily = Pixel.font, modifier = Modifier.weight(1f))
         if (badge > 0) SignalPill("$badge", Palette.warning)
         else if (hovered && shortcut.isNotEmpty()) Text(shortcut, color = Palette.secondary.copy(alpha = 0.7f), fontSize = 10.sp)
     }
@@ -246,7 +244,7 @@ private fun StatusBar(store: GameStore, onSearch: (String) -> Unit) {
                 Text(
                     economy.phase.replaceFirstChar { it.uppercase() },
                     color = Palette.ink, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clip(CircleShape).background(phaseTint(economy.phase)).padding(horizontal = 7.dp, vertical = 1.dp),
+                    modifier = Modifier.clip(Pixel.small).background(phaseTint(economy.phase)).padding(horizontal = 7.dp, vertical = 1.dp),
                 )
             }
         }
@@ -275,7 +273,7 @@ private fun StatusBar(store: GameStore, onSearch: (String) -> Unit) {
             },
             decorationBox = { inner ->
                 Row(
-                    Modifier.clip(RoundedCornerShape(9.dp)).background(Palette.ink).border(1.dp, Palette.stroke, RoundedCornerShape(9.dp))
+                    Modifier.clip(Pixel.shape).background(Palette.ink).border(1.dp, Palette.stroke, Pixel.shape)
                         .padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -348,7 +346,7 @@ private fun RowScope.Cell(text: String, col: Col, tone: Color = Palette.primaryT
 /** A titled pane that fills its slot and scrolls on its own. */
 @Composable
 private fun Pane(title: String, modifier: Modifier, scroll: Boolean = true, trailing: @Composable () -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.clip(RoundedCornerShape(10.dp)).background(Palette.panel).border(1.dp, Palette.stroke, RoundedCornerShape(10.dp))) {
+    Column(modifier.clip(Pixel.shape).background(Palette.panel).border(1.dp, Palette.stroke, Pixel.shape)) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title.uppercase(), color = Palette.secondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp, modifier = Modifier.weight(1f))
             trailing()
@@ -364,7 +362,7 @@ private fun Chips(options: List<String>, selected: String, onPick: (String) -> U
         options.forEach { option ->
             Text(
                 option, color = if (option == selected) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clip(CircleShape).background(if (option == selected) Palette.gold else Palette.panelRaised)
+                modifier = Modifier.clip(Pixel.small).background(if (option == selected) Palette.gold else Palette.panelRaised)
                     .clickable { onPick(option) }.padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }
@@ -445,7 +443,7 @@ private fun DesktopMap(store: GameStore) {
                 }
             }
         }
-        Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(10.dp)).border(1.dp, Palette.stroke, RoundedCornerShape(10.dp))) {
+        Box(Modifier.weight(1f).fillMaxHeight().clip(Pixel.shape).border(1.dp, Palette.stroke, Pixel.shape)) {
             WorldMapView(store, layer, selected, { selected = it }, Modifier.fillMaxSize(), pickedLane, { pickedLane = it })
             Row(Modifier.align(Alignment.TopStart).padding(10.dp)) {
                 Chips(MapLayer.entries.map { it.title }, layer.title) { title -> layer = MapLayer.entries.first { it.title == title } }
@@ -529,7 +527,7 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
     }
     Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.panel).padding(12.dp),
+            Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.panel).padding(12.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             SectorBadge(firm.industry, 40)
@@ -788,7 +786,7 @@ private fun DesktopPortfolio(store: GameStore) {
     val overview = store.overview ?: return
     Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.panel).padding(12.dp),
+            Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.panel).padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
             Figure("Net worth", Format.compact(overview.investorNetWorthCents))

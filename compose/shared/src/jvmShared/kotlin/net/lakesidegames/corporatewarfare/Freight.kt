@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -115,7 +114,7 @@ internal fun laneAt(map: WorldMap, projection: MapProjection, lanes: List<LaneDt
 private fun Pill(text: String, on: Boolean, onClick: () -> Unit) {
     Text(
         text, color = if (on) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clip(CircleShape).background(if (on) Palette.gold else Palette.panelRaised)
+        modifier = Modifier.clip(Pixel.small).background(if (on) Palette.gold else Palette.panelRaised)
             .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 4.dp),
     )
 }
@@ -137,7 +136,7 @@ private fun changeText(bps: Int): String = when {
 @Composable
 private fun LegendDot(color: Color, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Box(Modifier.size(8.dp).clip(Pixel.small).background(color))
         Spacer(Modifier.width(4.dp))
         Text(text, color = Palette.secondary, fontSize = 11.sp)
     }
@@ -171,7 +170,7 @@ private fun rememberShipping(store: GameStore, facility: ULong?): ShippingSummar
 @Composable
 private fun PolicyRow(store: GameStore, option: PolicyOptionDto, onPick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+        Modifier.fillMaxWidth().clip(Pixel.shape)
             .background(if (option.selected) Palette.gold.copy(alpha = 0.14f) else Palette.panelRaised.copy(alpha = 0.5f))
             .clickable(onClick = onPick).padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,

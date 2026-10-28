@@ -8,7 +8,6 @@ import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
@@ -147,8 +146,9 @@ fun GoldButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = t
         onClick = onClick,
         enabled = enabled,
         modifier = modifier,
+        shape = Pixel.small,
         colors = ButtonDefaults.buttonColors(containerColor = Palette.gold, contentColor = Palette.ink),
-    ) { Text(text, fontWeight = FontWeight.SemiBold) }
+    ) { Text(text.uppercase(), fontFamily = Pixel.font, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
 }
 
 @Composable
@@ -547,8 +547,8 @@ fun PauseBanner(store: GameStore, modifier: Modifier = Modifier) {
     val answerable = info.action == "answer" && event != null
     val tint = if (info.kind == "decision") Palette.warning else Palette.gold
     Column(
-        modifier.clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.10f))
-            .border(1.dp, tint.copy(alpha = 0.25f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
+        modifier.clip(Pixel.shape).background(tint.copy(alpha = 0.10f))
+            .border(1.dp, tint.copy(alpha = 0.25f), Pixel.shape).padding(horizontal = 12.dp, vertical = 9.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -687,7 +687,7 @@ fun RunControls(store: GameStore) {
 @Composable
 fun SpeedControl(store: GameStore) {
     Row(
-        Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(Palette.panelRaised).padding(2.dp),
+        Modifier.clip(Pixel.shape).background(Palette.panelRaised).padding(2.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         listOf(0 to "pause", 1 to "speed1", 2 to "speed2", 4 to "speed3").forEach { (value, label) ->
@@ -696,7 +696,7 @@ fun SpeedControl(store: GameStore) {
                 label,
                 size = 16.dp,
                 tint = if (selected) Palette.ink else Palette.primaryText,
-                modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                modifier = Modifier.clip(Pixel.shape)
                     .background(if (selected) Palette.gold else androidx.compose.ui.graphics.Color.Transparent)
                     .clickable { store.playAt(value) }
                     .padding(horizontal = 10.dp, vertical = 7.dp),

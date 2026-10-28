@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -300,9 +299,9 @@ private fun <T> Choices(options: List<T>, selected: T, label: (T) -> String, onP
             Text(
                 label(option),
                 color = if (on) Palette.ink else Palette.primaryText,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clip(CircleShape)
+                fontSize = 12.sp,
+                fontFamily = Pixel.font,
+                modifier = Modifier.clip(Pixel.small)
                     .background(if (on) Palette.gold else Palette.panelRaised)
                     .clickable { onPick(option) }
                     .padding(horizontal = 12.dp, vertical = 7.dp),

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -136,7 +135,7 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
                     color = if (sort == option) Palette.ink else Palette.primaryText,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clip(CircleShape).background(if (sort == option) Palette.gold else Palette.panel)
+                    modifier = Modifier.clip(Pixel.small).background(if (sort == option) Palette.gold else Palette.panel)
                         .clickable { onSort(option) }.padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }

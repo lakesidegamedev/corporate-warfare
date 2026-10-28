@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
                 isEnabled = true
             }
         })
+        Pixel.font = androidPixelFont()
         MeshCanvas.draw = { canvas, positions, tex, colors, indices, vertices, indexCount, paint ->
             // Clouds go to the graphics chip as arrays in one call.
             canvas.nativeCanvas.drawVertices(
@@ -73,4 +74,21 @@ private class AndroidUpdates(private val activity: ComponentActivity) : UpdatePl
             activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
         }
     }
+}
+
+/** Silkscreen, the pixel font: copied from the app's resources to the cache once, then loaded from there. */
+private fun android.content.Context.androidPixelFont(): androidx.compose.ui.text.font.FontFamily {
+    fun load(name: String, weight: androidx.compose.ui.text.font.FontWeight): androidx.compose.ui.text.font.Font? {
+        val file = java.io.File(cacheDir, name)
+        if (!file.exists()) {
+            val bytes = Pixel::class.java.getResourceAsStream("/$name")?.use { it.readBytes() } ?: return null
+            file.writeBytes(bytes)
+        }
+        return androidx.compose.ui.text.font.Font(file, weight)
+    }
+    val fonts = listOfNotNull(
+        load("Silkscreen-Regular.ttf", androidx.compose.ui.text.font.FontWeight.Normal),
+        load("Silkscreen-Bold.ttf", androidx.compose.ui.text.font.FontWeight.Bold),
+    )
+    return if (fonts.isEmpty()) androidx.compose.ui.text.font.FontFamily.Default else androidx.compose.ui.text.font.FontFamily(fonts)
 }

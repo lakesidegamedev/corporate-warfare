@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -148,7 +147,7 @@ private fun Trend(values: List<Long>) {
     Row(Modifier.fillMaxWidth().heightIn(min = 36.dp, max = 36.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
         values.forEach { v ->
             val h = (36.0 * v / peak).coerceAtLeast(1.0).dp
-            Spacer(Modifier.weight(1f).heightIn(min = h, max = h).clip(CircleShape).background(Palette.gold))
+            Spacer(Modifier.weight(1f).heightIn(min = h, max = h).clip(Pixel.small).background(Palette.gold))
         }
     }
 }
@@ -157,7 +156,7 @@ private fun Trend(values: List<Long>) {
 private fun Pill(text: String, onClick: () -> Unit) {
     Text(
         text, color = Palette.primaryText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clip(CircleShape).background(Palette.panelRaised).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 4.dp),
+        modifier = Modifier.clip(Pixel.small).background(Palette.panelRaised).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 4.dp),
     )
 }
 

@@ -84,6 +84,7 @@ private object DesktopUpdates : UpdatePlatform {
 fun main() = application {
     Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
     MeshCanvas.draw = desktopMeshDraw
+    Pixel.font = desktopPixelFont()
     MeshCanvas.shader = desktopLinearShader
     val settings = remember { AppSettings(File(saveDirectory(), "settings.properties")) }
     var loaded by remember { mutableStateOf(false) }
@@ -195,4 +196,16 @@ internal val desktopLinearShader: (androidx.compose.ui.graphics.ImageBitmap, Boo
         if (repeatX) org.jetbrains.skia.FilterTileMode.CLAMP else org.jetbrains.skia.FilterTileMode.MIRROR,
         org.jetbrains.skia.SamplingMode.LINEAR, null,
     )
+}
+
+/** Silkscreen, the pixel font, from the app's resources. */
+internal fun desktopPixelFont(): androidx.compose.ui.text.font.FontFamily {
+    fun load(name: String, weight: androidx.compose.ui.text.font.FontWeight) =
+        Pixel::class.java.getResourceAsStream("/$name")?.use { it.readBytes() }
+            ?.let { androidx.compose.ui.text.platform.Font(name, it, weight) }
+    val fonts = listOfNotNull(
+        load("Silkscreen-Regular.ttf", androidx.compose.ui.text.font.FontWeight.Normal),
+        load("Silkscreen-Bold.ttf", androidx.compose.ui.text.font.FontWeight.Bold),
+    )
+    return if (fonts.isEmpty()) androidx.compose.ui.text.font.FontFamily.Default else androidx.compose.ui.text.font.FontFamily(fonts)
 }

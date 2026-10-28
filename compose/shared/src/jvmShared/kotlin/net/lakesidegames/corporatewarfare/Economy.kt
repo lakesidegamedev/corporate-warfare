@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -50,7 +48,7 @@ private fun pct(bps: Int, digits: Int = 1) = "%.${digits}f%%".format(bps / 100.0
 private fun PhasePill(phase: String) {
     Text(
         phase.replaceFirstChar { it.uppercase() }, color = Palette.ink, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-        modifier = Modifier.clip(CircleShape).background(economyPhaseTint(phase)).padding(horizontal = 9.dp, vertical = 2.dp),
+        modifier = Modifier.clip(Pixel.small).background(economyPhaseTint(phase)).padding(horizontal = 9.dp, vertical = 2.dp),
     )
 }
 
@@ -133,7 +131,7 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
             Spacer(Modifier.width(8.dp))
             Text(
                 e.chairStance, color = Palette.ink, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.clip(CircleShape).background(if (e.chairStance.contains("hawk")) Palette.negative.copy(alpha = 0.8f) else if (e.chairStance.contains("dov")) Color(0xFF42A5F5) else Palette.secondary).padding(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.clip(Pixel.small).background(if (e.chairStance.contains("hawk")) Palette.negative.copy(alpha = 0.8f) else if (e.chairStance.contains("dov")) Color(0xFF42A5F5) else Palette.secondary).padding(horizontal = 8.dp, vertical = 2.dp),
             )
         }
         Text("Next meeting ${ResultBuckets.weekLabel(e.nextMeetingWeek.toInt())} · term ends ${ResultBuckets.weekLabel(e.chairTermEnds.toInt())}", color = Palette.secondary, fontSize = 12.sp)
@@ -158,8 +156,8 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
             Text(e.partyName, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
             Text("Approval ${e.approvalBps / 100}%", color = Palette.secondary, fontSize = 12.sp)
         }
-        Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(Palette.panelRaised)) {
-            Box(Modifier.fillMaxWidth((e.approvalBps / 10_000f).coerceIn(0f, 1f)).height(6.dp).clip(CircleShape).background(if (e.approvalBps >= 5_000) Palette.positive else Palette.warning))
+        Box(Modifier.fillMaxWidth().height(6.dp).clip(Pixel.small).background(Palette.panelRaised)) {
+            Box(Modifier.fillMaxWidth((e.approvalBps / 10_000f).coerceIn(0f, 1f)).height(6.dp).clip(Pixel.small).background(if (e.approvalBps >= 5_000) Palette.positive else Palette.warning))
         }
         Text("Next election ${ResultBuckets.weekLabel(e.nextElectionWeek.toInt())}", color = Palette.secondary, fontSize = 12.sp)
         LawsTable(e.laws, null)
@@ -264,7 +262,7 @@ private fun Sparkline(values: List<Long>, color: Color) {
 @Composable
 private fun Key(color: Color, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(9.dp).clip(RoundedCornerShape(2.dp)).background(color))
+        Box(Modifier.size(9.dp).clip(Pixel.small).background(color))
         Spacer(Modifier.width(5.dp))
         Text(text, color = Palette.secondary, fontSize = 11.sp)
     }
@@ -273,7 +271,7 @@ private fun Key(color: Color, text: String) {
 @Composable
 private fun LawsTable(laws: LawsDto, heading: String?) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (heading != null) Palette.gold.copy(alpha = 0.1f) else Palette.ink).padding(10.dp),
+        Modifier.fillMaxWidth().clip(Pixel.shape).background(if (heading != null) Palette.gold.copy(alpha = 0.1f) else Palette.ink).padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(heading?.let { "Announced, in force $it" } ?: "Laws in force", color = if (heading != null) Palette.gold else Palette.secondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)

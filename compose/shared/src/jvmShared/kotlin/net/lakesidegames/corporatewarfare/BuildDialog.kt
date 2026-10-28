@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -66,7 +65,7 @@ fun BuildDialog(store: GameStore, board: RegionBoardDto, initialRecipe: Int? = n
                         items(sectors.size) { index ->
                             val id = sectors[index]
                             Row(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.panelRaised)
+                                Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.panelRaised)
                                     .clickable { sector = id }.padding(10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -83,7 +82,7 @@ fun BuildDialog(store: GameStore, board: RegionBoardDto, initialRecipe: Int? = n
                         items(options.size) { index ->
                             val option = options[index]
                             Column(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.panelRaised)
+                                Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.panelRaised)
                                     .clickable { strategy = option }.padding(10.dp),
                             ) {
                                 Text(option.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold)

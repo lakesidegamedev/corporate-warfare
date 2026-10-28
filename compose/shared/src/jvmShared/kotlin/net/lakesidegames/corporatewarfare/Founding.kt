@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -93,8 +92,8 @@ fun FoundCompanyPanel(store: GameStore, scroll: Boolean = true) {
                         val on = b.index == region
                         val room = b.room.sumOf { it.importLots * it.importPriceCents }
                         Column(
-                            Modifier.fillMaxWidth(0.48f).widthIn(max = 230.dp).clip(RoundedCornerShape(10.dp)).background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.ink)
-                                .border(if (on) 2.dp else 1.dp, if (on) Palette.gold else Palette.stroke, RoundedCornerShape(10.dp))
+                            Modifier.fillMaxWidth(0.48f).widthIn(max = 230.dp).clip(Pixel.shape).background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.ink)
+                                .border(if (on) 2.dp else 1.dp, if (on) Palette.gold else Palette.stroke, Pixel.shape)
                                 .clickable { region = b.index }.padding(10.dp),
                         ) {
                             Text("${b.name}, ${b.stateCode}", color = Palette.primaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
@@ -112,7 +111,7 @@ fun FoundCompanyPanel(store: GameStore, scroll: Boolean = true) {
                     store.strategyCatalogue.map { it.industry }.distinct().forEach { s ->
                         Text(
                             Sectors.name(s), color = if (s == sector) Palette.ink else Palette.primaryText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.clip(RoundedCornerShape(50)).background(if (s == sector) Palette.gold else Palette.panelRaised)
+                            modifier = Modifier.clip(Pixel.small).background(if (s == sector) Palette.gold else Palette.panelRaised)
                                 .clickable { sector = s; recipe = store.strategyCatalogue.firstOrNull { it.industry == s }?.index }
                                 .padding(horizontal = 10.dp, vertical = 5.dp),
                         )
@@ -121,7 +120,7 @@ fun FoundCompanyPanel(store: GameStore, scroll: Boolean = true) {
                 store.strategyCatalogue.filter { it.industry == sector }.forEach { st ->
                     val on = st.index == recipe
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (on) Palette.gold.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent)
+                        Modifier.fillMaxWidth().clip(Pixel.shape).background(if (on) Palette.gold.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent)
                             .clickable { recipe = st.index }.padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

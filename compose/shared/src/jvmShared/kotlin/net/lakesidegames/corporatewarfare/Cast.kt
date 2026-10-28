@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,7 +50,7 @@ object CastPortraits {
 @Composable
 fun PixelPortrait(person: String, modifier: Modifier = Modifier, size: Dp = 40.dp) {
     val art = CastPortraits.all[person]
-    Canvas(modifier.size(size).clip(RoundedCornerShape(4.dp)).background(Palette.panelRaised)) {
+    Canvas(modifier.size(size).clip(Pixel.small).background(Palette.panelRaised)) {
         if (art != null) drawPixelIcon(art, null)
     }
 }

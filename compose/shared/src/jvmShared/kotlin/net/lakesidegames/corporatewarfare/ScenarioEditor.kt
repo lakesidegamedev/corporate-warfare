@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
@@ -206,7 +205,7 @@ internal fun ScenarioEditorScreen(store: GameStore, baseId: String?, existing: C
                                 val isOpen = openRival == r.firmId
                                 fun upd(next: RivalDto) { draft = d.copy(rivals = d.rivals.map { if (it.firmId == r.firmId) next else it }) }
                                 Row(
-                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { openRival = if (isOpen) null else r.firmId }.padding(vertical = 4.dp),
+                                    Modifier.fillMaxWidth().clip(Pixel.shape).clickable { openRival = if (isOpen) null else r.firmId }.padding(vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Column(Modifier.weight(1f)) {
@@ -239,7 +238,7 @@ internal fun ScenarioEditorScreen(store: GameStore, baseId: String?, existing: C
                             d.regions.forEach { g ->
                                 val isOpen = openRegion == g.code
                                 fun upd(next: RegionAdjustDto) { draft = d.copy(regions = d.regions.map { if (it.code == g.code) next else it }) }
-                                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { openRegion = if (isOpen) null else g.code }.padding(vertical = 4.dp)) {
+                                Column(Modifier.fillMaxWidth().clip(Pixel.shape).clickable { openRegion = if (isOpen) null else g.code }.padding(vertical = 4.dp)) {
                                     Text(g.name, color = Palette.primaryText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                                     Text("Wages ${g.wagePct}% · demand ${g.demandPct}%", color = Palette.secondary, fontSize = 11.sp)
                                 }
@@ -319,7 +318,7 @@ internal fun ScenarioEditorScreen(store: GameStore, baseId: String?, existing: C
 
 @Composable
 private fun Card(title: String, note: String, on: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = Pixel.shape
     Column(
         Modifier.width(300.dp).clip(shape).background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.panel)
             .border(if (on) 2.dp else 1.dp, if (on) Palette.gold else Palette.stroke, shape).clickable(onClick = onClick).padding(14.dp),
@@ -335,7 +334,7 @@ private fun Chips(items: List<Pair<String, String>>, selected: String, onPick: (
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items.forEach { (key, title) ->
             val on = key == selected
-            val shape = RoundedCornerShape(10.dp)
+            val shape = Pixel.shape
             Text(
                 title, color = if (on) Palette.gold else Palette.primaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clip(shape).background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.ink)

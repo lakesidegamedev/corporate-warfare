@@ -32,6 +32,14 @@ heading.
   close, planes cross between the big cities trailing contrails, shallow water glows along the
   coasts, the selected region glows, and a new week sends a ring out from every plant. A 3D button
   flattens the map again.
+- Real clouds: the map and the menu globe carry a real satellite cloud map of the whole Earth,
+  with its fronts, storms and tropical clusters, drifting west on the trade winds and east on the
+  westerlies and casting shadows on the tilted map. Each scenario has its own sharp close-up
+  clouds, and clouds clear as you zoom in. Clouds can be set to off, light or heavy. Cloud imagery:
+  Solar System Scope (CC BY 4.0), based on NASA Blue Marble.
+- A sharper 8-bit look: stepped corners, hard bevelled edges and hard shadows on panels and
+  buttons, and a pixel font (Silkscreen, SIL Open Font License) for headings, labels, buttons and
+  tabs. Body text and figures stay in the regular font so they are easy to read. No glass or blur.
 - The main menu's globe now turns in sunlight with its night side lit by cities, gold trade
   routes arc between the world's great cities, satellites circle it, the sun glares from the
   side, and a band of light crosses the logo.

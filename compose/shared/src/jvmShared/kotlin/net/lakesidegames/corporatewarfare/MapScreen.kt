@@ -38,8 +38,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -284,7 +282,7 @@ fun WorldMapView(
             }
             Column(
                 Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 24.dp)
-                    .clip(RoundedCornerShape(12.dp)).background(Palette.panel.copy(alpha = 0.94f)),
+                    .clip(Pixel.shape).background(Palette.panel.copy(alpha = 0.94f)),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val zoomedIn = (current()?.zoom ?: 1.0) > MapCamera.FLAT_START
@@ -334,7 +332,7 @@ fun MapScreen(store: GameStore) {
                         color = if (layer == option) Palette.ink else Palette.primaryText,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clip(CircleShape)
+                        modifier = Modifier.clip(Pixel.small)
                             .background(if (layer == option) Palette.gold else Palette.panel)
                             .clickable { layer = option }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -347,7 +345,7 @@ fun MapScreen(store: GameStore) {
     if (layer == MapLayer.Freight) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             Column(
-                Modifier.fillMaxWidth().padding(8.dp).clip(RoundedCornerShape(14.dp)).background(Palette.panel.copy(alpha = 0.96f)),
+                Modifier.fillMaxWidth().padding(8.dp).clip(Pixel.shape).background(Palette.panel.copy(alpha = 0.96f)),
             ) { FreightPanel(store, selected, pickedLane, { pickedLane = it }) }
         }
     }
@@ -878,7 +876,7 @@ internal fun shading(store: GameStore, layer: MapLayer): Map<String, Double> = w
 private fun MapHud(store: GameStore) {
     val overview = store.overview
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Palette.panel.copy(alpha = 0.94f)).padding(12.dp),
+        Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.panel.copy(alpha = 0.94f)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -975,7 +973,7 @@ fun TimeBar(store: GameStore) {
             SpeedControl(store)
         }
         Row(
-            Modifier.clip(CircleShape).background(Palette.panelRaised).clickable { open = !open }
+            Modifier.clip(Pixel.small).background(Palette.panelRaised).clickable { open = !open }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),

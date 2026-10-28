@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,7 +61,7 @@ fun ResearchScreen(store: GameStore) {
                         val reached = step <= research.level.toInt()
                         val reachable = step <= research.frontier.toInt() + 1
                         Box(
-                            Modifier.weight(1f).height((10 + step * 1.6f).dp).clip(RoundedCornerShape(2.dp))
+                            Modifier.weight(1f).height((10 + step * 1.6f).dp).clip(Pixel.small)
                                 .background(
                                     when {
                                         reached -> Palette.gold
