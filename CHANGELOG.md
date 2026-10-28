@@ -26,6 +26,28 @@ heading.
 
 ### Added
 
+- Market depth for every good: tap a good on the Markets screen to see how much is made, sold,
+  imported and exported each week, the stock held and how many weeks of sales it covers, your
+  share of sales over time, the top sellers and buyers with their shares, and in plain words
+  why the price is moving this week (buyers short of stock, unsold stock on the shelves,
+  reliance on imports, or spare capacity for services).
+- Region dossiers: tap a region for its workforce and how many are without a job, wages by
+  skill, land price, what households spend their money on, who competes there in each sector
+  with their shares, and your divisions there with their profit, with charts over time.
+- Division operations: each division shows how hard its plants run, what it made against what
+  it sold, and what one lot costs (inputs, labour, upkeep, land, depreciation and freight)
+  against its price, with the margin per lot and charts of output, use and cost per lot.
+- Freight stats on the company shipping panel: lots moved, cost per lot, who carried them
+  (your own carriers, other companies or outside carriers when lanes are full), and your own
+  carriers' capacity used and idle, week by week.
+- A rivals board: every company side by side (revenue, profit, cash, debt, share price,
+  divisions and best market share), sorted by any column. Pick one to chart it against you by
+  quarter and see the goods you both sell, head to head.
+- Economy history in the economy panel: the corridor share index, the bank rate and inflation,
+  the price level, companies operating and gone, raids and household spending, with date ranges.
+- Five years of weekly history behind these displays. Saves from earlier versions load and start
+  the history from the next week.
+
 - Deeper company financials: every company page and the Stats page have tabs for an overview,
   the income statement, the balance sheet, the cash flow statement, divisions and ratios. Pick
   weekly, quarterly or yearly periods and compare the last several side by side. Ratios cover

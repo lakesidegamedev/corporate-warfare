@@ -208,7 +208,8 @@ pub fn region_week(world: &World, index: u8) -> RegionWeek {
     }
 }
 
-/// Full-run weekly output of a division's primary product, in milli-lots.
+/// Full-run weekly output of a division's primary product, in milli-lots, as the division
+/// report measures utilisation. A good harvest can make more than this.
 pub fn division_capacity_milli(
     world: &World,
     dataset: &Dataset,
@@ -219,7 +220,7 @@ pub fn division_capacity_milli(
         .iter()
         .filter_map(|h| world.facilities.get(*h))
         .filter(|p| p.status == FacilityStatus::Operating)
-        .map(|p| dataset.recipes[p.recipe as usize].weekly_output_lots * p.blocks as i64 * 1_000)
+        .map(|p| p.full_weekly_output(dataset).0)
         .sum()
 }
 

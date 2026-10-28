@@ -94,6 +94,51 @@ class UiRenderTest {
                 }
             })
         }.orEmpty()
+        // The systems displays, read from the same career, at phone and desktop widths.
+        val systems = if (store.ready) kotlinx.coroutines.runBlocking {
+            store.read { h ->
+                val me = h.overview().primaryFirm!!
+                val board = h.commodityBoard()
+                val good = board.maxByOrNull { it.soldLots }!!
+                val division = h.divisions(me).first()
+                val region = h.regionBoards(me).first { it.code == division.region }
+                val rivals = h.rivalsBoard()
+                val rival = rivals.first { !it.yours }
+                SystemsData(
+                    h.goodDepth(good.product)!!, h.regionDossier(region.index, me)!!,
+                    h.divisionOps(me, division.region, division.industry)!!, h.logisticsStats(me)!!,
+                    rivals, rival.firm, RivalCompare(h.statements(me, "quarter"), h.statements(rival.firm, "quarter"), h.headToHead(me, rival.firm)),
+                    EconomyHistory(h.economySeries(), h.corridorIndexHistory()),
+                )
+            }
+        } else null
+        systems?.let { d ->
+            val views = mapOf<String, @androidx.compose.runtime.Composable () -> Unit>(
+                "market" to { GoodDepthView(d.good) },
+                "region" to { RegionDossierView(d.region) },
+                "division" to { DivisionOpsView(d.division) },
+                "logistics" to { LogisticsStatsView(d.logistics) },
+                "rivals" to { RivalsBoardView(d.rivals, d.rival, {}, d.compare) },
+                "economy" to { EconomyDashboardView(d.economy) },
+            )
+            for ((name, view) in views) {
+                for ((suffix, size) in listOf("phone" to (412 to 2400), "desktop" to (1400 to 1300))) {
+                    val scene = ImageComposeScene(size.first, size.second, Density(1f)) {
+                        CorporateWarfareTheme {
+                            androidx.compose.runtime.CompositionLocalProvider(LocalAppSettings provides settings) {
+                                Box(Modifier.fillMaxSize().background(Palette.ink).padding(16.dp)) {
+                                    Column(Modifier.width((size.first - 32).dp)) { view() }
+                                }
+                            }
+                        }
+                    }
+                    scene.render(0L)
+                    val image = scene.render(3_000_000_000L)
+                    scene.close()
+                    out?.let { File(it, "ui-systems-$name-$suffix.png").writeBytes(image.encodeToData(EncodedImageFormat.PNG)!!.bytes) }
+                }
+            }
+        }
         for ((name, content) in screens + desktop + financeScreens) {
             val scene = ImageComposeScene(1400, 860, Density(1f)) {
                 CorporateWarfareTheme { androidx.compose.runtime.CompositionLocalProvider(LocalAppSettings provides settings) { content() } }
@@ -105,3 +150,15 @@ class UiRenderTest {
         }
     }
 }
+
+/** Everything the systems renders show, read from one career. */
+data class SystemsData(
+    val good: uniffi.cw_ffi.GoodDepthDto,
+    val region: uniffi.cw_ffi.RegionDossierDto,
+    val division: uniffi.cw_ffi.DivisionOpsDto,
+    val logistics: uniffi.cw_ffi.LogisticsStatsDto,
+    val rivals: List<uniffi.cw_ffi.RivalRowDto>,
+    val rival: ULong,
+    val compare: RivalCompare,
+    val economy: EconomyHistory,
+)

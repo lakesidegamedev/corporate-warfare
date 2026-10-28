@@ -1,5 +1,6 @@
 package net.lakesidegames.corporatewarfare
 
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -1289,6 +1290,7 @@ internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () ->
     AlertDialog(
         onDismissRequest = onClose,
         containerColor = Palette.panel,
+        modifier = Modifier.widthIn(min = 360.dp, max = 980.dp),
         title = { Text(board.name) },
         text = {
             Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1310,6 +1312,7 @@ internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () ->
                     Eyebrow("Your storage here")
                     StorageLines(board.storage)
                 }
+                RegionDossierSection(store, board.index)
                 val ours = store.divisions.filter { it.region == board.code }
                 if (ours.isNotEmpty()) {
                     Eyebrow("Your divisions here")
