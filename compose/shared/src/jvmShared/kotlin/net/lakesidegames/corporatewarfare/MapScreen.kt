@@ -571,10 +571,15 @@ internal fun DrawScope.drawWorldMap(
         val close = cam.zoom > 14
         val nightNow = sun != null
         // City skylines, then the player's divisions as buildings, nearest drawn last.
+        val cityTops = HashMap<String, Float>()
         if (graphics.buildings >= 2 && cam.zoom > 6 && t > 0.5) {
-            g.skylines(ground).forEach { box ->
-                val windows = if (nightNow && light.facing(box.lon, box.lat) < 0) 0.75f else if (graphics.lighting == 2) 0.22f else 0f
-                drawBox(p, box.gx, box.gy, box.half, box.floor, box.top, SkylineColor, windows)
+            // Each big city on screen is a voxel city block sized by its population, a step smaller
+            // than the player's buildings so those stay the stars.
+            val voxelScale = (Voxels.scale(g.scale, density) - 1).coerceAtLeast(1)
+            g.cityBlocks(ground).forEach { block ->
+                val base = p.lift(block.gx.toDouble(), block.gy.toDouble(), block.floor)
+                val top = with(Voxels) { drawBuilding("city", block.plants, base, voxelScale) }
+                if (top != null) cityTops[block.name] = top
             }
         }
         val cityLift = plinth
@@ -582,7 +587,7 @@ internal fun DrawScope.drawWorldMap(
             if (!close && city.country != "USA") return@forEach
             val floor = g.cityFloor(city.name, ground)
             val at = p.project(point, floor) ?: return@forEach
-            val above = g.skylineTop(city.name)?.let { p.lift(it.x.toDouble(), it.y.toDouble(), it.h) }
+            val above = cityTops[city.name]?.let { Offset(at.x, it) }
             drawCircle(Palette.primaryText.copy(alpha = 0.85f), radius = 2.5f, center = at)
             val label = measurer.measure(city.name, TextStyle(color = Palette.primaryText.copy(alpha = 0.9f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, shadow = LabelShadow))
             val anchorY = above?.y?.let { min(it, at.y) } ?: at.y
@@ -685,6 +690,9 @@ internal class Building(
 )
 
 internal class TopPoint(val x: Float, val y: Float, val h: Double)
+
+/** A city drawn as a voxel block: ground offsets from the view centre, the tile it stands on, and a size stand-in. */
+internal class CityBlock(val name: String, val gx: Float, val gy: Float, val floor: Double, val plants: Int)
 
 /**
  * The map projected for one camera and view size. Each path is built the first time it is drawn
@@ -831,6 +839,31 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
             skylineKey = heights
         }
         return skylineValue
+    }
+
+    private var blocksKey: Map<String, Double>? = null
+    private var blocksValue: List<CityBlock> = emptyList()
+
+    /**
+     * The thirty biggest cities on screen as voxel city blocks, far ones first; [CityBlock.plants]
+     * carries a stand-in plant count that picks the block size (town, city, metropolis).
+     */
+    fun cityBlocks(heights: Map<String, Double>): List<CityBlock> {
+        if (blocksKey !== heights) {
+            blocksValue = map.cities.sortedByDescending { it.first.population }.asSequence()
+                .mapNotNull { (city, point) ->
+                    val ground = p.ground(point.lon[0], point.lat[0])
+                    if (!ground.isSpecified) return@mapNotNull null
+                    val screen = p.lift(ground.x.toDouble(), ground.y.toDouble(), 0.0)
+                    if (screen.x !in -60f..size.width + 60 || screen.y !in -60f..size.height + 60) return@mapNotNull null
+                    // Below a million people a town block, below four million a city, above that a metropolis.
+                    val stand = when { city.population < 1_000_000 -> 2; city.population < 4_000_000 -> 5; else -> 12 }
+                    CityBlock(city.name, ground.x, ground.y, cityFloor(city.name, heights), stand)
+                }
+                .take(30).sortedBy { it.gy }.toList()
+            blocksKey = heights
+        }
+        return blocksValue
     }
 
     /** The top of a city's tallest tower, once its skyline has been built. */

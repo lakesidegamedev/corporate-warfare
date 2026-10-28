@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Bake the voxel buildings that stand for the player's divisions on the map.
+"""Bake the voxel buildings on the map: the player's divisions and the cities.
 
 Each of the fifteen industries has a small voxel model in three sizes (a division grows from
-small to large with its plant count), drawn in 2:1 dimetric view with cel shading: three flat
+small to large with its plant count), and cities have a block in three sizes by population, drawn in 2:1 dimetric view with cel shading: three flat
 tones per colour (lit top, left, darker right), ink lines where colours meet, and a dark outline
 round the silhouette. Every model is rendered at three pixel scales so the map can always draw a
 sprite one to one, crisp at any zoom, without resampling.
@@ -212,10 +212,30 @@ def financial(s):
     return m
 
 
+def city(s):
+    """A city block: houses for a town, mid-rise for a city, towers for a metropolis."""
+    w = 8 + 3 * s
+    m = Model().box(0, 0, 0, w, w, 1, "#3A4450")
+    heights = [(1, 1, 3 + 2 * s), (5, 1, 2 + s), (1, 5, 2 + s), (5, 5, 4 + 3 * s)]
+    if s >= 1:
+        heights += [(8, 1, 5 + 2 * s), (8, 5, 3 + s)]
+    if s >= 2:
+        heights += [(1, 8, 6), (5, 8, 9), (8, 8, 13)]
+    for x, y, h in heights:
+        if x + 3 > w or y + 3 > w:
+            continue
+        body = "#5E7184" if (x + y) % 2 else "#6B7F93"
+        m.box(x, y, 1, x + 3, y + 3, 1 + h, body)
+        for z in range(2, 1 + h, 2):
+            m.box(x, y + 2, z, x + 3, y + 3, z + 1, "#F2D58A")
+        m.box(x, y, 1 + h, x + 3, y + 3, 2 + h, "#8FA2B4")
+    return m
+
+
 MODELS = {
     f.__name__: f for f in (
         agriculture, extraction, energy, chemical_industries, manufacturing, construction, logistics,
-        retail, healthcare, technology, media, telecommunications, real_estate, defense, financial,
+        retail, healthcare, technology, media, telecommunications, real_estate, defense, financial, city,
     )
 }
 
