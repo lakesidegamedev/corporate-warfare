@@ -13,6 +13,10 @@ heading.
 
 ### Added
 
+- The map tells the story: a plant still going up shows as a building site with scaffold and a
+  crane, a division adding or retooling plants has a crane beside it, a mothballed one goes dark,
+  and one you have just taken over flies a gold flag for six weeks. Rivals' sites and closures show
+  the same way. In a boom cranes rise beside the cities; in a slowdown or recession their lights dim.
 - The real Earth under the map: NASA's Blue Marble imagery (public domain) on the globe, the menu and
   the scenario, sharp close up. The seasons follow the game's calendar: a snow line that creeps south
   in winter, autumn colour, and browner winters in the mid-latitudes, half a year apart in the south.

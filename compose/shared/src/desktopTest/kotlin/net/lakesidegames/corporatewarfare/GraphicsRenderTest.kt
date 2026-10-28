@@ -55,6 +55,13 @@ class GraphicsRenderTest {
         strategy = "standard", blocks = blocks, status = "running", utilisationBps = 8000,
     )
 
+    // The player's plants as the map reads them: one division still going up, one being retooled.
+    private val own = listOf(
+        plant(1uL, "OH-CEN", "retail", 3u).copy(player = true, status = "Building"),
+        plant(1uL, "MI-DET", "energy", 9u).copy(player = true, status = "Retooling { until: Tick(40) }"),
+        plant(1uL, "OH-CEN", "manufacturing", 6u).copy(player = true, status = "Operating"),
+    )
+
     private val rivals = listOf(
         plant(7uL, "MI-DET", "manufacturing", 8u), plant(8uL, "MI-DET", "logistics", 3u), plant(9uL, "OH-CEN", "retail", 5u),
         plant(7uL, "OH-CEN", "chemical_industries", 4u), plant(10uL, "PA-WES", "extraction", 6u), plant(11uL, "OH-NE", "healthcare", 3u),
@@ -88,7 +95,7 @@ class GraphicsRenderTest {
                         fun still(phase: MapPhase) = drawWorldMap(
                             map, camera, Palette.gold, shading, "MI-DET", divisions, measurer, lanes = lanes, freightLayer = false,
                             geometry = geometry, graphics = graphics, sun = if (graphics.dayNight) sun else null, phase = phase,
-                            plants = rivals,
+                            plants = rivals + own, economyPhase = "boom", acquired = setOf("PA-WES/technology"),
                         )
                         still(MapPhase.Ground)
                         val g = geometry.of(map, camera, size, graphics.detail, graphics.pitch)

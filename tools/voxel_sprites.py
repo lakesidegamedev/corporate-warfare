@@ -232,10 +232,33 @@ def city(s):
     return m
 
 
+def site(s):
+    """A plant going up: the base poured, a scaffold of poles and planks, and a tower crane."""
+    w = 8 + 2 * s
+    m = Model().box(0, 0, 0, w, w, 1, "#8D7B68")
+    m.box(1, 1, 1, w - 3, w - 3, 2 + s, "#B0A898")
+    for x in range(1, w - 2, 2):
+        for y in (1, w - 4):
+            m.box(x, y, 2 + s, x + 1, y + 1, 6 + 2 * s, "#C8CED4")
+    for z in range(4 + s, 6 + 2 * s, 2):
+        m.box(1, 1, z, w - 2, 2, z + 1, "#E2B04A")
+    m.box(w - 2, w - 2, 1, w - 1, w - 1, 10 + 2 * s, "#E2B04A").box(2, w - 2, 10 + 2 * s, w, w - 1, 11 + 2 * s, "#E2B04A")
+    m.box(2, w - 2, 7 + 2 * s, 3, w - 1, 10 + 2 * s, "#4A5560")
+    return m
+
+
+def crane(s):
+    """A tower crane alone, for a city that is booming or a plant being retooled."""
+    m = Model().box(0, 0, 0, 3, 3, 1, "#5A6470")
+    m.box(1, 1, 1, 2, 2, 9 + 2 * s, "#E2B04A").box(0, 1, 9 + 2 * s, 7 + s, 2, 10 + 2 * s, "#E2B04A")
+    m.box(5 + s, 1, 6 + 2 * s, 6 + s, 2, 9 + 2 * s, "#4A5560")
+    return m
+
+
 MODELS = {
     f.__name__: f for f in (
         agriculture, extraction, energy, chemical_industries, manufacturing, construction, logistics,
-        retail, healthcare, technology, media, telecommunications, real_estate, defense, financial, city,
+        retail, healthcare, technology, media, telecommunications, real_estate, defense, financial, city, site, crane,
     )
 }
 

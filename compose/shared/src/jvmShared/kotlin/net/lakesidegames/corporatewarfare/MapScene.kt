@@ -537,7 +537,7 @@ internal class OverlayGeometry(
 
 internal class LaneTrack(
     val a: Offset, val b: Offset, val mode: String, val weight: Float, val length: Float, val seed: Float, val km: Float, val mine: Boolean = false,
-    /** For sea lanes, whether each of [WaterSamples] points from a to b is over water, so ships never sail over land. */
+    /** Whether each of [WaterSamples] points from a to b is over water, so ships never sail over land and trucks never drive on a lake. */
     val water: BooleanArray? = null,
 )
 
@@ -762,8 +762,10 @@ private fun laneVehicles(lane: LaneTrack, f: Float, forward: Boolean, p: MapProj
     val dir = ground((f + sign * step).coerceIn(0f, 1f)) - ground((f - sign * step).coerceIn(0f, 1f))
     if (dir.getDistance() < 1e-3f) return
     val u = dir / dir.getDistance()
+    // Trucks and trains keep to land: a straight lane between two hubs can cross a lake.
+    val wet = lane.water?.get((f * (WaterSamples - 1)).roundToInt()) == true
     when (lane.mode) {
-        "rail" -> {
+        "rail" -> if (!wet) {
             // Wagons trail the locomotive along the track, spaced by a vehicle's length on the ground.
             val gap = 14f * scale / lane.length.coerceAtLeast(1f)
             out += VehicleSpot("loco", lane.mine, at, dir)
@@ -776,7 +778,7 @@ private fun laneVehicles(lane: LaneTrack, f: Float, forward: Boolean, p: MapProj
         "sea" -> if (lane.water?.get((f * (WaterSamples - 1)).roundToInt()) != false) {
             out += VehicleSpot("ship", lane.mine, at + Offset(-u.y, u.x) * 5f * sign, dir)
         }
-        else -> out += VehicleSpot("truck", lane.mine, at + Offset(-u.y, u.x) * 2.5f * sign, dir)
+        else -> if (!wet) out += VehicleSpot("truck", lane.mine, at + Offset(-u.y, u.x) * 2.5f * sign, dir)
     }
 }
 
@@ -852,7 +854,7 @@ internal fun laneTracks(map: WorldMap, p: MapProjection, lanes: List<LaneDto>, c
         val length = (b - a).getDistance().coerceAtLeast(8f)
         LaneTrack(
             a, b, lane.modeId, (lane.capacityLots + lane.outsideLots).toFloat() / top, length, (stableHash(lane.a + lane.b) % 1000) / 1000f,
-            lane.km.toFloat().coerceAtLeast(20f), laneIsMine(lane), if (lane.modeId == "sea") waterAlong(map, lane.a, lane.b) else null,
+            lane.km.toFloat().coerceAtLeast(20f), laneIsMine(lane), waterAlong(map, lane.a, lane.b),
         )
     }
 }

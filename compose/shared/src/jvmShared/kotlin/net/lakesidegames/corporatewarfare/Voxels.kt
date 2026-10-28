@@ -57,6 +57,14 @@ internal object Voxels {
         },
     )
 
+    /** Mothballed plants and a city in recession: dark, the colour nearly gone. */
+    val Dark: ColorFilter = ColorFilter.colorMatrix(
+        ColorMatrix().apply {
+            setToSaturation(0.15f)
+            timesAssign(ColorMatrix(floatArrayOf(0.5f, 0f, 0f, 0f, 0f, 0f, 0.52f, 0f, 0f, 0f, 0f, 0f, 0.58f, 0f, 0f, 0f, 0f, 0f, 1f, 0f)))
+        },
+    )
+
     fun DrawScope.drawBuilding(sector: String, plants: Int, ground: Offset, scale: Int, filter: ColorFilter? = null): Float? {
         val f = frame(sector, size(plants), scale) ?: return null
         val image = Images.load("voxels-$scale") ?: return null

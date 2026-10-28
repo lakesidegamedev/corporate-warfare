@@ -197,6 +197,10 @@ fun WorldMapView(
     var rippleAt by remember { mutableDoubleStateOf(-10.0) }
     LaunchedEffect(week) { if (week != null) rippleAt = MapClock.now() }
     val fps = remember { FpsMeter() }
+    // Divisions the player has just taken over carry a flag for six weeks: a plant that was a
+    // rival's last week and is the player's now.
+    val takeovers = remember { TakeoverLog() }
+    val acquired = remember(store.mapPlants, store.overview?.tick) { takeovers.update(store.mapPlants, store.overview?.tick?.toInt() ?: 0) }
     val heightsNow by rememberUpdatedState(heights)
 
     fun current(): MapCamera? = camera ?: map?.let { if (viewSize.width > 0) MapCamera.scenario(viewSize, it) else null }
@@ -321,7 +325,7 @@ fun WorldMapView(
                     map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shaded, selected, store.mapDivisions, measurer,
                     lanes = store.lanes, freightLayer = layer == MapLayer.Freight, pickedLane = pickedLane,
                     geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Structures,
-                    plants = store.mapPlants,
+                    plants = store.mapPlants, economyPhase = store.economy?.phase, acquired = acquired,
                 )
             }
             Canvas(Modifier.fillMaxSize()) {
@@ -467,6 +471,8 @@ internal fun DrawScope.drawWorldMap(
     phase: MapPhase = MapPhase.All,
     plants: List<uniffi.cw_ffi.MapPlantDto> = emptyList(),
     week: Int = 28,
+    economyPhase: String? = null,
+    acquired: Set<String> = emptySet(),
 ) {
     MapProfiler.start()
     val detailLevel = graphics.detail
@@ -603,23 +609,46 @@ internal fun DrawScope.drawWorldMap(
             // Each big city on screen is a voxel city block sized by its population, a step smaller
             // than the player's buildings so those stay the stars.
             val voxelScale = (Voxels.scale(g.scale, density) - 1).coerceAtLeast(1)
-            g.cityBlocks(ground).forEach { block ->
+            // The economy shows in the cities: cranes rise in a boom, lights go out in a recession.
+            val dim = if (economyPhase == "recession" || economyPhase == "slowdown") Voxels.Dark else null
+            g.cityBlocks(ground).forEachIndexed { i, block ->
                 val base = p.lift(block.gx.toDouble(), block.gy.toDouble(), block.floor)
-                val top = with(Voxels) { drawBuilding("city", block.plants, base, voxelScale) }
+                val top = with(Voxels) { drawBuilding("city", block.plants, base, voxelScale, dim) }
                 if (top != null) cityTops[block.name] = top
+                if ((economyPhase == "boom" || economyPhase == "expansion" && i % 3 == 0) && i < 12) {
+                    with(Voxels) { drawBuilding("crane", if (economyPhase == "boom") 8 else 2, base + Offset(10f * voxelScale, 2f), voxelScale) }
+                }
             }
         }
         if (graphics.buildings > 0 && g.closeUp && t > 0.5) {
             // Rivals' plants first, a size smaller and muted, so the player's own stand over them.
             val rivalScale = (Voxels.scale(g.scale, density) - 1).coerceAtLeast(1)
+            val rivalStatuses = plantStatuses(plants.filter { !it.player }, byFirm = true)
             g.rivalBuildings(plants, ground).forEach { b ->
-                with(Voxels) { drawBuilding(b.sector, b.plants, p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor), rivalScale, Voxels.Muted) }
+                val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
+                when (rivalStatuses[b.key]) {
+                    PlantState.Site -> with(Voxels) { drawBuilding("site", b.plants, base, rivalScale, Voxels.Muted) }
+                    PlantState.Mothballed -> with(Voxels) { drawBuilding(b.sector, b.plants, base, rivalScale, Voxels.Dark) }
+                    else -> with(Voxels) { drawBuilding(b.sector, b.plants, base, rivalScale, Voxels.Muted) }
+                }
             }
             val voxelScale = Voxels.scale(g.scale, density)
+            val statuses = plantStatuses(plants.filter { it.player })
             g.buildings(divisions, ground).forEach { b ->
-                // Each division is a voxel building for its industry; a plain box if the sprite is missing.
+                // Each division is a voxel building for its industry, shown as it stands: a building
+                // site while its plants go up, a crane beside it while one is added or retooled, dark
+                // when mothballed, a gold flag when just taken over. A plain box if the sprite is missing.
                 val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
-                val spriteTop = with(Voxels) { drawBuilding(b.sector, b.plants, base, voxelScale) }
+                val state = statuses[b.key] ?: PlantState.Running
+                val spriteTop = with(Voxels) {
+                    when (state) {
+                        PlantState.Site -> drawBuilding("site", b.plants, base, voxelScale)
+                        PlantState.Mothballed -> drawBuilding(b.sector, b.plants, base, voxelScale, Voxels.Dark)
+                        else -> drawBuilding(b.sector, b.plants, base, voxelScale)
+                    }
+                }
+                if (state == PlantState.Growing) with(Voxels) { drawBuilding("crane", 2, base + Offset(12f * voxelScale, 3f), voxelScale) }
+                if (b.key in acquired && spriteTop != null) drawFlag(Offset(base.x + 6f * voxelScale, spriteTop - 2f), voxelScale)
                 val topAt = if (spriteTop != null) Offset(base.x, spriteTop) else {
                     val windows = if (nightNow && light.facing(b.lon, b.lat) < 0) 0.85f else if (graphics.lighting == 2) 0.30f else 0f
                     drawBox(p, b.gx, b.gy, b.half, b.floor, b.top, Sectors.color(b.sector), windows, Palette.gold.copy(alpha = 0.9f))
@@ -670,6 +699,53 @@ internal fun DrawScope.drawWorldMap(
         }
     }
     MapProfiler.mark("labels+vignette")
+}
+
+/** Remembers who owned each plant, so a takeover can be marked on the map for a while. */
+internal class TakeoverLog {
+    private val owner = HashMap<ULong, Boolean>()
+    private val since = HashMap<String, Int>()
+
+    fun update(plants: List<uniffi.cw_ffi.MapPlantDto>, week: Int): Set<String> {
+        for (plant in plants) {
+            val was = owner[plant.handle]
+            if (was == false && plant.player) since["${plant.region}/${plant.industry}"] = week
+            owner[plant.handle] = plant.player
+        }
+        since.entries.removeAll { week - it.value > 6 }
+        return since.keys.toSet()
+    }
+}
+
+/** How a division's plants stand, for the map. */
+internal enum class PlantState { Site, Growing, Running, Mothballed }
+
+/**
+ * Each division's state from its plants, keyed region/industry (and /firm for rivals): a building
+ * site while every plant is still going up, growing while some are built or retooled, mothballed
+ * when every plant is, running otherwise.
+ */
+internal fun plantStatuses(plants: List<uniffi.cw_ffi.MapPlantDto>, byFirm: Boolean = false): Map<String, PlantState> =
+    plants.groupBy { if (byFirm) "${it.region}/${it.industry}/${it.firm}" else "${it.region}/${it.industry}" }.mapValues { (_, items) ->
+        val building = items.count { it.status.startsWith("Building") }
+        val retooling = items.count { it.status.startsWith("Retooling") }
+        val mothballed = items.count { it.status.startsWith("Mothballed") }
+        when {
+            building == items.size -> PlantState.Site
+            mothballed == items.size -> PlantState.Mothballed
+            building + retooling > 0 -> PlantState.Growing
+            else -> PlantState.Running
+        }
+    }
+
+/** A small gold pennant on a pole, planted on a building the player has just taken over. */
+private fun DrawScope.drawFlag(at: Offset, scale: Int) {
+    val k = scale.toFloat()
+    drawRect(Palette.ink, Offset(at.x - k, at.y - 12f * k), Size(2f * k, 12f * k))
+    drawRect(Color(0xFFC8CED4), Offset(at.x - k / 2, at.y - 12f * k), Size(k, 12f * k))
+    val pennant = Path().apply { moveTo(at.x + k / 2, at.y - 12f * k); lineTo(at.x + 8f * k, at.y - 9.5f * k); lineTo(at.x + k / 2, at.y - 7f * k); close() }
+    drawPath(pennant, Palette.gold)
+    drawPath(pennant, Palette.ink, style = Stroke(1f))
 }
 
 /** Which part of the still map to draw: the ground, the structures over the traffic, or both. */
