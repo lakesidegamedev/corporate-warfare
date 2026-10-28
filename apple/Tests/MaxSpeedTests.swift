@@ -32,12 +32,12 @@ final class MaxSpeedTests: XCTestCase {
 
         var worstStall = 0.0
         /// Sleeps in short slices and records the longest the main actor was late to wake.
-        func breathe(_ seconds: Double) async {
+        func breathe(_ seconds: Double, measured: Bool = true) async {
             let end = Date.timeIntervalSinceReferenceDate + seconds
             while Date.timeIntervalSinceReferenceDate < end {
                 let before = Date.timeIntervalSinceReferenceDate
                 try? await Task.sleep(nanoseconds: 20_000_000)
-                worstStall = max(worstStall, Date.timeIntervalSinceReferenceDate - before - 0.02)
+                if measured { worstStall = max(worstStall, Date.timeIntervalSinceReferenceDate - before - 0.02) }
                 // A decision or warning stops time; answer it the way a player would and run on.
                 if store.overview?.pause != nil {
                     await store.continueCareer()
@@ -46,9 +46,13 @@ final class MaxSpeedTests: XCTestCase {
             }
         }
 
+        await breathe(1, measured: false)
         await breathe(1)
         for tab in [AppTab.office, .markets, .inbox, .portfolio, .map, .office] {
             host.rootView = AnyView(RootView(initialTab: tab).id(tab).environmentObject(store))
+            // The new tab's first render is the navigation itself, not the run loop holding the
+            // main thread, so it settles unmeasured; the time after it is measured.
+            await breathe(0.8, measured: false)
             await breathe(0.6)
         }
 

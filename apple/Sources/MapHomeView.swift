@@ -192,17 +192,15 @@ struct CompanyHUD: View {
     }
 }
 
-/// The week and the time controls in one slim bar, over every phone screen that is not the map
+/// The time controls in one slim bar, over every phone screen that is not the map
 /// (the map has its own in the HUD), so time can always be paused or slowed where you are.
 struct TimeStrip: View {
     @EnvironmentObject private var store: AppStore
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(store.overview?.weekLabel ?? "")
-                .font(.caption.weight(.semibold).monospacedDigit())
-                .foregroundStyle(Theme.secondary)
-                .lineLimit(1)
+            // The screens below show the week themselves; the strip only holds the clock.
+            Eyebrow(text: "Time")
             Spacer(minLength: 4)
             SpeedControl(compact: true)
         }
