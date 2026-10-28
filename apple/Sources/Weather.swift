@@ -89,7 +89,8 @@ struct CloudLayer: UIViewRepresentable {
         view.backgroundColor = .clear
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         view.colorPixelFormat = .bgra8Unorm
-        view.framebufferOnly = true
+        // Readable drawables, so a window snapshot can capture the clouds.
+        view.framebufferOnly = false
         view.isPaused = true
         view.enableSetNeedsDisplay = false
         view.presentsWithTransaction = true
@@ -146,6 +147,39 @@ final class CloudPainter: NSObject, MTKViewDelegate {
         buffer.commit()
         buffer.waitUntilScheduled()
         drawable.present()
+    }
+
+    /// One frame of clouds drawn off screen at `scale` pixels per point, for tests and review.
+    func snapshot(_ sky: CloudSky, scale: CGFloat = 2) -> CGImage? {
+        guard let renderer = CloudRenderer.shared else { return nil }
+        let width = Int(sky.size.width * scale)
+        let height = Int(sky.size.height * scale)
+        let stride = (width * 4 + 255) / 256 * 256
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+        descriptor.usage = .renderTarget
+        descriptor.storageMode = .private
+        guard width > 0, height > 0, let target = renderer.device.makeTexture(descriptor: descriptor),
+              let readback = renderer.device.makeBuffer(length: stride * height, options: .storageModeShared),
+              let buffer = renderer.queue.makeCommandBuffer() else { return nil }
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = target
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        guard let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { return nil }
+        encoder.setRenderPipelineState(renderer.pipeline)
+        encode(sky, renderer, encoder)
+        encoder.endEncoding()
+        guard let blit = buffer.makeBlitCommandEncoder() else { return nil }
+        blit.copy(from: target, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+                  sourceSize: MTLSize(width: width, height: height, depth: 1), to: readback, destinationOffset: 0,
+                  destinationBytesPerRow: stride, destinationBytesPerImage: stride * height)
+        blit.endEncoding()
+        buffer.commit()
+        buffer.waitUntilCompleted()
+        let info = CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
+        return CGContext(data: readback.contents(), width: width, height: height, bitsPerComponent: 8, bytesPerRow: stride,
+                         space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: info)?.makeImage()
     }
 
     /// The clouds for one frame. On the flat map only the area round the scenario is meshed,

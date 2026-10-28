@@ -51,6 +51,9 @@ final class SnapshotTests: XCTestCase {
             if CloudRenderer.shared?.ready(["clouds", "clouds-great-lakes-2000"]) ?? true { break }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
+        XCTAssertNotNil(CloudRenderer.shared, "Metal is available for the clouds")
+        XCTAssertTrue(CloudRenderer.shared?.ready(["clouds", "clouds-great-lakes-2000"]) ?? false, "the cloud textures load")
+        renderClouds()
         let phone = CGSize(width: 393, height: 852)
         let pad = CGSize(width: 1180, height: 820)
         let home = store.boards.first { $0.code == store.divisions.first?.region }
@@ -83,6 +86,34 @@ final class SnapshotTests: XCTestCase {
         render("menu-pad", pad, compact: false, StartView().environmentObject(store))
         render("settings-phone", phone, compact: true,
                ScrollView { GraphicsSettingsPanel().padding(16) }.background(Theme.ink))
+    }
+
+    /// The clouds alone, drawn off screen over a dark sea, on the globe and over the scenario.
+    private func renderClouds() {
+        let size = CGSize(width: 600, height: 400)
+        let map = WorldMap.shared
+        let painter = CloudPainter()
+        let cameras = [("clouds-globe", MapCamera(lon: -88, lat: 38, zoom: 1.2)),
+                       ("clouds-scenario", MapCamera.scenario(in: size, map: map))]
+        for (name, camera) in cameras {
+            let p = MapProjection(camera: camera, size: size, tilt: 28 * .pi / 180)
+            let sky = CloudSky(camera: camera, size: size, tilt: 28 * .pi / 180, sun: MapSun.fixed(p), seconds: 20,
+                               amount: 2, bounds: map.playBounds, altitude: 46 * p.t, zoom: camera.zoom,
+                               shadows: true, scenario: map.scenarioId)
+            guard let clouds = painter.snapshot(sky) else {
+                XCTFail("\(name) did not render")
+                continue
+            }
+            let image = UIGraphicsImageRenderer(size: size).image { context in
+                UIColor(red: 0.086, green: 0.208, blue: 0.333, alpha: 1).setFill()
+                context.fill(CGRect(origin: .zero, size: size))
+                UIImage(cgImage: clouds).draw(in: CGRect(origin: .zero, size: size))
+            }
+            XCTAssertGreaterThan(distinctShades(image), 8, "\(name) shows clouds")
+            if let data = image.pngData() {
+                try? data.write(to: FileManager.default.temporaryDirectory.appendingPathComponent("cw-snapshot-\(name).png"))
+            }
+        }
     }
 
     private func render<V: View>(_ name: String, _ size: CGSize, compact: Bool, _ view: V) {
