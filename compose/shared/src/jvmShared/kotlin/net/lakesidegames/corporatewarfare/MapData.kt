@@ -360,6 +360,10 @@ class MapProjection(camera: MapCamera, size: Size, pitchSetting: Double = 0.0) {
         return Offset(turnX(gx, gy).toFloat(), turnY(gx, gy).toFloat())
     }
 
+    /** One unit east and one unit north on the ground, as screen-ground offsets for the camera's bearing. */
+    val east: Offset get() = Offset(cosB.toFloat(), sinB.toFloat())
+    val north: Offset get() = Offset(sinB.toFloat(), (-cosB).toFloat())
+
     /** A ground offset turned by the camera's bearing (screen y points down). */
     private fun turnX(x: Double, y: Double) = x * cosB - y * sinB
     private fun turnY(x: Double, y: Double) = x * sinB + y * cosB

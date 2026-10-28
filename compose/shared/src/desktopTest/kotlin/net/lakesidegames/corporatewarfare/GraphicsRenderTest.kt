@@ -40,8 +40,14 @@ class GraphicsRenderTest {
 
     private fun lane(a: String, b: String, mode: String, lots: Int, mine: Int = 0) = LaneDto(
         a = a, b = b, aName = a, bName = b, mode = 0u, modeId = mode, modeName = mode, km = 300u,
-        capacityLots = lots, usedLots = lots / 2, heldLots = 0, outsideLots = 0, fillBps = 5000,
-        rateCentsPerLot = 100, outsideRateCentsPerLot = 120, hotWeeks = 0u, owners = emptyList(), contracts = 0u,
+        capacityLots = lots, usedLots = lots / 2, heldLots = 0, outsideLots = lots / 5, fillBps = 5000,
+        rateCentsPerLot = 100, outsideRateCentsPerLot = 120, hotWeeks = 0u,
+        owners = listOf(
+            uniffi.cw_ffi.LaneOwnerDto(1uL, "Lakeside Holdings", lots / 3, a == "OH-CEN"),
+            uniffi.cw_ffi.LaneOwnerDto(7uL, "Great Lakes Freight", lots / 4, false),
+            uniffi.cw_ffi.LaneOwnerDto(9uL, "Erie Haulage", lots / 6, false),
+        ),
+        contracts = 0u,
         myCapacityLots = 0, myShippedLots = mine, myContractLots = 0, reservableLots = 0,
     )
 
@@ -82,6 +88,8 @@ class GraphicsRenderTest {
             "close" to scenario.zoomed(3.0),
             "turned" to scenario.zoomed(2.0).rotated(35.0),
             "winter" to scenario.zoomed(3.0),
+            "freight" to scenario,
+            "turned-close" to scenario.zoomed(4.0).rotated(120.0),
             "vehicles" to scenario.zoomed(5.0),
         )
         val sun = Sun.moving(40.0)
@@ -94,7 +102,7 @@ class GraphicsRenderTest {
                     Canvas(Modifier.fillMaxSize()) {
                         // The layers in the game's order: ground, traffic, clouds, structures, effects.
                         fun still(phase: MapPhase) = drawWorldMap(
-                            map, camera, Palette.gold, shading, "MI-DET", divisions, measurer, lanes = lanes, freightLayer = false,
+                            map, camera, Palette.gold, shading, "MI-DET", divisions, measurer, lanes = lanes, freightLayer = name == "freight",
                             geometry = geometry, graphics = graphics, sun = if (graphics.dayNight) sun else null, phase = phase,
                             plants = rivals + own, economyPhase = "boom", acquired = setOf("PA-WES/technology"),
                             week = if (name == "winter") 3 else 28,
@@ -102,8 +110,8 @@ class GraphicsRenderTest {
                         still(MapPhase.Ground)
                         val g = geometry.of(map, camera, size, graphics.detail, graphics.pitch)
                         val o = g.overlay(lanes, divisions, "MI-DET", shading, graphics, false)
-                        drawMapOverlay(o, graphics, 12.5, false, sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId, part = OverlayPart.Traffic)
-                        with(Weather) { drawWeather(g.p, sun, 12.5, graphics.clouds, map.playBounds, 46.0 * g.scale * g.p.t, camera.zoom, graphics.lighting > 0, map.scenarioId) }
+                        drawMapOverlay(o, graphics, 12.5, name == "freight", sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId, part = OverlayPart.Traffic)
+                        if (name != "freight") with(Weather) { drawWeather(g.p, sun, 12.5, graphics.clouds, map.playBounds, 46.0 * g.scale * g.p.t, camera.zoom, graphics.lighting > 0, map.scenarioId) }
                         still(MapPhase.Structures)
                         drawMapOverlay(o, graphics, 12.5, false, sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId, part = OverlayPart.Effects)
                     }

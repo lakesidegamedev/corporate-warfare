@@ -11,6 +11,19 @@ heading.
 
 ## [Unreleased]
 
+### Changed
+
+- Buildings, city blocks, the countryside and every vehicle are true 3D voxel models, drawn from the
+  camera's angle each frame: turn the map and you see their sides, vehicles turn as they follow the
+  road, and the sun lights a fixed side of each building as you go round it.
+- The Freight mode is redrawn: each route is a clean arc between its two hubs over a darkened map,
+  with one coloured stripe per company that carries goods on it (yours in gold), wider where more
+  freight moves and dashed for water, and a legend naming the companies. Clouds step aside while it
+  is open.
+- Freight routes no longer show outside the Freight mode. Elsewhere trucks drive on the real
+  interstates and trains on the real railways, which are now drawn when zoomed in; a route with no
+  road or track simply shows no vehicles.
+
 ### Added
 
 - Seven more map modes: your share, competition, demand, workforce skill, infrastructure (roads,

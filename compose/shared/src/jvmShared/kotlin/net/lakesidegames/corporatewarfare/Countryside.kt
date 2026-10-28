@@ -97,22 +97,25 @@ internal object Countryside {
      * further from a city than the economy supports are left out: towns grow in a boom.
      */
     fun DrawScope.drawCountryside(
-        p: MapProjection, map: WorldMap, week: Int, scale: Int, lift: (String?) -> Double, economyPhase: String?, limit: Int = 900,
+        p: MapProjection, map: WorldMap, week: Int, unit: Float, lift: (String?) -> Double, economyPhase: String?, limit: Int = 500,
     ) {
         val reach = when (economyPhase) { "boom" -> 1.0; "expansion" -> 0.9; "recovery" -> 0.8; "slowdown" -> 0.7; "recession" -> 0.6; else -> 0.85 }
-        val shown = ArrayList<Pair<Offset, Prop>>()
+        val shown = ArrayList<Triple<Offset, Offset, Prop>>()
         for (prop in props(map)) {
             if (prop.kind == "house" && prop.city > reach) continue
             val g = p.ground(prop.lon * PI / 180, prop.lat * PI / 180)
             if (!g.isSpecified) continue
             val at = p.lift(g.x.toDouble(), g.y.toDouble(), lift(null))
             if (at.x < -20 || at.y < -20 || at.x > size.width + 20 || at.y > size.height + 20) continue
-            shown += at to prop
+            shown += Triple(at, g, prop)
             if (shown.size >= limit) break
         }
         shown.sortBy { it.first.y }
-        for ((at, prop) in shown) {
-            with(Voxels) { drawVariant(prop.kind, season(week, prop.lat), at, scale) }
+        val floor = lift(null)
+        for ((_, g, prop) in shown) {
+            // Each prop turned its own way, so a field of trees never looks stamped.
+            val heading = (prop.seed % 4) * PI / 2
+            with(VoxelModels) { drawModel("${prop.kind}/${season(week, prop.lat)}", p, g.x, g.y, floor, unit, heading, ink = false) }
         }
     }
 

@@ -1,5 +1,11 @@
 package net.lakesidegames.corporatewarfare
 
+import androidx.compose.ui.graphics.drawscope.Stroke
+
+import androidx.compose.ui.graphics.StrokeCap
+
+import androidx.compose.ui.graphics.Path
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,38 +63,92 @@ internal fun laneIsMine(lane: LaneDto): Boolean = lane.myCapacityLots > 0 || lan
 private fun busiestLanes(lanes: List<LaneDto>): List<LaneDto> =
     lanes.sortedByDescending { it.capacityLots + it.outsideLots }.take(90)
 
-/**
- * Draws the busiest lanes between region anchors: thicker with more freight, coloured by how full
- * they are, dashed for sea. Lanes the player owns or ships on get a gold edge; the lane picked for
- * the panel gets a white one.
- */
-internal fun DrawScope.drawLanes(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>, focus: String?, picked: String? = null) {
-    val busiest = busiestLanes(lanes)
-    val top = busiest.maxOfOrNull { it.capacityLots + it.outsideLots }?.coerceAtLeast(1) ?: return
-    busiest.forEach { lane ->
-        val a = map.anchor(lane.a)?.let { projection.project(it) } ?: return@forEach
-        val b = map.anchor(lane.b)?.let { projection.project(it) } ?: return@forEach
-        val weight = (lane.capacityLots + lane.outsideLots).toFloat() / top
-        val dim = if (focus != null && lane.a != focus && lane.b != focus && picked == null) 0.35f else 0.9f
-        val width = 1.5f + 5f * weight
-        val dash = if (lane.modeId == "sea") PathEffect.dashPathEffect(floatArrayOf(12f, 9f)) else null
-        if (laneKey(lane) == picked) {
-            drawLine(Color.White.copy(alpha = 0.9f), a, b, strokeWidth = width + 7f, pathEffect = dash)
-        } else if (laneIsMine(lane)) {
-            drawLine(Palette.gold.copy(alpha = 0.75f), a, b, strokeWidth = width + 4f, pathEffect = dash)
-        }
-        drawLine(color = laneColor(lane).copy(alpha = dim), start = a, end = b, strokeWidth = width, pathEffect = dash)
-    }
+/** Company colours for the Freight mode: the player always gold, rivals from a fixed set by firm. */
+private val RivalColors = listOf(
+    Color(0xFF42A5F5), Color(0xFFEF5350), Color(0xFF66BB6A), Color(0xFFAB47BC),
+    Color(0xFF26C6DA), Color(0xFFFF8A65), Color(0xFFEC407A), Color(0xFF9CCC65),
+)
+private val OutsideCarriers = Color(0xFF8A939C)
+
+internal fun companyColor(firm: ULong, mine: Boolean): Color =
+    if (mine) Palette.gold else RivalColors[((firm % RivalColors.size.toULong()).toInt())]
+
+/** One company's stripe on a lane: its colour and how many lots it carries there. */
+internal class Stripe(val color: Color, val lots: Int, val name: String)
+
+/** Who carries a lane: each owner's stripe, biggest first, then outside carriers. */
+internal fun stripes(lane: LaneDto): List<Stripe> {
+    val owners = lane.owners.filter { it.lots > 0 }.sortedByDescending { it.lots }
+        .map { Stripe(companyColor(it.firm, it.mine), it.lots, if (it.mine) "You" else it.name) }
+    val outside = if (lane.outsideLots > 0) listOf(Stripe(OutsideCarriers, lane.outsideLots, "Outside carriers")) else emptyList()
+    return (owners + outside).ifEmpty { listOf(Stripe(OutsideCarriers, maxOf(lane.capacityLots, 1), "Idle")) }
 }
 
-/** The busiest lanes as faint lines under the moving freight, outside the Freight layer. */
-internal fun DrawScope.drawFaintLanes(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>) {
-    busiestLanes(lanes).take(60).forEach { lane ->
-        // A lane on a real road or railway needs no line of its own: the road or track is drawn.
-        if (Routes.of(map, lane.modeId, lane.a, lane.b) != null) return@forEach
-        val a = map.anchor(lane.a)?.let { projection.project(it) } ?: return@forEach
-        val b = map.anchor(lane.b)?.let { projection.project(it) } ?: return@forEach
-        drawLine(laneColor(lane).copy(alpha = 0.10f), a, b, strokeWidth = 1f)
+/**
+ * A lane's arc: from hub to hub, bowed to one side so arcs between nearby hubs stand apart, more
+ * for rail and most for sea so the modes between the same two regions never overlap.
+ */
+private class Arc(val a: Offset, val c: Offset, val b: Offset) {
+    fun at(t: Float): Offset {
+        val u = 1 - t
+        return Offset(u * u * a.x + 2 * u * t * c.x + t * t * b.x, u * u * a.y + 2 * u * t * c.y + t * t * b.y)
+    }
+
+    /** The arc moved [d] pixels to its side, for stacking stripes. */
+    fun shifted(d: Float): Arc {
+        val dir = b - a
+        val len = dir.getDistance().coerceAtLeast(1e-3f)
+        val n = Offset(-dir.y / len, dir.x / len) * d
+        return Arc(a + n, c + n, b + n)
+    }
+
+    fun path(): Path = Path().apply { moveTo(a.x, a.y); quadraticTo(c.x, c.y, b.x, b.y) }
+}
+
+private fun arcOf(map: WorldMap, projection: MapProjection, lane: LaneDto, plinth: Double): Arc? {
+    // The same two hubs always bow the same way, whichever end is listed first.
+    val (from, to) = if (lane.a < lane.b) lane.a to lane.b else lane.b to lane.a
+    val a = map.anchor(from)?.let { projection.project(it, plinth) } ?: return null
+    val b = map.anchor(to)?.let { projection.project(it, plinth) } ?: return null
+    val d = b - a
+    val len = d.getDistance()
+    if (len < 2f) return null
+    val bow = when (lane.modeId) { "rail" -> 0.26f; "sea" -> 0.38f; else -> 0.14f }
+    val c = (a + b) / 2f + Offset(-d.y, d.x) * bow
+    return Arc(a, c, b)
+}
+
+/**
+ * The Freight mode: each of the busiest lanes as a clean arc between its hubs, one coloured stripe
+ * per company that carries goods on it, side by side, each as wide as its share of the lane's
+ * freight; your own in gold. Sea lanes are dashed. A dark casing keeps the stack readable on any
+ * ground; the picked lane is outlined in white and lanes away from a selected region fade.
+ */
+internal fun DrawScope.drawLanes(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>, focus: String?, picked: String? = null, plinth: Double = 0.0) {
+    val busiest = busiestLanes(lanes)
+    val top = busiest.maxOfOrNull { it.capacityLots + it.outsideLots }?.coerceAtLeast(1) ?: return
+    // Thin, quiet lanes first so the busy ones lie on top.
+    busiest.asReversed().forEach { lane ->
+        val arc = arcOf(map, projection, lane, plinth) ?: return@forEach
+        val parts = stripes(lane)
+        val total = parts.sumOf { it.lots }.coerceAtLeast(1)
+        val width = 5f + 13f * (lane.capacityLots + lane.outsideLots).toFloat() / top
+        val dim = if (focus != null && lane.a != focus && lane.b != focus && picked == null) 0.3f else 1f
+        val dash = if (lane.modeId == "sea") PathEffect.dashPathEffect(floatArrayOf(10f, 6f)) else null
+        if (laneKey(lane) == picked) drawPath(arc.path(), Color.White, style = Stroke(width + 6f, cap = StrokeCap.Round))
+        drawPath(arc.path(), Palette.ink.copy(alpha = 0.85f * dim), style = Stroke(width + 2.5f, cap = StrokeCap.Round))
+        var offset = -width / 2
+        parts.forEach { part ->
+            val w = (width * part.lots / total).coerceAtLeast(1.2f)
+            drawPath(arc.shifted(offset + w / 2).path(), part.color.copy(alpha = dim), style = Stroke(w, cap = StrokeCap.Butt, pathEffect = dash))
+            offset += w
+        }
+    }
+    // The hubs the lanes meet at.
+    busiest.flatMap { listOf(it.a, it.b) }.distinct().forEach { code ->
+        val at = map.anchor(code)?.let { projection.project(it, plinth) } ?: return@forEach
+        drawCircle(Palette.ink, 5f, at)
+        drawCircle(Color.White, 3f, at)
     }
 }
 
@@ -97,19 +157,43 @@ internal fun laneAt(map: WorldMap, projection: MapProjection, lanes: List<LaneDt
     var best: LaneDto? = null
     var bestDistance = 22f
     busiestLanes(lanes).forEach { lane ->
-        val a = map.anchor(lane.a)?.let { projection.project(it) } ?: return@forEach
-        val b = map.anchor(lane.b)?.let { projection.project(it) } ?: return@forEach
-        val dx = b.x - a.x
-        val dy = b.y - a.y
-        val len2 = dx * dx + dy * dy
-        val t = if (len2 <= 0f) 0f else (((tap.x - a.x) * dx + (tap.y - a.y) * dy) / len2).coerceIn(0f, 1f)
-        val d = hypot(tap.x - (a.x + t * dx), tap.y - (a.y + t * dy))
-        if (d < bestDistance) {
-            bestDistance = d
-            best = lane
+        val arc = arcOf(map, projection, lane, 0.0) ?: return@forEach
+        for (k in 0..24) {
+            val d = (arc.at(k / 24f) - tap).getDistance()
+            if (d < bestDistance) {
+                bestDistance = d
+                best = lane
+            }
         }
     }
     return best
+}
+
+/** What the Freight mode's colours mean: you, the biggest rivals on the busiest lanes, outside carriers. */
+@Composable
+internal fun FreightLegend(lanes: List<LaneDto>, modifier: Modifier) {
+    val carriers = busiestLanes(lanes).flatMap { it.owners }.filter { it.lots > 0 }
+        .groupBy { it.firm }.map { (_, owners) -> owners.first() to owners.sumOf { it.lots } }
+        .sortedWith(compareByDescending<Pair<uniffi.cw_ffi.LaneOwnerDto, Int>> { it.first.mine }.thenByDescending { it.second })
+        .take(5)
+    Column(
+        modifier.width(190.dp).padding(end = 3.dp, bottom = 3.dp).pixelFrame(Palette.panel.copy(alpha = 0.94f)).padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text("FREIGHT", color = Palette.primaryText, fontSize = 10.sp, fontFamily = Pixel.font)
+        carriers.forEach { (owner, _) -> LegendRow(companyColor(owner.firm, owner.mine), if (owner.mine) "You" else owner.name) }
+        LegendRow(OutsideCarriers, "Outside carriers")
+        Text("Wider: more freight. Dashed: by water.", color = Palette.secondary, fontSize = 10.sp)
+    }
+}
+
+@Composable
+private fun LegendRow(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(width = 18.dp, height = 6.dp).background(color))
+        Spacer(Modifier.width(6.dp))
+        Text(label, color = Palette.primaryText, fontSize = 11.sp, maxLines = 1)
+    }
 }
 
 @Composable
