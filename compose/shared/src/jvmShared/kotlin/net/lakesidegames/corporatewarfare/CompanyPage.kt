@@ -130,7 +130,15 @@ fun CompanyPageBody(store: GameStore, p: CompanyPageDto, onOpenFirm: (ULong) -> 
         if (p.divisions.isNotEmpty()) {
             Eyebrow("Divisions")
             p.divisions.forEach { d ->
-                Text("${d.regionName} · ${Sectors.name(d.industry)} · ${d.strategyName}: ${d.plants} plants, ${d.blocks} blocks", color = Palette.secondary, fontSize = 12.sp)
+                // Your own company: the row opens the live division's detail.
+                val live = if (p.kind == "yours" && p.firm == store.selectedFirm) {
+                    store.divisions.firstOrNull { it.regionName == d.regionName && it.industry == d.industry }
+                } else null
+                Text(
+                    "${d.regionName} · ${Sectors.name(d.industry)} · ${d.strategyName}: ${d.plants} plants, ${d.blocks} blocks",
+                    color = if (live != null) Palette.primaryText else Palette.secondary, fontSize = 12.sp,
+                    modifier = if (live != null) Modifier.fillMaxWidth().clickable { store.showDivision(live) }.padding(vertical = 4.dp) else Modifier,
+                )
             }
         }
         if (p.holders.isNotEmpty()) {

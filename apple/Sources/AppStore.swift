@@ -241,6 +241,7 @@ final class AppStore: ObservableObject {
     /// busy, so buttons stay put while time runs instead of flashing disabled every week.
     func advance(weeks: UInt32, background: Bool = false) async {
         guard sessionReady else { return }
+        let weekBefore = overview?.tick ?? 0
         let body: () async -> Void = {
             if let result = await self.engine.advance(weeks: weeks) {
                 if result.pause != nil {
@@ -251,7 +252,7 @@ final class AppStore: ObservableObject {
             }
             await self.reload()
             // Anonymous market-balance analytics every five weeks, in the background.
-            if let overview = self.overview, Telemetry.due(week: overview.tick), Telemetry.enabled {
+            if let overview = self.overview, Telemetry.crossed(from: weekBefore, to: overview.tick), Telemetry.enabled {
                 Telemetry.send(snapshotJSON: await self.engine.marketSnapshotJSON())
             }
             // Autosave on the four-week boundary only; background and manual saves cover the rest.

@@ -15,6 +15,9 @@ object Telemetry {
     /** True on the weeks a snapshot is due. */
     fun due(week: UInt): Boolean = week > 0u && week % 5u == 0u
 
+    /** True when an advance from [from] to [to] crossed a five-week boundary, however many weeks it took. */
+    fun crossed(from: UInt, to: UInt): Boolean = to / 5u > from / 5u
+
     /** The request body: the install, the app, and the engine's snapshot verbatim. */
     fun envelope(installId: String, version: String, build: String, snapshotJson: String): String =
         "{\"install_id\":\"$installId\",\"app_version\":\"$version\",\"build\":\"$build\",\"snapshot\":$snapshotJson}"
