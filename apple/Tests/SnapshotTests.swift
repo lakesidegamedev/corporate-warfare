@@ -110,18 +110,18 @@ final class SnapshotTests: XCTestCase {
         let pad = CGSize(width: 1032, height: 1376)
         let controlled = store.stocks.first { $0.controlledByYou } ?? store.stocks.first
 
-        storeShot("iphone", "01-map", phone, 3, compact: true, MapHomeView().environmentObject(store))
-        storeShot("iphone", "02-office", phone, 3, compact: true, CEOOfficeView().environmentObject(store))
-        storeShot("iphone", "03-markets", phone, 3, compact: true, MarketsView().environmentObject(store))
+        storeShot("iphone", "01-map", phone, 3, compact: true, RootView(initialTab: .map).environmentObject(store))
+        storeShot("iphone", "02-office", phone, 3, compact: true, RootView(initialTab: .office).environmentObject(store))
+        storeShot("iphone", "03-markets", phone, 3, compact: true, RootView(initialTab: .markets).environmentObject(store))
         if let stock = controlled {
             storeShot("iphone", "04-company", phone, 3, compact: true, StockSheet(stock: stock).environmentObject(store))
         }
-        storeShot("iphone", "05-inbox", phone, 3, compact: true, InboxView().environmentObject(store))
+        storeShot("iphone", "05-inbox", phone, 3, compact: true, RootView(initialTab: .inbox).environmentObject(store))
         storeShot("iphone", "06-portfolio", phone, 3, compact: true, RootView(initialTab: .portfolio).environmentObject(store))
 
-        storeShot("ipad", "01-map", pad, 2, compact: false, MapHomeView().environmentObject(store))
-        storeShot("ipad", "02-office", pad, 2, compact: false, CEOOfficeView().environmentObject(store))
-        storeShot("ipad", "03-markets", pad, 2, compact: false, MarketsView().environmentObject(store))
+        storeShot("ipad", "01-map", pad, 2, compact: false, RootView(initialTab: .map).environmentObject(store))
+        storeShot("ipad", "02-office", pad, 2, compact: false, RootView(initialTab: .office).environmentObject(store))
+        storeShot("ipad", "03-markets", pad, 2, compact: false, RootView(initialTab: .markets).environmentObject(store))
     }
 
     private func storeShot<V: View>(_ device: String, _ name: String, _ size: CGSize, _ scale: CGFloat, compact: Bool, _ view: V) {
