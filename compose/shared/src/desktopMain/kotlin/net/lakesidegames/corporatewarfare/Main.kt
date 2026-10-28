@@ -22,6 +22,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -81,6 +82,7 @@ private object DesktopUpdates : UpdatePlatform {
 
 fun main() = application {
     Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
+    MeshCanvas.draw = desktopMeshDraw
     val settings = remember { AppSettings(File(saveDirectory(), "settings.properties")) }
     var loaded by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
@@ -174,3 +176,12 @@ private fun WindowMode.placement(): WindowPlacement = when (this) {
     WindowMode.Maximized -> WindowPlacement.Maximized
     WindowMode.Fullscreen -> WindowPlacement.Fullscreen
 }
+
+/** Clouds go to Skia as arrays in one call. */
+internal val desktopMeshDraw: (androidx.compose.ui.graphics.Canvas, FloatArray, FloatArray, IntArray, ShortArray, Int, Int, androidx.compose.ui.graphics.Paint) -> Unit =
+    { canvas, positions, tex, colors, indices, vertices, indexCount, paint ->
+        canvas.nativeCanvas.drawVertices(
+            org.jetbrains.skia.VertexMode.TRIANGLES, positions.copyOf(vertices * 2), colors.copyOf(vertices), tex.copyOf(vertices * 2),
+            indices.copyOf(indexCount), org.jetbrains.skia.BlendMode.MODULATE, paint.asFrameworkPaint(),
+        )
+    }

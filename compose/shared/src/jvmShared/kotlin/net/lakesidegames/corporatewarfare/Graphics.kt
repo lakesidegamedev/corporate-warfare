@@ -72,7 +72,7 @@ internal val graphicsOptions = listOf(
     GraphicsOption("Lighting", { "Sunlight, shadows and the atmosphere around the globe." }, listOf("Off", "Standard", "Cinematic"), { it.lighting }, { c, v -> c.copy(lighting = v) }),
     GraphicsOption("Day and night", { "The sun moves across the world and night falls on the map." }, listOf("Off", "On"), { it.dayNight.int() }, { c, v -> c.copy(dayNight = v == 1) }),
     GraphicsOption("City lights", { "Cities glow on the night side." }, listOf("Off", "On"), { it.cityLights.int() }, { c, v -> c.copy(cityLights = v == 1) }),
-    GraphicsOption("Clouds", { "Few: clouds over the globe. Many: also thin high cloud over the map, casting shadows." }, listOf("Off", "Few", "Many"), { it.clouds }, { c, v -> c.copy(clouds = v) }),
+    GraphicsOption("Clouds", { "Weather that moves like the real thing: trade winds, storms and hurricanes, casting shadows on the map." }, listOf("Off", "Light", "Heavy"), { it.clouds }, { c, v -> c.copy(clouds = v) }),
     GraphicsOption("Traffic", { "Freight moves along the lanes and cars along the highways." }, listOf("Off", "Light", "Busy"), { it.traffic }, { c, v -> c.copy(traffic = v) }),
     GraphicsOption("Buildings", { "Shows your divisions as buildings, and city skylines." }, listOf("Flat", "Your divisions", "Divisions and cities"), { it.buildings }, { c, v -> c.copy(buildings = v) }),
     GraphicsOption("Frame rate", { "Lower saves battery." }, listOf("30", "60", "Unlimited"), { when (it.frameRate) { 30 -> 0; 60 -> 1; else -> 2 } }, { c, v -> c.copy(frameRate = listOf(30, 60, 0)[v]) }),
