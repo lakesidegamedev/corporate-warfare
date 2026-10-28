@@ -1,5 +1,6 @@
 package net.lakesidegames.corporatewarfare
 
+import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
@@ -128,18 +129,8 @@ fun LogoArt(modifier: Modifier) {
     val file = PixelLogo.file ?: return
     androidx.compose.foundation.Canvas(modifier.aspectRatio(file.width.toFloat() / file.height)) {
         val cell = minOf(size.width / file.width, size.height / file.height)
-        file.rows.forEachIndexed { y, row ->
-            row.forEachIndexed { x, character ->
-                val hex = if (character == '.') null else file.palette[character.toString()]
-                if (hex != null) {
-                    drawRect(
-                        SectorIcons.color(hex),
-                        topLeft = androidx.compose.ui.geometry.Offset(x * cell, y * cell),
-                        size = androidx.compose.ui.geometry.Size(cell + 0.5f, cell + 0.5f),
-                    )
-                }
-            }
-        }
+        val art = PixelBitmaps.of(file, file.rows) { character -> file.palette[character.toString()]?.let { SectorIcons.color(it) } }
+        drawPixelBitmap(art, width = (file.width * cell).roundToInt(), height = (file.height * cell).roundToInt())
     }
 }
 
@@ -229,7 +220,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
         // Content stops at the navigation bar: the scaffold's padding keeps it clear.
         Column(Modifier.padding(padding)) {
             PauseBanner(store, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp))
-            TutorialPanel(compact = true, modifier = Modifier.fillMaxWidth())
+            TutorialPanel(compact = true, modifier = Modifier.fillMaxWidth(), researchHint = store.research?.let { r -> store.selectedFirmDto?.let { Tutorial.researchHint(it.cashCents, r) } })
             Box(Modifier.weight(1f)) {
             when (tab) {
                 Tab.Map -> MapScreen(store)
@@ -345,6 +336,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
         }
         if (store.facilities.isNotEmpty()) item { ProductionTarget(store) }
         if (store.divisions.isNotEmpty()) item { Panel { CompanyShipping(store) } }
+        item { FourWeeklyResults(store) }
         if (store.divisions.isNotEmpty()) {
             item { Eyebrow("Divisions") }
             items(store.divisions.size) { index ->
@@ -355,7 +347,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text("${Sectors.name(division.industry)} · ${division.regionName}", color = Palette.primaryText, fontWeight = FontWeight.SemiBold)
-                            Text("${division.strategyName} · ${division.blocks} plants", color = Palette.secondary, fontSize = 12.sp)
+                            Text("${division.strategyName}${if (division.retooling) " (retooling)" else ""} · ${division.blocks} plants", color = Palette.secondary, fontSize = 12.sp)
                         }
                         Text("${division.shareBps / 100}% share", color = Palette.gold, fontSize = 13.sp)
                         Text("Details", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
@@ -592,6 +584,7 @@ private fun InboxScreen(store: GameStore) {
                 }
             }
         }
+        item { RivalMovesPanel(store) }
     }
 }
 
@@ -665,6 +658,7 @@ private fun PortfolioScreen(store: GameStore, onSettings: () -> Unit) {
                 }
             }
         }
+        item { ShareholdingsPanel(store) }
     }
 }
 

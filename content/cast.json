@@ -113,7 +113,7 @@
     },
     {
       "id": "joel_rosenthal",
-      "name": "Joel Rosenthal",
+      "name": "Joel Brandvold",
       "age": 52,
       "scenario": "silicon-valley-1995",
       "home": "Los Angeles, California",
@@ -184,6 +184,776 @@
         "leader"
       ],
       "background": "Mining engineer who became head of a coal and steel group and spent the 1980s converting old pits into industrial parks. He wants the region retrained and rebuilt, not sold off."
+    }
+  ],
+  "extras": [
+    {
+      "id": "x_001",
+      "name": "Lucia Lindqvist",
+      "age": 65,
+      "home": "Dortmund, Germany",
+      "temperament": "integrator",
+      "background": "Came up through a steel mill and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_002",
+      "name": "Bronwen Wallenberg",
+      "age": 46,
+      "home": "Gary, Indiana",
+      "temperament": "raider",
+      "background": "Came up through a textile mill and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_003",
+      "name": "Dario Brandvold",
+      "age": 40,
+      "home": "Palo Alto, California",
+      "temperament": "financier",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_004",
+      "name": "Quentin Marchetti",
+      "age": 51,
+      "home": "Bochum, Germany",
+      "temperament": "speculator",
+      "background": "Came up through a family wholesaler and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_005",
+      "name": "Jun Achterberg",
+      "age": 52,
+      "home": "Shreveport, Louisiana",
+      "temperament": "builder",
+      "background": "Came up through a regional bank and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_006",
+      "name": "Joanna Okafor",
+      "age": 41,
+      "home": "Toledo, Ohio",
+      "temperament": "cautious",
+      "background": "Came up through a steel mill and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_007",
+      "name": "Hamid Okafor",
+      "age": 65,
+      "home": "Fresno, California",
+      "temperament": "integrator",
+      "background": "Came up through a family wholesaler and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_008",
+      "name": "Dario Schreiber",
+      "age": 38,
+      "home": "Erie, Pennsylvania",
+      "temperament": "raider",
+      "background": "Came up through a tool-and-die shop and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_009",
+      "name": "Stellan Jankowski",
+      "age": 68,
+      "home": "Oklahoma City, Oklahoma",
+      "temperament": "financier",
+      "background": "Came up through a tool-and-die shop and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_010",
+      "name": "Beatrix Schreiber",
+      "age": 40,
+      "home": "Cologne, Germany",
+      "temperament": "speculator",
+      "background": "Came up through a regional bank and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_011",
+      "name": "Anders Faulkner",
+      "age": 51,
+      "home": "Lafayette, Louisiana",
+      "temperament": "builder",
+      "background": "Came up through a tool-and-die shop and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_012",
+      "name": "Hiroshi Pemberton",
+      "age": 46,
+      "home": "Cologne, Germany",
+      "temperament": "cautious",
+      "background": "Came up through a municipal utility and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_013",
+      "name": "Anita Andersen",
+      "age": 48,
+      "home": "Columbus, Ohio",
+      "temperament": "integrator",
+      "background": "Came up through a textile mill and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_014",
+      "name": "Mei Maldonado",
+      "age": 45,
+      "home": "Midland, Texas",
+      "temperament": "raider",
+      "background": "Came up through a grain elevator and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_015",
+      "name": "Leila Vandenberg",
+      "age": 63,
+      "home": "Rockford, Illinois",
+      "temperament": "financier",
+      "background": "Came up through a municipal utility and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_016",
+      "name": "Renata Andersen",
+      "age": 60,
+      "home": "Buffalo, New York",
+      "temperament": "speculator",
+      "background": "Came up through an engineering consultancy and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_017",
+      "name": "Leila Jankowski",
+      "age": 42,
+      "home": "Bonn, Germany",
+      "temperament": "builder",
+      "background": "Came up through an engineering consultancy and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_018",
+      "name": "Isaac Fitzgerald",
+      "age": 38,
+      "home": "Austin, Texas",
+      "temperament": "cautious",
+      "background": "Came up through a tool-and-die shop and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_019",
+      "name": "Dmitri Oyelaran",
+      "age": 66,
+      "home": "Memphis, Tennessee",
+      "temperament": "integrator",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_020",
+      "name": "Zofia Castellano",
+      "age": 62,
+      "home": "Midland, Texas",
+      "temperament": "raider",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_021",
+      "name": "Esperanza Quinlan",
+      "age": 48,
+      "home": "Lafayette, Louisiana",
+      "temperament": "financier",
+      "background": "Came up through a trade union staff office and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_022",
+      "name": "Emeka Jankowski",
+      "age": 51,
+      "home": "Toledo, Ohio",
+      "temperament": "speculator",
+      "background": "Came up through a shipping broker and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_023",
+      "name": "Felix Valdez",
+      "age": 40,
+      "home": "Toledo, Ohio",
+      "temperament": "builder",
+      "background": "Came up through a trade union staff office and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_024",
+      "name": "Ines Sandoval",
+      "age": 40,
+      "home": "Lafayette, Louisiana",
+      "temperament": "cautious",
+      "background": "Came up through a tool-and-die shop and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_025",
+      "name": "Greta Fitzgerald",
+      "age": 38,
+      "home": "Dallas, Texas",
+      "temperament": "integrator",
+      "background": "Came up through a municipal utility and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_026",
+      "name": "Stellan Rasmussen",
+      "age": 67,
+      "home": "Toledo, Ohio",
+      "temperament": "raider",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_027",
+      "name": "Patrick Jankowski",
+      "age": 48,
+      "home": "Sacramento, California",
+      "temperament": "financier",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_028",
+      "name": "Callum Halvorsen",
+      "age": 38,
+      "home": "Milwaukee, Wisconsin",
+      "temperament": "speculator",
+      "background": "Came up through a freight forwarder and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_029",
+      "name": "Lorenzo Schreiber",
+      "age": 46,
+      "home": "Grand Rapids, Michigan",
+      "temperament": "builder",
+      "background": "Came up through a freight forwarder and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_030",
+      "name": "Lucia Novak",
+      "age": 42,
+      "home": "Lafayette, Louisiana",
+      "temperament": "cautious",
+      "background": "Came up through a tool-and-die shop and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_031",
+      "name": "Rohan Fitzgerald",
+      "age": 54,
+      "home": "Fresno, California",
+      "temperament": "integrator",
+      "background": "Came up through an engineering consultancy and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_032",
+      "name": "Chidi Dellacroce",
+      "age": 63,
+      "home": "Dallas, Texas",
+      "temperament": "raider",
+      "background": "Came up through a freight forwarder and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_033",
+      "name": "Karl Nakagawa",
+      "age": 61,
+      "home": "Grand Rapids, Michigan",
+      "temperament": "financier",
+      "background": "Came up through a municipal utility and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_034",
+      "name": "Joanna Gallagher",
+      "age": 58,
+      "home": "Sunnyvale, California",
+      "temperament": "speculator",
+      "background": "Came up through an engineering consultancy and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_035",
+      "name": "Sigrid Eriksson",
+      "age": 66,
+      "home": "Lafayette, Louisiana",
+      "temperament": "builder",
+      "background": "Came up through a steel mill and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_036",
+      "name": "Gideon Brandvold",
+      "age": 52,
+      "home": "Rockford, Illinois",
+      "temperament": "cautious",
+      "background": "Came up through a family wholesaler and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_037",
+      "name": "Hamid Nakagawa",
+      "age": 58,
+      "home": "Gelsenkirchen, Germany",
+      "temperament": "integrator",
+      "background": "Came up through a steel mill and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_038",
+      "name": "Valentina Lindqvist",
+      "age": 65,
+      "home": "Dallas, Texas",
+      "temperament": "raider",
+      "background": "Came up through a textile mill and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_039",
+      "name": "Harriet Vandenberg",
+      "age": 58,
+      "home": "Oklahoma City, Oklahoma",
+      "temperament": "financier",
+      "background": "Came up through an engineering consultancy and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_040",
+      "name": "Jasper Whitlock",
+      "age": 48,
+      "home": "Dortmund, Germany",
+      "temperament": "speculator",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_041",
+      "name": "Greta Sokolov",
+      "age": 67,
+      "home": "St. Louis, Missouri",
+      "temperament": "builder",
+      "background": "Came up through a municipal utility and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_042",
+      "name": "Nikolai Haddad",
+      "age": 43,
+      "home": "Milwaukee, Wisconsin",
+      "temperament": "cautious",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_043",
+      "name": "Lars Faulkner",
+      "age": 42,
+      "home": "Lafayette, Louisiana",
+      "temperament": "integrator",
+      "background": "Came up through a tool-and-die shop and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_044",
+      "name": "Nikolai Wallenberg",
+      "age": 42,
+      "home": "Dortmund, Germany",
+      "temperament": "raider",
+      "background": "Came up through a textile mill and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_045",
+      "name": "Armando Valdez",
+      "age": 39,
+      "home": "Buffalo, New York",
+      "temperament": "financier",
+      "background": "Came up through an engineering consultancy and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_046",
+      "name": "Esperanza Kasprzak",
+      "age": 43,
+      "home": "Dallas, Texas",
+      "temperament": "speculator",
+      "background": "Came up through a freight forwarder and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_047",
+      "name": "Paloma Whitlock",
+      "age": 49,
+      "home": "Cologne, Germany",
+      "temperament": "builder",
+      "background": "Came up through a municipal utility and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_048",
+      "name": "Paloma Faulkner",
+      "age": 55,
+      "home": "Shreveport, Louisiana",
+      "temperament": "cautious",
+      "background": "Came up through a family wholesaler and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_049",
+      "name": "Lucia Thibodeaux",
+      "age": 40,
+      "home": "Palo Alto, California",
+      "temperament": "integrator",
+      "background": "Came up through a textile mill and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_050",
+      "name": "Rosalind Yamamoto",
+      "age": 50,
+      "home": "Rockford, Illinois",
+      "temperament": "raider",
+      "background": "Came up through a grain elevator and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_051",
+      "name": "Ines Valdez",
+      "age": 51,
+      "home": "Sacramento, California",
+      "temperament": "financier",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_052",
+      "name": "Emeka Gallagher",
+      "age": 51,
+      "home": "Dallas, Texas",
+      "temperament": "speculator",
+      "background": "Came up through a municipal utility and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_053",
+      "name": "Fiona Whitlock",
+      "age": 68,
+      "home": "Austin, Texas",
+      "temperament": "builder",
+      "background": "Came up through a trade union staff office and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_054",
+      "name": "Leila Halvorsen",
+      "age": 50,
+      "home": "Gary, Indiana",
+      "temperament": "cautious",
+      "background": "Came up through a freight forwarder and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_055",
+      "name": "Mateus Brandvold",
+      "age": 38,
+      "home": "Bochum, Germany",
+      "temperament": "integrator",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_056",
+      "name": "Fiona Castellano",
+      "age": 44,
+      "home": "Fresno, California",
+      "temperament": "raider",
+      "background": "Came up through a steel mill and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_057",
+      "name": "Tamsin Wallenberg",
+      "age": 66,
+      "home": "Dortmund, Germany",
+      "temperament": "financier",
+      "background": "Came up through a tool-and-die shop and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_058",
+      "name": "Jasper Fitzgerald",
+      "age": 42,
+      "home": "Sacramento, California",
+      "temperament": "speculator",
+      "background": "Came up through a trade union staff office and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_059",
+      "name": "Delphine Nakagawa",
+      "age": 54,
+      "home": "Bonn, Germany",
+      "temperament": "builder",
+      "background": "Came up through a regional bank and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_060",
+      "name": "Marguerite Stanford",
+      "age": 64,
+      "home": "Lafayette, Louisiana",
+      "temperament": "cautious",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_061",
+      "name": "Mei Mbeki",
+      "age": 38,
+      "home": "Gary, Indiana",
+      "temperament": "integrator",
+      "background": "Came up through a shipping broker and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_062",
+      "name": "Delphine Lindqvist",
+      "age": 67,
+      "home": "Grand Rapids, Michigan",
+      "temperament": "raider",
+      "background": "Came up through an engineering consultancy and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_063",
+      "name": "Rafael Halvorsen",
+      "age": 57,
+      "home": "Memphis, Tennessee",
+      "temperament": "financier",
+      "background": "Came up through a trade union staff office and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_064",
+      "name": "Anders Valdez",
+      "age": 49,
+      "home": "Erie, Pennsylvania",
+      "temperament": "speculator",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_065",
+      "name": "Cedric Haddad",
+      "age": 65,
+      "home": "Lafayette, Louisiana",
+      "temperament": "builder",
+      "background": "Came up through a trade union staff office and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_066",
+      "name": "Nikolai Pellegrini",
+      "age": 49,
+      "home": "Midland, Texas",
+      "temperament": "cautious",
+      "background": "Came up through an engineering consultancy and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_067",
+      "name": "Anita Faulkner",
+      "age": 52,
+      "home": "St. Louis, Missouri",
+      "temperament": "integrator",
+      "background": "Came up through an engineering consultancy and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_068",
+      "name": "Zofia Marchetti",
+      "age": 51,
+      "home": "Sunnyvale, California",
+      "temperament": "raider",
+      "background": "Came up through a textile mill and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_069",
+      "name": "Greta Achterberg",
+      "age": 38,
+      "home": "Denver, Colorado",
+      "temperament": "financier",
+      "background": "Came up through a regional bank and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_070",
+      "name": "Anita Pemberton",
+      "age": 62,
+      "home": "Dortmund, Germany",
+      "temperament": "speculator",
+      "background": "Came up through a textile mill and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_071",
+      "name": "Jun Schreiber",
+      "age": 59,
+      "home": "Dortmund, Germany",
+      "temperament": "builder",
+      "background": "Came up through a tool-and-die shop and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_072",
+      "name": "Samir Salazar",
+      "age": 51,
+      "home": "Gary, Indiana",
+      "temperament": "cautious",
+      "background": "Came up through a textile mill and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_073",
+      "name": "Jun Ibarra",
+      "age": 62,
+      "home": "Oklahoma City, Oklahoma",
+      "temperament": "integrator",
+      "background": "Came up through a family wholesaler and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_074",
+      "name": "Zofia Halvorsen",
+      "age": 55,
+      "home": "Palo Alto, California",
+      "temperament": "raider",
+      "background": "Came up through a family wholesaler and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_075",
+      "name": "Valentina Sandoval",
+      "age": 66,
+      "home": "Buffalo, New York",
+      "temperament": "financier",
+      "background": "Came up through a steel mill and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_076",
+      "name": "Carmen Mbeki",
+      "age": 42,
+      "home": "Denver, Colorado",
+      "temperament": "speculator",
+      "background": "Came up through a steel mill and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_077",
+      "name": "Wanjiru Kasprzak",
+      "age": 62,
+      "home": "Cologne, Germany",
+      "temperament": "builder",
+      "background": "Came up through a textile mill and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_078",
+      "name": "Emeka Achterberg",
+      "age": 45,
+      "home": "Buffalo, New York",
+      "temperament": "cautious",
+      "background": "Came up through a grain elevator and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_079",
+      "name": "Stellan Nakagawa",
+      "age": 39,
+      "home": "Columbus, Ohio",
+      "temperament": "integrator",
+      "background": "Came up through a municipal utility and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_080",
+      "name": "Karl Baptiste",
+      "age": 56,
+      "home": "Oklahoma City, Oklahoma",
+      "temperament": "raider",
+      "background": "Came up through a grain elevator and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_081",
+      "name": "Valentina Aldana",
+      "age": 45,
+      "home": "Columbus, Ohio",
+      "temperament": "financier",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_082",
+      "name": "Esperanza Carvalho",
+      "age": 42,
+      "home": "Columbus, Ohio",
+      "temperament": "speculator",
+      "background": "Came up through an engineering consultancy and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_083",
+      "name": "Hiroshi Bellamy",
+      "age": 50,
+      "home": "Toledo, Ohio",
+      "temperament": "builder",
+      "background": "Came up through a shipping broker and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_084",
+      "name": "Karl Marchetti",
+      "age": 58,
+      "home": "Gary, Indiana",
+      "temperament": "cautious",
+      "background": "Came up through a textile mill and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_085",
+      "name": "Mateus Fitzgerald",
+      "age": 46,
+      "home": "Fresno, California",
+      "temperament": "integrator",
+      "background": "Came up through a trade union staff office and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_086",
+      "name": "Valentina Montgomery",
+      "age": 68,
+      "home": "Grand Rapids, Michigan",
+      "temperament": "raider",
+      "background": "Came up through a shipping broker and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_087",
+      "name": "Jasper Nakagawa",
+      "age": 62,
+      "home": "Gelsenkirchen, Germany",
+      "temperament": "financier",
+      "background": "Came up through a tool-and-die shop and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_088",
+      "name": "Carmen Aldana",
+      "age": 41,
+      "home": "Rockford, Illinois",
+      "temperament": "speculator",
+      "background": "Came up through a textile mill and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_089",
+      "name": "Mei Stanford",
+      "age": 42,
+      "home": "Palo Alto, California",
+      "temperament": "builder",
+      "background": "Came up through a chemical plant and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_090",
+      "name": "Alistair Quinlan",
+      "age": 42,
+      "home": "Lafayette, Louisiana",
+      "temperament": "cautious",
+      "background": "Came up through a shipping broker and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
+    },
+    {
+      "id": "x_091",
+      "name": "Hiroshi Fitzgerald",
+      "age": 54,
+      "home": "St. Louis, Missouri",
+      "temperament": "integrator",
+      "background": "Came up through a steel mill and was brought in to run the firm. Likes to own the supplier before the supplier owns the price."
+    },
+    {
+      "id": "x_092",
+      "name": "Rosalind Pemberton",
+      "age": 49,
+      "home": "Bonn, Germany",
+      "temperament": "raider",
+      "background": "Came up through a tool-and-die shop and was brought in to run the firm. Watches rivals for a weak quarter and a cheap plant."
+    },
+    {
+      "id": "x_093",
+      "name": "Bronwen Kowalski",
+      "age": 49,
+      "home": "Palo Alto, California",
+      "temperament": "financier",
+      "background": "Came up through a freight forwarder and was brought in to run the firm. Prefers a clever balance sheet to a new furnace."
+    },
+    {
+      "id": "x_094",
+      "name": "Silvia Gallagher",
+      "age": 56,
+      "home": "Austin, Texas",
+      "temperament": "speculator",
+      "background": "Came up through a shipping broker and was brought in to run the firm. Backs new technology and big swings."
+    },
+    {
+      "id": "x_095",
+      "name": "Amara Jankowski",
+      "age": 53,
+      "home": "Grand Rapids, Michigan",
+      "temperament": "builder",
+      "background": "Came up through a shipping broker and was brought in to run the firm. Adds one plant at a time and rarely sells."
+    },
+    {
+      "id": "x_096",
+      "name": "Nikolai Ibarra",
+      "age": 67,
+      "home": "Sunnyvale, California",
+      "temperament": "cautious",
+      "background": "Came up through a freight forwarder and was brought in to run the firm. Keeps a deep cash cushion and waits for others to blink."
     }
   ]
 }

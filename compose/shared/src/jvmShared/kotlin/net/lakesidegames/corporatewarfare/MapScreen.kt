@@ -8,6 +8,8 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -74,6 +76,8 @@ fun WorldMapView(
     var flight by remember { mutableStateOf<Job?>(null) }
     val measurer = rememberTextMeasurer()
     val appSettings = LocalAppSettings.current
+    val geometry = remember(map) { MapGeometryCache() }
+    val shaded = remember(layer, store.boards, store.mapDivisions) { shading(store, layer) }
 
     fun current(): MapCamera? = camera ?: map?.let { if (viewSize.width > 0) MapCamera.scenario(viewSize, it) else null }
     fun fly(target: MapCamera) {
@@ -101,7 +105,6 @@ fun WorldMapView(
         if (map == null) {
             Text("The map file is missing from this build.", color = Palette.secondary, modifier = Modifier.padding(24.dp))
         } else {
-            val shading = shading(store, layer)
             Canvas(
                 Modifier.fillMaxSize()
                     .onSizeChanged { viewSize = Size(it.width.toFloat(), it.height.toFloat()) }
@@ -149,8 +152,9 @@ fun WorldMapView(
                     },
             ) {
                 drawWorldMap(
-                    map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shading, selected, store.mapDivisions, measurer,
+                    map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shaded, selected, store.mapDivisions, measurer,
                     appSettings?.mapDetail ?: MapDetail.High, lanes = if (layer == MapLayer.Freight) store.lanes else emptyList(), pickedLane = pickedLane,
+                    geometry = geometry,
                 )
             }
             Column(
@@ -179,7 +183,10 @@ fun MapScreen(store: GameStore) {
 
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             MapHud(store)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 MapLayer.entries.forEach { option ->
                     Text(
                         option.title,
@@ -224,43 +231,44 @@ internal fun DrawScope.drawWorldMap(
     space: Boolean = true,
     lanes: List<uniffi.cw_ffi.LaneDto> = emptyList(),
     pickedLane: String? = null,
+    geometry: MapGeometryCache = MapGeometryCache(),
 ) {
-    val p = MapProjection(cam, size)
+    val g = geometry.of(map, cam, size, detailLevel)
+    val p = g.p
     val t = p.t
     val center = Offset(p.cx.toFloat(), p.cy.toFloat())
     if (space) drawRect(Color(0xFF05090E))
     // Ocean: the globe's disc, growing to fill the view as the map flattens.
     drawCircle(Color(0xFF0E2840), radius = (p.r / max(1 - t, 0.03)).toFloat(), center = center)
-    if (t < 1) drawPath(p.lines(graticule), Palette.primaryText.copy(alpha = (0.06 * (1 - t)).toFloat()), style = Stroke(0.6f))
+    if (t < 1) drawPath(g.graticule, Palette.primaryText.copy(alpha = (0.06 * (1 - t)).toFloat()), style = Stroke(0.6f))
     // Outside the scenario the world is greyed out: neutral land, grey borders and roads. The
     // scenario's regions are drawn over it in colour.
-    val land = Path().apply { fillType = PathFillType.EvenOdd }
-    map.countries.forEach { p.addPolygons(it.rings, land) }
+    val land = g.land
     drawPath(land, OutsideLand)
     val provinces = if (detailLevel == MapDetail.Low) 0f else ((cam.zoom - 1.4) / 1.2).coerceIn(0.0, 1.0).toFloat()
-    if (provinces > 0) drawPath(p.lines(map.provinces), OutsideBorder.copy(alpha = 0.7f * provinces), style = Stroke(0.5f))
+    if (provinces > 0) drawPath(g.provinces, OutsideBorder.copy(alpha = 0.7f * provinces), style = Stroke(0.5f))
     val roads = if (detailLevel != MapDetail.High) 0f else ((cam.zoom - 2.4) / 1.6).coerceIn(0.0, 1.0).toFloat()
-    if (roads > 0) drawPath(p.lines(map.roads), OutsideRoad.copy(alpha = 0.6f * roads), style = Stroke(0.8f))
+    if (roads > 0) drawPath(g.roads, OutsideRoad.copy(alpha = 0.6f * roads), style = Stroke(0.8f))
     drawPath(land, OutsideBorder, style = Stroke(0.8f))
     val detail = if (detailLevel != MapDetail.High) 0f else ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
-    val regionPaths = map.regions.map { it.code to p.polygons(it.rings) }
+    val regionPaths = g.regionPaths
     regionPaths.forEach { (code, path) ->
         drawPath(path, Color(0xFF2B3B4A))
         val intensity = shading[code] ?: 0.0
         if (intensity > 0) drawPath(path, tint.copy(alpha = (0.15 + 0.6 * intensity).toFloat()))
     }
-    if (detail > 0) drawPath(p.lines(map.counties), Palette.stroke.copy(alpha = 0.45f * detail), style = Stroke(0.5f))
-    drawPath(p.polygons(map.lakes), Color(0xFF16354F))
+    if (detail > 0) drawPath(g.counties, Palette.stroke.copy(alpha = 0.45f * detail), style = Stroke(0.5f))
+    drawPath(g.lakes, Color(0xFF16354F))
     if (detail > 0) {
-        drawPath(p.lines(map.rivers), Color(0xFF16354F).copy(alpha = 0.9f * detail), style = Stroke(1.4f))
-        drawPath(p.lines(map.interstates), Color(0xFFC68A3D).copy(alpha = 0.35f * detail), style = Stroke(1f))
+        drawPath(g.rivers, Color(0xFF16354F).copy(alpha = 0.9f * detail), style = Stroke(1.4f))
+        drawPath(g.interstates, Color(0xFFC68A3D).copy(alpha = 0.35f * detail), style = Stroke(1f))
     }
     regionPaths.forEach { (code, path) ->
         if (code == selected) drawPath(path, Palette.gold.copy(alpha = 0.35f))
         drawPath(path, Palette.stroke, style = Stroke(0.9f))
     }
-    map.playStates.forEach {
-        drawPath(p.polygons(it.rings), Color(0xFFB8C7D6).copy(alpha = 0.6f), style = Stroke(if (cam.zoom > 3) 2.4f else 1f))
+    g.playStates.forEach {
+        drawPath(it, Color(0xFFB8C7D6).copy(alpha = 0.6f), style = Stroke(if (cam.zoom > 3) 2.4f else 1f))
     }
     if (t < 1) {
         // The globe's rim, fading as it unrolls.
@@ -300,12 +308,41 @@ internal fun DrawScope.drawWorldMap(
     }
 }
 
+/**
+ * The map projected for one camera and view size. Each path is built the first time it is drawn
+ * and kept, so a redraw that moves nothing (a new week, a selection) projects nothing.
+ */
+internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size, val detailLevel: MapDetail) {
+    val p = MapProjection(cam, size)
+    val graticule: Path by lazy { p.lines(graticuleRings) }
+    val land: Path by lazy { Path().apply { fillType = PathFillType.EvenOdd; map.countries.forEach { p.addPolygons(it.rings, this) } } }
+    val provinces: Path by lazy { p.lines(map.provinces) }
+    val roads: Path by lazy { p.lines(map.roads) }
+    val regionPaths: List<Pair<String, Path>> by lazy { map.regions.map { it.code to p.polygons(it.rings) } }
+    val counties: Path by lazy { p.lines(map.counties) }
+    val lakes: Path by lazy { p.polygons(map.lakes) }
+    val rivers: Path by lazy { p.lines(map.rivers) }
+    val interstates: Path by lazy { p.lines(map.interstates) }
+    val playStates: List<Path> by lazy { map.playStates.map { p.polygons(it.rings) } }
+
+    fun matches(map: WorldMap, cam: MapCamera, size: Size, detailLevel: MapDetail) =
+        this.map === map && this.cam == cam && this.size == size && this.detailLevel == detailLevel
+}
+
+/** Holds the last [MapGeometry] so an unchanged camera is projected once. */
+internal class MapGeometryCache {
+    private var held: MapGeometry? = null
+
+    fun of(map: WorldMap, cam: MapCamera, size: Size, detailLevel: MapDetail): MapGeometry =
+        held?.takeIf { it.matches(map, cam, size, detailLevel) } ?: MapGeometry(map, cam, size, detailLevel).also { held = it }
+}
+
 private val OutsideLand = Color(0xFF25282B)
 private val OutsideBorder = Color(0xFF55595D)
 private val OutsideRoad = Color(0xFF6A6E72)
 
 /** Meridians and parallels every 15 degrees, for the globe. */
-private val graticule: List<GeoRing> =
+private val graticuleRings: List<GeoRing> =
     (-180 until 180 step 15).map { lon -> GeoRing((-80..80 step 4).flatMap { listOf(lon * 10_000, it * 10_000) }) } +
         (-75..75 step 15).map { lat -> GeoRing((-180..180 step 4).flatMap { listOf(it * 10_000, lat * 10_000) }) }
 
@@ -369,6 +406,20 @@ private fun MapHud(store: GameStore) {
                 Text(Format.compact(profit, overview?.primaryCurrency.orEmpty()), color = if (profit >= 0) Palette.positive else Palette.negative, fontWeight = FontWeight.SemiBold)
             }
         }
+        // What the desktop shows in its Alerts pane: decisions due, a pause, the engine's warnings.
+        val due = store.events.count { it.mandatory }
+        val alerts = buildList {
+            if (due > 0) add("$due decision${if (due == 1) "" else "s"} waiting in the Inbox" to Palette.warning)
+            overview?.pause?.let { add("Paused: $it" to Palette.warning) }
+            overview?.alerts?.forEach { add(it to Palette.warning) }
+        }
+        alerts.take(3).forEach { (text, tone) ->
+            Row(verticalAlignment = Alignment.Top) {
+                PixelIcon("alert", size = 12.dp, tint = tone, modifier = Modifier.padding(top = 2.dp, end = 6.dp))
+                Text(text, color = Palette.primaryText, fontSize = 12.sp)
+            }
+        }
+        if (alerts.size > 3) Text("${alerts.size - 3} more on the Portfolio tab", color = Palette.secondary, fontSize = 11.sp)
     }
 }
 
@@ -379,7 +430,7 @@ internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () ->
         containerColor = Palette.panel,
         title = { Text(board.name) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("${board.stateName} · hub ${board.hubCity}", color = Palette.secondary, fontSize = 13.sp)
                 Text(
                     "Wages ${board.wageIndexBps / 100}% · skill ${board.skillBps / 100} · roads ${board.roadBps / 100} · power ${board.powerGridBps / 100}",
@@ -389,7 +440,7 @@ internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () ->
                 if (board.specialization.isNotEmpty()) {
                     Text("Specialized in " + board.specialization.joinToString(" and ") { Sectors.name(it) }, color = Palette.positive, fontSize = 12.sp)
                 }
-                val room = board.room.filter { it.importLots > 0 }.sortedByDescending { it.importLots * it.importPriceCents }.take(5)
+                val room = board.room.filter { it.importLots > 0 }.sortedByDescending { it.importLots * it.importPriceCents }.take(8)
                 if (room.isNotEmpty()) {
                     Eyebrow("Room to build")
                     room.forEach { Text("${it.productName}: ${it.importLots} lots a week imported at ${Format.money(it.importPriceCents)}", color = Palette.primaryText, fontSize = 13.sp) }

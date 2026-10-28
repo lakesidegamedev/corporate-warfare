@@ -88,8 +88,8 @@ final class TutorialModel: ObservableObject {
         ),
         TutorialStep(
             id: "research", title: "Fund research",
-            what: "On the Research screen, set a weekly research budget.",
-            why: "Each technology level makes your plants need fewer inputs and workers and lifts quality.",
+            what: "On the Research screen, set a modest weekly research budget.",
+            why: "Each technology level makes your plants need fewer inputs and workers and lifts quality. Start small: research that costs more than the company earns is a loss.",
             page: .research, commands: ["SetResearchBudget"]
         ),
         TutorialStep(
@@ -185,6 +185,19 @@ struct TutorialPanel: View {
     @EnvironmentObject private var store: AppStore
     var compact: Bool
 
+    /// A weekly research budget sized to the company: about 1 in 2,000 of its cash, in steps of
+    /// 500, never under 500. Shown with its cost, the weeks to the next level and what that buys.
+    private var researchHint: String? {
+        guard let research = store.research, let firm = store.selectedFirmDto else { return nil }
+        if research.level >= research.maxLevel { return "Your company is at the top technology level." }
+        let budget = max(50_000, (firm.cashCents / 2_000 + 25_000) / 50_000 * 50_000)
+        let remaining = max(research.nextThresholdCents - research.progressCents, 0)
+        let weeks = (remaining + budget - 1) / budget
+        return "Try \(Format.money(budget)) a week (about \(weeks) weeks to level \(research.level + 1)). "
+            + "That level takes inputs and labour per unit from \(research.intensityBps / 100)% to \(research.nextIntensityBps / 100)% of baseline "
+            + "and quality from \(research.qualityBps / 100) to \(research.nextQualityBps / 100)."
+    }
+
     var body: some View {
         let tutorial = store.tutorial
         if let step = tutorial.current, !tutorial.hidden {
@@ -213,6 +226,12 @@ struct TutorialPanel: View {
                         .font(.caption)
                         .foregroundStyle(Theme.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if step.id == "research", let hint = researchHint {
+                        Text(hint)
+                            .font(.caption)
+                            .foregroundStyle(Theme.gold)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 HStack(spacing: 6) {
                     ForEach(TutorialModel.steps) { item in

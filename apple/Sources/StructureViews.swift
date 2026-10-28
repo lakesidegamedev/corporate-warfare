@@ -29,6 +29,16 @@ struct StructureSection: View {
         }
     }
 
+    private func outcome(_ key: String) -> String {
+        switch key {
+        case "conceded": return "conceded"
+        case "compromised": return "settled"
+        case "activist_won": return "the activist won"
+        case "activist_lost": return "the activist lost"
+        default: return key
+        }
+    }
+
     var body: some View {
         if let view = store.structure {
             VStack(alignment: .leading, spacing: 12) {
@@ -45,10 +55,18 @@ struct StructureSection: View {
                 bonds(view)
                 Eyebrow(text: "Joint ventures")
                 ventures(view)
+                let settled = view.campaigns.filter { $0.mine && $0.outcome != "open" }.prefix(3)
+                if !settled.isEmpty {
+                    Eyebrow(text: "Past campaigns")
+                    ForEach(Array(settled), id: \.id) { c in
+                        Text("\(c.firmName): \(outcome(c.outcome)) (\(demand(c.demand)))")
+                            .font(.caption2).foregroundStyle(Theme.secondary)
+                    }
+                }
                 if let rejection {
                     Text(rejection.message).font(.caption).foregroundStyle(Theme.negative)
                 }
-                Text("Bonds issued \(view.stats.bondsIssued) · ventures \(view.stats.venturesFormed) · listings \(view.stats.ipos) · spin-offs \(view.stats.spinOffs) · activist campaigns \(view.stats.activistCampaigns). Carve out, list, spin off, form a venture or issue a bond from Actions.")
+                Text("Bonds issued \(view.stats.bondsIssued) · ventures \(view.stats.venturesFormed) · listings \(view.stats.ipos) · spin-offs \(view.stats.spinOffs) · carve-outs \(view.stats.carveOuts) · activist campaigns \(view.stats.activistCampaigns) (\(view.stats.activistWins) won) · tax moved by internal pricing \(Format.signedMoney(view.stats.taxShiftCents)). Carve out, list, spin off, form a venture or issue a bond from Actions.")
                     .font(.caption2).foregroundStyle(Theme.secondary)
             }
         } else {
@@ -131,8 +149,15 @@ struct StructureSection: View {
         }
         ForEach(Array(view.reputations.prefix(10).enumerated()), id: \.offset) { _, r in
             HStack {
-                Text("\(r.firmName) · \(r.industry) · \(r.region)").font(.caption).foregroundStyle(Theme.primaryText).lineLimit(1)
+                Text("\(r.firmName) · \(Sector.name(r.industry)) · \(r.region)").font(.caption).foregroundStyle(Theme.primaryText).lineLimit(1)
                 Spacer(minLength: 4)
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Theme.panelRaised)
+                        Capsule().fill(Theme.gold).frame(width: proxy.size.width * min(max(Double(r.reputationBps) / 10_000, 0), 1))
+                    }
+                }
+                .frame(width: 70, height: 6)
                 Text("\(r.reputationBps / 100)/100  \(r.premiumBps >= 0 ? "+" : "")\(pct(Int64(r.premiumBps))) price")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(r.premiumBps >= 0 ? Theme.positive : Theme.negative)

@@ -59,8 +59,8 @@ internal fun DivisionStock(store: GameStore, division: DivisionDto) {
         }
         ValueSlider(
             weeks, { weeks = it }, 0.0..26.0, 1.0,
-            label = { if (it < 0.5) "Company default" else "${it.toInt()} weeks of inputs" },
-            detail = { "How many weeks of inputs this division keeps on hand. Grain is also bought ahead in the harvest quarter." },
+            label = { if (it < 0.5) "Company default: ${division.stockWeeksDefault} weeks" else "${it.toInt()} weeks of inputs" },
+            detail = { "How many weeks of inputs this division keeps on hand. Perishable inputs keep at most 2 weeks unless you set a target. Grain is also bought ahead in the harvest quarter." },
             onCommit = { store.setStockTarget(division.plants, it.toInt(), division.seasonalBuild) },
         )
         StorageLines(division.storage)

@@ -106,7 +106,7 @@
     },
     {
       "id": "anadarko_gas",
-      "name": "Anadarko Gas Partners",
+      "name": "Washita Gas Partners",
       "industry": "extraction",
       "archetype": "consolidator",
       "region": "OK-WES",
@@ -145,7 +145,7 @@
     },
     {
       "id": "lone_star_power",
-      "name": "Lone Star Power and Light",
+      "name": "Red Fork Power and Light",
       "industry": "energy",
       "archetype": "cost_leader",
       "region": "TX-DFW",
@@ -283,7 +283,7 @@
     },
     {
       "id": "bluebonnet_assembly",
-      "name": "Bluebonnet Assembly",
+      "name": "Brazoria Assembly",
       "industry": "manufacturing",
       "archetype": "technologist",
       "region": "TX-DFW",
@@ -425,7 +425,7 @@
     },
     {
       "id": "lone_star_rail",
-      "name": "Lone Star Rail Freight",
+      "name": "Cross Timbers Rail Freight",
       "industry": "logistics",
       "archetype": "technologist",
       "region": "TX-DFW",
@@ -454,7 +454,7 @@
     },
     {
       "id": "bluebonnet_grocers",
-      "name": "Bluebonnet Grocers",
+      "name": "Mesquite Grocers",
       "industry": "retail",
       "archetype": "cost_leader",
       "region": "TX-SAT",
@@ -505,7 +505,7 @@
     },
     {
       "id": "lone_star_national",
-      "name": "Lone Star National Bank",
+      "name": "Trinity Plains National Bank",
       "industry": "financial",
       "archetype": "consolidator",
       "region": "TX-HOU",
@@ -555,7 +555,7 @@
     },
     {
       "id": "frontier_instruments",
-      "name": "Frontier Instruments",
+      "name": "Pecos Instruments",
       "industry": "technology",
       "archetype": "technologist",
       "region": "TX-DFW",
@@ -582,7 +582,7 @@
     },
     {
       "id": "lone_star_press",
-      "name": "Lone Star Press Group",
+      "name": "Staked Plains Press Group",
       "industry": "media",
       "archetype": "brand_builder",
       "region": "TX-DFW",
@@ -603,7 +603,7 @@
     },
     {
       "id": "southwestern_telephone",
-      "name": "Southwestern Telephone",
+      "name": "Chisholm Telephone",
       "industry": "telecommunications",
       "archetype": "cost_leader",
       "region": "TX-DFW",
@@ -633,7 +633,7 @@
     },
     {
       "id": "lone_star_towers",
-      "name": "Lone Star Towers",
+      "name": "Caprock Towers",
       "industry": "real_estate",
       "archetype": "brand_builder",
       "region": "TX-DFW",
@@ -643,7 +643,7 @@
     },
     {
       "id": "fort_worth_aerospace",
-      "name": "Fort Worth Aerospace",
+      "name": "Tarrant Aerospace",
       "industry": "defense",
       "archetype": "technologist",
       "region": "TX-DFW",

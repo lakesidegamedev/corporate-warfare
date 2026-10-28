@@ -13,6 +13,12 @@ heading.
 
 ### Added
 
+- Company pages. Tap any company in the stock list, the stock dialog, a rival's dossier, a region board or a news item to open its page. Listed companies show the share price chart, valuation, a financial summary, divisions and plants by region, holders, subsidiaries and joint ventures, recent moves, grudges and friends, news and Buy and Sell. Private companies show only what is public: name, logo, chief executive, sector, regions, size band and public moves. Your own companies show everything.
+- Every company has a logo, drawn in 8-bit pixels from its name from a fixed set of plain shapes (stars, arrows, wheat, drops, gears, towers, waves, monograms), the same on every platform. A tool refuses any symbol that looks like a banned shape.
+- Every company has a chief executive with a face. Firms outside the twelve-person cast get a generated, fictional chief with a portrait, name, temperament and background, shown in the stock dialog.
+
+### Added
+
 - Division detail. Tapping a division on the map, in the region board's "Your divisions here",
   in the CEO Office or on the company page opens a detail view with its weekly financials
   (revenue, each cost line, operating profit, margin, a revenue trend, capital invested and
@@ -41,6 +47,13 @@ heading.
   their output swing against the weekly plan. Coastal Generation now opens in Los Angeles, where it has
   customers. This changes the world state of every scenario, so saves and replays from 1.7.0
   do not carry over.
+- A division's stock target slider read "Company default" beside "26 weeks of inputs", which was
+  only the slider's maximum. It now shows the real company default, such as "Company default: 4
+  weeks", and notes that perishable inputs keep at most 2. The tutorial's research step told new
+  players to fund research with a budget that lost them money. It now asks for a modest budget and
+  shows one sized to your company: its cost a week, the weeks to the next level and what that
+  level buys. Display only, no change to world state or hashes.
+
 - Market snapshots now arrive from Android, Windows and Linux. Until now only the iPhone build sent
   its anonymous market-balance snapshot; the Compose app had no sender. It now posts one every five
   game weeks in the background, with a random install id and nothing else about you, and fails
@@ -53,6 +66,25 @@ heading.
   level it is allowed to buy stops spending its research budget until the frontier moves.
 - Research is cheaper to start: the first levels cost $40,000, $160,000 and $360,000 instead of
   $100,000, $400,000 and $900,000.
+- Faster weeks and a more responsive interface. A game week now takes about 20 to 40 percent
+  less time in every scenario (Ruhr and Rhine 18.8 to 11.6 ms, Silicon Valley 12.8 to 9.4 ms,
+  Texas 13.0 to 10.7 ms, Great Lakes 9.4 to 7.3 ms on the test machine) with identical results:
+  freight route shapes are kept from week to week until the network changes, and rival
+  expansion scoring reads each market once. Pixel icons, sector badges, portraits and the logo
+  are drawn from a bitmap built once instead of hundreds of rectangles a frame, and the map
+  keeps its projected shapes until the view moves, on Android, Windows, Linux and Apple.
+
+- Every scenario now keeps its own calendar. The status bar, elections, chair terms, seasons,
+  price paths, news, saves and chart axes read from the scenario start year, so Texas 1981 no
+  longer shows "2000 W05" on both the Android and iPhone clients.
+- Seed firms open at a fair share price. Their first quarter of earnings is unobserved, and the
+  opening valuation assumed far more than the firms really earn, so shares such as Gulf Broadcast
+  Network sat at several times fair value and slid for weeks. At week 5 the median price over fair
+  value is now about 1.0 in every scenario (was up to 1.6), and firms priced over twice fair value
+  fell from 17 to 20 of about 50 down to 2 to 8. Saved worlds from 1.7.0 are unaffected.
+- Fictional firm and cast names no longer echo real companies or people (for example
+  Anadarko Gas Partners, Lone Star Rail Freight, Bluebonnet Grocers, Golden State Power,
+  Texoma Power and Light and Joel Rosenthal).
 
 ### Added
 
@@ -95,6 +127,16 @@ heading.
   Summaries are worked out by the engine; they add no mechanics. The Shipping figures are now
   kept in the save file, so they are still there after you load a game instead of staying empty
   until the next week closes (older saves load as before and fill in at the next week).
+- Phone parity with the desktop app (1.7.1). The phone layouts now carry the desktop panels that
+  were missing. On Android phones: the map shows decisions waiting, a pause and engine warnings,
+  its layer chips scroll sideways instead of running off the screen, and a region's sheet scrolls
+  and lists the rival leaders there (tap one for its dossier); the Inbox lists recent raids as
+  Rival moves; the Portfolio lists your shareholdings with stake, value and the quarter's move;
+  the CEO Office shows four-weekly results and marks a retooling division; Stats shows each
+  holder's share of the votes. On iPhone and iPad: the Portfolio lists your shareholdings, the
+  CEO Office shows four-weekly results, Stats shows each holder's share of the votes, and the
+  Structure panel gains past activist campaigns, carve-out, activist win and internal-pricing tax
+  totals, and sector names with a reputation bar.
 
 - Every pause now says why and how to continue. A banner at the time controls on every screen,
   in the Compose and Apple apps, names the pause in plain words with one button: Answer opens

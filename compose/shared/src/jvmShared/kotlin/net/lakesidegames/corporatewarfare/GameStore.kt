@@ -404,6 +404,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         scope.launch { onResult(withContext(engine) { handle.dossier(firm) }) }
     }
 
+    /** A company's full page, with what the investor may see of it. */
+    fun companyPage(firm: ULong, onResult: (uniffi.cw_ffi.CompanyPageDto?) -> Unit) {
+        val handle = session ?: return
+        scope.launch { onResult(withContext(engine) { handle.companyPage(firm) }) }
+    }
+
     /** A rival's chief, temperament and any grudge or tie with the selected company. */
     fun rivalTag(firm: ULong, onResult: (RivalTagDto?) -> Unit) {
         val handle = session ?: return
@@ -582,6 +588,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
             @Suppress("UNCHECKED_CAST")
             run {
                 overview = parts[0] as OverviewDto
+                ResultBuckets.startYear = (parts[0] as OverviewDto).startYear
                 firms = parts[1] as List<FirmDto>
                 events = parts[2] as List<EventDto>
                 boards = parts[3] as List<RegionBoardDto>

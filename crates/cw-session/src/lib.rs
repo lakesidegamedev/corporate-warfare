@@ -866,7 +866,7 @@ impl Session {
                 pause = Some(reason);
                 break;
             }
-            self.run_ai();
+            cw_sim::ph!("ai+commands", self.run_ai());
             let outcome = cw_sim::tick::advance(&mut self.world, &self.dataset);
             advanced += 1;
             self.heal_pause();
@@ -1049,7 +1049,8 @@ impl Session {
         let advice = self.next_action();
         Overview {
             tick: world.tick.0,
-            week_label: world.tick.label(),
+            week_label: world.tick.label_from(world.start_year),
+            start_year: world.start_year,
             revision: world.revision,
             investor_cash_cents: world.fx.convert(world.investor.cash_cents, 0, reporting),
             investor_net_worth_cents: net_worth,
@@ -2162,7 +2163,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "55749f327b96f969cc21853f8a9a233555d5802672946532e2d2de4d3f6dffce"
+            "f85add779385728690ab8b13db937753d8abacc1cc921991eb5cd8aed42d6b43"
         );
     }
 

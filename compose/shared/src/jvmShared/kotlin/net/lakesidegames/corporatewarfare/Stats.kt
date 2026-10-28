@@ -60,10 +60,13 @@ data class ResultBucket(
 }
 
 object ResultBuckets {
+    /** Calendar year of week 1 in the running scenario, set from each overview. */
+    @Volatile var startYear: Int = 2000
+
     /** The game year is exactly 52 weeks: thirteen periods of four. */
     fun weekLabel(week: Int): String {
         val w = max(week, 1)
-        return "W%02d %d".format((w - 1) % 52 + 1, 2000 + (w - 1) / 52)
+        return "W%02d %d".format((w - 1) % 52 + 1, startYear + (w - 1) / 52)
     }
 
     fun make(period: StatsPeriod, weeks: List<WeekDto>, history: List<PeriodDto>): List<ResultBucket> = when (period) {
@@ -75,10 +78,10 @@ object ResultBuckets {
         }
         StatsPeriod.Month -> history.takeLast(13).map {
             val w = max(it.firstWeek.toInt(), 1)
-            bucket("P${(w - 1) % 52 / 4 + 1} ${2000 + (w - 1) / 52}", listOf(it))
+            bucket("P${(w - 1) % 52 / 4 + 1} ${startYear + (w - 1) / 52}", listOf(it))
         }
         StatsPeriod.Year -> history.groupBy { (max(it.firstWeek.toInt(), 1) - 1) / 52 }.toSortedMap()
-            .map { (year, periods) -> bucket("${2000 + year}", periods) }
+            .map { (year, periods) -> bucket("${startYear + year}", periods) }
     }
 
     private fun bucket(label: String, periods: List<PeriodDto>): ResultBucket {
@@ -192,7 +195,7 @@ fun StatsScreen(store: GameStore, onBack: () -> Unit) {
                         val share = if (ownership.issued > 0) holder.quantity.toFloat() / ownership.issued else 0f
                         Row(Modifier.fillMaxWidth()) {
                             Text(holder.holder, color = Palette.primaryText, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                            Text("%.1f%%".format(share * 100), color = Palette.primaryText, fontSize = 13.sp)
+                            Text("%.1f%% · %.1f%% of votes".format(share * 100, holder.votesBps / 100.0), color = Palette.primaryText, fontSize = 13.sp)
                         }
                         Box(Modifier.fillMaxWidth().height(5.dp).clip(CircleShape).background(Palette.stroke)) {
                             Box(Modifier.fillMaxWidth(share.coerceIn(0f, 1f)).height(5.dp).clip(CircleShape).background(Palette.gold))

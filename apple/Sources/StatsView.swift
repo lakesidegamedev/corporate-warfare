@@ -33,10 +33,13 @@ struct ResultBucket: Identifiable {
 }
 
 enum ResultBuckets {
+    /// Calendar year of week 1 in the running scenario, set from each overview.
+    static var startYear: Int = 2000
+
     /// Game weeks to a calendar label: the game year is exactly 52 weeks, thirteen periods of four.
     static func weekLabel(_ week: UInt32) -> String {
         let w = max(Int(week), 1)
-        return "W\(String(format: "%02d", (w - 1) % 52 + 1)) \(2000 + (w - 1) / 52)"
+        return "W\(String(format: "%02d", (w - 1) % 52 + 1)) \(startYear + (w - 1) / 52)"
     }
 
     static func make(_ period: StatsPeriod, weeks: [WeekDto], history: [PeriodDto]) -> [ResultBucket] {
@@ -58,12 +61,12 @@ enum ResultBuckets {
         case .month:
             return history.suffix(13).map { p in
                 let w = max(Int(p.firstWeek), 1)
-                return bucket(label: "P\((w - 1) % 52 / 4 + 1) \(2000 + (w - 1) / 52)", [p])
+                return bucket(label: "P\((w - 1) % 52 / 4 + 1) \(startYear + (w - 1) / 52)", [p])
             }
         case .year:
             let years = Dictionary(grouping: history) { (max(Int($0.firstWeek), 1) - 1) / 52 }
             return years.keys.sorted().map { year in
-                bucket(label: String(2000 + year), years[year] ?? [])
+                bucket(label: String(startYear + year), years[year] ?? [])
             }
         }
     }
@@ -307,7 +310,7 @@ struct StatsView: View {
                     HStack {
                         Text(holder.holder).font(.callout)
                         Spacer()
-                        Text(String(format: "%.1f%%", share * 100)).font(.callout.monospacedDigit())
+                        Text(String(format: "%.1f%% · %.1f%% of votes", share * 100, Double(holder.votesBps) / 100)).font(.callout.monospacedDigit())
                     }
                     GeometryReader { proxy in
                         ZStack(alignment: .leading) {

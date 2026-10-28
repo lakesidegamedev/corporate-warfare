@@ -22,7 +22,8 @@ def luminance(hex_colour):
 
 class CastPortraits(unittest.TestCase):
     def test_every_person_has_a_portrait_and_no_one_else(self):
-        people = {p['id'] for p in json.loads(CAST.read_text())['people']}
+        cast = json.loads(CAST.read_text())
+        people = {p['id'] for p in cast['people']} | {e['id'] for e in cast['extras']}
         self.assertEqual(people, set(json.loads(FILE.read_text())['portraits']))
 
     def test_grids_are_16_by_16_with_known_letters(self):

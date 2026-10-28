@@ -170,6 +170,7 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
             e.news.take(5).forEach { n ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     n.person?.let { PixelPortrait(it, size = 28.dp) }
+                    n.firm?.let { f -> n.firmName?.let { name -> FirmChipLogo(store, name, f) } }
                     Text("${ResultBuckets.weekLabel(n.week.toInt())}: ${n.text}", color = Palette.secondary, fontSize = 12.sp)
                 }
             }

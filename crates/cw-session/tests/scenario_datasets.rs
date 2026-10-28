@@ -39,10 +39,12 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// recorded on the engine before the change and must never move because of Texas content.
 /// Repinned when the character cast joined the dataset and the engine began naming chairs and
 /// chief executives from it, and again when rivals began choosing moves by temperament with
-/// grudges and alliances (1.7 preview 5), and again in 1.7.1 when new divisions gained a raid grace period, and when a plant under construction
-/// stopped hiring its crew until the last four weeks and research stopped spending at the frontier,
-/// and again in 1.7.1 when every good gained a producer in every scenario (new maintenance strategy
-/// and opening plants), every firm priced weekly on a damped rule and services followed demand.
+/// grudges and alliances (1.7 preview 5), and again in 1.7.1 when new divisions gained a raid
+/// grace period, a plant under construction stopped hiring its crew until the last four weeks,
+/// research stopped spending at the frontier, seed share prices began from an opening earnings
+/// prior and the world began carrying its scenario start year, and again when every good gained a
+/// producer in every scenario (new maintenance strategy and opening plants), every firm priced
+/// weekly on a damped rule and services followed demand.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -54,15 +56,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "6542a1244ee759072a853a6181f792c3e47532bd5234dc69b781148c2dd9711b",
+            "3c527cb0e95ceabcfe508ecac10d4cb372945ed8ba53f9516daf15378b2ad596",
         ),
         (
             2,
-            "30be7915058090ac1280a0b6b680478ab99c67952bfca8492657b5ba1de4c6fd",
+            "626bdcaad830735c96801aa92dd9b472b794c0381ebc85da4b088b001f25549f",
         ),
         (
             3,
-            "7e5051089a17a2966ca6b277df3425a8f8957272f0756398f764a77a9d75a9e0",
+            "acf7db36f858c20cbbd83ace30913aa5e68a3740303e599b0a74e86b2d6d9944",
         ),
     ];
     for (seed, hash) in pins {
@@ -74,12 +76,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "f68767624863560926a65c6a5e6a92ca8a989e79a348265bba66bae3f93ce810"
+        "813c409c1403938fe0cad5f7b84120d4520ed12f2991c238484dde83f16b2a58"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "6fe51183183a064bf75972c2c0b7e2752209c050a5b181322e1b96e2eed9cfe9"
+        "04cc10fa94a54cecdd6c7a2825ebcdd6ee075c22bee0e50617387534ae0a3c07"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();
@@ -539,5 +541,101 @@ fn ruhr_rhine_opens_solvent_and_keeps_the_player_company_alive() {
             session.world.firms.get(group).unwrap().operative(),
             "seed {seed}"
         );
+    }
+}
+
+const SCENARIOS: [(&str, i32); 4] = [
+    ("great-lakes-2000", 2000),
+    ("texas-1981", 1981),
+    ("silicon-valley-1995", 1995),
+    ("ruhr-rhine-1991", 1991),
+];
+
+#[test]
+fn every_scenario_opens_in_its_own_year() {
+    for (scenario, year) in SCENARIOS {
+        let mut session = Session::create(config(1, ScenarioKind::Guided, scenario)).unwrap();
+        for _ in 0..5 {
+            session.advance(1);
+        }
+        let overview = session.overview();
+        assert_eq!(overview.start_year, year, "{scenario}");
+        assert_eq!(overview.week_label, format!("{year} W05"), "{scenario}");
+        // The year turns over after 52 weeks, not before.
+        for _ in 5..53 {
+            session.advance(1);
+            if session.world.events.pending.iter().any(|e| !e.resolved) {
+                for event in session.world.events.pending.iter_mut() {
+                    event.resolved = true;
+                }
+                session.dismiss_pause();
+            }
+        }
+        assert!(
+            session
+                .overview()
+                .week_label
+                .starts_with(&format!("{} ", year + 1)),
+            "{scenario}: {}",
+            session.overview().week_label
+        );
+    }
+}
+
+/// Share price over fair value, for firms worth more than a few dollars a share.
+fn price_ratios(session: &Session) -> Vec<(String, f64)> {
+    session
+        .world
+        .firms
+        .iter()
+        .filter(|(_, f)| f.shares.fair_cents >= 100)
+        .map(|(_, f)| {
+            (
+                f.name.clone(),
+                f.shares.mark_cents as f64 / f.shares.fair_cents as f64,
+            )
+        })
+        .collect()
+}
+
+/// A seed firm's first quarter of earnings is unobserved, so its fair value must not collapse
+/// away from the opening price faster than the price can follow it.
+#[test]
+fn opening_share_prices_stay_near_fair_value() {
+    for (scenario, _) in SCENARIOS {
+        for seed in [1, 2] {
+            let mut session =
+                Session::create(config(seed, ScenarioKind::Guided, scenario)).unwrap();
+            for week in 1..=52u32 {
+                let result = session.advance(1);
+                if result.pause.is_some() {
+                    for event in session.world.events.pending.iter_mut() {
+                        event.resolved = true;
+                    }
+                    session.dismiss_pause();
+                }
+                if week == 5 || week == 52 {
+                    // By week 52 a firm that has since become very profitable can sit well under its
+                    // new fair value while the price catches up. Since 1.7.1 firms read their real
+                    // weekly sales from the first week, so early prices rise toward what sells out
+                    // and the median can open up to a fifth under fair value instead of at it.
+                    let (low, high) = if week == 5 { (0.3, 4.0) } else { (0.08, 6.0) };
+                    let ratios = price_ratios(&session);
+                    let mut sorted: Vec<f64> = ratios.iter().map(|r| r.1).collect();
+                    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                    let median = sorted[sorted.len() / 2];
+                    assert!(
+                        (0.8..=1.3).contains(&median),
+                        "{scenario} seed {seed} week {week}: median {median}"
+                    );
+                    for (name, ratio) in ratios {
+                        assert!(
+                            (low..=high).contains(&ratio),
+                            "{scenario} seed {seed} week {week}: {name} price/fair {ratio}"
+                        );
+                    }
+                }
+            }
+        }
     }
 }

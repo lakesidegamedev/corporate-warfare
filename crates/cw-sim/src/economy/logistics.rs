@@ -31,7 +31,7 @@ use cw_core::quantity::MilliLots;
 use cw_data::{Dataset, StorageClass};
 use serde::{Deserialize, Serialize};
 
-use crate::state::{FacilityStatus, World};
+use crate::state::{FacilityStatus, HolderId, World};
 
 pub const MAX_LEGS: usize = 3;
 /// A carrier's weekly capacity is lots over this reference haul. On a shorter lane the same fleet
@@ -369,7 +369,7 @@ pub struct LogisticsState {
     pub reservations: Vec<Reservation>,
     /// Route candidates and rate estimates: pure functions of the saved state above.
     #[serde(skip)]
-    cache: BTreeMap<(u8, u8, u8), Vec<Structure>>,
+    cache: BTreeMap<(u8, u8, u8), std::sync::Arc<Vec<Structure>>>,
     #[serde(skip)]
     estimates: Vec<i32>,
     /// Freight paid by firm and destination region: the week in progress and the week just closed.
@@ -377,6 +377,10 @@ pub struct LogisticsState {
     pub dest_week: BTreeMap<(Handle, u8), DestFreight>,
     #[serde(skip)]
     pub dest_last: BTreeMap<(Handle, u8), DestFreight>,
+    /// What the cache and estimates were built from: terminal access and the lanes with capacity.
+    /// They stay valid for as long as this does not change.
+    #[serde(skip)]
+    cache_basis: (Vec<Vec<bool>>, Vec<LaneKey>),
 }
 
 /// One route shape: legs by mode and hub, ranked at empty-lane prices.
@@ -607,8 +611,6 @@ pub fn begin_week(world: &mut World, ds: &Dataset) {
     close_stats(world, ds);
     let access = build_access(world, ds);
     world.logistics.access = access;
-    world.logistics.cache.clear();
-    world.logistics.estimates.clear();
     world.logistics.week = world.tick.0;
     world.logistics.last = std::mem::take(&mut world.logistics.totals);
     world.logistics.dest_last = std::mem::take(&mut world.logistics.dest_week);
@@ -685,7 +687,21 @@ pub fn begin_week(world: &mut World, ds: &Dataset) {
         }
     }
     world.logistics.carriers = carriers;
+    // Route shapes and rate estimates read only terminal access and which lanes have capacity, so
+    // they carry over from week to week until one of those changes.
+    let capable: Vec<LaneKey> = lanes
+        .iter()
+        .filter(|(_, lane)| lane.cap() > 0)
+        .map(|(key, _)| *key)
+        .collect();
     world.logistics.lanes = lanes;
+    if world.logistics.cache_basis.0 != world.logistics.access
+        || world.logistics.cache_basis.1 != capable
+    {
+        world.logistics.cache.clear();
+        world.logistics.estimates.clear();
+        world.logistics.cache_basis = (world.logistics.access.clone(), capable);
+    }
     apply_contracts(world, ds);
 }
 
@@ -964,17 +980,29 @@ struct Ctx {
 impl Ctx {
     fn new(world: &World, shipper: Handle) -> Ctx {
         let st = &world.logistics;
+        // Same answer as `same_group(shipper, firm)`, with the shipper's controller found once
+        // and each other firm's found once however many carriers and contracts it has.
+        let root = crate::economy::ownership::ultimate_controller(world, shipper);
+        let mut memo: BTreeMap<Handle, bool> = BTreeMap::new();
+        let mut same = |firm: Handle| -> bool {
+            if firm == shipper {
+                return true;
+            }
+            *memo.entry(firm).or_insert_with(|| {
+                match (
+                    root,
+                    crate::economy::ownership::ultimate_controller(world, firm),
+                ) {
+                    (Some(HolderId::Investor), Some(HolderId::Investor)) => true,
+                    (Some(HolderId::Outside(a)), Some(HolderId::Outside(b))) => a == b,
+                    (Some(HolderId::Firm(a)), Some(HolderId::Firm(b))) => a == b,
+                    _ => false,
+                }
+            })
+        };
         Ctx {
-            own_carrier: st
-                .carriers
-                .iter()
-                .map(|c| crate::economy::ownership::same_group(world, shipper, c.firm))
-                .collect(),
-            own_contract: st
-                .contracts
-                .iter()
-                .map(|c| crate::economy::ownership::same_group(world, shipper, c.holder))
-                .collect(),
+            own_carrier: st.carriers.iter().map(|c| same(c.firm)).collect(),
+            own_contract: st.contracts.iter().map(|c| same(c.holder)).collect(),
         }
     }
 }
@@ -1248,12 +1276,12 @@ fn structures(
     from: u8,
     to: u8,
     class: StorageClass,
-) -> Vec<Structure> {
+) -> std::sync::Arc<Vec<Structure>> {
     let key = (from, to, class.code());
     if let Some(found) = world.logistics.cache.get(&key) {
         return found.clone();
     }
-    let built = build_structures(ds, &world.logistics, from, to, class);
+    let built = std::sync::Arc::new(build_structures(ds, &world.logistics, from, to, class));
     world.logistics.cache.insert(key, built.clone());
     built
 }
@@ -1326,7 +1354,7 @@ pub fn plan_route(
     let st = &world.logistics;
     type Rank = (i64, i64, i64, i64, i64);
     let mut best: Option<(Rank, RoutePlan)> = None;
-    for shape in shapes {
+    for shape in shapes.iter() {
         if lots < shape.min_lots {
             continue;
         }

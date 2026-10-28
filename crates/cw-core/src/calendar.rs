@@ -51,7 +51,17 @@ impl Tick {
     }
 
     pub fn label(self) -> String {
-        format!("{} W{:02}", self.year(), self.week_of_year())
+        self.label_from(START_YEAR)
+    }
+
+    /// Calendar year containing this tick in a scenario whose first week falls in `start_year`.
+    pub fn year_from(self, start_year: i32) -> i32 {
+        start_year + ((self.0.saturating_sub(1)) / WEEKS_PER_YEAR) as i32
+    }
+
+    /// Display label such as `1981 W05` for a scenario that starts in `start_year`.
+    pub fn label_from(self, start_year: i32) -> String {
+        format!("{} W{:02}", self.year_from(start_year), self.week_of_year())
     }
 }
 
@@ -73,6 +83,13 @@ mod tests {
         // Five-year score lands on the last week of the fifth year.
         assert_eq!(Tick(260).year(), 2004);
         assert_eq!(Tick(260).week_of_year(), 52);
+    }
+
+    #[test]
+    fn scenario_start_year_shifts_the_label() {
+        assert_eq!(Tick(5).label_from(1981), "1981 W05");
+        assert_eq!(Tick(53).label_from(1995), "1996 W01");
+        assert_eq!(Tick(5).label(), "2000 W05");
     }
 
     #[test]

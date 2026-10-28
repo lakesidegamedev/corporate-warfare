@@ -185,7 +185,7 @@ pub fn weekly(world: &mut World, ds: &Dataset) {
             Rng::entity_stream(world.seed, TAG_POLITICS, cw_core::ids::Handle(week as u64));
         let hold = (p.approval_bps + 300).clamp(500, 9_500);
         let kept = rng.chance_bps(hold);
-        let year = cw_core::calendar::Tick(week).year();
+        let year = cw_core::calendar::Tick(week).year_from(world.start_year);
         if kept {
             p.news.push(PoliticalNews {
                 person: None,

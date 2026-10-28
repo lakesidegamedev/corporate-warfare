@@ -11,3 +11,6 @@ cw-data.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 postcard.workspace = true
+
+[features]
+phase-timing = []

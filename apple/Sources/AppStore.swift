@@ -316,6 +316,7 @@ final class AppStore: ObservableObject {
 
     func reload() async {
         overview = await engine.overview()
+        if let year = overview?.startYear { ResultBuckets.startYear = Int(year) }
         firms = await engine.firms()
         regions = await engine.regions(selected: selectedRegionCode)
         boards = await engine.regionBoards(firm: selectedFirm ?? overview?.primaryFirm)
@@ -674,6 +675,11 @@ final class AppStore: ObservableObject {
             "recipe": recipe,
             "blocks": blocks
         ]))
+    }
+
+    /// A company's full page, with what the investor may see of it.
+    func companyPage(_ firm: UInt64) async -> CompanyPageDto? {
+        await engine.companyPage(firm: firm)
     }
 
     /// A company's chief executive and recent moves.

@@ -75,8 +75,8 @@ object Tutorial {
         ),
         TutorialStep(
             "research", "Fund research",
-            "On the Research screen, set a weekly research budget.",
-            "Each technology level makes your plants need fewer inputs and workers and lifts quality.",
+            "On the Research screen, set a modest weekly research budget.",
+            "Each technology level makes your plants need fewer inputs and workers and lifts quality. Start small: research that costs more than the company earns is a loss.",
             page = "research", commands = setOf("SetResearchBudget"),
         ),
         TutorialStep(
@@ -110,6 +110,20 @@ object Tutorial {
         this.settings = settings
         done = settings.tutorialDone
         hidden = settings.tutorialHidden
+    }
+
+    /** A weekly research budget sized to the company: about 1 in 2,000 of its cash, in steps of 500, never under 500. */
+    fun suggestedResearchCents(cashCents: Long): Long = maxOf(50_000L, (cashCents / 2_000 + 25_000) / 50_000 * 50_000)
+
+    /** The research step's live advice: the suggested budget, what it costs a week and what the next level buys. */
+    fun researchHint(cashCents: Long, research: uniffi.cw_ffi.ResearchDto): String {
+        if (research.level >= research.maxLevel) return "Your company is at the top technology level."
+        val budget = suggestedResearchCents(cashCents)
+        val remaining = (research.nextThresholdCents - research.progressCents).coerceAtLeast(0)
+        val weeks = (remaining + budget - 1) / budget
+        return "Try ${Format.money(budget)} a week (about $weeks weeks to level ${research.level.toInt() + 1}). " +
+            "That level takes inputs and labour per unit from ${research.intensityBps / 100}% to ${research.nextIntensityBps / 100}% of baseline " +
+            "and quality from ${research.qualityBps / 100} to ${research.nextQualityBps / 100}."
     }
 
     val current: TutorialStep? get() = steps.firstOrNull { it.id !in done }
@@ -153,7 +167,7 @@ object Tutorial {
 
 /** The current step: docked in a corner on desktop, a single slim row on phones. */
 @Composable
-fun TutorialPanel(compact: Boolean, modifier: Modifier = Modifier) {
+fun TutorialPanel(compact: Boolean, modifier: Modifier = Modifier, researchHint: String? = null) {
     val step = Tutorial.current ?: return
     if (Tutorial.hidden) return
     val number = Tutorial.steps.indexOf(step) + 1
@@ -195,6 +209,7 @@ fun TutorialPanel(compact: Boolean, modifier: Modifier = Modifier) {
         }
         Text(step.what, color = Palette.primaryText, fontSize = 13.sp)
         Text(step.why, color = Palette.secondary, fontSize = 12.sp)
+        if (step.id == "research" && researchHint != null) Text(researchHint, color = Palette.gold, fontSize = 12.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Tutorial.steps.forEach { s ->
                 Box(
