@@ -87,6 +87,36 @@ final class SnapshotTests: XCTestCase {
         render("menu-pad", pad, compact: false, StartView().environmentObject(store))
         render("settings-phone", phone, compact: true,
                ScrollView { GraphicsSettingsPanel().padding(16) }.background(Theme.ink))
+        if let home { renderSplitView(store, region: home.code) }
+    }
+
+    /// The app in iPad Split View and Slide Over on a 13-inch iPad (1032 by 1376 points): a third,
+    /// a half and two thirds of the screen in portrait and landscape, with the size class iPadOS
+    /// gives each. Compact slices use the phone layout, regular ones the sidebar shell.
+    private func renderSplitView(_ store: AppStore, region: String) {
+        let slices: [(name: String, size: CGSize, compact: Bool)] = [
+            ("portrait-third", CGSize(width: 320, height: 1376), true),
+            ("portrait-half", CGSize(width: 507, height: 1376), true),
+            ("portrait-two-thirds", CGSize(width: 694, height: 1376), true),
+            ("landscape-third", CGSize(width: 375, height: 1032), true),
+            ("landscape-half", CGSize(width: 683, height: 1032), false),
+            ("landscape-two-thirds", CGSize(width: 993, height: 1032), false),
+        ]
+        let firm = store.selectedFirm ?? store.overview?.primaryFirm
+        for slice in slices {
+            let name = "split-\(slice.name)"
+            if slice.compact {
+                render("\(name)-map", slice.size, compact: true, RootView(initialTab: .map).environmentObject(store))
+                render("\(name)-markets", slice.size, compact: true, RootView(initialTab: .markets).environmentObject(store))
+            } else {
+                render("\(name)-map", slice.size, compact: false, DesktopShell(initialPage: .map).environmentObject(store))
+                render("\(name)-markets", slice.size, compact: false, DesktopShell(initialPage: .markets).environmentObject(store))
+            }
+            if let firm {
+                render("\(name)-company", slice.size, compact: slice.compact, CompanyPageSheet(firm: firm).environmentObject(store))
+            }
+            render("\(name)-build", slice.size, compact: slice.compact, BuildFlowView(regionCode: region).environmentObject(store))
+        }
     }
 
     /// The clouds alone, drawn off screen over a dark sea, on the globe and over the scenario.

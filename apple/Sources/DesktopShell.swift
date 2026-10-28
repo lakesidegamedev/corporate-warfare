@@ -4,16 +4,29 @@ import SwiftUI
 /// economy and the time controls always in view, and multi-pane screens.
 struct DesktopShell: View {
     @EnvironmentObject private var store: AppStore
-    @State private var page: GamePage = .map
+    @State private var page: GamePage
     @State private var query = ""
     @State private var actionsSeed = 0
     @State private var showingSettings = false
 
+    init(initialPage: GamePage = .map) {
+        _page = State(initialValue: initialPage)
+    }
+
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        // In Split View the window can be half an iPad or less; the sidebar and the tutorial
+        // then narrow so the screen itself keeps most of the room.
+        GeometryReader { proxy in
+            shell(width: proxy.size.width)
+        }
+    }
+
+    private func shell(width: CGFloat) -> some View {
+        let sidebar: CGFloat = width >= 900 ? 214 : 176
+        return ZStack(alignment: .bottomTrailing) {
             HStack(spacing: 0) {
                 DesktopSidebar(page: page, onPage: open, onSettings: { showingSettings = true })
-                    .frame(width: 214)
+                    .frame(width: sidebar)
                 Rectangle().fill(Theme.stroke).frame(width: 1)
                 VStack(spacing: 0) {
                     if let notice = store.recoveryNotice {
@@ -31,7 +44,7 @@ struct DesktopShell: View {
                 }
             }
             TutorialPanel(compact: false)
-                .frame(width: 360)
+                .frame(width: min(360, width - sidebar - 32))
                 .padding(16)
         }
         .background(Theme.ink)
@@ -242,42 +255,46 @@ private struct DesktopStatusBar: View {
         let cash = overview?.firmCashCents ?? 0
         let forecast = overview?.forecastFourWeekCents ?? 0
         let primary = overview?.primaryCurrency ?? ""
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(overview?.weekLabel ?? "")
-                        .font(.headline)
-                        .foregroundStyle(Theme.primaryText)
-                    if let economy = store.economy { PhasePill(phase: economy.phase) }
+        // The figures scroll; the week controls stay pinned on the right at every width.
+        HStack(spacing: 12) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 20) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(overview?.weekLabel ?? "")
+                            .font(.headline)
+                            .foregroundStyle(Theme.primaryText)
+                        if let economy = store.economy { PhasePill(phase: economy.phase) }
+                    }
+                    figure("Company cash", Format.moneyCompact(cash, currency: primary))
+                    figure(weeks >= 13 ? "Profit, quarter" : "Profit, \(weeks) wk", Format.moneyCompact(profit, currency: primary),
+                           tone: profit >= 0 ? Theme.positive : Theme.negative)
+                    figure("Cash in 4 wk", Format.moneyCompact(forecast, currency: primary),
+                           tone: forecast - cash >= 0 ? Theme.primaryText : Theme.negative)
+                    if let firm = store.selectedFirmDto {
+                        figure("Share price", Format.price(firm.markCents, currency: Format.numeraire))
+                    }
+                    figure("Net worth", Format.moneyCompact(overview?.investorNetWorthCents ?? 0))
+                    if let economy = store.economy {
+                        figure("Rate", String(format: "%.2f%%", Double(economy.policyRateBps) / 100))
+                        figure("Inflation", String(format: "%.1f%%", Double(economy.inflationBps) / 100),
+                               tone: economy.inflationBps > economy.targetInflationBps + 100 ? Theme.warning : Theme.primaryText)
+                    }
+                    searchField
                 }
-                figure("Company cash", Format.moneyCompact(cash, currency: primary))
-                figure(weeks >= 13 ? "Profit, quarter" : "Profit, \(weeks) wk", Format.moneyCompact(profit, currency: primary),
-                       tone: profit >= 0 ? Theme.positive : Theme.negative)
-                figure("Cash in 4 wk", Format.moneyCompact(forecast, currency: primary),
-                       tone: forecast - cash >= 0 ? Theme.primaryText : Theme.negative)
-                if let firm = store.selectedFirmDto {
-                    figure("Share price", Format.price(firm.markCents, currency: Format.numeraire))
-                }
-                figure("Net worth", Format.moneyCompact(overview?.investorNetWorthCents ?? 0))
-                if let economy = store.economy {
-                    figure("Rate", String(format: "%.2f%%", Double(economy.policyRateBps) / 100))
-                    figure("Inflation", String(format: "%.1f%%", Double(economy.inflationBps) / 100),
-                           tone: economy.inflationBps > economy.targetInflationBps + 100 ? Theme.warning : Theme.primaryText)
-                }
-                searchField
-                Button {
-                    Task { await store.advance(weeks: 1) }
-                } label: {
-                    Text("Next week").font(.callout.weight(.bold)).padding(.horizontal, 6)
-                }
-                .buttonStyle(PixelButtonStyle(prominent: true))
-                .tint(Theme.gold)
-                .foregroundStyle(Theme.ink)
-                .disabled(store.isBusy || store.runSpeed > 0)
-                SpeedControl()
+                .padding(.leading, 16)
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            Button {
+                Task { await store.advance(weeks: 1) }
+            } label: {
+                Text("Next week").font(.callout.weight(.bold)).lineLimit(1).fixedSize().padding(.horizontal, 6)
+            }
+            .buttonStyle(PixelButtonStyle(prominent: true))
+            .tint(Theme.gold)
+            .foregroundStyle(Theme.ink)
+            .disabled(store.isBusy || store.runSpeed > 0)
+            SpeedControl()
+                .padding(.trailing, 16)
         }
         .background(Theme.panel)
     }
