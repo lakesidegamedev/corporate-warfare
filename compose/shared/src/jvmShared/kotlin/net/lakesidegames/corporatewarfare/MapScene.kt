@@ -86,7 +86,7 @@ internal fun lerp(a: Color, b: Color, f: Float): Color =
 /** Soft round sprites drawn once and stamped many times: far cheaper than a gradient per dot. */
 internal object Sprites {
     val glow: ImageBitmap by lazy { radial(64, floatArrayOf(0f, 0.25f, 1f), floatArrayOf(1f, 0.55f, 0f)) }
-    val cloud: ImageBitmap by lazy { radial(96, floatArrayOf(0f, 0.55f, 1f), floatArrayOf(0.9f, 0.45f, 0f)) }
+    val cloud: ImageBitmap by lazy { radial(96, floatArrayOf(0f, 0.6f, 0.82f, 1f), floatArrayOf(0.95f, 0.85f, 0.35f, 0f)) }
 
     private fun radial(px: Int, stops: FloatArray, alphas: FloatArray): ImageBitmap {
         val image = ImageBitmap(px, px)
@@ -109,12 +109,15 @@ internal object Sprites {
 }
 
 /** Stamps [image] centred on [at], [radius] pixels, tinted and faded. */
-internal fun DrawScope.stamp(image: ImageBitmap, at: Offset, radius: Float, color: Color, alpha: Float, blend: BlendMode = BlendMode.SrcOver) {
+internal fun DrawScope.stamp(
+    image: ImageBitmap, at: Offset, radius: Float, color: Color, alpha: Float, blend: BlendMode = BlendMode.SrcOver, aspect: Float = 1f,
+) {
     if (radius < 0.4f || alpha <= 0.004f) return
-    val d = (radius * 2).toInt().coerceAtLeast(1)
+    val h = (radius * 2).toInt().coerceAtLeast(1)
+    val w = (radius * 2 * aspect).toInt().coerceAtLeast(1)
     drawImage(
         image, srcOffset = IntOffset.Zero, srcSize = IntSize(image.width, image.height),
-        dstOffset = IntOffset((at.x - radius).toInt(), (at.y - radius).toInt()), dstSize = IntSize(d, d),
+        dstOffset = IntOffset((at.x - w / 2f).toInt(), (at.y - radius).toInt()), dstSize = IntSize(w, h),
         alpha = alpha.coerceIn(0f, 1f), colorFilter = Sprites.tint(color), blendMode = blend,
     )
 }
@@ -210,7 +213,7 @@ internal fun DrawScope.drawGlobeBack(p: MapProjection, sun: Sun, g: GraphicsConf
         drawCircle(
             Brush.radialGradient(
                 0f to Color.Transparent, edge * 0.97f to Color(0xFF6FA0E0).copy(alpha = 0.50f * fade),
-                edge + (1 - edge) * 0.25f to Color(0xFF4F80C0).copy(alpha = 0.22f * fade), 1f to Color.Transparent,
+                edge + (1 - edge) * 0.2f to Color(0xFF4F80C0).copy(alpha = 0.16f * fade), 1f to Color.Transparent,
                 center = center, radius = outer,
             ),
             outer, center,
@@ -250,20 +253,20 @@ internal fun DrawScope.drawGlobeFront(p: MapProjection, sun: Sun, g: GraphicsCon
     val r = p.r.toFloat()
     drawCircle(
         Brush.radialGradient(
-            0f to Color.Transparent, 0.70f to Color.Transparent, 0.92f to Color.Black.copy(alpha = 0.35f * fade), 1f to Color.Black.copy(alpha = 0.6f * fade),
+            0f to Color.Transparent, 0.78f to Color.Transparent, 0.95f to Color.Black.copy(alpha = 0.30f * fade), 1f to Color.Black.copy(alpha = 0.5f * fade),
             center = center, radius = r,
         ),
         r, center,
     )
     drawCircle(
-        Brush.radialGradient(0f to Color.Transparent, 0.80f to Color.Transparent, 1f to Color(0xFF7FB2FF).copy(alpha = 0.35f * fade), center = center, radius = r),
+        Brush.radialGradient(0f to Color.Transparent, 0.90f to Color.Transparent, 1f to Color(0xFF7FB2FF).copy(alpha = 0.22f * fade), center = center, radius = r),
         r, center,
     )
     if (g.lighting == 2) {
         val sv = p.toView(sun.lon, sun.lat)
         if (sv[2] > -0.2) {
             val hl = center + Offset((0.45 * r * sv[0]).toFloat(), (-0.45 * r * sv[1]).toFloat())
-            drawCircle(Brush.radialGradient(0f to Color.White.copy(alpha = 0.10f * fade), 1f to Color.Transparent, center = hl, radius = r * 1.1f), r, center)
+            drawCircle(Brush.radialGradient(0f to Color.White.copy(alpha = 0.05f * fade), 1f to Color.Transparent, center = hl, radius = r * 0.9f), r, center)
             val hx = sv[0]; val hy = sv[1]; val hz = sv[2] + 1
             val hn = max(sqrt(hx * hx + hy * hy + hz * hz), 1e-6)
             val glint = center + Offset((r * hx / hn).toFloat(), (-r * hy / hn).toFloat())
@@ -385,11 +388,14 @@ private fun nightBands(sun: Sun, lon0: Double): List<GeoRing> {
     }
 }
 
-/** The edges of night, from twilight in: each band darkens a little more. */
-private val NightEdges = listOf(0.12, 0.05, -0.02, -0.10, -0.25)
+/**
+ * The edges of night, from twilight in. Twenty thin steps each darken a little, so dusk fades
+ * smoothly instead of showing bands; the deepest night ends about three quarters dark.
+ */
+private val NightEdges = List(20) { 0.16 - 0.46 * it / 19.0 }
 
 internal fun DrawScope.drawNight(paths: List<Path>) {
-    paths.forEach { drawPath(it, Color(0xFF02060F).copy(alpha = 0.21f)) }
+    paths.forEach { drawPath(it, Color(0xFF02060F).copy(alpha = 0.065f)) }
 }
 
 /** Cities glowing on the night side. */
@@ -566,11 +572,11 @@ internal fun DrawScope.drawClouds(
         if (shadows && altitude > 0) {
             val shadowAt = p.lift(ground.x.toDouble(), ground.y.toDouble(), 0.0) + Offset(radius * 0.35f, radius * 0.25f)
             for (k in 0 until 6) {
-                stamp(Sprites.cloud, shadowAt + Offset(lobes[3 * k] * radius, lobes[3 * k + 1] * radius), radius * lobes[3 * k + 2], Color.Black, 0.12f * fade * alpha)
+                stamp(Sprites.cloud, shadowAt + Offset(lobes[3 * k] * radius, lobes[3 * k + 1] * radius), radius * lobes[3 * k + 2], Color.Black, 0.10f * fade * alpha, aspect = 2.6f)
             }
         }
         for (k in 0 until 6) {
-            stamp(Sprites.cloud, cloudAt + Offset(lobes[3 * k] * radius, lobes[3 * k + 1] * radius), radius * lobes[3 * k + 2], Color.White, 0.26f * fade * night * alpha)
+            stamp(Sprites.cloud, cloudAt + Offset(lobes[3 * k] * radius, lobes[3 * k + 1] * radius * 0.5f), radius * lobes[3 * k + 2] * 0.7f, Color.White, 0.30f * fade * night * alpha, aspect = 2.6f)
         }
     }
 }
@@ -634,10 +640,11 @@ internal fun DrawScope.drawMapOverlay(
     }
     // Clouds and their shadows.
     if (g.clouds > 0) {
-        val count = if (g.clouds >= 2) 80 else 36
+        val count = if (g.clouds >= 2) 60 else 24
         val t = p.t.toFloat()
         if (t < 1f) drawClouds(p, sun, seconds * 4, count, WorldBounds, 0.0, zoom, false, 3.0, 1f - t, world = true)
-        if (t > 0f) drawClouds(p, sun, seconds, count, bounds, 46.0 * o.scale * p.t, zoom, g.lighting > 0, 1.0, t)
+        // Over the scenario itself only on Many, thin and high, so they never fog the map.
+        if (t > 0f && g.clouds >= 2) drawClouds(p, sun, seconds, 30, bounds, 46.0 * o.scale * p.t, zoom, g.lighting > 0, 1.0, 0.7f * t)
     }
     // Building beacons, smoke and the week's ripple.
     if (g.buildings > 0) {

@@ -425,7 +425,7 @@ internal fun DrawScope.drawWorldMap(
             drawPath(solid.walls[2], top.shade(0.88f))
             drawPath(solid.top, top)
             if (solid.code == selected) drawPath(solid.top, Palette.gold.copy(alpha = 0.35f))
-            drawPath(solid.top, if (lit) Color.White.copy(alpha = 0.10f) else Palette.stroke, style = Stroke(if (lit) 1f else 0.9f))
+            drawPath(solid.top, if (lit) Color(0xFF9FB4C8).copy(alpha = 0.55f) else Palette.stroke, style = Stroke(1f))
         }
         if (detail > 0) translate(top = up) { drawPath(g.counties, Palette.stroke.copy(alpha = 0.45f * detail), style = Stroke(0.5f)) }
     } else {
@@ -450,8 +450,8 @@ internal fun DrawScope.drawWorldMap(
         }
         g.playStates.forEach {
             // A cool rim light along the scenario's states when lit.
-            if (lit && t > 0.5) drawPath(it, Color(0xFF8EC5FF).copy(alpha = 0.12f), style = Stroke(7f))
-            drawPath(it, Color(0xFFB8C7D6).copy(alpha = 0.6f), style = Stroke(if (cam.zoom > 3) 2.4f else 1f))
+            if (lit && t > 0.5) drawPath(it, Color(0xFF8EC5FF).copy(alpha = 0.10f), style = Stroke(4f))
+            drawPath(it, Color(0xFFD2DEEA).copy(alpha = 0.85f), style = Stroke(if (cam.zoom > 3) 2f else 1f))
         }
     }
     // Night falls on the globe whenever it is lit, and on the flat map with day and night on.
@@ -525,11 +525,12 @@ internal fun DrawScope.drawWorldMap(
     }
     if (lit && t > 0.5) {
         // Haze towards the horizon when tilted, and a vignette that holds the eye in the middle.
-        val haze = (0.22 * sin(p.pitch) / sin(48 * PI / 180)).toFloat()
-        if (haze > 0.01f) drawRect(Brush.verticalGradient(0f to Color(0xFF9CC3E6).copy(alpha = haze), 0.45f to Color.Transparent))
+        // Kept faint: depth without washing the map out.
+        val haze = (0.07 * sin(p.pitch) / sin(48 * PI / 180)).toFloat()
+        if (haze > 0.01f) drawRect(Brush.verticalGradient(0f to Color(0xFF9CC3E6).copy(alpha = haze), 0.25f to Color.Transparent))
         drawRect(
             Brush.radialGradient(
-                0f to Color.Transparent, 0.6f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.35f),
+                0f to Color.Transparent, 0.8f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.18f),
                 center = Offset(size.width / 2, size.height / 2), radius = max(size.width, size.height) * 0.75f,
             ),
         )
