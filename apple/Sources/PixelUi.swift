@@ -38,8 +38,10 @@ enum Pixel {
         tabs.backgroundColor = UIColor(Theme.panel)
         tabs.shadowColor = UIColor(Theme.stroke)
         for item in [tabs.stackedLayoutAppearance, tabs.inlineLayoutAppearance, tabs.compactInlineLayoutAppearance] {
-            item.normal.titleTextAttributes = [.foregroundColor: UIColor(Theme.secondary), .font: uiFont(8)]
-            item.selected.titleTextAttributes = [.foregroundColor: UIColor(Theme.gold), .font: uiFont(8)]
+            // The system font: the tab bar drops titles set in the pixel font.
+            let font = UIFont.systemFont(ofSize: 10, weight: .bold)
+            item.normal.titleTextAttributes = [.foregroundColor: UIColor(Theme.secondary), .font: font]
+            item.selected.titleTextAttributes = [.foregroundColor: UIColor(Theme.gold), .font: font]
         }
         UITabBar.appearance().standardAppearance = tabs
         UITabBar.appearance().scrollEdgeAppearance = tabs

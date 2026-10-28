@@ -240,15 +240,15 @@ struct TutorialPanel: View {
                             .frame(width: 7, height: 7)
                     }
                     Spacer()
-                    Button("Hide") { tutorial.hide() }
-                        .font(.caption)
+                    Button("HIDE") { tutorial.hide() }
+                        .font(Pixel.font(11))
                         .foregroundStyle(Theme.secondary)
                         .buttonStyle(.plain)
                     Button {
                         tutorial.requestedPage = step.page
                     } label: {
-                        Text("Show me")
-                            .font(.footnote.weight(.bold))
+                        Text("SHOW ME")
+                            .font(Pixel.font(12, bold: true))
                             .foregroundStyle(Theme.ink)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
