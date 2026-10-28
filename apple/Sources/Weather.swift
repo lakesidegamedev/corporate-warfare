@@ -658,7 +658,7 @@ final class CloudRenderer {
         out.position = float4((v.x + u.ox) / u.width * 2 - 1, 1 - (v.y + u.oy) / u.height * 2, 0, 1);
         out.uv = float2((v.lon - v.wind * u.slide + u.uOffset) * u.uScale, (u.vOffset - v.lat) * u.vScale);
         float a = u.strength * v.alpha;
-        out.color = u.shadow > 0.5 ? float4(0, 0, 0, clamp(0.30 * a * v.light, 0.0, 1.0))
+        out.color = u.shadow > 0.5 ? float4(0, 0, 0, clamp(0.14 * a * v.light, 0.0, 1.0))
                                    : float4(v.light, v.light, min(v.light * 1.03, 1.0), clamp(a, 0.0, 1.0));
         return out;
     }

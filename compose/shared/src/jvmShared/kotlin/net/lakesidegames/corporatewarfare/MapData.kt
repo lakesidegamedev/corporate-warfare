@@ -35,6 +35,8 @@ data class WorldMapFile(
     val lakes: List<Rings>,
     val rivers: List<Lines> = emptyList(),
     val interstates: List<Lines>,
+    /** Natural Earth railways round each scenario, for the trains. */
+    val railroads: List<Lines> = emptyList(),
     val cities: List<City>,
     val hubs: Map<String, List<Double>>,
     /** The states each scenario plays in; the first is the default scenario. */
@@ -136,6 +138,7 @@ class WorldMap private constructor(val file: WorldMapFile, val scenarioId: Strin
     val lakes = file.lakes.flatMap { l -> l.rings.map(::GeoRing) }
     val rivers = file.rivers.filter { owns(it.scenario) }.flatMap { r -> r.lines.map(::GeoRing) }
     val interstates = file.interstates.filter { owns(it.scenario) }.flatMap { r -> r.lines.map(::GeoRing) }
+    val railroads = file.railroads.filter { owns(it.scenario) }.flatMap { r -> r.lines.map(::GeoRing) }
     val hubs: Map<String, GeoRing> = file.hubs.filterValues { it.size == 2 }
         .mapValues { GeoRing.point(it.value[0] / 10_000, it.value[1] / 10_000) }
     val cities: List<Pair<WorldMapFile.City, GeoRing>> = file.cities.filter { owns(it.scenario) }
@@ -190,7 +193,11 @@ class WorldMap private constructor(val file: WorldMapFile, val scenarioId: Strin
 }
 
 /** Where the map looks: a centre in degrees and a zoom where 1 fits the whole globe. */
-data class MapCamera(val lon: Double, val lat: Double, val zoom: Double) {
+/**
+ * Where the map looks: a centre in degrees, a zoom where 1 fits the whole globe, and a [bearing]
+ * in degrees, the compass direction at the top of the screen (0 is north up).
+ */
+data class MapCamera(val lon: Double, val lat: Double, val zoom: Double, val bearing: Double = 0.0) {
     /** 0 shows the globe, 1 the flat map, smoothly between. */
     val flatness: Double
         get() {
@@ -200,16 +207,23 @@ data class MapCamera(val lon: Double, val lat: Double, val zoom: Double) {
 
     fun radius(size: Size): Double = zoom * 0.45 * min(size.width, size.height)
 
-    /** Moves the centre by a screen drag, so the ground follows the finger, tilted or not. */
+    /** Moves the centre by a screen drag, so the ground follows the finger, tilted or turned. */
     fun panned(delta: Offset, size: Size, pitch: Double = 0.0): MapCamera {
         val r = radius(size)
         val east = 1 + flatness * (max(cos(lat * PI / 180), 0.2) - 1)
-        val nextLon = lon - delta.x / (r * east) * 180 / PI
-        val nextLat = (lat + delta.y / cos(pitch * flatness) / r * 180 / PI).coerceIn(-80.0, 80.0)
+        // Turn the drag back into the map's own east and south before moving the centre.
+        val b = bearing * PI / 180
+        val dx = delta.x * cos(b) + delta.y * sin(b)
+        val dy = -delta.x * sin(b) + delta.y * cos(b)
+        val nextLon = lon - dx / (r * east) * 180 / PI
+        val nextLat = (lat + dy / cos(pitch * flatness) / r * 180 / PI).coerceIn(-89.0, 89.0)
         return copy(lon = ((nextLon + 540) % 360) - 180, lat = nextLat)
     }
 
     fun zoomed(factor: Double): MapCamera = copy(zoom = (zoom * factor).coerceIn(MIN_ZOOM, MAX_ZOOM))
+
+    /** Turned by [degrees], clockwise on screen. */
+    fun rotated(degrees: Double): MapCamera = copy(bearing = (((bearing + degrees) % 360) + 360) % 360)
 
     companion object {
         const val MIN_ZOOM = 0.8
@@ -237,7 +251,10 @@ data class MapCamera(val lon: Double, val lat: Double, val zoom: Double) {
             var dLon = b.lon - a.lon
             if (dLon > 180) dLon -= 360
             if (dLon < -180) dLon += 360
-            return MapCamera(a.lon + dLon * f, a.lat + (b.lat - a.lat) * f, exp(ln(a.zoom) + (ln(b.zoom) - ln(a.zoom)) * f))
+            var dBearing = b.bearing - a.bearing
+            if (dBearing > 180) dBearing -= 360
+            if (dBearing < -180) dBearing += 360
+            return MapCamera(a.lon + dLon * f, a.lat + (b.lat - a.lat) * f, exp(ln(a.zoom) + (ln(b.zoom) - ln(a.zoom)) * f), a.bearing + dBearing * f)
         }
     }
 }
@@ -269,6 +286,8 @@ class MapProjection(camera: MapCamera, size: Size, pitchSetting: Double = 0.0) {
     val lat0 = camera.lat * PI / 180
     private val sinLon0 = sin(lon0)
     private val cosLon0 = cos(lon0)
+    private val sinB = sin(camera.bearing * PI / 180)
+    private val cosB = cos(camera.bearing * PI / 180)
     private val sin0 = sin(lat0)
     private val cos0 = cos(lat0)
     private val vx = cos0 * cos(lon0)
@@ -307,7 +326,9 @@ class MapProjection(camera: MapCamera, size: Size, pitchSetting: Double = 0.0) {
         }
         val fx = dl * cos0
         val fy = ring.lat[i] - lat0
-        return lift(r * (ox + t * (fx - ox)), -r * (oy + t * (fy - oy)), h)
+        val gx = r * (ox + t * (fx - ox))
+        val gy = -r * (oy + t * (fy - oy))
+        return lift(turnX(gx, gy), turnY(gx, gy), h)
     }
 
     /**
@@ -334,8 +355,14 @@ class MapProjection(camera: MapCamera, size: Size, pitchSetting: Double = 0.0) {
             val n = sqrt(ox * ox + oy * oy)
             if (n > 1e-9) { ox /= n; oy /= n }
         }
-        return Offset((r * (ox + t * (dl * cos0 - ox))).toFloat(), (-r * (oy + t * (lat - lat0 - oy))).toFloat())
+        val gx = r * (ox + t * (dl * cos0 - ox))
+        val gy = -r * (oy + t * (lat - lat0 - oy))
+        return Offset(turnX(gx, gy).toFloat(), turnY(gx, gy).toFloat())
     }
+
+    /** A ground offset turned by the camera's bearing (screen y points down). */
+    private fun turnX(x: Double, y: Double) = x * cosB - y * sinB
+    private fun turnY(x: Double, y: Double) = x * sinB + y * cosB
 
     /** Screen point of a place in radians [h] pixels up, or [Offset.Unspecified] when behind the globe. */
     fun at(lon: Double, lat: Double, h: Double = 0.0): Offset {
@@ -347,11 +374,16 @@ class MapProjection(camera: MapCamera, size: Size, pitchSetting: Double = 0.0) {
     fun toView(lon: Double, lat: Double): DoubleArray {
         val dl = lon - lon0
         val cosLat = cos(lat)
-        return doubleArrayOf(cosLat * sin(dl), cos0 * sin(lat) - sin0 * cosLat * cos(dl), sin0 * sin(lat) + cos0 * cosLat * cos(dl))
+        val x = cosLat * sin(dl)
+        val y = cos0 * sin(lat) - sin0 * cosLat * cos(dl)
+        // Turned with the bearing, as the screen shows it (view y points up).
+        return doubleArrayOf(x * cosB + y * sinB, -x * sinB + y * cosB, sin0 * sin(lat) + cos0 * cosLat * cos(dl))
     }
 
     /** Longitude and latitude in radians of a view-space direction. */
-    fun fromView(x: Double, y: Double, z: Double): DoubleArray {
+    fun fromView(xTurned: Double, yTurned: Double, z: Double): DoubleArray {
+        val x = xTurned * cosB - yTurned * sinB
+        val y = xTurned * sinB + yTurned * cosB
         // World = x * east + y * north + z * centre.
         val wx = -sin(lon0) * x - sin0 * cos(lon0) * y + vx * z
         val wy = cos(lon0) * x - sin0 * sin(lon0) * y + vy * z

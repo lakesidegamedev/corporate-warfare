@@ -1,5 +1,7 @@
 package net.lakesidegames.corporatewarfare
 
+import androidx.compose.foundation.horizontalScroll
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.hoverable
@@ -361,7 +363,7 @@ private fun Chips(options: List<String>, selected: String, onPick: (String) -> U
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         options.forEach { option ->
             Text(
-                option, color = if (option == selected) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontFamily = Pixel.font,
+                option, color = if (option == selected) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontFamily = Pixel.font, maxLines = 1, softWrap = false,
                 modifier = Modifier.clip(Pixel.small).background(if (option == selected) Palette.gold else Palette.panelRaised)
                     .clickable { onPick(option) }.padding(horizontal = 10.dp, vertical = 4.dp),
             )
@@ -445,7 +447,11 @@ private fun DesktopMap(store: GameStore) {
         }
         Box(Modifier.weight(1f).fillMaxHeight().clip(Pixel.shape).border(1.dp, Palette.stroke, Pixel.shape)) {
             WorldMapView(store, layer, selected, { selected = it }, Modifier.fillMaxSize(), pickedLane, { pickedLane = it }, controlsAtTop = true)
-            Row(Modifier.align(Alignment.TopStart).padding(10.dp)) {
+            // One scrolling line of modes, stopping short of the map controls on the right.
+            Row(
+                Modifier.align(Alignment.TopStart).fillMaxWidth().padding(start = 10.dp, top = 10.dp, end = 64.dp)
+                    .horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+            ) {
                 Chips(MapLayer.entries.map { it.title }, layer.title) { title -> layer = MapLayer.entries.first { it.title == title } }
             }
         }

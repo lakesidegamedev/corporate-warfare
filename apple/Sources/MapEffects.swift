@@ -566,21 +566,15 @@ func smokes(_ sector: String) -> Bool {
 
 // MARK: - Moving pieces
 
-/// A polyline on screen with the running length at each point.
+/// A road on screen. `lengths` is the distance along it on the ground, in degrees, so traffic
+/// keeps its pace and places whatever the camera does.
 struct MapPolyline {
     let points: [CGPoint]
     let lengths: [Double]
     var total: Double { lengths.last ?? 0 }
 
-    init(_ points: [CGPoint]) {
+    init(_ points: [CGPoint], lengths: [Double]) {
         self.points = points
-        var lengths: [Double] = [0]
-        lengths.reserveCapacity(points.count)
-        for index in 1..<points.count {
-            let a = points[index - 1]
-            let b = points[index]
-            lengths.append(lengths[index - 1] + Double(hypot(b.x - a.x, b.y - a.y)))
-        }
         self.lengths = lengths
     }
 
@@ -594,29 +588,38 @@ struct MapPolyline {
         }
         let a = points[low]
         let b = points[high]
-        let f = min(max((distance - lengths[low]) / max(lengths[high] - lengths[low], 1e-3), 0), 1)
+        let f = min(max((distance - lengths[low]) / max(lengths[high] - lengths[low], 1e-9), 0), 1)
         return CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
     }
 
     /// Lines on screen `lift` points up, broken where they leave the globe or jump, kept when any
-    /// of them is on screen.
+    /// of them is on screen and they run at least 20 points.
     static func build(_ p: MapProjection, _ rings: [GeoRing], lift: Double, size: CGSize) -> [MapPolyline] {
         var out: [MapPolyline] = []
         let jump = p.r * 0.5
         let bounds = CGRect(origin: .zero, size: size).insetBy(dx: -50, dy: -50)
         for ring in rings where ring.points.count >= 2 && p.mayShow(ring) {
             var points: [CGPoint] = []
+            var lengths: [Double] = []
+            var screen = 0.0
+            var lastGeo: GeoPoint?
             var onScreen = false
             for point in ring.points {
                 guard let at = p.at(lon: point.lon, lat: point.lat, height: lift) else { continue }
                 if let last = points.last, abs(at.x - last.x) + abs(at.y - last.y) > jump { continue }
                 if bounds.contains(at) { onScreen = true }
+                if let last = points.last, let geo = lastGeo {
+                    let dLon = (point.lon - geo.lon) * cos(point.lat)
+                    let dLat = point.lat - geo.lat
+                    lengths.append(lengths[lengths.count - 1] + (dLon * dLon + dLat * dLat).squareRoot() * 180 / .pi)
+                    screen += Double(hypot(at.x - last.x, at.y - last.y))
+                } else {
+                    lengths.append(0)
+                }
+                lastGeo = point
                 points.append(at)
             }
-            if points.count >= 2 && onScreen {
-                let line = MapPolyline(points)
-                if line.total > 20 { out.append(line) }
-            }
+            if points.count >= 2 && onScreen && screen > 20 { out.append(MapPolyline(points, lengths: lengths)) }
         }
         return out
     }

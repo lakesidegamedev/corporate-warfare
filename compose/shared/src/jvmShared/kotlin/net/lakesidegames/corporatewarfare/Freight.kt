@@ -84,6 +84,8 @@ internal fun DrawScope.drawLanes(map: WorldMap, projection: MapProjection, lanes
 /** The busiest lanes as faint lines under the moving freight, outside the Freight layer. */
 internal fun DrawScope.drawFaintLanes(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>) {
     busiestLanes(lanes).take(60).forEach { lane ->
+        // A lane on a real road or railway needs no line of its own: the road or track is drawn.
+        if (Routes.of(map, lane.modeId, lane.a, lane.b) != null) return@forEach
         val a = map.anchor(lane.a)?.let { projection.project(it) } ?: return@forEach
         val b = map.anchor(lane.b)?.let { projection.project(it) } ?: return@forEach
         drawLine(laneColor(lane).copy(alpha = 0.10f), a, b, strokeWidth = 1f)

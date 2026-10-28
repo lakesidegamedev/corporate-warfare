@@ -92,11 +92,17 @@ class AppSettings(private val file: File) {
             props.setProperty("lighting", g.lighting.toString())
             props.setProperty("dayNight", g.dayNight.toString())
             props.setProperty("cityLights", g.cityLights.toString())
+            props.setProperty("earth", g.earth.toString())
             props.setProperty("clouds", g.clouds.toString())
             props.setProperty("traffic", g.traffic.toString())
             props.setProperty("buildings", g.buildings.toString())
             props.setProperty("frameRate", g.frameRate.toString())
             props.setProperty("showFps", g.showFps.toString())
+            props.setProperty("countryside", g.countryside.toString())
+            props.setProperty("rivals", g.rivals.toString())
+            props.setProperty("interstates", g.interstates.toString())
+            props.setProperty("seasons", g.seasons.toString())
+            props.setProperty("labels", g.labels.toString())
         }
         props.setProperty("autoUpdate", autoUpdate.toString())
         props.setProperty("analytics", analytics.toString())
@@ -127,11 +133,17 @@ class AppSettings(private val file: File) {
             lighting = int("lighting", base.lighting, 0..2),
             dayNight = bool("dayNight", base.dayNight),
             cityLights = bool("cityLights", base.cityLights),
+            earth = bool("earth", base.earth),
             clouds = int("clouds", base.clouds, 0..3),
             traffic = int("traffic", base.traffic, 0..2),
             buildings = int("buildings", base.buildings, 0..2),
             frameRate = props.getProperty("frameRate")?.toIntOrNull()?.takeIf { it in listOf(0, 30, 60) } ?: base.frameRate,
             showFps = bool("showFps", base.showFps),
+            countryside = bool("countryside", base.countryside),
+            rivals = bool("rivals", base.rivals),
+            interstates = bool("interstates", base.interstates),
+            seasons = bool("seasons", base.seasons),
+            labels = int("labels", base.labels, 0..2),
         )
     }
 

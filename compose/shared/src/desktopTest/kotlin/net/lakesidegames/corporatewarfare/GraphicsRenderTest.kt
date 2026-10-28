@@ -38,16 +38,33 @@ class GraphicsRenderTest {
         MapDivisionDto(1uL, "IL-CHI", "logistics", 4u, 4u),
     )
 
-    private fun lane(a: String, b: String, mode: String, lots: Int) = LaneDto(
+    private fun lane(a: String, b: String, mode: String, lots: Int, mine: Int = 0) = LaneDto(
         a = a, b = b, aName = a, bName = b, mode = 0u, modeId = mode, modeName = mode, km = 300u,
         capacityLots = lots, usedLots = lots / 2, heldLots = 0, outsideLots = 0, fillBps = 5000,
         rateCentsPerLot = 100, outsideRateCentsPerLot = 120, hotWeeks = 0u, owners = emptyList(), contracts = 0u,
-        myCapacityLots = 0, myShippedLots = 0, myContractLots = 0, reservableLots = 0,
+        myCapacityLots = 0, myShippedLots = mine, myContractLots = 0, reservableLots = 0,
     )
 
     private val lanes = listOf(
-        lane("OH-CEN", "MI-DET", "road", 40), lane("OH-CEN", "PA-WES", "rail", 30), lane("IL-CHI", "MI-DET", "sea", 20),
+        lane("OH-CEN", "MI-DET", "road", 40, mine = 6), lane("OH-CEN", "PA-WES", "rail", 30, mine = 4), lane("IL-CHI", "MI-DET", "sea", 20),
         lane("OH-NE", "NY-WES", "road", 25), lane("IN-CEN", "IL-CHI", "rail", 35), lane("PA-PHL", "NY-NYC", "road", 50),
+    )
+
+    private fun plant(firm: ULong, region: String, industry: String, blocks: UInt) = uniffi.cw_ffi.MapPlantDto(
+        handle = firm * 100uL + blocks, firm = firm, firmName = "Rival $firm", player = false, region = region, industry = industry,
+        strategy = "standard", blocks = blocks, status = "running", utilisationBps = 8000,
+    )
+
+    // The player's plants as the map reads them: one division still going up, one being retooled.
+    private val own = listOf(
+        plant(1uL, "OH-CEN", "retail", 3u).copy(player = true, status = "Building"),
+        plant(1uL, "MI-DET", "energy", 9u).copy(player = true, status = "Retooling { until: Tick(40) }"),
+        plant(1uL, "OH-CEN", "manufacturing", 6u).copy(player = true, status = "Operating"),
+    )
+
+    private val rivals = listOf(
+        plant(7uL, "MI-DET", "manufacturing", 8u), plant(8uL, "MI-DET", "logistics", 3u), plant(9uL, "OH-CEN", "retail", 5u),
+        plant(7uL, "OH-CEN", "chemical_industries", 4u), plant(10uL, "PA-WES", "extraction", 6u), plant(11uL, "OH-NE", "healthcare", 3u),
     )
 
     private val shading = mapOf("OH-CEN" to 1.0, "MI-DET" to 0.8, "PA-WES" to 0.3, "IL-CHI" to 0.5)
@@ -63,6 +80,9 @@ class GraphicsRenderTest {
             "unrolling" to scenario.copy(zoom = 3.5),
             "scenario" to scenario,
             "close" to scenario.zoomed(3.0),
+            "turned" to scenario.zoomed(2.0).rotated(35.0),
+            "winter" to scenario.zoomed(3.0),
+            "vehicles" to scenario.zoomed(5.0),
         )
         val sun = Sun.moving(40.0)
         for (preset in GraphicsPreset.entries) {
@@ -72,14 +92,20 @@ class GraphicsRenderTest {
                     val measurer = rememberTextMeasurer()
                     val geometry = androidx.compose.runtime.remember { MapGeometryCache() }
                     Canvas(Modifier.fillMaxSize()) {
-                        drawWorldMap(
+                        // The layers in the game's order: ground, traffic, clouds, structures, effects.
+                        fun still(phase: MapPhase) = drawWorldMap(
                             map, camera, Palette.gold, shading, "MI-DET", divisions, measurer, lanes = lanes, freightLayer = false,
-                            geometry = geometry, graphics = graphics, sun = if (graphics.dayNight) sun else null,
+                            geometry = geometry, graphics = graphics, sun = if (graphics.dayNight) sun else null, phase = phase,
+                            plants = rivals + own, economyPhase = "boom", acquired = setOf("PA-WES/technology"),
+                            week = if (name == "winter") 3 else 28,
                         )
+                        still(MapPhase.Ground)
                         val g = geometry.of(map, camera, size, graphics.detail, graphics.pitch)
                         val o = g.overlay(lanes, divisions, "MI-DET", shading, graphics, false)
+                        drawMapOverlay(o, graphics, 12.5, false, sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId, part = OverlayPart.Traffic)
                         with(Weather) { drawWeather(g.p, sun, 12.5, graphics.clouds, map.playBounds, 46.0 * g.scale * g.p.t, camera.zoom, graphics.lighting > 0, map.scenarioId) }
-                        drawMapOverlay(o, graphics, 12.5, false, sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId)
+                        still(MapPhase.Structures)
+                        drawMapOverlay(o, graphics, 12.5, false, sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId, part = OverlayPart.Effects)
                     }
                 }
                 val image = scene.render()
@@ -87,6 +113,22 @@ class GraphicsRenderTest {
                 out?.let { File(it, "${preset.name.lowercase()}-$name.png").writeBytes(image.encodeToData(EncodedImageFormat.PNG)!!.bytes) }
             }
         }
+    }
+
+    @Test
+    fun vehiclesFaceTheWayTheyMoveOnScreen() {
+        assertEquals("E", Vehicles.heading(10f, 0f))
+        assertEquals("N", Vehicles.heading(0f, -10f))
+        assertEquals("SW", Vehicles.heading(-10f, 5f))
+        assertEquals("NW", Vehicles.heading(-10f, -5f))
+        // Every type, livery and heading has a frame at every scale.
+        for (type in listOf("truck", "car", "loco", "wagon", "ship", "plane")) for (mine in listOf(false, true)) {
+            for (h in listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")) for (scale in 1..3) assertNotNull(Vehicles.frame(type, mine, h, scale))
+        }
+        // A truck is smaller than the smallest division building at the same scale.
+        val truck = assertNotNull(Vehicles.frame("truck", false, "E", 2))
+        val shop = assertNotNull(Voxels.frame("retail", 0, 2))
+        assertTrue(truck.w * truck.h < shop.w * shop.h)
     }
 
     @Test
@@ -117,6 +159,23 @@ class GraphicsRenderTest {
         val top = assertNotNull(g.p.project(hub, solid.h))
         assertTrue(g.p.contains(region.rings, top, solid.h), "the hub on the tile's top is inside the raised region")
         assertEquals(31, g.raised(shading).size)
+    }
+
+    @Test
+    fun aTapOnATurnedMapSelectsTheRegionUnderIt() {
+        val map = assertNotNull(WorldMap.shared)
+        val size = Size(1200f, 800f)
+        for (bearing in listOf(0.0, 35.0, 120.0, 270.0)) {
+            val camera = MapCamera.scenario(size, map).zoomed(1.5).rotated(bearing)
+            val p = MapProjection(camera, size, 28 * kotlin.math.PI / 180)
+            val tap = assertNotNull(p.project(assertNotNull(map.anchor("OH-CEN"))))
+            assertEquals("OH-CEN", map.regions.firstOrNull { p.contains(it.rings, tap) }?.code, "a tap on Columbus at bearing $bearing")
+            // Turning and dragging: a drag to the right moves the centre west on screen whatever the bearing.
+            val moved = camera.panned(androidx.compose.ui.geometry.Offset(100f, 0f), size)
+            val before = p.project(GeoRing.point(camera.lon, camera.lat))!!
+            val after = MapProjection(moved, size, 28 * kotlin.math.PI / 180).project(GeoRing.point(camera.lon, camera.lat))!!
+            assertTrue(after.x - before.x > 50f, "the ground follows the finger at bearing $bearing")
+        }
     }
 
     @Test

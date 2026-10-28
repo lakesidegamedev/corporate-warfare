@@ -25,7 +25,7 @@ struct MapHomeView: View {
                         .background(Theme.panel)
                         .overlay(alignment: .trailing) { Rectangle().fill(Theme.stroke).frame(width: 1) }
                 }
-                WorldMapView(shading: shading, layer: layer, divisions: divisionMarkers, lanes: store.lanes, pickedLane: pickedLane, onLane: { pickedLane = $0 }, regionCodes: store.boards.map(\.code), week: store.overview?.tick ?? 0, controlsAtTop: embedded, selected: $selected)
+                WorldMapView(shading: shading, layer: layer, divisions: divisionMarkers, lanes: store.lanes, pickedLane: pickedLane, onLane: { pickedLane = $0 }, regionCodes: store.boards.map(\.code), week: store.overview?.tick ?? 0, weekLabel: store.overview?.weekLabel, plants: store.mapPlants, economyPhase: store.economy?.phase, controlsAtTop: embedded, gameSpeed: store.runSpeed, selected: $selected)
                     .ignoresSafeArea(edges: .bottom)
                 if wide, let code = selected, let board = store.boards.first(where: { $0.code == code }) {
                     RegionBoardView(board: board, onBuild: { building = code }, onClose: { selected = nil })
@@ -46,7 +46,11 @@ struct MapHomeView: View {
             }
             VStack(spacing: 10) {
                 if !embedded { CompanyHUD() }
+                // Inside the shell the row starts right of the outliner and stops short of the map
+                // controls, one scrolling line however many modes there are.
                 LayerChips(layer: $layer)
+                    .padding(.leading, embedded ? 300 : 0)
+                    .padding(.trailing, embedded ? 52 : 0)
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -114,12 +118,42 @@ struct MapHomeView: View {
             let low = values.min() ?? 0
             let high = values.max() ?? 1
             return Dictionary(uniqueKeysWithValues: store.boards.map { ($0.code, (Double($0.wageIndexBps) - low) / max(high - low, 1)) })
+        case .share:
+            var out: [String: Double] = [:]
+            for board in store.boards {
+                let own = board.sectors.filter { $0.ownBlocks > 0 }
+                let value = Double(own.map(\.ownShareBps).max() ?? 0) / 10_000
+                if value > 0 { out[board.code] = value }
+            }
+            return out
+        case .competition:
+            // Rivals' strength: the biggest share any rival leads with in the region's industries.
+            let firm = store.selectedFirm
+            return spread { board in
+                Double(board.sectors.filter { $0.leaderFirm != 0 && $0.leaderFirm != firm }
+                    .reduce(Int64(0)) { $0 + Int64($1.leaderShareBps) * Int64($1.operators) })
+            }
+        case .demand:
+            return spread { Double($0.demandIndexBps) }
         case .skill:
-            return Dictionary(uniqueKeysWithValues: store.boards.map { ($0.code, Double($0.skillBps) / 10_000) })
+            return spread { Double($0.skillBps) }
+        case .infrastructure:
+            return spread { Double(Int64($0.roadBps) + Int64($0.powerGridBps) + Int64($0.broadbandBps)) }
+        case .land:
+            return spread { Double($0.landIndexBps) }
+        case .population:
+            return spread { Double($0.population2000) }
         case .freight:
             // Lanes are drawn over the land instead of shading it.
             return [:]
         }
+    }
+
+    /// Each region's value scaled so the lowest is 0 and the highest 1.
+    private func spread(_ value: (RegionBoardDto) -> Double) -> [String: Double] {
+        let values = store.boards.map { ($0.code, value($0)) }
+        guard let low = values.map { $0.1 }.min(), let high = values.map { $0.1 }.max() else { return [:] }
+        return Dictionary(values, uniquingKeysWith: { a, _ in a }).mapValues { high > low ? ($0 - low) / (high - low) : 0 }
     }
 }
 
@@ -192,6 +226,25 @@ struct CompanyHUD: View {
     }
 }
 
+/// The time controls in one slim bar, over every phone screen that is not the map
+/// (the map has its own in the HUD), so time can always be paused or slowed where you are.
+struct TimeStrip: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // The screens below show the week themselves; the strip only holds the clock.
+            Eyebrow(text: "Time")
+            Spacer(minLength: 4)
+            SpeedControl(compact: true)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 40)
+        .background(Theme.panel)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.stroke).frame(height: 1) }
+    }
+}
+
 /// Time controls folded into one pill: the speed it is running at, tap to open Next week and the
 /// speed buttons, tap again to fold.
 struct TimeBar: View {
@@ -216,9 +269,12 @@ struct TimeBar: View {
             Button {
                 withAnimation(.easeOut(duration: 0.15)) { open.toggle() }
             } label: {
+                // One width whatever the speed, so nothing beside it moves under the finger.
                 HStack(spacing: 4) {
                     PixelIcon(store.runSpeed > 0 ? "play" : "pause")
-                    if store.runSpeed > 0 { Text("\(Int(store.runSpeed))x").monospacedDigit() }
+                    Text(store.runSpeed > 0 ? "\(Int(store.runSpeed))x" : "")
+                        .monospacedDigit()
+                        .frame(width: 20, alignment: .leading)
                     PixelIcon(open ? "chevron_right" : "chevron_left", size: 12)
                 }
                 .font(.caption.weight(.bold))

@@ -240,10 +240,16 @@ enum GraphicsKeys {
     static let lighting = "graphics.lighting"
     static let dayNight = "graphics.dayNight"
     static let cityLights = "graphics.cityLights"
+    static let earth = "graphics.earth"
     static let clouds = "graphics.clouds"
     static let traffic = "graphics.traffic"
     static let buildings = "graphics.buildings"
     static let frameRate = "graphics.frameRate"
+    static let countryside = "graphics.countryside"
+    static let rivals = "graphics.rivals"
+    static let interstates = "graphics.interstates"
+    static let seasons = "graphics.seasons"
+    static let labels = "graphics.labels"
     static let animations = "graphics.animations"
     static let showFps = "graphics.showFps"
 }
@@ -289,10 +295,16 @@ struct GraphicsSettingsPanel: View {
     @AppStorage(GraphicsKeys.lighting) private var lighting = 2
     @AppStorage(GraphicsKeys.dayNight) private var dayNight = true
     @AppStorage(GraphicsKeys.cityLights) private var cityLights = true
+    @AppStorage(GraphicsKeys.earth) private var earth = true
     @AppStorage(GraphicsKeys.clouds) private var clouds = 1
     @AppStorage(GraphicsKeys.traffic) private var traffic = 1
     @AppStorage(GraphicsKeys.buildings) private var buildings = 2
     @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
+    @AppStorage(GraphicsKeys.countryside) private var countryside = true
+    @AppStorage(GraphicsKeys.rivals) private var rivals = true
+    @AppStorage(GraphicsKeys.interstates) private var interstates = true
+    @AppStorage(GraphicsKeys.seasons) private var seasons = true
+    @AppStorage(GraphicsKeys.labels) private var labels = 2
     @AppStorage(GraphicsKeys.animations) private var animations = true
     @AppStorage(GraphicsKeys.showFps) private var showFps = false
 
@@ -321,12 +333,22 @@ struct GraphicsSettingsPanel: View {
                 choice("Day and night", onOff(custom($dayNight)), ["Off", "On"],
                        "The sun moves across the world and night falls on the map.")
                 choice("City lights", onOff(custom($cityLights)), ["Off", "On"], "Cities glow on the night side.")
+                choice("Satellite Earth", onOff(custom($earth)), ["Off", "On"],
+                       "The real Earth from NASA imagery under the map, with snow, autumn and winter following the game's calendar.")
                 choice("Clouds", custom($clouds), ["Off", "Thin", "Light", "Heavy"],
                        "Real satellite clouds that drift with the trade winds and westerlies. Heavy clouds cast shadows. The cloud button on the map steps through these.")
                 choice("Traffic", custom($traffic), ["Off", "Light", "Busy"],
                        "Freight moves along the lanes and cars along the highways.")
                 choice("Buildings", custom($buildings), ["Flat", "Your divisions", "Divisions and cities"],
-                       "Shows your divisions as buildings, and city skylines.")
+                       "Shows your divisions as buildings, and cities as blocks, when zoomed in.")
+                choice("Countryside", onOff(custom($countryside)), ["Off", "On"],
+                       "Trees, fields, barns and houses on the ground when zoomed in.")
+                choice("Rivals' buildings", onOff(custom($rivals)), ["Off", "On"],
+                       "Rivals' plants stand on the map, greyed, when zoomed in.")
+                choice("Interstates", onOff(custom($interstates)), ["Off", "On"], "The highways drawn over the map.")
+                choice("Seasons", onOff(custom($seasons)), ["Off", "On"],
+                       "Snow in winter and autumn colours, following the game's calendar.")
+                choice("Labels", custom($labels), ["Off", "Cities", "All"], "Names on the map.")
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Frame rate").font(.callout).foregroundStyle(Theme.primaryText)
                     PixelChoices(options: [(30, "30"), (60, "60"), (0, "Unlimited")], selection: custom($frameRate), label: "Frame rate")
@@ -342,7 +364,9 @@ struct GraphicsSettingsPanel: View {
     /// The options as they stand, for matching against the presets.
     private var current: GraphicsSettings {
         GraphicsSettings(mapDetail: detail, tilt: tilt, extrude: extrude, lighting: lighting, dayNight: dayNight,
-                         cityLights: cityLights, clouds: clouds, traffic: traffic, buildings: buildings, frameRate: frameRate)
+                         cityLights: cityLights, earth: earth, clouds: clouds, traffic: traffic, buildings: buildings,
+                         frameRate: frameRate, countryside: countryside, rivals: rivals, interstates: interstates,
+                         seasons: seasons, labels: labels)
     }
 
     /// An on and off option as a two-way choice.
@@ -362,10 +386,16 @@ struct GraphicsSettingsPanel: View {
                 lighting = values.lighting
                 dayNight = values.dayNight
                 cityLights = values.cityLights
+                earth = values.earth
                 clouds = values.clouds
                 traffic = values.traffic
                 buildings = values.buildings
                 frameRate = values.frameRate
+                countryside = values.countryside
+                rivals = values.rivals
+                interstates = values.interstates
+                seasons = values.seasons
+                labels = values.labels
                 preset = chosen.rawValue
             }
         )
@@ -395,58 +425,112 @@ struct GraphicsSettingsPanel: View {
 }
 
 /// Why the clock is stopped and the one button that resumes it: Answer opens the exact card,
-/// every other pause has Continue. Shown beside the time controls on every screen.
+/// every other pause has Continue, which carries on at the speed the game was running at. Shown
+/// beside the time controls on every screen.
+///
+/// Kept steady on a phone: the banner slides in and out once per pause instead of jumping, its
+/// height does not change as the detail text changes, the button keeps one size, a second tap
+/// does nothing, and the decision card is presented from a view that outlives the banner, so
+/// answering the card cannot tear its own sheet down halfway.
 struct PauseBanner: View {
     @EnvironmentObject private var store: AppStore
-    @State private var showingCard = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var answering: UInt64?
+    @State private var resolvingWeek: UInt32?
 
-    private var event: EventDto? {
-        guard let id = store.overview?.pauseInfo?.eventId else { return nil }
+    private func event(_ id: UInt64?) -> EventDto? {
+        guard let id else { return nil }
         return store.events.first { $0.id == id }
     }
 
     var body: some View {
-        if let info = store.overview?.pauseInfo {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 10) {
-                    PixelIcon("pause")
-                    Text(info.title).font(.callout.weight(.semibold))
-                    Spacer(minLength: 6)
-                    if info.action == "answer", event != nil {
-                        Button(info.actionLabel) { showingCard = true }
-                            .buttonStyle(PixelButtonStyle(prominent: true))
-                            .tint(Theme.gold)
-                            .foregroundStyle(Theme.ink)
-                            .disabled(store.isBusy)
-                    } else {
-                        Button("Continue") { Task { await store.continueCareer() } }
-                            .buttonStyle(PixelButtonStyle(prominent: true))
-                            .tint(Theme.gold)
-                            .foregroundStyle(Theme.ink)
-                            .disabled(store.isBusy)
-                    }
-                }
-                Text(info.detail)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.9))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(12)
-            .foregroundStyle(.white)
-            .background(info.kind == "decision" ? Theme.warning : Theme.panelRaised)
-            .clipShape(Pixel.shape)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .sheet(isPresented: Binding(get: { showingCard && event != nil }, set: { showingCard = $0 })) {
-                if let event {
-                    ScrollView {
-                        DecisionCard(event: event).padding(16)
-                    }
-                    .background(Theme.ink)
-                    .presentationDetents([.medium, .large])
-                }
+        VStack(spacing: 0) {
+            if let info = store.overview?.pauseInfo {
+                banner(info)
+                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
             }
         }
+        .frame(maxWidth: .infinity)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: store.overview?.pauseInfo?.reason)
+        .clipped()
+        .sheet(isPresented: Binding(get: { answering != nil }, set: { if !$0 { answering = nil } })) {
+            if let event = event(answering) {
+                ScrollView {
+                    DecisionCard(event: event).padding(16)
+                }
+                .background(Theme.ink)
+                .presentationDetents([.medium, .large])
+            } else {
+                // The card was answered: say so instead of flashing an empty sheet.
+                VStack(spacing: 12) {
+                    Text("Answered").font(.headline).foregroundStyle(Theme.primaryText)
+                    Button("Done") { answering = nil }
+                        .buttonStyle(PixelButtonStyle(prominent: true))
+                        .tint(Theme.gold)
+                        .foregroundStyle(Theme.ink)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.ink)
+                .presentationDetents([.medium])
+            }
+        }
+        .onChange(of: store.overview?.pauseInfo?.eventId) { _, id in
+            // The card the sheet shows was answered and the clock moved on: close it.
+            if answering != nil && answering != id && event(answering) == nil { answering = nil }
+        }
+    }
+
+    private func banner(_ info: PauseInfoDto) -> some View {
+        let resolving = resolvingWeek != nil && resolvingWeek == store.overview?.tick
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                PixelIcon("pause")
+                Text(info.title).font(.callout.weight(.semibold)).lineLimit(1)
+                Spacer(minLength: 6)
+                if info.action == "answer", event(info.eventId) != nil {
+                    Button {
+                        // One presentation at a time: a division sheet gives way to the card.
+                        store.openDivision = nil
+                        answering = info.eventId
+                    } label: {
+                        Text(info.actionLabel).lineLimit(1).frame(minWidth: 84)
+                    }
+                    .buttonStyle(PixelButtonStyle(prominent: true))
+                    .tint(Theme.gold)
+                    .foregroundStyle(Theme.ink)
+                    .fixedSize()
+                } else {
+                    Button {
+                        guard !resolving else { return }
+                        resolvingWeek = store.overview?.tick
+                        Task {
+                            await store.continueCareer()
+                            resolvingWeek = nil
+                        }
+                    } label: {
+                        Text("Continue").lineLimit(1).frame(minWidth: 84)
+                    }
+                    .buttonStyle(PixelButtonStyle(prominent: true))
+                    .tint(Theme.gold)
+                    .foregroundStyle(Theme.ink)
+                    .fixedSize()
+                    .opacity(resolving ? 0.6 : 1)
+                    .accessibilityHint("Carries on at the speed the game was running at")
+                }
+            }
+            Text(info.detail)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.9))
+                .lineLimit(2, reservesSpace: true)
+        }
+        .padding(12)
+        .foregroundStyle(.white)
+        .background(info.kind == "decision" ? Theme.warning : Theme.panelRaised)
+        .clipShape(Pixel.shape)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("pause-banner")
     }
 }
 

@@ -13,6 +13,68 @@ heading.
 
 ### Added
 
+- Seven more map modes: your share, competition, demand, workforce skill, infrastructure (roads,
+  power and broadband), land price and population, each with a legend showing what its colours
+  mean.
+- More map settings: countryside, rivals' buildings, interstates and seasons on or off, and labels
+  (off, cities, or cities and regions).
+- Interstates are drawn as 8-bit roads with a dark edge, grey asphalt and, up close, a dashed gold
+  centre line, over the regions' shading and under traffic and buildings, from the scenario's
+  framing inwards.
+- Zoomed in, the countryside fills in as a voxel diorama on the real ground: forests (pines in the
+  north), farm fields and barns, rocks on dry land, and houses round every city that spread out in
+  a boom and pull in during a recession. Trees turn in the autumn and everything wears snow in
+  winter.
+- Voxel trucks, trains on visible tracks, ships on the lakes and cargo planes carry the freight up
+  close; the lanes you use run in your gold livery. Trucks follow the real interstates and trains
+  the real railways (Natural Earth, public domain) between the region hubs, not straight lines.
+- The map tells the story: a plant still going up shows as a building site with scaffold and a
+  crane, a division adding or retooling plants has a crane beside it, a mothballed one goes dark,
+  and one you have just taken over flies a gold flag for six weeks. Rivals' sites and closures show
+  the same way. In a boom cranes rise beside the cities; in a slowdown or recession their lights dim.
+- The real Earth under the map: NASA's Blue Marble imagery (public domain) on the globe, the menu and
+  the scenario, sharp close up. The seasons follow the game's calendar: a snow line that creeps south
+  in winter, autumn colour, and browner winters in the mid-latitudes, half a year apart in the south.
+  Over it your regions lie flat and see-through. Switch it off under Settings, Satellite Earth, for the
+  painted map with raised regions. `tools/earth_tex.py` bakes the images.
+- Zoomed in, your divisions stand on the map as front-on, cel-shaded voxel buildings, square to
+  the map like classic 8-bit games, one model per industry (a farm
+  with barn and silos, a mine headframe, a refinery, a chemical works, a factory, a building site,
+  a port, a shop, a hospital, an office tower, a studio, a mast, apartments, a base, a bank) in
+  three sizes that grow with the division's plants. Cities on the map are voxel city blocks too,
+  a town, a city or a metropolis by population, a step smaller so your buildings stand out.
+  At the scenario's framing they are small badges instead, and further out nothing marks them.
+  Zoomed in, rivals' plants stand there too, smaller and greyed, so you can see who you face where.
+  `tools/voxel_sprites.py` bakes them.
+- Zoomed in on Android, Windows and Linux, the map's traffic becomes little voxel vehicles doing
+  the business: trucks on road lanes, trains of a locomotive and wagons on a thin track on rail
+  lanes, cargo ships on the lakes (never over land), cars on the highways and cargo planes with a
+  short faint contrail overhead. Each faces the way it is moving, even on a turned map. Busier
+  lanes carry more of them, and lanes where you ship or hold capacity run in your gold livery.
+  Zoomed out the traffic stays as dots. `tools/voxel_vehicles.py` bakes the sprites.
+
+- Turn the map: twist with two fingers, or drag with the right mouse button on desktop. Buildings
+  and labels stay upright, and an N button turns it back to north. Dragging now reaches almost to
+  the poles.
+
+### Fixed
+
+- No more pulsing: the rings round buildings, the weekly ripple, the breathing selection outline
+  and the menu's pulsing scenario glow are gone; rooftop lights are steady.
+- Traffic, planes, clouds and the sun stop when the game is paused and run faster at higher
+  speeds, instead of moving on regardless.
+- Freight and cars keep a steady pace when you pan or zoom the map; they no longer jump or speed
+  up as the camera moves.
+- Cars and freight run under buildings, and buildings and labels stand above the clouds, instead
+  of traffic being drawn over everything.
+- On iPhone and iPad the pause banner no longer jumps or resizes, answering a decision card no
+  longer tears its sheet down mid-close, and Continue resumes time at the speed it was running.
+- On iPhone and iPad the app no longer stalls at the top speed: the game runs off the interface
+  thread and the screen refreshes at most a few times a second at high speed. Every tab now has
+  the pause and speed buttons, not only the map, and so does every tab on Android phones.
+
+### Added
+
 - Android adaptive launcher icon with a themed (monochrome) layer, so Android 8 and later no longer
   shows the icon in a white circle.
 - Google Play listing assets: the 512 pixel icon, a 1024 by 500 feature graphic built from the

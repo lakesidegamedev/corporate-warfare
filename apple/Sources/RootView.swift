@@ -38,18 +38,21 @@ struct RootView: View {
                     }
                     .tag(AppTab.map)
                 CEOOfficeView()
+                    .safeAreaInset(edge: .top, spacing: 0) { TimeStrip() }
                     .tabItem {
                         PixelIcons.tabImage("office")
                         Text("CEO OFFICE")
                     }
                     .tag(AppTab.office)
                 MarketsView()
+                    .safeAreaInset(edge: .top, spacing: 0) { TimeStrip() }
                     .tabItem {
                         PixelIcons.tabImage("markets")
                         Text("MARKETS")
                     }
                     .tag(AppTab.markets)
                 InboxView()
+                    .safeAreaInset(edge: .top, spacing: 0) { TimeStrip() }
                     .tabItem {
                         PixelIcons.tabImage("inbox")
                         Text("INBOX")
@@ -57,6 +60,7 @@ struct RootView: View {
                     .badge(store.events.filter { $0.mandatory }.count)
                     .tag(AppTab.inbox)
                 OverviewView()
+                    .safeAreaInset(edge: .top, spacing: 0) { TimeStrip() }
                     .tabItem {
                         PixelIcons.tabImage("portfolio")
                         Text("PORTFOLIO")

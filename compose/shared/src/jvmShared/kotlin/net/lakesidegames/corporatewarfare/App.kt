@@ -230,6 +230,9 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
         // Content stops at the navigation bar: the scaffold's padding keeps it clear.
         Column(Modifier.padding(padding)) {
             PauseBanner(store, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp))
+            // The map has its own time controls; every other tab gets the strip, so time can be
+            // paused or slowed from anywhere.
+            if (tab != Tab.Map) TimeStrip(store)
             TutorialPanel(compact = true, modifier = Modifier.fillMaxWidth(), researchHint = store.research?.let { r -> store.selectedFirmDto?.let { Tutorial.researchHint(it.cashCents, r) } })
             Box(Modifier.weight(1f)) {
             when (tab) {
@@ -680,6 +683,18 @@ fun RunControls(store: GameStore) {
             SpeedControl(store)
         }
         Text("One tick is one week. 1x plays a week a second, 2x two, 4x four; play stops for any decision.", color = Palette.secondary, fontSize = 11.sp)
+    }
+}
+
+/** The week and the speed buttons along the top of a phone tab. */
+@Composable
+fun TimeStrip(store: GameStore) {
+    Row(
+        Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(store.overview?.weekLabel.orEmpty().uppercase(), color = Palette.secondary, fontSize = 11.sp, fontFamily = Pixel.font, modifier = Modifier.weight(1f))
+        SpeedControl(store)
     }
 }
 
