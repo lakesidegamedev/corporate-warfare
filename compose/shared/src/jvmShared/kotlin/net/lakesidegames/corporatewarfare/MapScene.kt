@@ -650,26 +650,17 @@ internal fun DrawScope.drawMapOverlay(
         }
     }
     if (!effects) return
-    // Building beacons, smoke and the week's ripple.
+    // Rooftop lights and smoke. No rings or pulses: they read as cheap.
     if (g.buildings > 0) {
         o.buildings.forEach { b ->
-            val phase = ((time / 2.4f) + b.seed) % 1f
-            drawCircle(b.color.copy(alpha = 0.45f * (1 - phase)), (6f + 20f * phase) * o.scale, b.base, style = Stroke(1.4f))
-            // An aircraft warning light blinks on every rooftop.
-            if (sin(time * 3f + b.seed * 20f) > 0.55f) {
-                stamp(Sprites.glow, b.top, 5f, Color(0xFFFF4A3A), 0.7f, BlendMode.Plus)
-                drawCircle(Color(0xFFFF6A5A), 1.3f, b.top)
-            }
+            // A steady aircraft warning light on every rooftop.
+            drawCircle(Color(0xFFFF5A4A), 1.3f, b.top)
             if (b.smoke && (g.traffic >= 2 || g.preset == GraphicsPreset.Ultra)) {
                 for (k in 0 until 3) {
                     val f = ((time / 3f) + k / 3f + b.seed) % 1f
                     val at = b.top + Offset(4f * sin(f * 5f + b.seed * 9f), -30f * f * o.scale)
                     stamp(Sprites.cloud, at, (2f + 5f * f) * o.scale, Color(0xFF9AA3AB), 0.55f * (1 - f))
                 }
-            }
-            if (rippleAge in 0.0..1.2) {
-                val f = (rippleAge / 1.2).toFloat()
-                drawCircle(Palette.gold.copy(alpha = 0.6f * (1 - f)), 60f * f * o.scale, b.base, style = Stroke(2f))
             }
         }
     }
@@ -702,12 +693,8 @@ internal fun DrawScope.drawMapOverlay(
             }
         }
     }
-    // The selected region breathes.
-    o.selectedTop?.let { top ->
-        val pulse = 0.5f + 0.5f * sin(2 * PI.toFloat() * wallSeconds.toFloat() / 1.6f)
-        drawPath(top, Palette.gold.copy(alpha = 0.18f), style = Stroke(8f))
-        drawPath(top, Palette.gold.copy(alpha = 0.95f), style = Stroke(2f + 1.5f * pulse))
-    }
+    // The selected region: a steady gold outline.
+    o.selectedTop?.let { top -> drawPath(top, Palette.gold, style = Stroke(2.5f)) }
 }
 
 /** Seeds per lane so particles never line up between lanes. */

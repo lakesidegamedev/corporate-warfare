@@ -149,12 +149,11 @@ private fun DrawScope.drawGlare(p: MapProjection, sun: Sun) {
     }
 }
 
-/** Each scenario's area glows and is named as it turns to face the viewer, with a slow pulse. */
+/** Each scenario's area glows and is named as it turns to face the viewer. */
 private fun DrawScope.drawScenarioGlow(map: WorldMap, projection: MapProjection, seconds: Double, measurer: androidx.compose.ui.text.TextMeasurer) {
-    val pulse = (0.85 + 0.15 * sin(seconds * 2)).toFloat()
     for ((id, rings) in map.scenarioAreas) {
         val facing = rings.maxOfOrNull { projection.facing(it) } ?: continue
-        val glow = ((facing - 0.35) / 0.5).coerceIn(0.0, 1.0).toFloat().let { it * it * (3 - 2 * it) } * pulse
+        val glow = ((facing - 0.35) / 0.5).coerceIn(0.0, 1.0).toFloat().let { it * it * (3 - 2 * it) }
         if (glow <= 0f) continue
         val tint = scenarioTint(id)
         val path = projection.polygons(rings)

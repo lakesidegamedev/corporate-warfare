@@ -29,6 +29,8 @@ heading.
 
 ### Fixed
 
+- No more pulsing: the rings round buildings, the weekly ripple, the breathing selection outline
+  and the menu's pulsing scenario glow are gone; rooftop lights are steady.
 - Traffic, planes, clouds and the sun stop when the game is paused and run faster at higher
   speeds, instead of moving on regardless.
 - Freight and cars keep a steady pace when you pan or zoom the map; they no longer jump or speed
