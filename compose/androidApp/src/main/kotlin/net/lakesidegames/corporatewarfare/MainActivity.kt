@@ -1,5 +1,6 @@
 package net.lakesidegames.corporatewarfare
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,10 +20,27 @@ class MainActivity : ComponentActivity() {
             val scope = rememberCoroutineScope()
             val store = remember { GameStore(filesDir, scope) }
             val settings = remember { AppSettings(java.io.File(filesDir, "settings.properties")) }
-            val updater = remember { Updater(AndroidUpdates(this), scope, java.io.File(cacheDir, "updates")) }
+            // A Play install updates through Play; only the direct-download APK keeps the updater.
+            val updater = remember {
+                if (Updater.selfUpdateAllowed(installerPackage())) {
+                    Updater(AndroidUpdates(this), scope, java.io.File(cacheDir, "updates"))
+                } else {
+                    null
+                }
+            }
             CorporateWarfareApp(store, settings, updater)
         }
     }
+
+    /** Which package installed this build: the Play Store, a browser, or nothing (adb/sideload). */
+    private fun installerPackage(): String? = runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            packageManager.getInstallSourceInfo(packageName).installingPackageName
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getInstallerPackageName(packageName)
+        }
+    }.getOrNull()
 }
 
 /** Android opens the release's APK in the browser; the system installer takes it from there. */

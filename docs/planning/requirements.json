@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-25",
+  "updated": "2026-10-28",
   "requirements": [
     {
       "id": "R01",
@@ -557,7 +557,9 @@
       "gate": "apple",
       "acceptance": "Signed tested commit uploaded, Apple processing valid, intended internal group has build; exact build number and status evidence recorded.",
       "status": "pending",
-      "evidence": []
+      "evidence": [
+        "evidence/R41-testflight.json"
+      ]
     },
     {
       "id": "R42",
