@@ -13,6 +13,10 @@ heading.
 
 ### Added
 
+- App Store screenshots at the sizes Connect accepts, rendered from a real career: iPhone 6.9-inch (1320 x 2868) and 13-inch iPad (2064 x 2752), flattened to RGB because a screenshot with an alpha channel is rejected. The Apple smoke workflow collects them as the `store-screenshots` artifact and the test asserts the PNG carries no alpha.
+
+### Added
+
 - Google Play can take a release: the release workflow builds a signed Android App Bundle, verifies its signature, manifest and arm64 library, and attaches it to the release. The APK stays for direct downloads.
 - Notes for Review for the first App Store submission: the offline game, the anonymous market snapshot and its switch, and the absence of purchases.
 

@@ -6,8 +6,10 @@
 - Price: owner decision (premium, no in-app purchases)
 - Keywords candidate: business, simulation, strategy, tycoon, corporation, economy, offline
 - Support and privacy URLs: owner must supply
-- Screenshots: required for every supported device size; render from real deterministic scenarios
-  per `docs/rules/VISUAL.md` (empty career, healthy operator, low cash, strike, tender, authority
-  refusal, bank warning, corrupted save recovery, year-five result, continued sandbox)
+- Screenshots: required for every supported device size. `SnapshotTests.testRenderStoreScreenshots`
+  renders the iPhone 6.9-inch and 13-inch iPad sets from a real career and the Apple smoke workflow
+  uploads them as the `store-screenshots` artifact; see `RELEASE.md`. Intended shots: empty career,
+  healthy operator, low cash, strike, tender, authority refusal, bank warning, corrupted save
+  recovery, year-five result, continued sandbox.
 
 Nothing in this file is submitted without the owner's review.

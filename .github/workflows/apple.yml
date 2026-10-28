@@ -43,9 +43,17 @@ jobs:
       - name: Collect UI snapshots
         if: always()
         run: |
-          mkdir -p apple/build/snapshots
-          find "$HOME/Library/Developer/CoreSimulator/Devices" -name 'cw-snapshot-*.png' -newer apple/project.yml -exec cp {} apple/build/snapshots/ \; 2>/dev/null || true
-          ls -la apple/build/snapshots
+          mkdir -p apple/build/snapshots apple/build/store-screenshots
+          find "$HOME/Library/Developer/CoreSimulator/Devices" \( -name 'cw-snapshot-*.png' -o -name 'cw-store-*.png' \) -newer apple/project.yml -exec cp {} apple/build/snapshots/ \; 2>/dev/null || true
+          # App Store sized, alpha-free screenshots for the store listing.
+          cp apple/build/snapshots/cw-store-*.png apple/build/store-screenshots/ 2>/dev/null || true
+          ls -la apple/build/snapshots apple/build/store-screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: store-screenshots
+          path: apple/build/store-screenshots
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
         with:
