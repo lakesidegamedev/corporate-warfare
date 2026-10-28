@@ -137,6 +137,9 @@ internal class CloudMask(image: ImageBitmap) {
     }
 }
 
+/** How opaque the clouds are at each setting: thin, light, heavy. */
+internal fun cloudStrength(amount: Int): Float = when (amount) { 1 -> 0.4f; 2 -> 0.72f; else -> 1f }
+
 internal object Weather {
     private val mesh = Mesh()
     private val masks = HashMap<ImageBitmap, CloudMask>()
@@ -153,7 +156,7 @@ internal object Weather {
     }
 
     /**
-     * The clouds for one frame. [amount] is the setting (0 off, 1 light, 2 heavy). On the flat
+     * The clouds for one frame. [amount] is the setting (0 off, 1 thin, 2 light, 3 heavy). On the flat
      * map only the area round the scenario ([bounds]) is meshed, finely enough that the tilt's
      * perspective does not bend the texture; on the globe the whole world, coarsely.
      */
@@ -169,7 +172,7 @@ internal object Weather {
         if (closeUp > 0f) drawRegion(p, sun, seconds, amount, region!!, regionImage!!, altitude, zoom, shadows, closeUp)
         if (closeUp >= 0.999f) return
         val image = Images.load("clouds.webp") ?: return
-        val strength = (if (amount >= 2) 1f else 0.72f) * (1 - closeUp)
+        val strength = cloudStrength(amount) * (1 - closeUp)
         // Up close the clouds thin so they never hide the map.
         val near = (1 - smoothstep(9.0, 22.0, zoom)).toFloat()
         val flat = p.t > 0.5
@@ -188,7 +191,7 @@ internal object Weather {
                 val (slide, weight) = flowPhase(seconds, layer)
                 if (weight < 0.01f) continue
                 // Shadows double the cost, so only heavy clouds cast them.
-                val passes = if (shadows && amount >= 2 && altitude > 0) listOf(true, false) else listOf(false)
+                val passes = if (shadows && amount >= 3 && altitude > 0) listOf(true, false) else listOf(false)
                 for (shadow in passes) {
                     fill(p, west, east, south, north, step, if (shadow) 0.0 else altitude,
                         if (shadow) Offset((altitude * 0.5).toFloat(), (altitude * 0.32).toFloat()) else Offset.Zero, sun, shadow, mask(image), true) { lon, lat, out ->
@@ -213,13 +216,13 @@ internal object Weather {
         weight: Float,
     ) {
         // Clouds clear as you zoom in, so a close look at the map is never through haze.
-        val strength = (if (amount >= 2) 0.95f else 0.7f) * weight * (1 - smoothstep(9.0, 22.0, zoom)).toFloat()
+        val strength = cloudStrength(amount) * 0.95f * weight * (1 - smoothstep(9.0, 22.0, zoom)).toFloat()
         val tw = image.width / (r.east - r.west)
         val th = image.height / (r.north - r.south)
         val drift = windAt((r.south + r.north) / 2) * seconds
         val canvasPaint = paint(image, false)
         drawIntoCanvas { canvas ->
-            for (shadow in if (shadows && amount >= 2 && altitude > 0) listOf(true, false) else listOf(false)) {
+            for (shadow in if (shadows && amount >= 3 && altitude > 0) listOf(true, false) else listOf(false)) {
                 fill(p, r.west, r.east, r.south, r.north, 1.0, if (shadow) 0.0 else altitude,
                     if (shadow) Offset((altitude * 0.5).toFloat(), (altitude * 0.32).toFloat()) else Offset.Zero, sun, shadow, mask(image), false) { lon, lat, out ->
                     out[0] = (lon - r.west - drift) * tw

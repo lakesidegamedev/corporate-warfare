@@ -444,7 +444,7 @@ private fun DesktopMap(store: GameStore) {
             }
         }
         Box(Modifier.weight(1f).fillMaxHeight().clip(Pixel.shape).border(1.dp, Palette.stroke, Pixel.shape)) {
-            WorldMapView(store, layer, selected, { selected = it }, Modifier.fillMaxSize(), pickedLane, { pickedLane = it })
+            WorldMapView(store, layer, selected, { selected = it }, Modifier.fillMaxSize(), pickedLane, { pickedLane = it }, controlsAtTop = true)
             Row(Modifier.align(Alignment.TopStart).padding(10.dp)) {
                 Chips(MapLayer.entries.map { it.title }, layer.title) { title -> layer = MapLayer.entries.first { it.title == title } }
             }

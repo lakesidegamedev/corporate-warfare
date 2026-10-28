@@ -141,7 +141,7 @@ private fun blendHeights(a: Map<String, Double>, b: Map<String, Double>, f: Floa
 @Composable
 fun WorldMapView(
     store: GameStore, layer: MapLayer, selected: String?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier,
-    pickedLane: String? = null, onLane: ((String?) -> Unit)? = null,
+    pickedLane: String? = null, onLane: ((String?) -> Unit)? = null, controlsAtTop: Boolean = false,
 ) {
     val map = WorldMap.forRegions(store.boards.map { it.code })
     var camera by remember(map) { mutableStateOf<MapCamera?>(null) }
@@ -293,8 +293,10 @@ fun WorldMapView(
                     drawText(label, topLeft = Offset(12f, size.height - label.size.height - 10f))
                 }
             }
+            // On desktop the tutorial card sits in the bottom corner, so the controls go to the top.
             Column(
-                Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 24.dp)
+                Modifier.align(if (controlsAtTop) Alignment.TopEnd else Alignment.BottomEnd)
+                    .padding(end = 12.dp, top = if (controlsAtTop) 12.dp else 0.dp, bottom = if (controlsAtTop) 0.dp else 24.dp)
                     .clip(Pixel.shape).background(Palette.panel.copy(alpha = 0.94f)),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -302,6 +304,16 @@ fun WorldMapView(
                 MapButton("zoom_in") { current()?.let { fly(it.zoomed(1.8)) } }
                 MapButton("zoom_out") { current()?.let { fly(it.zoomed(1 / 1.8)) } }
                 MapButton(if (zoomedIn) "globe" else "scope") { toggleGlobe() }
+                // Clouds in one tap: heavy, light, thin, off, and round again.
+                val settings = LocalAppSettings.current
+                if (settings != null) {
+                    Box(
+                        Modifier.size(40.dp).clickable { settings.chooseGraphics(graphics.copy(clouds = (graphics.clouds + 3) % 4)) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        PixelIcon(if (graphics.clouds == 0) "cloud_off" else "cloud", size = 22.dp, tint = if (graphics.clouds == 0) null else Palette.primaryText.copy(alpha = 0.4f + 0.2f * graphics.clouds))
+                    }
+                }
                 if (graphics.tilt > 0) {
                     Box(Modifier.size(40.dp).clickable { tilted = !tilted }, contentAlignment = Alignment.Center) {
                         Text("3D", color = if (tilted) Palette.gold else Palette.secondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)

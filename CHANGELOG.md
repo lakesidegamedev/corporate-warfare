@@ -34,8 +34,9 @@ heading.
   flattens the map again.
 - Real clouds: the map and the menu globe carry a real satellite cloud map of the whole Earth,
   with its fronts, storms and tropical clusters, drifting west on the trade winds and east on the
-  westerlies and casting shadows on the tilted map. Each scenario has its own sharp close-up
-  clouds, and clouds clear as you zoom in. Clouds can be set to off, light or heavy. Cloud imagery:
+  westerlies. Each scenario has its own sharp close-up clouds, and clouds clear as you zoom in.
+  Clouds can be off, thin, light or heavy (heavy clouds cast shadows), set in Settings or in one
+  tap with the new cloud button on the map. Cloud imagery:
   Solar System Scope (CC BY 4.0), based on NASA Blue Marble.
 - A sharper 8-bit look: stepped corners, hard bevelled edges and hard shadows on panels and
   buttons, and a pixel font (Silkscreen, SIL Open Font License) for headings, labels, buttons and

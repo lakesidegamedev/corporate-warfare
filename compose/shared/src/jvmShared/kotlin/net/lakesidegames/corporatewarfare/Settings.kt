@@ -127,7 +127,7 @@ class AppSettings(private val file: File) {
             lighting = int("lighting", base.lighting, 0..2),
             dayNight = bool("dayNight", base.dayNight),
             cityLights = bool("cityLights", base.cityLights),
-            clouds = int("clouds", base.clouds, 0..2),
+            clouds = int("clouds", base.clouds, 0..3),
             traffic = int("traffic", base.traffic, 0..2),
             buildings = int("buildings", base.buildings, 0..2),
             frameRate = props.getProperty("frameRate")?.toIntOrNull()?.takeIf { it in listOf(0, 30, 60) } ?: base.frameRate,
