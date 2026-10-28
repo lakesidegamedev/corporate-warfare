@@ -8,6 +8,8 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -181,7 +183,10 @@ fun MapScreen(store: GameStore) {
 
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             MapHud(store)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 MapLayer.entries.forEach { option ->
                     Text(
                         option.title,
@@ -401,6 +406,20 @@ private fun MapHud(store: GameStore) {
                 Text(Format.compact(profit, overview?.primaryCurrency.orEmpty()), color = if (profit >= 0) Palette.positive else Palette.negative, fontWeight = FontWeight.SemiBold)
             }
         }
+        // What the desktop shows in its Alerts pane: decisions due, a pause, the engine's warnings.
+        val due = store.events.count { it.mandatory }
+        val alerts = buildList {
+            if (due > 0) add("$due decision${if (due == 1) "" else "s"} waiting in the Inbox" to Palette.warning)
+            overview?.pause?.let { add("Paused: $it" to Palette.warning) }
+            overview?.alerts?.forEach { add(it to Palette.warning) }
+        }
+        alerts.take(3).forEach { (text, tone) ->
+            Row(verticalAlignment = Alignment.Top) {
+                PixelIcon("alert", size = 12.dp, tint = tone, modifier = Modifier.padding(top = 2.dp, end = 6.dp))
+                Text(text, color = Palette.primaryText, fontSize = 12.sp)
+            }
+        }
+        if (alerts.size > 3) Text("${alerts.size - 3} more on the Portfolio tab", color = Palette.secondary, fontSize = 11.sp)
     }
 }
 
@@ -411,7 +430,7 @@ internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () ->
         containerColor = Palette.panel,
         title = { Text(board.name) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("${board.stateName} · hub ${board.hubCity}", color = Palette.secondary, fontSize = 13.sp)
                 Text(
                     "Wages ${board.wageIndexBps / 100}% · skill ${board.skillBps / 100} · roads ${board.roadBps / 100} · power ${board.powerGridBps / 100}",
@@ -421,7 +440,7 @@ internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () ->
                 if (board.specialization.isNotEmpty()) {
                     Text("Specialized in " + board.specialization.joinToString(" and ") { Sectors.name(it) }, color = Palette.positive, fontSize = 12.sp)
                 }
-                val room = board.room.filter { it.importLots > 0 }.sortedByDescending { it.importLots * it.importPriceCents }.take(5)
+                val room = board.room.filter { it.importLots > 0 }.sortedByDescending { it.importLots * it.importPriceCents }.take(8)
                 if (room.isNotEmpty()) {
                     Eyebrow("Room to build")
                     room.forEach { Text("${it.productName}: ${it.importLots} lots a week imported at ${Format.money(it.importPriceCents)}", color = Palette.primaryText, fontSize = 13.sp) }

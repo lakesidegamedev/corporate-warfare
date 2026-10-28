@@ -336,6 +336,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
         }
         if (store.facilities.isNotEmpty()) item { ProductionTarget(store) }
         if (store.divisions.isNotEmpty()) item { Panel { CompanyShipping(store) } }
+        item { FourWeeklyResults(store) }
         if (store.divisions.isNotEmpty()) {
             item { Eyebrow("Divisions") }
             items(store.divisions.size) { index ->
@@ -346,7 +347,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text("${Sectors.name(division.industry)} · ${division.regionName}", color = Palette.primaryText, fontWeight = FontWeight.SemiBold)
-                            Text("${division.strategyName} · ${division.blocks} plants", color = Palette.secondary, fontSize = 12.sp)
+                            Text("${division.strategyName}${if (division.retooling) " (retooling)" else ""} · ${division.blocks} plants", color = Palette.secondary, fontSize = 12.sp)
                         }
                         Text("${division.shareBps / 100}% share", color = Palette.gold, fontSize = 13.sp)
                         Text("Details", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
@@ -583,6 +584,7 @@ private fun InboxScreen(store: GameStore) {
                 }
             }
         }
+        item { RivalMovesPanel(store) }
     }
 }
 
@@ -656,6 +658,7 @@ private fun PortfolioScreen(store: GameStore, onSettings: () -> Unit) {
                 }
             }
         }
+        item { ShareholdingsPanel(store) }
     }
 }
 
