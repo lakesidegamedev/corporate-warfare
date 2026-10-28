@@ -338,7 +338,7 @@ final class MapGeometry {
                              look: look, freight: freightLayer, displayScale: displayScale)
         if let overlayHeld, overlayKey == key { return overlayHeld }
         let p = projection
-        let raised = look.extrude && p.t > 0.05
+        let raised = look.raised(p.t)
         let ground: [String: Double]? = raised ? heights : nil
         let laneCount = look.traffic >= 2 || freightLayer ? 120 : look.traffic == 1 ? 60 : 0
         let tracks = p.t > 0.5 && laneCount > 0 ? laneTracks(lanes, count: laneCount) : []
@@ -500,6 +500,8 @@ final class TakeoverLog {
 
 /// Which part of the still map to draw: the ground, the structures over the traffic, or both.
 enum MapPhase {
+    /// Space and the ocean alone, under the satellite Earth's layer.
+    case sky
     case ground, structures, all
 }
 
@@ -581,7 +583,11 @@ struct MapLook: Equatable {
     var animations: Bool
     var showFps: Bool
     var ultra: Bool
+    /// The satellite Earth under the map; the regions then lie flat and see-through over it.
+    var earth = false
 
+    /// Whether the regions stand as raised tiles at a flatness: not over the satellite Earth.
+    func raised(_ t: Double) -> Bool { extrude && t > 0.05 && !earth }
     /// Whether anything on the map moves on its own, so the frame clock needs to run.
     var moves: Bool { animations && (traffic > 0 || clouds > 0 || buildings > 0 || dayNight || lighting == 2) }
     /// Heavy industry smokes with busy traffic or on Ultra.
@@ -674,12 +680,18 @@ struct MapScene {
         let lit = look.lighting > 0
         let whole = Path(CGRect(origin: .zero, size: size))
         let detail = look.detail < 2 ? 0 : clamp((zoom - 7) / 5)
-        let raised = look.extrude && t > 0.05
+        let raised = look.raised(t)
         // How far up the base of the raised scenario sits on screen, for lines drawn on it.
         let plinth = raised ? g.plinth : 0
         let up = Double(p.lift(g.center, plinth).y - p.lift(g.center, 0).y)
         let ground: [String: Double]? = raised ? heights : nil
+        if phase == .sky {
+            drawSky(in: &context, geometry: g, light: light, whole: whole)
+            return
+        }
         if phase != .structures {
+            // With the satellite Earth the sky is its own layer under the Earth's.
+            if !look.earth { drawSky(in: &context, geometry: g, light: light, whole: whole) }
             drawGround(in: &context, geometry: g, light: light, whole: whole, detail: detail, raised: raised, up: up)
         }
         if phase == .ground { return }
@@ -691,6 +703,12 @@ struct MapScene {
             // Each big city on screen is a voxel city block sized by its population, a step smaller
             // than the player's buildings so those stay the stars; then the divisions, nearest last.
             var cityTops: [Int: CGFloat] = [:]
+            // The diorama up close: trees, fields, barns, rocks and the houses round each city.
+            if look.buildings >= 2 && look.earth && g.closeUp && t > 0.5 {
+                let voxel = max(Voxels.scale(g.scale, displayScale: displayScale) - 1, 1)
+                Countryside.draw(in: &context, projection: p, map: map, week: week, scale: voxel, displayScale: displayScale,
+                                 lift: plinth, economyPhase: economyPhase, size: size)
+            }
             if look.buildings >= 2 && g.closeUp && t > 0.5 {
                 let voxel = max(Voxels.scale(g.scale, displayScale: displayScale) - 1, 1)
                 let px = Double(voxel) / max(displayScale, 1)
@@ -805,6 +823,26 @@ struct MapScene {
         }
     }
 
+    /// Space, the stars, the atmosphere and the ocean: what lies under the land.
+    private func drawSky(in context: inout GraphicsContext, geometry g: MapGeometry, light: MapSun, whole: Path) {
+        let p = g.projection
+        let t = p.t
+        let size = g.size
+        if space {
+            context.fill(whole, with: .color(MapScene.spaceColor.color()))
+            if look.lighting == 2 && t < 1 {
+                StarField.shared.draw(in: &context, size: size, seconds: 0, drift: 0, twinkle: false)
+            }
+        }
+        if look.lighting > 0 && t < 1 {
+            g.backLight.draw(in: &context, size: size, displayScale: displayScale, key: [light.lon, light.lat, look.lighting]) { layer, _ in
+                GlobeLighting.atmosphere(in: &layer, projection: p, sun: light, lighting: look.lighting)
+            }
+        }
+        GlobeLighting.back(in: &context, projection: p, sun: light, lighting: look.lighting, size: size)
+        if t < 1 { context.stroke(g.graticule, with: .color(Theme.primaryText.opacity(0.06 * (1 - t))), lineWidth: 0.6) }
+    }
+
     /// The ground: everything that lies flat, under the traffic and the buildings.
     private func drawGround(in context: inout GraphicsContext, geometry g: MapGeometry, light: MapSun, whole: Path,
                             detail: Double, raised: Bool, up: Double) {
@@ -813,23 +851,13 @@ struct MapScene {
         let size = g.size
         let zoom = camera.zoom
         let lit = look.lighting > 0
-        if space {
-            context.fill(whole, with: .color(MapScene.spaceColor.color()))
-            if look.lighting == 2 && t < 1 {
-                StarField.shared.draw(in: &context, size: size, seconds: 0, drift: 0, twinkle: false)
-            }
-        }
         let lightKey: [AnyHashable] = [light.lon, light.lat, look.lighting]
-        if lit && t < 1 {
-            g.backLight.draw(in: &context, size: size, displayScale: displayScale, key: lightKey) { layer, _ in
-                GlobeLighting.atmosphere(in: &layer, projection: p, sun: light, lighting: look.lighting)
-            }
-        }
-        GlobeLighting.back(in: &context, projection: p, sun: light, lighting: look.lighting, size: size)
-        if t < 1 { context.stroke(g.graticule, with: .color(Theme.primaryText.opacity(0.06 * (1 - t))), lineWidth: 0.6) }
         // Outside the scenario the world is muted: climate-tinted land on the globe that greys as
-        // the map flattens, grey borders and roads. The scenario's regions are drawn over it.
-        if lit {
+        // the map flattens, grey borders and roads. The scenario's regions are drawn over it. The
+        // satellite Earth, when on, is its own layer below and stands in for the painted land.
+        if look.earth {
+            // Nothing painted: the real ground shows through.
+        } else if lit {
             // Shallow water: a lighter band of sea hugging every coast, under the land.
             let shallows = min(max(2 + zoom * 0.35, 2), 9)
             for path in g.biomes { context.stroke(path, with: .color(RGB(hex: 0x2F6F9A).color(0.30)), lineWidth: shallows) }
@@ -882,7 +910,7 @@ struct MapScene {
             }
         } else {
             for region in g.regionPaths {
-                context.fill(region.path, with: .color(MapScene.regionLand.color()), style: even)
+                context.fill(region.path, with: .color(MapScene.regionLand.color(look.earth ? 0.32 : 1)), style: even)
                 let intensity = shading[region.code] ?? 0
                 if intensity > 0 { context.fill(region.path, with: .color(tint.color(0.15 + 0.6 * intensity)), style: even) }
             }
@@ -990,7 +1018,7 @@ struct MapScene {
 
     /// The lane drawn nearest a tap, within a finger's width.
     func laneAt(_ tap: CGPoint, geometry g: MapGeometry) -> LaneDto? {
-        let up: CGFloat = look.extrude && g.projection.t > 0.05
+        let up: CGFloat = look.raised(g.projection.t)
             ? g.projection.lift(g.center, g.plinth).y - g.projection.lift(g.center, 0).y : 0
         var best: LaneDto?
         var bestDistance: CGFloat = 22
@@ -1366,6 +1394,7 @@ struct WorldMapView: View {
     @AppStorage(GraphicsKeys.lighting) private var lighting = 2
     @AppStorage(GraphicsKeys.dayNight) private var dayNight = true
     @AppStorage(GraphicsKeys.cityLights) private var cityLights = true
+    @AppStorage(GraphicsKeys.earth) private var earth = true
     @AppStorage(GraphicsKeys.clouds) private var clouds = 1
     @AppStorage(GraphicsKeys.traffic) private var traffic = 1
     @AppStorage(GraphicsKeys.buildings) private var buildings = 2
@@ -1407,6 +1436,7 @@ struct WorldMapView: View {
     @State private var world = WorldClock()
     @State private var takeovers = TakeoverLog()
     @State private var acquired: Set<String> = []
+    @State private var countrysideReady = 0
 
     private var map: WorldMap { WorldMap.forRegions(regionCodes) }
 
@@ -1415,7 +1445,7 @@ struct WorldMapView: View {
             detail: detailLevel, tilt: GraphicsSettings.pitch(forTilt: tiltSetting), extrude: extrude,
             lighting: lighting, dayNight: dayNight, cityLights: cityLights, clouds: clouds, traffic: traffic,
             buildings: buildings, frameRate: frameRate, animations: animations, showFps: showFps,
-            ultra: preset == GraphicsPreset.ultra.rawValue
+            ultra: preset == GraphicsPreset.ultra.rawValue, earth: earth
         )
     }
 
@@ -1435,6 +1465,20 @@ struct WorldMapView: View {
             // Moving things follow the world clock, which stops while the game is paused.
             let sunMoves = easing || (look.dayNight && clockAllowed && gameSpeed > 0)
             ZStack(alignment: .topLeading) {
+                if look.earth {
+                    // Space and the ocean, then the satellite Earth over them, under the rest of the ground.
+                    TimelineView(.animation(minimumInterval: easing ? interval : 1.0 / 3.0, paused: !sunMoves)) { timeline in
+                        Canvas { context, canvasSize in
+                            let now = MapClock.seconds(timeline.date)
+                            let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
+                            scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .sky)
+                        }
+                        .drawingGroup()
+                    }
+                    EarthLayer(view: EarthView(camera: current, size: size, tilt: look.tilt, week: Earth.week(of: weekLabel),
+                                               bounds: map.playBounds, scenario: map.scenarioId))
+                        .allowsHitTesting(false)
+                }
                 TimelineView(.animation(minimumInterval: easing ? interval : 1.0 / 3.0, paused: !sunMoves)) { timeline in
                     Canvas { context, canvasSize in
                         let now = MapClock.seconds(timeline.date)
@@ -1473,7 +1517,10 @@ struct WorldMapView: View {
                     .allowsHitTesting(false)
                 }
                 TimelineView(.animation(minimumInterval: easing ? interval : 1.0 / 3.0, paused: !sunMoves)) { timeline in
+                    // Redrawn once the countryside for the scenario is worked out.
+                    let ready = countrysideReady
                     Canvas { context, canvasSize in
+                        _ = ready
                         let now = MapClock.seconds(timeline.date)
                         let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
                         scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .structures)
@@ -1561,7 +1608,7 @@ struct WorldMapView: View {
                     onLane(nil)
                 }
                 var hit: String?
-                if look.extrude && g.projection.t > 0.05 {
+                if look.raised(g.projection.t) {
                     // Nearest tile first, on its raised top face.
                     hit = g.raised(tapped.heights).reversed().first { $0.top.contains(location, eoFill: true) }?.code
                 }
@@ -1587,6 +1634,7 @@ struct WorldMapView: View {
         // Divisions the player has just taken over carry a flag for six weeks: a plant that was a
         // rival's last week and is the player's now.
         .onAppear { acquired = takeovers.update(plants, week: Int(week)) }
+        .onReceive(NotificationCenter.default.publisher(for: Countryside.ready)) { _ in countrysideReady += 1 }
         .onChange(of: plants) { _, new in acquired = takeovers.update(new, week: Int(week)) }
         .onChange(of: shading) { old, new in
             ease.retarget(from: old, to: new, now: MapClock.now, animate: animate && extrude)
@@ -1672,7 +1720,7 @@ struct WorldMapView: View {
             clouds = (level + 3) % 4
             // A mix that happens to match a preset shows as that preset.
             let now = GraphicsSettings(mapDetail: detailLevel, tilt: tiltSetting, extrude: extrude, lighting: lighting,
-                                       dayNight: dayNight, cityLights: cityLights, clouds: clouds, traffic: traffic,
+                                       dayNight: dayNight, cityLights: cityLights, earth: earth, clouds: clouds, traffic: traffic,
                                        buildings: buildings, frameRate: frameRate)
             preset = (GraphicsPreset.choices.first { $0.values == now } ?? .custom).rawValue
         } label: {
