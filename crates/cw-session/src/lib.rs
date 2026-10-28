@@ -2141,7 +2141,10 @@ mod tests {
         // alliances. In 1.8 preview 3 it moved from f85add77... when sellers stopped reading
         // their own empty post-trade shelf as scarcity (prices now rise on buyers' unmet input
         // cover and fall on unsold stock), services priced on spare installed capacity and
-        // carriers cut below 60 percent lane fill, so week-two asking prices differ. The Swift
+        // carriers cut below 60 percent lane fill, so week-two asking prices differ. It moved
+        // again from 1b265292... in the same preview when facilities gained a cut record,
+        // households gained wanted and unmet demand and policies a production lock (new
+        // encoded fields), and refineries began shifting their cut. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2167,7 +2170,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "1b26529295a8dd7a61c925a2ad0753e5379eb7251ba50c226b28bc4d1eabb292"
+            "f15337d64563274888db39de29fb00f88bf2652d93fb5df660d5473d73410413"
         );
     }
 

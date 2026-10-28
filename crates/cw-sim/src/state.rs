@@ -340,8 +340,8 @@ pub struct Facility {
     pub serves: Vec<u8>,
     /// Last week's yield of each output in the recipe's order (primary first), in basis points
     /// of the recipe's split, for a plant that shifted its cut between co-products (see
-    /// `production::cut_yields`). Empty means the recipe's fixed split; older saves load empty.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// `production::cut_yields`). Empty means the recipe's fixed split; older JSON saves load empty.
+    #[serde(default)]
     pub cut_bps: Vec<i32>,
 }
 
@@ -429,7 +429,7 @@ pub struct Policies {
     pub manual_production: bool,
     /// True when the hand-set rate also holds service and carrier plants. Without it those
     /// plants keep following what sells, under the hand-set rate. Older saves load false.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default)]
     pub production_locked: bool,
 }
 
@@ -790,9 +790,9 @@ pub struct Household {
     /// Milli-lots of each good households asked for last week, and of those the milli-lots no
     /// seller had on the shelf (unmet household demand). Demand a household's budget could not
     /// pay for is not unmet: it is the price doing its work. Older saves load empty.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
     pub wanted_milli: BTreeMap<u16, i64>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
     pub unmet_milli: BTreeMap<u16, i64>,
 }
 
