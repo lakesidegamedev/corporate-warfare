@@ -33,11 +33,11 @@ final class MaxSpeedTests: XCTestCase {
         var worstStall = 0.0
         /// Sleeps in short slices and records the longest the main actor was late to wake.
         func breathe(_ seconds: Double) async {
-            let end = ProcessInfo.processInfo.systemUptime + seconds
-            while ProcessInfo.processInfo.systemUptime < end {
-                let before = ProcessInfo.processInfo.systemUptime
+            let end = Date.timeIntervalSinceReferenceDate + seconds
+            while Date.timeIntervalSinceReferenceDate < end {
+                let before = Date.timeIntervalSinceReferenceDate
                 try? await Task.sleep(nanoseconds: 20_000_000)
-                worstStall = max(worstStall, ProcessInfo.processInfo.systemUptime - before - 0.02)
+                worstStall = max(worstStall, Date.timeIntervalSinceReferenceDate - before - 0.02)
                 // A decision or warning stops time; answer it the way a player would and run on.
                 if store.overview?.pause != nil {
                     await store.continueCareer()

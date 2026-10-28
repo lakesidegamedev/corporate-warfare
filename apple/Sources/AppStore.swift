@@ -326,7 +326,7 @@ final class AppStore: ObservableObject {
             while !Task.isCancelled {
                 guard let self else { return }
                 let pace = max(await self.runSpeed, 1)
-                let now = ProcessInfo.processInfo.systemUptime
+                let now = Date.timeIntervalSinceReferenceDate
                 let refresh = pace <= 1 || now - lastRefresh >= AppStore.runRefreshInterval
                 if refresh { lastRefresh = now }
                 if await self.runWeek(refresh: refresh, speed: pace, generation: generation) { break }
