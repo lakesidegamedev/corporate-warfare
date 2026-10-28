@@ -13,6 +13,22 @@ heading.
 
 ### Added
 
+- Your divisions stand on the map as cel-shaded voxel buildings, one model per industry (a farm
+  with barn and silos, a mine headframe, a refinery, a chemical works, a factory, a building site,
+  a port, a shop, a hospital, an office tower, a studio, a mast, apartments, a base, a bank) in
+  three sizes that grow with the division's plants. `tools/voxel_sprites.py` bakes them.
+
+### Fixed
+
+- Traffic, planes, clouds and the sun stop when the game is paused and run faster at higher
+  speeds, instead of moving on regardless.
+- Freight and cars keep a steady pace when you pan or zoom the map; they no longer jump or speed
+  up as the camera moves.
+- Cars and freight run under buildings, and buildings and labels stand above the clouds, instead
+  of traffic being drawn over everything.
+
+### Added
+
 - Android adaptive launcher icon with a themed (monochrome) layer, so Android 8 and later no longer
   shows the icon in a white circle.
 - Google Play listing assets: the 512 pixel icon, a 1024 by 500 feature graphic built from the

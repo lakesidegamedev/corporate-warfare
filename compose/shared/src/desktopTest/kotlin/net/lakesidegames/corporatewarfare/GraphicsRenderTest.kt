@@ -72,14 +72,18 @@ class GraphicsRenderTest {
                     val measurer = rememberTextMeasurer()
                     val geometry = androidx.compose.runtime.remember { MapGeometryCache() }
                     Canvas(Modifier.fillMaxSize()) {
-                        drawWorldMap(
+                        // The layers in the game's order: ground, traffic, clouds, structures, effects.
+                        fun still(phase: MapPhase) = drawWorldMap(
                             map, camera, Palette.gold, shading, "MI-DET", divisions, measurer, lanes = lanes, freightLayer = false,
-                            geometry = geometry, graphics = graphics, sun = if (graphics.dayNight) sun else null,
+                            geometry = geometry, graphics = graphics, sun = if (graphics.dayNight) sun else null, phase = phase,
                         )
+                        still(MapPhase.Ground)
                         val g = geometry.of(map, camera, size, graphics.detail, graphics.pitch)
                         val o = g.overlay(lanes, divisions, "MI-DET", shading, graphics, false)
+                        drawMapOverlay(o, graphics, 12.5, false, sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId, part = OverlayPart.Traffic)
                         with(Weather) { drawWeather(g.p, sun, 12.5, graphics.clouds, map.playBounds, 46.0 * g.scale * g.p.t, camera.zoom, graphics.lighting > 0, map.scenarioId) }
-                        drawMapOverlay(o, graphics, 12.5, false, sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId)
+                        still(MapPhase.Structures)
+                        drawMapOverlay(o, graphics, 12.5, false, sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId, part = OverlayPart.Effects)
                     }
                 }
                 val image = scene.render()

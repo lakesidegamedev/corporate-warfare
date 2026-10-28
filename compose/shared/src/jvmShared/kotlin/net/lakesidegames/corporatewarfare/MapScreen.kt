@@ -108,6 +108,21 @@ internal fun rememberFrameSeconds(active: Boolean, fps: Int): State<Double> {
     return seconds
 }
 
+/**
+ * Time for the world on the map: it stands still while the game is paused and runs one, two or
+ * four times as fast at the three speeds, so moving things follow the game rather than the wall.
+ */
+internal class WorldClock {
+    private var last = Double.NaN
+    private var seconds = 0.0
+
+    fun advance(wall: Double, running: Boolean, speed: Int): Double {
+        if (!last.isNaN() && running) seconds += (wall - last).coerceIn(0.0, 0.5) * when (speed) { 1 -> 1.0; 2 -> 2.0; else -> 4.0 }
+        last = wall
+        return seconds
+    }
+}
+
 /** Region heights ease to a new layer's values instead of jumping. */
 @Composable
 private fun animatedHeights(target: Map<String, Double>, animate: Boolean): Map<String, Double> {
@@ -171,8 +186,12 @@ fun WorldMapView(
     val shaded = remember(layer, store.boards, store.mapDivisions) { shading(store, layer) }
     val heights = animatedHeights(if (layer == MapLayer.Freight) emptyMap() else shaded, graphics.animations)
     val clock = rememberFrameSeconds(graphics.moves || graphics.showFps, graphics.frameRate)
-    val sunStep by remember(graphics.dayNight) { derivedStateOf { if (graphics.dayNight) floor(clock.value * 3) else 0.0 } }
-    val cloudTick by remember { derivedStateOf { floor(clock.value * 8) / 8 } }
+    // The world's own clock: traffic, planes, clouds and the sun stop when the game is paused and
+    // run faster at higher speeds. Only interface feedback (the selection glow) uses the wall clock.
+    val world = remember { WorldClock() }
+    val gameSeconds by remember { derivedStateOf { world.advance(clock.value, store.running, store.speed) } }
+    val sunStep by remember(graphics.dayNight) { derivedStateOf { if (graphics.dayNight) floor(gameSeconds * 3) else 0.0 } }
+    val cloudTick by remember { derivedStateOf { floor(gameSeconds * 8) / 8 } }
     val week = store.overview?.weekLabel
     var rippleAt by remember { mutableDoubleStateOf(-10.0) }
     LaunchedEffect(week) { if (week != null) rippleAt = MapClock.now() }
@@ -255,8 +274,22 @@ fun WorldMapView(
                 drawWorldMap(
                     map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shaded, selected, store.mapDivisions, measurer,
                     lanes = store.lanes, freightLayer = layer == MapLayer.Freight, pickedLane = pickedLane,
-                    geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights,
+                    geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Ground,
                 )
+            }
+            // Layers, bottom to top: the ground, traffic on it, clouds, buildings and labels, then
+            // effects. Traffic runs under the buildings; buildings stand clear of the clouds.
+            if (graphics.moves) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val cam = camera ?: MapCamera.scenario(size, map)
+                    val g = geometry.of(map, cam, size, graphics.detail, pitch)
+                    val o = g.overlay(store.lanes, store.mapDivisions, selected, heights, graphics, layer == MapLayer.Freight, density)
+                    val detailFade = if (graphics.detail != MapDetail.High) 0f else ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
+                    drawMapOverlay(
+                        o, graphics, gameSeconds, layer == MapLayer.Freight, sun ?: Sun.fixed(g.p), map.playBounds, cam.zoom,
+                        clock.value - rippleAt, detailFade, map.scenarioId, part = OverlayPart.Traffic,
+                    )
+                }
             }
             // Clouds drift a fraction of a degree a second, so their layer is redrawn eight times a
             // second rather than every frame.
@@ -270,19 +303,25 @@ fun WorldMapView(
                     }
                 }
             }
+            Canvas(Modifier.fillMaxSize().graphicsLayer()) {
+                drawWorldMap(
+                    map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shaded, selected, store.mapDivisions, measurer,
+                    lanes = store.lanes, freightLayer = layer == MapLayer.Freight, pickedLane = pickedLane,
+                    geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Structures,
+                )
+            }
             Canvas(Modifier.fillMaxSize()) {
-                val seconds = clock.value
                 val cam = camera ?: MapCamera.scenario(size, map)
                 val g = geometry.of(map, cam, size, graphics.detail, pitch)
                 if (graphics.moves) {
-                    val o = g.overlay(store.lanes, store.mapDivisions, selected, heights, graphics, layer == MapLayer.Freight)
+                    val o = g.overlay(store.lanes, store.mapDivisions, selected, heights, graphics, layer == MapLayer.Freight, density)
                     val detailFade = if (graphics.detail != MapDetail.High) 0f else ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
                     drawMapOverlay(
-                        o, graphics, seconds, layer == MapLayer.Freight, sun ?: Sun.fixed(g.p), map.playBounds, cam.zoom,
-                        seconds - rippleAt, detailFade, map.scenarioId,
+                        o, graphics, gameSeconds, layer == MapLayer.Freight, sun ?: Sun.fixed(g.p), map.playBounds, cam.zoom,
+                        clock.value - rippleAt, detailFade, map.scenarioId, part = OverlayPart.Effects, wallSeconds = clock.value,
                     )
                 } else {
-                    g.overlay(store.lanes, store.mapDivisions, selected, heights, graphics, layer == MapLayer.Freight).selectedTop?.let {
+                    g.overlay(store.lanes, store.mapDivisions, selected, heights, graphics, layer == MapLayer.Freight, density).selectedTop?.let {
                         drawPath(it, Palette.gold, style = Stroke(2.5f))
                     }
                 }
@@ -404,6 +443,7 @@ internal fun DrawScope.drawWorldMap(
     pitch: Double = graphics.pitch,
     sun: Sun? = null,
     heights: Map<String, Double> = shading,
+    phase: MapPhase = MapPhase.All,
 ) {
     MapProfiler.start()
     val detailLevel = graphics.detail
@@ -412,33 +452,6 @@ internal fun DrawScope.drawWorldMap(
     val t = p.t
     val light = sun ?: Sun.fixed(p)
     val lit = graphics.lighting > 0
-    if (space) {
-        drawRect(Color(0xFF05090E))
-        if (graphics.lighting == 2 && t < 1) SharedStars.draw(this, 0.0, 0f, false)
-    }
-    if (lit && t < 1) geometry.back.draw(this, listOf(g, light, graphics.lighting)) { drawAtmosphere(p, light, graphics) }
-    drawGlobeBack(p, light, graphics)
-    MapProfiler.mark("back")
-    if (t < 1) drawPath(g.graticule, Palette.primaryText.copy(alpha = (0.06 * (1 - t)).toFloat()), style = Stroke(0.6f))
-    // Outside the scenario the world is muted: climate-tinted land on the globe that greys as the
-    // map flattens, grey borders and roads. The scenario's regions are drawn over it in colour.
-    if (lit) {
-        // Shallow water: a lighter band of sea hugging every coast, under the land.
-        val shallows = (2 + cam.zoom * 0.35).coerceIn(2.0, 9.0).toFloat()
-        g.biomes.forEach { drawPath(it, Color(0xFF2F6F9A).copy(alpha = 0.30f), style = Stroke(shallows)) }
-        drawBiomes(g.biomes, (0.25 + 0.6 * t).toFloat())
-    } else drawPath(g.land, OutsideLand)
-    MapProfiler.mark("landfill")
-    val provinces = if (detailLevel == MapDetail.Low) 0f else ((cam.zoom - 1.4) / 1.2).coerceIn(0.0, 1.0).toFloat()
-    if (provinces > 0) drawPath(g.provinces, OutsideBorder.copy(alpha = 0.7f * provinces), style = Stroke(0.5f))
-    val roads = if (detailLevel != MapDetail.High) 0f else ((cam.zoom - 2.4) / 1.6).coerceIn(0.0, 1.0).toFloat()
-    if (roads > 0) drawPath(g.roads, OutsideRoad.copy(alpha = 0.6f * roads), style = Stroke(0.8f))
-    // Lit, the climate paths already hold every country, so the plain land outline is never built.
-    if (lit) g.biomes.forEach { drawPath(it, OutsideBorder, style = Stroke(0.8f)) } else drawPath(g.land, OutsideBorder, style = Stroke(0.8f))
-    MapProfiler.mark("landstroke")
-    // Lit and flat, the world outside the scenario falls into shade so the scenario stands out.
-    if (lit && t > 0.5) drawRect(Color.Black.copy(alpha = (0.18 * t).toFloat()))
-    MapProfiler.mark("veil")
     val detail = if (detailLevel != MapDetail.High) 0f else ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
     val raised = graphics.extrude && t > 0.05
     val regionPaths = g.regionPaths
@@ -447,81 +460,113 @@ internal fun DrawScope.drawWorldMap(
     val up = p.lift(0.0, 0.0, plinth).y - p.lift(0.0, 0.0, 0.0).y
     val water = Color(0xFF16354F)
     val ground = if (raised) heights else FlatGround
-    if (raised) {
-        drawPath(g.lakes, water)
-        val solids = g.raised(heights)
-        // Shadows first, so no tile's shadow falls across a tile drawn before it.
-        if (lit) drawPath(g.shadows(heights), Color.Black.copy(alpha = 0.22f))
-        solids.forEach { solid ->
-            val intensity = (shading[solid.code] ?: 0.0).toFloat()
-            val top = if (intensity > 0) lerp(RegionLand, tint, (0.15f + 0.6f * intensity).coerceAtMost(1f)) else RegionLand
-            drawPath(solid.walls[0], top.shade(0.50f))
-            drawPath(solid.walls[1], top.shade(0.68f))
-            drawPath(solid.walls[2], top.shade(0.88f))
-            drawPath(solid.top, top)
-            // Tops catch the light from the upper left and fall off away from it.
-            if (lit) {
-                val b = solid.bounds
-                drawPath(solid.top, Brush.linearGradient(0f to Color.White.copy(alpha = 0.09f), 0.5f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.12f), start = b.topLeft, end = b.bottomRight))
+    // The ground: everything that lies flat, under the traffic and the buildings.
+    if (phase != MapPhase.Structures) {
+        if (space) {
+            drawRect(Color(0xFF05090E))
+            if (graphics.lighting == 2 && t < 1) SharedStars.draw(this, 0.0, 0f, false)
+        }
+        if (lit && t < 1) geometry.back.draw(this, listOf(g, light, graphics.lighting)) { drawAtmosphere(p, light, graphics) }
+        drawGlobeBack(p, light, graphics)
+        MapProfiler.mark("back")
+        if (t < 1) drawPath(g.graticule, Palette.primaryText.copy(alpha = (0.06 * (1 - t)).toFloat()), style = Stroke(0.6f))
+        // Outside the scenario the world is muted: climate-tinted land on the globe that greys as the
+        // map flattens, grey borders and roads. The scenario's regions are drawn over it in colour.
+        if (lit) {
+            // Shallow water: a lighter band of sea hugging every coast, under the land.
+            val shallows = (2 + cam.zoom * 0.35).coerceIn(2.0, 9.0).toFloat()
+            g.biomes.forEach { drawPath(it, Color(0xFF2F6F9A).copy(alpha = 0.30f), style = Stroke(shallows)) }
+            drawBiomes(g.biomes, (0.25 + 0.6 * t).toFloat())
+        } else drawPath(g.land, OutsideLand)
+        MapProfiler.mark("landfill")
+        val provinces = if (detailLevel == MapDetail.Low) 0f else ((cam.zoom - 1.4) / 1.2).coerceIn(0.0, 1.0).toFloat()
+        if (provinces > 0) drawPath(g.provinces, OutsideBorder.copy(alpha = 0.7f * provinces), style = Stroke(0.5f))
+        val roads = if (detailLevel != MapDetail.High) 0f else ((cam.zoom - 2.4) / 1.6).coerceIn(0.0, 1.0).toFloat()
+        if (roads > 0) drawPath(g.roads, OutsideRoad.copy(alpha = 0.6f * roads), style = Stroke(0.8f))
+        // Lit, the climate paths already hold every country, so the plain land outline is never built.
+        if (lit) g.biomes.forEach { drawPath(it, OutsideBorder, style = Stroke(0.8f)) } else drawPath(g.land, OutsideBorder, style = Stroke(0.8f))
+        MapProfiler.mark("landstroke")
+        // Lit and flat, the world outside the scenario falls into shade so the scenario stands out.
+        if (lit && t > 0.5) drawRect(Color.Black.copy(alpha = (0.18 * t).toFloat()))
+        MapProfiler.mark("veil")
+        if (raised) {
+            drawPath(g.lakes, water)
+            val solids = g.raised(heights)
+            // Shadows first, so no tile's shadow falls across a tile drawn before it.
+            if (lit) drawPath(g.shadows(heights), Color.Black.copy(alpha = 0.22f))
+            solids.forEach { solid ->
+                val intensity = (shading[solid.code] ?: 0.0).toFloat()
+                val top = if (intensity > 0) lerp(RegionLand, tint, (0.15f + 0.6f * intensity).coerceAtMost(1f)) else RegionLand
+                drawPath(solid.walls[0], top.shade(0.50f))
+                drawPath(solid.walls[1], top.shade(0.68f))
+                drawPath(solid.walls[2], top.shade(0.88f))
+                drawPath(solid.top, top)
+                // Tops catch the light from the upper left and fall off away from it.
+                if (lit) {
+                    val b = solid.bounds
+                    drawPath(solid.top, Brush.linearGradient(0f to Color.White.copy(alpha = 0.09f), 0.5f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.12f), start = b.topLeft, end = b.bottomRight))
+                }
+                if (solid.code == selected) drawPath(solid.top, Palette.gold.copy(alpha = 0.35f))
+                drawPath(solid.top, if (lit) Color(0xFF9FB4C8).copy(alpha = 0.55f) else Palette.stroke, style = Stroke(1f))
             }
-            if (solid.code == selected) drawPath(solid.top, Palette.gold.copy(alpha = 0.35f))
-            drawPath(solid.top, if (lit) Color(0xFF9FB4C8).copy(alpha = 0.55f) else Palette.stroke, style = Stroke(1f))
-        }
-        if (detail > 0) translate(top = up) { drawPath(g.counties, Palette.stroke.copy(alpha = 0.45f * detail), style = Stroke(0.5f)) }
-    } else {
-        regionPaths.forEach { (code, path) ->
-            drawPath(path, RegionLand)
-            val intensity = shading[code] ?: 0.0
-            if (intensity > 0) drawPath(path, tint.copy(alpha = (0.15 + 0.6 * intensity).toFloat()))
-        }
-        if (detail > 0) drawPath(g.counties, Palette.stroke.copy(alpha = 0.45f * detail), style = Stroke(0.5f))
-        drawPath(g.lakes, water)
-    }
-    MapProfiler.mark("regions")
-    translate(top = up) {
-        if (detail > 0) {
-            drawPath(g.rivers, water.copy(alpha = 0.9f * detail), style = Stroke(1.4f))
-            drawPath(g.interstates, Color(0xFFC68A3D).copy(alpha = 0.35f * detail), style = Stroke(1f))
-        }
-        if (!raised) {
+            if (detail > 0) translate(top = up) { drawPath(g.counties, Palette.stroke.copy(alpha = 0.45f * detail), style = Stroke(0.5f)) }
+        } else {
             regionPaths.forEach { (code, path) ->
-                if (code == selected) drawPath(path, Palette.gold.copy(alpha = 0.35f))
-                drawPath(path, Palette.stroke, style = Stroke(0.9f))
+                drawPath(path, RegionLand)
+                val intensity = shading[code] ?: 0.0
+                if (intensity > 0) drawPath(path, tint.copy(alpha = (0.15 + 0.6 * intensity).toFloat()))
+            }
+            if (detail > 0) drawPath(g.counties, Palette.stroke.copy(alpha = 0.45f * detail), style = Stroke(0.5f))
+            drawPath(g.lakes, water)
+        }
+        MapProfiler.mark("regions")
+        translate(top = up) {
+            if (detail > 0) {
+                drawPath(g.rivers, water.copy(alpha = 0.9f * detail), style = Stroke(1.4f))
+                drawPath(g.interstates, Color(0xFFC68A3D).copy(alpha = 0.35f * detail), style = Stroke(1f))
+            }
+            if (!raised) {
+                regionPaths.forEach { (code, path) ->
+                    if (code == selected) drawPath(path, Palette.gold.copy(alpha = 0.35f))
+                    drawPath(path, Palette.stroke, style = Stroke(0.9f))
+                }
+            }
+            g.playStates.forEach {
+                // A cool rim light along the scenario's states when lit.
+                if (lit && t > 0.5) drawPath(it, Color(0xFF8EC5FF).copy(alpha = 0.10f), style = Stroke(4f))
+                drawPath(it, Color(0xFFD2DEEA).copy(alpha = 0.85f), style = Stroke(if (cam.zoom > 3) 2f else 1f))
             }
         }
-        g.playStates.forEach {
-            // A cool rim light along the scenario's states when lit.
-            if (lit && t > 0.5) drawPath(it, Color(0xFF8EC5FF).copy(alpha = 0.10f), style = Stroke(4f))
-            drawPath(it, Color(0xFFD2DEEA).copy(alpha = 0.85f), style = Stroke(if (cam.zoom > 3) 2f else 1f))
-        }
-    }
-    // Night falls on the globe whenever it is lit, and on the flat map with day and night on.
-    // With the globe's shading, the haze and the vignette it is soft, so it all goes in one small
-    // light layer, clipped to the globe while there is one so its edge stays sharp.
-    if (lit) {
-        val night = t < 1 || sun != null
-        val drawLight = {
-            geometry.front.draw(this, listOf(g, light, graphics.lighting, night)) { full ->
-                if (night) drawNight(g.night(light))
-                drawGlobeFront(p, light, graphics)
-                if (t > 0.5) drawFlatLight(p, full)
+        // Night falls on the globe whenever it is lit, and on the flat map with day and night on.
+        // With the globe's shading, the haze and the vignette it is soft, so it all goes in one small
+        // light layer, clipped to the globe while there is one so its edge stays sharp.
+        if (lit) {
+            val night = t < 1 || sun != null
+            val drawLight = {
+                geometry.front.draw(this, listOf(g, light, graphics.lighting, night)) { full ->
+                    if (night) drawNight(g.night(light))
+                    drawGlobeFront(p, light, graphics)
+                    if (t > 0.5) drawFlatLight(p, full)
+                }
             }
+            if (t < 0.5) clipPath(Path().apply { addOval(Rect(Offset(p.cx.toFloat(), p.cy.toFloat()), p.r.toFloat())) }) { drawLight() } else drawLight()
         }
-        if (t < 0.5) clipPath(Path().apply { addOval(Rect(Offset(p.cx.toFloat(), p.cy.toFloat()), p.r.toFloat())) }) { drawLight() } else drawLight()
-    }
-    MapProfiler.mark("night")
-    MapProfiler.mark("front")
-    if (t < 1 && !lit) {
-        // The globe's rim, fading as it unrolls.
-        val center = Offset(p.cx.toFloat(), p.cy.toFloat())
-        drawCircle(water.copy(alpha = (0.9 * (1 - t)).toFloat()), radius = p.r.toFloat(), center = center, style = Stroke(1.5f))
-        drawCircle(water.copy(alpha = (0.3 * (1 - t)).toFloat()), radius = p.r.toFloat() + 4f, center = center, style = Stroke(6f))
-    }
-    translate(top = up) {
-        if (freightLayer && lanes.isNotEmpty()) drawLanes(map, p, lanes, selected, pickedLane)
-        else if (graphics.traffic > 0 && lanes.isNotEmpty() && t > 0.5) drawFaintLanes(map, p, lanes)
+        MapProfiler.mark("night")
+        MapProfiler.mark("front")
+        if (t < 1 && !lit) {
+            // The globe's rim, fading as it unrolls.
+            val center = Offset(p.cx.toFloat(), p.cy.toFloat())
+            drawCircle(water.copy(alpha = (0.9 * (1 - t)).toFloat()), radius = p.r.toFloat(), center = center, style = Stroke(1.5f))
+            drawCircle(water.copy(alpha = (0.3 * (1 - t)).toFloat()), radius = p.r.toFloat() + 4f, center = center, style = Stroke(6f))
+        }
+        translate(top = up) {
+            if (freightLayer && lanes.isNotEmpty()) drawLanes(map, p, lanes, selected, pickedLane)
+            else if (graphics.traffic > 0 && lanes.isNotEmpty() && t > 0.5) drawFaintLanes(map, p, lanes)
+        }
     }
     MapProfiler.mark("lanes")
+    // The structures: buildings, skylines and labels, drawn in their own layer over the traffic.
+    if (phase == MapPhase.Ground) return
     if (cam.zoom > 3) {
         val close = cam.zoom > 14
         val nightNow = sun != null
@@ -544,10 +589,16 @@ internal fun DrawScope.drawWorldMap(
             drawText(label, topLeft = Offset(at.x + 6f, anchorY - label.size.height / 2f))
         }
         if (graphics.buildings > 0 && t > 0.5) {
+            val voxelScale = Voxels.scale(g.scale, density)
             g.buildings(divisions, ground).forEach { b ->
-                val windows = if (nightNow && light.facing(b.lon, b.lat) < 0) 0.85f else if (graphics.lighting == 2) 0.30f else 0f
-                drawBox(p, b.gx, b.gy, b.half, b.floor, b.top, Sectors.color(b.sector), windows, Palette.gold.copy(alpha = 0.9f))
-                val topAt = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.top)
+                // Each division is a voxel building for its industry; a plain box if the sprite is missing.
+                val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
+                val spriteTop = with(Voxels) { drawBuilding(b.sector, b.plants, base, voxelScale) }
+                val topAt = if (spriteTop != null) Offset(base.x, spriteTop) else {
+                    val windows = if (nightNow && light.facing(b.lon, b.lat) < 0) 0.85f else if (graphics.lighting == 2) 0.30f else 0f
+                    drawBox(p, b.gx, b.gy, b.half, b.floor, b.top, Sectors.color(b.sector), windows, Palette.gold.copy(alpha = 0.9f))
+                    p.lift(b.gx.toDouble(), b.gy.toDouble(), b.top)
+                }
                 val label = measurer.measure("${b.plants}", TextStyle(color = Palette.ink, fontSize = 10.sp, fontWeight = FontWeight.Bold))
                 val badge = topAt - Offset(0f, 12f)
                 drawCircle(Palette.gold, radius = max(label.size.width, label.size.height) / 2f + 3f, center = badge)
@@ -581,6 +632,9 @@ internal fun DrawScope.drawWorldMap(
     }
     MapProfiler.mark("labels+vignette")
 }
+
+/** Which part of the still map to draw: the ground, the structures over the traffic, or both. */
+internal enum class MapPhase { Ground, Structures, All }
 
 /** Heights that put everything on the ground, for a map drawn without raised regions. */
 internal val FlatGround: Map<String, Double> = HashMap()
@@ -721,8 +775,8 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
                 val ground = p.ground(anchor.lon[0], anchor.lat[0])
                 if (!ground.isSpecified) return@mapNotNull null
                 val i = perRegion.merge(region, 1, Int::plus)!! - 1
-                val gx = ground.x + (i % 3 - 1) * 24f * scale
-                val gy = ground.y + (16f + (i / 3) * 24f) * scale
+                val gx = ground.x + (i % 3 - 1) * 34f * scale
+                val gy = ground.y + (18f + (i / 3) * 30f) * scale
                 val floor = regionLift(region, heights)
                 val h = (12 + 7 * sqrt(plants.toDouble())) * scale
                 Building(sector, plants, gx, gy, 7.5f * scale, floor, floor + h, anchor.lon[0], anchor.lat[0], "$region/$sector")
@@ -788,9 +842,9 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
     /** What the moving layer needs, rebuilt only when the camera or the data under it changes. */
     fun overlay(
         lanes: List<uniffi.cw_ffi.LaneDto>, divisions: List<MapDivisionDto>, selected: String?, heights: Map<String, Double>,
-        graphics: GraphicsConfig, freightLayer: Boolean,
+        graphics: GraphicsConfig, freightLayer: Boolean, density: Float = 1f,
     ): OverlayGeometry {
-        val key = listOf(lanes, divisions, selected, heights, graphics, freightLayer)
+        val key = listOf(lanes, divisions, selected, heights, graphics, freightLayer, density)
         val held = overlayValue
         if (held != null && overlayKey?.let { k -> k.size == key.size && k.indices.all { k[it] === key[it] || k[it] == key[it] } } == true) return held
         val raised = graphics.extrude && p.t > 0.05
@@ -799,7 +853,11 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
         val tracks = if (p.t > 0.5 && laneCount > 0) laneTracks(map, p, lanes, laneCount) else emptyList()
         val roadLines = if (graphics.traffic > 0 && detailLevel == MapDetail.High && cam.zoom > 9) buildPolylines(p, map.interstates, if (raised) plinth else 0.0, size) else emptyList()
         val spots = if (graphics.buildings > 0 && cam.zoom > 3 && p.t > 0.5) buildings(divisions, ground).map { b ->
-            BuildingSpot(p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor), p.lift(b.gx.toDouble(), b.gy.toDouble(), b.top), Sectors.color(b.sector), smokes(b.sector), (stableHash(b.key) % 1000) / 1000f)
+            val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
+            // The rooftop light and smoke sit on the sprite's top when there is one.
+            val frame = Voxels.frame(b.sector, Voxels.size(b.plants), Voxels.scale(scale, density))
+            val top = frame?.let { Offset(base.x, (base.y - it.ay + 4).toFloat()) } ?: p.lift(b.gx.toDouble(), b.gy.toDouble(), b.top)
+            BuildingSpot(base, top, Sectors.color(b.sector), smokes(b.sector), (stableHash(b.key) % 1000) / 1000f)
         } else emptyList()
         val top = selected?.let { code ->
             val region = map.regions.firstOrNull { it.code == code } ?: return@let null

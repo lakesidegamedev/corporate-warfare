@@ -530,7 +530,11 @@ internal class OverlayGeometry(
     val airports: List<Offset> = emptyList(),
 )
 
-internal class LaneTrack(val a: Offset, val b: Offset, val mode: String, val weight: Float, val length: Float, val seed: Float)
+internal class LaneTrack(val a: Offset, val b: Offset, val mode: String, val weight: Float, val length: Float, val seed: Float, val km: Float)
+
+/** Which moving things to draw: traffic (under the buildings), effects (over them), or both. */
+internal enum class OverlayPart { Traffic, Effects, All }
+/** A road on screen; [cum] is the distance along it on the ground, in degrees, so traffic keeps its pace whatever the camera does. */
 internal class Polyline(val xs: FloatArray, val ys: FloatArray, val cum: FloatArray) { val length get() = cum.last() }
 internal class BuildingSpot(val base: Offset, val top: Offset, val color: Color, val smoke: Boolean, val seed: Float)
 
@@ -542,16 +546,25 @@ internal fun buildPolylines(p: MapProjection, rings: List<GeoRing>, lift: Double
         val xs = FloatArray(ring.size); val ys = FloatArray(ring.size); val cum = FloatArray(ring.size)
         var n = 0
         var onScreen = false
+        var screen = 0f
+        var lastLon = 0.0
+        var lastLat = 0.0
         for (i in 0 until ring.size) {
             val pt = p.at(ring.lon[i], ring.lat[i], lift)
             if (!pt.isSpecified) continue
             if (n > 0 && abs(pt.x - xs[n - 1]) + abs(pt.y - ys[n - 1]) > jump) continue
             if (pt.x in -50f..viewSize.width + 50 && pt.y in -50f..viewSize.height + 50) onScreen = true
             xs[n] = pt.x; ys[n] = pt.y
-            cum[n] = if (n == 0) 0f else cum[n - 1] + sqrt((xs[n] - xs[n - 1]) * (xs[n] - xs[n - 1]) + (ys[n] - ys[n - 1]) * (ys[n] - ys[n - 1]))
+            if (n == 0) cum[n] = 0f else {
+                val dLon = (ring.lon[i] - lastLon) * cos(ring.lat[i])
+                val dLat = ring.lat[i] - lastLat
+                cum[n] = cum[n - 1] + (sqrt(dLon * dLon + dLat * dLat) * 180 / PI).toFloat()
+                screen += sqrt((xs[n] - xs[n - 1]) * (xs[n] - xs[n - 1]) + (ys[n] - ys[n - 1]) * (ys[n] - ys[n - 1]))
+            }
+            lastLon = ring.lon[i]; lastLat = ring.lat[i]
             n++
         }
-        if (n >= 2 && onScreen && cum[n - 1] > 20f) out += Polyline(xs.copyOf(n), ys.copyOf(n), cum.copyOf(n))
+        if (n >= 2 && onScreen && screen > 20f) out += Polyline(xs.copyOf(n), ys.copyOf(n), cum.copyOf(n))
     }
     return out
 }
@@ -574,23 +587,26 @@ private val ModeSpeed = mapOf("road" to 40f, "rail" to 55f, "sea" to 22f)
 /** Everything that moves on the map, for one frame. */
 internal fun DrawScope.drawMapOverlay(
     o: OverlayGeometry, g: GraphicsConfig, seconds: Double, freightLayer: Boolean, sun: Sun?, bounds: DoubleArray, zoom: Double,
-    rippleAge: Double, detailFade: Float, scenario: String? = null,
+    rippleAge: Double, detailFade: Float, scenario: String? = null, part: OverlayPart = OverlayPart.All, wallSeconds: Double = seconds,
 ) {
     val p = o.p
     val time = seconds.toFloat()
+    val traffic = part != OverlayPart.Effects
+    val effects = part != OverlayPart.Traffic
     // Freight along the lanes, both ways.
-    if (g.traffic > 0 || freightLayer) {
+    if (traffic && (g.traffic > 0 || freightLayer)) {
         val per = if (g.traffic >= 2) 9 else 4
         val boost = if (freightLayer) 2f else 1f
         var drawn = 0
         o.lanes.forEach { lane ->
             val count = 1 + (lane.weight * per).toInt()
             val color = ModeColors[lane.mode] ?: Color(0xFFE8E8E8)
+            // Kilometres a second of game time, so freight keeps its pace at any zoom.
             val speed = ModeSpeed[lane.mode] ?: 40f
             for (k in 0 until count) {
                 for (dir in 0..1) {
                     if (drawn >= 600) return@forEach
-                    var f = (time * speed / lane.length + lane.seed + k / count.toFloat() + dir * 0.37f) % 1f
+                    var f = (time * speed / lane.km + lane.seed + k / count.toFloat() + dir * 0.37f) % 1f
                     if (dir == 1) f = 1f - f
                     val gx = lane.a.x + (lane.b.x - lane.a.x) * f
                     val gy = lane.a.y + (lane.b.y - lane.a.y) * f
@@ -603,8 +619,12 @@ internal fun DrawScope.drawMapOverlay(
         }
     }
     // Cars on the highways once close.
-    if (g.traffic > 0 && g.detail == MapDetail.High && zoom > 9 && o.roads.isNotEmpty()) {
-        val spacing = if (g.traffic >= 2) 35f else 70f
+    if (traffic && g.traffic > 0 && g.detail == MapDetail.High && zoom > 9 && o.roads.isNotEmpty()) {
+        // Spacing and speed are on the ground, in degrees, so cars hold their pace and places
+        // while the camera moves; closer in they simply look further apart and faster.
+        val spacing = if (g.traffic >= 2) 0.035f else 0.07f
+        val pace = 0.012f
+        val pxPerDegree = (p.r * PI / 180).toFloat().coerceAtLeast(1e-3f)
         var cars = 0
         val fade = (detailFade * ((zoom - 9) / 3).coerceIn(0.0, 1.0).toFloat())
         val head = Color(0xFFFFF4D8).copy(alpha = 0.95f * fade)
@@ -614,10 +634,11 @@ internal fun DrawScope.drawMapOverlay(
             for (k in 0 until n) {
                 if (cars >= 400) break
                 val forward = k % 2 == 0
-                val base = (k * spacing + (if (forward) 1 else -1) * time * 18f) % road.length
+                val base = (k * spacing + (if (forward) 1 else -1) * time * pace) % road.length
                 val d = if (base < 0) base + road.length else base
                 val at = road.pointAt(d)
-                val ahead = road.pointAt((d + if (forward) 3f else -3f).coerceIn(0f, road.length))
+                val step = 3f / pxPerDegree
+                val ahead = road.pointAt((d + if (forward) step else -step).coerceIn(0f, road.length))
                 val dx = ahead.x - at.x; val dy = ahead.y - at.y
                 val len = sqrt(dx * dx + dy * dy).coerceAtLeast(1e-3f)
                 // Keep the two directions in their own lanes.
@@ -628,6 +649,7 @@ internal fun DrawScope.drawMapOverlay(
             }
         }
     }
+    if (!effects) return
     // Building beacons, smoke and the week's ripple.
     if (g.buildings > 0) {
         o.buildings.forEach { b ->
@@ -682,7 +704,7 @@ internal fun DrawScope.drawMapOverlay(
     }
     // The selected region breathes.
     o.selectedTop?.let { top ->
-        val pulse = 0.5f + 0.5f * sin(2 * PI.toFloat() * time / 1.6f)
+        val pulse = 0.5f + 0.5f * sin(2 * PI.toFloat() * wallSeconds.toFloat() / 1.6f)
         drawPath(top, Palette.gold.copy(alpha = 0.18f), style = Stroke(8f))
         drawPath(top, Palette.gold.copy(alpha = 0.95f), style = Stroke(2f + 1.5f * pulse))
     }
@@ -696,7 +718,7 @@ internal fun laneTracks(map: WorldMap, p: MapProjection, lanes: List<LaneDto>, c
         val a = map.anchor(lane.a)?.let { p.ground(it.lon[0], it.lat[0]) }?.takeIf { it.isSpecified } ?: return@mapNotNull null
         val b = map.anchor(lane.b)?.let { p.ground(it.lon[0], it.lat[0]) }?.takeIf { it.isSpecified } ?: return@mapNotNull null
         val length = (b - a).getDistance().coerceAtLeast(8f)
-        LaneTrack(a, b, lane.modeId, (lane.capacityLots + lane.outsideLots).toFloat() / top, length, (stableHash(lane.a + lane.b) % 1000) / 1000f)
+        LaneTrack(a, b, lane.modeId, (lane.capacityLots + lane.outsideLots).toFloat() / top, length, (stableHash(lane.a + lane.b) % 1000) / 1000f, lane.km.toFloat().coerceAtLeast(20f))
     }
 }
 
