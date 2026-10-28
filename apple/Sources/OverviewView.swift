@@ -395,58 +395,112 @@ struct GraphicsSettingsPanel: View {
 }
 
 /// Why the clock is stopped and the one button that resumes it: Answer opens the exact card,
-/// every other pause has Continue. Shown beside the time controls on every screen.
+/// every other pause has Continue, which carries on at the speed the game was running at. Shown
+/// beside the time controls on every screen.
+///
+/// Kept steady on a phone: the banner slides in and out once per pause instead of jumping, its
+/// height does not change as the detail text changes, the button keeps one size, a second tap
+/// does nothing, and the decision card is presented from a view that outlives the banner, so
+/// answering the card cannot tear its own sheet down halfway.
 struct PauseBanner: View {
     @EnvironmentObject private var store: AppStore
-    @State private var showingCard = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var answering: UInt64?
+    @State private var resolvingWeek: UInt32?
 
-    private var event: EventDto? {
-        guard let id = store.overview?.pauseInfo?.eventId else { return nil }
+    private func event(_ id: UInt64?) -> EventDto? {
+        guard let id else { return nil }
         return store.events.first { $0.id == id }
     }
 
     var body: some View {
-        if let info = store.overview?.pauseInfo {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 10) {
-                    PixelIcon("pause")
-                    Text(info.title).font(.callout.weight(.semibold))
-                    Spacer(minLength: 6)
-                    if info.action == "answer", event != nil {
-                        Button(info.actionLabel) { showingCard = true }
-                            .buttonStyle(PixelButtonStyle(prominent: true))
-                            .tint(Theme.gold)
-                            .foregroundStyle(Theme.ink)
-                            .disabled(store.isBusy)
-                    } else {
-                        Button("Continue") { Task { await store.continueCareer() } }
-                            .buttonStyle(PixelButtonStyle(prominent: true))
-                            .tint(Theme.gold)
-                            .foregroundStyle(Theme.ink)
-                            .disabled(store.isBusy)
-                    }
-                }
-                Text(info.detail)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.9))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(12)
-            .foregroundStyle(.white)
-            .background(info.kind == "decision" ? Theme.warning : Theme.panelRaised)
-            .clipShape(Pixel.shape)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .sheet(isPresented: Binding(get: { showingCard && event != nil }, set: { showingCard = $0 })) {
-                if let event {
-                    ScrollView {
-                        DecisionCard(event: event).padding(16)
-                    }
-                    .background(Theme.ink)
-                    .presentationDetents([.medium, .large])
-                }
+        VStack(spacing: 0) {
+            if let info = store.overview?.pauseInfo {
+                banner(info)
+                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
             }
         }
+        .frame(maxWidth: .infinity)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: store.overview?.pauseInfo?.reason)
+        .clipped()
+        .sheet(isPresented: Binding(get: { answering != nil }, set: { if !$0 { answering = nil } })) {
+            if let event = event(answering) {
+                ScrollView {
+                    DecisionCard(event: event).padding(16)
+                }
+                .background(Theme.ink)
+                .presentationDetents([.medium, .large])
+            } else {
+                // The card was answered: say so instead of flashing an empty sheet.
+                VStack(spacing: 12) {
+                    Text("Answered").font(.headline).foregroundStyle(Theme.primaryText)
+                    Button("Done") { answering = nil }
+                        .buttonStyle(PixelButtonStyle(prominent: true))
+                        .tint(Theme.gold)
+                        .foregroundStyle(Theme.ink)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.ink)
+                .presentationDetents([.medium])
+            }
+        }
+        .onChange(of: store.overview?.pauseInfo?.eventId) { _, id in
+            // The card the sheet shows was answered and the clock moved on: close it.
+            if answering != nil && answering != id && event(answering) == nil { answering = nil }
+        }
+    }
+
+    private func banner(_ info: PauseInfoDto) -> some View {
+        let resolving = resolvingWeek != nil && resolvingWeek == store.overview?.tick
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                PixelIcon("pause")
+                Text(info.title).font(.callout.weight(.semibold)).lineLimit(1)
+                Spacer(minLength: 6)
+                if info.action == "answer", event(info.eventId) != nil {
+                    Button {
+                        // One presentation at a time: a division sheet gives way to the card.
+                        store.openDivision = nil
+                        answering = info.eventId
+                    } label: {
+                        Text(info.actionLabel).lineLimit(1).frame(minWidth: 84)
+                    }
+                    .buttonStyle(PixelButtonStyle(prominent: true))
+                    .tint(Theme.gold)
+                    .foregroundStyle(Theme.ink)
+                    .fixedSize()
+                } else {
+                    Button {
+                        guard !resolving else { return }
+                        resolvingWeek = store.overview?.tick
+                        Task {
+                            await store.continueCareer()
+                            resolvingWeek = nil
+                        }
+                    } label: {
+                        Text("Continue").lineLimit(1).frame(minWidth: 84)
+                    }
+                    .buttonStyle(PixelButtonStyle(prominent: true))
+                    .tint(Theme.gold)
+                    .foregroundStyle(Theme.ink)
+                    .fixedSize()
+                    .opacity(resolving ? 0.6 : 1)
+                    .accessibilityHint("Carries on at the speed the game was running at")
+                }
+            }
+            Text(info.detail)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.9))
+                .lineLimit(2, reservesSpace: true)
+        }
+        .padding(12)
+        .foregroundStyle(.white)
+        .background(info.kind == "decision" ? Theme.warning : Theme.panelRaised)
+        .clipShape(Pixel.shape)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("pause-banner")
     }
 }
 
