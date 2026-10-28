@@ -207,6 +207,26 @@ final class MapGeometry {
         return raisedHeld
     }
 
+    private var tileRoadsKey: [String: Double]?
+    private var tileRoadsHeld: [String: Path] = [:]
+
+    /// The interstates on each raised tile, projected at that tile's own height so they lie on its
+    /// top whatever the camera does. A single screen offset for every tile would leave them hanging
+    /// between the tiles' tops, and sliding as the perspective changes across the screen.
+    func tileRoads(_ heights: [String: Double]) -> [String: Path] {
+        if tileRoadsKey == heights { return tileRoadsHeld }
+        let index = map.regionIndex
+        var out: [String: Path] = [:]
+        for (i, region) in map.regions.enumerated() where i < index.regionInterstates.count {
+            let lines = index.regionInterstates[i].map { map.interstates[$0] }
+            if lines.isEmpty { continue }
+            out[region.code] = projection.lines(lines, height: height(heights[region.code] ?? 0))
+        }
+        tileRoadsHeld = out
+        tileRoadsKey = heights
+        return out
+    }
+
     private var shadowKey: [String: Double]?
     private var shadowHeld = Path()
 
@@ -932,7 +952,18 @@ struct MapScene {
 
         let water = Theme.water
         let even = FillStyle(eoFill: true)
+        let highways = look.detail == 0 || !look.interstates || t <= 0.5 ? 0 : smoothstep(0.85, 1.2, g.zoomRatio)
+        let roadWidth = 1.6 + 1.2 * min(g.scale, 2.5)
+        func strokeRoads(_ path: Path, in layer: inout GraphicsContext) {
+            layer.stroke(path, with: .color(RGB(hex: 0x1C2228).color(0.9 * highways)),
+                         style: StrokeStyle(lineWidth: roadWidth + 2, lineCap: .square))
+            layer.stroke(path, with: .color(RGB(hex: 0x6E757D).color(highways)), style: StrokeStyle(lineWidth: roadWidth, lineCap: .square))
+            if g.closeUp {
+                layer.stroke(path, with: .color(Theme.gold.opacity(0.85 * highways)), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+            }
+        }
         if raised {
+            let tileRoads = highways > 0 ? g.tileRoads(heights) : [:]
             context.fill(g.lakes, with: .color(water), style: even)
             let solids = g.raised(heights)
             // Shadows first, so no tile's shadow falls across a tile drawn before it.
@@ -955,6 +986,12 @@ struct MapScene {
                 }
                 if solid.code == selected { context.fill(solid.top, with: .color(Theme.gold.opacity(0.35)), style: even) }
                 context.stroke(solid.top, with: .color(lit ? RGB(hex: 0x9FB4C8).color(0.55) : Theme.stroke), lineWidth: 1)
+                // The tile's own interstates on its top, before any nearer tile is drawn over them.
+                if let roads = tileRoads[solid.code] {
+                    var onTile = context
+                    onTile.clip(to: solid.top, style: even)
+                    strokeRoads(roads, in: &onTile)
+                }
             }
             if detail > 0 {
                 var onTop = context
@@ -987,18 +1024,10 @@ struct MapScene {
             lifted.stroke(state, with: .color(RGB(hex: 0xD2DEEA).color(0.85)), lineWidth: zoom > 3 ? 2 : 1)
         }
         // Interstates over the regions and their shading, under the traffic and the buildings: an
-        // 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line.
-        let highways = look.detail == 0 ? 0 : smoothstep(0.85, 1.2, g.zoomRatio)
-        if look.interstates && highways > 0 && t > 0.5 {
-            let wide = 1.6 + 1.2 * min(g.scale, 2.5)
-            lifted.stroke(g.interstates, with: .color(RGB(hex: 0x1C2228).color(0.9 * highways)),
-                          style: StrokeStyle(lineWidth: wide + 2, lineCap: .square))
-            lifted.stroke(g.interstates, with: .color(RGB(hex: 0x6E757D).color(highways)),
-                          style: StrokeStyle(lineWidth: wide, lineCap: .square))
-            if g.closeUp {
-                lifted.stroke(g.interstates, with: .color(Theme.gold.opacity(0.85 * highways)),
-                              style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-            }
+        // 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line. On
+        // raised tiles each tile lays its own above; flat, they are projected on the ground itself.
+        if highways > 0 && !raised {
+            strokeRoads(g.interstates, in: &context)
         }
         // Night falls on the globe whenever it is lit, and on the flat map with day and night on.
         // With the globe's shading, the haze and the vignette it is soft, so it all goes in one

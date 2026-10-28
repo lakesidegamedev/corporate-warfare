@@ -730,6 +730,8 @@ final class RegionIndex {
     private let regions: [WorldMap.RegionFeature]
     /// The region index each city sits in, or -1 outside the scenario.
     let cityRegion: [Int]
+    /// For each region, the interstates whose bounds overlap it, so a raised tile lays only its own.
+    let regionInterstates: [[Int]]
 
     init(map: WorldMap) {
         regions = map.regions
@@ -743,6 +745,17 @@ final class RegionIndex {
             return b
         }
         boxes = regionBoxes
+        let lineBoxes = map.interstates.map { ring -> (west: Double, south: Double, east: Double, north: Double) in
+            var b = (west: Double.infinity, south: Double.infinity, east: -Double.infinity, north: -Double.infinity)
+            for p in ring.points { b = (min(b.west, p.lon), min(b.south, p.lat), max(b.east, p.lon), max(b.north, p.lat)) }
+            return b
+        }
+        regionInterstates = regionBoxes.map { r in
+            lineBoxes.indices.filter { i in
+                let l = lineBoxes[i]
+                return l.west <= r.east && l.east >= r.west && l.south <= r.north && l.north >= r.south
+            }
+        }
         cityRegion = map.cities.map {
             RegionIndex.find(GeoPoint(e4: $0.x, $0.y), boxes: regionBoxes, regions: map.regions)
         }
