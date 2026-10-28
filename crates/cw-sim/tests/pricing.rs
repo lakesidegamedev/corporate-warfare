@@ -53,6 +53,50 @@ fn food_firm(seed: u64, price: i64, stock: i64) -> (World, Dataset, Handle, u16)
     (world, dataset, firm, food)
 }
 
+/// Top every plant that buys `product` up to its input cover target, so no buyer is short.
+fn fill_buyers(world: &mut World, dataset: &Dataset, product: u16) {
+    let id = dataset.products[product as usize].id.clone();
+    let plants: Vec<(Handle, u8, i64)> = world
+        .facilities
+        .iter()
+        .filter_map(|(_, plant)| {
+            let weekly = dataset.recipes[plant.recipe as usize]
+                .weekly_inputs_lots
+                .get(&id)
+                .copied()?;
+            Some((plant.firm, plant.region, weekly * plant.blocks as i64 * 52))
+        })
+        .collect();
+    for (firm, region, lots) in plants {
+        if let Some(entity) = world.firms.get_mut(firm) {
+            entity.stock_lot_mut(product, region).receive(
+                cw_core::quantity::MilliLots::from_lots(lots),
+                cw_core::money::Cents(0),
+            );
+        }
+    }
+}
+
+/// Empty every firm's stock of `product` except the seller's, so every buyer is short, and set
+/// every firm to keep the default four weeks of input cover (two for a perishable).
+fn empty_buyers(world: &mut World, product: u16, seller: Handle) {
+    let firms: Vec<Handle> = world.firms.iter().map(|(h, _)| h).collect();
+    for handle in firms {
+        if let Some(entity) = world.firms.get_mut(handle) {
+            entity.policies.input_cover_weeks = 4;
+            if handle != seller {
+                entity.inventory.retain(|(p, _), _| *p != product);
+            }
+        }
+    }
+    let plants: Vec<Handle> = world.facilities.iter().map(|(h, _)| h).collect();
+    for handle in plants {
+        if let Some(plant) = world.facilities.get_mut(handle) {
+            plant.stock_plan.weeks = 0;
+        }
+    }
+}
+
 #[test]
 fn stock_cover_moves_the_price_a_sixth_of_the_way_and_never_past_two_percent() {
     // Sales are 100 lots a week. Food is perishable, so a week of cover is wanted; each week of
@@ -66,18 +110,23 @@ fn stock_cover_moves_the_price_a_sixth_of_the_way_and_never_past_two_percent() {
     // Two weeks of stock: wants 9,400; a sixth of 600 is 100.
     let (world, dataset, firm, food) = food_firm(55, 10_000, 200);
     assert_eq!(pricing::target_price(&world, &dataset, firm, food), 9_900);
-    // Exactly a week of stock is the price wanted: it holds. There is no dead band either side of
-    // it, so a few lots over or under move the price.
+    // Exactly a week of stock is the price wanted: it holds. A few lots over cut the price.
     let (world, dataset, firm, food) = food_firm(55, 10_000, 100);
     assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_000);
-    let (world, dataset, firm, food) = food_firm(55, 10_000, 90);
-    let below = pricing::target_price(&world, &dataset, firm, food);
-    assert!(below > 10_000, "{below}");
     let (world, dataset, firm, food) = food_firm(55, 10_000, 110);
     let above = pricing::target_price(&world, &dataset, firm, food);
     assert!(above < 10_000, "{above}");
-    // Half a week of stock wants 10,300, a sixth of the gap is 50 (kept under the import price).
-    let (world, dataset, firm, food) = food_firm(55, 10_000, 50);
+    // Plants buy food. Since 1.8 preview 3 a thin shelf alone no longer lifts the price of a good
+    // that plants buy: only buyers left short of their input cover do (see
+    // `short_buyers_lift_the_price_and_full_buyers_do_not` below). Under a week of stock with
+    // every buyer at its cover holds at reference. Before, this case rose, which pinned prices
+    // at the top of the band while stock sat in buyers' yards.
+    let (mut world, dataset, firm, food) = food_firm(55, 10_000, 90);
+    fill_buyers(&mut world, &dataset, food);
+    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_000);
+    // Half a week of stock with buyers short lifts the price; the step is a sixth of the gap,
+    // kept under the import price.
+    let (world, _, _, food) = food_firm(55, 10_000, 50);
     let ceiling = world
         .gateways
         .iter()
@@ -85,9 +134,15 @@ fn stock_cover_moves_the_price_a_sixth_of_the_way_and_never_past_two_percent() {
         .map(|g| g.sell_price_cents * 95 / 100)
         .min()
         .unwrap_or(i64::MAX);
+    // Every buyer holds no food: perishable input cover is two weeks, so buyers lack two weeks of
+    // their use and the price wants 12 percent over reference, 11,200, kept under 95 percent of
+    // the import; the price closes a sixth of that gap, at most 200.
+    let (mut world, dataset, firm, food) = food_firm(55, 10_000, 50);
+    empty_buyers(&mut world, food, firm);
+    let wanted = 11_200.min(ceiling);
     assert_eq!(
         pricing::target_price(&world, &dataset, firm, food),
-        10_050.min(ceiling)
+        10_000 + ((wanted - 10_000) / 6).min(200)
     );
     // Stock that does not sell is a glut: the price wants 30 percent under and falls two percent.
     let (mut world, dataset, firm, food) = food_firm(55, 10_000, 100);
@@ -398,4 +453,133 @@ fn a_cost_plus_posture_marks_up_the_cost_of_a_lot() {
         world.firms.get(firm).unwrap().policies.prices[&food],
         expected
     );
+}
+
+#[test]
+fn short_buyers_lift_the_price_and_full_buyers_do_not() {
+    // Cover and targets in hundredths of a week; six percent of reference per week of gap.
+    // Plants buy the good and all are full: a seller with an empty shelf asks reference.
+    assert_eq!(pricing::goods_wanted_bps(0, 200, 0, 1_000), 10_000);
+    // Buyers short 500 lots of the 1,000 they use a week: half a week short is 3 percent over.
+    assert_eq!(pricing::goods_wanted_bps(0, 200, 500, 1_000), 10_300);
+    // Buyers short two weeks: 12 percent over.
+    assert_eq!(pricing::goods_wanted_bps(0, 200, 2_000, 1_000), 11_200);
+    // Six weeks of unsold stock against a two-week target is four weeks over: 24 percent under.
+    assert_eq!(pricing::goods_wanted_bps(600, 200, 0, 1_000), 7_600);
+    // Shortage and glut together net out: a week short and a week over is reference.
+    assert_eq!(pricing::goods_wanted_bps(300, 200, 1_000, 1_000), 10_000);
+    // Stock under target with full buyers is no signal either way.
+    assert_eq!(pricing::goods_wanted_bps(150, 200, 0, 1_000), 10_000);
+    // The gap is held to five weeks: never more than 30 percent either side.
+    assert_eq!(pricing::goods_wanted_bps(0, 200, 99_000, 1_000), 13_000);
+    assert_eq!(pricing::goods_wanted_bps(5_000, 200, 0, 1_000), 7_000);
+    // No plant buys the good (households only): the seller's own cover reads both ways, as in
+    // 1.7: half a week under a one-week target is 3 percent over, two weeks over is 12 under.
+    assert_eq!(pricing::goods_wanted_bps(50, 100, 0, 0), 10_300);
+    assert_eq!(pricing::goods_wanted_bps(300, 100, 0, 0), 8_800);
+}
+
+#[test]
+fn a_glut_price_falls_at_a_bounded_weekly_rate_and_settles_without_overshoot() {
+    // Food, perishable: a one-week target. Every buyer is full, and the seller holds four weeks of
+    // sales. Three weeks over wants 10,000 - 3 * 600 = 8,200. Each week closes a sixth of the gap
+    // and never more than two percent of the current price.
+    let (mut world, dataset, firm, food) = food_firm(61, 10_000, 400);
+    fill_buyers(&mut world, &dataset, food);
+    let mut price = 10_000i64;
+    let mut weeks_to_settle = 0;
+    for week in 1..=60 {
+        let next = pricing::target_price(&world, &dataset, firm, food);
+        // Independent oracle for the step: a sixth of the gap, capped at 2 percent.
+        let expected = price - ((price - 8_200) / 6).clamp(1, price * 200 / 10_000);
+        let expected = if price == 8_200 {
+            8_200
+        } else {
+            expected.max(8_200)
+        };
+        assert_eq!(next, expected, "week {week} from {price}");
+        if next == 8_200 && weeks_to_settle == 0 {
+            weeks_to_settle = week;
+        }
+        price = next;
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .policies
+            .prices
+            .insert(food, next);
+    }
+    assert_eq!(price, 8_200);
+    assert!(
+        weeks_to_settle > 5,
+        "a two percent cap spreads the fall: {weeks_to_settle}"
+    );
+}
+
+#[test]
+fn services_price_on_spare_capacity() {
+    // 85 percent of installed capacity sold is reference; each point is six hundredths of a
+    // percent of reference, bounded at 20 percent under and 15 percent over.
+    assert_eq!(pricing::service_wanted_bps(8_500), 10_000);
+    assert_eq!(pricing::service_wanted_bps(10_000), 10_900);
+    assert_eq!(pricing::service_wanted_bps(6_000), 10_000 - 2_500 * 6 / 10);
+    assert_eq!(pricing::service_wanted_bps(6_000), 8_500);
+    assert_eq!(pricing::service_wanted_bps(4_000), 8_000);
+    assert_eq!(pricing::service_wanted_bps(0), 8_000);
+    // Out of range readings are clamped, not extrapolated.
+    assert_eq!(pricing::service_wanted_bps(20_000), 10_900);
+}
+
+#[test]
+fn import_dependence_reads_imports_against_home_output() {
+    // 372 lots imported against 52 made is 7.15 times home output.
+    assert_eq!(pricing::dependence_bps(372, 52), 71_538);
+    assert!(pricing::dependence_bps(372, 52) >= pricing::IMPORT_DEPENDENT_BPS);
+    // Imports a quarter over home output are the threshold; just under is not dependent.
+    assert_eq!(
+        pricing::dependence_bps(125, 100),
+        pricing::IMPORT_DEPENDENT_BPS
+    );
+    assert!(pricing::dependence_bps(124, 100) < pricing::IMPORT_DEPENDENT_BPS);
+    // Nothing made at home is the cap.
+    assert_eq!(pricing::dependence_bps(10, 0), 1_000_000);
+}
+
+#[test]
+fn an_import_dependent_good_prices_just_under_the_import() {
+    // Food with every gateway importing 1,000 lots a week and no farm making any: the seller
+    // asks just under the import whatever its own shelf says. Five weeks of stock would want a
+    // cut to 7,600, yet the price climbs toward 95 percent of the cheapest import.
+    let (mut world, dataset, firm, food) = food_firm(64, 10_000, 500);
+    fill_buyers(&mut world, &dataset, food);
+    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
+        gateway.smoothed_import_lots = 1_000;
+    }
+    for (_, plant) in world.facilities.iter_mut() {
+        plant.last_output = cw_core::quantity::MilliLots::ZERO;
+    }
+    let import = world
+        .gateways
+        .iter()
+        .filter(|g| g.product == food && g.sell_price_cents > 0)
+        .map(|g| g.sell_price_cents)
+        .min()
+        .unwrap();
+    let ceiling = import * 95 / 100;
+    assert!(
+        ceiling > 10_000,
+        "the import sits over reference here: {ceiling}"
+    );
+    // First step: a sixth of the gap to the ceiling, at most two percent.
+    let expected = 10_000 + ((ceiling - 10_000) / 6).min(200);
+    assert_eq!(
+        pricing::target_price(&world, &dataset, firm, food),
+        expected
+    );
+    // Without the imports the same shelf cuts the price.
+    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
+        gateway.smoothed_import_lots = 0;
+    }
+    assert!(pricing::target_price(&world, &dataset, firm, food) < 10_000);
 }

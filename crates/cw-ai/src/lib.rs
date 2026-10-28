@@ -1780,6 +1780,15 @@ fn best_expansion(
                 * 156
                 - cost
                 - financing;
+            // A good the corridor imports a quarter or more over what it makes is a market to
+            // win back: home sellers already ask near the import, so a plant that replaces imports
+            // is worth a quarter more than the same plant in a market the corridor supplies.
+            if npv > 0
+                && cw_sim::economy::pricing::import_dependence_bps(world, dataset, output)
+                    .is_some_and(|bps| bps >= cw_sim::economy::pricing::IMPORT_DEPENDENT_BPS)
+            {
+                npv += npv / 4;
+            }
             // Aggressive rivals prefer to fight for a market someone already holds, and the
             // player's markets most of all: invading makes the cell contested and raidable.
             if npv > 0 && fighter {

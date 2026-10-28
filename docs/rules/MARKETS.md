@@ -160,27 +160,38 @@ freight over the lane. Pairings fill cheapest delivered first; buyers tied on on
 price share it in proportion to what each still wants and can pay for; imports are the last
 resort at equal price. The seller receives its asking price and the buyer pays the freight.
 
-Prices and production follow sell-through, for every firm, every week (1.7.1). A firm reads the
-weeks of cover it holds of a good (free stock over its average weekly sales, over the weeks it has
-on the books up to 13) against the cover it wants, two weeks (one for a perishable), and works out
-the price it would ask: 6 percent of reference for every week of difference, so a good with five
-weeks too much stock wants a price 18 to 30 percent lower, and one with a week too little wants 6
-percent more. The price then moves a sixth of the way there, at most 2 percent in a week, within
+Prices and production follow sell-through, for every firm, every week (1.7.1, revised in 1.8
+preview 3). A firm reads the weeks of cover it holds of a good (free stock over its average weekly
+sales, over the weeks it has on the books up to 13) against the cover it wants, two weeks (one for
+a perishable). Where plants buy the good, the stock that matters is the whole corridor's: buyers
+keep weeks of input cover in their own yards and top it up every week, so a seller's shelf is
+nearly empty after trade even when every buyer is full. So only buyers left short lift the price,
+6 percent of reference for every week of their weekly use they lack after this week's trade
+(each firm and state counted once against the sum of its plants' cover targets), and only unsold
+stock beyond the seller's target cuts it, 6 percent for every week over. A seller that sells what
+it makes to full buyers asks reference. A good no plant buys reads the seller's own cover against
+its target both ways: a week too little wants 6 percent more. The gap is held to five weeks either
+way (30 percent). The price then moves a sixth of the way there, at most 2 percent in a week, within
 half to twice reference and never above 95 percent of the cheapest import, so local goods beat
-imports once normal freight is added. Nothing sold with stock on the shelf wants 30 percent under;
-nothing sold and nothing held gives no signal and the price eases a 26th of the way back to
-reference a week. There is no dead band and no fixed step, so a price moves continuously with
-supply and demand and settles instead of swinging. A service has no stock: it reads how much of
-what its plants are set to make sold, asks reference when it has slack and up to 15 percent over
-reference (no import quote) when sold out, and is never discounted. Stock a firm keeps as input
-cover for its own plants does not count as unsold. Rivals price this way in the weekly tick, not
-through their slower strategic review.
+imports once normal freight is added. Where the corridor's gateways import at least a quarter more
+than its plants made (smoothed imports at least 125 percent of last week's home output), the seller
+wants that 95 percent import ceiling whatever its own shelf says: buyers pay the import price for
+the rest anyway. Nothing sold with stock on the shelf wants 30 percent under; nothing sold and
+nothing held gives no signal and the price eases a 26th of the way back to reference a week. There
+is no dead band and no fixed step, so a price moves continuously with supply and demand and settles
+instead of swinging. A service cannot be stored, so spare capacity is its unsold stock: it reads
+the share of its installed capacity (operating plants at full run) that sold, asks reference at 85
+percent, 0.6 percent of reference more or less for every point above or below, up to 15 percent
+over reference (no import quote) and down to 20 percent under. Unsold service output expires each
+week. Stock a firm keeps as input cover for its own plants does not count as unsold. Rivals price
+this way in the weekly tick, not through their slower strategic review.
 
 Production is planned plant by plant: each plant's target moves 15 points a week toward what its
 good sold, floor 30 percent, so one product's glut never idles a firm's other plants. A goods
 plant with more than four weeks of unsold stock cuts, one under a week and a half raises; a
 service plant moves toward what the firm sold of it plus a tenth, between 10 percent and full, so
-it neither wastes a third of its output nor stays throttled below demand; a plant whose good has not sold yet
+it neither wastes a third of its output nor stays throttled below demand; a carrier cuts when its
+lanes ran under 60 percent full and raises from 90 percent; a plant whose good has not sold yet
 holds. A plant run down to its floor keeps at least one worker of every tier its recipe uses.
 Rivals always plan this way; the player's companies do too until the player sets a price or target
 by hand, and either can be handed back to automatic. Contract deliveries, power dispatched to the

@@ -13,6 +13,18 @@ heading.
 
 ### Changed
 
+- Markets respond to real supply and demand. A good stops creeping above its normal price just
+  because sellers sold out: prices now rise only when the factories that buy it are actually short,
+  and fall when unsold stock piles up beyond a few weeks of sales, by at most 2 percent a week.
+  Most industrial goods now trade close to their normal price instead of 8 to 12 percent over it.
+- Services such as care, telecom, software and advertising price on spare capacity: a provider
+  with idle capacity cuts its price (up to 20 percent) to win work from rivals, and one that is
+  sold out charges up to 9 percent more.
+- Goods the corridor mostly imports, such as fuel and petrochemical feedstock, now sell at home for
+  just under the import price, and rival companies are more willing to build plants that replace
+  those imports. Building one yourself is now a clearer opportunity.
+- Freight carriers trim their running rate sooner when their lanes run under 60 percent full, so
+  less carrying capacity goes to waste.
 - Buildings, city blocks, the countryside and every vehicle are true 3D voxel models, drawn from the
   camera's angle each frame: turn the map and you see their sides, vehicles turn as they follow the
   road, and the sun lights a fixed side of each building as you go round it.
