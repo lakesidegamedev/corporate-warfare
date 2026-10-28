@@ -1038,10 +1038,12 @@ struct WorldMapView: View {
                     }
                     .drawingGroup()
                 }
-                // Clouds and their shadows, over the still map and under what moves on it.
+                // Clouds and their shadows, over the still map and under what moves on it. They drift
+                // a fraction of a degree a second, so their layer is redrawn eight times a second
+                // rather than every frame; the camera still moves them at once.
                 if look.clouds > 0 {
-                    TimelineView(.animation(minimumInterval: interval, paused: !running)) { timeline in
-                        let now = MapClock.seconds(timeline.date)
+                    TimelineView(.animation(minimumInterval: 1.0 / 8, paused: !running)) { timeline in
+                        let now = floor(MapClock.seconds(timeline.date) * 8) / 8
                         let g = geometry.of(map: map, camera: current, size: size, tilt: look.tilt, detail: look.detail)
                         CloudLayer(sky: CloudSky(
                             camera: current, size: size, tilt: look.tilt,

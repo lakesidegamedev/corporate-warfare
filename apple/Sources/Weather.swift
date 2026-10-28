@@ -11,6 +11,8 @@ import SwiftUI
 // with the map, and its shadow falls on the ground below. SwiftUI's canvas has no textured mesh,
 // so the clouds are their own Metal layer between the still map and the moving overlay. The
 // mesh is rebuilt only when the camera or the sun moves; each frame only slides the texture.
+// Clouds drift a fraction of a degree a second, so the map redraws them about eight times a
+// second, and mesh cells over clear sky are left out using a max-pooled mask of each texture.
 
 /// The prevailing wind in degrees of longitude a second: west in the tropics and near the poles,
 /// east in between.
@@ -202,13 +204,15 @@ final class CloudPainter: NSObject, MTKViewDelegate {
         base.height = Float(sky.size.height)
         base.ox = Float(sky.origin.x)
         base.oy = Float(sky.origin.y)
-        let passes = sky.shadows && sky.altitude > 0 ? [true, false] : [false]
+        // Shadows double the cost, so only heavy clouds cast them.
+        let passes = sky.shadows && sky.amount >= 2 && sky.altitude > 0 ? [true, false] : [false]
         let shift = CGSize(width: sky.altitude * 0.5, height: sky.altitude * 0.32)
         // Clouds clear as you zoom in, so a close look at the map is never through haze.
         let near = 1 - smoothstep(9, 22, sky.zoom)
         // Close up, the scenario's own full-resolution texture; it fades in as the map flattens.
         var closeUp = 0.0
-        if let id = sky.scenario, let r = CloudRegion.all[id], let texture = renderer.texture("clouds-\(id)") {
+        if let id = sky.scenario, let r = CloudRegion.all[id], let texture = renderer.texture("clouds-\(id)"),
+           let mask = renderer.mask("clouds-\(id)") {
             closeUp = smoothstep(0.4, 0.8, p.t)
             if closeUp > 0 {
                 // One texture slid east or west with the wind at the scenario's latitude. Its
@@ -231,11 +235,11 @@ final class CloudPainter: NSObject, MTKViewDelegate {
                                 fade: { lon, lat in smoothstep(0, 5, min(lon - r.west, r.east - lon, lat - r.south, r.north - lat)) },
                                 wind: { _ in wind })
                     u.shadow = shadow ? 1 : 0
-                    grid.draw(encoder, uniforms: u, texture: texture, sampler: renderer.mirror)
+                    grid.draw(encoder, uniforms: u, texture: texture, sampler: renderer.mirror, mask: mask, repeatX: false)
                 }
             }
         }
-        guard closeUp < 0.999, let world = renderer.texture("clouds") else { return }
+        guard closeUp < 0.999, let world = renderer.texture("clouds"), let mask = renderer.mask("clouds") else { return }
         let strength = (sky.amount >= 2 ? 1.0 : 0.72) * (1 - closeUp)
         let west, east, south, north, step: Double
         if p.t > 0.5 {
@@ -269,11 +273,12 @@ final class CloudPainter: NSObject, MTKViewDelegate {
                                           west: west, east: east, south: south, north: north, step: step,
                                           up: shadow ? 0 : sky.altitude, shift: shadow ? shift : .zero, region: false),
                             device: renderer.device, projection: p,
-                            // Thin out towards the poles so the layer has no edge there.
-                            fade: { _, lat in smoothstep(84, 70, abs(lat)) },
+                            // Thin out from far below the poles, where the map's rows crowd together,
+                            // so the layer fades away there instead of ending in a ring.
+                            fade: { _, lat in smoothstep(82, 56, abs(lat)) },
                             wind: windAt)
                 u.shadow = shadow ? 1 : 0
-                grid.draw(encoder, uniforms: u, texture: world, sampler: renderer.repeatX)
+                grid.draw(encoder, uniforms: u, texture: world, sampler: renderer.repeatX, mask: mask, repeatX: true)
             }
         }
     }
@@ -341,10 +346,20 @@ private final class CloudGrid {
         let region: Bool
     }
 
+    /// The texture slide a set of cells was picked for.
+    private struct Slide: Equatable {
+        let uOffset: Float
+        let slide: Float
+    }
+
     private var key: Key?
+    private var mesh: [CloudVertex] = []
     private var vertices: MTLBuffer?
-    private var indices: MTLBuffer?
-    private var indexCount = 0
+    /// Cells that pass every test but the texture's, as the index of their first corner.
+    private var candidates: [Int] = []
+    private var columns = 0
+    /// The cells worth drawing for the last two slides, one per flow layer.
+    private var picked: [(slide: Slide, indices: MTLBuffer?, count: Int)] = []
 
     func update(_ key: Key, device: MTLDevice, projection p: MapProjection,
                 fade: (Double, Double) -> Double, wind: (Double) -> Double) {
@@ -374,8 +389,8 @@ private final class CloudGrid {
             }
         }
         let jump = Float(p.r * 0.5)
-        var cells: [UInt32] = []
-        cells.reserveCapacity(max(nx - 1, 0) * max(ny - 1, 0) * 6)
+        var cells: [Int] = []
+        cells.reserveCapacity(max(nx - 1, 0) * max(ny - 1, 0))
         for j in 0..<max(ny - 1, 0) {
             for i in 0..<max(nx - 1, 0) {
                 let k = j * nx + i
@@ -389,21 +404,56 @@ private final class CloudGrid {
                 let y0 = mesh[k].y
                 if abs(mesh[c3].x - x0) + abs(mesh[c3].y - y0) > jump { continue }
                 if abs(mesh[c1].x - x0) + abs(mesh[c2].y - y0) > jump { continue }
-                cells.append(contentsOf: [UInt32(k), UInt32(c1), UInt32(c2), UInt32(c1), UInt32(c3), UInt32(c2)])
+                cells.append(k)
             }
         }
-        indexCount = cells.count
-        if cells.isEmpty {
-            vertices = nil
-            indices = nil
-        } else {
-            vertices = device.makeBuffer(bytes: mesh, length: MemoryLayout<CloudVertex>.stride * mesh.count)
-            indices = device.makeBuffer(bytes: cells, length: MemoryLayout<UInt32>.stride * cells.count)
-        }
+        self.mesh = mesh
+        candidates = cells
+        columns = nx
+        picked = []
+        vertices = cells.isEmpty ? nil : device.makeBuffer(bytes: mesh, length: MemoryLayout<CloudVertex>.stride * mesh.count)
     }
 
-    func draw(_ encoder: MTLRenderCommandEncoder, uniforms: CloudUniforms, texture: MTLTexture, sampler: MTLSamplerState) {
-        guard indexCount > 0, uniforms.strength > 0, let vertices, let indices else { return }
+    /// The cells whose patch of texture holds some cloud at this slide. Clear sky costs nothing.
+    private func cells(_ u: CloudUniforms, texture: MTLTexture, mask: CloudMask, repeatX: Bool, device: MTLDevice) -> (MTLBuffer?, Int) {
+        let slide = Slide(uOffset: u.uOffset, slide: u.slide)
+        if let hit = picked.first(where: { $0.slide == slide }) { return (hit.indices, hit.count) }
+        let tw = Float(texture.width) * u.uScale
+        let th = Float(texture.height) * u.vScale
+        var out: [UInt32] = []
+        out.reserveCapacity(candidates.count * 6)
+        for k in candidates {
+            let c1 = k + 1
+            let c2 = k + columns
+            let c3 = k + columns + 1
+            var u0 = Float.greatestFiniteMagnitude
+            var u1 = -Float.greatestFiniteMagnitude
+            var v0 = Float.greatestFiniteMagnitude
+            var v1 = -Float.greatestFiniteMagnitude
+            for c in [k, c1, c2, c3] {
+                let v = mesh[c]
+                // As the shader places the texture, in texels.
+                let x = (v.lon - v.wind * u.slide + u.uOffset) * tw
+                let y = (u.vOffset - v.lat) * th
+                u0 = min(u0, x)
+                u1 = max(u1, x)
+                v0 = min(v0, y)
+                v1 = max(v1, y)
+            }
+            guard mask.anyCloud(u0, v0, u1, v1, repeatX: repeatX) else { continue }
+            out.append(contentsOf: [UInt32(k), UInt32(c1), UInt32(c2), UInt32(c1), UInt32(c3), UInt32(c2)])
+        }
+        let indices = out.isEmpty ? nil : device.makeBuffer(bytes: out, length: MemoryLayout<UInt32>.stride * out.count)
+        picked.append((slide, indices, out.count))
+        if picked.count > 2 { picked.removeFirst() }
+        return (indices, out.count)
+    }
+
+    func draw(_ encoder: MTLRenderCommandEncoder, uniforms: CloudUniforms, texture: MTLTexture, sampler: MTLSamplerState,
+              mask: CloudMask, repeatX: Bool) {
+        guard uniforms.strength > 0, let vertices else { return }
+        let (indices, indexCount) = cells(uniforms, texture: texture, mask: mask, repeatX: repeatX, device: encoder.device)
+        guard indexCount > 0, let indices else { return }
         var u = uniforms
         encoder.setVertexBuffer(vertices, offset: 0, index: 0)
         encoder.setVertexBytes(&u, length: MemoryLayout<CloudUniforms>.stride, index: 1)
@@ -411,6 +461,65 @@ private final class CloudGrid {
         encoder.setFragmentSamplerState(sampler, index: 0)
         encoder.drawIndexedPrimitives(type: .triangle, indexCount: indexCount, indexType: .uint32,
                                       indexBuffer: indices, indexBufferOffset: 0)
+    }
+}
+
+/// The most cloud in each 16 by 16 block of a texture, read once, so mesh cells over clear sky can
+/// be left out and never cost a pixel.
+final class CloudMask {
+    private static let block = 16
+    private let w: Int
+    private let h: Int
+    private let width: Int
+    private let height: Int
+    private var most: [UInt8]
+
+    init(_ alpha: UnsafePointer<UInt8>, width: Int, height: Int, stride: Int) {
+        let block = Self.block
+        let w = (width + block - 1) / block
+        self.w = w
+        h = (height + block - 1) / block
+        self.width = width
+        self.height = height
+        var most = [UInt8](repeating: 0, count: w * h)
+        most.withUnsafeMutableBufferPointer { most in
+            for y in 0..<height {
+                let row = alpha + y * stride
+                let base = (y / block) * w
+                for x in 0..<width where row[x] > most[base + x / block] {
+                    most[base + x / block] = row[x]
+                }
+            }
+        }
+        self.most = most
+    }
+
+    /// Whether any texel in the texture rectangle holds cloud. `repeatX` wraps east to west;
+    /// otherwise edges mirror.
+    func anyCloud(_ u0: Float, _ v0: Float, _ u1: Float, _ v1: Float, repeatX: Bool) -> Bool {
+        func place(_ u: Float, _ size: Int, _ repeats: Bool) -> Float {
+            let size = Float(size)
+            if repeats { return (u.truncatingRemainder(dividingBy: size) + size).truncatingRemainder(dividingBy: size) }
+            let period = 2 * size
+            let m = (u.truncatingRemainder(dividingBy: period) + period).truncatingRemainder(dividingBy: period)
+            return m < size ? m : period - m
+        }
+        let a = place(u0, width, repeatX)
+        let b = place(u1, width, repeatX)
+        // A cell that crosses a wrap or a mirror edge is kept rather than worked out.
+        if b < a || b - a > (u1 - u0) + 1 { return true }
+        let c = place(v0, height, false)
+        let d = place(v1, height, false)
+        if d < c || d - c > (v1 - v0) + 1 { return true }
+        let block = Float(Self.block)
+        let bx0 = min(max(Int(a / block), 0), w - 1)
+        let bx1 = min(max(Int(b / block), 0), w - 1)
+        let by0 = min(max(Int(c / block), 0), h - 1)
+        let by1 = min(max(Int(d / block), 0), h - 1)
+        for y in by0...by1 {
+            for x in bx0...bx1 where most[y * w + x] > 5 { return true }
+        }
+        return false
     }
 }
 
@@ -428,6 +537,7 @@ final class CloudRenderer {
     /// Mirrors at every edge, for a drifting close-up texture.
     let mirror: MTLSamplerState
     private var textures: [String: MTLTexture] = [:]
+    private var masks: [String: CloudMask] = [:]
     private var loading: Set<String> = []
 
     private init?() {
@@ -478,11 +588,12 @@ final class CloudRenderer {
         let device = device
         let queue = queue
         DispatchQueue.global(qos: .userInitiated).async {
-            let texture = Self.load(name, device: device, queue: queue)
+            let loaded = Self.load(name, device: device, queue: queue)
             DispatchQueue.main.async {
                 // A texture that fails to load stays in `loading`, so it is not tried every frame.
-                guard let texture else { return }
-                self.textures[name] = texture
+                guard let loaded else { return }
+                self.textures[name] = loaded.0
+                self.masks[name] = loaded.1
                 self.loading.remove(name)
                 NotificationCenter.default.post(name: Self.loaded, object: nil)
             }
@@ -490,8 +601,11 @@ final class CloudRenderer {
         return nil
     }
 
-    /// Decodes a white-on-clear WebP into its alpha alone and uploads it with mipmaps.
-    private static func load(_ name: String, device: MTLDevice, queue: MTLCommandQueue) -> MTLTexture? {
+    /// A loaded texture's cloud mask, or nil until the texture has loaded. Main thread only.
+    func mask(_ name: String) -> CloudMask? { masks[name] }
+
+    /// Decodes a white-on-clear WebP into its alpha alone, reads its mask and uploads it with mipmaps.
+    private static func load(_ name: String, device: MTLDevice, queue: MTLCommandQueue) -> (MTLTexture, CloudMask)? {
         guard let url = Bundle.main.url(forResource: name, withExtension: "webp"),
               let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
@@ -503,6 +617,7 @@ final class CloudRenderer {
                                       bytesPerRow: stride, space: CGColorSpaceCreateDeviceGray(),
                                       bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue) else { return nil }
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let mask = CloudMask(staging.contents().assumingMemoryBound(to: UInt8.self), width: width, height: height, stride: stride)
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r8Unorm, width: width, height: height, mipmapped: true)
         descriptor.usage = .shaderRead
         descriptor.storageMode = .private
@@ -515,7 +630,7 @@ final class CloudRenderer {
         blit.endEncoding()
         buffer.commit()
         buffer.waitUntilCompleted()
-        return buffer.status == .completed ? texture : nil
+        return buffer.status == .completed ? (texture, mask) : nil
     }
 
     /// White cloud, or black shadow, modulated by the texture's alpha; premultiplied out.
