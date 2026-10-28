@@ -1538,6 +1538,12 @@ pub struct World {
     /// and `canonical_hash` folds it in. See `economy::fx`.
     #[serde(skip)]
     pub fx: crate::economy::fx::FxState,
+    /// Long presentation history: ten years of weekly closes and each firm's weekly and
+    /// quarterly statements with cash flow and divisions. Outside the postcard encoding and the
+    /// hash; saved in its own trailer, so an older save loads with it empty. No rule reads it.
+    /// See `economy::history`.
+    #[serde(skip)]
+    pub archive: crate::economy::history::Archive,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.
