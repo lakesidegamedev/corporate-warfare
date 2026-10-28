@@ -13,6 +13,14 @@ heading.
 
 ### Added
 
+- Seven more map modes: your share, competition, demand, workforce skill, infrastructure (roads,
+  power and broadband), land price and population, each with a legend showing what its colours
+  mean.
+- More map settings: countryside, rivals' buildings, interstates and seasons on or off, and labels
+  (off, cities, or cities and regions).
+- Interstates are drawn as 8-bit roads with a dark edge, grey asphalt and, up close, a dashed gold
+  centre line, over the regions' shading and under traffic and buildings, from the scenario's
+  framing inwards.
 - Zoomed in, the countryside fills in as a voxel diorama on the real ground: forests (pines in the
   north), farm fields and barns, rocks on dry land, and houses round every city that spread out in
   a boom and pull in during a recession. Trees turn in the autumn and everything wears snow in

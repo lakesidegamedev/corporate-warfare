@@ -38,6 +38,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,6 +57,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -78,7 +82,20 @@ import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 
-enum class MapLayer(val title: String) { Presence("Your divisions"), Room("Room to build"), Wages("Wages"), Freight("Freight") }
+/** What the map shades the regions by, with the words for each end of its legend. */
+enum class MapLayer(val title: String, val low: String = "Low", val high: String = "High") {
+    Presence("Your divisions", "None", "Most plants"),
+    Share("Your share", "None", "Leading"),
+    Competition("Competition", "Open", "Crowded"),
+    Room("Room to build", "Little", "Most imports"),
+    Demand("Demand"),
+    Wages("Wages", "Cheap", "Dear"),
+    Skill("Workforce skill"),
+    Infrastructure("Infrastructure", "Poor", "Good"),
+    Land("Land price", "Cheap", "Dear"),
+    Population("Population", "Small", "Large"),
+    Freight("Freight"),
+}
 
 /** Seconds since the app started, shared by every moving thing so they stay in step. */
 internal object MapClock {
@@ -291,7 +308,7 @@ fun WorldMapView(
                     map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shaded, selected, store.mapDivisions, measurer,
                     lanes = store.lanes, freightLayer = layer == MapLayer.Freight, pickedLane = pickedLane,
                     geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Ground,
-                    week = Earth.weekOf(store.overview?.weekLabel),
+                    week = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28,
                 )
             }
             // Layers, bottom to top: the ground, traffic on it, clouds, buildings and labels, then
@@ -326,7 +343,7 @@ fun WorldMapView(
                     lanes = store.lanes, freightLayer = layer == MapLayer.Freight, pickedLane = pickedLane,
                     geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Structures,
                     plants = store.mapPlants, economyPhase = store.economy?.phase, acquired = acquired,
-                    week = Earth.weekOf(store.overview?.weekLabel),
+                    week = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28,
                 )
             }
             Canvas(Modifier.fillMaxSize()) {
@@ -350,6 +367,10 @@ fun WorldMapView(
                     drawRect(Color.Black.copy(alpha = 0.55f), Offset(6f, size.height - label.size.height - 14f), Size(label.size.width + 12f, label.size.height + 8f))
                     drawText(label, topLeft = Offset(12f, size.height - label.size.height - 10f))
                 }
+            }
+            // What the colours mean for the active mode.
+            if (layer != MapLayer.Freight) {
+                MapLegend(layer, Modifier.align(if (controlsAtTop) Alignment.BottomStart else Alignment.BottomStart).padding(start = 12.dp, bottom = 24.dp))
             }
             // On desktop the tutorial card sits in the bottom corner, so the controls go to the top.
             Column(
@@ -557,7 +578,6 @@ internal fun DrawScope.drawWorldMap(
         translate(top = up) {
             if (detail > 0) {
                 drawPath(g.rivers, water.copy(alpha = 0.9f * detail), style = Stroke(1.4f))
-                drawPath(g.interstates, Color(0xFFC68A3D).copy(alpha = 0.35f * detail), style = Stroke(1f))
             }
             if (!raised) {
                 regionPaths.forEach { (code, path) ->
@@ -569,6 +589,20 @@ internal fun DrawScope.drawWorldMap(
                 // A cool rim light along the scenario's states when lit.
                 if (lit && t > 0.5) drawPath(it, Color(0xFF8EC5FF).copy(alpha = 0.10f), style = Stroke(4f))
                 drawPath(it, Color(0xFFD2DEEA).copy(alpha = 0.85f), style = Stroke(if (cam.zoom > 3) 2f else 1f))
+            }
+            // Interstates over the regions and their shading, under the traffic and the buildings:
+            // an 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line.
+            val highways = if (detailLevel == MapDetail.Low) 0f else smoothstep(0.85, 1.2, g.zoomRatio).toFloat()
+            if (graphics.interstates && highways > 0f && t > 0.5) {
+                val wide = (1.6f + 1.2f * g.scale.coerceAtMost(2.5f))
+                drawPath(g.interstates, Color(0xFF1C2228).copy(alpha = 0.9f * highways), style = Stroke(wide + 2f, cap = StrokeCap.Square))
+                drawPath(g.interstates, Color(0xFF6E757D).copy(alpha = highways), style = Stroke(wide, cap = StrokeCap.Square))
+                if (g.closeUp) {
+                    drawPath(
+                        g.interstates, Palette.gold.copy(alpha = 0.85f * highways),
+                        style = Stroke(1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))),
+                    )
+                }
             }
         }
         // Night falls on the globe whenever it is lit, and on the flat map with day and night on.
@@ -607,7 +641,7 @@ internal fun DrawScope.drawWorldMap(
         // City skylines, then the player's divisions as buildings, nearest drawn last.
         val cityTops = HashMap<String, Float>()
         // The diorama up close: trees, fields, barns, rocks and the houses round each city.
-        if (graphics.buildings >= 2 && graphics.earth && g.closeUp && t > 0.5) {
+        if (graphics.countryside && graphics.buildings >= 2 && graphics.earth && g.closeUp && t > 0.5) {
             val propScale = (Voxels.scale(g.scale, density) - 1).coerceAtLeast(1)
             with(Countryside) { drawCountryside(p, map, week, propScale, { plinth }, economyPhase) }
         }
@@ -630,7 +664,7 @@ internal fun DrawScope.drawWorldMap(
             // Rivals' plants first, a size smaller and muted, so the player's own stand over them.
             val rivalScale = (Voxels.scale(g.scale, density) - 1).coerceAtLeast(1)
             val rivalStatuses = plantStatuses(plants.filter { !it.player }, byFirm = true)
-            g.rivalBuildings(plants, ground).forEach { b ->
+            if (graphics.rivals) g.rivalBuildings(plants, ground).forEach { b ->
                 val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
                 when (rivalStatuses[b.key]) {
                     PlantState.Site -> with(Voxels) { drawBuilding("site", b.plants, base, rivalScale, Voxels.Muted) }
@@ -682,7 +716,7 @@ internal fun DrawScope.drawWorldMap(
         }
         // City names last, so no building ever covers them.
         val cityLift = plinth
-        map.cities.take(if (close) 40 else 14).forEach { (city, point) ->
+        if (graphics.labels >= 1) map.cities.take(if (close) 40 else 14).forEach { (city, point) ->
             if (!close && city.country != "USA") return@forEach
             val floor = g.cityFloor(city.name, ground)
             val at = p.project(point, floor) ?: return@forEach
@@ -697,7 +731,7 @@ internal fun DrawScope.drawWorldMap(
         drawCityLights(map.cities, p, light, 0.0, 0.7f)
     }
     MapProfiler.mark("cities+buildings")
-    if (cam.zoom > 14) {
+    if (cam.zoom > 14 && graphics.labels >= 2) {
         map.regions.forEach { region ->
             val at = map.anchor(region.code)?.let { p.project(it, g.regionLift(region.code, ground)) } ?: return@forEach
             val label = measurer.measure(region.name.uppercase(), TextStyle(color = Palette.secondary.copy(alpha = 0.8f), fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp, shadow = LabelShadow))
@@ -1111,6 +1145,28 @@ private val graticuleRings: List<GeoRing> =
     (-180 until 180 step 15).map { lon -> GeoRing((-80..80 step 4).flatMap { listOf(lon * 10_000, it * 10_000) }) } +
         (-75..75 step 15).map { lat -> GeoRing((-180..180 step 4).flatMap { listOf(it * 10_000, lat * 10_000) }) }
 
+/** The active mode's name over a strip from its low colour to its high one. */
+@Composable
+private fun MapLegend(layer: MapLayer, modifier: Modifier) {
+    val tint = layerTint(layer)
+    Column(
+        modifier.width(170.dp).padding(end = 3.dp, bottom = 3.dp).pixelFrame(Palette.panel.copy(alpha = 0.94f)).padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(layer.title.uppercase(), color = Palette.primaryText, fontSize = 10.sp, fontFamily = Pixel.font)
+        // Stepped, like the rest of the 8-bit look: five blocks from faint to full.
+        Row(Modifier.fillMaxWidth().height(10.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            for (k in 0 until 5) {
+                Box(Modifier.weight(1f).fillMaxHeight().background(lerp(Color(0xFF33475A), tint, 0.15f + 0.6f * k / 4f)))
+            }
+        }
+        Row {
+            Text(layer.low, color = Palette.secondary, fontSize = 10.sp, modifier = Modifier.weight(1f))
+            Text(layer.high, color = Palette.secondary, fontSize = 10.sp)
+        }
+    }
+}
+
 @Composable
 private fun MapButton(symbol: String, onClick: () -> Unit) {
     Box(Modifier.size(40.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
@@ -1119,10 +1175,22 @@ private fun MapButton(symbol: String, onClick: () -> Unit) {
 }
 
 internal fun layerTint(layer: MapLayer): Color = when (layer) {
-    MapLayer.Presence -> Palette.gold
+    MapLayer.Presence, MapLayer.Share, MapLayer.Freight -> Palette.gold
+    MapLayer.Competition -> Palette.negative
     MapLayer.Room -> Palette.positive
+    MapLayer.Demand -> Color(0xFF7E57C2)
     MapLayer.Wages -> Color(0xFF42A5F5)
-    MapLayer.Freight -> Palette.gold
+    MapLayer.Skill -> Color(0xFF26C6DA)
+    MapLayer.Infrastructure -> Color(0xFF90A4AE)
+    MapLayer.Land -> Color(0xFFFF8A65)
+    MapLayer.Population -> Color(0xFFEC407A)
+}
+
+/** Each region's value scaled so the lowest is 0 and the highest 1. */
+private fun spread(values: Map<String, Double>): Map<String, Double> {
+    val low = values.values.minOrNull() ?: return emptyMap()
+    val high = values.values.maxOrNull() ?: return emptyMap()
+    return values.mapValues { if (high > low) (it.value - low) / (high - low) else 0.0 }
 }
 
 /** 0..1 intensity per region for the active layer. */
@@ -1142,6 +1210,20 @@ internal fun shading(store: GameStore, layer: MapLayer): Map<String, Double> = w
         val high = store.boards.maxOfOrNull { it.wageIndexBps } ?: 1
         store.boards.associate { it.code to (it.wageIndexBps - low).toDouble() / maxOf(high - low, 1) }
     }
+    MapLayer.Share -> store.boards.associate { board ->
+        val own = board.sectors.filter { it.ownBlocks > 0u }
+        board.code to (own.maxOfOrNull { it.ownShareBps } ?: 0) / 10_000.0
+    }.filterValues { it > 0 }
+    // Rivals' strength: the biggest share any rival leads with in the region's industries.
+    MapLayer.Competition -> spread(store.boards.associate { board ->
+        board.code to board.sectors.filter { it.leaderFirm != 0uL && it.leaderFirm != store.selectedFirm }
+            .sumOf { it.leaderShareBps * it.operators.toInt() }.toDouble()
+    })
+    MapLayer.Demand -> spread(store.boards.associate { it.code to it.demandIndexBps.toDouble() })
+    MapLayer.Skill -> spread(store.boards.associate { it.code to it.skillBps.toDouble() })
+    MapLayer.Infrastructure -> spread(store.boards.associate { it.code to (it.roadBps + it.powerGridBps + it.broadbandBps).toDouble() })
+    MapLayer.Land -> spread(store.boards.associate { it.code to it.landIndexBps.toDouble() })
+    MapLayer.Population -> spread(store.boards.associate { it.code to it.population2000.toDouble() })
     // Lanes are drawn over the land instead of shading it.
     MapLayer.Freight -> emptyMap()
 }

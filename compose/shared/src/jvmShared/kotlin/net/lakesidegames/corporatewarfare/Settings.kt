@@ -98,6 +98,11 @@ class AppSettings(private val file: File) {
             props.setProperty("buildings", g.buildings.toString())
             props.setProperty("frameRate", g.frameRate.toString())
             props.setProperty("showFps", g.showFps.toString())
+            props.setProperty("countryside", g.countryside.toString())
+            props.setProperty("rivals", g.rivals.toString())
+            props.setProperty("interstates", g.interstates.toString())
+            props.setProperty("seasons", g.seasons.toString())
+            props.setProperty("labels", g.labels.toString())
         }
         props.setProperty("autoUpdate", autoUpdate.toString())
         props.setProperty("analytics", analytics.toString())
@@ -134,6 +139,11 @@ class AppSettings(private val file: File) {
             buildings = int("buildings", base.buildings, 0..2),
             frameRate = props.getProperty("frameRate")?.toIntOrNull()?.takeIf { it in listOf(0, 30, 60) } ?: base.frameRate,
             showFps = bool("showFps", base.showFps),
+            countryside = bool("countryside", base.countryside),
+            rivals = bool("rivals", base.rivals),
+            interstates = bool("interstates", base.interstates),
+            seasons = bool("seasons", base.seasons),
+            labels = int("labels", base.labels, 0..2),
         )
     }
 
