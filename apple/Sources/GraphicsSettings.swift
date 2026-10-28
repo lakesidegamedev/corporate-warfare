@@ -16,16 +16,16 @@ enum GraphicsPreset: String, CaseIterable, Identifiable {
         switch self {
         case .low:
             return GraphicsSettings(mapDetail: 0, tilt: 0, extrude: false, lighting: 0, dayNight: false, cityLights: false,
-                                    clouds: 0, traffic: 0, buildings: 0, frameRate: 30)
+                                    traffic: 0, buildings: 0, frameRate: 30)
         case .medium:
             return GraphicsSettings(mapDetail: 1, tilt: 1, extrude: true, lighting: 1, dayNight: false, cityLights: true,
-                                    clouds: 0, traffic: 1, buildings: 1, frameRate: 30)
+                                    traffic: 1, buildings: 1, frameRate: 30)
         case .high:
             return GraphicsSettings(mapDetail: 2, tilt: 1, extrude: true, lighting: 2, dayNight: true, cityLights: true,
-                                    clouds: 1, traffic: 1, buildings: 2, frameRate: 60)
+                                    traffic: 1, buildings: 2, frameRate: 60)
         case .ultra:
             return GraphicsSettings(mapDetail: 2, tilt: 2, extrude: true, lighting: 2, dayNight: true, cityLights: true,
-                                    clouds: 2, traffic: 2, buildings: 2, frameRate: 0)
+                                    traffic: 2, buildings: 2, frameRate: 0)
         case .custom:
             return nil
         }
@@ -40,7 +40,6 @@ struct GraphicsSettings: Equatable {
     var lighting: Int
     var dayNight: Bool
     var cityLights: Bool
-    var clouds: Int
     var traffic: Int
     var buildings: Int
     var frameRate: Int
@@ -67,7 +66,6 @@ struct GraphicsSettings: Equatable {
         defaults.set(lighting, forKey: GraphicsKeys.lighting)
         defaults.set(dayNight, forKey: GraphicsKeys.dayNight)
         defaults.set(cityLights, forKey: GraphicsKeys.cityLights)
-        defaults.set(clouds, forKey: GraphicsKeys.clouds)
         defaults.set(traffic, forKey: GraphicsKeys.traffic)
         defaults.set(buildings, forKey: GraphicsKeys.buildings)
         defaults.set(frameRate, forKey: GraphicsKeys.frameRate)

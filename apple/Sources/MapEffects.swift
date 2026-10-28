@@ -89,7 +89,7 @@ struct MapSun: Equatable {
     }
 
     func facing(_ p: GeoPoint) -> Double {
-        p.cosLat * cos(p.lon) * x + p.cosLat * sin(p.lon) * y + p.sinLat * z
+        p.cosLat * p.cosLon * x + p.cosLat * p.sinLon * y + p.sinLat * z
     }
 
     /// The light used when day and night is off: from the upper left, in front of the globe.
@@ -147,6 +147,53 @@ func stamp(_ context: inout GraphicsContext, _ sprite: Sprite, at c: CGPoint, ra
 
 func disc(_ c: CGPoint, _ radius: Double) -> Path {
     Path(ellipseIn: CGRect(x: c.x - radius, y: c.y - radius, width: radius * 2, height: radius * 2))
+}
+
+/// Soft light drawn at half the screen's pixel density and stretched over the view: night, the
+/// globe's shading, the atmosphere, the vignette. These change smoothly across the screen, so a
+/// quarter of the pixels looks the same and costs a fraction. It covers a margin round the view
+/// too, so a translated drawing (the menu's globe sits off centre) never shows its edge. Redrawn
+/// only when its key or the view's size changes.
+final class LightLayer {
+    private var key: [AnyHashable]?
+    private var frame = CGRect.zero
+    private var image: Image?
+
+    /// Draws `build` through the layer; `build` gets the view's full size. Draws it directly when
+    /// the layer cannot be rendered off screen.
+    func draw(in context: inout GraphicsContext, size: CGSize, displayScale: Double, key: [AnyHashable],
+              build: @escaping (inout GraphicsContext, CGSize) -> Void) {
+        let pad = (max(size.width, size.height) * 0.25).rounded(.down)
+        let frame = CGRect(x: -pad, y: -pad, width: size.width + 2 * pad, height: size.height + 2 * pad)
+        if image == nil || key != self.key || frame != self.frame {
+            image = Self.render(frame: frame, size: size, scale: max(displayScale, 1) / 2, build: build)
+            self.key = key
+            self.frame = frame
+        }
+        if let image {
+            context.draw(image, in: frame)
+        } else {
+            build(&context, size)
+        }
+    }
+
+    private static func render(frame: CGRect, size: CGSize, scale: Double,
+                               build: @escaping (inout GraphicsContext, CGSize) -> Void) -> Image? {
+        guard Thread.isMainThread, frame.width >= 1, frame.height >= 1 else { return nil }
+        var image: Image?
+        MainActor.assumeIsolated {
+            let content = Canvas { context, _ in
+                context.translateBy(x: -frame.minX, y: -frame.minY)
+                build(&context, size)
+            }
+            .frame(width: frame.width, height: frame.height)
+            let renderer = ImageRenderer(content: content)
+            renderer.scale = scale
+            renderer.isOpaque = false
+            if let cgImage = renderer.cgImage { image = Image(decorative: cgImage, scale: scale).interpolation(.medium) }
+        }
+        return image
+    }
 }
 
 // MARK: - Land
@@ -238,31 +285,38 @@ final class StarField {
 enum GlobeLighting {
     private static let ocean = RGB(hex: 0x0E2840)
 
-    /// The atmosphere behind, then the ocean lit from the sun.
-    static func back(in context: inout GraphicsContext, projection p: MapProjection, sun: MapSun, lighting: Int, size: CGSize) {
+    /// The glow of the atmosphere behind the globe. Soft, so it is drawn into a small `LightLayer`.
+    static func atmosphere(in context: inout GraphicsContext, projection p: MapProjection, sun: MapSun, lighting: Int) {
         let t = p.t
         let c = CGPoint(x: p.cx, y: p.cy)
         let r = p.r
         let sv = p.toView(lon: sun.lon, lat: sun.lat)
         let fade = 1 - t
-        if lighting > 0 && fade > 0.01 {
-            let outer = r * 1.12
-            let edge = r / outer
-            context.fill(disc(c, outer), with: .radialGradient(Gradient(stops: [
+        guard lighting > 0 && fade > 0.01 else { return }
+        let outer = r * 1.06
+        let edge = r / outer
+        context.fill(disc(c, outer), with: .radialGradient(Gradient(stops: [
+            .init(color: .clear, location: 0),
+            .init(color: RGB(hex: 0x7FB0F0).color(0.55 * fade), location: edge * 0.985),
+            .init(color: RGB(hex: 0x4F80C0).color(0.14 * fade), location: edge + (1 - edge) * 0.25),
+            .init(color: .clear, location: 1),
+        ]), center: c, startRadius: 0, endRadius: outer))
+        if lighting == 2 {
+            let warm = CGPoint(x: c.x + sv.0 * 0.06 * r, y: c.y - sv.1 * 0.06 * r)
+            context.fill(disc(warm, outer), with: .radialGradient(Gradient(stops: [
                 .init(color: .clear, location: 0),
-                .init(color: RGB(hex: 0x6FA0E0).color(0.50 * fade), location: edge * 0.97),
-                .init(color: RGB(hex: 0x4F80C0).color(0.16 * fade), location: edge + (1 - edge) * 0.2),
+                .init(color: RGB(hex: 0xFFD8A0).color(0.10 * fade), location: 0.93),
                 .init(color: .clear, location: 1),
-            ]), center: c, startRadius: 0, endRadius: outer))
-            if lighting == 2 {
-                let warm = CGPoint(x: c.x + sv.0 * 0.06 * r, y: c.y - sv.1 * 0.06 * r)
-                context.fill(disc(warm, outer), with: .radialGradient(Gradient(stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: RGB(hex: 0xFFD8A0).color(0.14 * fade), location: 0.84),
-                    .init(color: .clear, location: 1),
-                ]), center: warm, startRadius: 0, endRadius: outer))
-            }
+            ]), center: warm, startRadius: 0, endRadius: outer))
         }
+    }
+
+    /// The ocean, lit from the sun: a crisp disc that grows to fill the view as the map flattens.
+    static func back(in context: inout GraphicsContext, projection p: MapProjection, sun: MapSun, lighting: Int, size: CGSize) {
+        let t = p.t
+        let c = CGPoint(x: p.cx, y: p.cy)
+        let r = p.r
+        let sv = p.toView(lon: sun.lon, lat: sun.lat)
         let oceanRadius = r / max(1 - t, 0.03)
         if t >= 0.999 {
             context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(ocean.color()))
@@ -314,6 +368,9 @@ enum GlobeLighting {
     static let nightEdges: [Double] = (0..<20).map { 0.16 - 0.46 * Double($0) / 19 }
 
     static func night(_ paths: [Path], in context: inout GraphicsContext) {
+        // Dusk first: a warm band along the edge of night, which the darker steps then cover.
+        let dusk = RGB(hex: 0xFF9A4A).color(0.018)
+        for path in paths.prefix(6) { context.fill(path, with: .color(dusk)) }
         let shade = RGB(hex: 0x02060F).color(0.065)
         for path in paths { context.fill(path, with: .color(shade)) }
     }
@@ -452,7 +509,7 @@ enum GlobeLighting {
             let light = smoothstep(0.05, -0.15, sun.facing(geo))
             guard light > 0, let at = p.at(lon: geo.lon, lat: geo.lat, height: lift) else { continue }
             let radius = (2 + 2.5 * log10(max(Double(city.population) / 1e5, 1))) * scale
-            stamp(&glow, .glow, at: at, radius: radius * 2.4, color: RGB(hex: 0xFFC872), alpha: 0.55 * light)
+            stamp(&glow, .glow, at: at, radius: radius * 1.3, color: RGB(hex: 0xFFC872), alpha: 0.6 * light)
             context.fill(disc(at, scale), with: .color(core.color(0.9 * light)))
         }
     }
@@ -562,76 +619,6 @@ struct MapPolyline {
             }
         }
         return out
-    }
-}
-
-/// Clouds: fixed seeds that drift east and wrap round their box. Six lobes spread wide and flat,
-/// each its own size, so a cloud reads as a bank.
-final class CloudField {
-    private(set) var lon: [Double] = []
-    private(set) var lat: [Double] = []
-    private(set) var size: [Double] = []
-    private(set) var lobes: [[Double]] = []
-
-    static let scenario = CloudField(count: 90, seed: 19)
-    static let world = CloudField(count: 90, seed: 23)
-    /// Where world clouds drift: everywhere but the poles. West, south, east, north.
-    static let worldBounds = (west: -174.0, south: -50.0, east: 174.0, north: 66.0)
-
-    init(count: Int, seed: UInt64) {
-        var stream = MapNoise.Stream(seed: seed)
-        for _ in 0..<count {
-            lon.append(stream.next())
-            lat.append(stream.next())
-            size.append(0.18 + 0.4 * stream.next() * stream.next())
-            var parts: [Double] = []
-            for _ in 0..<6 {
-                parts.append((stream.next() - 0.5) * 3.2)
-                parts.append((stream.next() - 0.5) * 0.9)
-                parts.append(0.45 + stream.next() * 0.55)
-            }
-            lobes.append(parts)
-        }
-    }
-
-    /// Clouds over `bounds` in degrees, drifting east. `altitude` lifts them off a tilted map so
-    /// their shadows fall apart from them. `scale` sizes them, 1 for the scenario.
-    func draw(in context: inout GraphicsContext, projection p: MapProjection, sun: MapSun?, seconds: Double, count: Int,
-              bounds: (west: Double, south: Double, east: Double, north: Double), altitude: Double, zoom: Double,
-              shadows: Bool, scale: Double = 1, alpha: Double = 1, size view: CGSize) {
-        let w = bounds.west - 6
-        let s = bounds.south - 6
-        let e = bounds.east + 6
-        let n = bounds.north + 6
-        let span = e - w
-        let fade = min(max(1.4 - zoom / 30, 0.25), 1)
-        let rScale = Double.pi / 180 * p.r
-        for i in 0..<min(count, lon.count) {
-            var lonDeg = w + (lon[i] * span + seconds * 0.25).truncatingRemainder(dividingBy: span)
-            if lonDeg > e { lonDeg -= span }
-            let latDeg = s + lat[i] * (n - s)
-            let lonR = lonDeg * .pi / 180
-            let latR = latDeg * .pi / 180
-            guard let ground = p.ground(lon: lonR, lat: latR) else { continue }
-            let night = sun.map { $0.facing(lon: lonR, lat: latR) < -0.05 } == true ? 0.4 : 1
-            let radius = size[i] * scale * rScale
-            guard radius >= 1.5 else { continue }
-            let parts = lobes[i]
-            let at = p.lift(ground, altitude)
-            if at.x < -radius * 3 || at.x > view.width + radius * 3 || at.y < -radius * 3 || at.y > view.height + radius * 3 { continue }
-            if shadows && altitude > 0 {
-                let base = p.lift(ground, 0)
-                for k in 0..<6 {
-                    let c = CGPoint(x: base.x + radius * 0.35 + parts[3 * k] * radius, y: base.y + radius * 0.25 + parts[3 * k + 1] * radius)
-                    stamp(&context, .cloud, at: c, radius: radius * parts[3 * k + 2], color: .black, alpha: 0.10 * fade * alpha, aspect: 2.6)
-                }
-            }
-            for k in 0..<6 {
-                let c = CGPoint(x: at.x + parts[3 * k] * radius, y: at.y + parts[3 * k + 1] * radius * 0.5)
-                stamp(&context, .cloud, at: c, radius: radius * parts[3 * k + 2] * 0.7, color: .white,
-                      alpha: 0.30 * fade * night * alpha, aspect: 2.6)
-            }
-        }
     }
 }
 

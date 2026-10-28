@@ -10,18 +10,18 @@ private func scenarioTint(_ id: String) -> Color {
 }
 
 /// The menu's world: a lit globe turning in space with night and city lights on its far side,
-/// clouds, trade routes arcing between the great cities, satellites and the sun's glare. Each
+/// trade routes arcing between the great cities, satellites and the sun's glare. Each
 /// scenario glows and is named as it turns to face the viewer. It draws the same still layer as
 /// the map, so the two always look alike.
 struct GlobeBackdrop: View {
     var offsetX: CGFloat = 0.22
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.displayScale) private var displayScale
     @AppStorage(GraphicsKeys.animations) private var animations = true
     @AppStorage(GraphicsKeys.preset) private var preset = GraphicsPreset.high.rawValue
     @AppStorage(GraphicsKeys.lighting) private var lighting = 2
     @AppStorage(GraphicsKeys.cityLights) private var cityLights = true
-    @AppStorage(GraphicsKeys.clouds) private var clouds = 1
     @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
     @State private var geometry = MapGeometryCache()
 
@@ -55,12 +55,14 @@ struct GlobeBackdrop: View {
 
     private var look: MapLook {
         MapLook(detail: 0, tilt: 0, extrude: false, lighting: lighting, dayNight: false, cityLights: cityLights,
-                clouds: clouds, traffic: 0, buildings: 0, frameRate: frameRate, animations: animations, showFps: false,
+                traffic: 0, buildings: 0, frameRate: frameRate, animations: animations, showFps: false,
                 ultra: preset == GraphicsPreset.ultra.rawValue)
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: GraphicsSettings.frameInterval(frameRate), paused: !animate)) { timeline in
+        // The globe turns two degrees a second, smooth at 30 frames; only Unlimited asks for more.
+        TimelineView(.animation(minimumInterval: GraphicsSettings.frameInterval(frameRate == 0 ? 0 : min(frameRate, 30)),
+                                paused: !animate)) { timeline in
             Canvas { context, size in
                 let seconds = animate ? MapClock.seconds(timeline.date) : 0
                 draw(&context, size: size, seconds: seconds)
@@ -87,12 +89,8 @@ struct GlobeBackdrop: View {
         let sun = MapSun.side(p)
         if cinematic { drawGlare(&scene, projection: p, sun: sun) }
         MapScene(map: map, camera: camera, look: look, tint: .gold, shading: [:], heights: [:], selected: nil,
-                 divisions: [], sun: sun, space: false)
+                 divisions: [], sun: sun, space: false, displayScale: displayScale)
             .drawStatic(in: &scene, geometry: g)
-        if look.clouds > 0 {
-            CloudField.world.draw(in: &scene, projection: p, sun: sun, seconds: seconds * 4, count: look.clouds >= 2 ? 90 : 55,
-                                  bounds: CloudField.worldBounds, altitude: 0, zoom: 1, shadows: false, scale: 3, size: size)
-        }
         if look.cityLights && look.lighting > 0 { drawHubLights(&scene, projection: p, sun: sun) }
         drawScenarios(&scene, projection: p, pulse: 0.85 + 0.15 * sin(seconds * 2))
         if look.lighting > 0 {
@@ -117,27 +115,28 @@ struct GlobeBackdrop: View {
             let light = smoothstep(0.05, -0.15, sun.facing(hub.geo))
             guard light > 0, let at = p.at(lon: hub.geo.lon, lat: hub.geo.lat) else { continue }
             let radius = 3 + 2.2 * log(1 + hub.people)
-            stamp(&glow, .glow, at: at, radius: radius * 2.2, color: RGB(hex: 0xFFC872), alpha: 0.65 * light)
-            context.fill(disc(at, 1.3), with: .color(RGB(hex: 0xFFEBC0).color(0.9 * light)))
+            stamp(&glow, .glow, at: at, radius: radius * 1.1, color: RGB(hex: 0xFFC872), alpha: 0.7 * light)
+            context.fill(disc(at, 1.6), with: .color(RGB(hex: 0xFFF1D0).color(light)))
         }
     }
 
-    /// The sun's glow off the globe's upper left, and faint lens ghosts across it.
+    /// The sun off the globe's upper left, and faint lens ghosts across it. A small hard sun with
+    /// a tight glow, not a wash of light across the scene.
     private func drawGlare(_ context: inout GraphicsContext, projection p: MapProjection, sun: MapSun) {
         let sv = p.toView(lon: sun.lon, lat: sun.lat)
         let n = max((sv.0 * sv.0 + sv.1 * sv.1).squareRoot(), 1e-6)
         let r = p.r
         let centre = CGPoint(x: p.cx, y: p.cy)
         let at = CGPoint(x: centre.x + sv.0 / n * r * 1.25, y: centre.y - sv.1 / n * r * 1.25)
-        context.fill(disc(at, r * 0.9), with: .radialGradient(Gradient(stops: [
-            .init(color: RGB(hex: 0xFFF8E8).color(0.9), location: 0),
-            .init(color: RGB(hex: 0xFFE2B0).color(0.45), location: 0.05),
-            .init(color: RGB(hex: 0xFFC870).color(0.06), location: 0.2),
+        context.fill(disc(at, r * 0.22), with: .radialGradient(Gradient(stops: [
+            .init(color: RGB(hex: 0xFFFBF0).color(), location: 0),
+            .init(color: RGB(hex: 0xFFF0D0).color(0.9), location: 0.16),
+            .init(color: RGB(hex: 0xFFD890).color(0.10), location: 0.3),
             .init(color: .clear, location: 1),
-        ]), center: at, startRadius: 0, endRadius: r * 0.9))
+        ]), center: at, startRadius: 0, endRadius: r * 0.22))
         for (along, radius) in [(0.6, 0.05), (1.35, 0.09), (1.8, 0.03)] {
             let ghost = CGPoint(x: at.x + (centre.x - at.x) * along, y: at.y + (centre.y - at.y) * along)
-            context.fill(disc(ghost, r * radius), with: .color(RGB(hex: 0xFFE2B0).color(0.06)))
+            context.fill(disc(ghost, r * radius), with: .color(RGB(hex: 0xFFE2B0).color(0.035)))
         }
     }
 
@@ -154,9 +153,7 @@ struct GlobeBackdrop: View {
             if glow <= 0 { continue }
             let tint = scenarioTint(area.id)
             let path = p.path(area.rings)
-            for width in [22.0, 14.0, 8.0] {
-                context.stroke(path, with: .color(tint.opacity(0.10 * glow)), lineWidth: width)
-            }
+            context.stroke(path, with: .color(tint.opacity(0.16 * glow)), lineWidth: 6)
             context.fill(path, with: .color(tint.opacity(0.55 * glow)), style: FillStyle(eoFill: true))
             context.stroke(path, with: .color(Color.white.opacity(0.75 * glow)), lineWidth: 1.6)
             guard let anchor = area.rings.max(by: { $0.points.count < $1.points.count }),

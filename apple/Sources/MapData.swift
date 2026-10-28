@@ -83,12 +83,15 @@ struct WorldMapFile: Decodable {
     let scenarios: [ScenarioStates]?
 }
 
-/// A point on the sphere in radians, with its sine and cosine of latitude kept for projection.
+/// A point on the sphere in radians, with the sines and cosines kept so projection needs no
+/// trigonometry per point.
 struct GeoPoint {
     let lon: Double
     let lat: Double
     let sinLat: Double
     let cosLat: Double
+    let sinLon: Double
+    let cosLon: Double
 
     init(e4 lon: Int, _ lat: Int) {
         self.init(lonDegrees: Double(lon) / 10_000, latDegrees: Double(lat) / 10_000)
@@ -99,6 +102,8 @@ struct GeoPoint {
         lat = latDegrees * .pi / 180
         sinLat = sin(lat)
         cosLat = cos(lat)
+        sinLon = sin(lon)
+        cosLon = cos(lon)
     }
 
     init(lonRadians: Double, latRadians: Double) {
@@ -106,10 +111,12 @@ struct GeoPoint {
         lat = latRadians
         sinLat = sin(latRadians)
         cosLat = cos(latRadians)
+        sinLon = sin(lonRadians)
+        cosLon = cos(lonRadians)
     }
 
     /// Unit vector, for angular distances.
-    var unit: (Double, Double, Double) { (cosLat * cos(lon), cosLat * sin(lon), sinLat) }
+    var unit: (Double, Double, Double) { (cosLat * cosLon, cosLat * sinLon, sinLat) }
 }
 
 /// One ring or line, with a bounding cap (centre and angular radius) for culling.
@@ -388,12 +395,18 @@ struct MapCamera: Equatable {
 /// tilts the flat result away from the viewer, and heights rise off the ground; `flat` gives the
 /// untilted point and `lift` tilts it, so every path, anchor and hit test shares one transform.
 struct MapProjection {
+    /// The shortest step, in points across plus down, worth adding to a path: about 0.8 pixels
+    /// on a 2x screen, the same as the Android map's 0.8 pixel step.
+    static let minStep: CGFloat = 0.4
+
     let r: Double
     let t: Double
     let cx: Double
     let cy: Double
     let lon0: Double
     let lat0: Double
+    let sinLon0: Double
+    let cosLon0: Double
     let sin0: Double
     let cos0: Double
     let view: (Double, Double, Double)
@@ -417,6 +430,8 @@ struct MapProjection {
         cy = Double(size.height) / 2
         lon0 = camera.lon * .pi / 180
         lat0 = camera.lat * .pi / 180
+        sinLon0 = sin(lon0)
+        cosLon0 = cos(lon0)
         sin0 = sin(lat0)
         cos0 = cos(lat0)
         view = (cos0 * cos(lon0), cos0 * sin(lon0), sin0)
@@ -445,9 +460,12 @@ struct MapProjection {
             if dl > .pi { dl -= 2 * .pi }
             if dl < -.pi { dl += 2 * .pi }
         }
-        let cosDl = cos(dl)
+        // The angle-difference identities give cos and sin of dl from values kept on the point,
+        // whichever way round the world dl was unwrapped: no trigonometry per point.
+        let cosDl = p.cosLon * cosLon0 + p.sinLon * sinLon0
+        let sinDl = p.sinLon * cosLon0 - p.cosLon * sinLon0
         let cosc = sin0 * p.sinLat + cos0 * p.cosLat * cosDl
-        var ox = p.cosLat * sin(dl)
+        var ox = p.cosLat * sinDl
         var oy = cos0 * p.sinLat - sin0 * p.cosLat * cosDl
         let front = cosc >= 0
         if !front {
@@ -519,6 +537,7 @@ struct MapProjection {
     func addPolygon(_ ring: GeoRing, to path: inout Path, height: Double = 0) {
         guard ring.points.count >= 3, mayShow(ring) else { return }
         var previous = 0.0
+        var last = CGPoint.zero
         for (index, point) in ring.points.enumerated() {
             var dl = point.lon - lon0
             if index == 0 {
@@ -530,7 +549,14 @@ struct MapProjection {
             }
             previous = dl
             let screen = lift(flat(point, dl: dl).0, height)
-            if index == 0 { path.move(to: screen) } else { path.addLine(to: screen) }
+            if index == 0 {
+                path.move(to: screen)
+                last = screen
+            } else if index == ring.points.count - 1 || abs(screen.x - last.x) + abs(screen.y - last.y) >= MapProjection.minStep {
+                // Points closer than a pixel to the last one add nothing but work.
+                path.addLine(to: screen)
+                last = screen
+            }
         }
         path.closeSubpath()
     }
@@ -541,14 +567,17 @@ struct MapProjection {
         var drawing = false
         var last = CGPoint.zero
         let jump = r * 0.5
-        for point in ring.points {
+        let end = ring.points.count - 1
+        for (index, point) in ring.points.enumerated() {
             let (flatPoint, visible) = flat(point)
             if !visible {
                 drawing = false
                 continue
             }
             let screen = lift(flatPoint, height)
-            if drawing, abs(screen.x - last.x) + abs(screen.y - last.y) < jump {
+            let step = abs(screen.x - last.x) + abs(screen.y - last.y)
+            if drawing, step < jump {
+                if step < MapProjection.minStep && index != end { continue }
                 path.addLine(to: screen)
             } else {
                 path.move(to: screen)

@@ -10,6 +10,17 @@ struct RegionSolid {
     let walls: [Path]
     let height: Double
     let lift: Double
+    let bounds: CGRect
+
+    init(code: String, ground: Path, top: Path, walls: [Path], height: Double, lift: Double) {
+        self.code = code
+        self.ground = ground
+        self.top = top
+        self.walls = walls
+        self.height = height
+        self.lift = lift
+        bounds = top.boundingRect
+    }
 }
 
 /// A building standing on the map: untilted screen point, floor and top in points.
@@ -59,6 +70,8 @@ struct OverlayGeometry {
     let selectedTop: Path?
     let scale: Double
     let plinth: Double
+    /// Untilted ground points of the biggest cities, where planes fly between.
+    let airports: [CGPoint]
 }
 
 /// The map projected for one camera, view size and tilt. Each path is built the first time it is
@@ -106,6 +119,9 @@ final class MapGeometry {
     lazy var rivers: Path = projection.lines(map.rivers)
     lazy var interstates: Path = projection.lines(map.interstates)
     lazy var playStates: [Path] = map.playStates.map { projection.path($0.rings) }
+    /// The small soft-light layers for this camera.
+    let backLight = LightLayer()
+    let frontLight = LightLayer()
 
     /// Meridians and parallels every 15 degrees, for the globe.
     static let graticuleRings: [GeoRing] = {
@@ -168,6 +184,21 @@ final class MapGeometry {
         raisedHeld = built.sorted { $0.y < $1.y }.map(\.solid)
         raisedKey = heights
         return raisedHeld
+    }
+
+    private var shadowKey: [String: Double]?
+    private var shadowHeld = Path()
+
+    /// Every tile's shadow in one path, cast down and right of its footprint.
+    func shadows(_ heights: [String: Double]) -> Path {
+        if shadowKey == heights { return shadowHeld }
+        var path = Path()
+        for solid in raised(heights) {
+            path.addPath(solid.ground, transform: CGAffineTransform(translationX: 0.25 * solid.lift, y: 0.18 * solid.lift))
+        }
+        shadowHeld = path
+        shadowKey = heights
+        return path
     }
 
     private var buildingsKey: (divisions: [DivisionMarker], heights: [String: Double]?)?
@@ -291,8 +322,13 @@ final class MapGeometry {
         if let selected, let region = map.regions.first(where: { $0.code == selected }) {
             top = p.path(region.rings, height: regionLift(selected, ground))
         }
+        let airports: [CGPoint] = look.traffic > 0 && p.t > 0.5
+            ? map.cities.sorted { $0.population > $1.population }.prefix(14).compactMap { city in
+                let geo = GeoPoint(e4: city.x, city.y)
+                return p.ground(lon: geo.lon, lat: geo.lat)
+            } : []
         let held = OverlayGeometry(lanes: tracks, roads: roadLines, buildings: spots, selectedTop: top, scale: scale,
-                                   plinth: raised ? plinth : 0)
+                                   plinth: raised ? plinth : 0, airports: airports)
         overlayHeld = held
         overlayKey = key
         return held
@@ -378,7 +414,6 @@ struct MapLook: Equatable {
     var lighting: Int
     var dayNight: Bool
     var cityLights: Bool
-    var clouds: Int
     var traffic: Int
     var buildings: Int
     var frameRate: Int
@@ -387,7 +422,7 @@ struct MapLook: Equatable {
     var ultra: Bool
 
     /// Whether anything on the map moves on its own, so the frame clock needs to run.
-    var moves: Bool { animations && (traffic > 0 || clouds > 0 || buildings > 0 || dayNight || lighting == 2) }
+    var moves: Bool { animations && (traffic > 0 || buildings > 0 || dayNight || lighting == 2) }
     /// Heavy industry smokes with busy traffic or on Ultra.
     var smoke: Bool { traffic >= 2 || ultra }
 }
@@ -442,6 +477,8 @@ struct MapScene {
     /// The moving sun, nil with day and night off.
     let sun: MapSun?
     var space = true
+    /// Pixels per point, for the half-resolution light layers.
+    var displayScale = 2.0
 
     static let spaceColor = RGB(hex: 0x05090E)
     private static let outsideLand = RGB(hex: 0x25282B)
@@ -473,11 +510,20 @@ struct MapScene {
                 StarField.shared.draw(in: &context, size: size, seconds: 0, drift: 0, twinkle: false)
             }
         }
+        let lightKey: [AnyHashable] = [light.lon, light.lat, look.lighting]
+        if lit && t < 1 {
+            g.backLight.draw(in: &context, size: size, displayScale: displayScale, key: lightKey) { layer, _ in
+                GlobeLighting.atmosphere(in: &layer, projection: p, sun: light, lighting: look.lighting)
+            }
+        }
         GlobeLighting.back(in: &context, projection: p, sun: light, lighting: look.lighting, size: size)
         if t < 1 { context.stroke(g.graticule, with: .color(Theme.primaryText.opacity(0.06 * (1 - t))), lineWidth: 0.6) }
         // Outside the scenario the world is muted: climate-tinted land on the globe that greys as
         // the map flattens, grey borders and roads. The scenario's regions are drawn over it.
         if lit {
+            // Shallow water: a lighter band of sea hugging every coast, under the land.
+            let shallows = min(max(2 + zoom * 0.35, 2), 9)
+            for path in g.biomes { context.stroke(path, with: .color(RGB(hex: 0x2F6F9A).color(0.30)), lineWidth: shallows) }
             Biomes.draw(g.biomes, in: &context, grey: 0.25 + 0.6 * t)
         } else {
             context.fill(g.land, with: .color(MapScene.outsideLand.color()), style: FillStyle(eoFill: true))
@@ -506,12 +552,7 @@ struct MapScene {
             context.fill(g.lakes, with: .color(water), style: even)
             let solids = g.raised(heights)
             // Shadows first, so no tile's shadow falls across a tile drawn before it.
-            if lit {
-                for solid in solids {
-                    context.fill(solid.ground.offsetBy(dx: 0.25 * solid.lift, dy: 0.18 * solid.lift),
-                                 with: .color(.black.opacity(0.22)), style: even)
-                }
-            }
+            if lit { context.fill(g.shadows(heights), with: .color(.black.opacity(0.22)), style: even) }
             for solid in solids {
                 let intensity = shading[solid.code] ?? 0
                 let top = intensity > 0 ? MapScene.regionLand.mixed(with: tint, min(0.15 + 0.6 * intensity, 1)) : MapScene.regionLand
@@ -519,6 +560,15 @@ struct MapScene {
                 context.fill(solid.walls[1], with: .color(top.scaled(0.68).color()))
                 context.fill(solid.walls[2], with: .color(top.scaled(0.88).color()))
                 context.fill(solid.top, with: .color(top.color()), style: even)
+                // Tops catch the light from the upper left and fall off away from it.
+                if lit {
+                    let b = solid.bounds
+                    context.fill(solid.top, with: .linearGradient(Gradient(stops: [
+                        .init(color: .white.opacity(0.09), location: 0),
+                        .init(color: .clear, location: 0.5),
+                        .init(color: .black.opacity(0.12), location: 1),
+                    ]), startPoint: CGPoint(x: b.minX, y: b.minY), endPoint: CGPoint(x: b.maxX, y: b.maxY)), style: even)
+                }
                 if solid.code == selected { context.fill(solid.top, with: .color(Theme.gold.opacity(0.35)), style: even) }
                 context.stroke(solid.top, with: .color(lit ? RGB(hex: 0x9FB4C8).color(0.55) : Theme.stroke), lineWidth: 1)
             }
@@ -554,8 +604,19 @@ struct MapScene {
             lifted.stroke(state, with: .color(RGB(hex: 0xD2DEEA).color(0.85)), lineWidth: zoom > 3 ? 2 : 1)
         }
         // Night falls on the globe whenever it is lit, and on the flat map with day and night on.
-        if lit && (t < 1 || sun != nil) { GlobeLighting.night(g.night(light), in: &context) }
-        GlobeLighting.front(in: &context, projection: p, sun: light, lighting: look.lighting)
+        // With the globe's shading, the haze and the vignette it is soft, so it all goes in one
+        // small light layer, clipped to the globe while there is one so its edge stays sharp.
+        if lit {
+            let night = t < 1 || sun != nil
+            var front = context
+            if t < 0.5 { front.clip(to: disc(g.center, p.r)) }
+            let lighting = look.lighting
+            g.frontLight.draw(in: &front, size: size, displayScale: displayScale, key: lightKey + [night]) { layer, full in
+                if night { GlobeLighting.night(g.night(light), in: &layer) }
+                GlobeLighting.front(in: &layer, projection: p, sun: light, lighting: lighting)
+                if t > 0.5 { MapScene.flatLight(in: &layer, projection: p, size: full) }
+            }
+        }
         if t < 1 && !lit {
             // The globe's rim, fading as it unrolls.
             let c = g.center
@@ -626,23 +687,24 @@ struct MapScene {
                 )
             }
         }
-        if lit && t > 0.5 {
-            // Haze towards the horizon when tilted, and a vignette that holds the eye in the
-            // middle. Kept faint: depth without washing the map out.
-            let haze = 0.07 * sin(p.pitch) / sin(48 * Double.pi / 180)
-            if haze > 0.01 {
-                context.fill(whole, with: .linearGradient(Gradient(stops: [
-                    .init(color: RGB(hex: 0x9CC3E6).color(haze), location: 0),
-                    .init(color: .clear, location: 0.25),
-                ]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
-            }
-            let c = CGPoint(x: size.width / 2, y: size.height / 2)
-            context.fill(whole, with: .radialGradient(Gradient(stops: [
-                .init(color: .clear, location: 0),
-                .init(color: .clear, location: 0.8),
-                .init(color: .black.opacity(0.18), location: 1),
-            ]), center: c, startRadius: 0, endRadius: max(size.width, size.height) * 0.75))
+    }
+
+    /// Haze towards the horizon when tilted, and a light vignette that holds the eye in the middle.
+    static func flatLight(in context: inout GraphicsContext, projection p: MapProjection, size: CGSize) {
+        // Kept faint: depth without washing the map out.
+        let haze = 0.07 * sin(p.pitch) / sin(48 * Double.pi / 180)
+        if haze > 0.01 {
+            context.fill(Path(CGRect(x: 0, y: 0, width: size.width, height: size.height * 0.25)), with: .linearGradient(Gradient(stops: [
+                .init(color: RGB(hex: 0x9CC3E6).color(haze), location: 0),
+                .init(color: .clear, location: 1),
+            ]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height * 0.25)))
         }
+        context.fill(Path(CGRect(origin: .zero, size: size)), with: .radialGradient(Gradient(stops: [
+            .init(color: .clear, location: 0),
+            .init(color: .clear, location: 0.8),
+            .init(color: .black.opacity(0.18), location: 1),
+        ]), center: CGPoint(x: size.width / 2, y: size.height / 2), startRadius: 0,
+            endRadius: max(size.width, size.height) * 0.75))
     }
 
     static func sectorRGB(_ sector: String) -> RGB {
@@ -827,30 +889,18 @@ struct MapScene {
             context.fill(heads, with: .color(RGB(hex: 0xFFF4D8).color(0.95 * fade)))
             context.fill(tails, with: .color(RGB(hex: 0xFF4A3A).color(0.85 * fade)))
         }
-        // Clouds: over the world on the globe, fading as it unrolls, and over the scenario only on
-        // Many, thin and high, so they never fog the map.
-        if look.clouds > 0 {
-            let light = sun ?? MapSun.fixed(p)
-            let count = look.clouds >= 2 ? 60 : 24
-            let t = p.t
-            if t < 1 {
-                CloudField.world.draw(in: &context, projection: p, sun: light, seconds: seconds * 4, count: count,
-                                      bounds: CloudField.worldBounds, altitude: 0, zoom: zoom, shadows: false, scale: 3,
-                                      alpha: 1 - t, size: g.size)
-            }
-            if t > 0 && look.clouds >= 2 {
-                let b = map.playBounds
-                CloudField.scenario.draw(in: &context, projection: p, sun: light, seconds: seconds, count: 30,
-                                         bounds: (west: b.west, south: b.south, east: b.east, north: b.north),
-                                         altitude: 46 * o.scale * t, zoom: zoom, shadows: look.lighting > 0, scale: 1,
-                                         alpha: 0.7 * t, size: g.size)
-            }
-        }
         // Building beacons, smoke and the week's ripple.
         if look.buildings > 0 {
             for b in o.buildings {
                 let phase = fract(seconds / 2.4 + b.seed)
                 context.stroke(disc(b.base, (6 + 20 * phase) * o.scale), with: .color(b.color.opacity(0.45 * (1 - phase))), lineWidth: 1.4)
+                // An aircraft warning light blinks on every rooftop.
+                if sin(seconds * 3 + b.seed * 20) > 0.55 {
+                    var beacon = context
+                    beacon.blendMode = .plusLighter
+                    stamp(&beacon, .glow, at: b.top, radius: 5, color: RGB(hex: 0xFF4A3A), alpha: 0.7)
+                    context.fill(disc(b.top, 1.3), with: .color(RGB(hex: 0xFF6A5A).color()))
+                }
                 if b.smoke && look.smoke {
                     for k in 0..<3 {
                         let f = fract(seconds / 3 + Double(k) / 3 + b.seed)
@@ -861,6 +911,37 @@ struct MapScene {
                 if rippleAge >= 0 && rippleAge <= 1.2 {
                     let f = rippleAge / 1.2
                     context.stroke(disc(b.base, 60 * f * o.scale), with: .color(Theme.gold.opacity(0.6 * (1 - f))), lineWidth: 2)
+                }
+            }
+        }
+        // Planes between the big cities, high over the map, trailing contrails with shadows below.
+        if look.traffic > 0 && o.airports.count >= 2 {
+            let planes = look.traffic >= 2 ? 10 : 5
+            let n = o.airports.count
+            let life = 14.0
+            for k in 0..<planes {
+                let local = seconds + Double(k) * 3.1
+                let cycle = Int(floor(local / life))
+                let f = (local - Double(cycle) * life) / life
+                let hash = stableHash("plane\(k)/\(cycle)")
+                let a = o.airports[hash % n]
+                let b = o.airports[(hash % n + 1 + (hash / n) % (n - 1)) % n]
+                let fade = min(min(f, 1 - f) * 8, 1)
+                for trail in stride(from: 12, through: 0, by: -1) {
+                    let ft = min(max(f - Double(trail) * 0.006, 0), 1)
+                    let ground = CGPoint(x: a.x + (b.x - a.x) * ft, y: a.y + (b.y - a.y) * ft)
+                    let at = p.lift(ground, (40 + 50 * sin(.pi * ft)) * o.scale)
+                    if trail == 0 {
+                        let shadow = p.lift(ground, o.plinth)
+                        context.fill(disc(CGPoint(x: shadow.x + 3, y: shadow.y + 2), 1.8), with: .color(.black.opacity(0.25 * fade)))
+                        context.fill(disc(at, 1.7), with: .color(.white.opacity(fade)))
+                        if fract(seconds * 2 + Double(k)) < 0.15 {
+                            context.fill(disc(CGPoint(x: at.x, y: at.y + 2.5), 1.2), with: .color(RGB(hex: 0xFF5040).color(fade)))
+                        }
+                    } else {
+                        context.fill(disc(at, 1.1 + Double(trail) * 0.08),
+                                     with: .color(.white.opacity(0.22 * fade * (1 - Double(trail) / 13))))
+                    }
                 }
             }
         }
@@ -884,7 +965,7 @@ struct MapScene {
 /// scenario. Drag to turn or pan, pinch or use the buttons to zoom, double-tap to fly between the
 /// globe and the scenario, tap a region to select it. Shading, markers and selection come from
 /// the caller. A still layer holds the land, regions and buildings; a moving layer over it holds
-/// traffic, clouds and pulses, and only runs while something on it moves.
+/// traffic, planes and pulses, and only runs while something on it moves.
 struct WorldMapView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -896,7 +977,6 @@ struct WorldMapView: View {
     @AppStorage(GraphicsKeys.lighting) private var lighting = 2
     @AppStorage(GraphicsKeys.dayNight) private var dayNight = true
     @AppStorage(GraphicsKeys.cityLights) private var cityLights = true
-    @AppStorage(GraphicsKeys.clouds) private var clouds = 1
     @AppStorage(GraphicsKeys.traffic) private var traffic = 1
     @AppStorage(GraphicsKeys.buildings) private var buildings = 2
     @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
@@ -929,7 +1009,7 @@ struct WorldMapView: View {
     private var look: MapLook {
         MapLook(
             detail: detailLevel, tilt: GraphicsSettings.pitch(forTilt: tiltSetting), extrude: extrude,
-            lighting: lighting, dayNight: dayNight, cityLights: cityLights, clouds: clouds, traffic: traffic,
+            lighting: lighting, dayNight: dayNight, cityLights: cityLights, traffic: traffic,
             buildings: buildings, frameRate: frameRate, animations: animations, showFps: showFps,
             ultra: preset == GraphicsPreset.ultra.rawValue
         )

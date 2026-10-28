@@ -240,7 +240,6 @@ enum GraphicsKeys {
     static let lighting = "graphics.lighting"
     static let dayNight = "graphics.dayNight"
     static let cityLights = "graphics.cityLights"
-    static let clouds = "graphics.clouds"
     static let traffic = "graphics.traffic"
     static let buildings = "graphics.buildings"
     static let frameRate = "graphics.frameRate"
@@ -289,7 +288,6 @@ struct GraphicsSettingsPanel: View {
     @AppStorage(GraphicsKeys.lighting) private var lighting = 2
     @AppStorage(GraphicsKeys.dayNight) private var dayNight = true
     @AppStorage(GraphicsKeys.cityLights) private var cityLights = true
-    @AppStorage(GraphicsKeys.clouds) private var clouds = 1
     @AppStorage(GraphicsKeys.traffic) private var traffic = 1
     @AppStorage(GraphicsKeys.buildings) private var buildings = 2
     @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
@@ -324,8 +322,6 @@ struct GraphicsSettingsPanel: View {
                 choice("Day and night", onOff(custom($dayNight)), ["Off", "On"],
                        "The sun moves across the world and night falls on the map.")
                 choice("City lights", onOff(custom($cityLights)), ["Off", "On"], "Cities glow on the night side.")
-                choice("Clouds", custom($clouds), ["Off", "Few", "Many"],
-                       "Few: clouds over the globe. Many: also thin high cloud over the map, casting shadows.")
                 choice("Traffic", custom($traffic), ["Off", "Light", "Busy"],
                        "Freight moves along the lanes and cars along the highways.")
                 choice("Buildings", custom($buildings), ["Flat", "Your divisions", "Divisions and cities"],
@@ -350,7 +346,7 @@ struct GraphicsSettingsPanel: View {
     /// The options as they stand, for matching against the presets.
     private var current: GraphicsSettings {
         GraphicsSettings(mapDetail: detail, tilt: tilt, extrude: extrude, lighting: lighting, dayNight: dayNight,
-                         cityLights: cityLights, clouds: clouds, traffic: traffic, buildings: buildings, frameRate: frameRate)
+                         cityLights: cityLights, traffic: traffic, buildings: buildings, frameRate: frameRate)
     }
 
     /// An on and off option as a two-way choice.
@@ -370,7 +366,6 @@ struct GraphicsSettingsPanel: View {
                 lighting = values.lighting
                 dayNight = values.dayNight
                 cityLights = values.cityLights
-                clouds = values.clouds
                 traffic = values.traffic
                 buildings = values.buildings
                 frameRate = values.frameRate
