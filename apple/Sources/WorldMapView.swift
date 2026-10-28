@@ -243,6 +243,37 @@ final class MapGeometry {
         return buildingsHeld
     }
 
+    private var rivalsKey: (plants: [MapPlantDto], heights: [String: Double]?)?
+    private var rivalsHeld: [Building] = []
+
+    /// Rivals' plants as buildings: each rival's plants in an industry and region together, the
+    /// four biggest per region, set in a row behind the region's hub (north of it, where the
+    /// player's own stand to the south), far ones first.
+    func rivalBuildings(_ plants: [MapPlantDto], _ heights: [String: Double]?) -> [Building] {
+        if let key = rivalsKey, key.plants == plants, key.heights == heights { return rivalsHeld }
+        let p = projection
+        var blocks: [String: (region: String, industry: String, firm: UInt64, blocks: Int)] = [:]
+        for plant in plants where !plant.player {
+            let key = "\(plant.region)/\(plant.industry)/\(plant.firm)"
+            blocks[key, default: (plant.region, plant.industry, plant.firm, 0)].blocks += Int(plant.blocks)
+        }
+        var placed: [Building] = []
+        for (region, firms) in Dictionary(grouping: blocks, by: { $0.value.region }) {
+            guard let anchor = map.anchor(of: region), let ground = p.ground(lon: anchor.lon, lat: anchor.lat) else { continue }
+            let floor = regionLift(region, heights)
+            let biggest = firms.sorted { $0.value.blocks != $1.value.blocks ? $0.value.blocks > $1.value.blocks : $0.key < $1.key }
+            for (i, firm) in biggest.prefix(4).enumerated() {
+                let gx = Double(ground.x) + (Double(i) - 1.5) * 26 * scale
+                let gy = Double(ground.y) - (14 + Double(i % 2) * 10) * scale
+                placed.append(Building(sector: firm.value.industry, plants: firm.value.blocks, gx: gx, gy: gy, half: 6 * scale,
+                                       floor: floor, top: floor + 10 * scale, geo: anchor, key: firm.key))
+            }
+        }
+        rivalsHeld = placed.sorted { $0.gy < $1.gy }
+        rivalsKey = (plants: plants, heights: heights)
+        return rivalsHeld
+    }
+
     private var blocksBuilt = false
     private var blocksKey: [String: Double]?
     private var blocksHeld: [CityBlock] = []
@@ -358,6 +389,43 @@ final class MapGeometryCache {
         let fresh = MapGeometry(map: map, camera: camera, size: size, tilt: tilt, detail: detail)
         held = fresh
         return fresh
+    }
+}
+
+/// How a division's plants stand, for the map.
+enum PlantState {
+    case site, growing, running, mothballed
+
+    /// Each division's state from its plants, keyed region/industry (and /firm for rivals): a
+    /// building site while every plant is still going up, growing while some are built or
+    /// retooled, mothballed when every plant is, running otherwise.
+    static func of(_ plants: [MapPlantDto], byFirm: Bool = false) -> [String: PlantState] {
+        let grouped = Dictionary(grouping: plants) { byFirm ? "\($0.region)/\($0.industry)/\($0.firm)" : "\($0.region)/\($0.industry)" }
+        return grouped.mapValues { items in
+            let building = items.filter { $0.status.hasPrefix("Building") }.count
+            let retooling = items.filter { $0.status.hasPrefix("Retooling") }.count
+            let mothballed = items.filter { $0.status.hasPrefix("Mothballed") }.count
+            if building == items.count { return .site }
+            if mothballed == items.count { return .mothballed }
+            return building + retooling > 0 ? .growing : .running
+        }
+    }
+}
+
+/// Remembers who owned each plant, so a takeover can be marked on the map for a while.
+final class TakeoverLog {
+    private var owner: [UInt64: Bool] = [:]
+    private var since: [String: Int] = [:]
+
+    /// Divisions (region/industry) with a plant that was a rival's and is the player's now, for
+    /// six weeks after.
+    func update(_ plants: [MapPlantDto], week: Int) -> Set<String> {
+        for plant in plants {
+            if owner[plant.handle] == false && plant.player { since["\(plant.region)/\(plant.industry)"] = week }
+            owner[plant.handle] = plant.player
+        }
+        since = since.filter { week - $0.value <= 6 }
+        return Set(since.keys)
     }
 }
 
@@ -500,6 +568,14 @@ struct MapScene {
     var pickedLane: String?
     /// The moving sun, nil with day and night off.
     let sun: MapSun?
+    /// Every plant on the map, the player's and rivals', for rivals' buildings and plant states.
+    var plants: [MapPlantDto] = []
+    /// The economy's phase ("boom", "recession" and so on), shown in the cities and towns.
+    var economyPhase: String?
+    /// Divisions (region/industry) the player has just taken over, which fly a flag.
+    var acquired: Set<String> = []
+    /// Week of the year 1..52, for the seasons.
+    var week = 28
     var space = true
     /// Pixels per point, for the half-resolution light layers.
     var displayScale = 2.0
@@ -548,22 +624,71 @@ struct MapScene {
             var cityTops: [Int: CGFloat] = [:]
             if look.buildings >= 2 && g.closeUp && t > 0.5 {
                 let voxel = max(Voxels.scale(g.scale, displayScale: displayScale) - 1, 1)
-                for block in g.cityBlocks(ground) {
+                let px = Double(voxel) / max(displayScale, 1)
+                // The economy shows in the cities: cranes rise in a boom, lights go out in a recession.
+                let tone: Voxels.Tone = economyPhase == "recession" || economyPhase == "slowdown" ? .dark : .plain
+                for (i, block) in g.cityBlocks(ground).enumerated() {
                     let base = p.lift(CGPoint(x: block.gx, y: block.gy), block.floor)
                     if let top = Voxels.draw("city", plants: block.plants, ground: base, scale: voxel,
-                                             displayScale: displayScale, in: &context) {
+                                             displayScale: displayScale, tone: tone, in: &context) {
                         cityTops[block.index] = top
+                    }
+                    if (economyPhase == "boom" || economyPhase == "expansion" && i % 3 == 0) && i < 12 {
+                        Voxels.draw("crane", plants: economyPhase == "boom" ? 8 : 2,
+                                    ground: CGPoint(x: base.x + 10 * px, y: base.y + 2 / max(displayScale, 1)),
+                                    scale: voxel, displayScale: displayScale, in: &context)
                     }
                 }
             }
             if look.buildings > 0 && g.closeUp && t > 0.5 {
-                let voxel = Voxels.scale(g.scale, displayScale: displayScale)
-                for b in g.buildings(divisions, ground) {
-                    // Each division is a voxel building for its industry; a plain box if the sprite is missing.
+                // Rivals' plants first, a size smaller and muted, so the player's own stand over them.
+                let rivalScale = max(Voxels.scale(g.scale, displayScale: displayScale) - 1, 1)
+                let rivalStates = PlantState.of(plants.filter { !$0.player }, byFirm: true)
+                for b in g.rivalBuildings(plants, ground) {
                     let base = p.lift(CGPoint(x: b.gx, y: b.gy), b.floor)
+                    switch rivalStates[b.key] {
+                    case .site:
+                        Voxels.draw("site", plants: b.plants, ground: base, scale: rivalScale, displayScale: displayScale,
+                                    tone: .muted, in: &context)
+                    case .mothballed:
+                        Voxels.draw(b.sector, plants: b.plants, ground: base, scale: rivalScale, displayScale: displayScale,
+                                    tone: .dark, in: &context)
+                    default:
+                        Voxels.draw(b.sector, plants: b.plants, ground: base, scale: rivalScale, displayScale: displayScale,
+                                    tone: .muted, in: &context)
+                    }
+                }
+                let voxel = Voxels.scale(g.scale, displayScale: displayScale)
+                let px = Double(voxel) / max(displayScale, 1)
+                let states = PlantState.of(plants.filter(\.player))
+                for b in g.buildings(divisions, ground) {
+                    // Each division is a voxel building for its industry, shown as it stands: a
+                    // building site while its plants go up, a crane beside it while one is added or
+                    // retooled, dark when mothballed, a gold flag when just taken over. A plain box
+                    // if the sprite is missing.
+                    let base = p.lift(CGPoint(x: b.gx, y: b.gy), b.floor)
+                    let state = states[b.key] ?? .running
+                    let spriteTop: CGFloat?
+                    switch state {
+                    case .site:
+                        spriteTop = Voxels.draw("site", plants: b.plants, ground: base, scale: voxel, displayScale: displayScale,
+                                                in: &context)
+                    case .mothballed:
+                        spriteTop = Voxels.draw(b.sector, plants: b.plants, ground: base, scale: voxel, displayScale: displayScale,
+                                                tone: .dark, in: &context)
+                    default:
+                        spriteTop = Voxels.draw(b.sector, plants: b.plants, ground: base, scale: voxel, displayScale: displayScale,
+                                                in: &context)
+                    }
+                    if state == .growing {
+                        Voxels.draw("crane", plants: 2, ground: CGPoint(x: base.x + 12 * px, y: base.y + 3 / max(displayScale, 1)),
+                                    scale: voxel, displayScale: displayScale, in: &context)
+                    }
+                    if acquired.contains(b.key), let spriteTop {
+                        MapScene.drawFlag(in: &context, at: CGPoint(x: base.x + 6 * px, y: spriteTop - 2 / max(displayScale, 1)), unit: px)
+                    }
                     let topAt: CGPoint
-                    if let spriteTop = Voxels.draw(b.sector, plants: b.plants, ground: base, scale: voxel,
-                                                   displayScale: displayScale, in: &context) {
+                    if let spriteTop {
                         topAt = CGPoint(x: base.x, y: spriteTop)
                     } else {
                         let windows = nightNow && light.facing(b.geo) < 0 ? 0.85 : look.lighting == 2 ? 0.30 : 0
@@ -757,6 +882,20 @@ struct MapScene {
             .init(color: .black.opacity(0.18), location: 1),
         ]), center: CGPoint(x: size.width / 2, y: size.height / 2), startRadius: 0,
             endRadius: max(size.width, size.height) * 0.75))
+    }
+
+    /// A small gold pennant on a pole, planted on a building the player has just taken over.
+    /// `unit` is one sprite pixel in points.
+    static func drawFlag(in context: inout GraphicsContext, at: CGPoint, unit k: Double) {
+        context.fill(Path(CGRect(x: at.x - k, y: at.y - 12 * k, width: 2 * k, height: 12 * k)), with: .color(Theme.ink))
+        context.fill(Path(CGRect(x: at.x - k / 2, y: at.y - 12 * k, width: k, height: 12 * k)), with: .color(RGB(hex: 0xC8CED4).color()))
+        var pennant = Path()
+        pennant.move(to: CGPoint(x: at.x + k / 2, y: at.y - 12 * k))
+        pennant.addLine(to: CGPoint(x: at.x + 8 * k, y: at.y - 9.5 * k))
+        pennant.addLine(to: CGPoint(x: at.x + k / 2, y: at.y - 7 * k))
+        pennant.closeSubpath()
+        context.fill(pennant, with: .color(Theme.gold))
+        context.stroke(pennant, with: .color(Theme.ink), lineWidth: 1)
     }
 
     static func sectorRGB(_ sector: String) -> RGB {
@@ -1038,8 +1177,14 @@ struct WorldMapView: View {
     var onLane: ((String?) -> Void)?
     /// The career's region codes, which say which scenario's map to draw.
     var regionCodes: [String] = []
-    /// The game week, which sets the season on the satellite Earth.
+    /// The game's week count, for how long a takeover flag flies.
     var week: UInt32 = 0
+    /// The week's label, such as "2000 W10", which sets the season.
+    var weekLabel: String?
+    /// Every plant on the map, the player's and rivals'.
+    var plants: [MapPlantDto] = []
+    /// The economy's phase, shown in the cities.
+    var economyPhase: String?
     /// Puts the zoom controls at the top right, for the desktop shell where the tutorial card
     /// sits in the bottom corner.
     var controlsAtTop = false
@@ -1057,6 +1202,8 @@ struct WorldMapView: View {
     @State private var easing = false
     @State private var meter = FrameMeter()
     @State private var world = WorldClock()
+    @State private var takeovers = TakeoverLog()
+    @State private var acquired: Set<String> = []
 
     private var map: WorldMap { WorldMap.forRegions(regionCodes) }
 
@@ -1234,6 +1381,10 @@ struct WorldMapView: View {
             }
             .accessibilityAction(named: "Show the scenario") { fly(from: current, to: MapCamera.scenario(in: size, map: map)) }
         }
+        // Divisions the player has just taken over carry a flag for six weeks: a plant that was a
+        // rival's last week and is the player's now.
+        .onAppear { acquired = takeovers.update(plants, week: Int(week)) }
+        .onChange(of: plants) { _, new in acquired = takeovers.update(new, week: Int(week)) }
         .onChange(of: shading) { old, new in
             ease.retarget(from: old, to: new, now: MapClock.now, animate: animate && extrude)
             guard animate && extrude else { return }
@@ -1256,7 +1407,8 @@ struct WorldMapView: View {
             map: map, camera: camera, look: look, tint: layer.tintRGB, shading: shading,
             heights: layer == .freight ? [:] : ease.value(at: now, target: shading),
             selected: selected, divisions: divisions, lanes: lanes, freightLayer: layer == .freight, pickedLane: pickedLane,
-            sun: look.dayNight ? MapSun.moving(gameSeconds(now)) : nil, displayScale: displayScale
+            sun: look.dayNight ? MapSun.moving(gameSeconds(now)) : nil, plants: plants, economyPhase: economyPhase,
+            acquired: acquired, week: Earth.week(of: weekLabel), displayScale: displayScale
         )
     }
 
