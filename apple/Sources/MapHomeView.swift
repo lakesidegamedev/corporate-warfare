@@ -25,7 +25,7 @@ struct MapHomeView: View {
                         .background(Theme.panel)
                         .overlay(alignment: .trailing) { Rectangle().fill(Theme.stroke).frame(width: 1) }
                 }
-                WorldMapView(shading: shading, layer: layer, divisions: divisionMarkers, lanes: layer == .freight ? store.lanes : [], pickedLane: pickedLane, onLane: { pickedLane = $0 }, regionCodes: store.boards.map(\.code), selected: $selected)
+                WorldMapView(shading: shading, layer: layer, divisions: divisionMarkers, lanes: store.lanes, pickedLane: pickedLane, onLane: { pickedLane = $0 }, regionCodes: store.boards.map(\.code), week: store.overview?.tick ?? 0, selected: $selected)
                     .ignoresSafeArea(edges: .bottom)
                 if wide, let code = selected, let board = store.boards.first(where: { $0.code == code }) {
                     RegionBoardView(board: board, onBuild: { building = code }, onClose: { selected = nil })

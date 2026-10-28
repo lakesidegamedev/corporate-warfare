@@ -205,6 +205,13 @@ final class WorldMap {
     /// region the current map does not draw.
     private let names: [String: String]
 
+    /// Every city in the file, whichever scenario it belongs to, largest first. The main menu
+    /// globe lights and links them.
+    static let worldCities: [WorldMapFile.City] = (file?.cities ?? []).sorted { $0.population > $1.population }
+
+    /// Which region each line, lake and city falls in, built the first time a raised map needs it.
+    lazy var regionIndex = RegionIndex(map: self)
+
     private init(file: WorldMapFile?, scenario: String?) {
         guard let file else {
             names = [:]
@@ -298,6 +305,9 @@ struct MapCamera: Equatable {
     var lon: Double
     var lat: Double
     var zoom: Double
+    /// How much of the player's tilt setting applies: 1 tilted, 0 straight down. The 3D button
+    /// flies between the two.
+    var tilt: Double = 1
 
     static let minZoom = 0.8
     static let maxZoom = 90.0
@@ -315,15 +325,16 @@ struct MapCamera: Equatable {
         zoom * 0.45 * Double(min(size.width, size.height))
     }
 
-    /// Moves the centre by a screen drag, so the ground follows the finger.
-    func panned(by delta: CGSize, in size: CGSize) -> MapCamera {
+    /// Moves the centre by a screen drag, so the ground follows the finger. A tilted map
+    /// foreshortens vertical movement by the cosine of its pitch.
+    func panned(by delta: CGSize, in size: CGSize, pitch: Double = 0) -> MapCamera {
         let r = radius(in: size)
         let t = flatness
         let latRad = lat * .pi / 180
         let east = 1 + t * (max(cos(latRad), 0.2) - 1)
         var next = self
         next.lon -= Double(delta.width) / (r * east) * 180 / .pi
-        next.lat += Double(delta.height) / r * 180 / .pi
+        next.lat += Double(delta.height) / max(cos(pitch), 0.2) / r * 180 / .pi
         next.lat = min(max(next.lat, -80), 80)
         next.lon = (next.lon + 540).truncatingRemainder(dividingBy: 360) - 180
         return next
@@ -359,13 +370,16 @@ struct MapCamera: Equatable {
         return MapCamera(
             lon: a.lon + dLon * f,
             lat: a.lat + (b.lat - a.lat) * f,
-            zoom: exp(log(a.zoom) + (log(b.zoom) - log(a.zoom)) * f)
+            zoom: exp(log(a.zoom) + (log(b.zoom) - log(a.zoom)) * f),
+            tilt: a.tilt + (b.tilt - a.tilt) * f
         )
     }
 }
 
 /// Orthographic globe blended into a flat equirectangular map around the camera centre. The two
-/// agree at the centre, so the blend reads as the globe unrolling rather than a cut.
+/// agree at the centre, so the blend reads as the globe unrolling rather than a cut. A pitch then
+/// tilts the flat result away from the viewer, and heights rise off the ground; `flat` gives the
+/// untilted point and `lift` tilts it, so every path, anchor and hit test shares one transform.
 struct MapProjection {
     let r: Double
     let t: Double
@@ -378,8 +392,18 @@ struct MapProjection {
     let view: (Double, Double, Double)
     /// Angular radius that can reach the screen; anything farther is culled.
     let reach: Double
+    /// Radians the ground is tilted, 0 on the globe and the full setting once flat.
+    let pitch: Double
+    let cosPitch: Double
+    let sinPitch: Double
+    /// Focal length in points for the tilt's perspective.
+    let focal: Double
+    /// Screen rise per point of height: the pitch's sine, or an oblique view on an untilted map.
+    let rise: Double
 
-    init(camera: MapCamera, size: CGSize) {
+    /// `tilt` is the player's tilt setting in radians; the camera's own tilt and the flatness
+    /// scale it.
+    init(camera: MapCamera, size: CGSize, tilt: Double = 0) {
         r = camera.radius(in: size)
         t = camera.flatness
         cx = Double(size.width) / 2
@@ -389,8 +413,14 @@ struct MapProjection {
         sin0 = sin(lat0)
         cos0 = cos(lat0)
         view = (cos0 * cos(lon0), cos0 * sin(lon0), sin0)
+        pitch = tilt * min(max(camera.tilt, 0), 1) * t
+        cosPitch = cos(pitch)
+        sinPitch = sin(pitch)
+        focal = 1.6 * Double(max(size.width, size.height))
+        rise = max(sinPitch, 0.40 * t)
         let halfDiagonal = (Double(size.width * size.width + size.height * size.height)).squareRoot() / 2
-        reach = min(.pi / 2 + 0.05 + t, halfDiagonal / r * 1.4 + 0.05)
+        // A tilted view sees farther up the screen, so the cull reaches farther with it.
+        reach = min(.pi / 2 + 0.05 + t, halfDiagonal / r * 1.4 * (1 + 1.5 * sinPitch) + 0.05)
     }
 
     /// Whether any of a ring could be on screen.
@@ -400,9 +430,9 @@ struct MapProjection {
         return d - ring.radius < reach
     }
 
-    /// Screen point and whether it faces the viewer. Hidden points sit on the globe's edge so a
-    /// filled shape that crosses the horizon is clipped to it.
-    func project(_ p: GeoPoint, dl given: Double? = nil) -> (CGPoint, Bool) {
+    /// The untilted screen point and whether it faces the viewer. Hidden points sit on the
+    /// globe's edge so a filled shape that crosses the horizon is clipped to it.
+    func flat(_ p: GeoPoint, dl given: Double? = nil) -> (CGPoint, Bool) {
         var dl = given ?? (p.lon - lon0)
         if given == nil {
             if dl > .pi { dl -= 2 * .pi }
@@ -427,8 +457,59 @@ struct MapProjection {
         return (CGPoint(x: x, y: y), front || t > 0.5)
     }
 
-    /// A filled ring. Longitude is unwrapped along the ring so the flat map never tears it.
-    func addPolygon(_ ring: GeoRing, to path: inout Path) {
+    /// Perspective scale at an untilted screen height: 1 at the centre, smaller farther away.
+    func scale(atFlatY y: CGFloat) -> Double {
+        if pitch == 0 { return 1 }
+        let z = -(Double(y) - cy) * sinPitch
+        return focal / max(focal + z, 0.25 * focal)
+    }
+
+    /// Tilts an untilted screen point and raises it `h` points off the ground.
+    func lift(_ point: CGPoint, _ h: Double = 0) -> CGPoint {
+        if pitch == 0 && (h == 0 || rise == 0) { return point }
+        let dx = Double(point.x) - cx
+        let dy = Double(point.y) - cy
+        let y1 = dy * cosPitch - h * rise
+        let s = scale(atFlatY: point.y)
+        return CGPoint(x: cx + dx * s, y: cy + y1 * s)
+    }
+
+    /// Screen point on the ground and whether it faces the viewer.
+    func project(_ p: GeoPoint, dl given: Double? = nil) -> (CGPoint, Bool) {
+        let (point, visible) = flat(p, dl: given)
+        return (lift(point), visible)
+    }
+
+    /// Screen point raised `h` points off the ground.
+    func project(_ p: GeoPoint, height h: Double) -> (CGPoint, Bool) {
+        let (point, visible) = flat(p)
+        return (lift(point, h), visible)
+    }
+
+    /// A ring's untilted points, longitude unwrapped along the ring so the flat map never tears
+    /// it. nil when the ring cannot be on screen.
+    func flatRing(_ ring: GeoRing) -> [CGPoint]? {
+        guard ring.points.count >= 3, mayShow(ring) else { return nil }
+        var points: [CGPoint] = []
+        points.reserveCapacity(ring.points.count)
+        var previous = 0.0
+        for (index, point) in ring.points.enumerated() {
+            var dl = point.lon - lon0
+            if index == 0 {
+                if dl > .pi { dl -= 2 * .pi }
+                if dl < -.pi { dl += 2 * .pi }
+            } else {
+                while dl - previous > .pi { dl -= 2 * .pi }
+                while dl - previous < -.pi { dl += 2 * .pi }
+            }
+            previous = dl
+            points.append(flat(point, dl: dl).0)
+        }
+        return points
+    }
+
+    /// A filled ring, raised `height` points off the ground.
+    func addPolygon(_ ring: GeoRing, to path: inout Path, height: Double = 0) {
         guard ring.points.count >= 3, mayShow(ring) else { return }
         var previous = 0.0
         for (index, point) in ring.points.enumerated() {
@@ -441,24 +522,25 @@ struct MapProjection {
                 while dl - previous < -.pi { dl += 2 * .pi }
             }
             previous = dl
-            let (screen, _) = project(point, dl: dl)
+            let screen = lift(flat(point, dl: dl).0, height)
             if index == 0 { path.move(to: screen) } else { path.addLine(to: screen) }
         }
         path.closeSubpath()
     }
 
     /// A stroked line, broken where it passes behind the globe or across the date line.
-    func addLine(_ ring: GeoRing, to path: inout Path) {
+    func addLine(_ ring: GeoRing, to path: inout Path, height: Double = 0) {
         guard ring.points.count >= 2, mayShow(ring) else { return }
         var drawing = false
         var last = CGPoint.zero
         let jump = r * 0.5
         for point in ring.points {
-            let (screen, visible) = project(point)
+            let (flatPoint, visible) = flat(point)
             if !visible {
                 drawing = false
                 continue
             }
+            let screen = lift(flatPoint, height)
             if drawing, abs(screen.x - last.x) + abs(screen.y - last.y) < jump {
                 path.addLine(to: screen)
             } else {
@@ -469,20 +551,181 @@ struct MapProjection {
         }
     }
 
-    func path(_ rings: [GeoRing]) -> Path {
+    func path(_ rings: [GeoRing], height: Double = 0) -> Path {
         var path = Path()
-        for ring in rings { addPolygon(ring, to: &path) }
+        for ring in rings { addPolygon(ring, to: &path, height: height) }
         return path
     }
 
-    func lines(_ rings: [GeoRing]) -> Path {
+    func lines(_ rings: [GeoRing], height: Double = 0) -> Path {
         var path = Path()
-        for ring in rings { addLine(ring, to: &path) }
+        for ring in rings { addLine(ring, to: &path, height: height) }
         return path
     }
 
     /// Even-odd test of a screen point against a feature's projected rings.
-    func contains(_ rings: [GeoRing], _ location: CGPoint) -> Bool {
-        path(rings).contains(location, eoFill: true)
+    func contains(_ rings: [GeoRing], _ location: CGPoint, height: Double = 0) -> Bool {
+        path(rings, height: height).contains(location, eoFill: true)
+    }
+
+    /// A geo direction in view space: x right, y up, z towards the viewer.
+    func toView(_ p: (Double, Double, Double)) -> (Double, Double, Double) {
+        let sinL = sin(lon0)
+        let cosL = cos(lon0)
+        let east = (-sinL, cosL, 0.0)
+        let north = (-sin0 * cosL, -sin0 * sinL, cos0)
+        return (p.0 * east.0 + p.1 * east.1 + p.2 * east.2,
+                p.0 * north.0 + p.1 * north.1 + p.2 * north.2,
+                p.0 * view.0 + p.1 * view.1 + p.2 * view.2)
+    }
+
+    /// A view-space direction back in geo space.
+    func toGeo(_ v: (Double, Double, Double)) -> (Double, Double, Double) {
+        let sinL = sin(lon0)
+        let cosL = cos(lon0)
+        let east = (-sinL, cosL, 0.0)
+        let north = (-sin0 * cosL, -sin0 * sinL, cos0)
+        return (v.0 * east.0 + v.1 * north.0 + v.2 * view.0,
+                v.0 * east.1 + v.1 * north.1 + v.2 * view.1,
+                v.0 * east.2 + v.1 * north.2 + v.2 * view.2)
+    }
+
+    /// The night side for a sun at `sunLon`, `sunLat` degrees: everything where the sun's
+    /// direction dotted with the point is below `offset`. A ring along the terminator from one
+    /// side of the view to the other, closed round the night pole, ready for `addPolygon`.
+    static func nightRing(sunLon: Double, sunLat: Double, offset c: Double, centerLon lon0: Double) -> GeoRing {
+        let ls = sunLon * .pi / 180
+        var dsDeg = sunLat
+        if abs(dsDeg) < 2 { dsDeg = dsDeg < 0 ? -2 : 2 }
+        let ds = dsDeg * .pi / 180
+        let nightPole = ds > 0 ? -89.9 : 89.9
+        let dayPole = -nightPole
+        var flat: [Int] = []
+        let first = Int((lon0 - 180).rounded())
+        let last = Int((lon0 + 180).rounded())
+        for lonDeg in stride(from: first, through: last, by: 3) {
+            let lon = Double(lonDeg) * .pi / 180
+            let a = cos(ds) * cos(lon - ls)
+            let b = sin(ds)
+            let rr = (a * a + b * b).squareRoot()
+            let lat: Double
+            if abs(c) > rr {
+                // The whole column is on one side: night when even the sunniest point is below c.
+                lat = c > rr ? dayPole : nightPole
+            } else {
+                let alpha = atan2(b, a)
+                let spread = acos(c / rr)
+                var roots: [Double] = []
+                for candidate in [alpha + spread, alpha - spread] {
+                    var deg = candidate * 180 / .pi
+                    while deg > 180 { deg -= 360 }
+                    while deg <= -180 { deg += 360 }
+                    if deg >= -90 && deg <= 90 { roots.append(deg) }
+                }
+                if roots.isEmpty {
+                    // Neither root is on the globe: the column is all night or all day.
+                    lat = a < c ? dayPole : nightPole
+                } else {
+                    // Night lies between the boundary and the night pole: take the root nearest it.
+                    lat = ds > 0 ? roots.min() ?? nightPole : roots.max() ?? nightPole
+                }
+            }
+            flat.append(lonDeg * 10_000)
+            flat.append(Int((min(max(lat, -89.9), 89.9) * 10_000).rounded()))
+        }
+        for lonDeg in stride(from: last, through: first, by: -3) {
+            flat.append(lonDeg * 10_000)
+            flat.append(Int((nightPole * 10_000).rounded()))
+        }
+        return GeoRing(flat)
+    }
+}
+
+/// Which region each county, lake, river, highway, state border and city of a map belongs to,
+/// so a raised region can draw its own detail on its top face. Built once per map.
+final class RegionIndex {
+    /// Region bounding boxes in radians.
+    private let boxes: [(west: Double, south: Double, east: Double, north: Double)]
+    private let regions: [WorldMap.RegionFeature]
+    let counties: [[Int]]
+    let lakes: [[Int]]
+    let rivers: [[Int]]
+    let interstates: [[Int]]
+    let states: [[Int]]
+    /// The region index each city sits in, or -1 outside the scenario.
+    let cityRegion: [Int]
+    /// City indices, most populous first.
+    let byPopulation: [Int]
+    private let interstateRings: [GeoRing]
+    /// The region index of every highway point, for traffic on raised regions.
+    lazy var interstatePoints: [[Int]] = interstateRings.map { ring in ring.points.map { region(at: $0) } }
+
+    init(map: WorldMap) {
+        regions = map.regions
+        func box(_ rings: [GeoRing]) -> (west: Double, south: Double, east: Double, north: Double) {
+            var b = (west: Double.infinity, south: Double.infinity, east: -Double.infinity, north: -Double.infinity)
+            for ring in rings {
+                for p in ring.points {
+                    b = (min(b.west, p.lon), min(b.south, p.lat), max(b.east, p.lon), max(b.north, p.lat))
+                }
+            }
+            return b
+        }
+        let regionBoxes = map.regions.map { box($0.rings) }
+        boxes = regionBoxes
+        func assign(_ rings: [GeoRing]) -> [[Int]] {
+            var result = Array(repeating: [Int](), count: regionBoxes.count)
+            for (index, ring) in rings.enumerated() {
+                let b = box([ring])
+                for (r, rb) in regionBoxes.enumerated()
+                where b.west <= rb.east && b.east >= rb.west && b.south <= rb.north && b.north >= rb.south {
+                    result[r].append(index)
+                }
+            }
+            return result
+        }
+        counties = assign(map.counties)
+        lakes = assign(map.lakes)
+        rivers = assign(map.rivers)
+        interstates = assign(map.interstates)
+        // A state's border belongs to the regions inside it.
+        states = map.regions.map { region in
+            map.playStates.indices.filter { map.playStates[$0].code == region.state }
+        }
+        var cities: [Int] = []
+        cities.reserveCapacity(map.cities.count)
+        for city in map.cities {
+            cities.append(RegionIndex.find(GeoPoint(e4: city.x, city.y), boxes: regionBoxes, regions: map.regions))
+        }
+        cityRegion = cities
+        byPopulation = map.cities.indices.sorted { map.cities[$0].population > map.cities[$1].population }
+        interstateRings = map.interstates
+    }
+
+    /// The region a point falls in, or -1.
+    func region(at point: GeoPoint) -> Int {
+        Self.find(point, boxes: boxes, regions: regions)
+    }
+
+    private static func find(_ p: GeoPoint, boxes: [(west: Double, south: Double, east: Double, north: Double)],
+                             regions: [WorldMap.RegionFeature]) -> Int {
+        for (index, b) in boxes.enumerated() where p.lon >= b.west && p.lon <= b.east && p.lat >= b.south && p.lat <= b.north {
+            var inside = false
+            for ring in regions[index].rings {
+                let pts = ring.points
+                var j = pts.count - 1
+                for i in 0..<pts.count {
+                    let a = pts[i]
+                    let c = pts[j]
+                    if (a.lat > p.lat) != (c.lat > p.lat) {
+                        let x = (c.lon - a.lon) * (p.lat - a.lat) / (c.lat - a.lat) + a.lon
+                        if p.lon < x { inside.toggle() }
+                    }
+                    j = i
+                }
+            }
+            if inside { return index }
+        }
+        return -1
     }
 }

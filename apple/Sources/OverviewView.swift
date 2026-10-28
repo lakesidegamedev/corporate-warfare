@@ -230,10 +230,22 @@ struct AnalyticsPanel: View {
     }
 }
 
-/// Keys for the graphics settings, read by the map.
+/// Keys for the graphics settings, read by the map and the main menu. The same keys on every
+/// platform.
 enum GraphicsKeys {
+    static let preset = "graphics.preset"
     static let mapDetail = "graphics.mapDetail"
+    static let tilt = "graphics.tilt"
+    static let extrude = "graphics.extrude"
+    static let lighting = "graphics.lighting"
+    static let dayNight = "graphics.dayNight"
+    static let cityLights = "graphics.cityLights"
+    static let clouds = "graphics.clouds"
+    static let traffic = "graphics.traffic"
+    static let buildings = "graphics.buildings"
+    static let frameRate = "graphics.frameRate"
     static let animations = "graphics.animations"
+    static let showFps = "graphics.showFps"
 }
 
 /// How much the map draws: 0 low, 1 medium, 2 high.
@@ -268,32 +280,125 @@ struct PauseSettingsPanel: View {
     }
 }
 
-/// Map detail and animation settings.
+/// The graphics options: a quality preset that sets everything, then each option on its own.
 struct GraphicsSettingsPanel: View {
+    @AppStorage(GraphicsKeys.preset) private var preset = GraphicsPreset.high.rawValue
     @AppStorage(GraphicsKeys.mapDetail) private var detail = MapDetailLevel.high.rawValue
+    @AppStorage(GraphicsKeys.tilt) private var tilt = 1
+    @AppStorage(GraphicsKeys.extrude) private var extrude = true
+    @AppStorage(GraphicsKeys.lighting) private var lighting = 2
+    @AppStorage(GraphicsKeys.dayNight) private var dayNight = true
+    @AppStorage(GraphicsKeys.cityLights) private var cityLights = true
+    @AppStorage(GraphicsKeys.clouds) private var clouds = 1
+    @AppStorage(GraphicsKeys.traffic) private var traffic = 1
+    @AppStorage(GraphicsKeys.buildings) private var buildings = 2
+    @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
     @AppStorage(GraphicsKeys.animations) private var animations = true
+    @AppStorage(GraphicsKeys.showFps) private var showFps = false
 
     var body: some View {
         Panel(padding: 12) {
             VStack(alignment: .leading, spacing: 10) {
                 Eyebrow(text: "Graphics")
-                Picker("Map detail", selection: $detail) {
-                    ForEach(MapDetailLevel.allCases) { Text($0.title).tag($0.rawValue) }
-                }
-                .pickerStyle(.segmented)
-                Text((MapDetailLevel(rawValue: detail) ?? .high).note)
-                    .font(.caption2)
-                    .foregroundStyle(Theme.secondary)
-                Divider().overlay(Theme.stroke)
-                Toggle(isOn: $animations) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Animations").font(.callout).foregroundStyle(Theme.primaryText)
-                        Text("Map flights between the globe and the scenario.").font(.caption2).foregroundStyle(Theme.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Quality").font(.callout).foregroundStyle(Theme.primaryText)
+                    Picker("Quality", selection: presetBinding) {
+                        ForEach(GraphicsPreset.choices) { Text($0.title).tag($0.rawValue) }
                     }
+                    .pickerStyle(.segmented)
+                    Text(preset == GraphicsPreset.custom.rawValue
+                         ? "Custom. Picking a preset sets every option below."
+                         : "Picking a preset sets every option below. Changing any one shows Custom.")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.secondary)
                 }
-                .tint(Theme.gold)
+                Divider().overlay(Theme.stroke)
+                choice("Map detail", custom($detail), MapDetailLevel.allCases.map(\.title),
+                       (MapDetailLevel(rawValue: detail) ?? .high).note)
+                choice("3D tilt", custom($tilt), ["Off", "Subtle", "Full"],
+                       "Tilts the map as you zoom in, so the ground recedes into the distance.")
+                toggle("Raised regions", custom($extrude),
+                       "Regions stand up as tiles, taller where the active layer is stronger.")
+                choice("Lighting", custom($lighting), ["Off", "Standard", "Cinematic"],
+                       "Sunlight, shadows and the atmosphere around the globe.")
+                toggle("Day and night", custom($dayNight), "The sun moves across the world and night falls on the map.")
+                toggle("City lights", custom($cityLights), "Cities glow on the night side.")
+                choice("Clouds", custom($clouds), ["Off", "Few", "Many"], "Clouds drift over the map and cast shadows.")
+                choice("Traffic", custom($traffic), ["Off", "Light", "Busy"],
+                       "Freight moves along the lanes and cars along the highways.")
+                choice("Buildings", custom($buildings), ["Flat", "Your divisions", "Divisions and cities"],
+                       "Shows your divisions as buildings, and city skylines.")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Frame rate").font(.callout).foregroundStyle(Theme.primaryText)
+                    Picker("Frame rate", selection: custom($frameRate)) {
+                        Text("30").tag(30)
+                        Text("60").tag(60)
+                        Text("Unlimited").tag(0)
+                    }
+                    .pickerStyle(.segmented)
+                    Text("Lower saves battery.").font(.caption2).foregroundStyle(Theme.secondary)
+                }
+                Divider().overlay(Theme.stroke)
+                toggle("Animations", $animations, "Camera flights, the menu and moving effects.")
+                toggle("Show frame rate", $showFps, "A frame counter in the corner of the map.")
             }
         }
+    }
+
+    /// Picking a preset writes every option it covers.
+    private var presetBinding: Binding<String> {
+        Binding(
+            get: { preset },
+            set: { id in
+                guard let chosen = GraphicsPreset(rawValue: id), let values = chosen.values else { return }
+                detail = values.mapDetail
+                tilt = values.tilt
+                extrude = values.extrude
+                lighting = values.lighting
+                dayNight = values.dayNight
+                cityLights = values.cityLights
+                clouds = values.clouds
+                traffic = values.traffic
+                buildings = values.buildings
+                frameRate = values.frameRate
+                preset = chosen.rawValue
+            }
+        )
+    }
+
+    /// An option binding that marks the preset Custom when the player changes it.
+    private func custom<Value: Equatable>(_ binding: Binding<Value>) -> Binding<Value> {
+        Binding(
+            get: { binding.wrappedValue },
+            set: { value in
+                guard value != binding.wrappedValue else { return }
+                binding.wrappedValue = value
+                preset = GraphicsPreset.custom.rawValue
+            }
+        )
+    }
+
+    private func choice(_ title: String, _ selection: Binding<Int>, _ labels: [String], _ note: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.callout).foregroundStyle(Theme.primaryText)
+            Picker(title, selection: selection) {
+                ForEach(Array(labels.enumerated()), id: \.offset) { index, label in
+                    Text(label).tag(index)
+                }
+            }
+            .pickerStyle(.segmented)
+            Text(note).font(.caption2).foregroundStyle(Theme.secondary)
+        }
+    }
+
+    private func toggle(_ title: String, _ isOn: Binding<Bool>, _ note: String) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.callout).foregroundStyle(Theme.primaryText)
+                Text(note).font(.caption2).foregroundStyle(Theme.secondary)
+            }
+        }
+        .tint(Theme.gold)
     }
 }
 

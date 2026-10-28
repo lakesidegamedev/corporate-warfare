@@ -10,6 +10,8 @@ struct CorporateWarfareApp: App {
     }
 
     init() {
+        // Before any view reads a graphics option, so a fresh install starts on High.
+        GraphicsSettings.migrate()
         if Self.isUITesting {
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("CorporateWarfareUITests", isDirectory: true)
