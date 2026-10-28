@@ -572,7 +572,7 @@ internal fun DrawScope.drawWorldMap(
         val nightNow = sun != null
         // City skylines, then the player's divisions as buildings, nearest drawn last.
         val cityTops = HashMap<String, Float>()
-        if (graphics.buildings >= 2 && cam.zoom > 6 && t > 0.5) {
+        if (graphics.buildings >= 2 && g.closeUp && t > 0.5) {
             // Each big city on screen is a voxel city block sized by its population, a step smaller
             // than the player's buildings so those stay the stars.
             val voxelScale = (Voxels.scale(g.scale, density) - 1).coerceAtLeast(1)
@@ -582,18 +582,7 @@ internal fun DrawScope.drawWorldMap(
                 if (top != null) cityTops[block.name] = top
             }
         }
-        val cityLift = plinth
-        map.cities.take(if (close) 40 else 14).forEach { (city, point) ->
-            if (!close && city.country != "USA") return@forEach
-            val floor = g.cityFloor(city.name, ground)
-            val at = p.project(point, floor) ?: return@forEach
-            val above = cityTops[city.name]?.let { Offset(at.x, it) }
-            drawCircle(Palette.primaryText.copy(alpha = 0.85f), radius = 2.5f, center = at)
-            val label = measurer.measure(city.name, TextStyle(color = Palette.primaryText.copy(alpha = 0.9f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, shadow = LabelShadow))
-            val anchorY = above?.y?.let { min(it, at.y) } ?: at.y
-            drawText(label, topLeft = Offset(at.x + 6f, anchorY - label.size.height / 2f))
-        }
-        if (graphics.buildings > 0 && t > 0.5) {
+        if (graphics.buildings > 0 && g.closeUp && t > 0.5) {
             val voxelScale = Voxels.scale(g.scale, density)
             g.buildings(divisions, ground).forEach { b ->
                 // Each division is a voxel building for its industry; a plain box if the sprite is missing.
@@ -622,6 +611,18 @@ internal fun DrawScope.drawWorldMap(
                 val label = measurer.measure("$plants", TextStyle(color = Palette.ink, fontSize = 10.sp, fontWeight = FontWeight.Bold))
                 drawText(label, topLeft = dot - Offset(label.size.width / 2f, label.size.height / 2f))
             }
+        }
+        // City names last, so no building ever covers them.
+        val cityLift = plinth
+        map.cities.take(if (close) 40 else 14).forEach { (city, point) ->
+            if (!close && city.country != "USA") return@forEach
+            val floor = g.cityFloor(city.name, ground)
+            val at = p.project(point, floor) ?: return@forEach
+            val above = cityTops[city.name]?.let { Offset(at.x, it) }
+            drawCircle(Palette.primaryText.copy(alpha = 0.85f), radius = 2.5f, center = at)
+            val label = measurer.measure(city.name, TextStyle(color = Palette.primaryText.copy(alpha = 0.9f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, shadow = LabelShadow))
+            val anchorY = above?.y?.let { min(it, at.y) } ?: at.y
+            drawText(label, topLeft = Offset(at.x + 6f, anchorY - label.size.height / 2f))
         }
         if (graphics.cityLights && lit && (sun != null || t < 1)) drawCityLights(map.cities, p, light, cityLift, 1f)
     } else if (graphics.cityLights && lit && t < 1) {
@@ -703,6 +704,12 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
     val p = MapProjection(cam, size, pitch)
     /** How big 3D things are drawn: 1 at the scenario's framing, larger closer in. */
     val scale: Float = (cam.zoom / MapCamera.scenario(size, map).zoom).coerceIn(0.6, 2.5).toFloat()
+    /**
+     * Zoomed in past the scenario's framing: only then do divisions and cities stand as voxel
+     * buildings. Further out they are flat badges, so the overview stays clean.
+     */
+    val closeUp: Boolean get() = scale >= 1.4f
+
     /** The height of the scenario's base in pixels. */
     val plinth: Double get() = 8.0 * scale * p.t
     val graticule: Path by lazy { p.lines(graticuleRings) }
@@ -860,7 +867,8 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
                     val stand = when { city.population < 1_000_000 -> 2; city.population < 4_000_000 -> 5; else -> 12 }
                     CityBlock(city.name, ground.x, ground.y, cityFloor(city.name, heights), stand)
                 }
-                .take(30).sortedBy { it.gy }.toList()
+                // At the scenario's framing only the biggest cities, so the map stays readable.
+                .take(if (cam.zoom > 10) 30 else 16).sortedBy { it.gy }.toList()
             blocksKey = heights
         }
         return blocksValue
@@ -885,7 +893,7 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
         val laneCount = if (graphics.traffic >= 2 || freightLayer) 120 else if (graphics.traffic == 1) 60 else 0
         val tracks = if (p.t > 0.5 && laneCount > 0) laneTracks(map, p, lanes, laneCount) else emptyList()
         val roadLines = if (graphics.traffic > 0 && detailLevel == MapDetail.High && cam.zoom > 9) buildPolylines(p, map.interstates, if (raised) plinth else 0.0, size) else emptyList()
-        val spots = if (graphics.buildings > 0 && cam.zoom > 3 && p.t > 0.5) buildings(divisions, ground).map { b ->
+        val spots = if (graphics.buildings > 0 && closeUp && p.t > 0.5) buildings(divisions, ground).map { b ->
             val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
             // The rooftop light and smoke sit on the sprite's top when there is one.
             val frame = Voxels.frame(b.sector, Voxels.size(b.plants), Voxels.scale(scale, density))

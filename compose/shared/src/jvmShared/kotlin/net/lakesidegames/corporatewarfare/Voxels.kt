@@ -35,8 +35,11 @@ internal object Voxels {
         else -> 2
     }
 
-    /** The pixel scale for a map drawn at [zoomScale] on a screen of [density]. */
-    fun scale(zoomScale: Float, density: Float): Int = (zoomScale * density).roundToInt().coerceIn(1, 3)
+    /**
+     * The pixel scale for a map drawn at [zoomScale] on a screen of [density]: the player's
+     * buildings start at the middle scale at the scenario's framing so they read as the stars.
+     */
+    fun scale(zoomScale: Float, density: Float): Int = (zoomScale * density * 1.6f).roundToInt().coerceIn(1, 3)
 
     fun frame(sector: String, size: Int, scale: Int): Frame? = atlas?.frames?.get("$sector/$size")?.get("$scale")
 
