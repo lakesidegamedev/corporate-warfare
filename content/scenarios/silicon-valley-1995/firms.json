@@ -125,7 +125,7 @@
       "name": "Coastal Generation",
       "industry": "energy",
       "archetype": "vulture",
-      "region": "CA-ORA",
+      "region": "CA-LAX",
       "recipe": "generator_gas",
       "blocks": 3,
       "public": false
@@ -184,6 +184,11 @@
           "recipe": "metal_works",
           "region": "CA-LAX",
           "blocks": 3
+        },
+        {
+          "recipe": "plant_services",
+          "region": "CA-SAC",
+          "blocks": 2
         }
       ]
     },
@@ -659,6 +664,11 @@
         {
           "recipe": "mine",
           "region": "CA-SAC",
+          "blocks": 2
+        },
+        {
+          "recipe": "rare_earth_mine",
+          "region": "CA-INL",
           "blocks": 2
         }
       ]

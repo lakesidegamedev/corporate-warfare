@@ -870,6 +870,34 @@ pub struct CommodityLine {
     pub yours: bool,
 }
 
+/// True when a good has a place in this game: some strategy makes it and a plant in the world
+/// makes or uses it, or it has traded or sits in stock. A good nothing in the game makes or
+/// uses would show a placeholder price and no trade, so the board leaves it out until a plant
+/// for it is built.
+fn listed(world: &World, dataset: &Dataset, code: u16) -> bool {
+    let id = &dataset.products[code as usize].id;
+    // Storage space is a plant's own capacity, charged as fees; it never clears on the exchange.
+    if !dataset.recipes.iter().any(|recipe| recipe.makes(id))
+        || dataset
+            .recipes
+            .iter()
+            .any(|recipe| recipe.makes(id) && recipe.storage_class.is_some())
+    {
+        return false;
+    }
+    world.facilities.iter().any(|(_, plant)| {
+        let recipe = &dataset.recipes[plant.recipe as usize];
+        recipe.makes(id) || recipe.weekly_inputs_lots.contains_key(id)
+    }) || world
+        .gateways
+        .iter()
+        .any(|g| g.product == code && (g.last_import_lots > 0 || g.last_export_lots > 0))
+        || world
+            .firms
+            .iter()
+            .any(|(_, f)| f.inventory.keys().any(|(p, _)| *p == code))
+}
+
 pub fn commodity_board(world: &World, dataset: &Dataset) -> Vec<CommodityLine> {
     use cw_sim::economy::pricing;
     let player_outputs: std::collections::BTreeSet<u16> = world
@@ -881,7 +909,9 @@ pub fn commodity_board(world: &World, dataset: &Dataset) -> Vec<CommodityLine> {
     (0..dataset.products.len() as u16)
         .filter(|code| {
             let product = &dataset.products[*code as usize];
-            product.reference_price_cents > 0 && !product.kind.is_financial()
+            product.reference_price_cents > 0
+                && !product.kind.is_financial()
+                && listed(world, dataset, *code)
         })
         .map(|code| {
             let product = &dataset.products[code as usize];

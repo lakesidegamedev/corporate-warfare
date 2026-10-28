@@ -34,7 +34,7 @@ final class EngineBridgeTests: XCTestCase {
         // government laws, the reserve and systemic incidents, and in 1.7 preview 5 when rivals chose
         // moves by temperament and the world gained grudges and alliances. This constant needs
         // a fresh simulator run on the Mac runner before R05 is claimed again.
-        XCTAssertEqual(session.canonicalHash(), "5c231e40dabce2114eea6c5e9e34fea0a8090a274f554f1a8a987a69ba9cc551")
+        XCTAssertEqual(session.canonicalHash(), "55749f327b96f969cc21853f8a9a233555d5802672946532e2d2de4d3f6dffce")
 
         let data = try session.exportSave()
         XCTAssertGreaterThan(data.count, 1_000)

@@ -193,7 +193,10 @@ fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: u
             world,
             &dataset.recipes[facility.recipe as usize],
         );
-        let desired = full * facility.target_bps as i64 / 10_000 * crew_bps / 10_000;
+        // Rounded up: a plant run down to its floor still needs one worker of every tier its
+        // recipe uses, or a crew of three high-tier staff rounds to none and the plant, making
+        // nothing, never sells enough to be run back up.
+        let desired = (full * facility.target_bps as i64 * crew_bps + 99_999_999) / 100_000_000;
         // A lower production target is a real layoff, not just a hiring freeze. Severance is
         // one week's wage per released worker, paid through solvency rules.
         if *workers > desired {

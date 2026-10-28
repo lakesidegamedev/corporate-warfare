@@ -5187,11 +5187,11 @@ mod tests {
         assert!(session.recent_raids().is_empty());
         let plants = session.map_plants();
         // Thirty seeded rivals, of which the bank and the insurer run no plants, plus the
-        // player's own plant. Six rivals also open with extra plants (thirteen in all) so the
+        // player's own plant. Ten rivals also open with extra plants (seventeen in all) so the
         // oil, gas, iron and food chains start with local producers.
         assert_eq!(
             plants.iter().filter(|p| !p.player).count(),
-            28 + 13,
+            28 + 17,
             "every rival plant is on the map"
         );
         assert!(
@@ -5199,7 +5199,7 @@ mod tests {
             "the player's plant is marked"
         );
         let catalogue = strategies();
-        assert_eq!(catalogue.len(), 68);
+        assert_eq!(catalogue.len(), 69);
         // A refinery lists its by-products for the build screens.
         let refinery = catalogue.iter().find(|s| s.id == "refinery").unwrap();
         assert_eq!(refinery.by_products.len(), 3);

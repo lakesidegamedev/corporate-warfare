@@ -1090,7 +1090,7 @@ mod tests {
     fn pinned_dataset_loads_and_validates() {
         let dataset = Dataset::load().expect("dataset must validate");
         assert_eq!(dataset.products.len(), 44);
-        assert_eq!(dataset.recipes.len(), 68);
+        assert_eq!(dataset.recipes.len(), 69);
         assert_eq!(dataset.regions.len(), 31);
         assert_eq!(dataset.states.len(), 8);
         assert_eq!(dataset.events.len(), 24);
@@ -1319,6 +1319,52 @@ mod tests {
                     .any(|recipe| recipe.makes(product))
             });
             assert!(seeded, "{product} has no opening producer");
+        }
+    }
+
+    /// Every good a seeded plant uses is made by a seeded plant in the same scenario, and every
+    /// good a seeded plant makes is either used by one, sold to households or contracts, or one
+    /// of the service goods bought from budgets. Nothing is left to the outside sector alone.
+    #[test]
+    fn every_scenario_opens_with_a_producer_for_each_good_its_plants_use() {
+        for scenario in scenarios() {
+            let dataset = Dataset::load_scenario(&scenario.id).unwrap();
+            let plants: Vec<&Recipe> = dataset
+                .seed_firms
+                .iter()
+                .flat_map(|firm| {
+                    std::iter::once(firm.recipe.as_str())
+                        .chain(firm.extra_plants.iter().map(|p| p.recipe.as_str()))
+                })
+                .filter_map(|id| dataset.recipe(id))
+                .collect();
+            let made = |product: &str| plants.iter().any(|recipe| recipe.makes(product));
+            for recipe in &plants {
+                for input in recipe.weekly_inputs_lots.keys() {
+                    assert!(
+                        made(input),
+                        "{}: {} uses {input}, which no opening plant makes",
+                        scenario.id,
+                        recipe.id
+                    );
+                }
+            }
+        }
+    }
+
+    /// Every good a recipe uses is made by some recipe, so no input is bought only from the
+    /// outside sector.
+    #[test]
+    fn every_recipe_input_has_a_recipe_that_makes_it() {
+        let dataset = Dataset::load().unwrap();
+        for recipe in &dataset.recipes {
+            for input in recipe.weekly_inputs_lots.keys() {
+                assert!(
+                    dataset.recipes.iter().any(|maker| maker.makes(input)),
+                    "{} uses {input}, which no recipe makes",
+                    recipe.id
+                );
+            }
         }
     }
 

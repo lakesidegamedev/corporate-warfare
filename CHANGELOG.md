@@ -26,6 +26,21 @@ heading.
 
 ### Fixed
 
+- Every market trades and prices move smoothly. Goods that sat at a round placeholder price with
+  nothing made or sold (maintenance, research and, in some scenarios, fertilizer, ore, rare
+  earths, timber, vehicles, pharmaceuticals, building materials and natural gas liquids) now have
+  a producer in every scenario, a new Plant Maintenance Services strategy supplies maintenance, and
+  the Markets board no longer lists goods nothing makes or uses (training, water). Prices were
+  swinging up and down every week or two because rivals changed prices only every fourth week on
+  two rules that fought each other; every firm now sets its price every week from its stock cover
+  and sales, a sixth of the way at a time, so prices follow supply and demand and settle. A
+  corridor price no longer jumps when a small seller drops out for a week. Services no longer
+  produce a third more than they sell, and no longer sit throttled below demand. A plant run down
+  to its floor keeps one worker of each tier instead of idling for good, and rivals no longer
+  retool the only plant making a good or reset every plant to 85 percent each review, which made
+  their output swing against the weekly plan. Coastal Generation now opens in Los Angeles, where it has
+  customers. This changes the world state of every scenario, so saves and replays from 1.7.0
+  do not carry over.
 - Market snapshots now arrive from Android, Windows and Linux. Until now only the iPhone build sent
   its anonymous market-balance snapshot; the Compose app had no sender. It now posts one every five
   game weeks in the background, with a random install id and nothing else about you, and fails

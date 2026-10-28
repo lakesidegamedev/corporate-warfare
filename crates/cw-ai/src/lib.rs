@@ -1229,62 +1229,18 @@ fn strategic_candidates(world: &World, dataset: &Dataset, firm: Handle) -> Vec<C
     let reserve = reserve_target(world, dataset, firm);
     let mut candidates: Vec<Candidate> = Vec::new();
 
-    // Pricing: the shared sell-through rule (cw_sim::economy::pricing), one price per good.
-    for product in cw_sim::economy::pricing::outputs(world, dataset, firm) {
-        let price = entity
-            .policies
-            .prices
-            .get(&product)
-            .copied()
-            .unwrap_or_else(|| dataset.reference_price(product));
-        let mut target = cw_sim::economy::pricing::target_price(world, dataset, firm, product);
-        // Cost leaders and vultures undercut the going price by 3 percent wherever their own cost
-        // still leaves a 5 percent margin: a price war, never a sale at a loss.
-        if weights[0] >= 3
-            && let Some(cost) = cw_sim::economy::pricing::unit_cost(world, dataset, firm, product)
-        {
-            let going = cw_sim::economy::pricing::market_price(world, dataset, firm, product);
-            let undercut = going * 97 / 100;
-            let reference = dataset.reference_price(product).max(1);
-            if undercut < target && undercut >= cost * 105 / 100 {
-                target = undercut.clamp(reference / 2, reference * 2);
-            }
-        }
-        if target != price {
-            let weekly_sold = cw_sim::economy::pricing::weekly_sold(world, firm, product);
-            candidates.push(Candidate {
-                score: weights[0] * (52 * weekly_sold.max(1) * (target - price).abs()),
-                target: product as u64,
-                intent: CommandIntent::SetPrice {
-                    firm,
-                    product,
-                    price_cents: target,
-                },
-            });
-        }
-    }
+    // Prices follow the shared sell-through rule every week in the tick (pricing::weekly), so
+    // a rival has no price move to schedule here.
 
-    // Recovery: a firm that is profitable again restores capacity and marketing instead of
-    // staying permanently shrunk, which otherwise ratchets corridor demand down over years.
+    // Production follows sell-through plant by plant in the weekly tick, up as well as down, so
+    // a profitable firm needs no whole-firm target reset: setting every plant back to 85 percent
+    // fought the plan and made output swing between the two.
     let recent_income: i64 = entity
         .book
         .recent_weeks()
         .iter()
         .map(|week| week.net_income)
         .sum();
-    if recent_income > 0
-        && entity.book.cash() > reserve * 2
-        && entity.policies.production_target_bps < 8_500
-    {
-        candidates.push(Candidate {
-            score: weights[1] * (recent_income / weeks * 52),
-            target: firm.0,
-            intent: CommandIntent::SetProductionTarget {
-                firm,
-                target_bps: 8_500,
-            },
-        });
-    }
 
     // Brand builders and retailers fund marketing, which is the only source of media revenue.
     // Three percent of trailing weekly revenue keeps the corridor's studios operating without
@@ -1946,6 +1902,18 @@ fn best_retool(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle
         };
         let weekly = current.weekly_output_lots * plant.blocks as i64;
         if entity.stock(output, plant.region).lots() <= weekly * 4 {
+            continue;
+        }
+        // A plant that is the corridor's only maker of one of its goods stays: retooling it would
+        // leave that good, say the natural gas liquids a gas plant strips, with no producer.
+        let sole_maker = current.outputs().any(|(id, _)| {
+            !world.facilities.iter().any(|(other, p)| {
+                other != *handle
+                    && p.status == FacilityStatus::Operating
+                    && dataset.recipes[p.recipe as usize].makes(id)
+            })
+        });
+        if sole_maker {
             continue;
         }
         // A retool moves the whole division, so it is valued and costed over all its plants,
