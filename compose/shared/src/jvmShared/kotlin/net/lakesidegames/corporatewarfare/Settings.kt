@@ -92,6 +92,7 @@ class AppSettings(private val file: File) {
             props.setProperty("lighting", g.lighting.toString())
             props.setProperty("dayNight", g.dayNight.toString())
             props.setProperty("cityLights", g.cityLights.toString())
+            props.setProperty("earth", g.earth.toString())
             props.setProperty("clouds", g.clouds.toString())
             props.setProperty("traffic", g.traffic.toString())
             props.setProperty("buildings", g.buildings.toString())
@@ -127,6 +128,7 @@ class AppSettings(private val file: File) {
             lighting = int("lighting", base.lighting, 0..2),
             dayNight = bool("dayNight", base.dayNight),
             cityLights = bool("cityLights", base.cityLights),
+            earth = bool("earth", base.earth),
             clouds = int("clouds", base.clouds, 0..3),
             traffic = int("traffic", base.traffic, 0..2),
             buildings = int("buildings", base.buildings, 0..2),

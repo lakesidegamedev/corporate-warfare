@@ -287,6 +287,7 @@ fun WorldMapView(
                     map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shaded, selected, store.mapDivisions, measurer,
                     lanes = store.lanes, freightLayer = layer == MapLayer.Freight, pickedLane = pickedLane,
                     geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Ground,
+                    week = Earth.weekOf(store.overview?.weekLabel),
                 )
             }
             // Layers, bottom to top: the ground, traffic on it, clouds, buildings and labels, then
@@ -385,7 +386,7 @@ fun WorldMapView(
 
 /** The region under a tap: raised tiles nearest the viewer first, so a tall tile catches its top. */
 private fun regionAt(map: WorldMap, g: MapGeometry, graphics: GraphicsConfig, heights: Map<String, Double>, tap: Offset): String? {
-    if (graphics.extrude && g.p.t > 0.05) {
+    if (graphics.extrude && g.p.t > 0.05 && !graphics.earth) {
         g.raised(heights).asReversed().forEach { solid ->
             val region = map.regions.firstOrNull { it.code == solid.code } ?: return@forEach
             if (g.p.contains(region.rings, tap, solid.h)) return solid.code
@@ -465,6 +466,7 @@ internal fun DrawScope.drawWorldMap(
     heights: Map<String, Double> = shading,
     phase: MapPhase = MapPhase.All,
     plants: List<uniffi.cw_ffi.MapPlantDto> = emptyList(),
+    week: Int = 28,
 ) {
     MapProfiler.start()
     val detailLevel = graphics.detail
@@ -474,7 +476,8 @@ internal fun DrawScope.drawWorldMap(
     val light = sun ?: Sun.fixed(p)
     val lit = graphics.lighting > 0
     val detail = if (detailLevel != MapDetail.High) 0f else ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
-    val raised = graphics.extrude && t > 0.05
+    // Over the satellite Earth the regions lie flat and see-through so the real ground shows.
+    val raised = graphics.extrude && t > 0.05 && !graphics.earth
     val regionPaths = g.regionPaths
     // How far up the base of the raised scenario sits on screen, for lines drawn on it.
     val plinth = if (raised) g.plinth else 0.0
@@ -493,7 +496,10 @@ internal fun DrawScope.drawWorldMap(
         if (t < 1) drawPath(g.graticule, Palette.primaryText.copy(alpha = (0.06 * (1 - t)).toFloat()), style = Stroke(0.6f))
         // Outside the scenario the world is muted: climate-tinted land on the globe that greys as the
         // map flattens, grey borders and roads. The scenario's regions are drawn over it in colour.
-        if (lit) {
+        if (graphics.earth) {
+            // The real Earth, with the season, in place of the painted land and sea.
+            with(Earth) { drawEarth(p, week, map.playBounds, map.scenarioId) }
+        } else if (lit) {
             // Shallow water: a lighter band of sea hugging every coast, under the land.
             val shallows = (2 + cam.zoom * 0.35).coerceIn(2.0, 9.0).toFloat()
             g.biomes.forEach { drawPath(it, Color(0xFF2F6F9A).copy(alpha = 0.30f), style = Stroke(shallows)) }
@@ -533,7 +539,7 @@ internal fun DrawScope.drawWorldMap(
             if (detail > 0) translate(top = up) { drawPath(g.counties, Palette.stroke.copy(alpha = 0.45f * detail), style = Stroke(0.5f)) }
         } else {
             regionPaths.forEach { (code, path) ->
-                drawPath(path, RegionLand)
+                drawPath(path, if (graphics.earth) RegionLand.copy(alpha = 0.32f) else RegionLand)
                 val intensity = shading[code] ?: 0.0
                 if (intensity > 0) drawPath(path, tint.copy(alpha = (0.15 + 0.6 * intensity).toFloat()))
             }
@@ -949,7 +955,7 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
         val key = listOf(lanes, divisions, selected, heights, graphics, freightLayer, density)
         val held = overlayValue
         if (held != null && overlayKey?.let { k -> k.size == key.size && k.indices.all { k[it] === key[it] || k[it] == key[it] } } == true) return held
-        val raised = graphics.extrude && p.t > 0.05
+        val raised = graphics.extrude && p.t > 0.05 && !graphics.earth
         val ground = if (raised) heights else FlatGround
         val laneCount = if (graphics.traffic >= 2 || freightLayer) 120 else if (graphics.traffic == 1) 60 else 0
         val tracks = if (p.t > 0.5 && laneCount > 0) laneTracks(map, p, lanes, laneCount) else emptyList()

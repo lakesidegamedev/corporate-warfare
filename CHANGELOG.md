@@ -13,6 +13,11 @@ heading.
 
 ### Added
 
+- The real Earth under the map: NASA's Blue Marble imagery (public domain) on the globe, the menu and
+  the scenario, sharp close up. The seasons follow the game's calendar: a snow line that creeps south
+  in winter, autumn colour, and browner winters in the mid-latitudes, half a year apart in the south.
+  Over it your regions lie flat and see-through. Switch it off under Settings, Satellite Earth, for the
+  painted map with raised regions. `tools/earth_tex.py` bakes the images.
 - Zoomed in, your divisions stand on the map as front-on, cel-shaded voxel buildings, square to
   the map like classic 8-bit games, one model per industry (a farm
   with barn and silos, a mine headframe, a refinery, a chemical works, a factory, a building site,
