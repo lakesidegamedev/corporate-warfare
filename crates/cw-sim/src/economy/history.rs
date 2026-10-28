@@ -2,7 +2,7 @@
 //! periods with closing balances. Nothing in the rules reads it.
 //!
 //! The archive keeps the deeper presentation history for the financial views: ten years of
-//! weekly closing prices, and each firm's statements weekly for two years and quarterly for the
+//! weekly closing prices, and each firm's statements weekly for a year and quarterly for the
 //! whole career. Every record carries an income statement, closing balances, a cash flow
 //! statement and, quarterly, each division's estimated results. It lives outside the world's
 //! postcard encoding and hash, so it never moves a determinism check.
@@ -25,8 +25,8 @@ use crate::state::{HISTORY_PERIODS, PERIOD_WEEKS, PeriodClose, PricePoint, World
 
 /// Weeks of closing prices the archive keeps: ten years.
 pub const ARCHIVE_PRICE_WEEKS: usize = 520;
-/// Weekly statements the archive keeps per firm: two years.
-pub const ARCHIVE_WEEKS: usize = 104;
+/// Weekly statements the archive keeps per firm: one year.
+pub const ARCHIVE_WEEKS: usize = 52;
 /// Quarterly statements the archive keeps per firm: forty years, a whole career.
 pub const ARCHIVE_QUARTERS: usize = 160;
 

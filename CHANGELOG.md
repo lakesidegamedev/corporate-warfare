@@ -39,7 +39,7 @@ heading.
   several series at once with a legend (your revenue against rivals, a share against the corridor
   index, a good against its reference price), the value under the pointer or finger, and dates
   such as 2001 Q3 along the bottom.
-- Longer history: ten years of weekly share and goods prices, two years of weekly statements and
+- Longer history: ten years of weekly share and goods prices, a year of weekly statements and
   quarterly statements for the whole career. Saves from earlier versions still load and start
   their longer history from the year of prices they already hold.
 

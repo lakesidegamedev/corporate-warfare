@@ -203,7 +203,7 @@ pub fn statements_of(
 
 #[uniffi::export]
 impl SessionHandle {
-    /// A firm's statements, oldest first. `period` is `week` (two years), `quarter` (the whole
+    /// A firm's statements, oldest first. `period` is `week` (one year), `quarter` (the whole
     /// career) or `year`. Your companies, inspected companies and companies on the board only; a save
     /// from before the archive has none until weeks are played.
     pub fn statements(&self, firm: u64, period: String) -> Vec<StatementDto> {
