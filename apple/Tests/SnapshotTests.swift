@@ -45,6 +45,12 @@ final class SnapshotTests: XCTestCase {
         XCTAssertEqual(store.stocks.first?.historyCents.count, 10, "ten weekly closes after ten weeks")
         XCTAssertEqual(store.divisions.count, 1)
 
+        // The cloud textures load in the background; wait for them so the map shows its clouds.
+        Pixel.configureSystemBars()
+        for _ in 0..<100 {
+            if CloudRenderer.shared?.ready(["clouds", "clouds-great-lakes-2000"]) ?? true { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
         let phone = CGSize(width: 393, height: 852)
         let pad = CGSize(width: 1180, height: 820)
         let home = store.boards.first { $0.code == store.divisions.first?.region }
@@ -72,6 +78,11 @@ final class SnapshotTests: XCTestCase {
         render("tab-markets-phone", phone, compact: true, RootView(initialTab: .markets).environmentObject(store))
         render("tab-inbox-phone", phone, compact: true, RootView(initialTab: .inbox).environmentObject(store))
         render("tab-portfolio-phone", phone, compact: true, RootView(initialTab: .portfolio).environmentObject(store))
+        // The menu's globe with its clouds, and the settings with the Clouds option and credits.
+        render("menu-phone", phone, compact: true, StartView().environmentObject(store))
+        render("menu-pad", pad, compact: false, StartView().environmentObject(store))
+        render("settings-phone", phone, compact: true,
+               ScrollView { GraphicsSettingsPanel().padding(16) }.background(Theme.ink))
     }
 
     private func render<V: View>(_ name: String, _ size: CGSize, compact: Bool, _ view: V) {

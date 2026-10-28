@@ -85,11 +85,12 @@ struct ChoiceChip: View {
                 if let icon { PixelIcon(icon, size: 12) }
                 Text(text)
             }
-                .font(.caption.weight(.semibold))
+                .font(Pixel.font(11))
+                .textCase(.uppercase)
                 .foregroundStyle(on ? Theme.ink : Theme.primaryText)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(on ? Theme.gold : Theme.panelRaised, in: Capsule())
+                .background(on ? Theme.gold : Theme.panelRaised, in: Pixel.small)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])
@@ -222,8 +223,8 @@ struct CommandCenterView: View {
                 }
             }
         }
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+        .background(Theme.panel, in: Pixel.shape)
+        .overlay(Pixel.shape.stroke(Theme.stroke, lineWidth: 1))
     }
 
     private func row(_ action: ActionDto) -> some View {
@@ -435,8 +436,8 @@ struct ActionFormView: View {
             }
             .padding(18)
         }
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+        .background(Theme.panel, in: Pixel.shape)
+        .overlay(Pixel.shape.stroke(Theme.stroke, lineWidth: 1))
         .task(id: firm ?? 0) {
             pickers = await store.pickers(firm: firm)
         }
@@ -485,7 +486,7 @@ struct ActionFormView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.ink, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Theme.ink, in: Pixel.shape)
     }
 
     private var submitRow: some View {
@@ -504,7 +505,7 @@ struct ActionFormView: View {
             } label: {
                 Text("Submit").frame(minWidth: 90)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PixelButtonStyle(prominent: true))
             .tint(Theme.gold)
             .foregroundStyle(Theme.ink)
             .controlSize(.large)
@@ -592,8 +593,8 @@ struct ActionFormView: View {
             .tint(Theme.gold)
             .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.ink, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+            .background(Theme.ink, in: Pixel.shape)
+            .overlay(Pixel.shape.stroke(Theme.stroke, lineWidth: 1))
         }
     }
 }

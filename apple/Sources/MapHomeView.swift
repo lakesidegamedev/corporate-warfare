@@ -139,8 +139,7 @@ struct CompanyHUD: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+        .pixelFrame(Theme.panel)
     }
 
     private var layout: some View {
@@ -207,7 +206,7 @@ struct TimeBar: View {
                 } label: {
                     PixelIcon("next_week")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PixelButtonStyle(prominent: true))
                 .tint(Theme.gold)
                 .foregroundStyle(Theme.ink)
                 .disabled(store.isBusy || store.runSpeed > 0)
@@ -226,8 +225,8 @@ struct TimeBar: View {
                 .foregroundStyle(Theme.primaryText)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
-                .background(Theme.panelRaised, in: Capsule())
-                .overlay(Capsule().stroke(Theme.stroke, lineWidth: 1))
+                .background(Theme.panelRaised, in: Pixel.small)
+                .overlay(Pixel.small.stroke(Theme.stroke, lineWidth: 1))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(open ? "Hide time controls" : "Show time controls")
@@ -271,13 +270,13 @@ struct LayerChips: View {
                     Button {
                         layer = option
                     } label: {
-                        PixelLabel(option.rawValue, icon: option.icon)
-                            .font(.caption.weight(.semibold))
+                        PixelLabel(option.rawValue.uppercased(), icon: option.icon)
+                            .font(Pixel.font(11))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                             .foregroundStyle(layer == option ? Theme.ink : Theme.primaryText)
-                            .background(layer == option ? option.tint : Theme.panel.opacity(0.9), in: Capsule())
-                            .overlay(Capsule().stroke(Theme.stroke, lineWidth: layer == option ? 0 : 1))
+                            .background(layer == option ? option.tint : Theme.panel, in: Pixel.small)
+                            .overlay(Pixel.small.stroke(Theme.stroke, lineWidth: layer == option ? 0 : 1))
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(layer == option ? .isSelected : [])
@@ -340,7 +339,7 @@ struct GameMenuButton: View {
             PixelIcon("menu", size: 12)
                 .foregroundStyle(Theme.primaryText)
                 .frame(width: 30, height: 30)
-                .background(Theme.panelRaised, in: Circle())
+                .background(Theme.panelRaised, in: Pixel.small)
         }
         .accessibilityLabel("Menu")
         .sheet(isPresented: $showingSettings) {

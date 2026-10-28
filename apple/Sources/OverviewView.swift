@@ -84,8 +84,8 @@ struct OverviewView: View {
                     PixelIcon("chevron_right", size: 14).foregroundStyle(Theme.secondary)
                 }
                 .padding(12)
-                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+                .background(Theme.panel, in: Pixel.shape)
+                .overlay(Pixel.shape.stroke(Theme.stroke, lineWidth: 1))
             }
             .buttonStyle(.plain)
         }
@@ -117,7 +117,7 @@ struct OverviewView: View {
             PixelLabel("Continue this career in sandbox", icon: "arrow_right")
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(PixelButtonStyle(prominent: true))
         .controlSize(.large)
     }
 
@@ -240,6 +240,7 @@ enum GraphicsKeys {
     static let lighting = "graphics.lighting"
     static let dayNight = "graphics.dayNight"
     static let cityLights = "graphics.cityLights"
+    static let clouds = "graphics.clouds"
     static let traffic = "graphics.traffic"
     static let buildings = "graphics.buildings"
     static let frameRate = "graphics.frameRate"
@@ -288,6 +289,7 @@ struct GraphicsSettingsPanel: View {
     @AppStorage(GraphicsKeys.lighting) private var lighting = 2
     @AppStorage(GraphicsKeys.dayNight) private var dayNight = true
     @AppStorage(GraphicsKeys.cityLights) private var cityLights = true
+    @AppStorage(GraphicsKeys.clouds) private var clouds = 1
     @AppStorage(GraphicsKeys.traffic) private var traffic = 1
     @AppStorage(GraphicsKeys.buildings) private var buildings = 2
     @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
@@ -300,10 +302,7 @@ struct GraphicsSettingsPanel: View {
                 Eyebrow(text: "Graphics")
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Quality").font(.callout).foregroundStyle(Theme.primaryText)
-                    Picker("Quality", selection: presetBinding) {
-                        ForEach(GraphicsPreset.choices) { Text($0.title).tag($0.rawValue) }
-                    }
-                    .pickerStyle(.segmented)
+                    PixelChoices(options: GraphicsPreset.choices.map { ($0.rawValue, $0.title) }, selection: presetBinding, label: "Quality")
                     Text(preset == GraphicsPreset.custom.rawValue
                          ? "Custom: your own mix of the options below."
                          : "Picking a preset sets every option below. Change any of them to make your own mix.")
@@ -322,18 +321,15 @@ struct GraphicsSettingsPanel: View {
                 choice("Day and night", onOff(custom($dayNight)), ["Off", "On"],
                        "The sun moves across the world and night falls on the map.")
                 choice("City lights", onOff(custom($cityLights)), ["Off", "On"], "Cities glow on the night side.")
+                choice("Clouds", custom($clouds), ["Off", "Light", "Heavy"],
+                       "Real satellite clouds that drift with the trade winds and westerlies, casting shadows on the map.")
                 choice("Traffic", custom($traffic), ["Off", "Light", "Busy"],
                        "Freight moves along the lanes and cars along the highways.")
                 choice("Buildings", custom($buildings), ["Flat", "Your divisions", "Divisions and cities"],
                        "Shows your divisions as buildings, and city skylines.")
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Frame rate").font(.callout).foregroundStyle(Theme.primaryText)
-                    Picker("Frame rate", selection: custom($frameRate)) {
-                        Text("30").tag(30)
-                        Text("60").tag(60)
-                        Text("Unlimited").tag(0)
-                    }
-                    .pickerStyle(.segmented)
+                    PixelChoices(options: [(30, "30"), (60, "60"), (0, "Unlimited")], selection: custom($frameRate), label: "Frame rate")
                     Text("Lower saves battery.").font(.caption2).foregroundStyle(Theme.secondary)
                 }
                 Divider().overlay(Theme.stroke)
@@ -346,7 +342,7 @@ struct GraphicsSettingsPanel: View {
     /// The options as they stand, for matching against the presets.
     private var current: GraphicsSettings {
         GraphicsSettings(mapDetail: detail, tilt: tilt, extrude: extrude, lighting: lighting, dayNight: dayNight,
-                         cityLights: cityLights, traffic: traffic, buildings: buildings, frameRate: frameRate)
+                         cityLights: cityLights, clouds: clouds, traffic: traffic, buildings: buildings, frameRate: frameRate)
     }
 
     /// An on and off option as a two-way choice.
@@ -366,6 +362,7 @@ struct GraphicsSettingsPanel: View {
                 lighting = values.lighting
                 dayNight = values.dayNight
                 cityLights = values.cityLights
+                clouds = values.clouds
                 traffic = values.traffic
                 buildings = values.buildings
                 frameRate = values.frameRate
@@ -391,12 +388,7 @@ struct GraphicsSettingsPanel: View {
     private func choice(_ title: String, _ selection: Binding<Int>, _ labels: [String], _ note: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.callout).foregroundStyle(Theme.primaryText)
-            Picker(title, selection: selection) {
-                ForEach(Array(labels.enumerated()), id: \.offset) { index, label in
-                    Text(label).tag(index)
-                }
-            }
-            .pickerStyle(.segmented)
+            PixelChoices(options: labels.enumerated().map { ($0.offset, $0.element) }, selection: selection, label: title)
             Text(note).font(.caption2).foregroundStyle(Theme.secondary)
         }
     }
@@ -422,13 +414,13 @@ struct PauseBanner: View {
                     Spacer(minLength: 6)
                     if info.action == "answer", event != nil {
                         Button(info.actionLabel) { showingCard = true }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(PixelButtonStyle(prominent: true))
                             .tint(Theme.gold)
                             .foregroundStyle(Theme.ink)
                             .disabled(store.isBusy)
                     } else {
                         Button("Continue") { Task { await store.continueCareer() } }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(PixelButtonStyle(prominent: true))
                             .tint(Theme.gold)
                             .foregroundStyle(Theme.ink)
                             .disabled(store.isBusy)
@@ -442,7 +434,7 @@ struct PauseBanner: View {
             .padding(12)
             .foregroundStyle(.white)
             .background(info.kind == "decision" ? Theme.warning : Theme.panelRaised)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(Pixel.shape)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .sheet(isPresented: Binding(get: { showingCard && event != nil }, set: { showingCard = $0 })) {
@@ -470,7 +462,7 @@ struct DecisionBanner: View {
         .padding(12)
         .foregroundStyle(.white)
         .background(Theme.warning)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(Pixel.shape)
     }
 }
 
@@ -574,6 +566,12 @@ struct SettingsView: View {
                                 .font(.caption.monospaced())
                                 .foregroundStyle(Theme.secondary)
                             Text("Institutions are simplified game rules, not legal, tax or investment advice.")
+                                .font(.caption)
+                                .foregroundStyle(Theme.secondary)
+                            Text("Clouds: Solar System Scope, CC BY 4.0, based on NASA Blue Marble imagery.")
+                                .font(.caption)
+                                .foregroundStyle(Theme.secondary)
+                            Text("Pixel font: Silkscreen, The Silkscreen Project Authors, SIL Open Font License 1.1.")
                                 .font(.caption)
                                 .foregroundStyle(Theme.secondary)
                         }

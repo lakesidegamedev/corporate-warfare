@@ -670,11 +670,7 @@ struct ShareOrderSheet: View {
             }
         ) {
             Section("Order") {
-                Picker("Side", selection: $buy) {
-                    Text("Buy").tag(true)
-                    Text("Sell").tag(false)
-                }
-                .pickerStyle(.segmented)
+                PixelChoices(options: [(true, "Buy"), (false, "Sell")], selection: $buy, label: "Side")
                 TextField("Shares", text: $quantityText)
                     .keyboardType(.numberPad)
                     .accessibilityLabel("Number of shares")
@@ -750,11 +746,7 @@ struct CastVoteSheet: View {
                 DetailRow(title: "Deadline", value: "Week \(vote.deadline)")
                 DetailRow(title: "Recorded yes", value: "\(vote.yes)")
                 DetailRow(title: "Recorded no", value: "\(vote.no)")
-                Picker("Your vote", selection: $approve) {
-                    Text("Approve").tag(true)
-                    Text("Reject").tag(false)
-                }
-                .pickerStyle(.segmented)
+                PixelChoices(options: [(true, "Approve"), (false, "Reject")], selection: $approve, label: "Your vote")
             }
         }
         .task { await refresh() }
@@ -1246,7 +1238,7 @@ struct QuoteBindSheet: View {
                 Button("Send a quote request") {
                     Task { await requestQuote() }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(PixelButtonStyle())
                 .frame(minHeight: 44)
             }
         }

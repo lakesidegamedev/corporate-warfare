@@ -214,6 +214,8 @@ final class WorldMap {
     let scenarioAreas: [(id: String, rings: [GeoRing])]
     /// The scenario's playable states, in degrees: west, south, east, north.
     let playBounds: (west: Double, south: Double, east: Double, north: Double)
+    /// The scenario this map is for, which picks its close-up clouds.
+    let scenarioId: String?
 
     /// Every region's name in the file, whichever scenario it belongs to, for feeds that name a
     /// region the current map does not draw.
@@ -227,6 +229,7 @@ final class WorldMap {
     lazy var regionIndex = RegionIndex(map: self)
 
     private init(file: WorldMapFile?, scenario: String?) {
+        scenarioId = scenario
         guard let file else {
             names = [:]
             attribution = ""

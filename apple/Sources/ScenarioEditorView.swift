@@ -174,16 +174,12 @@ struct ScenarioEditorView: View {
         }
         SectionCard(title: "Starting capital") {
             let standard = summary?.startingCapitalCents ?? 0
-            Picker("Starting capital", selection: Binding(
+            PixelChoices(options: [(true, "Standard for difficulty"), (false, "Set an amount")], selection: Binding(
                 get: { d.startingCapitalCents == nil },
                 set: { standardOn in
                     update { $0.startingCapitalCents = standardOn ? nil : min(max(standard, ranges.capitalMinCents), ranges.capitalMaxCents) }
                 }
-            )) {
-                Text("Standard for difficulty").tag(true)
-                Text("Set an amount").tag(false)
-            }
-            .pickerStyle(.segmented)
+            ), label: "Starting capital")
             if let cents = d.startingCapitalCents {
                 let top = min(Double(ranges.capitalMaxCents) / 100, 50_000_000)
                 ValueSlider(
@@ -222,13 +218,10 @@ struct ScenarioEditorView: View {
                     label: { String(format: "%.0f%%", $0 / 100) }
                 )
                 Text("Unions").font(.caption).foregroundStyle(Theme.secondary)
-                Picker("Unions", selection: Binding(
+                PixelChoices(options: Self.unions.map { ($0.0, $0.1) }, selection: Binding(
                     get: { draft?.laws?.unions ?? laws.unions },
                     set: { value in update { $0.laws?.unions = value } }
-                )) {
-                    ForEach(Self.unions, id: \.0) { Text($0.1).tag($0.0) }
-                }
-                .pickerStyle(.segmented)
+                ), label: "Unions")
             }
         }
     }
@@ -327,11 +320,7 @@ struct ScenarioEditorView: View {
             } else if let message {
                 Text(message).font(.caption).foregroundStyle(Theme.positive)
             }
-            Picker("How you start", selection: $guided) {
-                Text("Run a company").tag(true)
-                Text("Found your own").tag(false)
-            }
-            .pickerStyle(.segmented)
+            PixelChoices(options: [(true, "Run a company"), (false, "Found your own")], selection: $guided, label: "How you start")
             HStack {
                 if !d.id.isEmpty {
                     Button("Delete", role: .destructive) { confirmDelete = true }
@@ -348,7 +337,7 @@ struct ScenarioEditorView: View {
                 } label: {
                     PixelLabel("Start game", icon: "play")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PixelButtonStyle(prominent: true))
                 .disabled(!issues.isEmpty || store.isBusy)
             }
         }
@@ -387,10 +376,7 @@ struct ScenarioEditorView: View {
     }
 
     private func segmented(_ items: [(String, String)], _ binding: Binding<String>) -> some View {
-        Picker("", selection: binding) {
-            ForEach(items, id: \.0) { Text($0.1).tag($0.0) }
-        }
-        .pickerStyle(.segmented)
+        PixelChoices(options: items.map { ($0.0, $0.1) }, selection: binding)
     }
 
     private func currentRival(_ rival: RivalDto) -> RivalDto {

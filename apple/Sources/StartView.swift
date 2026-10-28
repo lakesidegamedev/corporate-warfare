@@ -49,9 +49,9 @@ struct ScenarioCard: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.ink.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Theme.panel, in: Pixel.shape)
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            Pixel.shape
                 .stroke(selected ? Theme.gold : Theme.stroke, lineWidth: selected ? 2 : 1)
         )
         .accessibilityElement(children: .combine)
@@ -90,7 +90,7 @@ struct RecoveryCard: View {
                     PixelLabel("Recover last good save", icon: "history")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PixelButtonStyle(prominent: true))
                 .controlSize(.large)
                 .accessibilityHint("Loads the previous copy of this save after the engine checks it.")
             } else {
@@ -127,7 +127,7 @@ struct DiagnosticExportView: View {
                         PixelLabel("Share diagnostics file", icon: "share")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PixelButtonStyle(prominent: true))
                     .controlSize(.large)
                     Text("This file is written on this device. Corporate Warfare never uploads it; sharing happens only through the button above.")
                         .font(.footnote)
@@ -247,7 +247,7 @@ struct SaveRow: View {
                     .buttonStyle(.borderless)
                     .tint(Theme.secondary)
                 Button("Load", action: onLoad)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PixelButtonStyle(prominent: true))
                     .tint(Theme.gold)
                     .foregroundStyle(Theme.ink)
             }

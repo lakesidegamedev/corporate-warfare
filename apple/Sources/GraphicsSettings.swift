@@ -16,16 +16,16 @@ enum GraphicsPreset: String, CaseIterable, Identifiable {
         switch self {
         case .low:
             return GraphicsSettings(mapDetail: 0, tilt: 0, extrude: false, lighting: 0, dayNight: false, cityLights: false,
-                                    traffic: 0, buildings: 0, frameRate: 30)
+                                    clouds: 0, traffic: 0, buildings: 0, frameRate: 30)
         case .medium:
             return GraphicsSettings(mapDetail: 1, tilt: 1, extrude: true, lighting: 1, dayNight: false, cityLights: true,
-                                    traffic: 1, buildings: 1, frameRate: 30)
+                                    clouds: 1, traffic: 1, buildings: 1, frameRate: 30)
         case .high:
             return GraphicsSettings(mapDetail: 2, tilt: 1, extrude: true, lighting: 2, dayNight: true, cityLights: true,
-                                    traffic: 1, buildings: 2, frameRate: 60)
+                                    clouds: 1, traffic: 1, buildings: 2, frameRate: 60)
         case .ultra:
             return GraphicsSettings(mapDetail: 2, tilt: 2, extrude: true, lighting: 2, dayNight: true, cityLights: true,
-                                    traffic: 2, buildings: 2, frameRate: 0)
+                                    clouds: 2, traffic: 2, buildings: 2, frameRate: 0)
         case .custom:
             return nil
         }
@@ -40,6 +40,8 @@ struct GraphicsSettings: Equatable {
     var lighting: Int
     var dayNight: Bool
     var cityLights: Bool
+    /// Clouds from the satellite cloud map: 0 off, 1 light, 2 heavy.
+    var clouds: Int
     var traffic: Int
     var buildings: Int
     var frameRate: Int
@@ -66,6 +68,7 @@ struct GraphicsSettings: Equatable {
         defaults.set(lighting, forKey: GraphicsKeys.lighting)
         defaults.set(dayNight, forKey: GraphicsKeys.dayNight)
         defaults.set(cityLights, forKey: GraphicsKeys.cityLights)
+        defaults.set(clouds, forKey: GraphicsKeys.clouds)
         defaults.set(traffic, forKey: GraphicsKeys.traffic)
         defaults.set(buildings, forKey: GraphicsKeys.buildings)
         defaults.set(frameRate, forKey: GraphicsKeys.frameRate)
@@ -75,6 +78,11 @@ struct GraphicsSettings: Equatable {
     /// detail and animations and takes High for the new options, shown as Custom when its map
     /// detail differs from High's.
     static func migrate(_ defaults: UserDefaults = .standard) {
+        // Clouds came back after presets were stored: give them the stored preset's amount.
+        if defaults.object(forKey: GraphicsKeys.clouds) == nil, let stored = defaults.string(forKey: GraphicsKeys.preset),
+           let values = GraphicsPreset(rawValue: stored)?.values {
+            defaults.set(values.clouds, forKey: GraphicsKeys.clouds)
+        }
         guard defaults.string(forKey: GraphicsKeys.preset) == nil, var high = GraphicsPreset.high.values else { return }
         var preset = GraphicsPreset.high
         if defaults.object(forKey: GraphicsKeys.mapDetail) != nil {

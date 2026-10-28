@@ -32,20 +32,20 @@ struct RootView: View {
             TutorialPanel(compact: true)
             TabView(selection: $tab) {
                 MapHomeView()
-                    .tabItem { PixelLabel("Map", icon: "map") }
+                    .tabItem { PixelLabel("MAP", icon: "map") }
                     .tag(AppTab.map)
                 CEOOfficeView()
-                    .tabItem { PixelLabel("CEO Office", icon: "office") }
+                    .tabItem { PixelLabel("CEO OFFICE", icon: "office") }
                     .tag(AppTab.office)
                 MarketsView()
-                    .tabItem { PixelLabel("Markets", icon: "markets") }
+                    .tabItem { PixelLabel("MARKETS", icon: "markets") }
                     .tag(AppTab.markets)
                 InboxView()
-                    .tabItem { PixelLabel("Inbox", icon: "inbox") }
+                    .tabItem { PixelLabel("INBOX", icon: "inbox") }
                     .badge(store.events.filter { $0.mandatory }.count)
                     .tag(AppTab.inbox)
                 OverviewView()
-                    .tabItem { PixelLabel("Portfolio", icon: "portfolio") }
+                    .tabItem { PixelLabel("PORTFOLIO", icon: "portfolio") }
                     .tag(AppTab.portfolio)
             }
             .tint(Theme.gold)
@@ -157,7 +157,7 @@ struct ContextChip: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(Theme.surface(for: scheme))
-        .clipShape(Capsule())
+        .clipShape(Pixel.small)
     }
 }
 
@@ -172,7 +172,7 @@ struct RunControls: View {
                 PixelLabel("Next week", icon: "next_week")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PixelButtonStyle(prominent: true))
             .tint(Theme.gold)
             .foregroundStyle(Theme.ink)
             .controlSize(.large)
@@ -199,7 +199,7 @@ struct SpeedControl: View {
                     PixelIcon(label, size: compact ? 16 : 20)
                     .frame(minWidth: compact ? 30 : 38, minHeight: compact ? 28 : 36)
                     .foregroundStyle(selected ? Theme.ink : Theme.primaryText)
-                    .background(selected ? Theme.gold : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(selected ? Theme.gold : Color.clear, in: Pixel.shape)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(speed == 0 ? "Pause" : "Speed \(Int(speed)) times")
@@ -207,7 +207,7 @@ struct SpeedControl: View {
             }
         }
         .padding(2)
-        .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+        .background(Theme.panelRaised, in: Pixel.shape)
+        .overlay(Pixel.shape.stroke(Theme.stroke, lineWidth: 1))
     }
 }

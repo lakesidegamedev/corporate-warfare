@@ -22,6 +22,7 @@ struct GlobeBackdrop: View {
     @AppStorage(GraphicsKeys.preset) private var preset = GraphicsPreset.high.rawValue
     @AppStorage(GraphicsKeys.lighting) private var lighting = 2
     @AppStorage(GraphicsKeys.cityLights) private var cityLights = true
+    @AppStorage(GraphicsKeys.clouds) private var clouds = 1
     @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
     @State private var geometry = MapGeometryCache()
 
@@ -55,7 +56,7 @@ struct GlobeBackdrop: View {
 
     private var look: MapLook {
         MapLook(detail: 0, tilt: 0, extrude: false, lighting: lighting, dayNight: false, cityLights: cityLights,
-                traffic: 0, buildings: 0, frameRate: frameRate, animations: animations, showFps: false,
+                clouds: clouds, traffic: 0, buildings: 0, frameRate: frameRate, animations: animations, showFps: false,
                 ultra: preset == GraphicsPreset.ultra.rawValue)
     }
 
@@ -63,11 +64,17 @@ struct GlobeBackdrop: View {
         // The globe turns two degrees a second, smooth at 30 frames; only Unlimited asks for more.
         TimelineView(.animation(minimumInterval: GraphicsSettings.frameInterval(frameRate == 0 ? 0 : min(frameRate, 30)),
                                 paused: !animate)) { timeline in
-            Canvas { context, size in
-                let seconds = animate ? MapClock.seconds(timeline.date) : 0
-                draw(&context, size: size, seconds: seconds)
+            let seconds = animate ? MapClock.seconds(timeline.date) : 0
+            // The real clouds are a Metal layer between the globe and what glows over it.
+            ZStack {
+                Canvas { context, size in drawBack(&context, size: size, seconds: seconds) }
+                    .drawingGroup()
+                if clouds > 0 {
+                    GeometryReader { proxy in CloudLayer(sky: sky(size: proxy.size, seconds: seconds)) }
+                }
+                Canvas { context, size in drawFront(&context, size: size, seconds: seconds) }
+                    .drawingGroup()
             }
-            .drawingGroup()
         }
         .accessibilityHidden(true)
     }
@@ -76,14 +83,31 @@ struct GlobeBackdrop: View {
         (((-82 + seconds * 2.2) + 540).truncatingRemainder(dividingBy: 360)) - 180
     }
 
-    private func draw(_ context: inout GraphicsContext, size: CGSize, seconds: Double) {
+    private static func camera(_ seconds: Double) -> MapCamera {
+        MapCamera(lon: spin(seconds), lat: 24 + 4 * sin(seconds / 23), zoom: 1.25)
+    }
+
+    /// Where the globe sits in the view: right of centre, a little low.
+    private func origin(_ size: CGSize) -> CGPoint { CGPoint(x: size.width * offsetX, y: size.height * 0.08) }
+
+    /// The clouds over the turning globe, sped up so they visibly move at this distance.
+    private func sky(size: CGSize, seconds: Double) -> CloudSky {
+        let camera = Self.camera(seconds)
+        return CloudSky(camera: camera, size: size, tilt: 0, origin: origin(size),
+                        sun: MapSun.side(MapProjection(camera: camera, size: size)), seconds: seconds * 3, amount: clouds,
+                        bounds: map.playBounds, altitude: 0, zoom: 1, shadows: false)
+    }
+
+    /// Stars, the sun's glare, the globe and the cities' night lights, under the clouds.
+    private func drawBack(_ context: inout GraphicsContext, size: CGSize, seconds: Double) {
         let look = self.look
         let cinematic = look.lighting == 2
         let stars = look.ultra ? 300 : cinematic ? 220 : 120
         StarField.lander.draw(in: &context, size: size, seconds: seconds, drift: animations ? 1 : 0, twinkle: cinematic, count: stars)
-        let camera = MapCamera(lon: Self.spin(seconds), lat: 24 + 4 * sin(seconds / 23), zoom: 1.25)
+        let camera = Self.camera(seconds)
         var scene = context
-        scene.translateBy(x: size.width * offsetX, y: size.height * 0.08)
+        let at = origin(size)
+        scene.translateBy(x: at.x, y: at.y)
         let g = geometry.of(map: map, camera: camera, size: size, tilt: 0, detail: 0)
         let p = g.projection
         let sun = MapSun.side(p)
@@ -92,6 +116,15 @@ struct GlobeBackdrop: View {
                  divisions: [], sun: sun, space: false, displayScale: displayScale)
             .drawStatic(in: &scene, geometry: g)
         if look.cityLights && look.lighting > 0 { drawHubLights(&scene, projection: p, sun: sun) }
+    }
+
+    /// The scenarios, trade routes, satellites and vignette, over the clouds.
+    private func drawFront(_ context: inout GraphicsContext, size: CGSize, seconds: Double) {
+        let look = self.look
+        var scene = context
+        let at = origin(size)
+        scene.translateBy(x: at.x, y: at.y)
+        let p = geometry.of(map: map, camera: Self.camera(seconds), size: size, tilt: 0, detail: 0).projection
         drawScenarios(&scene, projection: p, pulse: 0.85 + 0.15 * sin(seconds * 2))
         if look.lighting > 0 {
             drawArcs(&scene, projection: p, seconds: seconds)
@@ -379,43 +412,22 @@ private struct MenuButton: View {
     var primary = false
     var enabled = true
     let action: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.scenePhase) private var scenePhase
-    @AppStorage(GraphicsKeys.animations) private var animations = true
 
     var body: some View {
         Button(action: action) {
             Text(title.uppercased())
-                .font(.system(size: 17, weight: .bold))
-                .tracking(1.5)
+                .font(Pixel.font(16, bold: true))
+                .tracking(1)
                 .foregroundStyle(primary ? Theme.ink : Theme.primaryText)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
-                .background(primary ? Theme.gold : Theme.panel.opacity(0.72), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                // Glass: a soft highlight across the top half.
-                .overlay(
-                    LinearGradient(colors: [.white.opacity(0.10), .white.opacity(0)], startPoint: .top, endPoint: .center)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .allowsHitTesting(false)
-                )
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(primary ? Theme.gold : Theme.stroke, lineWidth: 1))
-                .background { if primary { glow } }
+                .contentShape(Pixel.shape)
+                .pixelFrame(primary ? Theme.gold : Theme.panel,
+                            outline: primary ? Color(red: 0.541, green: 0.392, blue: 0.125) : Theme.stroke)
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-    }
-
-    /// The primary button's gold glow, breathing over three seconds.
-    private var glow: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !(animations && !reduceMotion && scenePhase == .active))) { timeline in
-            let phase = sin(2 * Double.pi * timeline.date.timeIntervalSinceReferenceDate / 3)
-            let alpha = animations && !reduceMotion ? 0.35 + 0.10 * phase : 0.35
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Theme.gold.opacity(alpha))
-                .blur(radius: 10)
-        }
-        .allowsHitTesting(false)
     }
 }
 

@@ -12,6 +12,8 @@ struct CorporateWarfareApp: App {
     init() {
         // Before any view reads a graphics option, so a fresh install starts on High.
         GraphicsSettings.migrate()
+        // Solid pixel-styled system bars: no glass, no blur.
+        Pixel.configureSystemBars()
         // Start the shared clock at launch, so the sun begins over the Americas at noon.
         _ = MapClock.now
         if Self.isUITesting {

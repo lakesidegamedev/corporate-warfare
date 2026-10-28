@@ -119,8 +119,8 @@ private struct DesktopSidebar: View {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(groups, id: \.self) { group in
                         Text(group.uppercased())
-                            .font(.caption2.weight(.semibold))
-                            .tracking(1)
+                            .font(Pixel.font(10))
+                            .tracking(0.6)
                             .foregroundStyle(Theme.secondary.opacity(0.7))
                             .padding(.leading, 20)
                             .padding(.top, 12)
@@ -160,21 +160,24 @@ private struct SidebarItem: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 2)
+                Pixel.small
                     .fill(selected ? Theme.gold : Color.clear)
                     .frame(width: 3, height: 18)
                 PixelIcon(icon, size: 16)
                     .foregroundStyle(selected ? Theme.gold : Theme.secondary)
                     .frame(width: 20)
-                Text(title)
-                    .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                Text(title.uppercased())
+                    .font(Pixel.font(12))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .accessibilityLabel(title)
                     .foregroundStyle(selected ? Theme.primaryText : Theme.secondary)
                 Spacer(minLength: 4)
                 if badge > 0 { SignalPill(text: "\(badge)", tint: Theme.warning) }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(selected ? Theme.panelRaised : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(selected ? Theme.panelRaised : Color.clear, in: Pixel.shape)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -216,7 +219,7 @@ private struct CompanySwitcher: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(Theme.panelRaised, in: Pixel.shape)
         }
         .disabled(controlled.count < 2)
         .accessibilityLabel("Company: \(firm?.name ?? "none")")
@@ -267,7 +270,7 @@ private struct DesktopStatusBar: View {
                 } label: {
                     Text("Next week").font(.callout.weight(.bold)).padding(.horizontal, 6)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PixelButtonStyle(prominent: true))
                 .tint(Theme.gold)
                 .foregroundStyle(Theme.ink)
                 .disabled(store.isBusy || store.runSpeed > 0)
@@ -310,8 +313,8 @@ private struct DesktopStatusBar: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .frame(width: 220)
-        .background(Theme.ink, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+        .background(Theme.ink, in: Pixel.shape)
+        .overlay(Pixel.shape.stroke(Theme.stroke, lineWidth: 1))
     }
 }
 
@@ -364,10 +367,8 @@ private struct DesktopMarkets: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(Theme.secondary)
                 Spacer()
-                Picker("View", selection: $mode) {
-                    ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
+                PixelChoices(options: Mode.allCases.map { ($0, $0.rawValue) }, selection: $mode, label: "View")
+                    .frame(maxWidth: 260)
                 .frame(width: 330)
             }
             .padding(.horizontal, 16)

@@ -99,8 +99,8 @@ struct BuildFlowView: View {
                             Spacer(minLength: 0)
                         }
                         .padding(10)
-                        .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+                        .background(Theme.panelRaised, in: Pixel.shape)
+                        .overlay(Pixel.shape.stroke(Theme.stroke, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
@@ -216,7 +216,7 @@ struct BuildFlowView: View {
                 PixelLabel("Start construction", icon: "hammer")
                     .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PixelButtonStyle(prominent: true))
             .tint(Theme.gold)
             .foregroundStyle(Theme.ink)
             .disabled(store.isBusy || preview?.blockedKey != nil)
@@ -283,8 +283,8 @@ struct StrategyCard: View {
             }
         }
         .padding(12)
-        .background(Theme.panelRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(room != nil ? Theme.positive.opacity(0.6) : Theme.stroke, lineWidth: 1))
+        .background(Theme.panelRaised, in: Pixel.shape)
+        .overlay(Pixel.shape.stroke(room != nil ? Theme.positive.opacity(0.6) : Theme.stroke, lineWidth: 1))
         .accessibilityElement(children: .combine)
     }
 
@@ -324,6 +324,6 @@ struct FlowChips: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .foregroundStyle(tint)
-            .background(tint.opacity(0.14), in: Capsule())
+            .background(tint.opacity(0.14), in: Pixel.small)
     }
 }

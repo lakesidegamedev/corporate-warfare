@@ -83,7 +83,7 @@ struct ResearchView: View {
                     ForEach(1...max(Int(research.maxLevel), 1), id: \.self) { step in
                         let reached = step <= Int(research.level)
                         let reachable = step <= Int(research.frontier) + 1
-                        RoundedRectangle(cornerRadius: 2)
+                        Pixel.small
                             .fill(reached ? Theme.gold : (reachable ? Theme.gold.opacity(0.25) : Theme.panelRaised))
                             .frame(height: 10 + CGFloat(step) * 1.6)
                     }

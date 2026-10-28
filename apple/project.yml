@@ -26,6 +26,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.lakesidegames.corporatewarfare
+        # Merged with the generated Info.plist: the Silkscreen pixel font, and the classic
+        # system controls instead of iOS 26 Liquid Glass (the app draws its own solid pixel UI).
+        INFOPLIST_FILE: Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleDisplayName: Corporate Warfare
         INFOPLIST_KEY_UILaunchScreen_Generation: YES

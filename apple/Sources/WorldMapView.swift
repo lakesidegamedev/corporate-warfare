@@ -414,6 +414,7 @@ struct MapLook: Equatable {
     var lighting: Int
     var dayNight: Bool
     var cityLights: Bool
+    var clouds: Int
     var traffic: Int
     var buildings: Int
     var frameRate: Int
@@ -422,7 +423,7 @@ struct MapLook: Equatable {
     var ultra: Bool
 
     /// Whether anything on the map moves on its own, so the frame clock needs to run.
-    var moves: Bool { animations && (traffic > 0 || buildings > 0 || dayNight || lighting == 2) }
+    var moves: Bool { animations && (traffic > 0 || clouds > 0 || buildings > 0 || dayNight || lighting == 2) }
     /// Heavy industry smokes with busy traffic or on Ultra.
     var smoke: Bool { traffic >= 2 || ultra }
 }
@@ -977,6 +978,7 @@ struct WorldMapView: View {
     @AppStorage(GraphicsKeys.lighting) private var lighting = 2
     @AppStorage(GraphicsKeys.dayNight) private var dayNight = true
     @AppStorage(GraphicsKeys.cityLights) private var cityLights = true
+    @AppStorage(GraphicsKeys.clouds) private var clouds = 1
     @AppStorage(GraphicsKeys.traffic) private var traffic = 1
     @AppStorage(GraphicsKeys.buildings) private var buildings = 2
     @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
@@ -1009,7 +1011,7 @@ struct WorldMapView: View {
     private var look: MapLook {
         MapLook(
             detail: detailLevel, tilt: GraphicsSettings.pitch(forTilt: tiltSetting), extrude: extrude,
-            lighting: lighting, dayNight: dayNight, cityLights: cityLights, traffic: traffic,
+            lighting: lighting, dayNight: dayNight, cityLights: cityLights, clouds: clouds, traffic: traffic,
             buildings: buildings, frameRate: frameRate, animations: animations, showFps: showFps,
             ultra: preset == GraphicsPreset.ultra.rawValue
         )
@@ -1035,6 +1037,21 @@ struct WorldMapView: View {
                         scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g)
                     }
                     .drawingGroup()
+                }
+                // Clouds and their shadows, over the still map and under what moves on it.
+                if look.clouds > 0 {
+                    TimelineView(.animation(minimumInterval: interval, paused: !running)) { timeline in
+                        let now = MapClock.seconds(timeline.date)
+                        let g = geometry.of(map: map, camera: current, size: size, tilt: look.tilt, detail: look.detail)
+                        CloudLayer(sky: CloudSky(
+                            camera: current, size: size, tilt: look.tilt,
+                            sun: look.dayNight ? MapSun.moving(now) : MapSun.fixed(g.projection),
+                            seconds: now, amount: look.clouds, bounds: map.playBounds,
+                            altitude: 46 * g.scale * g.projection.t, zoom: current.zoom, shadows: look.lighting > 0,
+                            scenario: map.scenarioId
+                        ))
+                    }
+                    .allowsHitTesting(false)
                 }
                 if look.moves || look.showFps || selected != nil {
                     TimelineView(.animation(minimumInterval: interval, paused: !running)) { timeline in
@@ -1166,7 +1183,7 @@ struct WorldMapView: View {
                     fly(from: current, to: target)
                 } label: {
                     Text("3D")
-                        .font(.system(size: 14, weight: .heavy, design: .rounded))
+                        .font(Pixel.font(14, bold: true))
                         .foregroundStyle(current.tilt > 0.5 ? Theme.gold : Theme.primaryText)
                         .frame(width: 40, height: 40)
                 }
@@ -1174,8 +1191,7 @@ struct WorldMapView: View {
                 .accessibilityLabel(current.tilt > 0.5 ? "Look straight down" : "Tilt the map")
             }
         }
-        .background(Theme.panel.opacity(0.94), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.stroke))
+        .pixelFrame(Theme.panel)
     }
 
     private func mapButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
