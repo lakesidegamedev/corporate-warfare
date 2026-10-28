@@ -9,6 +9,10 @@ struct RegionBoardView: View {
     let onBuild: () -> Void
     let onClose: () -> Void
     @State private var raiding: RaidOptionDto?
+    @State private var detail: DivisionDto?
+
+    /// Your own divisions in this region, each opening its detail.
+    private var ours: [DivisionDto] { store.divisions.filter { $0.region == board.code } }
 
     /// The leading rival in each sector the player does not operate in, for its dossier.
     private var rivalLeaders: [SectorCellDto] {
@@ -142,6 +146,28 @@ struct RegionBoardView: View {
                     }
                 }
 
+                if !ours.isEmpty {
+                    Panel {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Eyebrow(text: "Your divisions here")
+                            ForEach(ours) { division in
+                                Button { detail = division } label: {
+                                    HStack(spacing: 10) {
+                                        SectorBadge(sector: division.industry, size: 26)
+                                        Text("\(Sector.name(division.industry)) · \(division.strategyName) · \(division.blocks) plants · \(division.shareBps / 100)% share")
+                                            .font(.callout).foregroundStyle(Theme.primaryText)
+                                            .multilineTextAlignment(.leading)
+                                        Spacer()
+                                        PixelIcon("chevron_right", size: 12).foregroundStyle(Theme.secondary)
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
                 Panel {
                     VStack(alignment: .leading, spacing: 10) {
                         Eyebrow(text: "Plants in \(board.name)")
@@ -179,6 +205,9 @@ struct RegionBoardView: View {
         .background(Theme.panel)
         .sheet(item: $raiding) { option in
             RaidSheet(option: option, regionName: board.name).environmentObject(store)
+        }
+        .sheet(item: $detail) { division in
+            DivisionDetailSheet(division: division).environmentObject(store)
         }
     }
 

@@ -268,6 +268,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     private suspend fun step() {
         val handle = session ?: return
+        val before = overview?.tick ?: 0u
         val policy = if (pauseOnWarnings) "decisions_and_warnings" else "decisions"
         val result = withContext(engine) {
             handle.setPausePolicy(policy)
@@ -278,7 +279,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         if ((overview?.tick ?: 0u) % 4u == 0u) save()
         val week = overview?.tick ?: 0u
         val sink = snapshotSink
-        if (sink != null && Telemetry.due(week)) {
+        if (sink != null && Telemetry.crossed(before, week)) {
             val json = withContext(engine) { runCatching { handle.marketSnapshotJson() }.getOrDefault("") }
             if (json.isNotEmpty()) scope.launch(Dispatchers.IO) { runCatching { sink(json) } }
         }

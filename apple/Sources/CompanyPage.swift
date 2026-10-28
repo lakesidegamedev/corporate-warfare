@@ -56,6 +56,8 @@ struct CompanyPageBody: View {
     let page: CompanyPageDto
     var onOpenFirm: (UInt64) -> Void = { _ in }
     var onTrade: (() -> Void)? = nil
+    /// Set for your own company: a division row opens its detail.
+    var onOpenDivision: ((DivisionLineDto) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -127,8 +129,22 @@ struct CompanyPageBody: View {
             if !page.divisions.isEmpty {
                 Eyebrow(text: "Divisions")
                 ForEach(Array(page.divisions.enumerated()), id: \.offset) { _, d in
-                    Text("\(d.regionName) · \(Sector.name(d.industry)) · \(d.strategyName): \(d.plants) plants, \(d.blocks) blocks")
-                        .font(.caption).foregroundStyle(Theme.secondary)
+                    let line = Text("\(d.regionName) · \(Sector.name(d.industry)) · \(d.strategyName): \(d.plants) plants, \(d.blocks) blocks")
+                        .font(.caption)
+                    if let onOpenDivision {
+                        Button { onOpenDivision(d) } label: {
+                            HStack {
+                                line.foregroundStyle(Theme.primaryText).multilineTextAlignment(.leading)
+                                Spacer()
+                                PixelIcon("chevron_right", size: 10).foregroundStyle(Theme.secondary)
+                            }
+                            .padding(.vertical, 4)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        line.foregroundStyle(Theme.secondary)
+                    }
                 }
             }
             if !page.holders.isEmpty {
@@ -205,12 +221,20 @@ struct CompanyPageSheet: View {
     @State var firm: UInt64
     @State private var page: CompanyPageDto?
     @State private var trading: StockDto?
+    @State private var opening: DivisionDto?
+
+    /// Your own company's division line, matched to the live division it describes.
+    private func division(for line: DivisionLineDto) -> DivisionDto? {
+        guard page?.firm == store.selectedFirm else { return nil }
+        return store.divisions.first { $0.regionName == line.regionName && $0.industry == line.industry }
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 if let page {
-                    CompanyPageBody(page: page, onOpenFirm: { firm = $0 }, onTrade: page.stock.map { stock -> () -> Void in { trading = stock } })
+                    CompanyPageBody(page: page, onOpenFirm: { firm = $0 }, onTrade: page.stock.map { stock -> () -> Void in { trading = stock } },
+                                    onOpenDivision: page.kind == "yours" ? { line in opening = division(for: line) } : nil)
                         .padding(14)
                 } else {
                     Text("Loading").foregroundStyle(Theme.secondary).padding(14)
@@ -220,6 +244,7 @@ struct CompanyPageSheet: View {
             .navigationTitle(page?.name ?? "Company")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .sheet(item: $trading) { stock in StockSheet(stock: stock, showPage: false) }
+            .sheet(item: $opening) { division in DivisionDetailSheet(division: division).environmentObject(store) }
         }
         .environmentObject(store)
         .task(id: firm) { page = await store.companyPage(firm) }

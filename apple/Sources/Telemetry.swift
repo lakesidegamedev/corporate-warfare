@@ -32,6 +32,9 @@ enum Telemetry {
     /// True on the weeks a snapshot is due.
     static func due(week: UInt32) -> Bool { week > 0 && week % 5 == 0 }
 
+    /// True when an advance from `from` to `to` crossed a five-week boundary, however many weeks it took.
+    static func crossed(from: UInt32, to: UInt32) -> Bool { to / 5 > from / 5 }
+
     /// Post one snapshot in the background.
     static func send(snapshotJSON: String) {
         guard enabled, !snapshotJSON.isEmpty else { return }

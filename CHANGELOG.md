@@ -11,6 +11,14 @@ heading.
 
 ## [Unreleased]
 
+### Fixed
+
+- Market snapshots no longer skip when time runs fast. A snapshot was only sent when the week landed exactly on a multiple of five, so a run that stepped over one sent nothing. iPhone, iPad, Android, Windows and Linux now send when an advance crosses a five-week boundary.
+
+### Added
+
+- Phones and iPad audited against every 1.7.1 desktop screen (stuck-pause banner and pause settings, company pages, division detail, freight sections and lane panel, CFO advisor, Rivals card, raid panel and rival tags, scenario dates, stock target label, tutorial research step). Two gaps closed: on your own company's page, tapping a division opens its detail on iPhone, iPad and Android; and on iPhone and iPad a region board now lists "Your divisions here", each opening its detail, as Android and desktop already did.
+
 ### Added
 
 - Company pages. Tap any company in the stock list, the stock dialog, a rival's dossier, a region board or a news item to open its page. Listed companies show the share price chart, valuation, a financial summary, divisions and plants by region, holders, subsidiaries and joint ventures, recent moves, grudges and friends, news and Buy and Sell. Private companies show only what is public: name, logo, chief executive, sector, regions, size band and public moves. Your own companies show everything.
