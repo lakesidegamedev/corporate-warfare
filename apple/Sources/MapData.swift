@@ -78,6 +78,8 @@ struct WorldMapFile: Decodable {
     let lakes: [Water]
     let rivers: [Line]
     let interstates: [Line]
+    /// Natural Earth railways round each scenario, for the trains.
+    let railroads: [Line]?
     let cities: [City]
     let hubs: [String: [Double]]
     let scenarios: [ScenarioStates]?
@@ -208,6 +210,7 @@ final class WorldMap {
     let lakes: [GeoRing]
     let rivers: [GeoRing]
     let interstates: [GeoRing]
+    let railroads: [GeoRing]
     let cities: [WorldMapFile.City]
     let hubs: [String: GeoPoint]
     /// Each scenario's outline, for the main menu globe.
@@ -243,6 +246,7 @@ final class WorldMap {
             lakes = []
             rivers = []
             interstates = []
+            railroads = []
             cities = []
             hubs = [:]
             scenarioAreas = []
@@ -282,6 +286,7 @@ final class WorldMap {
         lakes = file.lakes.flatMap { $0.rings.map(GeoRing.init) }
         rivers = file.rivers.filter { owns($0.scenario) }.flatMap { $0.lines.map(GeoRing.init) }
         interstates = file.interstates.filter { owns($0.scenario) }.flatMap { $0.lines.map(GeoRing.init) }
+        railroads = (file.railroads ?? []).filter { owns($0.scenario) }.flatMap { $0.lines.map(GeoRing.init) }
         cities = file.cities.filter { owns($0.scenario) }
         scenarioAreas = (file.scenario_areas ?? []).map { (id: $0.id, rings: $0.rings.map(GeoRing.init)) }
         hubs = file.hubs.compactMapValues { $0.count == 2 ? GeoPoint(lonDegrees: $0[0] / 10_000, latDegrees: $0[1] / 10_000) : nil }

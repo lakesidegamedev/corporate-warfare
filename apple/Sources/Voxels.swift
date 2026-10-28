@@ -227,10 +227,12 @@ enum Vehicles {
     }
 }
 
-/// One vehicle to draw this frame; gathered first so they can be drawn back to front.
+/// One vehicle to draw this frame; gathered first so they can be drawn back to front. `ground` is
+/// where it stands on the untilted ground and `dir` its direction of travel there.
 struct VehicleSpot {
     let type: String
     let mine: Bool
-    let at: CGPoint
+    let ground: CGPoint
     let dir: CGVector
+    var height = 0.0
 }
