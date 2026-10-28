@@ -42,7 +42,7 @@ private val LanderStars = StarField(300, 7)
 
 /**
  * The menu's world: a lit globe turning in space with night and city lights on its far side,
- * clouds, trade routes arcing between the great cities, satellites and the sun's glare. Each
+ * trade routes arcing between the great cities, satellites and the sun's glare. Each
  * scenario glows and is named as it turns to face the viewer.
  */
 @Composable
@@ -70,7 +70,6 @@ fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
                 map, camera, Palette.gold, emptyMap(), null, emptyList(), measurer, space = false, geometry = geometry,
                 graphics = graphics.copy(detail = MapDetail.Low, extrude = false, buildings = 0, traffic = 0), sun = sun,
             )
-            with(Weather) { drawWeather(p, sun, seconds * 2, graphics.clouds, map.playBounds, 0.0, 1.0, false) }
             if (graphics.cityLights && graphics.lighting > 0) drawHubLights(world, p, sun)
             drawScenarioGlow(map, p, seconds, measurer)
             if (graphics.lighting > 0) {

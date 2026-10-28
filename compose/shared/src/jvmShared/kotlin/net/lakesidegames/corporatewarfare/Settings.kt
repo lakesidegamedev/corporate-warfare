@@ -93,7 +93,6 @@ class AppSettings(private val file: File) {
             props.setProperty("lighting", g.lighting.toString())
             props.setProperty("dayNight", g.dayNight.toString())
             props.setProperty("cityLights", g.cityLights.toString())
-            props.setProperty("clouds", g.clouds.toString())
             props.setProperty("traffic", g.traffic.toString())
             props.setProperty("buildings", g.buildings.toString())
             props.setProperty("frameRate", g.frameRate.toString())
@@ -128,7 +127,6 @@ class AppSettings(private val file: File) {
             lighting = int("lighting", base.lighting, 0..2),
             dayNight = bool("dayNight", base.dayNight),
             cityLights = bool("cityLights", base.cityLights),
-            clouds = int("clouds", base.clouds, 0..2),
             traffic = int("traffic", base.traffic, 0..2),
             buildings = int("buildings", base.buildings, 0..2),
             frameRate = props.getProperty("frameRate")?.toIntOrNull()?.takeIf { it in listOf(0, 30, 60) } ?: base.frameRate,
