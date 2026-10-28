@@ -967,7 +967,8 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
         }
         val airports = if (graphics.traffic > 0 && p.t > 0.5) map.cities.sortedByDescending { it.first.population }.take(14)
             .mapNotNull { (_, point) -> p.ground(point.lon[0], point.lat[0]).takeIf { it.isSpecified } } else emptyList()
-        return OverlayGeometry(p, tracks, roadLines, spots, top, scale, if (raised) plinth else 0.0, airports).also {
+        val vehicleScale = (Voxels.scale(scale, density) - 1).coerceAtLeast(1)
+        return OverlayGeometry(p, tracks, roadLines, spots, top, scale, if (raised) plinth else 0.0, airports, closeUp && p.t > 0.5, vehicleScale).also {
             overlayValue = it
             overlayKey = key
         }

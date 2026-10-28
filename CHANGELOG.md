@@ -22,6 +22,12 @@ heading.
   At the scenario's framing they are small badges instead, and further out nothing marks them.
   Zoomed in, rivals' plants stand there too, smaller and greyed, so you can see who you face where.
   `tools/voxel_sprites.py` bakes them.
+- Zoomed in on Android, Windows and Linux, the map's traffic becomes little voxel vehicles doing
+  the business: trucks on road lanes, trains of a locomotive and wagons on a thin track on rail
+  lanes, cargo ships on the lakes (never over land), cars on the highways and cargo planes with a
+  short faint contrail overhead. Each faces the way it is moving, even on a turned map. Busier
+  lanes carry more of them, and lanes where you ship or hold capacity run in your gold livery.
+  Zoomed out the traffic stays as dots. `tools/voxel_vehicles.py` bakes the sprites.
 
 - Turn the map: twist with two fingers, or drag with the right mouse button on desktop. Buildings
   and labels stay upright, and an N button turns it back to north. Dragging now reaches almost to
