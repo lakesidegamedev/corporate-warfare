@@ -38,7 +38,7 @@ heading.
   longer tears its sheet down mid-close, and Continue resumes time at the speed it was running.
 - On iPhone and iPad the app no longer stalls at the top speed: the game runs off the interface
   thread and the screen refreshes at most a few times a second at high speed. Every tab now has
-  the pause and speed buttons, not only the map.
+  the pause and speed buttons, not only the map, and so does every tab on Android phones.
 
 ### Added
 
