@@ -35,7 +35,7 @@ final class EngineBridgeTests: XCTestCase {
         // moves by temperament and the world gained grudges and alliances, and in 1.7.1 when seed
         // shares began from an opening earnings prior and the world gained its start year. This needs
         // a fresh simulator run on the Mac runner before R05 is claimed again.
-        XCTAssertEqual(session.canonicalHash(), "f85add779385728690ab8b13db937753d8abacc1cc921991eb5cd8aed42d6b43")
+        XCTAssertEqual(session.canonicalHash(), "1b26529295a8dd7a61c925a2ad0753e5379eb7251ba50c226b28bc4d1eabb292")
 
         let data = try session.exportSave()
         XCTAssertGreaterThan(data.count, 1_000)
