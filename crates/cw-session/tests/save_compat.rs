@@ -45,7 +45,10 @@ fn a_preview_2_save_loads_with_neutral_defaults_for_the_new_fields() {
     for region in &world.regions {
         assert!(region.households.wanted_milli.is_empty());
         assert!(region.households.unmet_milli.is_empty());
-        assert!(!region.households.weights.is_empty(), "old household data kept");
+        assert!(
+            !region.households.weights.is_empty(),
+            "old household data kept"
+        );
     }
 }
 
