@@ -33,3 +33,16 @@ uniffi = "=0.32.0"
 [profile.release]
 overflow-checks = true
 lto = "thin"
+
+# The market health test plays 4 scenarios x 8 seeds x 104 weeks; unoptimised that is minutes.
+# Optimising the engine crates keeps every simulation test fast without touching release builds.
+[profile.dev.package.cw-core]
+opt-level = 2
+[profile.dev.package.cw-data]
+opt-level = 2
+[profile.dev.package.cw-sim]
+opt-level = 2
+[profile.dev.package.cw-ai]
+opt-level = 2
+[profile.dev.package.cw-session]
+opt-level = 2

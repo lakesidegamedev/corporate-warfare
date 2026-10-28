@@ -160,19 +160,47 @@ freight over the lane. Pairings fill cheapest delivered first; buyers tied on on
 price share it in proportion to what each still wants and can pay for; imports are the last
 resort at equal price. The seller receives its asking price and the buyer pays the freight.
 
-Prices and production follow sell-through. Each week an automatically priced good is cut 5
-percent when stock exceeds four weeks of sales (two weeks for a perishable) or nothing sold, and
-raised 2 percent when stock is under one week and the corridor is still importing the good, within
+Prices and production follow sell-through, for every firm, every week (1.7.1). A firm reads the
+weeks of cover it holds of a good (free stock over its average weekly sales, over the weeks it has
+on the books up to 13) against the cover it wants, two weeks (one for a perishable), and works out
+the price it would ask: 6 percent of reference for every week of difference, so a good with five
+weeks too much stock wants a price 18 to 30 percent lower, and one with a week too little wants 6
+percent more. The price then moves a sixth of the way there, at most 2 percent in a week, within
 half to twice reference and never above 95 percent of the cheapest import, so local goods beat
-imports once normal freight is added (services: reference plus 15 percent). With no imports a
-price above reference eases back 1 percent a week instead of staying at the ceiling. Stock a firm keeps as input cover for its own plants does not count
-as unsold. Production is planned plant by plant: each plant's target moves 15 points a week
-toward what its good sold, floor 30 percent, so one product's glut never idles a firm's other
-plants; a service is judged by sold against capacity, and a plant whose good has not sold yet
-holds. Rivals always plan this way;
-the player's companies do too until the player sets a price or target by hand, and either can be
-handed back to automatic. Contract deliveries, power dispatched to the grid and construction
-services all count as sales. The player can instead give any good a pricing posture, after A House
+imports once normal freight is added. Nothing sold with stock on the shelf wants 30 percent under;
+nothing sold and nothing held gives no signal and the price eases a 26th of the way back to
+reference a week. There is no dead band and no fixed step, so a price moves continuously with
+supply and demand and settles instead of swinging. A service has no stock: it reads how much of
+what its plants are set to make sold, asks reference when it has slack and up to 15 percent over
+reference (no import quote) when sold out, and is never discounted. Stock a firm keeps as input
+cover for its own plants does not count as unsold. Rivals price this way in the weekly tick, not
+through their slower strategic review.
+
+Production is planned plant by plant: each plant's target moves 15 points a week toward what its
+good sold, floor 30 percent, so one product's glut never idles a firm's other plants. A goods
+plant with more than four weeks of unsold stock cuts, one under a week and a half raises; a
+service plant moves toward what the firm sold of it plus a tenth, between 10 percent and full, so
+it neither wastes a third of its output nor stays throttled below demand; a plant whose good has not sold yet
+holds. A plant run down to its floor keeps at least one worker of every tier its recipe uses.
+Rivals always plan this way; the player's companies do too until the player sets a price or target
+by hand, and either can be handed back to automatic. Contract deliveries, power dispatched to the
+grid and construction services all count as sales.
+
+The corridor price on the Markets board is the average asking price of the firms that make a good,
+each weighted by the lots it sells (plus one), including firms in restructuring, or the cheapest
+import quote when nobody makes it. A small seller joining, leaving or being restructured moves it
+only a little. The board lists a good only when some strategy makes it and a plant in the world
+makes or uses it, or it has traded or sits in stock: a good nothing uses is not shown at a
+placeholder price. Storage space, a plant's own capacity, is never listed.
+
+Every scenario opens with a producer for every good its plants use (a dataset test enforces it).
+Maintenance, used by seven plant types, is made by the Plant Maintenance Services strategy
+(construction industry) and research by IT Services; the roster of each scenario opens with
+those and the other plants its chains lacked. A rival does not retool the only plant making a
+good, since that would leave the good with no producer. A profitable rival no longer resets all
+its plants to 85 percent every review; the weekly plan already raises a plant that sells out.
+
+The player can instead give any good a pricing posture, after A House
 Divided: a step from 20 percent under to 20 percent over the market price (the median ask of
 the other firms that make it, or reference when none do), or a markup of 10 to 100 percent over
 the firm's own cost per lot (inputs at reference, its wage offers for this season's crew,

@@ -39,7 +39,14 @@
       "recipe": "farm_industrial",
       "blocks": 14,
       "public": false,
-      "cash_pct": 60
+      "cash_pct": 60,
+      "extra_plants": [
+        {
+          "recipe": "timber_forestry",
+          "region": "DE-RLP",
+          "blocks": 3
+        }
+      ]
     },
     {
       "id": "emscher_kohle",
@@ -55,6 +62,11 @@
           "recipe": "coal_mine",
           "region": "DE-SAA",
           "blocks": 4
+        },
+        {
+          "recipe": "mine",
+          "region": "DE-RLP",
+          "blocks": 3
         }
       ]
     },
@@ -66,7 +78,19 @@
       "region": "DE-RHW",
       "recipe": "coal_mine",
       "blocks": 10,
-      "public": true
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "oil_wells",
+          "region": "DE-HAN",
+          "blocks": 3
+        },
+        {
+          "recipe": "rare_earth_mine",
+          "region": "DE-OST",
+          "blocks": 2
+        }
+      ]
     },
     {
       "id": "meuse_charbonnages",
@@ -190,7 +214,14 @@
       "recipe": "chemical_plant",
       "blocks": 8,
       "public": false,
-      "cash_pct": 60
+      "cash_pct": 60,
+      "extra_plants": [
+        {
+          "recipe": "fertilizer_plant",
+          "region": "DE-RHW",
+          "blocks": 3
+        }
+      ]
     },
     {
       "id": "delta_raffinaderij",
@@ -241,6 +272,11 @@
           "recipe": "blast_furnace",
           "region": "DE-SAA",
           "blocks": 6
+        },
+        {
+          "recipe": "plant_services",
+          "region": "DE-RUH",
+          "blocks": 2
         }
       ],
       "cash_pct": 200
@@ -662,7 +698,14 @@
       "region": "DE-MUC",
       "recipe": "software_studio",
       "blocks": 5,
-      "public": false
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "it_services",
+          "region": "DE-STU",
+          "blocks": 2
+        }
+      ]
     },
     {
       "id": "rheinische_presse",

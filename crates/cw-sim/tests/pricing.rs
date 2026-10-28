@@ -35,63 +35,102 @@ fn set_price(
     .expect("price accepted");
 }
 
-#[test]
-fn stock_and_sell_through_move_the_price() {
+/// A firm holding `stock` lots of food that sells 100 a week, asking `price`.
+fn food_firm(seed: u64, price: i64, stock: i64) -> (World, Dataset, Handle, u16) {
     let dataset = Dataset::load().unwrap();
-    let mut world = seed::build(&dataset, 55, ScenarioKind::Guided, ScenarioMode::Sandbox);
+    let mut world = seed::build(&dataset, seed, ScenarioKind::Guided, ScenarioMode::Sandbox);
     let firm = world.investor.primary_group.unwrap();
     let food = dataset.product_index["food_raw"];
     let region = world.firms.get(firm).unwrap().region;
     let entity = world.firms.get_mut(firm).unwrap();
-    entity.policies.prices.insert(food, 10_000);
+    entity.policies.prices.insert(food, price);
     entity.sales_history = vec![[((region, food), 100)].into_iter().collect(); 13];
-    // 100 lots a week. Five weeks of stock: cut five percent.
     entity.inventory.retain(|(p, _), _| *p != food);
     entity.stock_lot_mut(food, region).receive(
-        cw_core::quantity::MilliLots::from_lots(500),
+        cw_core::quantity::MilliLots::from_lots(stock),
         cw_core::money::Cents(0),
     );
-    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 9_500);
-    // Half a week of stock: selling out raises two percent while the corridor still imports.
-    let entity = world.firms.get_mut(firm).unwrap();
-    entity.inventory.retain(|(p, _), _| *p != food);
-    entity.stock_lot_mut(food, region).receive(
-        cw_core::quantity::MilliLots::from_lots(50),
-        cw_core::money::Cents(0),
-    );
-    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
-        gateway.last_import_lots = 10;
-    }
-    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_200);
-    // With no imports, local supply already covers demand: a price at reference holds, and one
-    // above reference eases back a percent instead of climbing to the import ceiling.
-    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
-        gateway.last_import_lots = 0;
-    }
+    (world, dataset, firm, food)
+}
+
+#[test]
+fn stock_cover_moves_the_price_a_sixth_of_the_way_and_never_past_two_percent() {
+    // Sales are 100 lots a week. Food is perishable, so a week of cover is wanted; each week of
+    // difference is six percent of reference (10,000 here) and a week closes a sixth of the gap.
+    // Five weeks of stock: wants 10,000 - 4 * 600 = 7,600; a sixth of 2,400 is 400, capped at 200.
+    let (world, dataset, firm, food) = food_firm(55, 10_000, 500);
+    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 9_800);
+    // Three weeks of stock: wants 8,800; a sixth of 1,200 is 200.
+    let (world, dataset, firm, food) = food_firm(55, 10_000, 300);
+    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 9_800);
+    // Two weeks of stock: wants 9,400; a sixth of 600 is 100.
+    let (world, dataset, firm, food) = food_firm(55, 10_000, 200);
+    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 9_900);
+    // Exactly a week of stock is the price wanted: it holds. There is no dead band either side of
+    // it, so a few lots over or under move the price.
+    let (world, dataset, firm, food) = food_firm(55, 10_000, 100);
     assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_000);
-    world
-        .firms
-        .get_mut(firm)
-        .unwrap()
-        .policies
-        .prices
-        .insert(food, 11_000);
-    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_890);
-    world
-        .firms
-        .get_mut(firm)
-        .unwrap()
-        .policies
-        .prices
-        .insert(food, 10_000);
-    // Two weeks of stock: hold.
-    let entity = world.firms.get_mut(firm).unwrap();
-    entity.inventory.retain(|(p, _), _| *p != food);
-    entity.stock_lot_mut(food, region).receive(
-        cw_core::quantity::MilliLots::from_lots(200),
-        cw_core::money::Cents(0),
+    let (world, dataset, firm, food) = food_firm(55, 10_000, 90);
+    let below = pricing::target_price(&world, &dataset, firm, food);
+    assert!(below > 10_000, "{below}");
+    let (world, dataset, firm, food) = food_firm(55, 10_000, 110);
+    let above = pricing::target_price(&world, &dataset, firm, food);
+    assert!(above < 10_000, "{above}");
+    // Half a week of stock wants 10,300, a sixth of the gap is 50 (kept under the import price).
+    let (world, dataset, firm, food) = food_firm(55, 10_000, 50);
+    let ceiling = world
+        .gateways
+        .iter()
+        .filter(|g| g.product == food && g.sell_price_cents > 0)
+        .map(|g| g.sell_price_cents * 95 / 100)
+        .min()
+        .unwrap_or(i64::MAX);
+    assert_eq!(
+        pricing::target_price(&world, &dataset, firm, food),
+        10_050.min(ceiling)
     );
-    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_000);
+    // Stock that does not sell is a glut: the price wants 30 percent under and falls two percent.
+    let (mut world, dataset, firm, food) = food_firm(55, 10_000, 100);
+    world.firms.get_mut(firm).unwrap().sales_history.clear();
+    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 9_800);
+    // Nothing sold and nothing held gives no signal: the price eases a 26th of the way back to
+    // reference instead of holding wherever it was.
+    let (mut world, dataset, firm, food) = food_firm(55, 11_000, 0);
+    world.firms.get_mut(firm).unwrap().sales_history.clear();
+    let ceiling = world
+        .gateways
+        .iter()
+        .filter(|g| g.product == food && g.sell_price_cents > 0)
+        .map(|g| g.sell_price_cents * 95 / 100)
+        .min()
+        .unwrap_or(i64::MAX);
+    let eased = pricing::target_price(&world, &dataset, firm, food);
+    assert_eq!(eased, (11_000 - 1_000 / 26).min(ceiling));
+}
+
+#[test]
+fn a_price_under_constant_conditions_converges_without_overshooting() {
+    // Five weeks of cover wants 7,600. Applied week after week the price falls every week,
+    // never below what it wants, and settles there: no sawtooth around the target.
+    let (mut world, dataset, firm, food) = food_firm(58, 10_000, 500);
+    let mut last = 10_000;
+    let mut falls = 0;
+    for _ in 0..80 {
+        let next = pricing::target_price(&world, &dataset, firm, food);
+        assert!(next <= last, "price rose from {last} to {next}");
+        assert!(next >= 7_600, "price {next} overshot the 7,600 it wants");
+        falls += (next < last) as i32;
+        last = next;
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .policies
+            .prices
+            .insert(food, next);
+    }
+    assert!(falls >= 10, "the price kept moving toward what it wants");
+    assert!((7_600..7_660).contains(&last), "settled at {last}");
 }
 
 #[test]

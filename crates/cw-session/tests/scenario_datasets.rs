@@ -42,27 +42,29 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// grudges and alliances (1.7 preview 5), and again in 1.7.1 when new divisions gained a raid
 /// grace period, a plant under construction stopped hiring its crew until the last four weeks,
 /// research stopped spending at the frontier, seed share prices began from an opening earnings
-/// prior and the world began carrying its scenario start year.
+/// prior and the world began carrying its scenario start year, and again when every good gained a
+/// producer in every scenario (new maintenance strategy and opening plants), every firm priced
+/// weekly on a damped rule and services followed demand.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
     assert_eq!(data.scenario_id, "great-lakes-2000");
     assert_eq!(
         data.hash,
-        "519ebc7d1c7319f75d000d688822a9b707c90f06218f9e6ebd5af793713edcd7"
+        "51e3b2ad8be01df2f07096fbd80e476005521df50f1352704f1db3a7b901d68e"
     );
     let pins = [
         (
             1u64,
-            "6d767785d5ffc7ffa70752a3d78cc497289b8ac8984496c20572fd0d02657538",
+            "3c527cb0e95ceabcfe508ecac10d4cb372945ed8ba53f9516daf15378b2ad596",
         ),
         (
             2,
-            "02791c43483349a25b7347bcf771f001cda0f6375655efce4a738dd65c623e4b",
+            "626bdcaad830735c96801aa92dd9b472b794c0381ebc85da4b088b001f25549f",
         ),
         (
             3,
-            "4630433eb4e07a25e63f128002de87e7744ecb7b249f0f85291adaeb47bfe2a0",
+            "acf7db36f858c20cbbd83ace30913aa5e68a3740303e599b0a74e86b2d6d9944",
         ),
     ];
     for (seed, hash) in pins {
@@ -74,12 +76,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "dca3350530574acb30e768dacb5a922aeaf675771181b58f977e465e7929cd96"
+        "813c409c1403938fe0cad5f7b84120d4520ed12f2991c238484dde83f16b2a58"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "b0e88dee5f0f212d102ab3c89add3f855e5b88962d75ba3d5c838b86f7d4d83b"
+        "04cc10fa94a54cecdd6c7a2825ebcdd6ee075c22bee0e50617387534ae0a3c07"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();
@@ -614,14 +616,16 @@ fn opening_share_prices_stay_near_fair_value() {
                 }
                 if week == 5 || week == 52 {
                     // By week 52 a firm that has since become very profitable can sit well under its
-                    // new fair value while the price catches up.
+                    // new fair value while the price catches up. Since 1.7.1 firms read their real
+                    // weekly sales from the first week, so early prices rise toward what sells out
+                    // and the median can open up to a fifth under fair value instead of at it.
                     let (low, high) = if week == 5 { (0.3, 4.0) } else { (0.08, 6.0) };
                     let ratios = price_ratios(&session);
                     let mut sorted: Vec<f64> = ratios.iter().map(|r| r.1).collect();
                     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
                     let median = sorted[sorted.len() / 2];
                     assert!(
-                        (0.85..=1.3).contains(&median),
+                        (0.8..=1.3).contains(&median),
                         "{scenario} seed {seed} week {week}: median {median}"
                     );
                     for (name, ratio) in ratios {

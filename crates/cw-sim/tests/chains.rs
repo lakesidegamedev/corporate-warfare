@@ -8,7 +8,7 @@ use cw_core::money::Cents;
 use cw_core::quantity::MilliLots;
 use cw_data::Dataset;
 use cw_sim::economy::{pricing, production, seed};
-use cw_sim::state::{FacilityStatus, ScenarioKind, ScenarioMode, World};
+use cw_sim::state::{ScenarioKind, ScenarioMode, World};
 
 fn world(seed_value: u64) -> (World, Dataset) {
     let dataset = Dataset::load().unwrap();
@@ -221,9 +221,17 @@ fn the_new_chains_run_end_to_end_in_a_seeded_world() {
     // Crude -> refinery -> fuel and feedstock; ore -> pig iron -> steel; grain -> food.
     let (mut world, dataset) = world(906);
     staff_everything(&mut world, &dataset);
+    // Prices now follow sales for every firm each week, so a plant can be mothballed by the
+    // week 26 close: what counts is that each plant made its goods over the half year.
+    let mut produced: std::collections::BTreeMap<String, i64> = Default::default();
     for _ in 0..26 {
         cw_sim::tick::advance(&mut world, &dataset);
         staff_everything(&mut world, &dataset);
+        for (_, f) in world.facilities.iter() {
+            *produced
+                .entry(dataset.recipes[f.recipe as usize].id.clone())
+                .or_default() += f.last_output.0;
+        }
     }
     for recipe in [
         "oil_wells",
@@ -235,13 +243,7 @@ fn the_new_chains_run_end_to_end_in_a_seeded_world() {
         "mixed_farm",
         "food_processing",
     ] {
-        let produced: i64 = world
-            .facilities
-            .iter()
-            .filter(|(_, f)| dataset.recipes[f.recipe as usize].id == recipe)
-            .filter(|(_, f)| f.status == FacilityStatus::Operating)
-            .map(|(_, f)| f.last_output.0)
-            .sum();
+        let produced = produced.get(recipe).copied().unwrap_or(0);
         assert!(produced > 0, "{recipe} produced in the seeded world");
     }
 }

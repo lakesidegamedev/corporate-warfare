@@ -118,6 +118,11 @@
           "recipe": "refinery",
           "region": "OH-NW",
           "blocks": 2
+        },
+        {
+          "recipe": "fertilizer_plant",
+          "region": "IL-CEN",
+          "blocks": 3
         }
       ]
     },
@@ -178,7 +183,14 @@
       "region": "MI-DET",
       "recipe": "vehicle_assembly",
       "blocks": 5,
-      "public": false
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "assembly",
+          "region": "IN-NE",
+          "blocks": 3
+        }
+      ]
     },
     {
       "id": "stonebridge",
@@ -188,7 +200,14 @@
       "region": "IN-CEN",
       "recipe": "contractor",
       "blocks": 5,
-      "public": false
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "plant_services",
+          "region": "IL-CHI",
+          "blocks": 2
+        }
+      ]
     },
     {
       "id": "keystone_build",
@@ -288,7 +307,14 @@
       "region": "OH-NE",
       "recipe": "software_studio",
       "blocks": 10,
-      "public": true
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "it_services",
+          "region": "OH-CEN",
+          "blocks": 2
+        }
+      ]
     },
     {
       "id": "lantern_systems",

@@ -1,14 +1,15 @@
 //! Pricing and production planning from sell-through, shared by rival AI and the player's
 //! automatic operations.
 //!
-//! A firm sets one price per good it makes. Weekly sales are its closed thirteen-week sales of
-//! the good in every region divided by thirteen; stock is everything it holds of the good. More
-//! than four weeks of stock (or none sold while stock sits) cuts the price five percent; selling
-//! out, with less than a week of stock, raises it two percent; otherwise it holds. The result
-//! stays within half and twice reference and never above the cheapest import price in the
+//! A firm sets one price per good it makes, every week, rival or player's automatic company.
+//! Weekly sales are its closed thirteen-week sales of the good in every region divided by
+//! thirteen; stock is everything it holds of the good beyond its own plants' input cover. The
+//! firm reads its weeks of cover against the cover it wants and works out the price it would
+//! ask, six percent of reference for every week of difference, then moves a sixth of the way
+//! there, at most two percent in a week. Services read how much of their capacity sold. The
+//! result stays within half and twice reference and under the cheapest import price in the
 //! corridor, above which buyers import instead (services, with no import quote, stop at fifteen
-//! percent over reference). Stock a firm keeps as input cover for its own plants is not
-//! counted as unsold.
+//! percent over reference).
 
 use std::collections::BTreeSet;
 
@@ -32,12 +33,15 @@ pub fn outputs(world: &World, dataset: &Dataset, firm: Handle) -> BTreeSet<u16> 
         .collect()
 }
 
-/// Average weekly units of a good sold over the closed thirteen weeks.
+/// Average weekly units of a good sold over the closed weeks, up to thirteen. A firm with fewer
+/// weeks on the books averages over the weeks it has, so a young firm's sales are not read as a
+/// fraction of what they are.
 pub fn weekly_sold(world: &World, firm: Handle, product: u16) -> i64 {
     world
         .firms
         .get(firm)
         .map(|entity| {
+            let weeks = entity.sales_history.len().clamp(1, 13) as i64;
             entity
                 .sales_history
                 .iter()
@@ -45,7 +49,7 @@ pub fn weekly_sold(world: &World, firm: Handle, product: u16) -> i64 {
                 .filter(|((_, p), _)| *p == product)
                 .map(|(_, qty)| *qty)
                 .sum::<i64>()
-                / 13
+                / weeks
         })
         .unwrap_or(0)
 }
@@ -125,17 +129,86 @@ pub fn cover_weeks(firm: &crate::state::Firm, dataset: &Dataset, product: u16) -
     }
 }
 
-/// Lots of a good the corridor imported through the gateways last week.
-fn imported_last_week(world: &World, product: u16) -> i64 {
+/// Weeks of sales a firm is content to hold. Stock below this raises the price it asks, stock
+/// above it cuts it. Perishables spoil on the shelf, so they aim lower.
+pub fn cover_target_hundredths(dataset: &Dataset, product: u16) -> i64 {
+    if dataset.products[product as usize].spoilage_bps_weekly >= 200 {
+        100
+    } else {
+        200
+    }
+}
+
+/// Each hundredth of a week of cover away from the target moves the price the firm wants by this
+/// many basis points of reference (six percent for every whole week).
+const WANT_BPS_PER_HUNDREDTH_WEEK: i64 = 6;
+/// A price closes this fraction of the gap to the price its firm wants each week, so a change in
+/// the market is followed over about six weeks and never overshot in one step.
+const PRICE_LAG_WEEKS: i64 = 6;
+/// No firm moves a price more than this share in a week, in basis points.
+const MAX_WEEKLY_MOVE_BPS: i64 = 200;
+/// Weeks a price that has no sales signal takes to ease back toward reference.
+const IDLE_REVERSION_WEEKS: i64 = 26;
+
+/// What the firm wants to ask for a good, in basis points of reference, from how much of it is
+/// left on the shelf and how fast it sells. None when there is nothing to read (nothing sold and
+/// nothing held, as at a plant still starting up).
+///
+/// Goods: weeks of free stock against weeks of cover wanted. Services keep no stock, so they read
+/// the share of the firm's output that sold: full order books lift the price, slack returns it
+/// to reference. Both are continuous, with no dead band, so a price moves as the market moves.
+fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> Option<i64> {
+    let sold = weekly_sold(world, firm, product);
+    if dataset.products[product as usize].kind.is_service() {
+        let capacity = service_capacity(world, dataset, firm, product);
+        if capacity <= 0 {
+            return None;
+        }
+        // Sales against what the plants are set to make: a service sold out asks 9 percent over
+        // reference and one with slack asks reference. A service has no stock to clear and its
+        // buyers' budgets do not grow when it is cheaper, so a discount would only lose revenue.
+        let used_bps = (sold * 10_000 / capacity).clamp(0, 10_000);
+        return Some((10_000 + (used_bps - 8_500) * 6 / 10).clamp(10_000, 11_500));
+    }
+    let stock = free_stock(world, dataset, firm, product);
+    if sold <= 0 {
+        return (stock > 0).then_some(7_000);
+    }
+    let cover = stock * 100 / sold;
+    let target = cover_target_hundredths(dataset, product)
+        + harvest_glut_extra(world, dataset, product) * 100;
+    let gap = (target - cover).clamp(-500, 500);
+    Some(10_000 + gap * WANT_BPS_PER_HUNDREDTH_WEEK)
+}
+
+/// Lots a firm's operating plants are set to make of a service in a week, at their run rates.
+fn service_capacity(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> i64 {
+    let id = &dataset.products[product as usize].id;
     world
-        .gateways
-        .iter()
-        .filter(|gateway| gateway.product == product)
-        .map(|gateway| gateway.last_import_lots)
-        .sum()
+        .firms
+        .get(firm)
+        .map(|entity| {
+            entity
+                .facilities
+                .iter()
+                .filter_map(|handle| world.facilities.get(*handle))
+                .filter(|plant| plant.status == crate::state::FacilityStatus::Operating)
+                .map(|plant| {
+                    dataset.recipes[plant.recipe as usize].lots_of(id)
+                        * plant.blocks as i64
+                        * plant.target_bps.clamp(3_000, 10_000) as i64
+                        / 10_000
+                })
+                .sum()
+        })
+        .unwrap_or(0)
 }
 
 /// The price the sell-through rule sets this week for one good.
+///
+/// The firm works out the price it wants from its stock cover (see `wanted_bps`), then moves
+/// a sixth of the way there, never more than two percent in a week. The price is kept within
+/// half and twice reference and under the cheapest import, above which buyers import instead.
 pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> i64 {
     let reference = dataset.reference_price(product).max(1);
     let Some(entity) = world.firms.get(firm) else {
@@ -147,24 +220,6 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
         .get(&product)
         .copied()
         .unwrap_or(reference);
-    let sold = weekly_sold(world, firm, product);
-    let stock = free_stock(world, dataset, firm, product);
-    let mut target = price;
-    if (sold == 0 && stock > 0)
-        || stock
-            > sold * (glut_weeks(dataset, product) + harvest_glut_extra(world, dataset, product))
-    {
-        target = price * 95 / 100;
-    } else if stock < sold {
-        // Selling out only lifts the price while the corridor is still importing the good: with
-        // no imports, local supply already covers demand, so a price above reference eases back
-        // by a percent a week instead of climbing to the import ceiling and staying there.
-        if imported_last_week(world, product) > 0 || price < reference {
-            target = price * 102 / 100;
-        } else if price > reference {
-            target = price * 99 / 100;
-        }
-    }
     // A local seller stays five percent under the cheapest import, so its goods still beat
     // imports once freight over a normal haul is added; asking the full import price made the
     // delivered price higher than imports and the corridor imported what it made.
@@ -177,7 +232,25 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
         .min()
         .map(|import| import * 95 / 100)
         .unwrap_or(reference + reference * 15 / 100);
-    let mut priced = target
+    let signal = wanted_bps(world, dataset, firm, product);
+    let wanted = signal
+        .map(|bps| {
+            (reference * bps / 10_000)
+                .clamp(reference / 2, reference * 2)
+                .min(ceiling)
+        })
+        .unwrap_or(reference);
+    let lag = if signal.is_some() {
+        PRICE_LAG_WEEKS
+    } else {
+        IDLE_REVERSION_WEEKS
+    };
+    let mut step = (wanted - price) / lag;
+    if step == 0 && wanted != price {
+        step = (wanted - price).signum();
+    }
+    let cap = (price * MAX_WEEKLY_MOVE_BPS / 10_000).max(1);
+    let mut priced = (price + step.clamp(-cap, cap))
         .clamp(reference / 2, reference * 2)
         .min(ceiling)
         .max(1);
@@ -193,9 +266,10 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
 /// Production planning from sell-through, plant by plant: each plant follows the good it makes.
 /// Goods: more than four weeks of unsold stock (beyond the firm's own input cover) cuts fifteen
 /// points, down to thirty percent; under a week and a half raises fifteen points, up to full
-/// capacity. Services keep no stock: sales under half of the firm's capacity for the service
-/// cut, above ninety percent raise. Otherwise the plant holds. A plant whose good has not sold
-/// yet, such as a new plant still waiting for inputs, holds too.
+/// capacity. Services keep no stock: the plant moves fifteen points a week toward what the firm
+/// sold of the service plus a tenth, between ten percent and full. Otherwise the
+/// plant holds. A plant whose good has not sold yet, such as a new plant still waiting for
+/// inputs, holds too.
 pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Handle, i32)> {
     let Some(entity) = world.firms.get(firm) else {
         return Vec::new();
@@ -234,7 +308,16 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
                     None => (false, false),
                 }
             } else if dataset.products[product as usize].kind.is_service() {
-                (sold * 2 < full, sold * 10 >= full * 9)
+                // A service that goes unsold expires, so the plant is run toward what sold plus
+                // a tenth, fifteen points a week, rather than held anywhere between half and
+                // nine-tenths of capacity where it could waste a third of its output.
+                let wanted = (sold * 11_000 / full.max(1)).clamp(1_000, 10_000) as i32;
+                let target = if wanted < current {
+                    (current - 1_500).max(wanted)
+                } else {
+                    (current + 1_500).min(wanted)
+                };
+                return (handle, target);
             } else {
                 let stock = free_stock(world, dataset, firm, product);
                 (
@@ -409,6 +492,13 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
         .map(|(handle, _)| handle)
         .collect();
     for firm in rivals {
+        // Rivals ask the same sell-through price every week, state firms capped at cost.
+        for product in outputs(world, dataset, firm) {
+            let target = target_price(world, dataset, firm, product);
+            if let Some(entity) = world.firms.get_mut(firm) {
+                entity.policies.prices.insert(product, target);
+            }
+        }
         plan(world, dataset, firm);
     }
     let firms: Vec<Handle> = world
@@ -465,27 +555,43 @@ pub fn set_target(world: &mut World, firm: Handle, target_bps: i32) {
     }
 }
 
-/// A good's corridor price this week: the median asking price of the firms that make it, or
-/// the cheapest import quote when nobody does, or the reference price.
+/// A good's corridor price this week: the asking prices of the firms that make it, each counted
+/// by the lots it sells (and one, so a plant that has not sold yet still counts), or the cheapest
+/// import quote when nobody does, or the reference price. Weighting by sales keeps the price
+/// steady when a small seller joins, leaves or is restructured, which a plain median does not.
 pub fn corridor_price(world: &World, dataset: &Dataset, product: u16) -> i64 {
+    use crate::state::FirmStatus;
     let id = &dataset.products[product as usize].id;
-    let mut asks: Vec<i64> = world
-        .firms
-        .iter()
-        .filter(|(_, entity)| entity.operative())
-        .filter(|(_, entity)| {
-            entity.facilities.iter().any(|plant| {
-                world
-                    .facilities
-                    .get(*plant)
-                    .is_some_and(|plant| dataset.recipes[plant.recipe as usize].makes(id))
-            })
-        })
-        .filter_map(|(_, entity)| entity.policies.prices.get(&product).copied())
-        .collect();
-    if !asks.is_empty() {
-        asks.sort_unstable();
-        return asks[asks.len() / 2].max(1);
+    // A firm in restructuring still holds its plants and asks, so it stays in the average: a
+    // firm that drops out for a week between states would make the price jump and jump back.
+    let (mut total, mut weight) = (0i128, 0i128);
+    for (handle, entity) in world.firms.iter().filter(|(_, entity)| {
+        matches!(
+            entity.status,
+            FirmStatus::Operating | FirmStatus::PastDue { .. } | FirmStatus::Restructuring { .. }
+        )
+    }) {
+        let makes = entity.facilities.iter().any(|plant| {
+            world
+                .facilities
+                .get(*plant)
+                .is_some_and(|plant| dataset.recipes[plant.recipe as usize].makes(id))
+        });
+        let Some(ask) = entity
+            .policies
+            .prices
+            .get(&product)
+            .copied()
+            .filter(|_| makes)
+        else {
+            continue;
+        };
+        let lots = weekly_sold(world, handle, product) as i128 + 1;
+        total += ask as i128 * lots;
+        weight += lots;
+    }
+    if weight > 0 {
+        return ((total + weight / 2) / weight).max(1) as i64;
     }
     world
         .gateways

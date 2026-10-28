@@ -112,7 +112,19 @@
       "region": "OK-WES",
       "recipe": "gas_wells",
       "blocks": 10,
-      "public": true
+      "public": true,
+      "extra_plants": [
+        {
+          "recipe": "mine",
+          "region": "TX-ABI",
+          "blocks": 3
+        },
+        {
+          "recipe": "rare_earth_mine",
+          "region": "TX-LUB",
+          "blocks": 1
+        }
+      ]
     },
     {
       "id": "piney_woods_lignite",
@@ -206,6 +218,11 @@
           "recipe": "plastics_plant",
           "region": "TX-HOU",
           "blocks": 4
+        },
+        {
+          "recipe": "pharma_plant",
+          "region": "TX-SAT",
+          "blocks": 2
         }
       ]
     },
@@ -256,6 +273,11 @@
           "recipe": "electric_arc",
           "region": "TX-HOU",
           "blocks": 3
+        },
+        {
+          "recipe": "building_products",
+          "region": "TX-AUS",
+          "blocks": 3
         }
       ]
     },
@@ -273,6 +295,11 @@
           "recipe": "component_works",
           "region": "TX-AUS",
           "blocks": 4
+        },
+        {
+          "recipe": "vehicle_assembly",
+          "region": "TX-SAT",
+          "blocks": 3
         }
       ]
     },
@@ -311,7 +338,14 @@
       "region": "OK-OKC",
       "recipe": "modular",
       "blocks": 4,
-      "public": false
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "plant_services",
+          "region": "OK-TUL",
+          "blocks": 2
+        }
+      ]
     },
     {
       "id": "permian_trunk_lines",
@@ -537,7 +571,14 @@
       "region": "TX-AUS",
       "recipe": "software_studio",
       "blocks": 6,
-      "public": false
+      "public": false,
+      "extra_plants": [
+        {
+          "recipe": "it_services",
+          "region": "TX-DFW",
+          "blocks": 2
+        }
+      ]
     },
     {
       "id": "lone_star_press",

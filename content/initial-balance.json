@@ -1717,6 +1717,25 @@
       "capex_cents": 50000000,
       "build_weeks": 26,
       "life_years": 40
+    },
+    {
+      "industry": "construction",
+      "id": "plant_services",
+      "name": "Plant Maintenance Services",
+      "output": "maintenance",
+      "weekly_output_lots": 14,
+      "weekly_inputs_lots": {
+        "components": 2,
+        "electricity": 1
+      },
+      "workers_low_mid_high": [
+        4,
+        5,
+        1
+      ],
+      "capex_cents": 28000000,
+      "build_weeks": 8,
+      "life_years": 15
     }
   ],
   "financial_businesses": [
