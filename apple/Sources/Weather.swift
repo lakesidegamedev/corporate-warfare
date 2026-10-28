@@ -110,6 +110,8 @@ struct CloudLayer: UIViewRepresentable {
 final class CloudPainter: NSObject, MTKViewDelegate {
     weak var view: MTKView?
     var sky: CloudSky?
+    /// Frames drawn with clouds in them, for tests.
+    private(set) var drawn = 0
     private let regionCloud = CloudGrid()
     private let regionShadow = CloudGrid()
     private let worldCloud = CloudGrid()
@@ -142,7 +144,10 @@ final class CloudPainter: NSObject, MTKViewDelegate {
               let pass = view.currentRenderPassDescriptor, let buffer = renderer.queue.makeCommandBuffer(),
               let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { return }
         encoder.setRenderPipelineState(renderer.pipeline)
-        if let sky, sky.amount > 0 { encode(sky, renderer, encoder) }
+        if let sky, sky.amount > 0 {
+            encode(sky, renderer, encoder)
+            drawn += 1
+        }
         encoder.endEncoding()
         buffer.commit()
         buffer.waitUntilScheduled()

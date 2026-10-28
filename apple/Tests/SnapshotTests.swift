@@ -1,3 +1,4 @@
+import MetalKit
 import SwiftUI
 import UIKit
 import XCTest
@@ -133,9 +134,22 @@ final class SnapshotTests: XCTestCase {
         host.view.frame = window.bounds
         host.view.layoutIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        // A window snapshot cannot read a Metal layer, so each cloud layer's own last frame is
+        // shown in an image view inside it for the capture, at the layer's place in the stack.
+        var stand: [UIView] = []
+        for view in metalViews(in: window) {
+            guard let painter = view.delegate as? CloudPainter, let sky = painter.sky else { continue }
+            XCTAssertGreaterThan(painter.drawn, 0, "the cloud layer in \(name) drew in the window")
+            guard let frame = painter.snapshot(sky) else { continue }
+            let still = UIImageView(image: UIImage(cgImage: frame))
+            still.frame = view.bounds
+            view.addSubview(still)
+            stand.append(still)
+        }
         let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }
+        stand.forEach { $0.removeFromSuperview() }
         guard let data = image.pngData() else {
             return XCTFail("snapshot \(name) did not encode")
         }
@@ -147,6 +161,10 @@ final class SnapshotTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         window.isHidden = true
+    }
+
+    private func metalViews(in view: UIView) -> [MTKView] {
+        (view as? MTKView).map { [$0] } ?? view.subviews.flatMap { metalViews(in: $0) }
     }
 
     /// Distinct grey levels across a coarse grid of samples. A blank or unrendered window has one.
