@@ -57,7 +57,44 @@ class UiRenderTest {
         val desktop = if (store.ready) (0 until 8).associate { page ->
             "ui-desktop-$page" to @androidx.compose.runtime.Composable { DesktopShell(store, onSettings = {}, startPage = page) }
         } else emptyMap()
-        for ((name, content) in screens + desktop) {
+        // Play two quarters on the engine thread, then render the financial tabs and charts.
+        val finance = if (store.ready) kotlinx.coroutines.runBlocking {
+            store.read { h ->
+                var guard = 0
+                while (h.overview().tick < 30u && guard++ < 40) { h.dismissPause(); h.advance(26u) }
+                val me = h.overview().primaryFirm!!
+                val rival = h.stockBoard().filter { it.firm != me }.maxByOrNull { it.marketCapCents }
+                FinancialData(
+                    h.overview().primaryName, h.statements(me, "week"), h.statements(me, "quarter"), h.statements(me, "year"),
+                    h.sharePriceHistory(me), h.corridorIndexHistory(),
+                    listOfNotNull(rival?.let { it.name to h.statements(it.firm, "quarter") }),
+                ) to h.goodPriceHistory(0u)
+            }
+        } else null
+        val financeScreens = finance?.let { (data, good) ->
+            FinanceTab.entries.associate { tab ->
+                "ui-finance-${tab.name.lowercase()}" to @androidx.compose.runtime.Composable {
+                    Box(Modifier.fillMaxSize().background(Palette.ink).padding(24.dp)) {
+                        Column(Modifier.width(760.dp)) { CompanyFinancials(data, columns = 5, initialTab = tab) }
+                    }
+                }
+            } + ("ui-chart" to @androidx.compose.runtime.Composable {
+                Box(Modifier.fillMaxSize().background(Palette.ink).padding(24.dp)) {
+                    Column(Modifier.width(640.dp)) {
+                        Panel {
+                            Chart(
+                                listOf(
+                                    ChartSeries("Good 0", Palette.gold, good.map { ChartPoint(it.week.toInt(), it.cents) }),
+                                    ChartSeries("Share", Palette.positive, data.share.map { ChartPoint(it.week.toInt(), it.cents) }),
+                                ),
+                                title = "Closing prices", initialKind = ChartKind.Area, format = { Format.money(it) },
+                            )
+                        }
+                    }
+                }
+            })
+        }.orEmpty()
+        for ((name, content) in screens + desktop + financeScreens) {
             val scene = ImageComposeScene(1400, 860, Density(1f)) {
                 CorporateWarfareTheme { androidx.compose.runtime.CompositionLocalProvider(LocalAppSettings provides settings) { content() } }
             }

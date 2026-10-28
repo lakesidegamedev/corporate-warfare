@@ -204,7 +204,7 @@ pub fn statements_of(
 #[uniffi::export]
 impl SessionHandle {
     /// A firm's statements, oldest first. `period` is `week` (two years), `quarter` (the whole
-    /// career) or `year`. Your companies, inspected companies and listed companies only; a save
+    /// career) or `year`. Your companies, inspected companies and companies on the board only; a save
     /// from before the archive has none until weeks are played.
     pub fn statements(&self, firm: u64, period: String) -> Vec<StatementDto> {
         let session = self.lock();
@@ -213,7 +213,7 @@ impl SessionHandle {
         let Some(entity) = world.firms.get(handle) else {
             return Vec::new();
         };
-        let listed = entity.shares.issued > 0 && entity.shares.ipo_done;
+        let listed = entity.shares.issued > 0 && entity.operative();
         if !listed && !session.can_inspect(firm) {
             return Vec::new();
         }
