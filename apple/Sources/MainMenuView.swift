@@ -15,6 +15,9 @@ private func scenarioTint(_ id: String) -> Color {
 /// the map, so the two always look alike.
 struct GlobeBackdrop: View {
     var offsetX: CGFloat = 0.22
+    /// Where the menu column ends, in points from the left. Scenario names never show under it,
+    /// where they would read through the gaps between the buttons.
+    var menuEdge: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.displayScale) private var displayScale
@@ -125,7 +128,7 @@ struct GlobeBackdrop: View {
         let at = origin(size)
         scene.translateBy(x: at.x, y: at.y)
         let p = geometry.of(map: map, camera: Self.camera(seconds), size: size, tilt: 0, detail: 0).projection
-        drawScenarios(&scene, projection: p, pulse: 0.85 + 0.15 * sin(seconds * 2))
+        drawScenarios(&scene, projection: p, pulse: 0.85 + 0.15 * sin(seconds * 2), clearOf: menuEdge - at.x)
         if look.lighting > 0 {
             drawArcs(&scene, projection: p, seconds: seconds)
             drawSatellites(&scene, projection: p, seconds: seconds)
@@ -174,7 +177,8 @@ struct GlobeBackdrop: View {
     }
 
     /// Each scenario's area glows and is named as it turns to face the viewer, with a slow pulse.
-    private func drawScenarios(_ context: inout GraphicsContext, projection p: MapProjection, pulse: Double) {
+    /// Names fade out as they reach `edge`, the menu column's edge in the globe's coordinates.
+    private func drawScenarios(_ context: inout GraphicsContext, projection p: MapProjection, pulse: Double, clearOf edge: CGFloat) {
         for area in map.scenarioAreas {
             var facing = -1.0
             for ring in area.rings {
@@ -196,8 +200,14 @@ struct GlobeBackdrop: View {
             let latDeg = asin(min(max(c.2, -1), 1)) * 180 / .pi
             let (at, front) = p.project(GeoPoint(lonDegrees: lonDeg, latDegrees: latDeg))
             if front {
-                let label = Text(name).font(.system(size: 13, weight: .bold)).foregroundColor(Color.white.opacity(min(glow, 1)))
-                context.draw(context.resolve(label), at: CGPoint(x: at.x, y: at.y - 6), anchor: .bottom)
+                let label = Text(name).font(.system(size: 13, weight: .bold)).foregroundColor(.white)
+                let resolved = context.resolve(label)
+                let left = at.x - resolved.measure(in: CGSize(width: 1000, height: 100)).width / 2
+                let clear = smoothstep(Double(edge), Double(edge) + 40, Double(left))
+                guard clear > 0 else { continue }
+                var named = context
+                named.opacity = min(glow, 1) * clear
+                named.draw(resolved, at: CGPoint(x: at.x, y: at.y - 6), anchor: .bottom)
             }
         }
     }
@@ -473,9 +483,10 @@ struct StartView: View {
     private var menu: some View {
         GeometryReader { proxy in
             let wide = proxy.size.width >= 900
+            let column: CGFloat = wide ? 460 : proxy.size.width
             ZStack(alignment: .leading) {
                 Color(red: 0.020, green: 0.035, blue: 0.055).ignoresSafeArea()
-                GlobeBackdrop(offsetX: wide ? 0.22 : 0)
+                GlobeBackdrop(offsetX: wide ? 0.22 : 0, menuEdge: column + proxy.safeAreaInsets.leading)
                     .ignoresSafeArea()
                 // Shade the left side so the menu reads over the globe.
                 LinearGradient(
@@ -524,7 +535,7 @@ struct StartView: View {
                     }
                     .padding(.horizontal, wide ? 48 : 24)
                     .padding(.vertical, 40)
-                    .frame(width: wide ? 460 : proxy.size.width)
+                    .frame(width: column)
                     .frame(minHeight: proxy.size.height)
                 }
             }
