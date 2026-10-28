@@ -93,6 +93,7 @@ class AppSettings(private val file: File) {
             props.setProperty("lighting", g.lighting.toString())
             props.setProperty("dayNight", g.dayNight.toString())
             props.setProperty("cityLights", g.cityLights.toString())
+            props.setProperty("clouds", g.clouds.toString())
             props.setProperty("traffic", g.traffic.toString())
             props.setProperty("buildings", g.buildings.toString())
             props.setProperty("frameRate", g.frameRate.toString())
@@ -127,6 +128,7 @@ class AppSettings(private val file: File) {
             lighting = int("lighting", base.lighting, 0..2),
             dayNight = bool("dayNight", base.dayNight),
             cityLights = bool("cityLights", base.cityLights),
+            clouds = int("clouds", base.clouds, 0..2),
             traffic = int("traffic", base.traffic, 0..2),
             buildings = int("buildings", base.buildings, 0..2),
             frameRate = props.getProperty("frameRate")?.toIntOrNull()?.takeIf { it in listOf(0, 30, 60) } ?: base.frameRate,
@@ -264,6 +266,7 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                 val info = uniffi.cw_ffi.engineInfo()
                 Text("Corporate Warfare ${BuildInfo.VERSION} · engine ${info.version}", color = Palette.secondary, fontSize = 12.sp)
                 Text("Institutions are simplified game rules, not legal, tax or investment advice.", color = Palette.secondary, fontSize = 11.sp)
+                Text("Clouds: Solar System Scope, CC BY 4.0, based on NASA Blue Marble imagery.", color = Palette.secondary, fontSize = 11.sp)
             }
         }
     }

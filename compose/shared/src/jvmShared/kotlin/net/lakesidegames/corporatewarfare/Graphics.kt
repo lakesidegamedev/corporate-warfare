@@ -17,6 +17,8 @@ data class GraphicsConfig(
     /** The sun moves round the world; off keeps a fixed afternoon light. */
     val dayNight: Boolean = true,
     val cityLights: Boolean = true,
+    /** Clouds from the satellite cloud map: 0 off, 1 light, 2 heavy. */
+    val clouds: Int = 1,
     /** Freight along the lanes and cars on the highways: 0 off, 1 light, 2 busy. */
     val traffic: Int = 1,
     /** 0 flat badges, 1 divisions as buildings, 2 also city skylines. */
@@ -30,7 +32,7 @@ data class GraphicsConfig(
     val pitch: Double get() = when (tilt) { 0 -> 0.0; 1 -> 28 * PI / 180; else -> 48 * PI / 180 }
 
     /** Whether anything on the map moves on its own, so the frame clock needs to run. */
-    val moves: Boolean get() = animations && (traffic > 0 || buildings > 0 || dayNight || lighting == 2)
+    val moves: Boolean get() = animations && (traffic > 0 || clouds > 0 || buildings > 0 || dayNight || lighting == 2)
 
     /** The preset this matches, or null when the player has mixed their own. */
     val preset: GraphicsPreset? get() = GraphicsPreset.entries.firstOrNull { it.config(animations, showFps) == this }
@@ -45,10 +47,10 @@ enum class GraphicsPreset(val title: String) {
     Low("Low"), Medium("Medium"), High("High"), Ultra("Ultra");
 
     fun config(animations: Boolean, showFps: Boolean): GraphicsConfig = when (this) {
-        Low -> GraphicsConfig(MapDetail.Low, 0, false, 0, false, false, 0, 0, 30, animations, showFps)
-        Medium -> GraphicsConfig(MapDetail.Medium, 1, true, 1, false, true, 1, 1, 30, animations, showFps)
-        High -> GraphicsConfig(MapDetail.High, 1, true, 2, true, true, 1, 2, 60, animations, showFps)
-        Ultra -> GraphicsConfig(MapDetail.High, 2, true, 2, true, true, 2, 2, 0, animations, showFps)
+        Low -> GraphicsConfig(MapDetail.Low, 0, false, 0, false, false, 0, 0, 0, 30, animations, showFps)
+        Medium -> GraphicsConfig(MapDetail.Medium, 1, true, 1, false, true, 1, 1, 1, 30, animations, showFps)
+        High -> GraphicsConfig(MapDetail.High, 1, true, 2, true, true, 1, 1, 2, 60, animations, showFps)
+        Ultra -> GraphicsConfig(MapDetail.High, 2, true, 2, true, true, 2, 2, 2, 0, animations, showFps)
     }
 }
 
@@ -70,6 +72,7 @@ internal val graphicsOptions = listOf(
     GraphicsOption("Lighting", { "Sunlight, shadows and the atmosphere around the globe." }, listOf("Off", "Standard", "Cinematic"), { it.lighting }, { c, v -> c.copy(lighting = v) }),
     GraphicsOption("Day and night", { "The sun moves across the world and night falls on the map." }, listOf("Off", "On"), { it.dayNight.int() }, { c, v -> c.copy(dayNight = v == 1) }),
     GraphicsOption("City lights", { "Cities glow on the night side." }, listOf("Off", "On"), { it.cityLights.int() }, { c, v -> c.copy(cityLights = v == 1) }),
+    GraphicsOption("Clouds", { "Real satellite clouds that drift with the trade winds and westerlies, casting shadows on the map." }, listOf("Off", "Light", "Heavy"), { it.clouds }, { c, v -> c.copy(clouds = v) }),
     GraphicsOption("Traffic", { "Freight moves along the lanes and cars along the highways." }, listOf("Off", "Light", "Busy"), { it.traffic }, { c, v -> c.copy(traffic = v) }),
     GraphicsOption("Buildings", { "Shows your divisions as buildings, and city skylines." }, listOf("Flat", "Your divisions", "Divisions and cities"), { it.buildings }, { c, v -> c.copy(buildings = v) }),
     GraphicsOption("Frame rate", { "Lower saves battery." }, listOf("30", "60", "Unlimited"), { when (it.frameRate) { 30 -> 0; 60 -> 1; else -> 2 } }, { c, v -> c.copy(frameRate = listOf(30, 60, 0)[v]) }),

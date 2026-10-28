@@ -71,6 +71,7 @@ fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
                 graphics = graphics.copy(detail = MapDetail.Low, extrude = false, buildings = 0, traffic = 0), sun = sun,
             )
             if (graphics.cityLights && graphics.lighting > 0) drawHubLights(world, p, sun)
+            with(Weather) { drawWeather(p, sun, seconds * 3, graphics.clouds, map.playBounds, 0.0, 1.0, false) }
             drawScenarioGlow(map, p, seconds, measurer)
             if (graphics.lighting > 0) {
                 drawTradeArcs(world, p, seconds)

@@ -268,7 +268,7 @@ fun WorldMapView(
                     val detailFade = if (graphics.detail != MapDetail.High) 0f else ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
                     drawMapOverlay(
                         o, graphics, seconds, layer == MapLayer.Freight, sun ?: Sun.fixed(g.p), map.playBounds, cam.zoom,
-                        seconds - rippleAt, detailFade,
+                        seconds - rippleAt, detailFade, map.scenarioId,
                     )
                 } else {
                     g.overlay(store.lanes, store.mapDivisions, selected, heights, graphics, layer == MapLayer.Freight).selectedTop?.let {

@@ -68,7 +68,7 @@ object Images {
     private val cache = mutableMapOf<String, ImageBitmap?>()
 
     fun load(name: String): ImageBitmap? = cache.getOrPut(name) {
-        val bytes = Images::class.java.getResourceAsStream("/$name.png")?.use { it.readBytes() } ?: return@getOrPut null
+        val bytes = Images::class.java.getResourceAsStream(if ('.' in name) "/$name" else "/$name.png")?.use { it.readBytes() } ?: return@getOrPut null
         runCatching { decode(bytes) }.getOrNull()
     }
 }

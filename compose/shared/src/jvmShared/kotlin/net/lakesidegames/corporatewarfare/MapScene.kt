@@ -574,7 +574,7 @@ private val ModeSpeed = mapOf("road" to 40f, "rail" to 55f, "sea" to 22f)
 /** Everything that moves on the map, for one frame. */
 internal fun DrawScope.drawMapOverlay(
     o: OverlayGeometry, g: GraphicsConfig, seconds: Double, freightLayer: Boolean, sun: Sun?, bounds: DoubleArray, zoom: Double,
-    rippleAge: Double, detailFade: Float,
+    rippleAge: Double, detailFade: Float, scenario: String? = null,
 ) {
     val p = o.p
     val time = seconds.toFloat()
@@ -628,6 +628,8 @@ internal fun DrawScope.drawMapOverlay(
             }
         }
     }
+    // Clouds and their shadows.
+    with(Weather) { drawWeather(p, sun, seconds, g.clouds, bounds, 46.0 * o.scale * p.t, zoom, g.lighting > 0, scenario) }
     // Building beacons, smoke and the week's ripple.
     if (g.buildings > 0) {
         o.buildings.forEach { b ->
