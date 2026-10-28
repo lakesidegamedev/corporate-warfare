@@ -314,9 +314,7 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
                         Stat("You hold", Format.count(line.yourShares), note = Format.compact(line.yourShares * line.priceCents)),
                     ),
                 )
-                if (line.historyCents.size > 1) {
-                    Sparkline(line.historyCents, changeTint(line.changeQuarterBps), Modifier.fillMaxWidth().height(90.dp))
-                }
+                StockHistoryChart(store, line.firm)
                 DossierSection(store, line.firm)
                 if (showPage) TextButton(onClick = { page = true }) { Text("Open company page") }
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
@@ -365,9 +363,7 @@ internal fun CommodityDialog(store: GameStore, line: CommodityDto, onClose: () -
                         Stat("In stock", Format.count(line.stockLots)),
                     ),
                 )
-                if (line.historyCents.size > 1) {
-                    Sparkline(line.historyCents, changeTint(line.changeQuarterBps), Modifier.fillMaxWidth().height(90.dp))
-                }
+                GoodHistoryChart(store, line.product, line.referenceCents)
                 if (mine != null) Text("You make this: ${Format.money(mine.priceCents)} a lot. Change it from the CEO Office pricing panel.", color = Palette.gold, fontSize = 12.sp)
                 StoreGoodSection(store, line)
             }
