@@ -598,7 +598,8 @@ internal fun DrawScope.drawWorldMap(
                 drawCircle(Palette.gold, radius = max(label.size.width, label.size.height) / 2f + 3f, center = badge)
                 drawText(label, topLeft = badge - Offset(label.size.width / 2f, label.size.height / 2f))
             }
-        } else {
+        } else if (t > 0.9 && g.zoomRatio >= 0.7) {
+            // Around the scenario's framing: a small badge per division. Further out, nothing.
             val grouped = divisions.groupBy { it.region to it.industry }
             val perRegion = mutableMapOf<String, Int>()
             grouped.forEach { (key, items) ->
@@ -708,7 +709,10 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
      * Zoomed in past the scenario's framing: only then do divisions and cities stand as voxel
      * buildings. Further out they are flat badges, so the overview stays clean.
      */
-    val closeUp: Boolean get() = scale >= 1.4f
+    val closeUp: Boolean get() = zoomRatio >= 1.4
+
+    /** The zoom against the scenario's framing, unclamped: 1 at the framing, under 1 further out. */
+    val zoomRatio: Double = cam.zoom / MapCamera.scenario(size, map).zoom
 
     /** The height of the scenario's base in pixels. */
     val plinth: Double get() = 8.0 * scale * p.t

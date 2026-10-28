@@ -2,8 +2,8 @@
 """Bake the voxel buildings on the map: the player's divisions and the cities.
 
 Each of the fifteen industries has a small voxel model in three sizes (a division grows from
-small to large with its plant count), and cities have a block in three sizes by population, drawn in 2:1 dimetric view with cel shading: three flat
-tones per colour (lit top, left, darker right), ink lines where colours meet, and a dark outline
+small to large with its plant count), and cities have a block in three sizes by population, drawn in 2:1 dimetric view with cel shading: two flat
+tones per colour (lit roof, darker front), ink lines where colours meet, and a dark outline
 round the silhouette. Every model is rendered at three pixel scales so the map can always draw a
 sprite one to one, crisp at any zoom, without resampling.
 
@@ -243,34 +243,41 @@ MODELS = {
 # ---- rendering ---------------------------------------------------------------------------------
 
 def render(m: Model, s: int):
-    """The model at s pixels per half voxel, cel shaded, and its ground anchor in the sprite."""
+    """The model at s pixels per voxel step, front on and cel shaded, and its ground anchor.
+
+    Front on, square to the map: a voxel shows its roof (2s wide, s deep) and its front face
+    (2s wide, 2s tall), looking north and slightly down, the way the tilted map is seen. Nothing
+    sits on a diagonal.
+    """
     x0, x1, y0, y1 = m.footprint()
+    # The models put their doors, signs and windows on the high-y side; turn them to face front.
+    flipped = Model()
+    flipped.v = {(x, y1 - 1 - (y - y0), z): c for (x, y, z), c in m.v.items()}
+    m = flipped
     top = max(k[2] for k in m.v) + 1
-    w = (x1 - x0 + y1 - y0) * 2 * s + 4
-    h = (x1 - x0 + y1 - y0) * s + top * 2 * s + 4
+    w = (x1 - x0) * 2 * s + 4
+    h = (y1 - y0) * s + top * 2 * s + 4
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     ids = Image.new("L", (w, h), 0)
     d = ImageDraw.Draw(img)
     di = ImageDraw.Draw(ids)
-    ox = (y1 - y0) * 2 * s + 2
-    oy = top * 2 * s + 2 + 2 * s
+    base = h - 2
     material: dict = {}
 
     def at(x, y, z):
-        return ox + ((x - x0) - (y - y0)) * 2 * s, oy + ((x - x0) + (y - y0)) * s - z * 2 * s
+        # The front-bottom-left corner of a voxel on screen.
+        return 2 + (x - x0) * 2 * s, base - (y - y0) * s - z * 2 * s
 
-    for (x, y, z), colour in sorted(m.v.items(), key=lambda kv: (kv[0][0] + kv[0][1], kv[0][2])):
+    # Far rows first, then up each column, so nearer and higher voxels cover the ones behind.
+    for (x, y, z), colour in sorted(m.v.items(), key=lambda kv: (-kv[0][1], kv[0][2])):
         px, py = at(x, y, z)
-        T = [(px, py - 2 * s), (px + 2 * s, py - s), (px, py), (px - 2 * s, py - s)]
-        L = [(px - 2 * s, py - s), (px, py), (px, py + 2 * s), (px - 2 * s, py + s)]
-        R = [(px, py), (px + 2 * s, py - s), (px + 2 * s, py + s), (px, py + 2 * s)]
+        front = [(px, py - 2 * s), (px + 2 * s, py - 2 * s), (px + 2 * s, py), (px, py)]
+        roof = [(px, py - 2 * s - s), (px + 2 * s, py - 2 * s - s), (px + 2 * s, py - 2 * s), (px, py - 2 * s)]
         mid = material.setdefault(colour, len(material) + 1)
         if (x, y, z + 1) not in m.v:
-            d.polygon(T, fill=tone(colour, 1.0)); di.polygon(T, fill=mid)
-        if (x, y + 1, z) not in m.v:
-            d.polygon(L, fill=tone(colour, 0.72)); di.polygon(L, fill=mid)
-        if (x + 1, y, z) not in m.v:
-            d.polygon(R, fill=tone(colour, 0.52)); di.polygon(R, fill=mid)
+            d.polygon(roof, fill=tone(colour, 1.0)); di.polygon(roof, fill=mid)
+        if (x, y - 1, z) not in m.v:
+            d.polygon(front, fill=tone(colour, 0.68)); di.polygon(front, fill=mid)
 
     a = np.array(img)
     solid = a[..., 3] > 0
@@ -290,11 +297,9 @@ def render(m: Model, s: int):
     top, bottom, left, right = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
     a = a[top:bottom, left:right]
     # The ground anchor: the middle of the footprint at ground level.
-    cx = (x0 + x1) / 2
-    cy = (y0 + y1) / 2
-    ax = ox + ((cx - x0) - (cy - y0)) * 2 * s
-    ay = oy + ((cx - x0) + (cy - y0)) * s - s
-    return Image.fromarray(a), (ax - left, ay - top)
+    ax = 2 + (x1 - x0) * s
+    ay = base - (y1 - y0) * s / 2
+    return Image.fromarray(a), (float(ax - left), float(ay - top))
 
 
 def main() -> None:

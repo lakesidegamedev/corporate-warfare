@@ -13,11 +13,13 @@ heading.
 
 ### Added
 
-- Your divisions stand on the map as cel-shaded voxel buildings, one model per industry (a farm
+- Zoomed in, your divisions stand on the map as front-on, cel-shaded voxel buildings, square to
+  the map like classic 8-bit games, one model per industry (a farm
   with barn and silos, a mine headframe, a refinery, a chemical works, a factory, a building site,
   a port, a shop, a hospital, an office tower, a studio, a mast, apartments, a base, a bank) in
   three sizes that grow with the division's plants. Cities on the map are voxel city blocks too,
   a town, a city or a metropolis by population, a step smaller so your buildings stand out.
+  At the scenario's framing they are small badges instead, and further out nothing marks them.
   `tools/voxel_sprites.py` bakes them.
 
 ### Fixed
