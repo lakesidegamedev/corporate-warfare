@@ -321,8 +321,8 @@ struct GraphicsSettingsPanel: View {
                 choice("Day and night", onOff(custom($dayNight)), ["Off", "On"],
                        "The sun moves across the world and night falls on the map.")
                 choice("City lights", onOff(custom($cityLights)), ["Off", "On"], "Cities glow on the night side.")
-                choice("Clouds", custom($clouds), ["Off", "Light", "Heavy"],
-                       "Real satellite clouds that drift with the trade winds and westerlies, casting shadows on the map.")
+                choice("Clouds", custom($clouds), ["Off", "Thin", "Light", "Heavy"],
+                       "Real satellite clouds that drift with the trade winds and westerlies. Heavy clouds cast shadows. The cloud button on the map steps through these.")
                 choice("Traffic", custom($traffic), ["Off", "Light", "Busy"],
                        "Freight moves along the lanes and cars along the highways.")
                 choice("Buildings", custom($buildings), ["Flat", "Your divisions", "Divisions and cities"],

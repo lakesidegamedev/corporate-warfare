@@ -994,6 +994,9 @@ struct WorldMapView: View {
     var regionCodes: [String] = []
     /// The game week; a new week sends a ripple out from each building.
     var week: UInt32 = 0
+    /// Puts the zoom controls at the top right, for the desktop shell where the tutorial card
+    /// sits in the bottom corner.
+    var controlsAtTop = false
     @Binding var selected: String?
 
     @State private var camera: MapCamera?
@@ -1127,10 +1130,11 @@ struct WorldMapView: View {
                 }
                 selected = hit == selected ? nil : hit
             }
-            .overlay(alignment: .bottomTrailing) {
+            .overlay(alignment: controlsAtTop ? .topTrailing : .bottomTrailing) {
+                // Up top they sit below the layer chips.
                 zoomControls(current: current, size: size)
                     .padding(.trailing, 12)
-                    .padding(.bottom, 40)
+                    .padding(controlsAtTop ? .top : .bottom, controlsAtTop ? 56 : 40)
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("World map. The scenario's regions can be selected.")
@@ -1177,6 +1181,8 @@ struct WorldMapView: View {
                     : MapCamera.scenario(in: size, map: map)
                 fly(from: current, to: target)
             }
+            Divider().frame(width: 36).overlay(Theme.stroke)
+            cloudButton
             if tiltSetting > 0 {
                 Divider().frame(width: 36).overlay(Theme.stroke)
                 Button {
@@ -1194,6 +1200,31 @@ struct WorldMapView: View {
             }
         }
         .pixelFrame(Theme.panel)
+    }
+
+    /// Clouds in one tap: heavy, light, thin, off, and round again.
+    private var cloudButton: some View {
+        let level = min(max(clouds, 0), 3)
+        return Button {
+            clouds = (level + 3) % 4
+            // A mix that happens to match a preset shows as that preset.
+            let now = GraphicsSettings(mapDetail: detailLevel, tilt: tiltSetting, extrude: extrude, lighting: lighting,
+                                       dayNight: dayNight, cityLights: cityLights, clouds: clouds, traffic: traffic,
+                                       buildings: buildings, frameRate: frameRate)
+            preset = (GraphicsPreset.choices.first { $0.values == now } ?? .custom).rawValue
+        } label: {
+            Group {
+                if level == 0 {
+                    PixelIcon("cloud_off", size: 22, colored: true)
+                } else {
+                    PixelIcon("cloud", size: 22)
+                        .foregroundStyle(Theme.primaryText.opacity(0.4 + 0.2 * Double(level)))
+                }
+            }
+            .frame(width: 40, height: 40)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Clouds: \(["Off", "Thin", "Light", "Heavy"][level])")
     }
 
     private func mapButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {

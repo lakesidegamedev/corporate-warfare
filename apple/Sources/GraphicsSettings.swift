@@ -22,10 +22,10 @@ enum GraphicsPreset: String, CaseIterable, Identifiable {
                                     clouds: 1, traffic: 1, buildings: 1, frameRate: 30)
         case .high:
             return GraphicsSettings(mapDetail: 2, tilt: 1, extrude: true, lighting: 2, dayNight: true, cityLights: true,
-                                    clouds: 1, traffic: 1, buildings: 2, frameRate: 60)
+                                    clouds: 2, traffic: 1, buildings: 2, frameRate: 60)
         case .ultra:
             return GraphicsSettings(mapDetail: 2, tilt: 2, extrude: true, lighting: 2, dayNight: true, cityLights: true,
-                                    clouds: 2, traffic: 2, buildings: 2, frameRate: 0)
+                                    clouds: 3, traffic: 2, buildings: 2, frameRate: 0)
         case .custom:
             return nil
         }
@@ -40,7 +40,7 @@ struct GraphicsSettings: Equatable {
     var lighting: Int
     var dayNight: Bool
     var cityLights: Bool
-    /// Clouds from the satellite cloud map: 0 off, 1 light, 2 heavy.
+    /// Clouds from the satellite cloud map: 0 off, 1 thin, 2 light, 3 heavy.
     var clouds: Int
     var traffic: Int
     var buildings: Int
@@ -83,6 +83,8 @@ struct GraphicsSettings: Equatable {
            let values = GraphicsPreset(rawValue: stored)?.values {
             defaults.set(values.clouds, forKey: GraphicsKeys.clouds)
         }
+        // Clouds gained a thin level, so the top is now 3; anything stored above that is heavy.
+        if defaults.integer(forKey: GraphicsKeys.clouds) > 3 { defaults.set(3, forKey: GraphicsKeys.clouds) }
         guard defaults.string(forKey: GraphicsKeys.preset) == nil, var high = GraphicsPreset.high.values else { return }
         var preset = GraphicsPreset.high
         if defaults.object(forKey: GraphicsKeys.mapDetail) != nil {
