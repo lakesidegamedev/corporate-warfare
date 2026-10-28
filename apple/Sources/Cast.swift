@@ -26,7 +26,7 @@ struct PixelPortrait: View {
             var context = context
             PixelIcons.draw(
                 rows: art.rows, palette: art.palette, gridSize: CastPortraits.size,
-                in: &context, rect: CGRect(origin: .zero, size: area), tint: nil
+                in: &context, rect: CGRect(origin: .zero, size: area), tint: nil, key: "portrait|\(person)"
             )
         }
         .frame(width: size, height: size)

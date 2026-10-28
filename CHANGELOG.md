@@ -51,6 +51,13 @@ heading.
   level it is allowed to buy stops spending its research budget until the frontier moves.
 - Research is cheaper to start: the first levels cost $40,000, $160,000 and $360,000 instead of
   $100,000, $400,000 and $900,000.
+- Faster weeks and a more responsive interface. A game week now takes about 20 to 40 percent
+  less time in every scenario (Ruhr and Rhine 18.8 to 11.6 ms, Silicon Valley 12.8 to 9.4 ms,
+  Texas 13.0 to 10.7 ms, Great Lakes 9.4 to 7.3 ms on the test machine) with identical results:
+  freight route shapes are kept from week to week until the network changes, and rival
+  expansion scoring reads each market once. Pixel icons, sector badges, portraits and the logo
+  are drawn from a bitmap built once instead of hundreds of rectangles a frame, and the map
+  keeps its projected shapes until the view moves, on Android, Windows, Linux and Apple.
 
 - Every scenario now keeps its own calendar. The status bar, elections, chair terms, seasons,
   price paths, news, saves and chart axes read from the scenario start year, so Texas 1981 no

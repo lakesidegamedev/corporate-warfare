@@ -1,5 +1,6 @@
 package net.lakesidegames.corporatewarfare
 
+import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -124,18 +125,9 @@ fun SectorBadge(sector: String, size: Int = 26) {
         if (icon == null) return@Canvas
         val inset = this.size.width * 0.12f
         val cell = (this.size.width - inset * 2) / 12f
-        icon.rows.forEachIndexed { y, row ->
-            row.forEachIndexed { x, character ->
-                val hex = if (character == '.') null else icon.palette[character.toString()]
-                if (hex != null) {
-                    drawRect(
-                        SectorIcons.color(hex),
-                        topLeft = androidx.compose.ui.geometry.Offset(inset + x * cell, inset + y * cell),
-                        size = androidx.compose.ui.geometry.Size(cell + 0.5f, cell + 0.5f),
-                    )
-                }
-            }
-        }
+        val art = PixelBitmaps.of(icon, icon.rows) { character -> icon.palette[character.toString()]?.let { SectorIcons.color(it) } }
+        val side = (cell * 12).roundToInt()
+        drawPixelBitmap(art, androidx.compose.ui.unit.IntOffset(inset.roundToInt(), inset.roundToInt()), side, side)
     }
 }
 

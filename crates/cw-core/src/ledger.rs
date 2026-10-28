@@ -470,21 +470,42 @@ impl Ledger {
         if cutoff == 0 {
             return;
         }
-        let mut keep = Vec::with_capacity(self.journal.len());
+        // Postings are appended in week order, so what falls out of the window is a prefix.
+        let split = self
+            .journal
+            .partition_point(|posting| posting.week.0 < cutoff);
+        let ordered = self.journal[..split]
+            .iter()
+            .all(|posting| posting.week.0 < cutoff)
+            && self.journal[split..]
+                .iter()
+                .all(|posting| posting.week.0 >= cutoff);
         let mut hasher = CanonicalHasher::new(DOMAIN_STATE);
         let mut pruned = 0u64;
-        for posting in self.journal.drain(..) {
-            if posting.week.0 < cutoff {
-                hasher
-                    .u32(posting.week.0)
-                    .u64(posting.txn)
-                    .u32(posting.account.index() as u32)
-                    .i64(posting.delta)
-                    .string(&posting.memo);
+        let fold = |posting: &Posting, hasher: &mut CanonicalHasher| {
+            hasher
+                .u32(posting.week.0)
+                .u64(posting.txn)
+                .u32(posting.account.index() as u32)
+                .i64(posting.delta)
+                .string(&posting.memo);
+        };
+        if ordered {
+            for posting in self.journal.drain(..split) {
+                fold(&posting, &mut hasher);
                 pruned += 1;
-            } else {
-                keep.push(posting);
             }
+        } else {
+            let mut keep = Vec::with_capacity(self.journal.len());
+            for posting in self.journal.drain(..) {
+                if posting.week.0 < cutoff {
+                    fold(&posting, &mut hasher);
+                    pruned += 1;
+                } else {
+                    keep.push(posting);
+                }
+            }
+            self.journal = keep;
         }
         if pruned > 0 {
             let mut chained = CanonicalHasher::new(DOMAIN_STATE);
@@ -493,7 +514,6 @@ impl Ledger {
             chained.bytes(&new_hash);
             self.pruned_hash = chained.finish();
         }
-        self.journal = keep;
     }
 
     pub fn canonical_hash(&self, hasher: &mut CanonicalHasher) {

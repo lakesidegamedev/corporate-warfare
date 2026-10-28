@@ -1,5 +1,50 @@
 import SwiftUI
 
+/// The map projected for one camera and view size. Each path is built the first time it is
+/// drawn and kept, so a redraw that moves nothing (a new week, a selection) projects nothing.
+final class MapGeometry {
+    let map: WorldMap
+    let camera: MapCamera
+    let size: CGSize
+    let projection: MapProjection
+
+    init(map: WorldMap, camera: MapCamera, size: CGSize) {
+        self.map = map
+        self.camera = camera
+        self.size = size
+        self.projection = MapProjection(camera: camera, size: size)
+    }
+
+    lazy var graticule: Path = projection.lines(WorldMapView.graticuleRings)
+    lazy var land: Path = {
+        var path = Path()
+        for country in map.countries {
+            for ring in country.rings { projection.addPolygon(ring, to: &path) }
+        }
+        return path
+    }()
+    lazy var provinces: Path = projection.lines(map.provinces)
+    lazy var roads: Path = projection.lines(map.roads)
+    lazy var regionPaths: [(code: String, path: Path)] = map.regions.map { (code: $0.code, path: projection.path($0.rings)) }
+    lazy var counties: Path = projection.lines(map.counties)
+    lazy var lakes: Path = projection.path(map.lakes)
+    lazy var rivers: Path = projection.lines(map.rivers)
+    lazy var interstates: Path = projection.lines(map.interstates)
+    lazy var playStates: [Path] = map.playStates.map { projection.path($0.rings) }
+}
+
+/// Holds the last `MapGeometry`. A reference type so the canvas can refill it while drawing.
+final class MapGeometryCache {
+    private var held: MapGeometry?
+
+    func of(map: WorldMap, camera: MapCamera, size: CGSize) -> MapGeometry {
+        if let held, held.map === map, held.camera == camera, held.size == size { return held }
+        let fresh = MapGeometry(map: map, camera: camera, size: size)
+        held = fresh
+        return fresh
+    }
+}
+
 /// What the map shades the regions by.
 enum MapLayer: String, CaseIterable, Identifiable {
     case presence = "Your divisions"
@@ -63,13 +108,14 @@ struct WorldMapView: View {
     @State private var lastDrag: CGSize = .zero
     @State private var lastPinch: CGFloat = 1
     @State private var flight: Task<Void, Never>?
+    @State private var geometry = MapGeometryCache()
 
     private var map: WorldMap { WorldMap.forRegions(regionCodes) }
     private static let space = Color(red: 0.020, green: 0.035, blue: 0.055)
     private static let outsideLand = Color(red: 0.145, green: 0.157, blue: 0.169)
     private static let outsideBorder = Color(red: 0.333, green: 0.349, blue: 0.365)
     private static let outsideRoad = Color(red: 0.416, green: 0.431, blue: 0.447)
-    private static let graticule: [GeoRing] = {
+    static let graticuleRings: [GeoRing] = {
         var rings: [GeoRing] = []
         for lon in stride(from: -180, to: 180, by: 15) {
             rings.append(GeoRing(stride(from: -80, through: 80, by: 4).flatMap { [lon * 10_000, $0 * 10_000] }))
@@ -85,7 +131,8 @@ struct WorldMapView: View {
             let size = proxy.size
             let current = camera ?? MapCamera.scenario(in: size, map: map)
             Canvas { context, size in
-                draw(in: &context, projection: MapProjection(camera: current, size: size), camera: current)
+                let projected = geometry.of(map: map, camera: current, size: size)
+                draw(in: &context, projected: projected, camera: current)
             }
             .background(WorldMapView.space)
             .contentShape(Rectangle())
@@ -189,7 +236,8 @@ struct WorldMapView: View {
         }
     }
 
-    private func draw(in context: inout GraphicsContext, projection p: MapProjection, camera: MapCamera) {
+    private func draw(in context: inout GraphicsContext, projected: MapGeometry, camera: MapCamera) {
+        let p = projected.projection
         let t = p.t
         let center = CGPoint(x: p.cx, y: p.cy)
         // Ocean: the globe's disc, growing to fill the view as the map flattens.
@@ -197,28 +245,25 @@ struct WorldMapView: View {
         let disc = CGRect(x: center.x - oceanRadius, y: center.y - oceanRadius, width: oceanRadius * 2, height: oceanRadius * 2)
         context.fill(Path(ellipseIn: disc), with: .color(Theme.water.opacity(0.55)))
         if t < 1 {
-            context.stroke(p.lines(WorldMapView.graticule), with: .color(Theme.primaryText.opacity(0.06 * (1 - t))), lineWidth: 0.6)
+            context.stroke(projected.graticule, with: .color(Theme.primaryText.opacity(0.06 * (1 - t))), lineWidth: 0.6)
         }
 
         // Outside the scenario the world is greyed out: neutral land, grey borders and roads.
         // The scenario's regions are drawn over it in colour.
-        var land = Path()
-        for country in map.countries {
-            for ring in country.rings { p.addPolygon(ring, to: &land) }
-        }
+        let land = projected.land
         context.fill(land, with: .color(WorldMapView.outsideLand), style: FillStyle(eoFill: true))
         let provinces = detailLevel == 0 ? 0 : min(max((camera.zoom - 1.4) / 1.2, 0), 1)
         if provinces > 0 {
-            context.stroke(p.lines(map.provinces), with: .color(WorldMapView.outsideBorder.opacity(0.7 * provinces)), lineWidth: 0.5)
+            context.stroke(projected.provinces, with: .color(WorldMapView.outsideBorder.opacity(0.7 * provinces)), lineWidth: 0.5)
         }
         let roads = detailLevel < 2 ? 0 : min(max((camera.zoom - 2.4) / 1.6, 0), 1)
         if roads > 0 {
-            context.stroke(p.lines(map.roads), with: .color(WorldMapView.outsideRoad.opacity(0.6 * roads)), lineWidth: 0.8)
+            context.stroke(projected.roads, with: .color(WorldMapView.outsideRoad.opacity(0.6 * roads)), lineWidth: 0.8)
         }
         context.stroke(land, with: .color(WorldMapView.outsideBorder), lineWidth: 0.8)
 
         let detail = detailLevel < 2 ? 0 : min(max((camera.zoom - 7) / 5, 0), 1)
-        let regionPaths = map.regions.map { (code: $0.code, path: p.path($0.rings)) }
+        let regionPaths = projected.regionPaths
         for region in regionPaths {
             context.fill(region.path, with: .color(Theme.land))
             let value = shading[region.code] ?? 0
@@ -227,19 +272,19 @@ struct WorldMapView: View {
             }
         }
         if detail > 0 {
-            context.stroke(p.lines(map.counties), with: .color(Theme.stroke.opacity(0.45 * detail)), lineWidth: 0.5)
+            context.stroke(projected.counties, with: .color(Theme.stroke.opacity(0.45 * detail)), lineWidth: 0.5)
         }
-        context.fill(p.path(map.lakes), with: .color(Theme.water))
+        context.fill(projected.lakes, with: .color(Theme.water))
         if detail > 0 {
-            context.stroke(p.lines(map.rivers), with: .color(Theme.water.opacity(0.9 * detail)), lineWidth: 1.4)
-            context.stroke(p.lines(map.interstates), with: .color(Theme.road.opacity(0.4 * detail)), lineWidth: 1)
+            context.stroke(projected.rivers, with: .color(Theme.water.opacity(0.9 * detail)), lineWidth: 1.4)
+            context.stroke(projected.interstates, with: .color(Theme.road.opacity(0.4 * detail)), lineWidth: 1)
         }
         // Region borders, then state borders over them, then the selected region on top.
         for region in regionPaths {
             context.stroke(region.path, with: .color(Theme.secondary.opacity(0.45)), lineWidth: 0.9)
         }
-        for state in map.playStates {
-            context.stroke(p.path(state.rings), with: .color(Theme.primaryText.opacity(0.7)), lineWidth: camera.zoom > 3 ? 1.8 : 1)
+        for state in projected.playStates {
+            context.stroke(state, with: .color(Theme.primaryText.opacity(0.7)), lineWidth: camera.zoom > 3 ? 1.8 : 1)
         }
         if let selected, let region = regionPaths.first(where: { $0.code == selected }) {
             context.stroke(region.path, with: .color(Theme.gold), lineWidth: 3)

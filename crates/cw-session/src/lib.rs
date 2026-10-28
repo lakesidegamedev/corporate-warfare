@@ -866,7 +866,7 @@ impl Session {
                 pause = Some(reason);
                 break;
             }
-            self.run_ai();
+            cw_sim::ph!("ai+commands", self.run_ai());
             let outcome = cw_sim::tick::advance(&mut self.world, &self.dataset);
             advanced += 1;
             self.heal_pause();

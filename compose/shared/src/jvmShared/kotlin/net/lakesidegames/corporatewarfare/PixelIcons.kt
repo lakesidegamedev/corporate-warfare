@@ -4,11 +4,15 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -37,25 +41,56 @@ object PixelIcons {
     private fun luminance(c: Color): Float = 0.299f * c.red + 0.587f * c.green + 0.114f * c.blue
 }
 
+/**
+ * Pixel art rasterised once into a small bitmap and drawn scaled with no smoothing. Drawing the art
+ * as one rectangle per pixel on every frame cost hundreds of draw calls per icon.
+ */
+internal object PixelBitmaps {
+    private val cache = java.util.concurrent.ConcurrentHashMap<Any, ImageBitmap>()
+
+    /** The bitmap for [key], built from [rows] with [colorOf] per letter on first use. */
+    fun of(key: Any, rows: List<String>, colorOf: (Char) -> Color?): ImageBitmap = cache.getOrPut(key) {
+        val width = rows.maxOfOrNull { it.length } ?: 1
+        val bitmap = ImageBitmap(width.coerceAtLeast(1), rows.size.coerceAtLeast(1))
+        val canvas = Canvas(bitmap)
+        val paint = Paint()
+        rows.forEachIndexed { y, row ->
+            row.forEachIndexed { x, ch ->
+                val color = if (ch == '.') null else colorOf(ch)
+                if (color != null) {
+                    paint.color = color
+                    canvas.drawRect(x.toFloat(), y.toFloat(), x + 1f, y + 1f, paint)
+                }
+            }
+        }
+        bitmap
+    }
+}
+
+/** Draws [bitmap] to fill a [side] square at [at], pixels hard-edged. */
+internal fun DrawScope.drawPixelBitmap(bitmap: ImageBitmap, at: IntOffset = IntOffset.Zero, width: Int, height: Int) {
+    drawImage(
+        bitmap,
+        srcOffset = IntOffset.Zero,
+        srcSize = IntSize(bitmap.width, bitmap.height),
+        dstOffset = at,
+        dstSize = IntSize(width, height),
+        filterQuality = FilterQuality.None,
+    )
+}
+
+private data class IconKey(val icon: PixelIcons.Icon, val tint: Color?)
+
+/** The icon as a bitmap, repainted in one colour when [tint] is set, keeping its shading. */
+internal fun PixelIcons.Icon.bitmap(tint: Color?): ImageBitmap = PixelBitmaps.of(IconKey(this, tint), rows) { ch ->
+    val base = palette[ch.toString()]?.let { SectorIcons.color(it) } ?: return@of null
+    if (tint == null) base else tint.copy(alpha = tint.alpha * (PixelIcons.monoAlpha(this)[ch.toString()] ?: 1f))
+}
+
 /** Draws [icon] into this scope as exact pixels. A non-null [tint] repaints it in one colour, keeping its shading. */
 fun DrawScope.drawPixelIcon(icon: PixelIcons.Icon, tint: Color?) {
-    val n = PixelIcons.size
-    val cell = minOf(size.width, size.height) / n
-    val alpha = if (tint != null) PixelIcons.monoAlpha(icon) else emptyMap()
-    val colors = icon.palette.mapValues { SectorIcons.color(it.value) }
-    icon.rows.forEachIndexed { y, row ->
-        row.forEachIndexed { x, ch ->
-            if (ch == '.') return@forEachIndexed
-            val base = colors[ch.toString()] ?: return@forEachIndexed
-            val color = if (tint != null) tint.copy(alpha = tint.alpha * (alpha[ch.toString()] ?: 1f)) else base
-            // Round both edges so neighbouring pixels meet without seams or blur.
-            val left = (x * cell).roundToInt().toFloat()
-            val top = (y * cell).roundToInt().toFloat()
-            val right = ((x + 1) * cell).roundToInt().toFloat()
-            val bottom = ((y + 1) * cell).roundToInt().toFloat()
-            drawRect(color, Offset(left, top), Size(right - left, bottom - top))
-        }
-    }
+    val side = minOf(size.width, size.height).roundToInt()
+    drawPixelBitmap(icon.bitmap(tint), width = side, height = side)
 }
 
 /** A pixel icon by name. Pass [tint] for one-colour use in menus, buttons and bars; omit it for the full palette. */
