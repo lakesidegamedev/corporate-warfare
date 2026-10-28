@@ -29,7 +29,7 @@ data class FinancialData(
     val years: List<StatementDto>,
     val share: List<PricePointDto>,
     val index: List<PricePointDto>,
-    /** Up to two listed rivals in the same sector, by quarter, for the comparison chart. */
+    /** The two largest rivals in the same sector whose statements you can see, by quarter. */
     val rivals: List<Pair<String, List<StatementDto>>>,
 ) {
     fun of(period: ChartPeriod): List<StatementDto> = when (period) {
@@ -48,21 +48,34 @@ enum class FinanceTab(val title: String) {
 @Composable
 fun rememberFinancials(store: GameStore, firm: ULong, name: String, industry: String): FinancialData? {
     val revision = store.overview?.revision
-    val rivals = store.stocks.filter { it.firm != firm && it.industry == industry }.sortedByDescending { it.marketCapCents }.take(2)
     val state = produceState<FinancialData?>(null, firm, revision) {
-        value = store.read { h ->
-            FinancialData(
-                name, h.statements(firm, "week"), h.statements(firm, "quarter"), h.statements(firm, "year"),
-                h.sharePriceHistory(firm), h.corridorIndexHistory(),
-                rivals.map { it.name to h.statements(it.firm, "quarter") }.filter { it.second.isNotEmpty() },
-            )
-        }
+        value = store.read { h -> loadFinancials(h, firm, name, industry) }
     }
     return state.value
 }
 
+/**
+ * Read one company's financials on the engine thread. Rivals are every other firm in the sector,
+ * listed or not, whose statements the engine shows you; the two with the most revenue in their
+ * latest quarter are compared. A firm with nothing visible is skipped rather than taking a place.
+ */
+fun loadFinancials(h: uniffi.cw_ffi.SessionHandle, firm: ULong, name: String, industry: String): FinancialData {
+    val rivals = h.firms().filter { it.handle != firm && it.industry == industry }
+        .map { it.name to h.statements(it.handle, "quarter") }
+        .filter { it.second.isNotEmpty() }
+        .sortedByDescending { it.second.last().revenueCents }
+        .take(2)
+    return FinancialData(
+        name, h.statements(firm, "week"), h.statements(firm, "quarter"), h.statements(firm, "year"),
+        h.sharePriceHistory(firm), h.corridorIndexHistory(), rivals,
+    )
+}
+
 private fun List<StatementDto>.points(value: (StatementDto) -> Long) = map { ChartPoint(it.firstWeek.toInt(), value(it)) }
 private fun List<PricePointDto>.points() = map { ChartPoint(it.week.toInt(), it.cents) }
+
+/** Whether the latest statement covers fewer weeks than a full period. */
+private fun List<StatementDto>.partial(period: ChartPeriod) = lastOrNull()?.let { it.weeks.toInt() < period.weeks } ?: false
 
 private fun pct(bps: Long?): String = bps?.let { "%.1f%%".format(it / 100.0) } ?: "n/a"
 private fun times(bps: Long?): String = bps?.let { "%.2fx".format(it / 10_000.0) } ?: "n/a"
@@ -92,11 +105,12 @@ fun CompanyFinancials(data: FinancialData, columns: Int = 4, initialTab: Finance
         }
         val recent = rows.takeLast(columns).reversed()
         val pick: (ChartPeriod) -> Unit = { period = it }
+        val open = rows.partial(period)
         when (tab) {
             FinanceTab.Overview -> {
                 val latest = rows.last()
                 StatGroup(
-                    Stat("Revenue", Format.compact(latest.revenueCents), note = "${latest.label}, growth ${pct(latest.revenueGrowthBps)}"),
+                    Stat("Revenue", Format.compact(latest.revenueCents), note = "${latest.label}${if (open) " to date" else ""}, growth ${pct(latest.revenueGrowthBps)}"),
                     listOf(
                         Stat("Net income", Format.compact(latest.netIncomeCents), if (latest.netIncomeCents < 0) Palette.negative else Palette.positive),
                         Stat("Net margin", pct(latest.netMarginBps)),
@@ -112,7 +126,7 @@ fun CompanyFinancials(data: FinancialData, columns: Int = 4, initialTab: Finance
                             ChartSeries("Revenue", Palette.gold, rows.points { it.revenueCents }),
                             ChartSeries("Net income", Palette.positive, rows.points { it.netIncomeCents }),
                         ),
-                        title = "Revenue and profit", initialKind = ChartKind.Bar, period = period, periods = periods, onPeriod = pick,
+                        title = "Revenue and profit", initialKind = ChartKind.Bar, period = period, periods = periods, onPeriod = pick, partialLast = open,
                     )
                 }
                 if (data.rivals.isNotEmpty()) {
@@ -120,7 +134,8 @@ fun CompanyFinancials(data: FinancialData, columns: Int = 4, initialTab: Finance
                     Panel {
                         Chart(
                             (listOf(data.name to data.quarters) + data.rivals).mapIndexed { i, (n, s) -> ChartSeries(n, colours[i % colours.size], s.points { it.revenueCents }) },
-                            title = "Revenue against rivals, by quarter", period = ChartPeriod.Quarterly,
+                            title = "Revenue against the largest rivals, by quarter", period = ChartPeriod.Quarterly,
+                            partialLast = data.quarters.partial(ChartPeriod.Quarterly),
                         )
                     }
                 }
@@ -135,7 +150,7 @@ fun CompanyFinancials(data: FinancialData, columns: Int = 4, initialTab: Finance
                         Chart(
                             listOf(ChartSeries("Share", Palette.gold, GameDates.lastClose(share, sharePeriod)), ChartSeries("Corridor index", Palette.secondary, GameDates.lastClose(index, sharePeriod))),
                             title = "Share price against the index (100 at start)", period = sharePeriod, periods = periods, onPeriod = { sharePeriod = it },
-                            format = { "%.1f".format(it / 100.0) },
+                            format = { "%.1f".format(it / 100.0) }, partialLast = GameDates.partial(share.last().week, sharePeriod),
                         )
                     }
                 }
@@ -165,7 +180,7 @@ fun CompanyFinancials(data: FinancialData, columns: Int = 4, initialTab: Finance
                             ChartSeries("Gross profit", Color(0xFF6EC6FF), rows.points { it.grossProfitCents }),
                             ChartSeries("Net income", Palette.positive, rows.points { it.netIncomeCents }),
                         ),
-                        title = "Income", period = period, periods = periods, onPeriod = pick,
+                        title = "Income", period = period, periods = periods, onPeriod = pick, partialLast = open,
                     )
                 }
             }
@@ -193,7 +208,7 @@ fun CompanyFinancials(data: FinancialData, columns: Int = 4, initialTab: Finance
                             ChartSeries("Liabilities", Palette.negative, rows.points { it.liabilitiesCents }),
                             ChartSeries("Equity", Palette.positive, rows.points { it.equityCents }),
                         ),
-                        title = "Balance sheet at each close", initialKind = ChartKind.Area, period = period, periods = periods, onPeriod = pick,
+                        title = "Balance sheet at each close", initialKind = ChartKind.Area, period = period, periods = periods, onPeriod = pick, partialLast = open,
                     )
                 }
             }
@@ -218,7 +233,7 @@ fun CompanyFinancials(data: FinancialData, columns: Int = 4, initialTab: Finance
                             ChartSeries("Financing", Color(0xFF6EC6FF), rows.points { it.cashFinancingCents }),
                             ChartSeries("Tax", Palette.warning, rows.points { it.cashTaxCents }),
                         ),
-                        title = "Cash flow by activity", initialKind = ChartKind.Bar, period = period, periods = periods, onPeriod = pick,
+                        title = "Cash flow by activity", initialKind = ChartKind.Bar, period = period, periods = periods, onPeriod = pick, partialLast = open,
                     )
                 }
             }
@@ -228,7 +243,8 @@ fun CompanyFinancials(data: FinancialData, columns: Int = 4, initialTab: Finance
                 if (latest == null || latest.divisions.isEmpty()) {
                     Callout("Division results are kept by quarter once a quarter has closed weeks.", Palette.secondary)
                 } else {
-                    Text("${latest.label}. Estimated from each division's plants; weekly view shows quarters.", color = Palette.secondary, fontSize = 11.sp)
+                    val shown = if (period == ChartPeriod.Weekly) ChartPeriod.Quarterly else period
+                    Text("${latest.label}${if (source.partial(shown)) " to date" else ""}. Estimated from each division's plants; weekly view shows quarters.", color = Palette.secondary, fontSize = 11.sp)
                     val header = listOf("Division", "Revenue", "Costs", "Profit", "Plants", "Share")
                     Row(Modifier.fillMaxWidth()) {
                         header.forEachIndexed { i, h -> Text(h, color = Palette.secondary, fontSize = 10.sp, fontFamily = Pixel.font, modifier = Modifier.weight(if (i == 0) 2f else 1f)) }
@@ -254,7 +270,7 @@ fun CompanyFinancials(data: FinancialData, columns: Int = 4, initialTab: Finance
                                 )
                             },
                             title = "Division profit", initialKind = ChartKind.Bar,
-                            period = if (period == ChartPeriod.Weekly) ChartPeriod.Quarterly else period,
+                            period = shown, partialLast = source.partial(shown),
                         )
                     }
                 }
@@ -280,7 +296,7 @@ fun CompanyFinancials(data: FinancialData, columns: Int = 4, initialTab: Finance
                             ChartSeries("Net margin", Palette.positive, rows.mapNotNull { s -> s.netMarginBps?.let { ChartPoint(s.firstWeek.toInt(), it) } }),
                             ChartSeries("Return on equity", Color(0xFF6EC6FF), rows.mapNotNull { s -> s.roeBps?.let { ChartPoint(s.firstWeek.toInt(), it) } }),
                         ),
-                        title = "Margins and returns", period = period, periods = periods, onPeriod = pick, format = { pct(it) },
+                        title = "Margins and returns", period = period, periods = periods, onPeriod = pick, format = { pct(it) }, partialLast = open,
                     )
                 }
             }

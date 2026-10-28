@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toComposeImageBitmap
@@ -32,6 +34,10 @@ class UiRenderTest {
         val dir = kotlin.io.path.createTempDirectory("cwui").toFile()
         val store = GameStore(dir, CoroutineScope(Dispatchers.Default))
         val settings = AppSettings(File(dir, "settings.properties"))
+        // The menu's badge flight and shine run on real-time delays and an endless frame loop that
+        // can deadlock ImageComposeScene. The player's own Animations switch stops both and shows
+        // the finished menu, so the menu renders with it off.
+        val still = AppSettings(File(dir, "still.properties")).apply { chooseGraphics(graphics.copy(animations = false)) }
         val screens = mapOf<String, @androidx.compose.runtime.Composable () -> Unit>(
             "ui-menu" to { StartScreen(store, null, {}, {}) },
             "ui-settings" to { Box(Modifier.fillMaxSize().background(Palette.ink)) { SettingsScreen(store, settings, desktop = true) {} } },
@@ -63,22 +69,19 @@ class UiRenderTest {
                 var guard = 0
                 while (h.overview().tick < 30u && guard++ < 40) { h.dismissPause(); h.advance(26u) }
                 val me = h.overview().primaryFirm!!
-                val rival = h.stockBoard().filter { it.firm != me }.maxByOrNull { it.marketCapCents }
-                FinancialData(
-                    h.overview().primaryName, h.statements(me, "week"), h.statements(me, "quarter"), h.statements(me, "year"),
-                    h.sharePriceHistory(me), h.corridorIndexHistory(),
-                    listOfNotNull(rival?.let { it.name to h.statements(it.firm, "quarter") }),
-                ) to h.goodPriceHistory(0u)
+                loadFinancials(h, me, h.overview().primaryName, h.firm(me)!!.industry) to h.goodPriceHistory(0u)
             }
         } else null
         val financeScreens = finance?.let { (data, good) ->
-            FinanceTab.entries.associate { tab ->
-                "ui-finance-${tab.name.lowercase()}" to @androidx.compose.runtime.Composable {
-                    Box(Modifier.fillMaxSize().background(Palette.ink).padding(24.dp)) {
-                        Column(Modifier.width(760.dp)) { CompanyFinancials(data, columns = 5, initialTab = tab) }
-                    }
+            check(data.rivals.isNotEmpty()) { "the test career should have a visible rival in the sector" }
+            // Scrolling columns as in the game, so no chart is squeezed to fit the picture.
+            fun page(width: Int, columns: Int, tab: FinanceTab) = @androidx.compose.runtime.Composable {
+                Box(Modifier.fillMaxSize().background(Palette.ink).padding(24.dp)) {
+                    Column(Modifier.width(width.dp).verticalScroll(rememberScrollState())) { CompanyFinancials(data, columns = columns, initialTab = tab) }
                 }
-            } + ("ui-chart" to @androidx.compose.runtime.Composable {
+            }
+            FinanceTab.entries.associate { tab -> "ui-finance-${tab.name.lowercase()}" to page(760, 5, tab) } +
+                ("ui-finance-overview-phone" to page(360, 3, FinanceTab.Overview)) + ("ui-chart" to @androidx.compose.runtime.Composable {
                 Box(Modifier.fillMaxSize().background(Palette.ink).padding(24.dp)) {
                     Column(Modifier.width(640.dp)) {
                         Panel {
@@ -95,8 +98,9 @@ class UiRenderTest {
             })
         }.orEmpty()
         for ((name, content) in screens + desktop + financeScreens) {
-            val scene = ImageComposeScene(1400, 860, Density(1f)) {
-                CorporateWarfareTheme { androidx.compose.runtime.CompositionLocalProvider(LocalAppSettings provides settings) { content() } }
+            val tall = name.startsWith("ui-finance")
+            val scene = ImageComposeScene(1400, if (tall) 1700 else 860, Density(1f)) {
+                CorporateWarfareTheme { androidx.compose.runtime.CompositionLocalProvider(LocalAppSettings provides if (name == "ui-menu") still else settings) { content() } }
             }
             scene.render(0L)
             val image = scene.render(3_000_000_000L)
