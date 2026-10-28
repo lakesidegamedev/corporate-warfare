@@ -1066,6 +1066,7 @@ struct WorldMapView: View {
     @State private var camera: MapCamera?
     @State private var lastDrag: CGSize = .zero
     @State private var lastPinch: CGFloat = 1
+    @State private var lastTurn: Angle = .zero
     @State private var flight: Task<Void, Never>?
     @State private var geometry = MapGeometryCache()
     @State private var ease = HeightEase()
@@ -1169,17 +1170,33 @@ struct WorldMapView: View {
                 }
             }
             .background(MapScene.spaceColor.color())
+            // A right drag (a Mac, or an iPad with a mouse) turns the map.
+            .background(SecondaryDrag { dx in
+                flight?.cancel()
+                camera = (camera ?? current).rotated(by: Double(dx) * 0.4)
+            })
             .contentShape(Rectangle())
             .gesture(
                 SimultaneousGesture(
-                    MagnifyGesture()
-                        .onChanged { value in
-                            flight?.cancel()
-                            let factor = value.magnification / lastPinch
-                            lastPinch = value.magnification
-                            camera = (camera ?? current).zoomed(by: Double(factor))
-                        }
-                        .onEnded { _ in lastPinch = 1 },
+                    SimultaneousGesture(
+                        MagnifyGesture()
+                            .onChanged { value in
+                                flight?.cancel()
+                                let factor = value.magnification / lastPinch
+                                lastPinch = value.magnification
+                                camera = (camera ?? current).zoomed(by: Double(factor))
+                            }
+                            .onEnded { _ in lastPinch = 1 },
+                        // A two-finger twist turns the map; sprites and labels stay upright.
+                        RotateGesture()
+                            .onChanged { value in
+                                flight?.cancel()
+                                let turn = value.rotation - lastTurn
+                                lastTurn = value.rotation
+                                camera = (camera ?? current).rotated(by: turn.degrees)
+                            }
+                            .onEnded { _ in lastTurn = .zero }
+                    ),
                     DragGesture(minimumDistance: 6)
                         .onChanged { value in
                             flight?.cancel()
@@ -1278,6 +1295,22 @@ struct WorldMapView: View {
             }
             Divider().frame(width: 36).overlay(Theme.stroke)
             cloudButton
+            if current.turned {
+                // Turned away from north: one tap turns it back.
+                Divider().frame(width: 36).overlay(Theme.stroke)
+                Button {
+                    var target = current
+                    target.bearing = 0
+                    fly(from: current, to: target)
+                } label: {
+                    Text("N")
+                        .font(Pixel.font(14, bold: true))
+                        .foregroundStyle(Theme.gold)
+                        .frame(width: 40, height: 40)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Turn the map back to north")
+            }
             if tiltSetting > 0 {
                 Divider().frame(width: 36).overlay(Theme.stroke)
                 Button {
@@ -1364,5 +1397,90 @@ struct WorldMapView: View {
         let box = CGRect(x: 6, y: size.height - measured.height - 14, width: measured.width + 12, height: measured.height + 8)
         context.fill(Path(box), with: .color(.black.opacity(0.55)))
         context.draw(text, at: CGPoint(x: 12, y: size.height - measured.height - 10), anchor: .topLeading)
+    }
+}
+
+/// Turns the map with a secondary-button drag. The recogniser sits on the window, so the map's own
+/// SwiftUI gestures keep every other touch, and it answers only drags that start over this view.
+private struct SecondaryDrag: UIViewRepresentable {
+    let onTurn: (CGFloat) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onTurn: onTurn) }
+
+    func makeUIView(context: Context) -> Host {
+        let view = Host()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateUIView(_ view: Host, context: Context) {
+        context.coordinator.onTurn = onTurn
+    }
+
+    static func dismantleUIView(_ view: Host, coordinator: Coordinator) {
+        coordinator.detach()
+    }
+
+    final class Host: UIView {
+        weak var coordinator: Coordinator?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            coordinator?.attach(to: window, over: self)
+        }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var onTurn: (CGFloat) -> Void
+        private weak var area: UIView?
+        private var pan: UIPanGestureRecognizer?
+        private var last: CGFloat = 0
+
+        init(onTurn: @escaping (CGFloat) -> Void) {
+            self.onTurn = onTurn
+        }
+
+        func attach(to window: UIWindow?, over view: UIView) {
+            detach()
+            guard let window else { return }
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
+            pan.buttonMaskRequired = .secondary
+            pan.allowedScrollTypesMask = []
+            pan.cancelsTouchesInView = false
+            pan.delegate = self
+            window.addGestureRecognizer(pan)
+            self.pan = pan
+            area = view
+        }
+
+        func detach() {
+            if let pan { pan.view?.removeGestureRecognizer(pan) }
+            pan = nil
+        }
+
+        @objc private func dragged(_ pan: UIPanGestureRecognizer) {
+            let x = pan.translation(in: pan.view).x
+            switch pan.state {
+            case .began:
+                last = x
+            case .changed:
+                onTurn(x - last)
+                last = x
+            default:
+                last = 0
+            }
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard let area, area.window != nil else { return false }
+            return area.bounds.contains(touch.location(in: area))
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            true
+        }
     }
 }
