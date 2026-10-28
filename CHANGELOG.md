@@ -28,14 +28,15 @@ heading.
   switch layers. The globe is lit by the sun, with an atmosphere, a glint on the ocean, land
   coloured by climate, and a night side that fades in smoothly with cities glowing in the dark.
   Your divisions stand as buildings with lit windows and their plant counts, big cities get
-  skylines, freight moves along the lanes, cars run the highways up close, clouds drift past, the
-  selected region glows, and a new week sends a ring out from every plant. A 3D button flattens
-  the map again.
+  skylines with blinking rooftop lights, freight moves along the lanes, cars run the highways up
+  close, planes cross between the big cities trailing contrails, shallow water glows along the
+  coasts, the selected region glows, and a new week sends a ring out from every plant. A 3D button
+  flattens the map again.
 - The main menu's globe now turns in sunlight with its night side lit by cities, gold trade
   routes arc between the world's great cities, satellites circle it, the sun glares from the
   side, and a band of light crosses the logo.
 - Graphics settings: Low, Medium, High and Ultra presets, and separate choices for map detail,
-  3D tilt, raised regions, lighting, day and night, city lights, clouds, traffic, buildings,
+  3D tilt, raised regions, lighting, day and night, city lights, traffic, buildings,
   frame rate (30, 60 or unlimited), animations and an on-screen frame counter. Low looks and costs
   the same as before. Moving effects only redraw what moves, at the chosen frame rate, and stop
   when the map is off screen.
