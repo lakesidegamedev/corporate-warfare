@@ -48,9 +48,10 @@ private val LanderStars = StarField(300, 7)
 @Composable
 fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
     val map = WorldMap.shared ?: return
-    val measurer = rememberTextMeasurer()
+    val measurer = rememberTextMeasurer(cacheSize = 32)
     val graphics = LocalAppSettings.current?.graphics ?: GraphicsConfig.Default
-    val clock = rememberFrameSeconds(graphics.animations, graphics.frameRate)
+    // The globe turns two degrees a second, smooth at 30 frames; only Unlimited asks for more.
+    val clock = rememberFrameSeconds(graphics.animations, if (graphics.frameRate == 0) 0 else minOf(graphics.frameRate, 30))
     val world = remember { WorldCities() }
     val geometry = remember(map) { MapGeometryCache() }
     Canvas(modifier) {
