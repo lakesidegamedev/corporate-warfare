@@ -30,6 +30,10 @@ heading.
   only be exported toward fuel the corridor imports. Its total output never grows.
 - A refinery's or mill's by-products can always leave through the region's export market, even
   when the plant was built after the game started. Gasoline no longer piles up unsold for years.
+- When you set production by hand, service and freight divisions no longer keep running at full
+  cost for customers they do not have. They follow what they sell plus a margin, up to the rate you
+  set, as rival companies' do. Lock the rate to hold them at it anyway. The CFO now says plainly
+  when a division runs far above what it sells and offers to match output to demand.
 - Goods that shoppers buy, such as food and retail goods, now rise in price when shoppers find
   shelves empty, and stay put when they find what they want. Goods nobody at home buys, that only
   leave as exports, no longer creep up in price because the seller's shelf is empty.

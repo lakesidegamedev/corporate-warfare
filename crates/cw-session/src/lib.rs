@@ -2302,6 +2302,7 @@ mod tests {
             intent: CommandIntent::SetProductionTarget {
                 firm: primary,
                 target_bps: 9_000,
+                lock: false,
             },
         };
         session.submit(envelope.clone()).unwrap();

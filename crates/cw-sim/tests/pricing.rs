@@ -617,9 +617,15 @@ fn unmet_household_demand_lifts_a_household_good_like_short_buyers() {
     let mut world = seed::build(&dataset, 3, ScenarioKind::Guided, ScenarioMode::Sandbox);
     let food = dataset.product_index["food_retail"];
     // Two regions: 30 + 20 lots of 60 + 40 asked for found no seller.
-    world.regions[0].households.wanted_milli.insert(food, 60_000);
+    world.regions[0]
+        .households
+        .wanted_milli
+        .insert(food, 60_000);
     world.regions[0].households.unmet_milli.insert(food, 30_000);
-    world.regions[1].households.wanted_milli.insert(food, 40_000);
+    world.regions[1]
+        .households
+        .wanted_milli
+        .insert(food, 40_000);
     world.regions[1].households.unmet_milli.insert(food, 20_000);
     assert_eq!(pricing::household_unmet(&world, food), (50, 100));
     // Half a week of demand unmet counts as half the two-week target short: 50 x 200 / 100 =
@@ -629,5 +635,86 @@ fn unmet_household_demand_lifts_a_household_good_like_short_buyers() {
     let mut session_world = seed::build(&dataset, 3, ScenarioKind::Guided, ScenarioMode::Sandbox);
     cw_sim::tick::advance(&mut session_world, &dataset);
     let (unmet, wanted) = pricing::household_unmet(&session_world, food);
-    assert!(wanted > 0 && (0..=wanted).contains(&unmet), "{unmet} of {wanted}");
+    assert!(
+        wanted > 0 && (0..=wanted).contains(&unmet),
+        "{unmet} of {wanted}"
+    );
+}
+
+#[test]
+fn an_older_production_command_loads_without_a_lock_and_writes_the_same() {
+    let old = r#"{"SetProductionTarget":{"firm":7,"target_bps":9000}}"#;
+    let intent: CommandIntent = serde_json::from_str(old).unwrap();
+    assert!(matches!(
+        intent,
+        CommandIntent::SetProductionTarget {
+            target_bps: 9_000,
+            lock: false,
+            ..
+        }
+    ));
+    // An unlocked command serialises exactly as before, so recorded logs replay unchanged.
+    assert_eq!(serde_json::to_string(&intent).unwrap(), old);
+}
+
+#[test]
+fn a_hand_set_rate_caps_service_plants_that_still_follow_sales_unless_locked() {
+    let dataset = Dataset::load().unwrap();
+    let mut world = seed::build(&dataset, 5, ScenarioKind::Guided, ScenarioMode::Sandbox);
+    let firm = world.investor.primary_group.unwrap();
+    // Hand the player company a rival's operating service plant (not a carrier).
+    let service = world
+        .facilities
+        .iter()
+        .find(|(h, p)| {
+            p.status == cw_sim::state::FacilityStatus::Operating
+                && pricing::expiring_output(&world, &dataset, *h)
+                && dataset.recipes[p.recipe as usize].transport_mode.is_none()
+                && dataset.recipes[p.recipe as usize].storage_class.is_none()
+        })
+        .map(|(h, _)| h)
+        .expect("the corridor runs a service plant");
+    let owner = world.facilities.get(service).unwrap().firm;
+    world
+        .firms
+        .get_mut(owner)
+        .unwrap()
+        .facilities
+        .retain(|h| *h != service);
+    world.facilities.get_mut(service).unwrap().firm = firm;
+    world.firms.get_mut(firm).unwrap().facilities.push(service);
+    let product = dataset.product_index
+        [&dataset.recipes[world.facilities.get(service).unwrap().recipe as usize].output];
+    // Nothing sold: the plan wants the ten percent floor, fifteen points a week from full.
+    world.firms.get_mut(firm).unwrap().sales_history =
+        vec![[((0u8, product), 0)].into_iter().collect(); 13];
+    for (lock, expected) in [(false, 8_500), (true, 10_000)] {
+        set_target(&mut world, &dataset, firm, 10_000, lock);
+        pricing::weekly(&mut world, &dataset);
+        assert_eq!(
+            world.facilities.get(service).unwrap().target_bps,
+            expected,
+            "lock {lock}"
+        );
+    }
+}
+
+fn set_target(world: &mut World, dataset: &Dataset, firm: Handle, target_bps: i32, lock: bool) {
+    apply(
+        world,
+        dataset,
+        &CommandEnvelope {
+            command_id_high: 1,
+            command_id_low: world.tick.0 as u64 * 2 + lock as u64,
+            actor: INVESTOR_ACTOR,
+            expected_revision: world.revision,
+            submitted_tick: world.tick.0,
+            intent: CommandIntent::SetProductionTarget {
+                firm,
+                target_bps,
+                lock,
+            },
+        },
+    )
+    .unwrap();
 }

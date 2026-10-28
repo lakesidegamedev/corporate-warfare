@@ -1090,6 +1090,7 @@ fn urgent(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Pr
                 intent: CommandIntent::SetProductionTarget {
                     firm,
                     target_bps: 6_000,
+                    lock: false,
                 },
             });
         } else {
@@ -3595,6 +3596,7 @@ mod tests {
             intent: CommandIntent::SetProductionTarget {
                 firm,
                 target_bps: 5_000,
+                lock: false,
             },
         };
         assert!(note(&world, &dataset, &price).is_none());

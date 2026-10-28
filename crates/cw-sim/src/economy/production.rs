@@ -129,7 +129,12 @@ pub fn cut_yields(world: &World, dataset: &Dataset, handle: Handle) -> Vec<i32> 
             return Vec::new();
         };
         let reference = dataset.reference_price(code).max(1);
-        let mut ask = firm.policies.prices.get(&code).copied().unwrap_or(reference);
+        let mut ask = firm
+            .policies
+            .prices
+            .get(&code)
+            .copied()
+            .unwrap_or(reference);
         // A fraction nobody at home buys leaves at the export bid, whatever its ask.
         if crate::economy::pricing::exported(world, code)
             && !crate::economy::pricing::home_buyers(world, dataset, code)
@@ -147,8 +152,8 @@ pub fn cut_yields(world: &World, dataset: &Dataset, handle: Handle) -> Vec<i32> 
         let free = crate::economy::pricing::free_stock(world, dataset, plant.firm, code);
         let over = free.saturating_mul(100) / sold
             - crate::economy::pricing::glut_weeks(dataset, code) * 100;
-        let penalty =
-            (over.max(0).saturating_mul(CUT_GLUT_PENALTY_PER_HUNDREDTH)).min(CUT_GLUT_PENALTY_MAX_BPS);
+        let penalty = (over.max(0).saturating_mul(CUT_GLUT_PENALTY_PER_HUNDREDTH))
+            .min(CUT_GLUT_PENALTY_MAX_BPS);
         bases.push(lots);
         scores.push(ask.saturating_mul(10_000) / reference - penalty);
     }

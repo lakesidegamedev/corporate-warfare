@@ -845,8 +845,11 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
     if gateway.buy_price_cents <= 0 {
         return;
     }
-    let mut remaining =
-        MilliLots::from_lots(gateway.capacity_lots.max(coproduct_room(world, dataset, region, product)));
+    let mut remaining = MilliLots::from_lots(
+        gateway
+            .capacity_lots
+            .max(coproduct_room(world, dataset, region, product)),
+    );
     if remaining.0 <= 0 {
         return;
     }

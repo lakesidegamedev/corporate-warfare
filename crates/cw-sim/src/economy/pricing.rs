@@ -209,8 +209,7 @@ pub fn household_unmet(world: &World, product: u16) -> (i64, i64) {
     for region in &world.regions {
         let households = &region.households;
         unmet = unmet.saturating_add(households.unmet_milli.get(&product).copied().unwrap_or(0));
-        wanted =
-            wanted.saturating_add(households.wanted_milli.get(&product).copied().unwrap_or(0));
+        wanted = wanted.saturating_add(households.wanted_milli.get(&product).copied().unwrap_or(0));
     }
     (unmet / 1_000, wanted / 1_000)
 }
@@ -703,14 +702,37 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
             }
         }
         // Automatic production follows sell-through too, unless the player set it by hand.
-        let manual = world
-            .firms
-            .get(firm)
-            .is_some_and(|f| f.policies.manual_production);
-        if !manual {
+        // A hand-set rate still lets service and carrier plants follow what sells beneath it,
+        // as rivals' do: unsold service and carrying capacity expires every week at full cost.
+        // Only an explicit lock holds them at the hand-set rate.
+        let Some(policies) = world.firms.get(firm).map(|f| f.policies.clone()) else {
+            continue;
+        };
+        if !policies.manual_production {
             plan(world, dataset, firm);
+        } else if !policies.production_locked {
+            for (handle, target) in plant_targets(world, dataset, firm) {
+                if !expiring_output(world, dataset, handle) {
+                    continue;
+                }
+                if let Some(plant) = world.facilities.get_mut(handle) {
+                    plant.target_bps = target.min(policies.production_target_bps);
+                }
+            }
         }
     }
+}
+
+/// Whether a plant's output expires when it goes unsold: a service or a carrier's capacity.
+pub fn expiring_output(world: &World, dataset: &Dataset, plant: Handle) -> bool {
+    world.facilities.get(plant).is_some_and(|p| {
+        let recipe = &dataset.recipes[p.recipe as usize];
+        recipe.transport_mode.is_some()
+            || dataset
+                .product_index
+                .get(&recipe.output)
+                .is_some_and(|code| dataset.products[*code as usize].kind.is_service())
+    })
 }
 
 /// Apply a firm-wide production target to the firm and every plant it runs.

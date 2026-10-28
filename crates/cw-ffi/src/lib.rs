@@ -4392,6 +4392,7 @@ impl SessionHandle {
             cw_sim::commands::CommandIntent::SetProductionTarget {
                 firm: cw_core::ids::Handle(firm),
                 target_bps,
+                lock: false,
             },
         )
     }

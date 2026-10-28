@@ -211,6 +211,7 @@ fn forced_invalid(rng: &mut SplitMix64, session: &Session, turn: usize) -> Force
             intent: CommandIntent::SetProductionTarget {
                 firm: primary,
                 target_bps: 20_000,
+                lock: false,
             },
             key: "error.arithmetic",
         },
@@ -281,6 +282,7 @@ fn random_intent(rng: &mut SplitMix64, session: &Session) -> CommandIntent {
         1 => CommandIntent::SetProductionTarget {
             firm: primary,
             target_bps: rng.between(0, 10_000) as i32,
+            lock: false,
         },
         2 => CommandIntent::SetMarketingBudget {
             firm: primary,
@@ -623,6 +625,7 @@ fn duplicate_command_ids_return_the_first_outcome_and_change_nothing() {
         CommandIntent::SetProductionTarget {
             firm: primary,
             target_bps: 9_000,
+            lock: false,
         },
     );
 
@@ -687,6 +690,7 @@ fn a_stale_revision_is_rejected_without_mutation() {
     let intent = CommandIntent::SetProductionTarget {
         firm: primary,
         target_bps: 5_000,
+        lock: false,
     };
 
     let hash = session.canonical_hash();

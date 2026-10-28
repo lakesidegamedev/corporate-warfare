@@ -378,7 +378,10 @@ impl Facility {
             return MilliLots::ZERO;
         }
         let index = recipe.outputs().position(|(id, _)| id == product);
-        match (self.cut_bps.first(), index.and_then(|i| self.cut_bps.get(i))) {
+        match (
+            self.cut_bps.first(),
+            index.and_then(|i| self.cut_bps.get(i)),
+        ) {
             (Some(primary), Some(own)) if *primary > 0 => MilliLots(
                 (self.last_output.0 as i128 * by as i128 * *own as i128
                     / (recipe.weekly_output_lots as i128 * *primary as i128))
@@ -424,6 +427,10 @@ pub struct Policies {
     /// the player turns it back on.
     #[serde(default)]
     pub manual_production: bool,
+    /// True when the hand-set rate also holds service and carrier plants. Without it those
+    /// plants keep following what sells, under the hand-set rate. Older saves load false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub production_locked: bool,
 }
 
 impl Default for Policies {
@@ -441,6 +448,7 @@ impl Default for Policies {
             manual_prices: Default::default(),
             price_postures: Default::default(),
             manual_production: false,
+            production_locked: false,
         }
     }
 }
