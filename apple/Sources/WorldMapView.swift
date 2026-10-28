@@ -176,14 +176,26 @@ final class MapGeometry {
     lazy var lakes: Path = projection.path(map.lakes)
     lazy var rivers: Path = projection.lines(map.rivers)
     lazy var interstates: Path = projection.lines(map.interstates)
+    /// The interstates' gold centre line: dashes cut on the ground, projected like the roads and
+    /// stroked solid, so they stay painted on the road as the camera moves.
+    lazy var centreLines: Path = projection.lines(map.centreDashLines)
     var railroadLines: [GeoRing] { map.railroads }
     private var railsHeld: (lift: Double, path: Path)?
+    private var sleepersHeld: (lift: Double, path: Path)?
 
     /// The real railways `lift` points up, kept for the last height.
     func railroads(lift: Double) -> Path {
         if let railsHeld, railsHeld.lift == lift { return railsHeld.path }
         let path = projection.lines(map.railroads, height: lift)
         railsHeld = (lift, path)
+        return path
+    }
+
+    /// The railways' sleepers `lift` points up, cut on the ground, kept for the last height.
+    func sleepers(lift: Double) -> Path {
+        if let sleepersHeld, sleepersHeld.lift == lift { return sleepersHeld.path }
+        let path = projection.lines(map.sleeperDashes, height: lift)
+        sleepersHeld = (lift, path)
         return path
     }
     lazy var playStates: [Path] = map.playStates.map { projection.path($0.rings) }
@@ -271,6 +283,24 @@ final class MapGeometry {
         }
         tileRoadsHeld = out
         tileRoadsKey = heights
+        return out
+    }
+
+    private var tileDashesKey: [String: Double]?
+    private var tileDashesHeld: [String: Path] = [:]
+
+    /// The centre-line dashes on each raised tile, at that tile's own height like its roads.
+    func tileDashes(_ heights: [String: Double]) -> [String: Path] {
+        if tileDashesKey == heights { return tileDashesHeld }
+        let index = map.regionIndex
+        var out: [String: Path] = [:]
+        for (i, region) in map.regions.enumerated() where i < index.regionInterstates.count {
+            let dashes = index.regionInterstates[i].flatMap { map.centreDashes[$0] }
+            if dashes.isEmpty { continue }
+            out[region.code] = projection.lines(dashes, height: height(heights[region.code] ?? 0))
+        }
+        tileDashesHeld = out
+        tileDashesKey = heights
         return out
     }
 
@@ -1019,16 +1049,19 @@ struct MapScene {
         let even = FillStyle(eoFill: true)
         let highways = look.detail == 0 || !look.interstates || t <= 0.5 ? 0 : smoothstep(0.85, 1.2, g.zoomRatio)
         let roadWidth = 1.6 + 1.2 * min(g.scale, 2.5)
-        func strokeRoads(_ path: Path, in layer: inout GraphicsContext) {
+        // The centre line's dashes are cut on the ground and stroked solid: a screen dash pattern
+        // would crawl along the road as the camera moves.
+        func strokeRoads(_ path: Path, dashes: Path?, in layer: inout GraphicsContext) {
             layer.stroke(path, with: .color(RGB(hex: 0x1C2228).color(0.9 * highways)),
                          style: StrokeStyle(lineWidth: roadWidth + 2, lineCap: .square))
             layer.stroke(path, with: .color(RGB(hex: 0x6E757D).color(highways)), style: StrokeStyle(lineWidth: roadWidth, lineCap: .square))
-            if g.closeUp {
-                layer.stroke(path, with: .color(Theme.gold.opacity(0.85 * highways)), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+            if g.closeUp, let dashes {
+                layer.stroke(dashes, with: .color(Theme.gold.opacity(0.85 * highways)), style: StrokeStyle(lineWidth: 1, lineCap: .butt))
             }
         }
         if raised {
             let tileRoads = highways > 0 ? g.tileRoads(heights) : [:]
+            let tileDashes = highways > 0 && g.closeUp ? g.tileDashes(heights) : [:]
             context.fill(g.lakes, with: .color(water), style: even)
             let solids = g.raised(heights)
             // Shadows first, so no tile's shadow falls across a tile drawn before it.
@@ -1055,7 +1088,7 @@ struct MapScene {
                 if let roads = tileRoads[solid.code] {
                     var onTile = context
                     onTile.clip(to: solid.top, style: even)
-                    strokeRoads(roads, in: &onTile)
+                    strokeRoads(roads, dashes: tileDashes[solid.code], in: &onTile)
                 }
             }
             if detail > 0 {
@@ -1092,14 +1125,14 @@ struct MapScene {
         // 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line. On
         // raised tiles each tile lays its own above; flat, they are projected on the ground itself.
         // The real railways once close, so trains have track to run on: a thin grey rail over dark
-        // dashed sleepers, on the ground or the scenario's base.
+        // sleepers cut on the ground, on the ground or the scenario's base.
         if g.closeUp && t > 0.5 && look.traffic > 0 && !g.railroadLines.isEmpty {
-            let rails = g.railroads(lift: raised ? g.plinth : 0)
-            context.stroke(rails, with: .color(RGB(hex: 0x3A3028).color(0.9)), style: StrokeStyle(lineWidth: 3, dash: [1.5, 2]))
-            context.stroke(rails, with: .color(RGB(hex: 0x9AA1A8).color(0.85)), lineWidth: 1)
+            let lift = raised ? g.plinth : 0
+            context.stroke(g.sleepers(lift: lift), with: .color(RGB(hex: 0x3A3028).color(0.9)), style: StrokeStyle(lineWidth: 3, lineCap: .butt))
+            context.stroke(g.railroads(lift: lift), with: .color(RGB(hex: 0x9AA1A8).color(0.85)), lineWidth: 1)
         }
         if highways > 0 && !raised {
-            strokeRoads(g.interstates, in: &context)
+            strokeRoads(g.interstates, dashes: g.closeUp ? g.centreLines : nil, in: &context)
         }
         // Night falls on the globe whenever it is lit, and on the flat map with day and night on.
         // With the globe's shading, the haze and the vignette it is soft, so it all goes in one
@@ -1268,8 +1301,8 @@ struct MapScene {
         }
         // Cars on the highways once close, each direction in its own lane. Spacing and speed are on
         // the ground, in degrees, so cars hold their pace and places while the camera moves; closer
-        // in they simply look further apart and faster.
-        if traffic && look.traffic > 0 && look.detail >= 2 && zoom > 9 && !o.roads.isEmpty {
+        // in they simply look further apart and faster. The Freight mode hides them with the freight.
+        if traffic && look.traffic > 0 && look.detail >= 2 && zoom > 9 && !o.roads.isEmpty && !freightLayer {
             let spacing = vehicles != nil ? (look.traffic >= 2 ? 0.12 : 0.24) : look.traffic >= 2 ? 0.035 : 0.07
             let pace = 0.012
             let step = 3 / max(p.r * .pi / 180, 1e-3)
@@ -1337,7 +1370,8 @@ struct MapScene {
             }
         }
         // Planes between the big cities, high over the map, trailing contrails with shadows below.
-        if look.traffic > 0 && o.airports.count >= 2 {
+        // Hidden in the Freight mode with the rest of the moving traffic.
+        if look.traffic > 0 && o.airports.count >= 2 && !freightLayer {
             let planes = look.traffic >= 2 ? 10 : 5
             let n = o.airports.count
             let life = 14.0

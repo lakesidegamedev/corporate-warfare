@@ -153,6 +153,72 @@ struct GeoRing {
     }
 }
 
+/// Dashed markings cut on the ground once per map, so each dash stays painted in one place while
+/// the camera moves. A screen dash pattern restarts at every projected line and stretches with the
+/// perspective, so it crawled along the road as the map panned, tilted, zoomed or turned.
+enum GroundDashes {
+    static let earthKm = 6371.0
+    /// The interstates' centre line: dash and gap in kilometres on the ground.
+    static let centreLine = (dash: 3.5, gap: 3.5)
+    /// The railways' sleepers.
+    static let sleepers = (dash: 1.5, gap: 2.0)
+
+    /// Kilometres between two points on the ground.
+    static func km(_ a: GeoPoint, _ b: GeoPoint) -> Double {
+        let ua = a.unit
+        let ub = b.unit
+        let dot = ua.0 * ub.0 + ua.1 * ub.1 + ua.2 * ub.2
+        return acos(min(max(dot, -1), 1)) * earthKm
+    }
+
+    /// A line cut into solid dashes of `dash` km with `gap` km between, from its first point.
+    static func cut(_ line: GeoRing, dash: Double, gap: Double) -> [GeoRing] {
+        var out: [GeoRing] = []
+        var flat: [Int] = []
+        var on = true
+        var left = dash
+        func add(_ lon: Double, _ lat: Double) {
+            flat.append(Int((lon * 10_000).rounded()))
+            flat.append(Int((lat * 10_000).rounded()))
+        }
+        guard let first = line.points.first else { return out }
+        add(first.lon * 180 / .pi, first.lat * 180 / .pi)
+        for i in 1..<max(line.points.count, 1) {
+            let a = line.points[i - 1]
+            let b = line.points[i]
+            let lonA = a.lon * 180 / .pi
+            let latA = a.lat * 180 / .pi
+            var dl = b.lon * 180 / .pi - lonA
+            if dl > 180 { dl -= 360 }
+            if dl < -180 { dl += 360 }
+            let dLat = b.lat * 180 / .pi - latA
+            let length = km(a, b)
+            var done = 0.0
+            while length - done >= left {
+                done += left
+                let f = done / max(length, 1e-9)
+                if on {
+                    add(lonA + dl * f, latA + dLat * f)
+                    out.append(GeoRing(flat))
+                    flat = []
+                } else {
+                    add(lonA + dl * f, latA + dLat * f)
+                }
+                on.toggle()
+                left = on ? dash : gap
+            }
+            left -= length - done
+            if on { add(lonA + dl, latA + dLat) }
+        }
+        if on && flat.count >= 4 { out.append(GeoRing(flat)) }
+        return out
+    }
+
+    static func cut(_ lines: [GeoRing], dash: Double, gap: Double) -> [[GeoRing]] {
+        lines.map { cut($0, dash: dash, gap: gap) }
+    }
+}
+
 /// Geometry turned into sphere points once, shared by every map view. A map is for one scenario:
 /// its playable states, regions, counties, roads, rivers and cities.
 final class WorldMap {
@@ -230,6 +296,14 @@ final class WorldMap {
 
     /// Which region each line, lake and city falls in, built the first time a raised map needs it.
     lazy var regionIndex = RegionIndex(map: self)
+
+    /// Each interstate's gold centre line, cut on the ground: one list of dashes per interstate.
+    lazy var centreDashes: [[GeoRing]] = GroundDashes.cut(interstates, dash: GroundDashes.centreLine.dash,
+                                                         gap: GroundDashes.centreLine.gap)
+    lazy var centreDashLines: [GeoRing] = centreDashes.flatMap { $0 }
+    /// The railways' sleepers, cut on the ground.
+    lazy var sleeperDashes: [GeoRing] = GroundDashes.cut(railroads, dash: GroundDashes.sleepers.dash,
+                                                         gap: GroundDashes.sleepers.gap).flatMap { $0 }
 
     private init(file: WorldMapFile?, scenario: String?) {
         scenarioId = scenario

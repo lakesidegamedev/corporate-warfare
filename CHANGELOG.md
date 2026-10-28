@@ -72,6 +72,12 @@ heading.
 
 ### Fixed
 
+- Dashed road markings stay painted on the road as the camera moves: the interstates' gold centre
+  line and the railway sleepers no longer slide along the track when you pan, tilt, zoom or turn the
+  map, and the dashes on sea routes stay in place along their arc.
+- The Freight mode is clearer: it shows the 30 busiest routes plus every route you use, with
+  rivals and outside carriers drawn fainter so your gold reads first, and no cars or planes move
+  over the routes while it is open.
 - On iPhone and iPad the roads, borders and buildings no longer slide against the satellite ground
   as you pan, tilt or turn the map: the photo is now laid on in true perspective, raised regions
   carry their own roads, and buildings are placed along the ground rather than across the screen.

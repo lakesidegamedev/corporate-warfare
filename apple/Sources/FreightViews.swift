@@ -47,9 +47,9 @@ struct FreightLegend: View {
             .prefix(5).map { Carrier(id: $0.key, name: $0.value.name, mine: $0.value.mine) }
     }
 
-    private func row(_ color: RGB, _ text: String) -> some View {
+    private func row(_ color: RGB, _ text: String, alpha: Double = FreightArcs.othersAlpha) -> some View {
         HStack(spacing: 6) {
-            Rectangle().fill(color.color()).frame(width: 18, height: 6)
+            Rectangle().fill(color.color(alpha)).frame(width: 18, height: 6)
             Text(text).font(.system(size: 11)).foregroundStyle(Theme.primaryText).lineLimit(1)
         }
     }
@@ -58,7 +58,8 @@ struct FreightLegend: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("FREIGHT").font(Pixel.font(10)).foregroundStyle(Theme.primaryText)
             ForEach(carriers) { carrier in
-                row(FreightArcs.companyColor(carrier.id, mine: carrier.mine), carrier.name)
+                row(FreightArcs.companyColor(carrier.id, mine: carrier.mine), carrier.name,
+                    alpha: carrier.mine ? 1 : FreightArcs.othersAlpha)
             }
             row(FreightArcs.outsideCarriers, "Outside carriers")
             Text("Wider: more freight. Dashed: by water.")
@@ -70,7 +71,8 @@ struct FreightLegend: View {
 
 /// The Freight mode on the map: each of the busiest lanes as a clean arc between its hubs, one
 /// coloured stripe per company that carries goods on it, side by side, each as wide as its share of
-/// the lane's freight; your own in gold. Sea lanes are dashed. A dark casing keeps the stack
+/// the lane's freight; your own in gold, everyone else's fainter. Only the 30 busiest lanes and
+/// your own are drawn. Sea lanes are dashed. A dark casing keeps the stack
 /// readable on any ground; the picked lane is outlined in white and lanes away from a selected
 /// region fade.
 enum FreightArcs {
@@ -86,16 +88,39 @@ enum FreightArcs {
         mine ? gold : rivalColors[Int(firm % UInt64(rivalColors.count))]
     }
 
+    /// Lanes drawn: the 30 busiest, and every lane the player uses wherever it ranks.
+    static let shown = 30
+
+    /// The lanes drawn, busiest first.
     static func busiest(_ lanes: [LaneDto]) -> [LaneDto] {
-        Array(lanes.sorted { ($0.capacityLots + $0.outsideLots) > ($1.capacityLots + $1.outsideLots) }.prefix(90))
+        let sorted = lanes.sorted { ($0.capacityLots + $0.outsideLots) > ($1.capacityLots + $1.outsideLots) }
+        return sorted.enumerated().filter { $0.offset < shown || laneIsMine($0.element) }.map(\.element)
     }
 
+    /// How strongly rivals' and outside carriers' stripes are drawn, so the player's gold reads first.
+    static let othersAlpha = 0.5
+
     /// Who carries a lane: each owner's stripe, biggest first, then outside carriers.
-    static func stripes(_ lane: LaneDto) -> [(color: RGB, lots: Int)] {
+    static func stripes(_ lane: LaneDto) -> [(color: RGB, lots: Int, mine: Bool)] {
         var out = lane.owners.filter { $0.lots > 0 }.sorted { $0.lots > $1.lots }
-            .map { (color: companyColor($0.firm, mine: $0.mine), lots: Int($0.lots)) }
-        if lane.outsideLots > 0 { out.append((outsideCarriers, Int(lane.outsideLots))) }
-        return out.isEmpty ? [(outsideCarriers, max(Int(lane.capacityLots), 1))] : out
+            .map { (color: companyColor($0.firm, mine: $0.mine), lots: Int($0.lots), mine: $0.mine) }
+        if lane.outsideLots > 0 { out.append((outsideCarriers, Int(lane.outsideLots), false)) }
+        return out.isEmpty ? [(outsideCarriers, max(Int(lane.capacityLots), 1), false)] : out
+    }
+
+    /// A sea lane's dash pattern, a whole number of dashes along the arc from hub to hub, so the
+    /// dashes stay put on the lane as the camera moves instead of crawling from one end.
+    static func seaDash(_ arc: Arc, km: Double) -> [CGFloat] {
+        var length = 0.0
+        var last = arc.a
+        for k in 1...24 {
+            let point = arc.at(Double(k) / 24)
+            length += Double(hypot(point.x - last.x, point.y - last.y))
+            last = point
+        }
+        let count = Double(max(Int((km / 60).rounded()), 3))
+        let period = length / count
+        return [CGFloat(period * 0.62), CGFloat(period * 0.38)]
     }
 
     /// A lane's arc: hub to hub through a control point, bowed to one side so arcs between nearby
@@ -131,6 +156,12 @@ enum FreightArcs {
         }
     }
 
+    /// Kilometres on the ground between a lane's two hubs.
+    static func hubKm(_ lane: LaneDto, map: WorldMap) -> Double {
+        guard let a = map.anchor(of: lane.a), let b = map.anchor(of: lane.b) else { return 0 }
+        return GroundDashes.km(a, b)
+    }
+
     static func arc(_ lane: LaneDto, map: WorldMap, projection p: MapProjection, plinth: Double) -> Arc? {
         // The same two hubs always bow the same way, whichever end is listed first.
         let (from, to) = lane.a < lane.b ? (lane.a, lane.b) : (lane.b, lane.a)
@@ -151,14 +182,15 @@ enum FreightArcs {
         let busiest = busiest(lanes)
         guard let first = busiest.first else { return }
         let top = Double(max(first.capacityLots + first.outsideLots, 1))
-        // Thin, quiet lanes first so the busy ones lie on top.
-        for lane in busiest.reversed() {
+        // Thin, quiet lanes first so the busy ones lie on top, and the player's own over all.
+        let order = busiest.reversed().filter { !laneIsMine($0) } + busiest.reversed().filter(laneIsMine)
+        for lane in order {
             guard let arc = arc(lane, map: map, projection: p, plinth: plinth) else { continue }
             let parts = stripes(lane)
             let total = Double(max(parts.reduce(0) { $0 + $1.lots }, 1))
             let width = 5 + 13 * Double(lane.capacityLots + lane.outsideLots) / top
             let dim = focus != nil && lane.a != focus && lane.b != focus && picked == nil ? 0.3 : 1
-            let dash: [CGFloat] = lane.modeId == "sea" ? [10, 6] : []
+            let dash: [CGFloat] = lane.modeId == "sea" ? seaDash(arc, km: hubKm(lane, map: map)) : []
             if lane.id == picked {
                 context.stroke(arc.path, with: .color(.white), style: StrokeStyle(lineWidth: width + 6, lineCap: .round))
             }
@@ -166,7 +198,7 @@ enum FreightArcs {
             var offset = -width / 2
             for part in parts {
                 let w = max(width * Double(part.lots) / total, 1.2)
-                context.stroke(arc.shifted(offset + w / 2).path, with: .color(part.color.color(dim)),
+                context.stroke(arc.shifted(offset + w / 2).path, with: .color(part.color.color(dim * (part.mine ? 1 : othersAlpha))),
                                style: StrokeStyle(lineWidth: w, lineCap: .butt, dash: dash))
                 offset += w
             }

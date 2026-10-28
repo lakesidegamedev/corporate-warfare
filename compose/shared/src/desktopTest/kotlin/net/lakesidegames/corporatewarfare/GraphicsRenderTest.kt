@@ -113,7 +113,7 @@ class GraphicsRenderTest {
                         drawMapOverlay(o, graphics, 12.5, name == "freight", sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId, part = OverlayPart.Traffic)
                         if (name != "freight") with(Weather) { drawWeather(g.p, sun, 12.5, graphics.clouds, map.playBounds, 46.0 * g.scale * g.p.t, camera.zoom, graphics.lighting > 0, map.scenarioId) }
                         still(MapPhase.Structures)
-                        drawMapOverlay(o, graphics, 12.5, false, sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId, part = OverlayPart.Effects)
+                        drawMapOverlay(o, graphics, 12.5, name == "freight", sun, map.playBounds, camera.zoom, 0.5, 1f, map.scenarioId, part = OverlayPart.Effects)
                     }
                 }
                 val image = scene.render()
