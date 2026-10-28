@@ -115,10 +115,15 @@ final class EarthMetalView: MTKView {
     }
 }
 
-/// One mesh vertex: screen point, texture point and colour. Matches EarthVertex in the shader.
+/// One mesh vertex: screen point, texture point, colour and the perspective's depth at the point.
+/// Matches EarthVertex in the shader.
 private struct EarthVertex {
     var x: Float = 0
     var y: Float = 0
+    /// One over the tilt's perspective scale, so the image is interpolated in perspective across a
+    /// cell rather than flat on the screen: otherwise the photo slides against the roads and borders
+    /// drawn over it by up to a few dozen points as the camera moves.
+    var w: Float = 1
     var u: Float = 0
     var v: Float = 0
     var r: Float = 1
@@ -150,10 +155,11 @@ private final class EarthMesh {
             for i in 0..<nx {
                 let k = j * nx + i
                 let lonDeg = west + Double(i) * step
-                guard let at = p.at(lon: lonDeg * .pi / 180, lat: latDeg * .pi / 180) else { continue }
+                guard let g = p.ground(lon: lonDeg * .pi / 180, lat: latDeg * .pi / 180) else { continue }
+                let at = p.lift(g)
                 let uv = place(lonDeg, latDeg)
                 let c = color(lonDeg, latDeg)
-                mesh[k] = EarthVertex(x: Float(at.x), y: Float(at.y), u: Float(uv.0), v: Float(uv.1),
+                mesh[k] = EarthVertex(x: Float(at.x), y: Float(at.y), w: Float(1 / p.scale(atFlatY: g.y)), u: Float(uv.0), v: Float(uv.1),
                                       r: Float(c.0), g: Float(c.1), b: Float(c.2), a: Float(min(max(c.3, 0), 1)))
                 visible[k] = true
             }
@@ -457,14 +463,15 @@ final class EarthRenderer {
     #include <metal_stdlib>
     using namespace metal;
 
-    struct EarthVertex { float x, y, u, v, r, g, b, a; };
+    struct EarthVertex { float x, y, w, u, v, r, g, b, a; };
     struct Shaded { float4 position [[position]]; float2 uv; float4 color; };
 
     vertex Shaded earthVertex(uint id [[vertex_id]], const device EarthVertex *vertices [[buffer(0)]],
                               constant float2 &size [[buffer(1)]]) {
         EarthVertex v = vertices[id];
         Shaded out;
-        out.position = float4(v.x / size.x * 2 - 1, 1 - v.y / size.y * 2, 0, 1);
+        // Clip space scaled by w: the same point on screen, interpolated in perspective.
+        out.position = float4((v.x / size.x * 2 - 1) * v.w, (1 - v.y / size.y * 2) * v.w, 0, v.w);
         out.uv = float2(v.u, v.v);
         out.color = float4(v.r, v.g, v.b, v.a);
         return out;

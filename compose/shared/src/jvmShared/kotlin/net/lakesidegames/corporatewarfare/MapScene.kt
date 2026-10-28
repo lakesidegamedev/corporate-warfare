@@ -684,8 +684,8 @@ internal fun DrawScope.drawMapOverlay(
             }
         }
     }
-    // Cars on the highways once close.
-    if (traffic && g.traffic > 0 && g.detail == MapDetail.High && zoom > 9 && o.roads.isNotEmpty()) {
+    // Cars on the highways once close. The Freight mode hides them with the freight.
+    if (traffic && g.traffic > 0 && g.detail == MapDetail.High && zoom > 9 && o.roads.isNotEmpty() && !freightLayer) {
         // Spacing and speed are on the ground, in degrees, so cars hold their pace and places
         // while the camera moves; closer in they simply look further apart and faster.
         val spacing = if (vehicles != null) (if (g.traffic >= 2) 0.12f else 0.24f) else if (g.traffic >= 2) 0.035f else 0.07f
@@ -745,7 +745,8 @@ internal fun DrawScope.drawMapOverlay(
         }
     }
     // Planes between the big cities, high over the map, trailing contrails with shadows below.
-    if (g.traffic > 0 && o.airports.size >= 2) {
+    // Hidden in the Freight mode with the rest of the moving traffic.
+    if (g.traffic > 0 && o.airports.size >= 2 && !freightLayer) {
         val planes = if (g.traffic >= 2) 10 else 5
         val n = o.airports.size
         for (k in 0 until planes) {
