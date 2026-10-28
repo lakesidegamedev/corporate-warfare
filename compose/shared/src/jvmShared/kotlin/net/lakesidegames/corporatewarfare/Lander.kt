@@ -82,7 +82,7 @@ fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
         if (graphics.lighting > 0) {
             drawRect(
                 Brush.radialGradient(
-                    0f to Color.Transparent, 0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.55f),
+                    0f to Color.Transparent, 0.7f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.35f),
                     center = Offset(size.width / 2, size.height / 2), radius = max(size.width, size.height) * 0.72f,
                 ),
             )
@@ -137,7 +137,7 @@ private fun DrawScope.drawGlare(p: MapProjection, sun: Sun) {
     val at = centre + Offset((sv[0] / n * r * 1.25).toFloat(), (-sv[1] / n * r * 1.25).toFloat())
     drawCircle(
         Brush.radialGradient(
-            0f to Color(0xFFFFF4DC).copy(alpha = 0.55f), 0.08f to Color(0xFFFFE2B0).copy(alpha = 0.30f), 0.35f to Color(0xFFFFC870).copy(alpha = 0.08f), 1f to Color.Transparent,
+            0f to Color(0xFFFFF8E8).copy(alpha = 0.9f), 0.05f to Color(0xFFFFE2B0).copy(alpha = 0.45f), 0.2f to Color(0xFFFFC870).copy(alpha = 0.06f), 1f to Color.Transparent,
             center = at, radius = r * 0.9f,
         ),
         r * 0.9f, at,
