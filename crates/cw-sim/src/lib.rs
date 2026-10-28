@@ -8,6 +8,7 @@
 pub mod commands;
 pub mod economy;
 pub mod fixtures;
+pub mod legacy;
 #[macro_use]
 pub mod prof;
 pub mod state;

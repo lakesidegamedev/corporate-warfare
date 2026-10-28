@@ -100,6 +100,10 @@ heading.
 
 ### Fixed
 
+- Careers saved in 1.8 preview 1 and preview 2 load in this version and keep playing. The save
+  format records its layout version, and an older save is converted on load, with the new market
+  figures starting empty and filling in from the first week played. Saves written by this version
+  do not open in older versions, which refuse them with a clear version message.
 - No more pulsing: the rings round buildings, the weekly ripple, the breathing selection outline
   and the menu's pulsing scenario glow are gone; rooftop lights are steady.
 - Traffic, planes, clouds and the sun stop when the game is paused and run faster at higher

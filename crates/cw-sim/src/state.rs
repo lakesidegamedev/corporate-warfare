@@ -300,7 +300,9 @@ impl StockLot {
     }
 }
 
+/// Part of the save layout: a field change bumps `legacy::LAYOUT` (see `crate::legacy`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(remote = "Self")]
 pub struct Facility {
     pub firm: Handle,
     pub region: u8,
@@ -392,7 +394,9 @@ impl Facility {
     }
 }
 
+/// Part of the save layout: a field change bumps `legacy::LAYOUT` (see `crate::legacy`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(remote = "Self")]
 pub struct Policies {
     /// Per-product asking price; falls back to the regional reference price.
     pub prices: BTreeMap<u16, i64>,
@@ -775,7 +779,9 @@ pub struct LabourTier {
     pub search_carry: i64,
 }
 
+/// Part of the save layout: a field change bumps `legacy::LAYOUT` (see `crate::legacy`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(remote = "Self")]
 pub struct Household {
     pub savings_cents: i64,
     pub last_income_cents: i64,

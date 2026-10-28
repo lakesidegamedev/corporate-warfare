@@ -12,10 +12,14 @@ use cw_core::hash::{DOMAIN_SAVE, digest};
 use cw_sim::state::World;
 
 pub const MAGIC: &[u8; 4] = b"CWSV";
-pub const SCHEMA_VERSION: u32 = 1;
+/// The schema is the layout of the postcard world payload (`cw_sim::legacy`). Postcard is not
+/// self-describing, so any field added to saved state bumps it, with a frozen copy of the older
+/// structs in `cw_sim::legacy`. Schema 1 is every release up to 1.8 preview 2. Trailers are
+/// outside the payload and keep their own rule: a reader skips what it does not know.
+pub const SCHEMA_VERSION: u32 = cw_sim::legacy::LAYOUT;
 /// Oldest schema this engine can read. Schema 0 was never released, so there is no migration
 /// path: a payload claiming it is rejected instead of being parsed as if it were schema 1.
-pub const MIN_SCHEMA_VERSION: u32 = 1;
+pub const MIN_SCHEMA_VERSION: u32 = cw_sim::legacy::MIN_LAYOUT;
 pub const MAX_BYTES: usize = 64 * 1024 * 1024;
 
 /// Marks the optional custom scenario trailer after the world payload.
@@ -148,9 +152,10 @@ pub fn decode_with(
             detail: SaveFault::Checksum,
         });
     }
-    let mut world: World = postcard::from_bytes(payload).map_err(|_| DomainError::InvalidSave {
-        detail: SaveFault::MalformedPayload,
-    })?;
+    let mut world: World = cw_sim::legacy::read_layout(schema, || postcard::from_bytes(payload))
+        .map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
     let mut rest = &bytes[cursor + declared..];
     let mut custom_end = 0usize;
     let custom = if rest.len() >= 40 && &rest[..4] == CUSTOM_MAGIC {
