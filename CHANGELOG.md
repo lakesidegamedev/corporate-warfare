@@ -13,6 +13,10 @@ heading.
 
 ### Added
 
+- Android adaptive launcher icon with a themed (monochrome) layer, so Android 8 and later no longer
+  shows the icon in a white circle.
+- Google Play listing assets: the 512 pixel icon, a 1024 by 500 feature graphic built from the
+  game's own menu and globe, and draft listing copy for review (`store/play/`).
 - App Store screenshots at the sizes Connect accepts, rendered from a real career: iPhone 6.9-inch (1320 x 2868) and 13-inch iPad (2064 x 2752), flattened to RGB because a screenshot with an alpha channel is rejected. The Apple smoke workflow collects them as the `store-screenshots` artifact and the test asserts the PNG carries no alpha.
 
 ### Added
@@ -22,6 +26,11 @@ heading.
 
 ### Fixed
 
+- Android back now returns one level at a time, closing settings, overlays, the new-game steps,
+  the load and scenario editor screens, and stepping back through companies opened from a company
+  page, instead of leaving the app. From another tab it returns to the map first.
+- On Android 15 and later, the menu, settings, new-game, load, scenario editor and tablet screens
+  keep clear of the status and navigation bars.
 - A build installed from Google Play no longer offers the GitHub self-updater, because Play requires updates to come through Play. The direct-download APK still updates itself.
 
 ### Changed

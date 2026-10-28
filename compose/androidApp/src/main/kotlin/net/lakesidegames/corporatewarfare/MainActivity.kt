@@ -13,6 +13,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // System back closes the open screen, step or overlay one level at a time; with nothing
+        // open it leaves the app as usual.
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (Back.press()) return
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+                isEnabled = true
+            }
+        })
         Images.decode = { bytes ->
             android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
         }

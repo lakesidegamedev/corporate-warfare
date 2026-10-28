@@ -1,5 +1,9 @@
 package net.lakesidegames.corporatewarfare
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+
 import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -98,13 +102,16 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
         CorporateWarfareTheme {
             Box(Modifier.fillMaxSize().background(Palette.ink)) {
                 when {
-                    showSettings -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                    showSettings -> Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), contentAlignment = Alignment.TopCenter) {
+                        BackAction { showSettings = false }
                         Box(Modifier.widthIn(max = 820.dp)) {
                             SettingsScreen(store, settings, desktop = onQuit != null, updater = updater) { showSettings = false }
                         }
                     }
                     store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
-                        if (maxWidth >= DesktopBreakpoint) DesktopShell(store, onSettings = { showSettings = true })
+                        if (maxWidth >= DesktopBreakpoint) {
+                            Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) { DesktopShell(store, onSettings = { showSettings = true }) }
+                        }
                         else MainScreen(store, onSettings = { showSettings = true })
                     }
                     else -> StartScreen(store, updater, onSettings = { showSettings = true }, onQuit = onQuit)
@@ -166,8 +173,11 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
         open(wanted)
         Tutorial.requestedPage = null
     }
+    // Back closes an overlay first, then returns to the map from any other tab.
+    BackAction(enabled = overlay == null && tab != Tab.Map) { tab = Tab.Map }
     overlay?.let { page ->
-        Column(Modifier.fillMaxSize().background(Palette.ink)) {
+        BackAction { overlay = null }
+        Column(Modifier.fillMaxSize().background(Palette.ink).windowInsetsPadding(WindowInsets.safeDrawing)) {
             Row(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { overlay = null }) { BackLabel("Back", Palette.gold) }
             }
