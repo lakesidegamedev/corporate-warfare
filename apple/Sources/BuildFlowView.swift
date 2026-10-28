@@ -87,6 +87,7 @@ struct BuildFlowView: View {
                             SectorBadge(sector: id, size: 32)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(Sector.name(id)).font(.callout.weight(.semibold)).foregroundStyle(Theme.primaryText)
+                                    .lineLimit(1).minimumScaleFactor(0.75)
                                 Text(focusLabel(id, ops)).font(.caption2).foregroundStyle(focusColor(id, ops))
                                 if let division = store.divisions.first(where: { $0.region == regionCode && $0.industry == id }) {
                                     Text("Your division · \(division.blocks) plant\(division.blocks == 1 ? "" : "s")")

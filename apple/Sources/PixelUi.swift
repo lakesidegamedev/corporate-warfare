@@ -30,6 +30,14 @@ enum Pixel {
         bar.shadowColor = UIColor(Theme.stroke)
         bar.titleTextAttributes = [.foregroundColor: UIColor(Theme.primaryText), .font: uiFont(14, bold: true)]
         bar.largeTitleTextAttributes = [.foregroundColor: UIColor(Theme.primaryText), .font: uiFont(24, bold: true)]
+        // Bar buttons (Close, Done) in gold pixel type rather than the system's blue.
+        let button = UIBarButtonItemAppearance()
+        button.normal.titleTextAttributes = [.foregroundColor: UIColor(Theme.gold), .font: uiFont(12, bold: true)]
+        button.disabled.titleTextAttributes = [.foregroundColor: UIColor(Theme.secondary), .font: uiFont(12, bold: true)]
+        bar.buttonAppearance = button
+        bar.doneButtonAppearance = button
+        bar.backButtonAppearance = button
+        UINavigationBar.appearance().tintColor = UIColor(Theme.gold)
         UINavigationBar.appearance().standardAppearance = bar
         UINavigationBar.appearance().scrollEdgeAppearance = bar
         UINavigationBar.appearance().compactAppearance = bar
@@ -50,6 +58,7 @@ enum Pixel {
         toolbar.backgroundColor = UIColor(Theme.panel)
         UIToolbar.appearance().standardAppearance = toolbar
         UIToolbar.appearance().scrollEdgeAppearance = toolbar
+        UISwitch.appearance().onTintColor = UIColor(Theme.gold)
         let segments = UISegmentedControl.appearance()
         segments.selectedSegmentTintColor = UIColor(Theme.gold)
         segments.backgroundColor = UIColor(Theme.panelRaised)

@@ -32,20 +32,35 @@ struct RootView: View {
             TutorialPanel(compact: true)
             TabView(selection: $tab) {
                 MapHomeView()
-                    .tabItem { PixelLabel("MAP", icon: "map") }
+                    .tabItem {
+                        PixelIcons.tabImage("map")
+                        Text("MAP")
+                    }
                     .tag(AppTab.map)
                 CEOOfficeView()
-                    .tabItem { PixelLabel("CEO OFFICE", icon: "office") }
+                    .tabItem {
+                        PixelIcons.tabImage("office")
+                        Text("CEO OFFICE")
+                    }
                     .tag(AppTab.office)
                 MarketsView()
-                    .tabItem { PixelLabel("MARKETS", icon: "markets") }
+                    .tabItem {
+                        PixelIcons.tabImage("markets")
+                        Text("MARKETS")
+                    }
                     .tag(AppTab.markets)
                 InboxView()
-                    .tabItem { PixelLabel("INBOX", icon: "inbox") }
+                    .tabItem {
+                        PixelIcons.tabImage("inbox")
+                        Text("INBOX")
+                    }
                     .badge(store.events.filter { $0.mandatory }.count)
                     .tag(AppTab.inbox)
                 OverviewView()
-                    .tabItem { PixelLabel("PORTFOLIO", icon: "portfolio") }
+                    .tabItem {
+                        PixelIcons.tabImage("portfolio")
+                        Text("PORTFOLIO")
+                    }
                     .tag(AppTab.portfolio)
             }
             .tint(Theme.gold)
