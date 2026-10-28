@@ -50,7 +50,16 @@ struct CloudRegion {
     ]
 }
 
-/// Everything one frame of clouds needs. `amount` is the setting (0 off, 1 light, 2 heavy).
+/// How opaque the clouds are at each setting: thin, light, heavy.
+func cloudStrength(_ amount: Int) -> Double {
+    switch amount {
+    case 1: return 0.4
+    case 2: return 0.72
+    default: return 1
+    }
+}
+
+/// Everything one frame of clouds needs. `amount` is the setting (0 off, 1 thin, 2 light, 3 heavy).
 /// `origin` moves the drawing, as the menu moves its globe off centre.
 struct CloudSky: Equatable {
     let camera: MapCamera
@@ -205,7 +214,7 @@ final class CloudPainter: NSObject, MTKViewDelegate {
         base.ox = Float(sky.origin.x)
         base.oy = Float(sky.origin.y)
         // Shadows double the cost, so only heavy clouds cast them.
-        let passes = sky.shadows && sky.amount >= 2 && sky.altitude > 0 ? [true, false] : [false]
+        let passes = sky.shadows && sky.amount >= 3 && sky.altitude > 0 ? [true, false] : [false]
         let shift = CGSize(width: sky.altitude * 0.5, height: sky.altitude * 0.32)
         // Clouds clear as you zoom in, so a close look at the map is never through haze.
         let near = 1 - smoothstep(9, 22, sky.zoom)
@@ -224,7 +233,7 @@ final class CloudPainter: NSObject, MTKViewDelegate {
                 u.vOffset = Float(r.north)
                 u.vScale = Float(1 / (r.north - r.south))
                 u.slide = Float(sky.seconds)
-                u.strength = Float((sky.amount >= 2 ? 0.95 : 0.7) * closeUp * near)
+                u.strength = Float(cloudStrength(sky.amount) * 0.95 * closeUp * near)
                 for shadow in passes {
                     let grid = shadow ? regionShadow : regionCloud
                     grid.update(CloudGrid.Key(camera: sky.camera, size: sky.size, tilt: sky.tilt, sun: sky.sun,
@@ -240,7 +249,7 @@ final class CloudPainter: NSObject, MTKViewDelegate {
             }
         }
         guard closeUp < 0.999, let world = renderer.texture("clouds"), let mask = renderer.mask("clouds") else { return }
-        let strength = (sky.amount >= 2 ? 1.0 : 0.72) * (1 - closeUp)
+        let strength = cloudStrength(sky.amount) * (1 - closeUp)
         let west, east, south, north, step: Double
         if p.t > 0.5 {
             let b = sky.bounds

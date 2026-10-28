@@ -130,7 +130,7 @@ final class SnapshotTests: XCTestCase {
         for (name, camera) in cameras {
             let p = MapProjection(camera: camera, size: size, tilt: 28 * .pi / 180)
             let sky = CloudSky(camera: camera, size: size, tilt: 28 * .pi / 180, sun: MapSun.fixed(p), seconds: 20,
-                               amount: 2, bounds: map.playBounds, altitude: 46 * p.t, zoom: camera.zoom,
+                               amount: 3, bounds: map.playBounds, altitude: 46 * p.t, zoom: camera.zoom,
                                shadows: true, scenario: map.scenarioId)
             guard let clouds = painter.snapshot(sky) else {
                 XCTFail("\(name) did not render")
