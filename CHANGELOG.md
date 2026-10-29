@@ -106,6 +106,9 @@ heading.
 
 ### Changed
 
+- Tooling: every change to the Android app now starts the trimmed release build on an emulator in
+  CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
+  so a trimming mistake fails the check and not a phone.
 - Smaller downloads and a quicker start. The Android download is much smaller because the app
   is now trimmed of code it never uses and the direct download carries only the phone version
   of the game engine (the Play Store bundle already delivered just the right one). The game
