@@ -6,6 +6,7 @@
 
 pub mod cfo;
 pub mod dto;
+pub mod letters;
 pub mod paper;
 pub mod save;
 pub mod telemetry;
