@@ -13,6 +13,18 @@ heading.
 
 ### Added
 
+- The weekly paper. Every week the game prints a newspaper for your scenario (The Corridor
+  Times, The Gulf Ledger, The Valley Wire or Rhein-Ruhr Kurier) with a lead story, up to three
+  briefs, a markets column and a classified strip. Stories are only things that really happened
+  in the last four weeks: raids, takeover bids, strikes, rate decisions, elections and new laws,
+  incidents, scenario events, early warnings of what is coming, and your own quarterly results.
+  Anything you are involved in comes first. Tap a story to open the company, market, region or
+  deal it is about, and use the back issues buttons to read earlier weeks. A one line news
+  ticker under the top bar on every screen shows the top headline and cycles through the top
+  three while time runs (it holds still when time is paused or animations are off). On desktop
+  the paper is in the sidebar under World (F8); on phones, open it from the ticker or the Inbox.
+  Several bids for one company read as one story, dates read like "week 21, 1982", and the
+  ticker stays quiet at 2x and 4x speed.
 - Scenario history. Each scenario now has dated events from its own period that play out in your
   career: a regional bank failure and the 1986 oil collapse in Texas, the technology bust and the
   2001 recession in the Great Lakes, a browser listing boom and the dot-com bust in Silicon

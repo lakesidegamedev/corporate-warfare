@@ -102,3 +102,36 @@ numbers during play and a saved and reloaded career plays what an unbroken one d
 
 **Order.** Each week the timeline runs just before the world prices and the business cycle, so a
 shock, squeeze or demand regime fired this week is in force for them this week.
+
+## The weekly paper
+
+The paper (`cw_session::paper::weekly_paper`) is a presentation of facts the world already
+records. It adds no saved state, uses no random draws and invents nothing: a back issue is
+recomputed from the histories the world keeps, so it reads the same every time. An issue reads
+the facts of its own week and the three before it.
+
+- Sources: market raids, rival wind-downs and ventures, deals (dated by their start, or by their
+  offer deadline once finished), strikes, activist campaigns and other news items, central bank
+  decisions with the bank's stated reason, elections and new laws, systemic incidents, timeline
+  events that fired, timeline foreshadow notices (written as a hint attributed to the paper's
+  analysts desk), companies missing a payment, and the player's quarterly results on a quarter
+  close.
+- Ranking: stories the player is party to first, then the size of the kind of fact (a won raid, a
+  finished takeover and the player's results rank highest), then freshness, then the money
+  involved. The top story leads and the next three are briefs. A week with no facts prints no
+  stories, only the markets column and the classifieds.
+- One event, one story: open bids on the same target become one story ("Three bidders chase X",
+  naming the bidders and the best price), repeated strikes at one company become one, and a
+  rival's own bid log entry is dropped because the deal reports it. Dates in stories and
+  classifieds use the paper's date form ("week 21, 1982"), never a raw game week. Bid and win
+  headlines rotate their verb with the issue's week.
+- Ticker: the apps read it only while time is paused or at 1x; at 2x and 4x the last headlines
+  stay up until time slows.
+- Markets column: the index move (market cap weighted over listed shares), the three biggest
+  share moves and the two biggest good moves on the week. A good's reason is the strongest
+  driver the market screen shows; only today's issue carries it.
+- Classifieds: open bids, and companies restructuring or being wound up (today's issue only).
+- Mastheads by scenario: The Corridor Times (Great Lakes 2000), The Gulf Ledger (Texas 1981), The
+  Valley Wire (Silicon Valley 1995), Rhein-Ruhr Kurier (Ruhr and Rhine 1991). A custom scenario
+  uses its base scenario's.
+- Back issues cover the last 52 weeks, the span of weekly prices the world keeps.
