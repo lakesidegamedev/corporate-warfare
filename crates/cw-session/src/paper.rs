@@ -165,9 +165,34 @@ pub fn clip(text: &str, max: usize) -> String {
         return text.to_owned();
     }
     let cut: String = text.chars().take(max).collect();
-    match cut.rfind(' ') {
-        Some(at) if at > max / 2 => cut[..at].trim_end_matches([',', ';', ':']).to_owned(),
+    let mut cut = match cut.rfind(' ') {
+        Some(at) if at > max / 2 => cut[..at].to_owned(),
         _ => cut,
+    };
+    // Never end on a dangling joining word.
+    loop {
+        let trimmed = cut.trim_end_matches([',', ';', ':', ' ']);
+        let last = trimmed.rsplit(' ').next().unwrap_or("");
+        if matches!(
+            last.to_lowercase().as_str(),
+            "in" | "of"
+                | "for"
+                | "to"
+                | "and"
+                | "the"
+                | "a"
+                | "an"
+                | "at"
+                | "on"
+                | "by"
+                | "from"
+                | "with"
+        ) && trimmed.len() > last.len()
+        {
+            cut = trimmed[..trimmed.len() - last.len()].to_owned();
+        } else {
+            return trimmed.to_owned();
+        }
     }
 }
 
@@ -384,7 +409,7 @@ fn raids(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) 
         let yours = player_side(world, raid.attacker) || player_side(world, raid.defender);
         let (headline, body, base) = if raid.success {
             (
-                format!("{attacker} raids {defender} in {region}"),
+                format!("{attacker} raids {defender}"),
                 format!(
                     "{attacker} won {} block{} of {industry} business from {defender} in {region}.",
                     raid.blocks,
@@ -1174,6 +1199,18 @@ mod tests {
         for c in ['\u{2013}', '\u{2014}'] {
             assert!(!cut.contains(c));
         }
+    }
+
+    #[test]
+    fn a_cut_headline_never_ends_on_a_joining_word() {
+        let cut = clip(
+            "Brazoria Assembly manufacturing raids Brazos Cattle and Grain in the region",
+            64,
+        );
+        assert_eq!(
+            cut,
+            "Brazoria Assembly manufacturing raids Brazos Cattle and Grain"
+        );
     }
 
     #[test]

@@ -17,7 +17,8 @@ import kotlin.test.assertTrue
 
 /**
  * The paper and its ticker, from real careers: Texas 1981 at week 60 (its timeline is Historical,
- * so the bank squeeze and failure are in the news) and Great Lakes 2000 at week 30. Set
+ * so its dated events are in the news), Texas at week 76, two weeks after the notice of the
+ * 1982 bank failure, and Great Lakes 2000 at week 30. Set
  * CW_MAP_RENDER_DIR to keep the pictures.
  */
 class PaperRenderTest {
@@ -46,6 +47,10 @@ class PaperRenderTest {
                 while (h.overview().tick < week && guard++ < 60) { h.dismissPause(); h.advance(4u) }
             }
         }
+        store.refresh()
+        val settled = System.currentTimeMillis() + 30_000
+        while ((store.busy || (store.overview?.tick ?: 0u) < week) && System.currentTimeMillis() < settled) Thread.sleep(100)
+        assertTrue((store.overview?.tick ?: 0u) >= week, "the store caught up to week $week")
         return store
     }
 
@@ -70,7 +75,7 @@ class PaperRenderTest {
 
     @Test
     fun thePaperAndTickerRender() {
-        for ((scenario, week, label) in listOf(Triple("texas-1981", 60u, "texas-w60"), Triple("great-lakes-2000", 30u, "great-lakes-w30"))) {
+        for ((scenario, week, label) in listOf(Triple("texas-1981", 60u, "texas-w60"), Triple("texas-1981", 76u, "texas-w76"), Triple("great-lakes-2000", 30u, "great-lakes-w30"))) {
             val store = career(scenario, week)
             val paper = kotlinx.coroutines.runBlocking { store.read { it.paper(it.overview().tick) } }!!
             val ticker = kotlinx.coroutines.runBlocking { store.read { it.ticker() } }!!
