@@ -33,8 +33,8 @@ pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetti
 pub use events::EventCard;
 pub use firms::{Archetype, ExtraPlant, SeedFirm};
 pub use geography::{Conditions, Geography, Lane, Region, StateInfo};
-pub use opening_macro::OpeningMacro;
 pub use logistics::{GatewayLink, LogisticsData, LogisticsOverlay, ModeDef, SeaSystem};
+pub use opening_macro::OpeningMacro;
 
 pub const BALANCE_JSON: &str = include_str!("../../../content/initial-balance.json");
 pub const GEOGRAPHY_JSON: &str = include_str!("../../../content/geography/regions.json");

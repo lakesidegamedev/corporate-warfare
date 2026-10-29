@@ -37,7 +37,11 @@ impl OpeningMacro {
         let parsed: OpeningMacro =
             serde_json::from_str(json).map_err(|error| format!("macro.json: {error}"))?;
         let mut errors = Vec::new();
-        if !parsed.classification.to_ascii_lowercase().contains("estimate") {
+        if !parsed
+            .classification
+            .to_ascii_lowercase()
+            .contains("estimate")
+        {
             errors.push("macro.json classification must say the figures are estimates");
         }
         if !(-300..=2_000).contains(&parsed.inflation_bps) {
@@ -65,3 +69,56 @@ impl OpeningMacro {
 
 /// The weeks over which opening wage growth fades into inflation.
 pub const WAGE_FADE_WEEKS: u32 = 104;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{SCENARIO_CONTENT, scenario_content};
+
+    #[test]
+    fn every_scenario_has_labelled_estimates_and_no_dashes() {
+        for content in SCENARIO_CONTENT.iter() {
+            let m = OpeningMacro::parse(content.macro_json).unwrap();
+            assert!(m.classification.contains("estimates"), "{}", content.id);
+            assert!(
+                !content.macro_json.contains('\u{2013}')
+                    && !content.macro_json.contains('\u{2014}'),
+                "{} has a dash",
+                content.id
+            );
+        }
+    }
+
+    #[test]
+    fn a_figure_out_of_range_or_an_unlabelled_file_is_refused() {
+        let json = scenario_content("texas-1981").macro_json;
+        assert!(
+            OpeningMacro::parse(
+                &json.replace("\"policy_rate_bps\": 1650", "\"policy_rate_bps\": 9000")
+            )
+            .is_err()
+        );
+        assert!(OpeningMacro::parse(&json.replace("estimates", "figures")).is_err());
+    }
+
+    #[test]
+    fn the_period_orders_the_scenarios_as_history_did() {
+        let get = |id: &str| OpeningMacro::parse(scenario_content(id).macro_json).unwrap();
+        let (tx, sv, rr, gl) = (
+            get("texas-1981"),
+            get("silicon-valley-1995"),
+            get("ruhr-rhine-1991"),
+            get("great-lakes-2000"),
+        );
+        assert!(tx.inflation_bps > 2 * rr.inflation_bps);
+        assert!(tx.policy_rate_bps > 2 * sv.policy_rate_bps);
+        assert!(
+            rr.ten_year_bps > gl.ten_year_bps,
+            "the Bund yielded more than the Treasury in 2000"
+        );
+        assert!(
+            tx.ten_year_bps < tx.policy_rate_bps,
+            "the 1981 curve was inverted"
+        );
+    }
+}

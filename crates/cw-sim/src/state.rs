@@ -1281,10 +1281,7 @@ impl Cycle {
     /// The opening cycle for a chosen starting economy. A historic start opens at the inflation,
     /// expectations, policy rate and neutral rate of the scenario's own period; the other
     /// starts are the same generic economy in every scenario.
-    pub fn for_start(
-        start: EconomyStart,
-        period: &cw_data::OpeningMacro,
-    ) -> (Cycle, i32, i32) {
+    pub fn for_start(start: EconomyStart, period: &cw_data::OpeningMacro) -> (Cycle, i32, i32) {
         let mut c = Cycle::default();
         let (rate, inflation) = match start {
             EconomyStart::Historic => {

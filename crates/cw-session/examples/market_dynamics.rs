@@ -311,7 +311,9 @@ fn main() {
             row[4]
         );
     }
-    println!("by year end: policy rate, inflation, ten-year yield (percent), price index and background wage index (start 100), mean over seeds");
+    println!(
+        "by year end: policy rate, inflation, ten-year yield (percent), price index and background wage index (start 100), mean over seeds"
+    );
     for (year, row) in &macros {
         let n = seeds as i64;
         println!(
