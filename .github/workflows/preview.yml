@@ -26,12 +26,12 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            package: packageDeb
-            glob: compose/shared/build/compose/binaries/main/deb/*.deb
+            package: packageReleaseDeb
+            glob: compose/shared/build/compose/binaries/main-release/deb/*.deb
             name: linux.deb
           - os: windows-latest
-            package: packageMsi
-            glob: compose/shared/build/compose/binaries/main/msi/*.msi
+            package: packageReleaseMsi
+            glob: compose/shared/build/compose/binaries/main-release/msi/*.msi
             name: windows.msi
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -73,7 +73,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p setup-out
-          cp compose/shared/build/compose/binaries/main/setup/*-setup.exe "setup-out/CorporateWarfare-${TAG#v}-setup.exe"
+          cp compose/shared/build/compose/binaries/main-release/setup/*-setup.exe "setup-out/CorporateWarfare-${TAG#v}-setup.exe"
       - uses: actions/upload-artifact@v4
         if: ${{ matrix.os == 'windows-latest' }}
         with:

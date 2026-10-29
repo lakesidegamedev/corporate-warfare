@@ -107,13 +107,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            package: packageDeb
+            package: packageReleaseDeb
             artifact: corporate-warfare-linux-deb
-            path: compose/shared/build/compose/binaries/main/deb/*.deb
+            path: compose/shared/build/compose/binaries/main-release/deb/*.deb
           - os: windows-latest
-            package: packageMsi
+            package: packageReleaseMsi
             artifact: corporate-warfare-windows-msi
-            path: compose/shared/build/compose/binaries/main/msi/*.msi
+            path: compose/shared/build/compose/binaries/main-release/msi/*.msi
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -145,13 +145,46 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh
         run: |
-          $setup = (Get-ChildItem compose/shared/build/compose/binaries/main/setup -Filter '*-setup.exe').FullName
+          $setup = (Get-ChildItem compose/shared/build/compose/binaries/main-release/setup -Filter '*-setup.exe').FullName
           ./compose/shared/packaging/windows/test-setup.ps1 -Setup $setup `
-            -AppImage "$PWD/compose/shared/build/compose/binaries/main/app/Corporate Warfare" `
+            -AppImage "$PWD/compose/shared/build/compose/binaries/main-release/app/Corporate Warfare" `
             -Work "$env:RUNNER_TEMP/cw-setup-test"
+      # Starts the release app image and waits for the main menu (CW_STARTUP_TIMELINE=exit quits there).
+      # The setup wizard is skipped with a settings file that says it is done. Software drawing, so
+      # the time is a relative number, not a player's. Reported, not gating: a runner without a
+      # display must not block a build, but a menu that never shows is visible in the log.
+      - name: Launch to the main menu (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:RUNNER_TEMP 'cw-launch'
+          New-Item -ItemType Directory -Force (Join-Path $data 'Corporate Warfare') | Out-Null
+          "setupDone=true`nanalytics=false`nautoUpdate=false" | Set-Content (Join-Path $data 'Corporate Warfare\settings.properties')
+          $env:APPDATA = $data
+          $env:CW_STARTUP_TIMELINE = 'exit'
+          $env:SKIKO_RENDER_API = 'SOFTWARE_FAST'
+          $err = Join-Path $data 'timeline.txt'
+          $exe = "$PWD\compose\shared\build\compose\binaries\main-release\app\Corporate Warfare\Corporate Warfare.exe"
+          $p = Start-Process $exe -PassThru -RedirectStandardError $err
+          if (-not $p.WaitForExit(120000)) { $p.Kill() }
+          if (Test-Path $err) { Get-Content $err }
+          if (-not ((Test-Path $err) -and (Select-String -Path $err -Pattern 'main menu shown' -Quiet))) { throw 'The main menu did not show within 120 seconds' }
+      - name: Launch to the main menu (Linux)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        continue-on-error: true
+        working-directory: compose
+        run: |
+          ./gradlew --no-daemon :shared:createReleaseDistributable
+          export XDG_DATA_HOME="$RUNNER_TEMP/cw-launch"
+          mkdir -p "$XDG_DATA_HOME/corporate-warfare"
+          printf 'setupDone=true\nanalytics=false\nautoUpdate=false\n' > "$XDG_DATA_HOME/corporate-warfare/settings.properties"
+          export CW_STARTUP_TIMELINE=exit SKIKO_RENDER_API=SOFTWARE_FAST
+          timeout 120 xvfb-run -a "shared/build/compose/binaries/main-release/app/Corporate Warfare/bin/Corporate Warfare" 2>&1 | tee "$RUNNER_TEMP/timeline.txt"
+          grep -q "main menu shown" "$RUNNER_TEMP/timeline.txt"
       - uses: actions/upload-artifact@v4
         if: ${{ matrix.os == 'windows-latest' }}
         with:
           name: corporate-warfare-windows-setup
-          path: compose/shared/build/compose/binaries/main/setup/*-setup.exe
+          path: compose/shared/build/compose/binaries/main-release/setup/*-setup.exe
           retention-days: 14
