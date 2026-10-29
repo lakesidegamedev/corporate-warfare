@@ -121,40 +121,99 @@ class VersionsTest {
     fun windowsUpgradeRunsTheMsiAndDowngradeFallsBackToUninstall() {
         val app = "C:\\Program Files\\Corporate Warfare\\Corporate Warfare.exe"
         val up = WindowsInstall.plan("C:\\u\\new.msi", "1.8.0", "1.8.0-preview.4", app)
+        val close = listOf("call :closeall", "if errorlevel 1 goto running")
         assertEquals(
-            listOf(
-                "@echo off",
-                "timeout /t 2 /nobreak >nul",
+            listOf("@echo off") + close + listOf(
                 "msiexec /i \"C:\\u\\new.msi\" /passive /norestart",
                 "start \"\" \"$app\"",
+                "exit 0",
+                ":running",
             ),
-            up,
+            up.take(7),
         )
-        assertFalse(up.any { it.startsWith("powershell") })
+        assertTrue(up[7].startsWith("powershell ") && WindowsInstall.STILL_RUNNING in up[7])
+        assertEquals("exit 1", up[8])
+        assertEquals(WindowsInstall.closeAll(), up.drop(9))
+        assertFalse(up.any { "RelatedProducts" in it })
 
         val down = WindowsInstall.plan("C:\\u\\old.msi", "1.8.0-preview.3", "1.8.0-preview.4", app)
         val install = "msiexec /i \"C:\\u\\old.msi\" /passive /norestart INSTALLDIR=\"C:\\Program Files\\Corporate Warfare\""
         // The older MSI goes into the same folder first; success, restart-pending or cancel stop there.
-        assertEquals(install, down[2])
+        assertEquals(close, down.subList(1, 3))
+        assertEquals(install, down[3])
         assertEquals(
             listOf("if %errorlevel%==0 goto started", "if %errorlevel%==3010 goto started", "if %errorlevel%==1602 goto started"),
-            down.subList(3, 6),
+            down.subList(4, 7),
         )
-        // Any other failure removes the installed game by its upgrade code and installs again.
-        val uninstall = down[6]
+        // Any other failure removes the installed game by its upgrade code and installs again,
+        // checking before each step that no copy of the game has been started meanwhile.
+        assertEquals(close, down.subList(7, 9))
+        val uninstall = down[9]
         assertTrue(uninstall.startsWith("powershell "))
         assertTrue("RelatedProducts('{5B6F6B2E-3C1D-4B8E-9F1A-0C7D2E4A9B31}')" in uninstall)
         assertTrue("'/x', \$p, '/passive'" in uninstall)
-        assertEquals(install, down[7])
-        assertEquals(":started", down[8])
-        assertEquals("start \"\" \"$app\"", down[9])
+        assertEquals(close, down.subList(10, 12))
+        assertEquals(install, down[12])
+        assertEquals(":started", down[13])
+        assertEquals("start \"\" \"$app\"", down[14])
+        assertEquals("exit 0", down[15])
 
         // Same version: an ordinary install, never an uninstall.
-        assertFalse(WindowsInstall.plan("x.msi", "1.8.0", "1.8.0", app).any { it.startsWith("powershell") })
+        assertFalse(WindowsInstall.plan("x.msi", "1.8.0", "1.8.0", app).any { "RelatedProducts" in it })
         // No known app path (a dev run): no folder and no relaunch.
         val bare = WindowsInstall.plan("x.msi", "1.8.0", "1.8.1", null)
-        assertEquals("msiexec /i \"x.msi\" /passive /norestart", bare[2])
+        assertEquals("msiexec /i \"x.msi\" /passive /norestart", bare[3])
         assertFalse(bare.any { it.startsWith("start") })
+    }
+
+    @Test
+    fun windowsScriptNeverRunsAnInstallerBeforeEveryCopyIsClosed() {
+        val app = "C:\\Program Files\\Corporate Warfare\\Corporate Warfare.exe"
+        for (plan in listOf(
+            WindowsInstall.plan("new.msi", "1.8.1", "1.8.0", app),
+            WindowsInstall.plan("old.msi", "1.8.0-preview.3", "1.8.0", app),
+        )) {
+            // Every msiexec, direct or through the uninstall, comes straight after a passed check.
+            plan.forEachIndexed { i, line ->
+                if ("msiexec" in line) assertEquals(listOf("call :closeall", "if errorlevel 1 goto running"), plan.subList(i - 2, i), line)
+            }
+            // The main part ends before the subroutine, so nothing falls through into it.
+            assertTrue(plan.indexOf("exit 0") < plan.indexOf(":closeall"))
+        }
+
+        val sub = WindowsInstall.closeAll()
+        val running = "tasklist /fi \"imagename eq Corporate Warfare.exe\" /nh 2>nul | find /i \"Corporate Warfare.exe\" >nul"
+        fun at(line: String, from: Int = 0) = sub.drop(from).indexOf(line).also { assertTrue(it >= 0, line) } + from
+        // Wait: a check, done when none is found, give up waiting after 60 one-second rounds.
+        val wait = at(":closeall_wait")
+        assertEquals(running, sub[wait + 1])
+        assertEquals("if errorlevel 1 exit /b 0", sub[wait + 2])
+        assertEquals("if %cw_wait% geq 60 goto closeall_ask", sub[wait + 3])
+        // Then ask politely (no /f), wait up to 15 more seconds, and only then force.
+        val ask = at("taskkill /im \"Corporate Warfare.exe\" >nul 2>&1")
+        val grace = at("if %cw_wait% lss 15 goto closeall_grace", ask)
+        val force = at("taskkill /f /im \"Corporate Warfare.exe\" >nul 2>&1", grace)
+        assertTrue(wait < ask && ask < grace && grace < force)
+        assertTrue(sub.subList(ask, grace).contains(running))
+        // After forcing, a last check; still running means exit 1 and no install.
+        assertEquals(listOf(running, "if errorlevel 1 exit /b 0", "exit /b 1"), sub.takeLast(3))
+        assertEquals(1, sub.count { it.startsWith("taskkill /f") })
+    }
+
+    @Test
+    fun windowsInstallerTemplateClosesTheGame() {
+        val wxs = File("packaging/windows/main.wxs").readText()
+        assertTrue("xmlns:util=\"http://schemas.microsoft.com/wix/UtilExtension\"" in wxs)
+        val close = wxs.substringAfter("<util:CloseApplication").substringBefore("/>")
+        assertTrue("Target=\"${WindowsInstall.EXE}\"" in close)
+        assertTrue("CloseMessage=\"yes\"" in close)
+        assertTrue("TerminateProcess=" in close)
+        assertTrue("RebootPrompt=\"no\"" in close)
+        // The rest is jpackage's own template: upgrades and downgrades behave as before.
+        assertTrue("<RemoveExistingProducts Before=\"CostInitialize\"/>" in wxs)
+        assertTrue("Property=\"JP_DOWNGRADABLE_FOUND\"" in wxs)
+        val gradle = File("build.gradle.kts").readText()
+        assertTrue("project.file(\"packaging/windows\")" in gradle)
     }
 
     @Test
