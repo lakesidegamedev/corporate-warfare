@@ -101,6 +101,8 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         // Production follows sell-through plant by plant in the weekly tick, the same planner
         // as the player's automatic production (cw_sim::economy::pricing::plan).
         cw_sim::ph!("ai::reopen", reopen(world, dataset, handle, &mut proposals));
+        idle_carrier(world, dataset, handle, &mut proposals);
+        reopen_carrier(world, dataset, handle, &mut proposals);
         if wind_down(world, handle, &mut proposals) {
             continue;
         }
@@ -902,7 +904,16 @@ fn best_carrier_build(
                 if entity.book.cash() < reserve * 2 + cost {
                     continue;
                 }
-                let lots = hot.outside.min(recipe.weekly_output_lots as i32) as i64;
+                // Carrier plants of this mode being built, or opened within a quarter, are not yet
+                // in the lane's overflow: every rival reads the same hot lane and would each
+                // build for all of it, so the overflow is net of what is on its way.
+                let coming = coming_carrier_lots(world, dataset, hot.key, hot.key.mode);
+                let lots = (hot.outside as i64 - coming)
+                    .max(0)
+                    .min(recipe.weekly_output_lots);
+                if lots <= 0 {
+                    continue;
+                }
                 // A third of the lane rate on the lots it can take over, three years of it.
                 let take = if recipe.terminal { lots / 2 } else { lots };
                 let npv = take * hot.rate_cents * 33 / 100 * 156
@@ -915,6 +926,131 @@ fn best_carrier_build(
         }
     }
     best.map(|(_, recipe, region)| (recipe, region))
+}
+
+/// Weekly lots of carrier plants of one mode that serve either end of a lane and are still being
+/// built or opened in the last thirteen weeks.
+fn coming_carrier_lots(
+    world: &World,
+    dataset: &Dataset,
+    key: cw_sim::economy::logistics::LaneKey,
+    mode: u8,
+) -> i64 {
+    let now = world.tick.0;
+    world
+        .facilities
+        .iter()
+        .filter(|(_, plant)| plant.region == key.a || plant.region == key.b)
+        .filter(|(_, plant)| {
+            let recent = match plant.status {
+                FacilityStatus::Building => true,
+                FacilityStatus::Operating => now.saturating_sub(plant.completes.0) < 13,
+                _ => false,
+            };
+            let recipe = &dataset.recipes[plant.recipe as usize];
+            recent
+                && !recipe.terminal
+                && recipe
+                    .transport_mode
+                    .as_deref()
+                    .and_then(|id| dataset.logistics.mode_index(id))
+                    == Some(mode)
+        })
+        .map(|(_, plant)| {
+            dataset.recipes[plant.recipe as usize].weekly_output_lots * plant.blocks as i64
+        })
+        .sum()
+}
+
+/// A carrier plant that has run for half a year, moves under a quarter of its capacity, and whose
+/// owner lost money over the last quarter is idle capacity: it is mothballed, so the firm stops
+/// paying a crew and upkeep for freight that is not there. It returns when its lanes run hot.
+fn idle_carrier(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
+    use cw_sim::economy::logistics as lg;
+    let Some(entity) = world.firms.get(firm) else {
+        return;
+    };
+    if !matches!(entity.status, FirmStatus::Operating) {
+        return;
+    }
+    let weeks = entity.book.recent_weeks();
+    if weeks.len() < 13 || weeks.iter().map(|w| w.net_income).sum::<i64>() >= 0 {
+        return;
+    }
+    let now = world.tick.0;
+    for handle in &entity.facilities {
+        let Some(plant) = world.facilities.get(*handle) else {
+            continue;
+        };
+        let recipe = &dataset.recipes[plant.recipe as usize];
+        if recipe.transport_mode.is_none()
+            || recipe.terminal
+            || plant.status != FacilityStatus::Operating
+            || now.saturating_sub(plant.completes.0) < 26
+        {
+            continue;
+        }
+        if lg::carrier_fill_bps(world, *handle).is_some_and(|fill| fill < lg::CARRIER_MIN_FILL_BPS)
+        {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::MothballFacility { facility: *handle },
+            });
+            return;
+        }
+    }
+}
+
+/// Bring a mothballed carrier back when a lane at either end of it runs hot, with at least half
+/// its capacity overflowing to outside carriers, and the restart leaves the cash reserve intact.
+fn reopen_carrier(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
+    use cw_sim::economy::logistics as lg;
+    let Some(entity) = world.firms.get(firm) else {
+        return;
+    };
+    if !matches!(entity.status, FirmStatus::Operating) {
+        return;
+    }
+    if !entity.facilities.iter().any(|h| {
+        world
+            .facilities
+            .get(*h)
+            .is_some_and(|p| p.status == FacilityStatus::Mothballed)
+    }) {
+        return;
+    }
+    let hot = lg::hot_lanes(world, dataset);
+    for handle in &entity.facilities {
+        let Some(plant) = world.facilities.get(*handle) else {
+            continue;
+        };
+        let recipe = &dataset.recipes[plant.recipe as usize];
+        let Some(mode) = recipe
+            .transport_mode
+            .as_deref()
+            .and_then(|id| dataset.logistics.mode_index(id))
+        else {
+            continue;
+        };
+        if recipe.terminal || plant.status != FacilityStatus::Mothballed {
+            continue;
+        }
+        let size = recipe.weekly_output_lots * plant.blocks as i64;
+        let overflow: i64 = hot
+            .iter()
+            .filter(|h| h.key.mode == mode && (h.key.a == plant.region || h.key.b == plant.region))
+            .map(|h| h.outside as i64)
+            .sum();
+        let cost = cw_sim::economy::operations::reopen_cost(plant);
+        if overflow * 2 >= size && entity.book.cash() - cost >= reserve_target(world, dataset, firm)
+        {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::ReopenFacility { facility: *handle },
+            });
+            return;
+        }
+    }
 }
 
 /// A pipeline for a producer of liquids or gas whose goods crowd a truck or rail lane. The
@@ -3176,6 +3312,125 @@ mod tests {
             book.close_week(tick);
         }
         assert_eq!(earned_last_quarter(&world, firm), 1_300_000);
+    }
+
+    /// A Ruhr firm with two pipelines, 100 lots of capacity each, and a fake week of freight on
+    /// them: lot-km moved over lot-km of capacity (100 lots x 400 km = 40,000).
+    fn pipeline_firm(
+        profit_per_week: i64,
+        used: [i64; 2],
+    ) -> (World, Dataset, Handle, [Handle; 2]) {
+        use cw_core::ledger::{Account, Txn};
+        let dataset = Dataset::load_scenario("ruhr-rhine-1991").unwrap();
+        let mut world = seed::build(&dataset, 5, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let (firm, plants) = world
+            .firms
+            .iter()
+            .find_map(|(h, f)| {
+                let pipes: Vec<Handle> = f
+                    .facilities
+                    .iter()
+                    .copied()
+                    .filter(|p| {
+                        let r = &dataset.recipes[world.facilities.get(*p).unwrap().recipe as usize];
+                        r.transport_mode.as_deref() == Some("pipeline") && !r.terminal
+                    })
+                    .collect();
+                (pipes.len() == 2).then(|| (h, [pipes[0], pipes[1]]))
+            })
+            .unwrap();
+        world.logistics.carriers.clear();
+        for (plant, used_lot_km) in plants.iter().zip(used) {
+            let facility = world.facilities.get(*plant).unwrap();
+            world
+                .logistics
+                .carriers
+                .push(cw_sim::economy::logistics::Carrier {
+                    firm,
+                    facility: *plant,
+                    region: facility.region,
+                    mode: 0,
+                    cap: 100,
+                    used_lot_km,
+                });
+        }
+        for week in 1..=13u32 {
+            let tick = cw_core::calendar::Tick(week + 100);
+            world.tick = tick;
+            let book = &mut world.firms.get_mut(firm).unwrap().book;
+            let txn = if profit_per_week >= 0 {
+                Txn::new()
+                    .debit(Account::Cash, profit_per_week, "test")
+                    .credit(Account::Revenue, profit_per_week, "test")
+            } else {
+                Txn::new()
+                    .credit(Account::Cash, -profit_per_week, "test")
+                    .debit(Account::OperatingExpense, -profit_per_week, "test")
+            };
+            let _ = book.commit(tick, txn);
+            book.close_week(tick);
+        }
+        (world, dataset, firm, plants)
+    }
+
+    #[test]
+    fn a_losing_firm_mothballs_the_carrier_under_a_quarter_full_and_only_that_one() {
+        // Worked by hand: 9,999 of 40,000 lot-km is 2,499 basis points, one under the line;
+        // 10,000 is exactly 2,500 and stays.
+        let (world, dataset, firm, plants) = pipeline_firm(-1_000, [9_999, 10_000]);
+        let mut proposals = Vec::new();
+        idle_carrier(&world, &dataset, firm, &mut proposals);
+        assert_eq!(proposals.len(), 1);
+        assert!(matches!(
+            proposals[0].intent,
+            CommandIntent::MothballFacility { facility } if facility == plants[0]
+        ));
+        // A firm that is making money keeps its idle carrier: the loss is what idles it.
+        let (world, dataset, firm, _) = pipeline_firm(1_000, [0, 0]);
+        let mut proposals = Vec::new();
+        idle_carrier(&world, &dataset, firm, &mut proposals);
+        assert!(proposals.is_empty());
+        // So does a carrier younger than half a year, however empty.
+        let (mut world, dataset, firm, plants) = pipeline_firm(-1_000, [0, 0]);
+        for p in plants {
+            world.facilities.get_mut(p).unwrap().completes = cw_core::calendar::Tick(100);
+        }
+        world.tick = cw_core::calendar::Tick(120);
+        let mut proposals = Vec::new();
+        idle_carrier(&world, &dataset, firm, &mut proposals);
+        assert!(proposals.is_empty());
+    }
+
+    #[test]
+    fn carrier_plants_on_their_way_are_taken_off_the_overflow_a_rival_builds_for() {
+        let (mut world, dataset, _, plants) = pipeline_firm(0, [0, 0]);
+        world.tick = cw_core::calendar::Tick(200);
+        let region = world.facilities.get(plants[0]).unwrap().region;
+        let key = cw_sim::economy::logistics::LaneKey::new(region, region, 0);
+        let pipeline = dataset.logistics.mode_index("pipeline").unwrap();
+        let size = |w: &World, p: Handle| {
+            let plant = w.facilities.get(p).unwrap();
+            dataset.recipes[plant.recipe as usize].weekly_output_lots * plant.blocks as i64
+        };
+        for p in plants {
+            world.facilities.get_mut(p).unwrap().completes = cw_core::calendar::Tick(0);
+        }
+        assert_eq!(coming_carrier_lots(&world, &dataset, key, pipeline), 0);
+        // One still being built counts in full; one opened ten weeks ago too; one opened
+        // twenty weeks ago does not.
+        world.facilities.get_mut(plants[0]).unwrap().status = FacilityStatus::Building;
+        assert_eq!(
+            coming_carrier_lots(&world, &dataset, key, pipeline),
+            size(&world, plants[0])
+        );
+        world.facilities.get_mut(plants[0]).unwrap().status = FacilityStatus::Operating;
+        world.facilities.get_mut(plants[0]).unwrap().completes = cw_core::calendar::Tick(190);
+        assert_eq!(
+            coming_carrier_lots(&world, &dataset, key, pipeline),
+            size(&world, plants[0])
+        );
+        world.facilities.get_mut(plants[0]).unwrap().completes = cw_core::calendar::Tick(180);
+        assert_eq!(coming_carrier_lots(&world, &dataset, key, pipeline), 0);
     }
 
     #[test]
