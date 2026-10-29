@@ -255,7 +255,7 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
     let tick = world.tick.0;
     let alive: Vec<Handle> = world.firms.iter().map(|(h, _)| h).collect();
     world.earnings.firms.retain(|h, _| alive.contains(h));
-    if tick == 0 || tick % QUARTER != 0 {
+    if tick == 0 || !tick.is_multiple_of(QUARTER) {
         return;
     }
     let covered_firms: Vec<Handle> = alive
@@ -540,7 +540,7 @@ pub fn rival_guidance(world: &World, firm: Handle) -> Option<(i64, i64)> {
     if fe.guidance.is_some() || world.tick.0 != est.made + 1 {
         return None;
     }
-    if (firm.slot() as u32 + est.due / QUARTER) % 2 != 0 {
+    if !(firm.slot() + est.due / QUARTER).is_multiple_of(2) {
         return None;
     }
     let n = fe.quarters.len();
