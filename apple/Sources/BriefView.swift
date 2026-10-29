@@ -1,14 +1,22 @@
 import SwiftUI
 
 /// The weekly brief: what changed, what is due and what to do, in the engine's own numbers. A
-/// suggestion's Review button opens a confirmation with its command filled in and previewed;
-/// nothing is sent until the player confirms there.
+/// suggestion's Review button opens the game's own sheet for that move (build flow, raid panel,
+/// lane reservation, pricing posture, mandate offer, division detail) filled in, or a plain
+/// confirmation with the fix ready; nothing is sent until the player confirms there.
+
+/// A move the player pressed Review on.
+struct BriefReviewItem: Identifiable {
+    let id = UUID()
+    let move: BriefMoveDto
+}
+
 struct BriefPanel: View {
     @EnvironmentObject private var store: AppStore
     @AppStorage("briefCollapsed") private var collapsed = false
     let currency: String
     let firmName: String
-    @State private var review: ConfirmRequest?
+    @State private var review: BriefReviewItem?
 
     var body: some View {
         Panel(padding: 12) {
@@ -39,8 +47,8 @@ struct BriefPanel: View {
             if !collapsed { Task { await store.refreshBrief() } }
         }
         .onDisappear { store.briefOpen = false }
-        .sheet(item: $review) { request in
-            ConfirmCommandSheet(request: request).environmentObject(store)
+        .sheet(item: $review) { item in
+            reviewSheet(item.move).environmentObject(store)
         }
     }
 
@@ -75,7 +83,8 @@ struct BriefPanel: View {
         }
         heading("What to do")
         if brief.moves.isEmpty {
-            Text("No move stands out. Hold your course.").font(.caption).foregroundStyle(Theme.secondary)
+            Text(brief.hold.isEmpty ? "No move stands out. Hold your course." : "Hold your course. \(brief.hold)")
+                .font(.caption).foregroundStyle(Theme.secondary)
         }
         ForEach(Array(brief.moves.enumerated()), id: \.offset) { _, move in
             VStack(alignment: .leading, spacing: 4) {
@@ -85,16 +94,7 @@ struct BriefPanel: View {
                 HStack {
                     Text(figures(move)).font(.caption).foregroundStyle(Theme.positive)
                     Spacer()
-                    Button("Review") {
-                        guard let json = move.commands.first else { return }
-                        review = ConfirmRequest(
-                            title: move.headline,
-                            actorName: firmName,
-                            detail: move.detail,
-                            submitTitle: move.actionLabel == "Review" ? "Do it" : move.actionLabel,
-                            json: json
-                        )
-                    }
+                    Button("Review") { review = BriefReviewItem(move: move) }
                     .buttonStyle(PixelButtonStyle())
                     .tint(Theme.gold)
                 }
@@ -111,8 +111,110 @@ struct BriefPanel: View {
         }
         if move.costCents > 0 { parts.append("costs \(Format.moneyCompact(move.costCents, currency: currency))") }
         if move.hasPayback && move.costCents > 0 && move.paybackWeeks > 0 {
-            parts.append("pays back in about \(move.paybackWeeks) weeks")
+            parts.append("pays back in about \(Self.paybackText(move.paybackWeeks))")
         }
         return parts.joined(separator: ", ")
+    }
+
+    /// Weeks under a year, years to one decimal after.
+    static func paybackText(_ weeks: Int64) -> String {
+        weeks < 52 ? "\(weeks) weeks" : "\(weeks * 10 / 52 / 10).\(weeks * 10 / 52 % 10) years"
+    }
+
+    /// The posture the move would set, read from its first command.
+    private func presetBps(_ move: BriefMoveDto) -> Int32? {
+        guard let json = move.commands.first,
+              let range = json.range(of: "\"bps\":-?[0-9]+", options: .regularExpression) else { return nil }
+        return Int32(json[range].dropFirst(6))
+    }
+
+    private func confirmation(_ move: BriefMoveDto) -> some View {
+        Group {
+            if let json = move.commands.first {
+                ConfirmCommandSheet(request: ConfirmRequest(
+                    title: move.headline,
+                    actorName: firmName,
+                    detail: move.detail,
+                    submitTitle: move.actionLabel == "Review" ? "Do it" : move.actionLabel,
+                    json: json
+                ))
+            } else {
+                briefNote(move)
+            }
+        }
+    }
+
+    /// A move with no command behind it, such as a company losing money with no single cause:
+    /// the plain reading of the income statement.
+    private func briefNote(_ move: BriefMoveDto) -> some View {
+        NavigationStack {
+            ScrollView {
+                Text(move.detail).font(.callout).foregroundStyle(Theme.primaryText)
+                    .fixedSize(horizontal: false, vertical: true).padding(16)
+            }
+            .background(Theme.panel)
+            .navigationTitle(move.headline)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { review = nil } } }
+        }
+    }
+
+    private func card<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+        NavigationStack {
+            ScrollView { content().padding(16) }
+                .background(Theme.panel)
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { review = nil } } }
+        }
+    }
+
+    /// Each move opens the sheet the rest of the game already uses for it.
+    @ViewBuilder
+    private func reviewSheet(_ move: BriefMoveDto) -> some View {
+        let t = move.target
+        switch t.dialog {
+        case "build":
+            BuildSheet(
+                region: store.regions.first { $0.code == t.region }?.index,
+                recipe: t.recipe,
+                blocks: t.blocks
+            )
+        case "pricing":
+            if let line = store.productLines.first(where: { $0.product == t.product }) {
+                PostureSheet(line: line, presetBps: presetBps(move))
+            } else {
+                confirmation(move)
+            }
+        case "lane":
+            if let lane = store.lanes.first(where: { $0.a == t.region && $0.b == t.regionTo && $0.mode == t.mode }) {
+                card(move.headline) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(move.detail).font(.caption).foregroundStyle(Theme.secondary)
+                        LaneDetail(lane: lane, initialLots: Double(t.lots), initialWeeks: Double(t.weeks))
+                    }
+                }
+            } else {
+                confirmation(move)
+            }
+        case "mandate":
+            card("The board's offer") {
+                if let offer = store.boardOffer {
+                    BoardOfferCard(chapter: offer)
+                } else {
+                    Text("The offer has lapsed or been taken.").font(.callout).foregroundStyle(Theme.secondary)
+                }
+            }
+        case "raid":
+            RaidPanel(target: t.target, region: t.region, industry: t.industry)
+        case "division":
+            if let division = store.divisions.first(where: { $0.region == t.region && $0.industry == t.industry }) {
+                DivisionDetailSheet(division: division)
+            } else {
+                confirmation(move)
+            }
+        default:
+            confirmation(move)
+        }
     }
 }
