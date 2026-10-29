@@ -37,6 +37,18 @@ jobs:
           name: corporate-warfare-android-debug
           path: compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk
           retention-days: 14
+      # The shrunk release build must still start the engine, so it is built (unsigned) on every run.
+      # One APK per ABI: arm64-v8a is the direct download, x86_64 is for emulators.
+      - name: Release APKs and bundle (unsigned, shrunk)
+        working-directory: compose
+        run: ./gradlew --no-daemon :androidApp:assembleRelease :androidApp:bundleRelease -Pcw.splitAbi=true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corporate-warfare-android-release-unsigned
+          path: |
+            compose/androidApp/build/outputs/apk/release/*.apk
+            compose/androidApp/build/outputs/bundle/release/*.aab
+          retention-days: 14
 
   desktop:
     strategy:
