@@ -94,6 +94,12 @@ struct PaperView: View {
         .onChange(of: now) { _, latest in
             if picked == latest { picked = nil }
         }
+        .task(id: store.paperWeek) {
+            // The History card asks for the issue of a past event's week.
+            guard let wanted = store.paperWeek else { return }
+            picked = wanted == now ? nil : wanted
+            store.paperWeek = nil
+        }
         .sheet(item: $target) { target in
             PaperTargetSheet(target: target).environmentObject(store)
         }

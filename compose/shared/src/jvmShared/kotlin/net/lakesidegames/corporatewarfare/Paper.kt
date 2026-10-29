@@ -68,6 +68,8 @@ fun PaperScreen(store: GameStore) {
     var picked by remember { mutableStateOf<Int?>(null) }
     // A new week brings the new issue unless the reader is deliberately on a back issue.
     LaunchedEffect(now) { if (picked == now) picked = null }
+    // The History card asks for the issue of a past event's week.
+    LaunchedEffect(store.paperWeek) { store.paperWeek?.let { picked = if (it == now) null else it; store.paperWeek = null } }
     val week = picked ?: now
     val paper = rememberEngine(store, week) { it.paper(week.toUInt()) }
     val archive = rememberEngine(store, now) { it.paperArchive() }.orEmpty().map { it.toInt() }

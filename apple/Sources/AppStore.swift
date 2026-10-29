@@ -52,6 +52,8 @@ final class AppStore: ObservableObject {
     @Published var events: [EventDto] = []
     /// The economy, central bank and government, for the Markets economy card and the status bar.
     @Published var economy: EconomyDto?
+    /// A back issue of the paper to open on the next visit, set by the History card.
+    @Published var paperWeek: UInt32?
     /// The selected company's technology position.
     @Published var research: ResearchDto?
     /// What the CFO says is costing the selected company money. Empty when it is not losing money.
