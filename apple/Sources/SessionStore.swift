@@ -270,6 +270,14 @@ actor Engine {
         session?.events() ?? []
     }
 
+    func letters(since: UInt32) -> [LetterDto] {
+        session?.letters(sinceWeek: since) ?? []
+    }
+
+    func markLettersRead(_ ids: [String]) {
+        session?.markLettersRead(ids: ids)
+    }
+
     func groupTree() -> [GroupNodeDto] {
         session?.groupTree() ?? []
     }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// What a tapped story or price opens.
-private struct PaperTarget: Identifiable {
+struct PaperTarget: Identifiable {
     let id = UUID()
     let link: PaperLinkDto
     let story: StoryDto?
@@ -93,6 +93,12 @@ struct PaperView: View {
         }
         .onChange(of: now) { _, latest in
             if picked == latest { picked = nil }
+        }
+        .task(id: store.paperWeek) {
+            // The History card asks for the issue of a past event's week.
+            guard let wanted = store.paperWeek else { return }
+            picked = wanted == now ? nil : wanted
+            store.paperWeek = nil
         }
         .sheet(item: $target) { target in
             PaperTargetSheet(target: target).environmentObject(store)
@@ -292,7 +298,7 @@ struct PaperView: View {
 
 /// The thing a story is about: a company page, a market, a region board, the company a deal is
 /// aimed at, or the event's own text.
-private struct PaperTargetSheet: View {
+struct PaperTargetSheet: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     let target: PaperTarget

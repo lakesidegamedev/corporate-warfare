@@ -58,7 +58,7 @@ struct RootView: View {
                         PixelIcons.tabImage("inbox")
                         Text("INBOX")
                     }
-                    .badge(store.events.filter { $0.mandatory }.count)
+                    .badge(store.inboxBadge)
                     .tag(AppTab.inbox)
                 OverviewView()
                     .safeAreaInset(edge: .top, spacing: 0) { TimeStrip() }

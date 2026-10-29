@@ -288,6 +288,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
     var economy by remember { mutableStateOf(Economy.Historic) }
     // Null means the scenario's own default.
     var pricePathPick by remember { mutableStateOf<PricePath?>(null) }
+    var history by remember { mutableStateOf(ScenarioHistory.Historical) }
     var capital by remember { mutableStateOf(capitalOf(Level.Standard)) }
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
@@ -393,6 +394,9 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                             val picked = pricePathPick ?: fallback
                             Options(PricePath.entries, picked, { it.title + if (it == fallback) " (scenario default)" else "" }, { it.note }, wide) { pricePathPick = it }
                         }
+                        Section("Scenario history") {
+                            Options(ScenarioHistory.entries, history, { it.title }, { it.note }, wide) { history = it }
+                        }
                         Section("Starting capital") {
                             ValueSlider(
                                 capital, { capital = it }, 1_000_000.0..20_000_000.0, 250_000.0,
@@ -438,6 +442,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                                 economy = economy.key,
                                 startingCapitalCents = (capital * 100).toLong(),
                                 pricePath = pricePathPick?.key ?: "",
+                                timeline = history.key,
                             ),
                         )
                     }

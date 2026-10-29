@@ -118,6 +118,25 @@ private enum StartPricePath: String, CaseIterable, WizardOption {
     }
 }
 
+private enum StartHistory: String, CaseIterable, WizardOption {
+    case historical, off, shuffled
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .historical: return "Historical"
+        case .off: return "Off"
+        case .shuffled: return "Shuffled"
+        }
+    }
+    var note: String {
+        switch self {
+        case .historical: return "Real events from the period happen on their real dates."
+        case .off: return "No dated events. Only the business cycle and your rivals move the world."
+        case .shuffled: return "The same events happen, but on different dates, up to half a year either side."
+        }
+    }
+}
+
 /// Scenario, then the career's terms, then start.
 struct NewGameView: View {
     @EnvironmentObject private var store: AppStore
@@ -135,6 +154,7 @@ struct NewGameView: View {
     @State private var economy = StartEconomy.historic
     /// Nil means the scenario's own default.
     @State private var pricePathPick: StartPricePath?
+    @State private var history = StartHistory.historical
     @State private var capital: Double = StartLevel.standard.capital
 
     private var chosen: ScenarioDto? {
@@ -337,6 +357,9 @@ struct NewGameView: View {
                     .foregroundStyle(Theme.secondary)
             }
         }
+        section("Scenario history") {
+            OptionGrid(items: StartHistory.allCases, selected: history) { history = $0 }
+        }
         section("Starting capital") {
             ValueSlider(
                 value: $capital,
@@ -418,7 +441,8 @@ struct NewGameView: View {
             difficulty: level.rawValue,
             economy: economy.rawValue,
             startingCapitalCents: Int64((capital * 100).rounded()),
-            pricePath: pricePathPick?.rawValue ?? ""
+            pricePath: pricePathPick?.rawValue ?? "",
+            timeline: history.rawValue
         )
         Task { await store.startCareer(options) }
     }
