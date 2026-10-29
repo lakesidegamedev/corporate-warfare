@@ -120,6 +120,13 @@ the facts of its own week and the three before it.
   finished takeover and the player's results rank highest), then freshness, then the money
   involved. The top story leads and the next three are briefs. A week with no facts prints no
   stories, only the markets column and the classifieds.
+- One event, one story: open bids on the same target become one story ("Three bidders chase X",
+  naming the bidders and the best price), repeated strikes at one company become one, and a
+  rival's own bid log entry is dropped because the deal reports it. Dates in stories and
+  classifieds use the paper's date form ("week 21, 1982"), never a raw game week. Bid and win
+  headlines rotate their verb with the issue's week.
+- Ticker: the apps read it only while time is paused or at 1x; at 2x and 4x the last headlines
+  stay up until time slows.
 - Markets column: the index move (market cap weighted over listed shares), the three biggest
   share moves and the two biggest good moves on the week. A good's reason is the strongest
   driver the market screen shows; only today's issue carries it.

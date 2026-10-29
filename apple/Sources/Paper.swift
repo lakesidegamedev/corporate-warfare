@@ -346,7 +346,7 @@ private struct PaperTargetSheet: View {
 
 /// One line with the top headline, on every screen. Time running cycles the top three every few
 /// seconds; paused it holds the first; with animations off or Reduce Motion on it never cycles.
-/// Tapping opens the paper.
+/// Tapping opens the paper. It reads the engine only when paused or at 1x.
 struct NewsTicker: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -354,6 +354,12 @@ struct NewsTicker: View {
     let onOpen: () -> Void
     @State private var headlines: [String] = []
     @State private var shown = 0
+
+    /// The engine is read only when time is paused or at 1x, once per change, never at speed.
+    private var readKey: String {
+        guard let overview = store.overview else { return "none" }
+        return store.runSpeed > 1 ? "fast" : "rev-\(overview.revision)"
+    }
 
     private var cycling: Bool { store.runSpeed > 0 && animations && !reduceMotion && headlines.count > 1 }
 
@@ -380,9 +386,14 @@ struct NewsTicker: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("News ticker")
-        .task(id: store.historyRefreshKey) {
-            headlines = await store.read { $0.ticker() } ?? []
-            shown = 0
+        .task(id: readKey) {
+            // At 2x and 4x the last headlines stay up; one read catches up when time slows.
+            guard readKey != "fast" else { return }
+            let fresh = await store.read { $0.ticker() } ?? headlines
+            if fresh != headlines {
+                headlines = fresh
+                shown = 0
+            }
         }
         .task(id: cycling) {
             shown = 0

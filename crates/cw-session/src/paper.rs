@@ -251,6 +251,83 @@ fn money(world: &World, dataset: &Dataset, firm: Handle, cents: i64) -> String {
     format!("{symbol}{body}")
 }
 
+/// A game week in the paper's own date form, as in the date line: `week 21, 1982`.
+fn date_phrase(world: &World, tick: Tick) -> String {
+    format!(
+        "week {}, {}",
+        tick.week_of_year(),
+        tick.year_from(world.start_year)
+    )
+}
+
+/// `a` or `an` for the word that follows.
+fn article(word: &str) -> &'static str {
+    match word.chars().next().map(|c| c.to_ascii_lowercase()) {
+        Some('a' | 'e' | 'i' | 'o') => "an",
+        _ => "a",
+    }
+}
+
+/// A count in words up to ten.
+fn count_word(n: usize) -> String {
+    const WORDS: [&str; 11] = [
+        "No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+    ];
+    WORDS.get(n).map(|w| (*w).to_owned()).unwrap_or_else(|| n.to_string())
+}
+
+/// What a plant of an industry is called in the paper.
+fn plant_noun(industry: &str) -> &'static str {
+    match industry {
+        "defense" => "defense plant",
+        "manufacturing" => "factory",
+        "retail" => "retail site",
+        "telecommunications" => "telecom site",
+        "logistics" => "logistics site",
+        "chemical_industries" => "chemical plant",
+        "healthcare" => "healthcare site",
+        "extraction" => "extraction site",
+        "construction" => "construction yard",
+        "media" => "media studio",
+        "agriculture" => "farm",
+        "energy" => "power plant",
+        "technology" => "technology campus",
+        "real_estate" => "property development",
+        _ => "plant",
+    }
+}
+
+/// The headline and body for a rival starting a plant. The move note names the strategy by its
+/// internal id ("oil wells plant"), which reads badly, so the paper looks the strategy up and
+/// names the kind of site and, in the body, the strategy by its proper name.
+fn ground_story(dataset: &Dataset, firm: &str, note: &str) -> (String, String) {
+    let parsed = note
+        .strip_prefix("Started building a ")
+        .and_then(|rest| rest.trim_end_matches('.').split_once(" plant in "));
+    let Some((id_words, region)) = parsed else {
+        return (
+            format!("{firm} breaks ground on a plant"),
+            format!("{firm} {}", lower_first(note)),
+        );
+    };
+    let id = id_words.replace(' ', "_");
+    let recipe = dataset.recipes.iter().find(|r| r.id == id);
+    let noun = recipe.map(|r| plant_noun(&r.industry)).unwrap_or("plant");
+    let headline = format!(
+        "{firm} breaks ground on {} {noun} in {region}",
+        article(noun)
+    );
+    let mut body = format!(
+        "{firm} started building {} {noun} in {region}",
+        article(noun)
+    );
+    match recipe.filter(|r| !r.name.is_empty()) {
+        Some(r) => body.push_str(&format!(", running its {} strategy.", r.name)),
+        None => body.push('.'),
+    }
+    (headline, body)
+}
+
 fn percent(bps: i64) -> String {
     format!("{}.{:02}", bps.abs() / 100, bps.abs() % 100)
 }
@@ -337,7 +414,7 @@ pub fn weekly_paper(world: &World, dataset: &Dataset, week: u32) -> Paper {
     let week = week.clamp(1, world.tick.0.max(1));
     let mut found: Vec<Candidate> = Vec::new();
     raids(world, dataset, week, &mut found);
-    rival_moves(world, week, &mut found);
+    rival_moves(world, dataset, week, &mut found);
     deals(world, dataset, week, &mut found);
     labour_and_news(world, week, &mut found);
     rate_decisions(world, week, &mut found);
@@ -442,7 +519,7 @@ fn raids(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) 
     }
 }
 
-fn rival_moves(world: &World, week: u32, out: &mut Vec<Candidate>) {
+fn rival_moves(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) {
     for mv in world
         .rivalry
         .moves
@@ -460,11 +537,10 @@ fn rival_moves(world: &World, week: u32, out: &mut Vec<Candidate>) {
                 format!("{name} {}", lower_first(&mv.text)),
                 3,
             ),
-            "build" => (
-                format!("{name} breaks ground on a plant"),
-                format!("{name} {}", lower_first(&mv.text)),
-                2,
-            ),
+            "build" => {
+                let (headline, body) = ground_story(dataset, &name, &mv.text);
+                (headline, body, 2)
+            }
             _ if mv.text.starts_with("Wound itself down") => (
                 format!("{name} winds itself down"),
                 format!("{name} {}", lower_first(&mv.text)),
@@ -486,7 +562,30 @@ fn rival_moves(world: &World, week: u32, out: &mut Vec<Candidate>) {
     }
 }
 
+/// Headline for a bid that is still open. The verb rotates with the issue's week so a run of
+/// quiet weeks does not read "bids for" every time.
+fn bid_headline(week: u32, buyer: &str, target: &str) -> String {
+    match week % 5 {
+        0 => format!("{buyer} bids for {target}"),
+        1 => format!("{buyer} makes an offer for {target}"),
+        2 => format!("{buyer} goes after {target}"),
+        3 => format!("{buyer} approaches {target}"),
+        _ => format!("{buyer} moves to buy {target}"),
+    }
+}
+
+fn win_headline(week: u32, buyer: &str, target: &str) -> String {
+    match week % 3 {
+        0 => format!("{buyer} wins {target}"),
+        1 => format!("{buyer} takes over {target}"),
+        _ => format!("{buyer} buys {target}"),
+    }
+}
+
 fn deals(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) {
+    // Open bids on the same target are one story, however many bidders there are.
+    let mut open: std::collections::BTreeMap<u64, Vec<(Handle, &cw_sim::state::Deal)>> =
+        std::collections::BTreeMap::new();
     for (handle, deal) in world.deals.iter() {
         if matches!(deal.state, DealState::Draft | DealState::Funded) {
             continue;
@@ -515,7 +614,7 @@ fn deals(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) 
         let price = money(world, dataset, deal.buyer, deal.offer_price_cents);
         let (headline, body, base) = match deal.state {
             DealState::Settled => (
-                format!("{buyer} wins {target}"),
+                win_headline(week, &buyer, &target),
                 format!(
                     "The {hostile}{kind} of {target} by {buyer} went through at {price} a share."
                 ),
@@ -536,13 +635,10 @@ fn deals(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) 
                 format!("The {hostile}{kind} offer from {buyer} for {target} ran out of time."),
                 5,
             ),
-            _ => (
-                format!("{buyer} bids for {target}"),
-                format!(
-                    "{buyer} has launched a {hostile}{kind} bid for {target} at {price} a share."
-                ),
-                7,
-            ),
+            _ => {
+                open.entry(deal.target.0).or_default().push((handle, deal));
+                continue;
+            }
         };
         out.push(candidate(
             format!("deal:{}:{:?}", handle.0, deal.state),
@@ -556,26 +652,121 @@ fn deals(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) 
             deal.escrow_cents,
         ));
     }
+    for (target_id, mut bids) in open {
+        // Best offer first; the lowest handle breaks a tie so the story is stable.
+        bids.sort_by(|a, b| {
+            b.1.offer_price_cents
+                .cmp(&a.1.offer_price_cents)
+                .then_with(|| a.0.cmp(&b.0))
+        });
+        let (best_handle, best) = bids[0];
+        let Some(target) = firm_name(world, best.target) else {
+            continue;
+        };
+        let at = bids.iter().map(|(_, d)| d.started.0).max().unwrap_or(week);
+        let yours = bids
+            .iter()
+            .any(|(_, d)| player_side(world, d.buyer) || player_side(world, d.target));
+        let escrow: i64 = bids.iter().map(|(_, d)| d.escrow_cents).sum();
+        let mut buyers: Vec<String> = Vec::new();
+        for (_, d) in &bids {
+            if let Some(name) = firm_name(world, d.buyer)
+                && !buyers.contains(&name)
+            {
+                buyers.push(name);
+            }
+        }
+        let best_buyer = firm_name(world, best.buyer).unwrap_or_default();
+        let price = money(world, dataset, best.buyer, best.offer_price_cents);
+        let (headline, body) = if bids.len() == 1 {
+            let kind = match best.kind {
+                DealKind::SharePurchase => "takeover",
+                DealKind::AssetPurchase => "asset purchase",
+                DealKind::Merger => "merger",
+            };
+            let hostile = if best.hostile { "hostile " } else { "" };
+            (
+                bid_headline(week, &best_buyer, &target),
+                format!(
+                    "{best_buyer} has launched a {hostile}{kind} bid for {target} at {price} a share."
+                ),
+            )
+        } else {
+            let list = match buyers.as_slice() {
+                [] => String::new(),
+                [only] => only.clone(),
+                [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+            };
+            (
+                format!("{} bidders chase {target}", count_word(buyers.len().max(2))),
+                format!(
+                    "{list} have all bid for {target}. The best offer is {price} a share, from {best_buyer}."
+                ),
+            )
+        };
+        out.push(candidate(
+            if bids.len() == 1 {
+                format!("deal:{}:{:?}", best_handle.0, best.state)
+            } else {
+                format!("bids:{target_id}")
+            },
+            at,
+            &headline,
+            body,
+            "Business desk",
+            PaperLink::deal(best_handle),
+            yours,
+            7,
+            escrow,
+        ));
+    }
 }
 
 fn labour_and_news(world: &World, week: u32, out: &mut Vec<Candidate>) {
-    for (i, item) in world
+    let items: Vec<(usize, &cw_sim::state::NewsItem)> = world
         .news
         .iter()
         .enumerate()
         .filter(|(_, n)| in_window(n.week.0, week))
-    {
+        .collect();
+    // The same thing happening to the same company again is one story, not several.
+    let same = |a: &cw_sim::state::NewsItem, b: &cw_sim::state::NewsItem| {
+        a.key == b.key && a.subject == b.subject
+    };
+    for (i, item) in items.iter().copied() {
+        let repeats = items.iter().filter(|(_, o)| same(o, item)).count();
+        let latest = items
+            .iter()
+            .filter(|(_, o)| same(o, item))
+            .map(|(j, o)| (o.week.0, *j))
+            .max();
+        if latest != Some((item.week.0, i)) {
+            continue;
+        }
         let firm = firm_by_exact_name(world, &item.subject);
         let link = firm.map(PaperLink::company).unwrap_or_else(PaperLink::none);
         let yours = firm.is_some_and(|f| player_side(world, f));
         let id = format!("news:{}:{}", item.week.0, i);
         let s = &item.subject;
         let (headline, body, base) = if item.key == "news.strike" {
-            (
-                format!("Workers strike at {s}"),
-                format!("Workers at {s} have walked out. Local demand is lower for four weeks."),
-                6,
-            )
+            if repeats > 1 {
+                (
+                    format!("Workers strike again at {s}"),
+                    format!(
+                        "Workers at {s} have walked out {} times in the past month. Local demand is lower while the stoppages last.",
+                        lower_first(&count_word(repeats))
+                    ),
+                    6,
+                )
+            } else {
+                (
+                    format!("Workers strike at {s}"),
+                    format!(
+                        "Workers at {s} have walked out. Local demand is lower for four weeks."
+                    ),
+                    6,
+                )
+            }
         } else if item.key.starts_with("news.activist.") {
             (
                 format!("Activist investor targets {s}"),
@@ -967,8 +1158,8 @@ fn classifieds(world: &World, week: u32) -> Vec<Classified> {
         out.push(Classified {
             kind: "bid".to_owned(),
             text: format!(
-                "OPEN BID. {buyer} for {target}. Offer open until week {}.",
-                deal.offer_deadline.0
+                "OPEN BID. {buyer} for {target}. Offer open until {}.",
+                date_phrase(world, deal.offer_deadline)
             ),
             link: PaperLink::deal(handle),
         });
@@ -980,8 +1171,9 @@ fn classifieds(world: &World, week: u32) -> Vec<Classified> {
                 FirmStatus::Restructuring { until } => out.push(Classified {
                     kind: "restructuring".to_owned(),
                     text: format!(
-                        "NOTICE. {} is restructuring under court protection until week {}.",
-                        firm.name, until.0
+                        "NOTICE. {} is restructuring under court protection until {}.",
+                        firm.name,
+                        date_phrase(world, until)
                     ),
                     link: PaperLink::company(handle),
                 }),
@@ -1226,6 +1418,177 @@ mod tests {
         for c in ['\u{2013}', '\u{2014}'] {
             assert!(!text.contains(c));
         }
+        let mut notices = String::new();
+        for c in &paper.classifieds {
+            notices += &c.text;
+            notices.push(' ');
+        }
+        for part in (text.clone() + &notices).split("week ").skip(1) {
+            let digits: String = part.chars().take_while(char::is_ascii_digit).collect();
+            assert!(
+                digits.is_empty() || part[digits.len()..].starts_with(", "),
+                "a raw game week in the paper: week {part}"
+            );
+        }
         assert_eq!(archive_weeks(&s.world).first(), Some(&now));
+    }
+
+    fn bid(buyer: Handle, target: Handle, price: i64, started: u32) -> cw_sim::state::Deal {
+        cw_sim::state::Deal {
+            buyer,
+            target,
+            kind: DealKind::SharePurchase,
+            state: DealState::OfferOpen,
+            escrow_cents: price * 1_000,
+            offer_price_cents: price,
+            max_shares: 1_000,
+            committed_shares: 0,
+            started: Tick(started),
+            diligence_until: Tick(started),
+            offer_deadline: Tick(started + 8),
+            review_deadline: None,
+            frozen_fair_cents: price,
+            review_required: false,
+            remedy_share_bps: 0,
+            hostile: false,
+            diligence_paid: true,
+            investor_tendered: false,
+        }
+    }
+
+    fn firms(s: &Session, count: usize) -> Vec<Handle> {
+        let mut handles: Vec<Handle> = s
+            .world
+            .firms
+            .iter()
+            .filter(|(h, _)| !player_side(&s.world, *h))
+            .map(|(h, _)| h)
+            .collect();
+        handles.sort();
+        handles.truncate(count);
+        handles
+    }
+
+    #[test]
+    fn several_bids_for_one_target_are_one_story() {
+        let mut s = quiet("great-lakes-2000", 30);
+        let f = firms(&s, 4);
+        s.world.deals.insert(bid(f[1], f[0], 4_000, 29));
+        s.world.deals.insert(bid(f[2], f[0], 5_500, 30));
+        s.world.deals.insert(bid(f[3], f[0], 4_500, 30));
+        let paper = weekly_paper(&s.world, &s.dataset, 30);
+        let lead = paper.lead.expect("the bids are news");
+        let name = |h: Handle| s.world.firms.get(h).unwrap().name.clone();
+        assert!(
+            lead.headline.starts_with("Three bidders chase"),
+            "{}",
+            lead.headline
+        );
+        for h in [f[1], f[2], f[3]] {
+            assert!(lead.body.contains(&name(h)), "{}", lead.body);
+        }
+        assert!(
+            lead.body.contains(&format!("from {}", name(f[2]))) && lead.body.contains("$55"),
+            "best price and bidder: {}",
+            lead.body
+        );
+        assert!(paper.briefs.is_empty(), "one event, one story");
+    }
+
+    #[test]
+    fn one_bid_is_one_story_and_the_verb_rotates_with_the_week() {
+        let mut s = quiet("great-lakes-2000", 30);
+        let f = firms(&s, 2);
+        s.world.deals.insert(bid(f[1], f[0], 4_000, 29));
+        let mut seen = std::collections::BTreeSet::new();
+        for week in 30..40 {
+            let mut later = s.world.clone();
+            later.tick = Tick(week);
+            let paper = weekly_paper(&later, &s.dataset, week);
+            if let Some(lead) = paper.lead {
+                assert!(lead.headline.chars().count() <= MAX_HEADLINE);
+                seen.insert(
+                    lead.headline
+                        .replace(&later.firms.get(f[1]).unwrap().name, "A")
+                        .replace(&later.firms.get(f[0]).unwrap().name, "B"),
+                );
+                assert!(paper.briefs.is_empty());
+            }
+        }
+        // Same week, same words.
+        let one = weekly_paper(&s.world, &s.dataset, 30).lead.unwrap().headline;
+        assert_eq!(one, weekly_paper(&s.world, &s.dataset, 30).lead.unwrap().headline);
+        // Weeks 30 to 32 are inside the bid's window; the verbs differ between them.
+        assert!(seen.len() >= 3, "{seen:?}");
+    }
+
+    #[test]
+    fn repeated_strikes_at_one_company_are_one_story() {
+        let mut s = quiet("great-lakes-2000", 30);
+        let f = firms(&s, 1);
+        let name = s.world.firms.get(f[0]).unwrap().name.clone();
+        for week in [28, 30] {
+            s.world.news.push(cw_sim::state::NewsItem {
+                week: Tick(week),
+                key: "news.strike".to_owned(),
+                subject: name.clone(),
+                amount_cents: 0,
+                quantity: Default::default(),
+            });
+        }
+        let paper = weekly_paper(&s.world, &s.dataset, 30);
+        let lead = paper.lead.unwrap();
+        assert_eq!(lead.headline, format!("Workers strike again at {name}"));
+        assert!(lead.body.contains("two times"), "{}", lead.body);
+        assert!(paper.briefs.is_empty());
+    }
+
+    #[test]
+    fn classifieds_use_the_papers_date_form() {
+        let mut s = quiet("texas-1981", 58);
+        let f = firms(&s, 2);
+        s.world.deals.insert(bid(f[1], f[0], 4_000, 57));
+        let paper = weekly_paper(&s.world, &s.dataset, 58);
+        // Deadline is week 65 of the game, which is week 13 of 1982.
+        let text = &paper.classifieds[0].text;
+        assert!(text.ends_with("until week 13, 1982."), "{text}");
+    }
+
+    #[test]
+    fn plant_stories_read_naturally_for_every_strategy() {
+        for scenario in [
+            "great-lakes-2000",
+            "texas-1981",
+            "silicon-valley-1995",
+            "ruhr-rhine-1991",
+        ] {
+            let dataset = Dataset::load_scenario(scenario).unwrap();
+            for recipe in &dataset.recipes {
+                let note = format!(
+                    "Started building a {} plant in Piney Woods.",
+                    recipe.id.replace('_', " ")
+                );
+                let (headline, body) = ground_story(&dataset, "Acme Works", &note);
+                for text in [&headline, &body] {
+                    assert!(!text.contains('_') && !text.contains("  "), "{text}");
+                    let words: Vec<&str> = text.split(' ').collect();
+                    for pair in words.windows(2) {
+                        assert!(!pair[0].eq_ignore_ascii_case(pair[1]), "{text}");
+                    }
+                    for (at, word) in words.iter().enumerate() {
+                        if matches!(*word, "a" | "an") {
+                            let next = words[at + 1];
+                            let vowel = next.starts_with(['a', 'e', 'i', 'o', 'u']);
+                            assert_eq!(*word == "an", vowel, "{text}");
+                        }
+                    }
+                }
+                assert!(headline.contains("breaks ground on "), "{headline}");
+                assert!(headline.chars().count() <= MAX_HEADLINE + 10, "{headline}");
+                if !recipe.name.is_empty() {
+                    assert!(body.contains(&recipe.name), "{body}");
+                }
+            }
+        }
     }
 }

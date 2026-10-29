@@ -23,6 +23,8 @@ heading.
   ticker under the top bar on every screen shows the top headline and cycles through the top
   three while time runs (it holds still when time is paused or animations are off). On desktop
   the paper is in the sidebar under World (F8); on phones, open it from the ticker or the Inbox.
+  Several bids for one company read as one story, dates read like "week 21, 1982", and the
+  ticker stays quiet at 2x and 4x speed.
 - Scenario history. Each scenario now has dated events from its own period that play out in your
   career: a regional bank failure and the 1986 oil collapse in Texas, the technology bust and the
   2001 recession in the Great Lakes, a browser listing boom and the dot-com bust in Silicon

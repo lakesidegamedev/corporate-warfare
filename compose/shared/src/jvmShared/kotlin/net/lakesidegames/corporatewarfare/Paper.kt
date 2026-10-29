@@ -303,10 +303,18 @@ private fun PaperTarget(store: GameStore, link: PaperLinkDto, story: StoryDto?, 
 /**
  * One line with the top headline, on every screen. Time running cycles the top three every few
  * seconds; paused it holds the first; with animations off it never cycles. Tapping opens the paper.
+ * It reads the engine only when paused or at 1x, never at speed.
  */
 @Composable
 fun TickerBar(store: GameStore, modifier: Modifier = Modifier, onOpen: () -> Unit) {
-    val headlines = rememberEngine(store) { it.ticker() }.orEmpty()
+    // Read the engine only when time is paused or at 1x; at 2x and 4x the last headlines stay up
+    // and one read catches up when time slows or stops.
+    val live = !store.running || store.speed <= 1
+    val revision = store.overview?.revision
+    var headlines by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(revision, live) {
+        if (live) headlines = store.read { it.ticker() } ?: headlines
+    }
     val animate = LocalAppSettings.current?.animations != false
     var shown by remember { mutableStateOf(0) }
     val cycling = store.running && animate && headlines.size > 1
