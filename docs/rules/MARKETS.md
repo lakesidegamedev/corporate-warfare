@@ -418,6 +418,13 @@ of four weeks of revenue (and $2,000), or when four weeks of spoilage reaches 2 
 (and $2,000). Market snapshots (schema 2) carry corridor and player storage lines: use, capacity,
 owned capacity, outside lots, fees, holding cost, spoilage and held goods.
 
+**Who is losing money.** The snapshot's corridor line splits operating companies into three
+kinds and counts how many of each lost money over their last thirteen weeks: established (an
+operating plant and founded more than 52 weeks ago), entrants (an operating plant, younger) and
+shells (no operating plant: still building, mothballed or with every plant sold or raided away).
+The all-company losing share mixes young plants still ramping and idle shells with the trading
+companies; the established share is the one that should stay flat over a career.
+
 ## Owned logistics, lanes and routing (1.7)
 
 The generic `freight` product is lane capacity. Data lives in `content/logistics.json` and the

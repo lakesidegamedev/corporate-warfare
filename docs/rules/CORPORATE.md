@@ -260,6 +260,14 @@ guaranteed plant; instead the success chance is the attack-over-total chance tim
 started. That covers a new game's starting divisions and any division opened later; a raid
 against a division inside the window is refused, and rival AI does not attempt one.
 
+**Rival raid pacing (1.8 preview 3).** A rival launches at most one raid a year: one that
+campaigned in the last 52 weeks does not choose another. This is a rival's choice, not a rule;
+the validator still accepts a raid from any company, the player's included, at any time. Without
+it raids grew fourfold over five years, since each raid leaves grudges that invite the next, and
+the write-offs and spent campaigns pushed the share of established companies losing money from 12
+to 18 percent. With it raids level off (about 110 to 160 a year across 16 five-year careers,
+against 85 to 335) and that share stays at 12 to 14 percent.
+
 **Construction capacity.** A firm builds at normal cost and speed while the blocks under
 construction, including a new order, stay within 40 plus a tenth of the blocks it already runs
 (at most 400). Each capacity's worth of excess adds fifty percent to capex (at most 2.5 times) and

@@ -67,19 +67,7 @@ fn main() {
                     let net: i64 = firm.book.recent_weeks().iter().map(|w| w.net_income).sum();
                     entry.0 += (net < 0) as i64;
                     entry.1 += 1;
-                    let operating = firm.facilities.iter().any(|h| {
-                        world
-                            .facilities
-                            .get(*h)
-                            .is_some_and(|p| p.status == cw_sim::state::FacilityStatus::Operating)
-                    });
-                    let kind = if !operating {
-                        2
-                    } else if world.tick.0.saturating_sub(firm.founding_week.0) > 52 {
-                        0
-                    } else {
-                        1
-                    };
+                    let kind = cw_session::telemetry::firm_kind(world, firm);
                     kinds[kind].0 += (net < 0) as i64;
                     kinds[kind].1 += 1;
                 }

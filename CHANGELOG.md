@@ -27,6 +27,10 @@ heading.
   far loads actually travel, but never while their own routes are turning much freight away to
   outside carriers. Less carrying capacity goes to waste and slightly less freight has to go
   outside.
+- Rival companies launch at most one market raid a year. Raids used to snowball as each one left
+  grudges that invited the next, and over a long career more and more healthy companies slipped
+  into losses from raid write-offs and failed campaigns. Raiding still happens, and you can raid
+  as often as before.
 - Refineries and gas plants shift their output toward the products that sell. A refinery can move
   up to a quarter of a product's share of its run to the others, for example from gasoline that can
   only be exported toward fuel the corridor imports. Its total output never grows.
@@ -52,6 +56,8 @@ heading.
 
 ### Added
 
+- Market analytics split the companies losing money into established companies, new entrants and
+  shells with no working plant, so a rise in losses can be told apart from young or idle firms.
 - Market analytics report a new sales-weighted asking price for each good, which shows what sellers
   that actually sold were asking. The existing median asking price is unchanged, so older servers
   and app versions keep working.

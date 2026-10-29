@@ -39,6 +39,33 @@ pub struct CorridorLine {
     pub firms_dissolved: u32,
     pub raids: u32,
     pub outside_cash_cents: i64,
+    /// Operating companies by kind, and of each how many lost money over their last thirteen
+    /// weeks: established (an operating plant, founded over a year ago), entrants (an operating
+    /// plant, younger) and shells (no operating plant: still building, mothballed or sold off).
+    /// Added in 1.8 preview 3; older readers ignore them.
+    pub firms_established: u32,
+    pub losing_established: u32,
+    pub firms_entrants: u32,
+    pub losing_entrants: u32,
+    pub firms_shells: u32,
+    pub losing_shells: u32,
+}
+
+/// Which of the three kinds in `CorridorLine` a company is: 0 established, 1 entrant, 2 shell.
+pub fn firm_kind(world: &cw_sim::state::World, firm: &cw_sim::state::Firm) -> usize {
+    let operating = firm.facilities.iter().any(|handle| {
+        world
+            .facilities
+            .get(*handle)
+            .is_some_and(|plant| plant.status == cw_sim::state::FacilityStatus::Operating)
+    });
+    if !operating {
+        2
+    } else if world.tick.0.saturating_sub(firm.founding_week.0) > 52 {
+        0
+    } else {
+        1
+    }
 }
 
 /// Storage over the last thirteen weeks for the whole corridor, or for the player's company:
@@ -490,11 +517,24 @@ impl Session {
             });
         }
         let operating = world.firms.iter().filter(|(_, f)| f.operative()).count() as u32;
+        let mut kinds = [(0u32, 0u32); 3];
+        for (_, firm) in world.firms.iter().filter(|(_, f)| f.operative()) {
+            let net: i64 = firm.book.recent_weeks().iter().map(|w| w.net_income).sum();
+            let kind = &mut kinds[firm_kind(world, firm)];
+            kind.0 += 1;
+            kind.1 += (net < 0) as u32;
+        }
         let corridor = CorridorLine {
             firms_operating: operating,
             firms_dissolved: world.firms.iter().count() as u32 - operating,
             raids: world.raids.len() as u32,
             outside_cash_cents: world.outside.gateway_book.cash(),
+            firms_established: kinds[0].0,
+            losing_established: kinds[0].1,
+            firms_entrants: kinds[1].0,
+            losing_entrants: kinds[1].1,
+            firms_shells: kinds[2].0,
+            losing_shells: kinds[2].1,
         };
         let player = world.investor.primary_group.and_then(|handle| {
             let firm = world.firms.get(handle)?;
@@ -626,6 +666,59 @@ fn rivalry_line(world: &cw_sim::state::World, dataset: &cw_data::Dataset) -> Riv
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn companies_split_into_established_entrants_and_shells_by_plant_and_age() {
+        let mut session = Session::create(crate::ScenarioConfig {
+            seed: 9,
+            scenario: cw_sim::state::ScenarioKind::Guided,
+            mode: cw_sim::state::ScenarioMode::Sandbox,
+            dataset_hash: String::new(),
+            difficulty: cw_data::Difficulty::Standard,
+            economy_start: Default::default(),
+            starting_capital_cents: None,
+            prices: Default::default(),
+        })
+        .unwrap();
+        session.world.tick = cw_core::calendar::Tick(100);
+        let firms: Vec<cw_core::ids::Handle> = session
+            .world
+            .firms
+            .iter()
+            .filter(|(_, f)| f.operative() && !f.facilities.is_empty())
+            .map(|(h, _)| h)
+            .take(3)
+            .collect();
+        // Founded at the opening: 100 weeks old. Founded in week 60: 40 weeks, an entrant. The
+        // third has every plant mothballed: a shell whatever its age.
+        session.world.firms.get_mut(firms[1]).unwrap().founding_week = cw_core::calendar::Tick(60);
+        let plants = session
+            .world
+            .firms
+            .get(firms[2])
+            .unwrap()
+            .facilities
+            .clone();
+        for plant in plants {
+            session.world.facilities.get_mut(plant).unwrap().status =
+                cw_sim::state::FacilityStatus::Mothballed;
+        }
+        let world = &session.world;
+        let kind = |h| firm_kind(world, world.firms.get(h).unwrap());
+        assert_eq!((kind(firms[0]), kind(firms[1]), kind(firms[2])), (0, 1, 2));
+        // Exactly 52 weeks old is still an entrant; 53 is established.
+        let mut aged = world.firms.get(firms[1]).unwrap().clone();
+        aged.founding_week = cw_core::calendar::Tick(48);
+        assert_eq!(firm_kind(world, &aged), 1);
+        aged.founding_week = cw_core::calendar::Tick(47);
+        assert_eq!(firm_kind(world, &aged), 0);
+        let line = session.market_snapshot().corridor;
+        assert_eq!(
+            line.firms_established + line.firms_entrants + line.firms_shells,
+            line.firms_operating
+        );
+        assert!(line.firms_entrants >= 1 && line.firms_shells >= 1);
+    }
 
     #[test]
     fn the_sold_ask_weights_each_seller_by_the_lots_it_sold() {
