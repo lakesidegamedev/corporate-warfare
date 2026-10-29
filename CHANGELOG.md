@@ -200,6 +200,21 @@ heading.
 
 ### Fixed
 
+- The outside world no longer runs out of money. It used to buy your exports and keep them on its
+  books forever while its cash only fell: in Texas it dropped from $855 million to $360 million in
+  four years, in Great Lakes from $463 million to $201 million in five, and once it was empty
+  exports would have stopped. It now sells what it buys on to the rest of the world, a thirteenth of
+  its stock a week, at what it paid. Over thirty years in every scenario its account stays level or
+  grows, and it never limits what you can export.
+- Carriers fit their lanes better. Rivals no longer all build a ship or a pipeline for the same
+  busy lane in the same quarter, and a rival whose carrier is under a quarter full and who is losing
+  money shuts it down (it opens again when the lane gets busy). You can do the same with Mothball.
+- A restructuring now changes something. Companies in restructuring used to come back after a few
+  weeks with the same plants and the same costs, took another 50 percent off their debt, and did it
+  again, over and over (94 percent of firms leaving the market in a five year Ruhr run were these).
+  Now a restructuring lasts its full year, plants that lose money are closed down, and a company
+  with nothing worth keeping is wound up instead. The same applies to you.
+- The Windows setup program's licence page now says that the game sends an anonymous market summary you can switch off, instead of saying it sends nothing.
 - New careers on Windows, Linux and Android no longer stop with an engine error around week 5. The inbox asked for letters from a week before the career began, which the engine could not count back to. Found by the new Android emulator check.
 - Each scenario now opens in the money conditions of its own time. Texas 1981 starts with
   inflation near 10 percent and interest rates near 16 percent, and both fall over the next

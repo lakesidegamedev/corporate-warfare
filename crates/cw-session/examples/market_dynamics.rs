@@ -67,6 +67,10 @@ fn main() {
     // first region), summed over seeds at the last week of the year.
     let mut macros: BTreeMap<u32, [i64; 5]> = BTreeMap::new();
     let mut wage0 = 0i64;
+    // year -> restructurings started, of them repeats (the firm restructured before); and the
+    // outside gateway account at the year end, summed over seeds.
+    let mut restructurings: BTreeMap<u32, [i64; 2]> = BTreeMap::new();
+    let mut outside: BTreeMap<u32, i64> = BTreeMap::new();
     for seed in 1..=seeds {
         let config = cw_session::ScenarioConfig {
             seed,
@@ -84,6 +88,8 @@ fn main() {
         };
         let mut session = cw_session::Session::create(config).unwrap();
         let mut alive: Vec<u64> = Vec::new();
+        let mut in_plan: std::collections::BTreeSet<u64> = Default::default();
+        let mut had_plan: std::collections::BTreeSet<u64> = Default::default();
         for week in 1..=weeks {
             let r = session.advance(1);
             if r.pause.is_some() {
@@ -94,6 +100,22 @@ fn main() {
             }
             let world = &session.world;
             let dataset = &session.dataset;
+            {
+                let year = (week - 1) / 52 + 1;
+                for (h, f) in world.firms.iter() {
+                    let now = matches!(f.status, cw_sim::state::FirmStatus::Restructuring { .. });
+                    if now && in_plan.insert(h.0) {
+                        let row = restructurings.entry(year).or_default();
+                        row[0] += 1;
+                        row[1] += !had_plan.insert(h.0) as i64;
+                    } else if !now {
+                        in_plan.remove(&h.0);
+                    }
+                }
+                if week % 52 == 0 {
+                    *outside.entry(week / 52).or_default() += world.outside.gateway_book.cash();
+                }
+            }
             if week == 1 {
                 wage0 = world.regions[0].background_wage_cents[0];
             }
@@ -309,6 +331,17 @@ fn main() {
             row[2],
             row[3],
             row[4]
+        );
+    }
+    println!(
+        "by year: restructurings started (repeats of a firm that restructured before), outside account at year end, mean over seeds"
+    );
+    for (year, row) in &restructurings {
+        println!(
+            "  year {year}: restructurings {} ({} repeats)  outside account ${}M",
+            row[0],
+            row[1],
+            outside.get(year).copied().unwrap_or(0) / seeds as i64 / 100_000_000
         );
     }
     println!(

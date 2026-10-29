@@ -57,9 +57,15 @@ fn loan_arrears(world: &World, firm: Handle) -> i64 {
 fn mark_past_due(firm: &mut crate::state::Firm, now: Tick) {
     // A dissolved, liquidating or merged firm cannot re-enter the payment-grace state. Late
     // interest or contract postings used to resurrect it, which hid a liquidation from reports.
+    // A firm in restructuring stays in it for its full year: a bill it defers meanwhile joins its
+    // overdue payables, and the year's end decides, rather than the next late posting turning
+    // the plan back into a four-week grace and a second haircut a month after the first.
     if matches!(
         firm.status,
-        FirmStatus::Dissolved | FirmStatus::Liquidating | FirmStatus::Merged { .. }
+        FirmStatus::Dissolved
+            | FirmStatus::Liquidating
+            | FirmStatus::Merged { .. }
+            | FirmStatus::Restructuring { .. }
     ) {
         return;
     }
@@ -137,8 +143,9 @@ pub fn settle(world: &mut World, dataset: &Dataset) -> Vec<(Handle, &'static str
                         &world.firms.get(handle).unwrap().book,
                     );
                     let debt = world.firms.get(handle).unwrap().book.debt();
-                    if liquid * 100 >= debt * 50 {
-                        restructure(world, handle, debt);
+                    if liquid * 100 >= debt * 50
+                        && restructure(world, dataset, handle, debt) != Plan::NoneViable
+                    {
                         events.push((handle, "restructuring"));
                     } else {
                         liquidate(world, handle, dataset);
@@ -160,12 +167,111 @@ pub fn settle(world: &mut World, dataset: &Dataset) -> Vec<(Handle, &'static str
     events
 }
 
-/// Public entry for an approved restructuring command.
-pub fn restructure_for_owner(world: &mut World, firm: Handle, debt: i64) {
-    restructure(world, firm, debt);
+/// Public entry for an approved restructuring command. A firm with no plant worth keeping has no
+/// plan to put to its creditors, so the request is refused; the same test sends an automatic
+/// restructuring to liquidation.
+pub fn restructure_for_owner(
+    world: &mut World,
+    dataset: &Dataset,
+    firm: Handle,
+    debt: i64,
+) -> bool {
+    restructure(world, dataset, firm, debt) != Plan::NoneViable
 }
 
-fn restructure(world: &mut World, firm: Handle, debt: i64) {
+/// What a restructuring plan found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Plan {
+    /// Every plant that earns its keep stays; the ones that do not were mothballed.
+    Done,
+    /// Nothing the firm runs covers its own running costs: no plan, nothing changed.
+    NoneViable,
+}
+
+/// What a plant adds each week at reference prices and the firm's own wages: output sold, less
+/// inputs, payroll, upkeep and land. A carrier earns from the freight it gets, so it is judged on how much of
+/// its capacity it fills. None for a terminal, which serves the carriers and is not judged alone.
+fn plant_pays(world: &World, dataset: &Dataset, facility: Handle) -> Option<bool> {
+    let plant = world.facilities.get(facility)?;
+    let firm = world.firms.get(plant.firm)?;
+    let recipe = &dataset.recipes[plant.recipe as usize];
+    if recipe.transport_mode.is_some() {
+        if recipe.terminal {
+            return None;
+        }
+        return Some(
+            crate::economy::logistics::carrier_fill_bps(world, facility)
+                .is_some_and(|fill| fill >= crate::economy::logistics::CARRIER_MIN_FILL_BPS),
+        );
+    }
+    let blocks = plant.blocks as i64;
+    let revenue: i64 = recipe
+        .outputs()
+        .filter_map(|(id, lots)| {
+            let product = dataset.product_index.get(id).copied()?;
+            Some(lots * blocks * dataset.reference_price(product))
+        })
+        .sum();
+    let inputs: i64 = recipe
+        .weekly_inputs_lots
+        .iter()
+        .filter_map(|(id, qty)| {
+            let product = dataset.product_index.get(id).copied()?;
+            Some(qty * blocks * dataset.reference_price(product))
+        })
+        .sum();
+    let wages: i64 = (0..3)
+        .map(|tier| recipe.workers_low_mid_high[tier] * blocks * firm.policies.wage_offer[tier])
+        .sum();
+    let upkeep = recipe.weekly_maintenance(dataset.maintenance_annual_bps) * blocks;
+    let land = dataset.fixture_land_rent_cents_weekly
+        * world.regions[plant.region as usize].land_index_bps as i64
+        / 10_000;
+    Some(revenue - inputs - wages - upkeep - land >= 0)
+}
+
+/// Restructure a firm's debt and its plant list together. Creditors take the haircut only
+/// against a plan: every plant that does not pay its way is mothballed, so the firm comes out
+/// with a smaller cost base, not the same one. A firm whose plants all lose money has no plan.
+fn restructure(world: &mut World, dataset: &Dataset, firm: Handle, debt: i64) -> Plan {
+    let plants: Vec<(Handle, Option<bool>)> = world
+        .firm(firm)
+        .map(|entity| {
+            entity
+                .facilities
+                .iter()
+                .copied()
+                .filter(|h| {
+                    world
+                        .facilities
+                        .get(*h)
+                        .is_some_and(|p| p.status == crate::state::FacilityStatus::Operating)
+                })
+                .map(|h| (h, plant_pays(world, dataset, h)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let judged = plants.iter().filter(|(_, pays)| pays.is_some()).count();
+    let keepers = plants
+        .iter()
+        .filter(|(_, pays)| *pays == Some(true))
+        .count();
+    if judged > 0 && keepers == 0 {
+        return Plan::NoneViable;
+    }
+    let now = world.tick;
+    for (handle, pays) in &plants {
+        if *pays == Some(false)
+            && let Some(plant) = world.facilities.get_mut(*handle)
+        {
+            crate::economy::operations::mothball(plant, now);
+        }
+    }
+    cut_debt(world, firm, debt);
+    Plan::Done
+}
+
+fn cut_debt(world: &mut World, firm: Handle, debt: i64) {
     if debt <= 0 {
         if let Some(entity) = world.firms.get_mut(firm) {
             entity.status = FirmStatus::Operating;
@@ -937,5 +1043,115 @@ mod tests {
             ),
             "grace expired with {status:?}"
         );
+    }
+
+    /// A Ruhr firm with two pipelines, and the fake week of freight each moved. Fill is lot-km
+    /// moved over lot-km of capacity, so 100 lots of capacity over the 400 km reference haul is
+    /// 40,000 lot-km, and 20,000 moved is exactly half.
+    fn pipeline_firm() -> (World, Dataset, Handle, [Handle; 2]) {
+        let dataset = Dataset::load_scenario("ruhr-rhine-1991").unwrap();
+        let mut world = seed::build(&dataset, 5, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let (firm, plants) = world
+            .firms
+            .iter()
+            .find_map(|(h, f)| {
+                let pipes: Vec<Handle> = f
+                    .facilities
+                    .iter()
+                    .copied()
+                    .filter(|p| {
+                        let r = &dataset.recipes[world.facilities.get(*p).unwrap().recipe as usize];
+                        r.transport_mode.as_deref() == Some("pipeline") && !r.terminal
+                    })
+                    .collect();
+                (pipes.len() == 2).then(|| (h, [pipes[0], pipes[1]]))
+            })
+            .expect("a Ruhr firm with two pipelines");
+        // Only the two pipelines are judged: whatever else the firm runs is put away.
+        let others: Vec<Handle> = world
+            .firm(firm)
+            .unwrap()
+            .facilities
+            .iter()
+            .copied()
+            .filter(|p| !plants.contains(p))
+            .collect();
+        for other in others {
+            world.facilities.get_mut(other).unwrap().status =
+                crate::state::FacilityStatus::Mothballed;
+        }
+        (world, dataset, firm, plants)
+    }
+
+    fn move_freight(world: &mut World, plants: [Handle; 2], used: [i64; 2]) {
+        world.logistics.carriers.clear();
+        for (plant, used_lot_km) in plants.iter().zip(used) {
+            let facility = world.facilities.get(*plant).unwrap();
+            world
+                .logistics
+                .carriers
+                .push(crate::economy::logistics::Carrier {
+                    firm: facility.firm,
+                    facility: *plant,
+                    region: facility.region,
+                    mode: 0,
+                    cap: 100,
+                    used_lot_km,
+                });
+        }
+    }
+
+    #[test]
+    fn a_restructuring_mothballs_the_carrier_that_sits_idle_and_keeps_the_one_that_fills() {
+        let (mut world, dataset, firm, plants) = pipeline_firm();
+        // Half full keeps its place; one lot in ten thousand does not (the line is 25 percent).
+        move_freight(&mut world, plants, [20_000, 4]);
+        assert_eq!(
+            restructure(&mut world, &dataset, firm, 1_000_000),
+            Plan::Done
+        );
+        let status = |w: &World, i: usize| w.facilities.get(plants[i]).unwrap().status;
+        assert_eq!(status(&world, 0), crate::state::FacilityStatus::Operating);
+        assert_eq!(status(&world, 1), crate::state::FacilityStatus::Mothballed);
+        assert_eq!(world.facilities.get(plants[1]).unwrap().workers, [0; 3]);
+        // The creditors' half of the plan still ran: a 50 percent haircut on the debt.
+        assert!(matches!(
+            world.firm(firm).unwrap().status,
+            FirmStatus::Restructuring { .. }
+        ));
+        assert!(world.firm(firm).unwrap().book.is_balanced());
+    }
+
+    #[test]
+    fn a_firm_whose_every_carrier_sits_idle_has_no_plan_and_nothing_changes() {
+        let (mut world, dataset, firm, plants) = pipeline_firm();
+        move_freight(&mut world, plants, [4, 4]);
+        let before = world.firm(firm).unwrap().status;
+        assert_eq!(
+            restructure(&mut world, &dataset, firm, 1_000_000),
+            Plan::NoneViable
+        );
+        assert!(!restructure_for_owner(
+            &mut world, &dataset, firm, 1_000_000
+        ));
+        assert_eq!(world.firm(firm).unwrap().status, before);
+        for plant in plants {
+            assert_eq!(
+                world.facilities.get(plant).unwrap().status,
+                crate::state::FacilityStatus::Operating
+            );
+        }
+    }
+
+    #[test]
+    fn a_late_bill_does_not_end_a_restructuring_early() {
+        let (mut world, _dataset, firm, _) = pipeline_firm();
+        world.firms.get_mut(firm).unwrap().status = FirmStatus::Restructuring { until: Tick(60) };
+        defer_expense(&mut world, firm, 5_000, Account::Wages, "late");
+        assert_eq!(overdue(&world.firm(firm).unwrap().book), 5_000);
+        assert!(matches!(
+            world.firm(firm).unwrap().status,
+            FirmStatus::Restructuring { .. }
+        ));
     }
 }
