@@ -65,6 +65,7 @@ object Images {
     var decode: (ByteArray) -> ImageBitmap? = { null }
     private val cache = mutableMapOf<String, ImageBitmap?>()
 
+    @Synchronized
     fun load(name: String): ImageBitmap? = cache.getOrPut(name) {
         val bytes = Images::class.java.getResourceAsStream(if ('.' in name) "/$name" else "/$name.png")?.use { it.readBytes() } ?: return@getOrPut null
         runCatching { decode(bytes) }.getOrNull()
