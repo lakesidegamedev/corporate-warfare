@@ -56,15 +56,15 @@ android() {
     export "CARGO_TARGET_${upper}_LINKER=$bin/${triple}26-clang"
     export "CC_${env_triple}=$bin/${triple}26-clang"
     export "AR_${env_triple}=$bin/llvm-ar"
-    cargo build --locked -p cw-ffi --release --target "$triple"
+    cargo build --locked -p cw-ffi --profile small --target "$triple"
     mkdir -p "$OUT/jniLibs/$abi"
-    cp "target/$triple/release/libcw_ffi.so" "$OUT/jniLibs/$abi/"
+    cp "target/$triple/small/libcw_ffi.so" "$OUT/jniLibs/$abi/"
   done
-  bindings "target/aarch64-linux-android/release/libcw_ffi.so"
+  bindings libcw_ffi.so
 }
 
 desktop() {
-  cargo build --locked -p cw-ffi --release
+  cargo build --locked -p cw-ffi --profile small
   local lib platform
   case "$(uname -s)-$(uname -m)" in
     Linux-x86_64) lib=libcw_ffi.so; platform=linux-x86-64 ;;
@@ -76,13 +76,16 @@ desktop() {
   esac
   # JNA finds a library on the classpath under its platform folder.
   mkdir -p "$OUT/desktop/$platform"
-  cp "target/release/$lib" "$OUT/desktop/$platform/"
-  bindings "target/release/$lib"
+  cp "target/small/$lib" "$OUT/desktop/$platform/"
+  bindings "$lib"
 }
 
+# The shipped libraries are stripped, which removes the metadata the generator reads, so the
+# bindings come from a debug build of the same code (a host library; the metadata is the same).
 bindings() {
+  cargo build --locked -p cw-ffi
   rm -rf "$OUT/kotlin"
-  cargo run --locked -p cw-bindgen -- generate "$1" --language kotlin --no-format --out-dir "$OUT/kotlin"
+  cargo run --locked -p cw-bindgen -- generate "target/debug/$1" --language kotlin --no-format --out-dir "$OUT/kotlin"
 }
 
 case "${1:-android}" in

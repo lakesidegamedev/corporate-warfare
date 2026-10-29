@@ -96,6 +96,10 @@ private fun bringToFront() = java.awt.EventQueue.invokeLater {
 }
 
 fun main() {
+    if (System.getenv("CW_STARTUP_TIMELINE") != null) {
+        StartupTimeline.origin = java.lang.management.ManagementFactory.getRuntimeMXBean().startTime
+    }
+    StartupTimeline.mark("main() entered")
     // One copy at a time: a second launch brings the open game forward and exits (SingleInstance).
     when (SingleInstance.start(saveDirectory(), onActivate = ::bringToFront)) {
         is SingleInstance.Start.First -> Unit
@@ -139,16 +143,20 @@ private fun game() = application {
             frontWindow = window
             Splash(progress, stage)
             LaunchedEffect(Unit) {
+                StartupTimeline.mark("launcher window shown")
                 withContext(Dispatchers.Default) {
                     stage = "Starting the engine"
                     runCatching { uniffi.cw_ffi.engineInfo() }
+                    StartupTimeline.mark("engine loaded")
                     progress = 0.35f
                     stage = "Loading the world map"
                     WorldMap.shared
+                    StartupTimeline.mark("world map loaded")
                     progress = 0.85f
                     stage = "Drawing the icons"
                     SectorIcons.all
                     PixelLogo.file
+                    StartupTimeline.mark("icons loaded")
                     progress = 1f
                 }
                 loaded = true
@@ -175,6 +183,7 @@ private fun game() = application {
         state = state,
     ) {
         frontWindow = window
+        StartupTimeline.mark("game window composing")
         // The frame counter shows which Skia backend draws this window.
         androidx.compose.runtime.DisposableEffect(window) {
             RenderInfo.backend = window.renderApi.name
