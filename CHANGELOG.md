@@ -13,6 +13,10 @@ heading.
 
 ### Changed
 
+- Export ports grow with use. When a state's exports of a good fill its port for a week, the
+  port gains one percent more room, so surpluses no longer pile up at a port sized for the
+  plants that ran at the start. Grain, for example, now leaves the corridor instead of sitting
+  in silos at a discount.
 - Markets respond to real supply and demand. A good stops creeping above its normal price just
   because sellers sold out: prices now rise only when the factories that buy it are actually short,
   and fall when unsold stock piles up beyond a few weeks of sales, by at most 2 percent a week.
