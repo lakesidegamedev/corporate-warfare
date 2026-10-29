@@ -83,6 +83,7 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
         store.preferredCurrency = settings.reportingCurrency
         store.pauseOnWarnings = settings.pauseOnWarnings
         store.onCurrencyChosen = { settings.chooseReportingCurrency(it) }
+        store.onCareerEnded = { settings.recordCareer(it) }
         val installId = settings.installId
         store.snapshotSink = if (analytics) {
             { json -> Telemetry.post(Telemetry.envelope(installId, BuildInfo.VERSION, BuildInfo.CHANNEL, json)) }
@@ -194,6 +195,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
                     "actions" -> CommandCenterScreen(store)
                     "research" -> ResearchScreen(store)
                     "paper" -> PaperScreen(store)
+                    "hall" -> HallScreen(store)
                     else -> StatsScreen(store) { overlay = null }
                 }
             }
@@ -302,6 +304,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedButton(onClick = { onOpen("research") }) { Text("Research", color = Palette.primaryText, fontSize = 12.sp) }
                         OutlinedButton(onClick = { onOpen("stats") }) { Text("Stats", color = Palette.primaryText, fontSize = 12.sp) }
+                        OutlinedButton(onClick = { onOpen("hall") }) { Text("Hall", color = Palette.primaryText, fontSize = 12.sp) }
                         GoldButton("Actions") { onOpen("actions") }
                     }
                 }
@@ -311,6 +314,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
             item { FoundCompanyPanel(store, scroll = false) }
             return@TabList
         }
+        chapterItems(store)
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectorBadge(firm.industry, 40)

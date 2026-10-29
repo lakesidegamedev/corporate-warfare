@@ -450,6 +450,7 @@ struct StartView: View {
     @State private var showingSettings = false
     @State private var showingSaves = false
     @State private var showingEditor = false
+    @State private var showingCareers = false
     @State private var export: DiagnosticExport?
 
     private var version: String {
@@ -471,6 +472,9 @@ struct StartView: View {
         }
         .sheet(isPresented: $showingEditor) {
             ScenarioEditorView().environmentObject(store)
+        }
+        .sheet(isPresented: $showingCareers) {
+            CareerListView()
         }
         .sheet(isPresented: $showingSaves) {
             SavesView().environmentObject(store)
@@ -515,6 +519,9 @@ struct StartView: View {
                         MenuButton(title: "New game", primary: store.saves.isEmpty) { screen = .newGame }
                         if !store.saves.isEmpty {
                             MenuButton(title: "Load game") { showingSaves = true }
+                        }
+                        if !CareerSummary.load().isEmpty {
+                            MenuButton(title: "Hall of Careers") { showingCareers = true }
                         }
                         MenuButton(title: "Scenario editor") { showingEditor = true }
                         MenuButton(title: "Settings") { showingSettings = true }

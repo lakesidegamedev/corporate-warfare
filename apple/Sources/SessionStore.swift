@@ -202,6 +202,10 @@ actor Engine {
         session?.objective()
     }
 
+    func hallOfCareers() -> HallDto? {
+        session?.hallOfCareers()
+    }
+
     func objectiveHistory() -> [ObjectiveResultDto] {
         session?.objectiveHistory() ?? []
     }
