@@ -36,6 +36,8 @@ fn main() {
     let mut split: BTreeMap<u32, [(i64, i64); 3]> = BTreeMap::new();
     // final year: lot-km used, lot-km capacity, outside leg lots, all leg lots.
     let mut freight = [0i64; 4];
+    // year -> export value (numeraire cents), export lots, raids, successful raids, firm exits.
+    let mut trade: BTreeMap<u32, [i64; 5]> = BTreeMap::new();
     for seed in 1..=seeds {
         let config = cw_session::ScenarioConfig {
             seed,
@@ -48,6 +50,7 @@ fn main() {
             prices: Default::default(),
         };
         let mut session = cw_session::Session::create(config).unwrap();
+        let mut alive: Vec<u64> = Vec::new();
         for week in 1..=weeks {
             let r = session.advance(1);
             if r.pause.is_some() {
@@ -58,6 +61,30 @@ fn main() {
             }
             let world = &session.world;
             let dataset = &session.dataset;
+            {
+                let year = (week - 1) / 52 + 1;
+                let row = trade.entry(year).or_default();
+                for gateway in world.gateways.iter().filter(|g| g.last_export_lots > 0) {
+                    row[0] += cw_sim::economy::fx::region_to_numeraire(
+                        world,
+                        dataset,
+                        gateway.region,
+                        gateway.last_export_lots * gateway.buy_price_cents,
+                    );
+                    row[1] += gateway.last_export_lots;
+                }
+                let now: Vec<u64> = world
+                    .firms
+                    .iter()
+                    .filter(|(_, f)| f.operative())
+                    .map(|(h, _)| h.0)
+                    .collect();
+                row[4] += alive
+                    .iter()
+                    .filter(|h| now.binary_search(h).is_err())
+                    .count() as i64;
+                alive = now;
+            }
             if week % 13 == 0 {
                 // Board-wide price level and losing share by year, to show drift or collapse.
                 let year = (week - 1) / 52 + 1;
@@ -75,6 +102,14 @@ fn main() {
                 for good in snapshot.goods.iter().filter(|g| g.sold_lots > 0) {
                     entry.2 += good.median_ask_cents * 10_000 / good.reference_cents.max(1);
                     entry.3 += 1;
+                }
+            }
+            if week == weeks {
+                for raid in &world.raids {
+                    let year = (raid.tick.max(1) - 1) / 52 + 1;
+                    let row = trade.entry(year as u32).or_default();
+                    row[2] += 1;
+                    row[3] += raid.success as i64;
                 }
             }
             if week + 52 <= weeks {
@@ -176,6 +211,21 @@ fn main() {
             cell(kinds[1]),
             cell(kinds[2]),
             (ask / goods.max(&1) - 10_000) / 100
+        );
+    }
+    println!(
+        "by year: exports a week (value at the gateway bid in numeraire, lots), raids (successful), \
+         firms that stopped operating; totals over all seeds"
+    );
+    for (year, row) in &trade {
+        let n = (seeds as i64 * 52).max(1);
+        println!(
+            "  year {year}: exports ${}k / {} lots a week per seed  raids {} ({})  exits {}",
+            row[0] / n / 100_000,
+            row[1] / n,
+            row[2],
+            row[3],
+            row[4]
         );
     }
 }
