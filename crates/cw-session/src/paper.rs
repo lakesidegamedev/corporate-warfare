@@ -316,7 +316,7 @@ pub fn weekly_paper(world: &World, dataset: &Dataset, week: u32) -> Paper {
     labour_and_news(world, week, &mut found);
     rate_decisions(world, week, &mut found);
     incidents(world, week, &mut found);
-    timeline(world, week, &mut found);
+    timeline(world, dataset, week, &mut found);
     politics(world, week, &mut found);
     distress(world, week, &mut found);
     results(world, dataset, week, &mut found);
@@ -331,7 +331,7 @@ pub fn weekly_paper(world: &World, dataset: &Dataset, week: u32) -> Paper {
     let lead = stories.next();
     let briefs = stories.take(MAX_BRIEFS).collect();
 
-    let scenario = world.cast.scenario_id.as_str();
+    let scenario = dataset.scenario_id.as_str();
     let at = Tick(week);
     Paper {
         week,
@@ -684,8 +684,8 @@ fn incidents(world: &World, week: u32, out: &mut Vec<Candidate>) {
     }
 }
 
-fn timeline(world: &World, week: u32, out: &mut Vec<Candidate>) {
-    let masthead = masthead_for(world.cast.scenario_id.as_str());
+fn timeline(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) {
+    let masthead = masthead_for(dataset.scenario_id.as_str());
     for event in &world.systemic.timeline.events {
         if event.fired_at != 0 && in_window(event.fired_at, week) {
             out.push(candidate(
@@ -1114,7 +1114,6 @@ mod tests {
     #[test]
     fn a_timeline_notice_becomes_a_hint() {
         let mut s = quiet("texas-1981", 58);
-        s.world.cast.scenario_id = "texas-1981".to_owned();
         s.world.systemic.timeline.events.push(LiveEvent {
             id: "test-bank-failure".to_owned(),
             title: "Penn Square style bank failure".to_owned(),
