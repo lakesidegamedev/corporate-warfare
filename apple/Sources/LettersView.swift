@@ -74,11 +74,11 @@ struct LetterRow: View {
             }
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 4) {
-                Text(ResultBuckets.weekLabel(Int(letter.week)))
+                Text(ResultBuckets.weekLabel(letter.week))
                     .font(Pixel.font(10)).foregroundStyle(Theme.secondary)
                 if letter.event != nil {
                     SignalPill(
-                        text: letter.mandatory ? "Due \(ResultBuckets.weekLabel(Int(letter.deadline)))" : "Reply",
+                        text: letter.mandatory ? "Due \(ResultBuckets.weekLabel(letter.deadline))" : "Reply",
                         tint: letter.mandatory ? Theme.warning : Theme.gold
                     )
                 }
@@ -107,13 +107,13 @@ struct LetterPaperView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text((letter.sender.organisation.isEmpty ? letter.sender.role : letter.sender.organisation).uppercased())
                         .font(Pixel.font(17)).tracking(0.6).foregroundStyle(Stationery.ink)
-                    Text([letter.sender.role, ResultBuckets.weekLabel(Int(letter.week))]
+                    Text([letter.sender.role, ResultBuckets.weekLabel(letter.week)]
                         .filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.caption).foregroundStyle(Stationery.faded)
                 }
                 Spacer(minLength: 0)
                 if letter.event != nil && letter.mandatory {
-                    Text("DUE \(ResultBuckets.weekLabel(Int(letter.deadline)))")
+                    Text("DUE \(ResultBuckets.weekLabel(letter.deadline))")
                         .font(Pixel.font(11)).foregroundStyle(Stationery.seal)
                 }
             }
