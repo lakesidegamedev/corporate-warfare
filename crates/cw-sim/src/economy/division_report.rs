@@ -113,7 +113,29 @@ pub fn report(
     region: u8,
     industry: u8,
 ) -> Option<DivisionReport> {
-    build(world, dataset, firm, region, industry, true)
+    build(
+        world,
+        dataset,
+        firm,
+        region,
+        industry,
+        true,
+        &mut Corridors::default(),
+    )
+}
+
+/// Corridor prices read once per good for many reports against one unchanged world.
+#[derive(Default)]
+pub struct Corridors(Vec<Option<i64>>);
+
+impl Corridors {
+    fn get(&mut self, world: &World, dataset: &Dataset, code: u16) -> i64 {
+        let i = code as usize;
+        if self.0.len() <= i {
+            self.0.resize(i + 1, None);
+        }
+        *self.0[i].get_or_insert_with(|| pricing::corridor_price(world, dataset, code))
+    }
 }
 
 /// The figures the weekly records keep, at a fraction of the report's cost: revenue, costs,
@@ -125,8 +147,9 @@ pub fn figures(
     firm: Handle,
     region: u8,
     industry: u8,
+    corridors: &mut Corridors,
 ) -> Option<DivisionReport> {
-    build(world, dataset, firm, region, industry, false)
+    build(world, dataset, firm, region, industry, false, corridors)
 }
 
 fn build(
@@ -136,6 +159,7 @@ fn build(
     region: u8,
     industry: u8,
     detail: bool,
+    corridors: &mut Corridors,
 ) -> Option<DivisionReport> {
     let entity = world.firms.get(firm)?;
     let plant_handles = sectors::division_plants(world, dataset, firm, region, industry);
@@ -213,7 +237,7 @@ fn build(
         } else {
             held.map(|l| l.qty.0).unwrap_or(0)
         };
-        let corridor = pricing::corridor_price(world, dataset, code);
+        let corridor = corridors.get(world, dataset, code);
         let group_seller = world
             .structure
             .links

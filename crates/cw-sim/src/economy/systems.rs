@@ -299,12 +299,13 @@ fn division_weeks(
     dataset: &Dataset,
     firm: Handle,
     shares: &mut crate::economy::sectors::ShareCache,
+    corridors: &mut crate::economy::division_report::Corridors,
 ) -> Vec<DivisionWeek> {
     crate::economy::sectors::divisions_of(world, dataset, firm)
         .into_iter()
         .map(|d| {
             let report = crate::economy::division_report::figures(
-                world, dataset, firm, d.region, d.industry,
+                world, dataset, firm, d.region, d.industry, corridors,
             );
             let (made, sold, revenue, profit) = report
                 .as_ref()
@@ -413,9 +414,10 @@ pub fn record(world: &mut World, dataset: &Dataset) {
         .map(|(h, _)| h)
         .collect();
     let mut shares = crate::economy::sectors::ShareCache::default();
+    let mut corridors = crate::economy::division_report::Corridors::default();
     let divisions = players
         .iter()
-        .flat_map(|h| division_weeks(world, dataset, *h, &mut shares))
+        .flat_map(|h| division_weeks(world, dataset, *h, &mut shares, &mut corridors))
         .collect();
     let freight = players.iter().map(|h| freight_week(world, *h)).collect();
     let entry = SystemsWeek {
@@ -497,6 +499,7 @@ mod tests {
                 .collect();
             assert_eq!(goods_week(&world, &dataset), one_at_a_time);
             let mut shares = crate::economy::sectors::ShareCache::default();
+            let mut corridors = crate::economy::division_report::Corridors::default();
             for (h, _) in world.firms.iter() {
                 for d in crate::economy::sectors::divisions_of(&world, &dataset, h) {
                     let full = crate::economy::division_report::report(
@@ -504,7 +507,12 @@ mod tests {
                     )
                     .unwrap();
                     let lean = crate::economy::division_report::figures(
-                        &world, &dataset, h, d.region, d.industry,
+                        &world,
+                        &dataset,
+                        h,
+                        d.region,
+                        d.industry,
+                        &mut corridors,
                     )
                     .unwrap();
                     assert_eq!(full.revenue_cents, lean.revenue_cents);
