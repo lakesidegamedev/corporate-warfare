@@ -115,7 +115,7 @@ pub fn decode_with(
     }
     cursor += 4;
     let schema = read_u32(bytes, &mut cursor)?;
-    if schema > SCHEMA_VERSION || schema < MIN_SCHEMA_VERSION {
+    if !(MIN_SCHEMA_VERSION..=SCHEMA_VERSION).contains(&schema) {
         return Err(DomainError::UnsupportedVersion {
             found: schema,
             supported: SCHEMA_VERSION,
