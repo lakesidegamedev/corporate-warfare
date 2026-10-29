@@ -7,7 +7,7 @@ set -uo pipefail
 stamp() { echo "[$(date +%H:%M:%S)] $*"; }
 cd "$(dirname "$0")/.."
 PKG=net.lakesidegames.corporatewarfare
-OUT="${SMOKE_OUT:-$PWD/../build/smoke}"
+OUT="${SMOKE_OUT:-$PWD/build/smoke}"
 mkdir -p "$OUT"
 exec > >(tee "$OUT/run.txt") 2>&1
 BAD='FATAL EXCEPTION|UnsatisfiedLinkError|ClassNotFoundException|NoSuchMethodError|NoClassDefFoundError'
@@ -47,7 +47,18 @@ check_log "$OUT/logcat-launch.txt" "$PID"
 
 echo "instrumented test against the shrunk build"
 adb logcat -c
-stamp "instrumented run"; timeout 1200 ./gradlew --no-daemon :androidApp:connectedReleaseAndroidTest -Pcw.smoke=true || { echo "::error::instrumented test failed"; fail=1; }
+stamp "instrumented run"
+TESTAPK=$(ls androidApp/build/outputs/apk/androidTest/release/*.apk | head -1)
+timeout 180 adb install -r -t "$TESTAPK" || { echo "::error::test APK did not install"; fail=1; }
+# Driven with adb, not Gradle: Gradle waits forever when the instrumentation process dies on start.
+timeout 600 adb shell am instrument -w -r "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tee "$OUT/instrument.txt"
+R="$OUT/instrument.txt"
+if grep -q "INSTRUMENTATION_STATUS_CODE: 0" "$R" && grep -q "INSTRUMENTATION_CODE: -1" "$R" \
+  && ! grep -q "INSTRUMENTATION_STATUS_CODE: -[12]" "$R" && ! grep -q "Process crashed" "$R"; then
+  echo "instrumented test passed"
+else
+  echo "::error::instrumented test failed"; fail=1
+fi
 timeout 60 adb logcat -d -v threadtime > "$OUT/logcat-test.txt"
 check_log "$OUT/logcat-test.txt" ""
 exit $fail

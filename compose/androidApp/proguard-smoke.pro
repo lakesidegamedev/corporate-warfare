@@ -7,3 +7,5 @@
 -keep class kotlinx.coroutines.Dispatchers { public *; }
 -keep class kotlinx.coroutines.CoroutineDispatcher
 -keep class kotlin.coroutines.CoroutineContext
+# The test runner's Kotlin code calls the compiler's null-check helpers, which R8 otherwise trims.
+-keep,allowobfuscation class kotlin.jvm.internal.** { *; }

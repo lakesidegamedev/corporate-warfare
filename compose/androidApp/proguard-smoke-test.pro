@@ -3,3 +3,4 @@
 -keep class net.lakesidegames.corporatewarfare.ShrunkEngineTest { *; }
 -keep class androidx.test.** { *; }
 -dontwarn androidx.test.**
+-dontobfuscate
