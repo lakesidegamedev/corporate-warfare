@@ -51,7 +51,7 @@ internal fun BriefPanel(store: GameStore, currency: String) {
             Text(
                 if (store.briefCollapsed) "Show" else "Hide",
                 color = Palette.secondary, fontSize = 12.sp,
-                modifier = Modifier.clickable { store.setBriefCollapsed(!store.briefCollapsed) }.padding(4.dp),
+                modifier = Modifier.clickable { store.foldBrief(!store.briefCollapsed) }.padding(4.dp),
             )
         }
         if (!store.briefCollapsed) {

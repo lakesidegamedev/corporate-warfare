@@ -722,7 +722,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     /** Read the brief now, for the panel when it opens or the weekly pop-up. */
     fun refreshBrief() { scope.launch { loadBrief(force = true) } }
 
-    fun setBriefCollapsed(value: Boolean) {
+    fun foldBrief(value: Boolean) {
         briefCollapsed = value
         onBriefCollapsed(value)
         if (!value) refreshBrief()
