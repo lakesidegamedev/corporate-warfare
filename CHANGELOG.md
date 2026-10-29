@@ -13,6 +13,25 @@ heading.
 
 ### Added
 
+- Earnings season. Every listed company now reports each quarter. At the start of the quarter an
+  analyst writes an estimate of its operating profit from its trend, its sector and a little
+  luck, so estimates can miss. On results day the share price moves on the surprise: a beat lifts
+  it, a miss drops it, bigger surprises and repeated surprises move it more, and no move is ever
+  more than 12 percent. Prices move and nothing else: no money is created or lost. Each listed
+  company has an analyst rating (buy, hold or sell) from its value against its price. Company
+  pages show the estimate, the last results against it, the rating and when it reports, and the
+  stock board marks companies reporting this week. The weekly brief lists "Results in 5 weeks:
+  analysts expect $X" under what is due, the paper runs the biggest surprises, and the analyst
+  writes to you before and after your own results.
+- Guidance. On your company's page, Give guidance tells the analysts a range for the quarter's
+  operating profit and explains the risk first. They move their estimate toward the middle of the
+  range. Meet the low end and the market trusts your numbers more, so a later miss moves the
+  price less. Miss it and the company loses reputation and trust, and a second miss in a row (or a
+  deep one) brings activist investors. A low end well under what the analysts expect is seen as sandbagging and earns no trust.
+  Rival companies give guidance too, with the same rules.
+- Short campaigns. A company whose price runs to twice what it is worth, yours included, can
+  now draw an activist campaign against it, which knocks a few percent off the price when it
+  opens and then runs like any other activist campaign.
 - Developer: the stylized map renderer (`cw-render`, not yet in the apps) now draws the real interstates, main roads and railways from the 1.8 map data (interstates are the only prominent roads: grey asphalt with a darker edge and a gold dashed centre line only at the closest zoom; main roads appear only at the closest zoom as a faint line one step off the ground colour; thin light rails with sleepers only at the closest zoom; widths in whole screen pixels, laid on the terrace heights with short ramps at walls; each zoom band simplifies and merges near-parallel roads, builds its own tiles and draws only the tiles in view), a light pixel texture per ground type that fades out as the camera pulls back (forest canopy, field rows only north-south or east-west on half the fields, no diagonals, and gold holdings let the land show through), real city footprints from Natural Earth urban areas with street grids and small downtown blocks, world-space wave dashes, a highlight on terrace wall tops, and the 1.8 cloud levels (off, thin, light, heavy; default light, thinner than before, with an outline, underside band and ground shadow, and none at the closest zoom). Six draw calls. New bake tool `tools/render_bake_urban.py`.
 - Executives. Every company can hire a chief financial officer, a chief operating officer and a
   logistics chief, and your rivals do too. Each is a named person with a portrait, a level from 1 to
@@ -197,9 +216,25 @@ heading.
   so moving the map no longer waits on drawing. A fresh picture replaces it a moment later.
 - A new install with no graphics choice saved starts on Medium when the window is large or the
   computer is drawing in software, so the first look is smooth. Your own choice is never changed.
+- Tooling: a 1.9 cast proposal, not wired into the game. `content/cast-1.9.json` lists 40 fictional people (ten per scenario, with voice notes), `tools/cast_portraits_v2.py` draws 32 by 32 busts with neutral, pleased and displeased expressions, a derived 16 by 16 version, 64 by 64 office portraits for chief executives and a larger extras kit, written to `apple/Resources/cast-portraits-v2.json`. Awaiting owner approval of the roster and portraits. Second pass: clearer pleased and displeased faces, seven head shapes with varied noses, eye spacing, ears and necks, softer women's faces with jewellery, repainted 64 by 64 office portraits with a trade object on the wall, era clothing, lifted deep skin tones and unique names in the extras sample.
 
 ### Fixed
 
+- The outside world no longer runs out of money. It used to buy your exports and keep them on its
+  books forever while its cash only fell: in Texas it dropped from $855 million to $360 million in
+  four years, in Great Lakes from $463 million to $201 million in five, and once it was empty
+  exports would have stopped. It now sells what it buys on to the rest of the world, a thirteenth of
+  its stock a week, at what it paid. Over thirty years in every scenario its account stays level or
+  grows, and it never limits what you can export.
+- Carriers fit their lanes better. Rivals no longer all build a ship or a pipeline for the same
+  busy lane in the same quarter, and a rival whose carrier is under a quarter full and who is losing
+  money shuts it down (it opens again when the lane gets busy). You can do the same with Mothball.
+- A restructuring now changes something. Companies in restructuring used to come back after a few
+  weeks with the same plants and the same costs, took another 50 percent off their debt, and did it
+  again, over and over (94 percent of firms leaving the market in a five year Ruhr run were these).
+  Now a restructuring lasts its full year, plants that lose money are closed down, and a company
+  with nothing worth keeping is wound up instead. The same applies to you.
+- The Windows setup program's licence page now says that the game sends an anonymous market summary you can switch off, instead of saying it sends nothing.
 - New careers on Windows, Linux and Android no longer stop with an engine error around week 5. The inbox asked for letters from a week before the career began, which the engine could not count back to. Found by the new Android emulator check.
 - Each scenario now opens in the money conditions of its own time. Texas 1981 starts with
   inflation near 10 percent and interest rates near 16 percent, and both fall over the next

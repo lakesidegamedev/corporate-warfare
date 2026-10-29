@@ -1,0 +1,845 @@
+{
+  "schema": 2,
+  "classification": "authored game content; fictional people, no real individuals",
+  "note": "PROPOSAL for 1.9, awaiting owner approval, not wired into the game. Forty named fictional people, ten per scenario, drawn by tools/cast_portraits_v2.py. Same schema as content/cast.json plus voice (how the person writes a letter), expressions (neutral, pleased, displeased), office_portrait (a 64 by 64 portrait for the CEO office) and hire_note (one-line trait for executives for hire). The twelve existing people keep their names, backgrounds, temperaments, roles and stances. Roles beyond the old four: union_leader, journalist, analyst, cfo, coo, logistics.",
+  "people": [
+    {
+      "id": "dennis_halloran",
+      "name": "Dennis Halloran",
+      "age": 53,
+      "scenario": "great-lakes-2000",
+      "home": "Milwaukee, Wisconsin",
+      "state": "WI",
+      "temperament": "raider",
+      "roles": [
+        "ceo"
+      ],
+      "background": "Corporate lawyer who switched sides and now buys unloved divisions of old manufacturers at a discount. He is polite in every meeting and ruthless in every footnote.",
+      "voice": "polished and courteous, an offer dressed as a compliment",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "gloria_abernathy",
+      "name": "Gloria Abernathy",
+      "age": 66,
+      "scenario": "great-lakes-2000",
+      "home": "Chicago, Illinois",
+      "state": "IL",
+      "temperament": "financier",
+      "roles": [
+        "ceo",
+        "chair"
+      ],
+      "stance": -40,
+      "background": "Spent 25 years as an economist at a regional reserve bank, then ran a Chicago commercial lender. She argues that tight money hurts factory towns first.",
+      "voice": "professorial and patient, explains the reasoning before the ask",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "helen_kowalczyk",
+      "name": "Helen Kowalczyk",
+      "age": 58,
+      "scenario": "great-lakes-2000",
+      "home": "Cleveland, Ohio",
+      "state": "OH",
+      "temperament": "cautious",
+      "roles": [
+        "ceo",
+        "chair",
+        "leader"
+      ],
+      "stance": 60,
+      "background": "Daughter of a steelworker, she became chief financial officer and then chief executive of a Cleveland steel maker. She keeps large cash reserves and wants slow, predictable growth.",
+      "voice": "calm and plain, reserves and dates first",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "kenji_watanabe_moore",
+      "name": "Kenji Watanabe-Moore",
+      "age": 44,
+      "scenario": "great-lakes-2000",
+      "home": "Detroit, Michigan",
+      "state": "MI",
+      "temperament": "builder",
+      "roles": [
+        "ceo",
+        "governor",
+        "leader"
+      ],
+      "background": "Runs an auto-parts supplier his mother's family started, and has opened three new plants in a decade. He prefers adding capacity to buying competitors.",
+      "voice": "polite and practical, talks about plants and crews",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "adaora_nwosu",
+      "name": "Adaora Nwosu",
+      "age": 41,
+      "scenario": "great-lakes-2000",
+      "home": "Detroit, Michigan",
+      "state": "MI",
+      "temperament": "raider",
+      "roles": [
+        "journalist"
+      ],
+      "background": "Business reporter who covered the auto suppliers for ten years and was first to report two plant closures. She is fair, relentless and reads every filing to the end.",
+      "voice": "crisp, the quote first and the numbers after",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "carol_metzger",
+      "name": "Carol Metzger",
+      "age": 61,
+      "scenario": "great-lakes-2000",
+      "home": "Indianapolis, Indiana",
+      "state": "IN",
+      "temperament": "builder",
+      "roles": [
+        "governor",
+        "leader"
+      ],
+      "background": "Two-term state senator and former county auditor known for balanced budgets and quiet deals on highways and plant incentives. She asks every delegation how many jobs, and for how long.",
+      "voice": "friendly and practical, one number and one deadline",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "daniel_hsieh",
+      "name": "Daniel Hsieh",
+      "age": 39,
+      "scenario": "great-lakes-2000",
+      "home": "Chicago, Illinois",
+      "state": "IL",
+      "temperament": "financier",
+      "roles": [
+        "analyst"
+      ],
+      "background": "Former commodities trader who now publishes a widely read industrial index from a one-room office. His steel and freight forecasts are right more often than the banks own.",
+      "voice": "terse, charts attached, one line of caution",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "darnell_pierce",
+      "name": "Darnell Pierce",
+      "age": 52,
+      "scenario": "great-lakes-2000",
+      "home": "Gary, Indiana",
+      "state": "IN",
+      "temperament": "builder",
+      "roles": [
+        "union_leader"
+      ],
+      "background": "Third-generation steelworker who rose from the mill floor to president of a large local. He bargains from the pension table outward and has kept two plants open with wage freezes the members voted for themselves.",
+      "voice": "direct and rhythmic, short sentences that land one at a time",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "frank_pietrowski",
+      "name": "Frank Pietrowski",
+      "age": 56,
+      "scenario": "great-lakes-2000",
+      "home": "Toledo, Ohio",
+      "state": "OH",
+      "temperament": "builder",
+      "roles": [
+        "coo"
+      ],
+      "background": "Started as a line supervisor at an auto-parts plant and spent 30 years learning why plants run late. He knows every foreman by name and every machine by its sound.",
+      "voice": "plain, written like a shift report",
+      "hire_note": "Raises plant output and uptime; pushes crews hard and resists outsourcing.",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "meredith_lahti",
+      "name": "Meredith Lahti",
+      "age": 48,
+      "scenario": "great-lakes-2000",
+      "home": "Duluth, Minnesota",
+      "state": "MN",
+      "temperament": "cautious",
+      "roles": [
+        "logistics"
+      ],
+      "background": "Grew up around the ore docks and now runs lake shipping and rail scheduling for a freight group. She plans around ice, locks and weather months ahead.",
+      "voice": "calm and practical, a backup plan attached to every request",
+      "hire_note": "Smooths freight costs across lake and rail lanes; slow to commit to new routes.",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "cassandra_rutledge",
+      "name": "Cassandra Rutledge",
+      "age": 46,
+      "scenario": "texas-1981",
+      "home": "Midland, Texas",
+      "state": "TX",
+      "temperament": "speculator",
+      "roles": [
+        "ceo"
+      ],
+      "background": "Geologist's daughter who drilled her first wildcat well at 29 on borrowed money and has struck oil in three of her last eight. She rolls every strike straight into the next well and treats a dry hole as the price of a ticket.",
+      "voice": "breezy and quick, the latest rumour in the postscript",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "desmond_broussard",
+      "name": "Desmond Broussard",
+      "age": 55,
+      "scenario": "texas-1981",
+      "home": "Baton Rouge, Louisiana",
+      "state": "LA",
+      "temperament": "financier",
+      "roles": [
+        "ceo",
+        "chair",
+        "governor"
+      ],
+      "stance": 25,
+      "background": "Former Louisiana state treasurer who now runs a pipeline and petrochemical lender. He knows which Gulf operators are over-borrowed and prices loans accordingly.",
+      "voice": "courtly and exact, lists every rate and covenant",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "marisol_ybarra",
+      "name": "Marisol Ybarra",
+      "age": 47,
+      "scenario": "texas-1981",
+      "home": "Houston, Texas",
+      "state": "TX",
+      "temperament": "integrator",
+      "roles": [
+        "ceo",
+        "chair",
+        "governor",
+        "leader"
+      ],
+      "stance": -10,
+      "background": "Chemical engineer from Rice who rose to run refining at a Houston major. She ties wells, pipelines and refineries into one chain and favours steady credit over tight money.",
+      "voice": "clear and organised, the whole supply chain in one paragraph",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "walter_pruitt",
+      "name": "Walter Pruitt",
+      "age": 61,
+      "scenario": "texas-1981",
+      "home": "Tulsa, Oklahoma",
+      "state": "OK",
+      "temperament": "raider",
+      "roles": [
+        "ceo",
+        "governor"
+      ],
+      "background": "Ran a small drilling contractor for 30 years and bought distressed leases whenever prices fell. He is blunt, distrusts banks, and is happiest taking a rival's rigs at auction.",
+      "voice": "blunt and short, one sentence per point, no greeting",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "anil_deshpande",
+      "name": "Anil Deshpande",
+      "age": 38,
+      "scenario": "texas-1981",
+      "home": "Houston, Texas",
+      "state": "TX",
+      "temperament": "financier",
+      "roles": [
+        "analyst"
+      ],
+      "background": "Petroleum engineer turned brokerage analyst who models reserves well by well and never trusts a press release. His buy and sell notes are read on every Gulf Coast trading floor before the market opens.",
+      "voice": "tabular and footnoted, one sentence of opinion at the end",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "evelyn_hollis",
+      "name": "Evelyn Hollis",
+      "age": 49,
+      "scenario": "texas-1981",
+      "home": "Dallas, Texas",
+      "state": "TX",
+      "temperament": "raider",
+      "roles": [
+        "journalist"
+      ],
+      "background": "Business editor of a Dallas daily who made her name by reading oil companies' footnotes before anyone else did. Her columns have moved lease prices, and nobody is sure whether she minds.",
+      "voice": "dry and exact, a pointed question in the last line",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "lionel_abrams",
+      "name": "Lionel Abrams",
+      "age": 57,
+      "scenario": "texas-1981",
+      "home": "Dallas, Texas",
+      "state": "TX",
+      "temperament": "cautious",
+      "roles": [
+        "cfo"
+      ],
+      "background": "Spent 25 years as a bank credit officer before moving to the finance side of two drilling firms. He has lived through three busts and will tell any board exactly how much debt each one can survive.",
+      "voice": "measured and numbered, risks listed one to five",
+      "hire_note": "Lowers borrowing costs and flags over-borrowing early; slow to approve new capital spending.",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "odell_tibbs",
+      "name": "Odell Tibbs",
+      "age": 57,
+      "scenario": "texas-1981",
+      "home": "Port Arthur, Texas",
+      "state": "TX",
+      "temperament": "builder",
+      "roles": [
+        "union_leader"
+      ],
+      "background": "Started on the maintenance crew of a Gulf Coast refinery at 19 and has led the local through two strikes and one near miss. He trades hard on overtime and safety, and keeps his word to the foreman as carefully as to the members.",
+      "voice": "plain and warm, speaks for the crew and says \"we\"",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "raymond_delgado",
+      "name": "Raymond Delgado",
+      "age": 63,
+      "scenario": "texas-1981",
+      "home": "San Antonio, Texas",
+      "state": "TX",
+      "temperament": "cautious",
+      "roles": [
+        "governor",
+        "leader"
+      ],
+      "background": "Former county judge who spent two decades getting roads, water lines and a university campus built across South Texas. He prefers a signed contract to a speech, and he has never run a deficit he could not explain.",
+      "voice": "courteous and formal, three short paragraphs and a full signature",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "teresa_villanueva",
+      "name": "Teresa Villanueva",
+      "age": 45,
+      "scenario": "texas-1981",
+      "home": "Corpus Christi, Texas",
+      "state": "TX",
+      "temperament": "builder",
+      "roles": [
+        "logistics"
+      ],
+      "background": "Began as a dispatcher for a pipeline company and now schedules crude, rail cars and tankers for a living. She can tell from a map which terminal will clog first.",
+      "voice": "brisk, dates and quantities in the first line",
+      "hire_note": "Cuts shipping costs and bottlenecks on pipeline and rail lanes; pushes hard on buying capacity.",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "joel_rosenthal",
+      "name": "Joel Brandvold",
+      "age": 52,
+      "scenario": "silicon-valley-1995",
+      "home": "Los Angeles, California",
+      "state": "CA",
+      "temperament": "speculator",
+      "roles": [
+        "ceo",
+        "chair"
+      ],
+      "stance": -75,
+      "background": "Venture investor who made money early in cable and software, and lost some of it in a 1987 crash. He backs fast growth and cheap credit, and trades his own stakes often.",
+      "voice": "chatty and confident, rounds every number up",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "leonard_hirsch",
+      "name": "Leonard Hirsch",
+      "age": 62,
+      "scenario": "silicon-valley-1995",
+      "home": "Santa Clara, California",
+      "state": "CA",
+      "temperament": "cautious",
+      "roles": [
+        "ceo"
+      ],
+      "background": "Engineer who has run an old instrument maker for 20 years and survived two chip downturns by keeping cash in the bank. He thinks the current frenzy will end badly and prefers reliable products at a fair margin.",
+      "voice": "careful and old-fashioned, never a superlative",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "linh_tran",
+      "name": "Linh Tran",
+      "age": 34,
+      "scenario": "silicon-valley-1995",
+      "home": "Oakland, California",
+      "state": "CA",
+      "temperament": "speculator",
+      "roles": [
+        "ceo",
+        "governor"
+      ],
+      "background": "Software founder who sold her first company at 27 and put the money into three new ones. She chases unproven markets and changes direction quickly.",
+      "voice": "fast and informal, new idea in every second paragraph",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "priya_raman",
+      "name": "Priya Raman",
+      "age": 39,
+      "scenario": "silicon-valley-1995",
+      "home": "San Jose, California",
+      "state": "CA",
+      "temperament": "integrator",
+      "roles": [
+        "ceo",
+        "governor",
+        "leader"
+      ],
+      "background": "Chip designer who moved into management and now runs a firm making both processors and the boards around them. She likes owning every step from design to shipping.",
+      "voice": "quick and technical, shipping dates in the opening line",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "darius_rahimi",
+      "name": "Darius Rahimi",
+      "age": 42,
+      "scenario": "silicon-valley-1995",
+      "home": "Fremont, California",
+      "state": "CA",
+      "temperament": "integrator",
+      "roles": [
+        "coo"
+      ],
+      "background": "Born in Tehran and schooled in California, he ran a chip factory's yield team before moving up to operations. He believes every bad quarter starts with a process nobody wrote down.",
+      "voice": "methodical, steps numbered, dry humour",
+      "hire_note": "Improves manufacturing yield and cuts waste; impatient with firms that skip documentation.",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "delia_quintanilla",
+      "name": "Delia Quintanilla",
+      "age": 49,
+      "scenario": "silicon-valley-1995",
+      "home": "San Jose, California",
+      "state": "CA",
+      "temperament": "builder",
+      "roles": [
+        "union_leader"
+      ],
+      "background": "Came from a family of cannery workers and organised electronics assembly lines through the 1980s. She bargains for training and safe workplaces as much as for wages.",
+      "voice": "firm and personal, writes about the people behind the numbers",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "elena_montoya",
+      "name": "Elena Montoya",
+      "age": 56,
+      "scenario": "silicon-valley-1995",
+      "home": "Sacramento, California",
+      "state": "CA",
+      "temperament": "builder",
+      "roles": [
+        "governor",
+        "leader"
+      ],
+      "background": "Former county supervisor who reached the state capital by getting schools, water and a rail line funded together. She courts technology firms but insists they hire locally.",
+      "voice": "warm and political, thanks first and asks second",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "jonah_whitcomb",
+      "name": "Jonah Whitcomb",
+      "age": 38,
+      "scenario": "silicon-valley-1995",
+      "home": "San Francisco, California",
+      "state": "CA",
+      "temperament": "speculator",
+      "roles": [
+        "journalist"
+      ],
+      "background": "Technology reporter who started out covering startups from their garages and cannot decide whether he is a critic or a fan. He breaks funding news before the lawyers finish the paperwork.",
+      "voice": "fast and chatty, a joke up front and the point in the last line",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "judith_aronson",
+      "name": "Judith Aronson",
+      "age": 50,
+      "scenario": "silicon-valley-1995",
+      "home": "Menlo Park, California",
+      "state": "CA",
+      "temperament": "financier",
+      "roles": [
+        "cfo"
+      ],
+      "background": "Finance chief for two companies that listed on the exchange and one that was bought out at a good price. She understands what investors want to hear and what the books can bear.",
+      "voice": "neat and forward-looking, always a timeline",
+      "hire_note": "Eases listings and fundraising; prefers deals that look good on the stock market.",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "tamika_greer",
+      "name": "Tamika Greer",
+      "age": 33,
+      "scenario": "silicon-valley-1995",
+      "home": "San Francisco, California",
+      "state": "CA",
+      "temperament": "financier",
+      "roles": [
+        "analyst"
+      ],
+      "background": "Semiconductor analyst who moved from an equipment maker's engineering team to a bank, and is one of few on the Street who can read a fab schedule. She is wary of growth stories and generous to sound balance sheets.",
+      "voice": "precise and brief, three points and a recommendation",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "emre_kaplan",
+      "name": "Emre Kaplan",
+      "age": 45,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Duisburg, Germany",
+      "state": "",
+      "temperament": "raider",
+      "roles": [
+        "ceo",
+        "governor"
+      ],
+      "background": "Son of a Turkish steelworker, he built a river freight and scrap business and now buys troubled Ruhr suppliers cheaply. Established firms in the region still treat him as an outsider.",
+      "voice": "direct and unsentimental, prices and deadlines only",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "ingrid_vossberg",
+      "name": "Ingrid Vossberg",
+      "age": 59,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Duesseldorf, Germany",
+      "state": "",
+      "temperament": "cautious",
+      "roles": [
+        "ceo",
+        "chair",
+        "leader"
+      ],
+      "stance": 90,
+      "background": "Economist who worked 20 years at the national central bank before joining a Rhine chemicals firm's board. She holds that price stability comes before everything else.",
+      "voice": "formal and exact, long clean sentences and a firm close",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "sabine_lohmeier",
+      "name": "Sabine Lohmeier",
+      "age": 53,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Cologne, Germany",
+      "state": "",
+      "temperament": "integrator",
+      "roles": [
+        "ceo"
+      ],
+      "background": "Engineer who took over her family's components firm and has spent twenty years buying her suppliers one by one. She insists every part of a product should be made within a day's drive of the head office.",
+      "voice": "formal and exact, long clean sentences, a deadline at the end",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "tobias_wendt",
+      "name": "Tobias Wendt",
+      "age": 70,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Essen, Germany",
+      "state": "",
+      "temperament": "builder",
+      "roles": [
+        "ceo",
+        "governor",
+        "leader"
+      ],
+      "background": "Mining engineer who became head of a coal and steel group and spent the 1980s converting old pits into industrial parks. He wants the region retrained and rebuilt, not sold off.",
+      "voice": "old-fashioned and warm, writes about the region first",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": true
+    },
+    {
+      "id": "birgit_nordmann",
+      "name": "Birgit Nordmann",
+      "age": 49,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Duisburg, Germany",
+      "state": "",
+      "temperament": "integrator",
+      "roles": [
+        "logistics"
+      ],
+      "background": "Runs the inland harbour's freight scheduling and has never lost a barge load for want of a plan. She thinks in locks, rail slots and customs forms.",
+      "voice": "dry and efficient, a schedule table instead of a greeting",
+      "hire_note": "Cuts freight costs on river, rail and road lanes; wants every route fixed on paper first.",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "elisabeth_maurer",
+      "name": "Elisabeth Maurer",
+      "age": 46,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Duesseldorf, Germany",
+      "state": "",
+      "temperament": "raider",
+      "roles": [
+        "journalist"
+      ],
+      "background": "Economics correspondent for a national business daily, known for reading balance sheets aloud to executives. She is fair, formal and hard to avoid.",
+      "voice": "formal and exact, clean sentences, a closing question",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "giuseppe_ferrante",
+      "name": "Giuseppe Ferrante",
+      "age": 50,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Gelsenkirchen, Germany",
+      "state": "",
+      "temperament": "builder",
+      "roles": [
+        "coo"
+      ],
+      "background": "Son of a steelworker who came from Calabria, he rose from furnace foreman to head of operations at a coal and steel group. He runs plants like a family business and remembers every birthday.",
+      "voice": "warm and a little long, always asks after the family",
+      "hire_note": "Keeps plants running through downturns and holds on to skilled crews; resists layoffs.",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "johannes_rauhut",
+      "name": "Johannes Rauhut",
+      "age": 64,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Bonn, Germany",
+      "state": "",
+      "temperament": "cautious",
+      "roles": [
+        "governor",
+        "leader"
+      ],
+      "background": "Long-serving state minister who guided the region through two coal closures and a steel crisis. He believes in consensus and patient retraining, and in speaking last at every meeting.",
+      "voice": "measured and diplomatic, thanks first and conditions after",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "juergen_zielke",
+      "name": "Juergen Zielke",
+      "age": 57,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Bochum, Germany",
+      "state": "",
+      "temperament": "builder",
+      "roles": [
+        "union_leader"
+      ],
+      "background": "Toolmaker who became a works council chair and then a regional union official. He negotiates early and in private, and rarely loses.",
+      "voice": "blunt and minimal, a handwritten greeting and three lines",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    },
+    {
+      "id": "marek_dombrowski",
+      "name": "Marek Dombrowski",
+      "age": 38,
+      "scenario": "ruhr-rhine-1991",
+      "home": "Dortmund, Germany",
+      "state": "",
+      "temperament": "financier",
+      "roles": [
+        "analyst"
+      ],
+      "background": "Third-generation Ruhr family, trained as a banker and now analysing industrial firms for a regional bank. He values order books and patient capital over slogans.",
+      "voice": "numbers first, then a dry understatement",
+      "expressions": [
+        "neutral",
+        "pleased",
+        "displeased"
+      ],
+      "office_portrait": false
+    }
+  ]
+}

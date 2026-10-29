@@ -147,7 +147,13 @@ a gateway) has an outside world that can pay for it, and Great Lakes keeps exact
 draw at most one percent of its opening cash, net of that week's import receipts, so a
 corridor running a sustained trade surplus sees exports taper toward balance rather than
 stop at once. It buys only what it can pay for in full; a seller never hands over goods
-for part of their price. Nothing is minted. Re-export
+for part of their price. Nothing is minted. The account is a trader, not a vault: each week it
+sells on a thirteenth of the stock on its books (what it bought from the corridor) to the rest of
+the world, at cost, so cash plus stock never changes and no profit is booked. Without the resale
+the goods sat on its books forever while its cash only fell, and every export-heavy scenario ran the
+account dry within a few years (Texas $855 million to $360 million in four, Great Lakes $463 million
+to $201 million in five); with it the account is flat to rising over thirty years in all four
+scenarios and exports are never limited by its cash. Re-export
 still pays freight and transit, and cannot use a shipment before arrival.
 
 Goods use moving-average cost inventory, not free market-value write-ups. Each receipt
@@ -529,7 +535,15 @@ fell from 69 to 49 percent and the outside share rose. With this rule fill was 7
 
 **Rivals** set policies (own carriers first when they own any), build a carrier on the lane with
 the most outside overflow when they earn and have cash (a terminal first where the lane has none),
-and aggressive rivals reserve part of a busy lane they own a fifth of and ship on.
+and aggressive rivals reserve part of a busy lane they own a fifth of and ship on. The overflow a
+rival builds for is net of carrier plants of that mode, at either end of the lane, that are being
+built or opened in the last thirteen weeks, because every rival reads the same hot lane in the same
+quarter. A carrier plant (not a terminal) that has run half a year, moved under a quarter of its
+capacity in lot-km in the week just closed, and belongs to a firm that lost money over its last
+thirteen weeks is mothballed, so the firm stops paying a crew and upkeep for freight that is not
+there; it is reopened when a lane at its end runs with at least half its capacity overflowing to
+outside carriers and the restart leaves the cash reserve intact. The player has the same
+Mothball and Reopen commands.
 
 **Sprawl** no longer has a threshold. Overhead is 0.18 percent of revenue times the square of the
 division count over 100 (10 divisions 0.18 percent, 20 0.72, 30 1.6), doubled with a secondary

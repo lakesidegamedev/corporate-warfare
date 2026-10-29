@@ -7,6 +7,7 @@ pub mod chapters;
 pub mod credit;
 pub mod deals;
 pub mod division_report;
+pub mod earnings;
 pub mod equity;
 pub mod events_engine;
 pub mod executives;

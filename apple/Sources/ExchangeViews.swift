@@ -211,6 +211,11 @@ private struct StockRow: View {
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(Theme.secondary)
                     .lineLimit(1)
+                // Companies reporting results this week are marked on the board.
+                if stock.earnings.reportsThisWeek {
+                    Text("Reports this week · analysts: \(EarningsText.rating(stock.earnings.rating))")
+                        .font(.caption2).foregroundStyle(Theme.gold).lineLimit(1)
+                }
             }
             Spacer(minLength: 6)
             Sparkline(values: stock.historyCents, tint: Change.tint(stock.changeQuarterBps))
@@ -267,6 +272,7 @@ struct StockSheet: View {
                         ]
                     )
                     StockHistorySection(firm: stock.firm)
+                    EarningsSection(earnings: stock.earnings, onGiveGuidance: nil)
                     DossierSection(firm: stock.firm)
                     if showPage {
                         Button("Open company page") { showCompany = true }.buttonStyle(PixelButtonStyle())

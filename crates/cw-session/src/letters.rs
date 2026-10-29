@@ -902,6 +902,127 @@ fn analyst_letters(
     }
 }
 
+const ANALYST_FIRST: [&str; 8] = [
+    "Marion", "Teodor", "Priya", "Gideon", "Lucia", "Anders", "Naomi", "Calvin",
+];
+const ANALYST_LAST: [&str; 8] = [
+    "Whitlock",
+    "Okafor",
+    "Brandt",
+    "Castellanos",
+    "Hargrove",
+    "Lindqvist",
+    "Mbeki",
+    "Rourke",
+];
+
+/// The scenario's equity analyst, the same person all career: generated from the world seed.
+fn equity_analyst(world: &World, dataset: &Dataset) -> Sender {
+    let masthead = paper::masthead_for(dataset.scenario_id.as_str());
+    let id = format!("analyst:{}", world.seed);
+    let name = format!(
+        "{} {}",
+        ANALYST_FIRST[(fnv(&id, 11) % 8) as usize],
+        ANALYST_LAST[(fnv(&id, 12) % 8) as usize]
+    );
+    office_sender(&name, "Equity analyst", masthead)
+}
+
+/// The analyst writes to the player before a results day (what is expected) and after it (what
+/// happened). Both read the results log, so they read the same every time.
+fn earnings_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
+    use cw_sim::economy::earnings::QUARTER;
+    let Some(handle) = world.investor.primary_group else {
+        return;
+    };
+    let Some(firm) = world.firms.get(handle) else {
+        return;
+    };
+    let sender = equity_analyst(world, dataset);
+    let money = |c: i64| paper::money(world, dataset, handle, c);
+    // Before: the live estimate and every reported one.
+    let mut pre: Vec<(u32, u32, i64)> = Vec::new();
+    for r in world.earnings.log.iter().filter(|r| r.firm == handle) {
+        pre.push((r.week.saturating_sub(QUARTER), r.week, r.estimate_cents));
+    }
+    if let Some(fe) = world.earnings.firms.get(&handle)
+        && let Some(e) = fe.estimate.as_ref()
+    {
+        pre.push((e.made, e.due, e.raw_cents));
+    }
+    for (made, due, expected) in pre {
+        if made < since.max(1) || made == 0 {
+            continue;
+        }
+        out.push(finish(
+            world,
+            Draft {
+                id: format!("earn:pre:{}:{due}", handle.0),
+                kind: "analyst",
+                week: made,
+                sender: sender.clone(),
+                tone: Tone::Formal,
+                addressee: firm.name.clone(),
+                facts: vec![
+                    format!(
+                        "We expect {} to report about {} in operating profit when the quarter closes in week {due}.",
+                        firm.name,
+                        money(expected)
+                    ),
+                    "A range from your side would help us. Meet it and we will trust your numbers more next time. Miss it and we will not forget."
+                        .to_owned(),
+                ],
+                link: PaperLink::company(handle),
+            },
+            None,
+        ));
+    }
+    // After: what happened.
+    for r in world
+        .earnings
+        .log
+        .iter()
+        .filter(|r| r.firm == handle && r.week >= since)
+    {
+        let beat = r.actual_cents >= r.estimate_cents;
+        let mut facts = vec![format!(
+            "{} reported {} in operating profit, {} our {}. The shares {} {} percent.",
+            firm.name,
+            money(r.actual_cents),
+            if beat { "above" } else { "below" },
+            money(r.estimate_cents),
+            if r.move_bps >= 0 { "rose" } else { "fell" },
+            paper::percent((r.move_bps as i64).abs()),
+        )];
+        match (r.guided, r.guidance_met) {
+            (Some((low, high)), Some(true)) => facts.push(format!(
+                "You guided {} to {} and delivered. That counts with us.",
+                money(low),
+                money(high)
+            )),
+            (Some((low, _)), Some(false)) => facts.push(format!(
+                "You guided at least {} and missed. We will mark that down.",
+                money(low)
+            )),
+            _ => {}
+        }
+        out.push(finish(
+            world,
+            Draft {
+                id: format!("earn:post:{}:{}", handle.0, r.week),
+                kind: "analyst",
+                week: r.week,
+                sender: sender.clone(),
+                tone: Tone::Formal,
+                addressee: firm.name.clone(),
+                facts,
+                link: PaperLink::company(handle),
+            },
+            None,
+        ));
+    }
+}
+
 /// What a mandate kind asks, in a few plain words for the chair's letter.
 pub(crate) fn mandate_label(key: &str) -> &'static str {
     match key {
@@ -1336,6 +1457,7 @@ pub fn letters(world: &World, dataset: &Dataset, since_week: u32) -> Vec<Letter>
     government_letters(world, dataset, &stories, since, &mut out);
     union_letters(world, since, &mut out);
     analyst_letters(world, dataset, &stories, since, &mut out);
+    earnings_letters(world, dataset, since, &mut out);
     cfo_letters(world, dataset, since, &mut out);
     board_letters(world, since, &mut out);
     executive_letters(world, dataset, since, &mut out);
