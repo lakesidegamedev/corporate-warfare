@@ -26,25 +26,210 @@ private func changeText(_ bps: Int32) -> String {
     return bps < 0 ? "\(-bps / 100)% less" : "\(bps / 100)% more"
 }
 
-/// What the lane colours, thickness and gold edge on the Freight map mean.
+/// What the Freight mode's colours mean: you, the biggest carriers on the busiest lanes, outside
+/// carriers, and how width and dashes read.
 struct FreightLegend: View {
-    private func dot(_ color: Color, _ text: String) -> some View {
-        HStack(spacing: 4) {
-            Pixel.small.fill(color).frame(width: 8, height: 8)
-            Text(text).font(.caption2).foregroundStyle(Theme.secondary)
+    let lanes: [LaneDto]
+
+    private struct Carrier: Identifiable {
+        let id: UInt64
+        let name: String
+        let mine: Bool
+    }
+
+    private var carriers: [Carrier] {
+        var lots: [UInt64: (name: String, mine: Bool, lots: Int)] = [:]
+        for owner in FreightArcs.busiest(lanes).flatMap(\.owners) where owner.lots > 0 {
+            let held = lots[owner.firm] ?? (owner.mine ? "You" : owner.name, owner.mine, 0)
+            lots[owner.firm] = (held.name, held.mine, held.lots + Int(owner.lots))
+        }
+        return lots.sorted { $0.value.mine != $1.value.mine ? $0.value.mine : $0.value.lots > $1.value.lots }
+            .prefix(5).map { Carrier(id: $0.key, name: $0.value.name, mine: $0.value.mine) }
+    }
+
+    private func row(_ color: RGB, _ text: String, alpha: Double = FreightArcs.othersAlpha) -> some View {
+        HStack(spacing: 6) {
+            Rectangle().fill(color.color(alpha)).frame(width: 18, height: 6)
+            Text(text).font(.system(size: 11)).foregroundStyle(Theme.primaryText).lineLimit(1)
         }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 10) {
-                dot(Theme.positive, "Room")
-                dot(Theme.warning, "Filling up")
-                dot(Theme.negative, "Full")
+        VStack(alignment: .leading, spacing: 4) {
+            Text("FREIGHT").font(Pixel.font(10)).foregroundStyle(Theme.primaryText)
+            ForEach(carriers) { carrier in
+                row(FreightArcs.companyColor(carrier.id, mine: carrier.mine), carrier.name,
+                    alpha: carrier.mine ? 1 : FreightArcs.othersAlpha)
             }
-            Text("Thicker line, more freight. Gold edge, you own or ship on it. Tap a line for details.")
-                .font(.caption2).foregroundStyle(Theme.secondary)
+            row(FreightArcs.outsideCarriers, "Outside carriers")
+            Text("Wider: more freight. Dashed: by water.")
+                .font(.system(size: 10)).foregroundStyle(Theme.secondary)
         }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The Freight mode on the map: each of the busiest lanes as a clean arc between its hubs, one
+/// coloured stripe per company that carries goods on it, side by side, each as wide as its share of
+/// the lane's freight; your own in gold, everyone else's fainter. Only the 30 busiest lanes and
+/// your own are drawn. Sea lanes are dashed. A dark casing keeps the stack
+/// readable on any ground; the picked lane is outlined in white and lanes away from a selected
+/// region fade.
+enum FreightArcs {
+    /// Company colours: the player always gold, rivals from a fixed set by firm.
+    static let rivalColors: [RGB] = [
+        RGB(hex: 0x42A5F5), RGB(hex: 0xEF5350), RGB(hex: 0x66BB6A), RGB(hex: 0xAB47BC),
+        RGB(hex: 0x26C6DA), RGB(hex: 0xFF8A65), RGB(hex: 0xEC407A), RGB(hex: 0x9CCC65),
+    ]
+    static let outsideCarriers = RGB(hex: 0x8A939C)
+    static let gold = RGB(hex: 0xE2B04A)
+
+    static func companyColor(_ firm: UInt64, mine: Bool) -> RGB {
+        mine ? gold : rivalColors[Int(firm % UInt64(rivalColors.count))]
+    }
+
+    /// Lanes drawn: the 30 busiest, and every lane the player uses wherever it ranks.
+    static let shown = 30
+
+    /// The lanes drawn, busiest first.
+    static func busiest(_ lanes: [LaneDto]) -> [LaneDto] {
+        let sorted = lanes.sorted { ($0.capacityLots + $0.outsideLots) > ($1.capacityLots + $1.outsideLots) }
+        return sorted.enumerated().filter { $0.offset < shown || laneIsMine($0.element) }.map(\.element)
+    }
+
+    /// How strongly rivals' and outside carriers' stripes are drawn, so the player's gold reads first.
+    static let othersAlpha = 0.5
+
+    /// Who carries a lane: each owner's stripe, biggest first, then outside carriers.
+    static func stripes(_ lane: LaneDto) -> [(color: RGB, lots: Int, mine: Bool)] {
+        var out = lane.owners.filter { $0.lots > 0 }.sorted { $0.lots > $1.lots }
+            .map { (color: companyColor($0.firm, mine: $0.mine), lots: Int($0.lots), mine: $0.mine) }
+        if lane.outsideLots > 0 { out.append((outsideCarriers, Int(lane.outsideLots), false)) }
+        return out.isEmpty ? [(outsideCarriers, max(Int(lane.capacityLots), 1), false)] : out
+    }
+
+    /// A sea lane's dash pattern, a whole number of dashes along the arc from hub to hub, so the
+    /// dashes stay put on the lane as the camera moves instead of crawling from one end.
+    static func seaDash(_ arc: Arc, km: Double) -> [CGFloat] {
+        var length = 0.0
+        var last = arc.a
+        for k in 1...24 {
+            let point = arc.at(Double(k) / 24)
+            length += Double(hypot(point.x - last.x, point.y - last.y))
+            last = point
+        }
+        let count = Double(max(Int((km / 60).rounded()), 3))
+        let period = length / count
+        return [CGFloat(period * 0.62), CGFloat(period * 0.38)]
+    }
+
+    /// A lane's arc: hub to hub through a control point, bowed to one side so arcs between nearby
+    /// hubs stand apart, more for rail and most for sea so the modes between the same two regions
+    /// never overlap.
+    struct Arc {
+        let a: CGPoint
+        let c: CGPoint
+        let b: CGPoint
+
+        func at(_ t: Double) -> CGPoint {
+            let u = 1 - t
+            return CGPoint(x: u * u * Double(a.x) + 2 * u * t * Double(c.x) + t * t * Double(b.x),
+                           y: u * u * Double(a.y) + 2 * u * t * Double(c.y) + t * t * Double(b.y))
+        }
+
+        /// The arc moved `d` points to its side, for stacking stripes.
+        func shifted(_ d: Double) -> Arc {
+            let dx = Double(b.x - a.x)
+            let dy = Double(b.y - a.y)
+            let len = max(hypot(dx, dy), 1e-3)
+            let nx = -dy / len * d
+            let ny = dx / len * d
+            func move(_ p: CGPoint) -> CGPoint { CGPoint(x: Double(p.x) + nx, y: Double(p.y) + ny) }
+            return Arc(a: move(a), c: move(c), b: move(b))
+        }
+
+        var path: Path {
+            var path = Path()
+            path.move(to: a)
+            path.addQuadCurve(to: b, control: c)
+            return path
+        }
+    }
+
+    /// Kilometres on the ground between a lane's two hubs.
+    static func hubKm(_ lane: LaneDto, map: WorldMap) -> Double {
+        guard let a = map.anchor(of: lane.a), let b = map.anchor(of: lane.b) else { return 0 }
+        return GroundDashes.km(a, b)
+    }
+
+    static func arc(_ lane: LaneDto, map: WorldMap, projection p: MapProjection, plinth: Double) -> Arc? {
+        // The same two hubs always bow the same way, whichever end is listed first.
+        let (from, to) = lane.a < lane.b ? (lane.a, lane.b) : (lane.b, lane.a)
+        guard let ga = map.anchor(of: from), let gb = map.anchor(of: to) else { return nil }
+        let (a, va) = p.project(ga, height: plinth)
+        let (b, vb) = p.project(gb, height: plinth)
+        guard va, vb else { return nil }
+        let dx = Double(b.x - a.x)
+        let dy = Double(b.y - a.y)
+        guard hypot(dx, dy) >= 2 else { return nil }
+        let bow = lane.modeId == "rail" ? 0.26 : lane.modeId == "sea" ? 0.38 : 0.14
+        let c = CGPoint(x: Double(a.x + b.x) / 2 - dy * bow, y: Double(a.y + b.y) / 2 + dx * bow)
+        return Arc(a: a, c: c, b: b)
+    }
+
+    static func draw(_ lanes: [LaneDto], map: WorldMap, projection p: MapProjection, plinth: Double, focus: String?,
+                     picked: String?, in context: inout GraphicsContext) {
+        let busiest = busiest(lanes)
+        guard let first = busiest.first else { return }
+        let top = Double(max(first.capacityLots + first.outsideLots, 1))
+        // Thin, quiet lanes first so the busy ones lie on top, and the player's own over all.
+        let order = busiest.reversed().filter { !laneIsMine($0) } + busiest.reversed().filter(laneIsMine)
+        for lane in order {
+            guard let arc = arc(lane, map: map, projection: p, plinth: plinth) else { continue }
+            let parts = stripes(lane)
+            let total = Double(max(parts.reduce(0) { $0 + $1.lots }, 1))
+            let width = 5 + 13 * Double(lane.capacityLots + lane.outsideLots) / top
+            let dim = focus != nil && lane.a != focus && lane.b != focus && picked == nil ? 0.3 : 1
+            let dash: [CGFloat] = lane.modeId == "sea" ? seaDash(arc, km: hubKm(lane, map: map)) : []
+            if lane.id == picked {
+                context.stroke(arc.path, with: .color(.white), style: StrokeStyle(lineWidth: width + 6, lineCap: .round))
+            }
+            context.stroke(arc.path, with: .color(Theme.ink.opacity(0.85 * dim)), style: StrokeStyle(lineWidth: width + 2.5, lineCap: .round))
+            var offset = -width / 2
+            for part in parts {
+                let w = max(width * Double(part.lots) / total, 1.2)
+                context.stroke(arc.shifted(offset + w / 2).path, with: .color(part.color.color(dim * (part.mine ? 1 : othersAlpha))),
+                               style: StrokeStyle(lineWidth: w, lineCap: .butt, dash: dash))
+                offset += w
+            }
+        }
+        // The hubs the lanes meet at.
+        var seen = Set<String>()
+        for code in busiest.flatMap({ [$0.a, $0.b] }) where seen.insert(code).inserted {
+            guard let anchor = map.anchor(of: code) else { continue }
+            let (at, visible) = p.project(anchor, height: plinth)
+            guard visible else { continue }
+            context.fill(disc(at, 5), with: .color(Theme.ink))
+            context.fill(disc(at, 3), with: .color(.white))
+        }
+    }
+
+    /// The lane drawn nearest a tap, along its arc, within a finger's width.
+    static func at(_ tap: CGPoint, lanes: [LaneDto], map: WorldMap, projection p: MapProjection, plinth: Double) -> LaneDto? {
+        var best: LaneDto?
+        var bestDistance = 22.0
+        for lane in busiest(lanes) {
+            guard let arc = arc(lane, map: map, projection: p, plinth: plinth) else { continue }
+            for k in 0...24 {
+                let point = arc.at(Double(k) / 24)
+                let d = Double(hypot(point.x - tap.x, point.y - tap.y))
+                if d < bestDistance {
+                    bestDistance = d
+                    best = lane
+                }
+            }
+        }
+        return best
     }
 }
 
@@ -74,7 +259,7 @@ struct FreightPanelView: View {
                             .font(.caption.weight(.semibold)).buttonStyle(.plain).foregroundStyle(Theme.gold)
                         LaneDetail(lane: lane)
                     } else {
-                        FreightLegend()
+                        FreightLegend(lanes: store.lanes)
                         if let summary = store.freight {
                             HStack(alignment: .top, spacing: 6) {
                                 PixelIcon("lane", size: 14).foregroundStyle(Theme.gold)

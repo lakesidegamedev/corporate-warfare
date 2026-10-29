@@ -43,7 +43,10 @@ import uniffi.cw_ffi.ReserveQuoteDto
 import uniffi.cw_ffi.ShippingSuggestionDto
 import uniffi.cw_ffi.ShippingSummaryDto
 import kotlin.math.abs
+import kotlin.math.acos
+import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 
 /** The pixel icon for a freight mode id. */
 internal fun modeArt(modeId: String): String = if (modeId == "sea") "ship" else modeId
@@ -60,8 +63,15 @@ internal fun laneKey(lane: LaneDto): String = "${lane.a}-${lane.b}-${lane.mode}"
 /** Whether the player's group owns capacity on the lane, ships on it or holds a contract there. */
 internal fun laneIsMine(lane: LaneDto): Boolean = lane.myCapacityLots > 0 || lane.myShippedLots > 0 || lane.myContractLots > 0
 
-private fun busiestLanes(lanes: List<LaneDto>): List<LaneDto> =
-    lanes.sortedByDescending { it.capacityLots + it.outsideLots }.take(90)
+/** Lanes drawn: the 30 busiest, and every lane the player uses wherever it ranks. */
+private const val SHOWN_LANES = 30
+
+/** How strongly rivals' and outside carriers' stripes are drawn, so the player's gold reads first. */
+private const val OTHERS_ALPHA = 0.5f
+
+/** The lanes drawn, busiest first. */
+internal fun busiestLanes(lanes: List<LaneDto>): List<LaneDto> =
+    lanes.sortedByDescending { it.capacityLots + it.outsideLots }.filterIndexed { i, lane -> i < SHOWN_LANES || laneIsMine(lane) }
 
 /** Company colours for the Freight mode: the player always gold, rivals from a fixed set by firm. */
 private val RivalColors = listOf(
@@ -74,12 +84,12 @@ internal fun companyColor(firm: ULong, mine: Boolean): Color =
     if (mine) Palette.gold else RivalColors[((firm % RivalColors.size.toULong()).toInt())]
 
 /** One company's stripe on a lane: its colour and how many lots it carries there. */
-internal class Stripe(val color: Color, val lots: Int, val name: String)
+internal class Stripe(val color: Color, val lots: Int, val name: String, val mine: Boolean = false)
 
 /** Who carries a lane: each owner's stripe, biggest first, then outside carriers. */
 internal fun stripes(lane: LaneDto): List<Stripe> {
     val owners = lane.owners.filter { it.lots > 0 }.sortedByDescending { it.lots }
-        .map { Stripe(companyColor(it.firm, it.mine), it.lots, if (it.mine) "You" else it.name) }
+        .map { Stripe(companyColor(it.firm, it.mine), it.lots, if (it.mine) "You" else it.name, it.mine) }
     val outside = if (lane.outsideLots > 0) listOf(Stripe(OutsideCarriers, lane.outsideLots, "Outside carriers")) else emptyList()
     return (owners + outside).ifEmpty { listOf(Stripe(OutsideCarriers, maxOf(lane.capacityLots, 1), "Idle")) }
 }
@@ -103,6 +113,36 @@ private class Arc(val a: Offset, val c: Offset, val b: Offset) {
     }
 
     fun path(): Path = Path().apply { moveTo(a.x, a.y); quadraticTo(c.x, c.y, b.x, b.y) }
+
+    /** Pixels along the arc. */
+    fun length(): Float {
+        var total = 0f
+        var last = a
+        for (k in 1..24) {
+            val point = at(k / 24f)
+            total += (point - last).getDistance()
+            last = point
+        }
+        return total
+    }
+}
+
+/**
+ * A sea lane's dash pattern, a whole number of dashes along the arc from hub to hub, so the dashes
+ * stay put on the lane as the camera moves instead of crawling from one end.
+ */
+private fun seaDash(arc: Arc, km: Double): PathEffect {
+    val count = (km / 60).roundToInt().coerceAtLeast(3)
+    val period = arc.length() / count
+    return PathEffect.dashPathEffect(floatArrayOf(period * 0.62f, period * 0.38f))
+}
+
+/** Kilometres on the ground between a lane's two hubs. */
+private fun hubKm(map: WorldMap, lane: LaneDto): Double {
+    val a = map.anchor(lane.a) ?: return 0.0
+    val b = map.anchor(lane.b) ?: return 0.0
+    val dot = a.cosLat[0] * b.cosLat[0] * cos(a.lon[0] - b.lon[0]) + a.sinLat[0] * b.sinLat[0]
+    return acos(dot.coerceIn(-1.0, 1.0)) * GroundDashes.EARTH_KM
 }
 
 private fun arcOf(map: WorldMap, projection: MapProjection, lane: LaneDto, plinth: Double): Arc? {
@@ -121,26 +161,28 @@ private fun arcOf(map: WorldMap, projection: MapProjection, lane: LaneDto, plint
 /**
  * The Freight mode: each of the busiest lanes as a clean arc between its hubs, one coloured stripe
  * per company that carries goods on it, side by side, each as wide as its share of the lane's
- * freight; your own in gold. Sea lanes are dashed. A dark casing keeps the stack readable on any
+ * freight; your own in gold, everyone else's fainter. Only the 30 busiest lanes and your own are
+ * drawn. Sea lanes are dashed. A dark casing keeps the stack readable on any
  * ground; the picked lane is outlined in white and lanes away from a selected region fade.
  */
 internal fun DrawScope.drawLanes(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>, focus: String?, picked: String? = null, plinth: Double = 0.0) {
     val busiest = busiestLanes(lanes)
     val top = busiest.maxOfOrNull { it.capacityLots + it.outsideLots }?.coerceAtLeast(1) ?: return
-    // Thin, quiet lanes first so the busy ones lie on top.
-    busiest.asReversed().forEach { lane ->
+    // Thin, quiet lanes first so the busy ones lie on top, and the player's own over all.
+    val (mine, others) = busiest.asReversed().partition(::laneIsMine)
+    (others + mine).forEach { lane ->
         val arc = arcOf(map, projection, lane, plinth) ?: return@forEach
         val parts = stripes(lane)
         val total = parts.sumOf { it.lots }.coerceAtLeast(1)
         val width = 5f + 13f * (lane.capacityLots + lane.outsideLots).toFloat() / top
         val dim = if (focus != null && lane.a != focus && lane.b != focus && picked == null) 0.3f else 1f
-        val dash = if (lane.modeId == "sea") PathEffect.dashPathEffect(floatArrayOf(10f, 6f)) else null
+        val dash = if (lane.modeId == "sea") seaDash(arc, hubKm(map, lane)) else null
         if (laneKey(lane) == picked) drawPath(arc.path(), Color.White, style = Stroke(width + 6f, cap = StrokeCap.Round))
         drawPath(arc.path(), Palette.ink.copy(alpha = 0.85f * dim), style = Stroke(width + 2.5f, cap = StrokeCap.Round))
         var offset = -width / 2
         parts.forEach { part ->
             val w = (width * part.lots / total).coerceAtLeast(1.2f)
-            drawPath(arc.shifted(offset + w / 2).path(), part.color.copy(alpha = dim), style = Stroke(w, cap = StrokeCap.Butt, pathEffect = dash))
+            drawPath(arc.shifted(offset + w / 2).path(), part.color.copy(alpha = dim * if (part.mine) 1f else OTHERS_ALPHA), style = Stroke(w, cap = StrokeCap.Butt, pathEffect = dash))
             offset += w
         }
     }
@@ -181,8 +223,10 @@ internal fun FreightLegend(lanes: List<LaneDto>, modifier: Modifier) {
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text("FREIGHT", color = Palette.primaryText, fontSize = 10.sp, fontFamily = Pixel.font)
-        carriers.forEach { (owner, _) -> LegendRow(companyColor(owner.firm, owner.mine), if (owner.mine) "You" else owner.name) }
-        LegendRow(OutsideCarriers, "Outside carriers")
+        carriers.forEach { (owner, _) ->
+            LegendRow(companyColor(owner.firm, owner.mine).copy(alpha = if (owner.mine) 1f else OTHERS_ALPHA), if (owner.mine) "You" else owner.name)
+        }
+        LegendRow(OutsideCarriers.copy(alpha = OTHERS_ALPHA), "Outside carriers")
         Text("Wider: more freight. Dashed: by water.", color = Palette.secondary, fontSize = 10.sp)
     }
 }

@@ -58,7 +58,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -593,23 +592,22 @@ internal fun DrawScope.drawWorldMap(
                 if (lit && t > 0.5) drawPath(it, Color(0xFF8EC5FF).copy(alpha = 0.10f), style = Stroke(4f))
                 drawPath(it, Color(0xFFD2DEEA).copy(alpha = 0.85f), style = Stroke(if (cam.zoom > 3) 2f else 1f))
             }
-            // The real railways once close, so trains have track to run on: rails over dark sleepers.
+            // The real railways once close, so trains have track to run on: rails over dark
+            // sleepers cut on the ground.
             if (g.closeUp && t > 0.5 && graphics.traffic > 0) {
-                drawPath(g.railroads, Color(0xFF3A3028).copy(alpha = 0.9f), style = Stroke(3f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(1.5f, 2f))))
+                drawPath(g.sleepers, Color(0xFF3A3028).copy(alpha = 0.9f), style = Stroke(3f, cap = StrokeCap.Butt))
                 drawPath(g.railroads, Color(0xFF9AA1A8).copy(alpha = 0.85f), style = Stroke(1f))
             }
             // Interstates over the regions and their shading, under the traffic and the buildings:
-            // an 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line.
+            // an 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line
+            // whose dashes are cut on the ground: a screen dash pattern crawled as the camera moved.
             val highways = if (detailLevel == MapDetail.Low) 0f else smoothstep(0.85, 1.2, g.zoomRatio).toFloat()
             if (graphics.interstates && highways > 0f && t > 0.5) {
                 val wide = (1.6f + 1.2f * g.scale.coerceAtMost(2.5f))
                 drawPath(g.interstates, Color(0xFF1C2228).copy(alpha = 0.9f * highways), style = Stroke(wide + 2f, cap = StrokeCap.Square))
                 drawPath(g.interstates, Color(0xFF6E757D).copy(alpha = highways), style = Stroke(wide, cap = StrokeCap.Square))
                 if (g.closeUp) {
-                    drawPath(
-                        g.interstates, Palette.gold.copy(alpha = 0.85f * highways),
-                        style = Stroke(1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))),
-                    )
+                    drawPath(g.centreLines, Palette.gold.copy(alpha = 0.85f * highways), style = Stroke(1f, cap = StrokeCap.Butt))
                 }
             }
         }
@@ -888,6 +886,12 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
     val rivers: Path by lazy { p.lines(map.rivers) }
     val interstates: Path by lazy { p.lines(map.interstates) }
     val railroads: Path by lazy { p.lines(map.railroads) }
+    /**
+     * The centre line's dashes and the railways' sleepers, cut on the ground, projected like the
+     * roads and stroked solid, so they stay painted on as the camera moves.
+     */
+    val centreLines: Path by lazy { p.lines(map.centreDashes) }
+    val sleepers: Path by lazy { p.lines(map.sleeperDashes) }
     val playStates: List<Path> by lazy { map.playStates.map { p.polygons(it.rings) } }
 
     /** Pixels high for a region at a layer intensity, flattening towards the base up close. */
