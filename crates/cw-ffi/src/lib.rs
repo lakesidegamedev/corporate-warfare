@@ -2126,13 +2126,47 @@ pub struct QuotaDto {
 #[derive(uniffi::Record)]
 pub struct IncidentDto {
     pub week: u32,
-    /// spill, port_strike, refinery_fire, lane_outage or harvest_failure.
+    /// spill, port_strike, refinery_fire, lane_outage, harvest_failure or timeline.
     pub kind: String,
     pub text: String,
     /// Weeks left until it is over.
     pub weeks_left: u32,
     /// One of your companies is touched.
     pub touches_you: bool,
+}
+
+/// A dated event from the scenario's history the player has been told is coming.
+#[derive(uniffi::Record)]
+pub struct TimelineUpcomingDto {
+    pub id: String,
+    pub title: String,
+    pub summary: String,
+    pub year: i32,
+    /// 1 to 52.
+    pub week_of_year: u32,
+    /// The game week it happens in.
+    pub week: u32,
+    pub weeks_away: u32,
+}
+
+/// A dated event from the scenario's history that has happened.
+#[derive(uniffi::Record)]
+pub struct TimelinePastDto {
+    pub id: String,
+    pub title: String,
+    pub summary: String,
+    pub year: i32,
+    pub week_of_year: u32,
+    pub week: u32,
+}
+
+/// The scenario timeline as the player may see it. Events not yet announced are never listed.
+#[derive(uniffi::Record)]
+pub struct TimelineDto {
+    /// "off", "historical" or "shuffled".
+    pub mode: String,
+    pub upcoming: Vec<TimelineUpcomingDto>,
+    pub past: Vec<TimelinePastDto>,
 }
 
 /// The economy, the central bank and the government, for the Markets economy card.
@@ -2349,6 +2383,10 @@ pub struct NewGameDto {
     /// How world commodity prices move: "historical", "historical_variance" or "random".
     /// Empty takes the scenario's default.
     pub price_path: String,
+    /// Whether the scenario's dated history plays: "historical", "off" or "shuffled". Empty
+    /// takes historical.
+    #[uniffi(default = "")]
+    pub timeline: String,
 }
 
 #[uniffi::export]
@@ -2375,6 +2413,7 @@ impl SessionHandle {
             prices: cw_session::PriceSetup {
                 scenario_id: options.scenario_id.clone(),
                 path: cw_data::PricePath::from_key(&options.price_path),
+                timeline: cw_sim::economy::timeline::TimelineMode::from_key(&options.timeline),
             },
         };
         let session = Session::create(config)?;
@@ -2486,6 +2525,38 @@ impl SessionHandle {
             assisted: score.assisted,
             personal_net_worth_cents: score.personal_net_worth_cents,
         })
+    }
+
+    /// The scenario's dated history: announced events still ahead, and events that happened.
+    pub fn timeline(&self) -> TimelineDto {
+        let session = self.lock();
+        let world = &session.world;
+        TimelineDto {
+            mode: world.systemic.timeline.mode.key().to_owned(),
+            upcoming: cw_sim::economy::timeline::upcoming(world)
+                .into_iter()
+                .map(|e| TimelineUpcomingDto {
+                    id: e.id,
+                    title: e.title,
+                    summary: e.summary,
+                    year: e.year,
+                    week_of_year: e.week_of_year,
+                    week: e.tick,
+                    weeks_away: e.weeks_away,
+                })
+                .collect(),
+            past: cw_sim::economy::timeline::past(world)
+                .into_iter()
+                .map(|e| TimelinePastDto {
+                    id: e.id,
+                    title: e.title,
+                    summary: e.summary,
+                    year: e.year,
+                    week_of_year: e.week_of_year,
+                    week: e.tick,
+                })
+                .collect(),
+        }
     }
 
     pub fn canonical_hash(&self) -> String {
@@ -5287,6 +5358,7 @@ mod tests {
             economy: "historic".to_owned(),
             starting_capital_cents: None,
             price_path: String::new(),
+            timeline: String::new(),
         })
         .unwrap();
         assert_eq!(career.scenario_id(), "texas-1981");
@@ -5309,6 +5381,7 @@ mod tests {
                 economy: "historic".to_owned(),
                 starting_capital_cents: None,
                 price_path: String::new(),
+                timeline: String::new(),
             })
             .unwrap();
             session.advance(3);

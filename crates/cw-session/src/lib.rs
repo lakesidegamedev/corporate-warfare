@@ -57,6 +57,9 @@ pub struct PriceSetup {
     pub scenario_id: String,
     /// None takes the scenario's default mode.
     pub path: Option<cw_data::PricePath>,
+    /// Whether the scenario's dated history plays. None takes the default, Historical.
+    #[serde(default)]
+    pub timeline: Option<cw_sim::economy::timeline::TimelineMode>,
 }
 
 #[derive(Clone, Debug)]
@@ -184,6 +187,7 @@ impl Session {
         config.prices = PriceSetup {
             scenario_id: custom.base_scenario_id.clone(),
             path: Some(custom.price_path),
+            timeline: config.prices.timeline,
         };
         Self::create_with(config, Some(custom)).map_err(|e| format!("{e:?}"))
     }
@@ -239,6 +243,18 @@ impl Session {
                 &cw_data::price_paths::PricePathFile::load(),
                 id,
                 path,
+                config.seed,
+            );
+        }
+        if !config.prices.scenario_id.is_empty() {
+            cw_sim::economy::timeline::init(
+                &mut world,
+                &dataset,
+                &config.prices.scenario_id,
+                config
+                    .prices
+                    .timeline
+                    .unwrap_or(cw_sim::economy::timeline::TimelineMode::Historical),
                 config.seed,
             );
         }

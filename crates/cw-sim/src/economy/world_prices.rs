@@ -305,7 +305,7 @@ pub fn weekly(world: &mut World) {
         world.macro_state.cycle.output_gap_bps - state.baseline_gap_bps - state.shadow_gap_bps;
     let mut before = Vec::with_capacity(state.families.len());
     let (mut weighted, mut weights) = (0i64, 0i64);
-    for family in &mut state.families {
+    for (index, family) in state.families.iter_mut().enumerate() {
         before.push(family.index_bps);
         family.raw_bps = match family.mode {
             PriceMode::Historical => interpolate_bps(&family.anchors, week),
@@ -328,12 +328,17 @@ pub fn weekly(world: &mut World) {
                     .clamp(RANDOM_BAND_BPS.0, RANDOM_BAND_BPS.1)
             }
         };
+        // A timeline shock is a world price move like any other: it feeds the cycle with the
+        // path and is tilted with it, but is never written into the path itself.
+        let shock = crate::economy::timeline::price_shock_bps(world, index as u16) as i64;
         if family.mode.follows_history() {
-            weighted += family.raw_bps as i64 * family.weight as i64;
+            weighted += family.raw_bps as i64 * (BASE_BPS as i64 + shock).max(1) / BASE_BPS as i64
+                * family.weight as i64;
             weights += family.weight as i64;
         }
         let tilt = unexplained_gap as i64 * TILT_PCT / 100 * family.cyclical_pct as i64 / 100;
-        family.index_bps = (family.raw_bps as i64 * (BASE_BPS as i64 + tilt) / BASE_BPS as i64)
+        family.index_bps = (family.raw_bps as i64 * (BASE_BPS as i64 + tilt + shock)
+            / BASE_BPS as i64)
             .clamp(INDEX_FLOOR_BPS as i64, INDEX_CEIL_BPS as i64) as i32;
         family.recent.push(family.index_bps);
         let excess = family.recent.len().saturating_sub(TREND_WEEKS + 1);

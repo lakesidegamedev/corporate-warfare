@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "note": "Dated events for this scenario, drawn only from mechanics the engine already has. Dates are the year and the week of that year. Magnitudes follow docs/rules/CONTENT-PACING.md. Titles and summaries are fictional framing with no real company or person names.",
+  "events": [
+    {
+      "id": "gl-tech-bust",
+      "date": {
+        "year": 2000,
+        "week": 15
+      },
+      "title": "The technology bubble bursts",
+      "summary": "Share prices of internet and technology firms fall hard. Orders for equipment and software dry up across the region.",
+      "foreshadow_weeks": 6,
+      "effects": [
+        {
+          "kind": "demand_regime",
+          "sector": "technology",
+          "percent": -10,
+          "weeks": 39
+        }
+      ]
+    },
+    {
+      "id": "gl-recession",
+      "date": {
+        "year": 2001,
+        "week": 10
+      },
+      "title": "The economy slips into recession",
+      "summary": "Factories cut shifts and households hold back. The central bank starts cutting rates to cushion the fall.",
+      "foreshadow_weeks": 10,
+      "effects": [
+        {
+          "kind": "demand_regime",
+          "sector": "all",
+          "percent": -6,
+          "weeks": 39
+        },
+        {
+          "kind": "central_bank_stance",
+          "shift": -20
+        }
+      ]
+    },
+    {
+      "id": "gl-credit-aftermath",
+      "date": {
+        "year": 2001,
+        "week": 40
+      },
+      "title": "Lenders pull back after the bankruptcies",
+      "summary": "A string of big bankruptcies leaves banks cautious. Credit costs more for everyone but the strongest borrowers.",
+      "foreshadow_weeks": 4,
+      "effects": [
+        {
+          "kind": "credit_tightening",
+          "spread_bps": 80,
+          "weeks": 26
+        }
+      ]
+    },
+    {
+      "id": "gl-steel-tariffs",
+      "date": {
+        "year": 2002,
+        "week": 10
+      },
+      "title": "Steel import tariffs begin",
+      "summary": "The government puts tariffs on imported steel to protect mills. Foreign steel arrives in smaller amounts and domestic steel prices firm up.",
+      "foreshadow_weeks": 8,
+      "effects": [
+        {
+          "kind": "import_ceiling",
+          "good": "steel",
+          "percent": -35
+        },
+        {
+          "kind": "price_shock",
+          "good": "steel",
+          "percent": 15,
+          "weeks": 39
+        }
+      ]
+    },
+    {
+      "id": "gl-lake-ports-dispute",
+      "date": {
+        "year": 2002,
+        "week": 40
+      },
+      "title": "A labour dispute shuts a lake port",
+      "summary": "Dockworkers at a major lake port walk out over contracts. Ships wait while shippers look for other routes.",
+      "foreshadow_weeks": 4,
+      "effects": [
+        {
+          "kind": "systemic_event",
+          "event": "port_strike"
+        }
+      ]
+    },
+    {
+      "id": "gl-recovery",
+      "date": {
+        "year": 2003,
+        "week": 20
+      },
+      "title": "Growth returns",
+      "summary": "Orders pick up and hiring restarts. The central bank stops cutting and begins to lean the other way.",
+      "foreshadow_weeks": 0,
+      "effects": [
+        {
+          "kind": "demand_regime",
+          "sector": "all",
+          "percent": 4,
+          "weeks": 39
+        },
+        {
+          "kind": "central_bank_stance",
+          "shift": 10
+        }
+      ]
+    },
+    {
+      "id": "gl-housing-boom",
+      "date": {
+        "year": 2004,
+        "week": 10
+      },
+      "title": "A housing and building boom",
+      "summary": "Cheap credit and rising home prices send builders into overdrive. Demand for construction jumps.",
+      "foreshadow_weeks": 6,
+      "effects": [
+        {
+          "kind": "demand_regime",
+          "sector": "construction",
+          "percent": 8,
+          "weeks": 52
+        }
+      ]
+    },
+    {
+      "id": "gl-export-boom",
+      "date": {
+        "year": 2007,
+        "week": 10
+      },
+      "title": "An export boom",
+      "summary": "A weak currency and hungry overseas buyers lift orders for the region's factories and farms.",
+      "foreshadow_weeks": 8,
+      "effects": [
+        {
+          "kind": "demand_regime",
+          "sector": "manufacturing",
+          "percent": 8,
+          "weeks": 52
+        },
+        {
+          "kind": "price_shock",
+          "good": "grain",
+          "percent": 15,
+          "weeks": 39
+        }
+      ]
+    },
+    {
+      "id": "gl-credit-crunch",
+      "date": {
+        "year": 2008,
+        "week": 36
+      },
+      "title": "A credit crunch",
+      "summary": "A string of lender failures freezes borrowing. Spreads jump, orders fall and the central bank cuts hard.",
+      "foreshadow_weeks": 8,
+      "effects": [
+        {
+          "kind": "credit_tightening",
+          "spread_bps": 250,
+          "weeks": 78
+        },
+        {
+          "kind": "demand_regime",
+          "sector": "all",
+          "percent": -8,
+          "weeks": 52
+        },
+        {
+          "kind": "central_bank_stance",
+          "shift": -30
+        }
+      ]
+    }
+  ]
+}

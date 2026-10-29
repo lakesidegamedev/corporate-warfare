@@ -1,0 +1,188 @@
+{
+  "schema": 1,
+  "note": "Dated events for this scenario, drawn only from mechanics the engine already has. Dates are the year and the week of that year. Magnitudes follow docs/rules/CONTENT-PACING.md. Titles and summaries are fictional framing with no real company or person names.",
+  "events": [
+    {
+      "id": "tx-tight-money",
+      "date": {
+        "year": 1981,
+        "week": 30
+      },
+      "title": "The central bank squeezes money",
+      "summary": "The central bank is fighting inflation with very high rates. Lenders ration credit and borrowers feel it first.",
+      "foreshadow_weeks": 6,
+      "effects": [
+        {
+          "kind": "central_bank_stance",
+          "shift": 15
+        },
+        {
+          "kind": "credit_tightening",
+          "spread_bps": 60,
+          "weeks": 39
+        }
+      ]
+    },
+    {
+      "id": "tx-regional-bank-failure",
+      "date": {
+        "year": 1982,
+        "week": 28
+      },
+      "title": "A rig-lending bank fails",
+      "summary": "A mid-sized bank that lent heavily against drilling rigs collapses. Other lenders pull back from oil credit and the whole region gets nervous.",
+      "foreshadow_weeks": 6,
+      "effects": [
+        {
+          "kind": "credit_tightening",
+          "spread_bps": 200,
+          "weeks": 52
+        },
+        {
+          "kind": "demand_regime",
+          "sector": "all",
+          "percent": -4,
+          "weeks": 26
+        }
+      ]
+    },
+    {
+      "id": "tx-lending-pullback",
+      "date": {
+        "year": 1983,
+        "week": 10
+      },
+      "title": "Banks cut oil lending",
+      "summary": "Banks that survived the failure shrink their oil books. Loans cost more and take longer to arrange.",
+      "foreshadow_weeks": 4,
+      "effects": [
+        {
+          "kind": "credit_tightening",
+          "spread_bps": 100,
+          "weeks": 26
+        }
+      ]
+    },
+    {
+      "id": "tx-gulf-pipeline",
+      "date": {
+        "year": 1984,
+        "week": 20
+      },
+      "title": "A new Gulf gas pipeline opens",
+      "summary": "A long gas pipeline to the Gulf coast opens. More gas reaches the water, ports take more of it and local gas prices ease.",
+      "foreshadow_weeks": 13,
+      "effects": [
+        {
+          "kind": "price_shock",
+          "good": "natural_gas",
+          "percent": -8,
+          "weeks": 26
+        },
+        {
+          "kind": "import_ceiling",
+          "good": "natural_gas",
+          "percent": 20
+        }
+      ]
+    },
+    {
+      "id": "tx-oil-collapse",
+      "date": {
+        "year": 1986,
+        "week": 4
+      },
+      "title": "Oil prices collapse",
+      "summary": "Producers abroad open the taps and the price of oil falls through the floor. Drillers shut rigs and the whole region feels it.",
+      "foreshadow_weeks": 10,
+      "effects": [
+        {
+          "kind": "price_shock",
+          "good": "crude_oil",
+          "percent": -30,
+          "weeks": 39
+        },
+        {
+          "kind": "price_shock",
+          "good": "fuel",
+          "percent": -25,
+          "weeks": 39
+        },
+        {
+          "kind": "demand_regime",
+          "sector": "all",
+          "percent": -6,
+          "weeks": 26
+        }
+      ]
+    },
+    {
+      "id": "tx-savings-crisis",
+      "date": {
+        "year": 1986,
+        "week": 30
+      },
+      "title": "The savings and loan crisis deepens",
+      "summary": "Savings institutions that lent against property and oil are failing one after another. Lending retreats and the central bank eases to cushion the fall.",
+      "foreshadow_weeks": 8,
+      "effects": [
+        {
+          "kind": "credit_tightening",
+          "spread_bps": 150,
+          "weeks": 52
+        },
+        {
+          "kind": "central_bank_stance",
+          "shift": -15
+        },
+        {
+          "kind": "demand_regime",
+          "sector": "real_estate",
+          "percent": -8,
+          "weeks": 39
+        }
+      ]
+    },
+    {
+      "id": "tx-stockpile-programme",
+      "date": {
+        "year": 1987,
+        "week": 10
+      },
+      "title": "The state starts buying oil for storage",
+      "summary": "With prices low, the state begins buying and storing commodities to prop up the market until it recovers.",
+      "foreshadow_weeks": 6,
+      "effects": [
+        {
+          "kind": "law_change",
+          "law": "reserve",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": "tx-slow-recovery",
+      "date": {
+        "year": 1988,
+        "week": 26
+      },
+      "title": "The oil patch steadies",
+      "summary": "Rig counts stop falling and exporters return to the market. Spending creeps back across the region.",
+      "foreshadow_weeks": 0,
+      "effects": [
+        {
+          "kind": "demand_regime",
+          "sector": "all",
+          "percent": 5,
+          "weeks": 39
+        },
+        {
+          "kind": "price_shock",
+          "good": "fuel",
+          "percent": 10,
+          "weeks": 26
+        }
+      ]
+    }
+  ]
+}

@@ -17,6 +17,7 @@ fn config(seed: u64, kind: ScenarioKind, scenario: &str) -> ScenarioConfig {
         prices: PriceSetup {
             scenario_id: scenario.to_owned(),
             path: Some(PricePath::HistoricalVariance),
+            ..Default::default()
         },
     }
 }
