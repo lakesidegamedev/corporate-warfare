@@ -363,7 +363,13 @@ fun WorldMapView(
                 }
                 if (graphics.showFps) {
                     val rate = fps.tick(System.nanoTime())
-                    val label = measurer.measure("${rate.toInt()} fps", TextStyle(color = Palette.positive, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                    // The backend and the map's pixel size sit beside the rate; software drawing is flagged.
+                    val tag = RenderInfo.label()?.let { " · $it" } ?: ""
+                    val warn = RenderInfo.software
+                    val label = measurer.measure(
+                        "${rate.toInt()} fps$tag · ${size.width.toInt()}x${size.height.toInt()}",
+                        TextStyle(color = if (warn) Palette.warning else Palette.positive, fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                    )
                     drawRect(Color.Black.copy(alpha = 0.55f), Offset(6f, size.height - label.size.height - 14f), Size(label.size.width + 12f, label.size.height + 8f))
                     drawText(label, topLeft = Offset(12f, size.height - label.size.height - 10f))
                 }

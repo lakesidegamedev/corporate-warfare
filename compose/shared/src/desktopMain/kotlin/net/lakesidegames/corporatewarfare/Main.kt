@@ -171,6 +171,12 @@ private fun game() = application {
         state = state,
     ) {
         frontWindow = window
+        // The frame counter shows which Skia backend draws this window.
+        androidx.compose.runtime.DisposableEffect(window) {
+            RenderInfo.backend = window.renderApi.name
+            window.onRenderApiChanged { RenderInfo.backend = window.renderApi.name }
+            onDispose { }
+        }
         val scope = rememberCoroutineScope()
         val store = remember { GameStore(saveDirectory(), scope) }
         val updater = remember {
