@@ -123,7 +123,7 @@ class EarningsRenderTest {
         val line = covered.firstOrNull { it.earnings.hasLast && it.earnings.hasEstimate }
         assertTrue(line != null, "a company has reported and has a new estimate")
         println("stock ${line!!.name}: ${line.earnings.rating}, expects ${line.earnings.estimateCents}, last ${line.earnings.lastActualCents} against ${line.earnings.lastEstimateCents}")
-        render("earnings-real-career-desktop", 640, 360) { Box(Modifier.padding(12.dp)) { Panel { EarningsSection(line, null) } } }
-        render("earnings-real-career-phone", 380, 420) { Box(Modifier.padding(12.dp)) { Panel { EarningsSection(line, null) } } }
+        render("earnings-real-career-desktop", 640, 360) { Box(Modifier.padding(12.dp)) { Panel { EarningsSection(line.earnings, null) } } }
+        render("earnings-real-career-phone", 380, 420) { Box(Modifier.padding(12.dp)) { Panel { EarningsSection(line.earnings, null) } } }
     }
 }
