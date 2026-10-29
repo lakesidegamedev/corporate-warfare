@@ -20,4 +20,4 @@ pub use data::{
 pub use palette::{COLOURS as PALETTE_COLOURS, Palette};
 pub use renderer::{AdapterSummary, CloudLevel, Frame, FrameStats, NoAdapter, Renderer, Style};
 
-pub use mesh::{RoadPoint, ground_z, road_chains};
+pub use mesh::{ROAD_BANDS, RoadPoint, ground_z, road_band, road_chains, road_chains_for_band};

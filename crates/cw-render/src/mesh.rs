@@ -1,5 +1,7 @@
 //! Geometry: stepped terrace terrain, voxel buildings and the cloud sheet.
 
+use std::collections::{BTreeMap, HashMap};
+
 use bytemuck::{Pod, Zeroable};
 
 use crate::data::{Scene, VoxelModel, WATER_LAKE};
@@ -651,64 +653,217 @@ fn follow_ground(
     }
 }
 
-/// Roads and railways as chains of points on the ground (kilometres, ground height). Each
-/// map segment is cut at every terrace cell edge it crosses and then refined along walls.
-pub fn road_chains(scene: &Scene) -> Vec<(u8, Vec<RoadPoint>)> {
+/// How much of the road network a zoom band draws and how hard it is simplified.
+#[derive(Clone, Copy, Debug)]
+pub struct RoadBand {
+    /// Highest line class kept (0 interstates, 1 main roads, 2 railways).
+    pub max_class: u8,
+    /// Cell size in kilometres for merging near-parallel duplicate segments.
+    pub merge_km: f32,
+}
+
+/// The three zoom bands: far (interstates), middle (interstates and rails) and closest (all).
+pub const ROAD_BANDS: [RoadBand; 3] = [
+    RoadBand {
+        max_class: 0,
+        merge_km: 4.0,
+    },
+    RoadBand {
+        max_class: 2,
+        merge_km: 1.8,
+    },
+    RoadBand {
+        max_class: 2,
+        merge_km: 0.6,
+    },
+];
+
+/// Which road band a camera width in kilometres uses.
+pub fn road_band(width_km: f32) -> usize {
+    if width_km > 1500.0 {
+        0
+    } else if width_km > 450.0 {
+        1
+    } else {
+        2
+    }
+}
+
+/// Class priority for merging: interstates first, then railways, then main roads.
+fn class_priority(class: u8) -> u8 {
+    match class {
+        0 => 0,
+        2 => 1,
+        _ => 2,
+    }
+}
+
+/// Douglas-Peucker simplification of a polyline, keeping both ends.
+fn douglas_peucker(pts: &[(f32, f32)], tol: f32) -> Vec<(f32, f32)> {
+    if pts.len() < 3 {
+        return pts.to_vec();
+    }
+    let mut keep = vec![false; pts.len()];
+    keep[0] = true;
+    keep[pts.len() - 1] = true;
+    let mut stack = vec![(0usize, pts.len() - 1)];
+    while let Some((lo, hi)) = stack.pop() {
+        let (a, b) = (pts[lo], pts[hi]);
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let len2 = (dx * dx + dy * dy).max(1e-12);
+        let mut worst = (0.0f32, lo);
+        for (k, p) in pts.iter().enumerate().take(hi).skip(lo + 1) {
+            let t = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len2).clamp(0.0, 1.0);
+            let d = ((p.0 - a.0 - dx * t).powi(2) + (p.1 - a.1 - dy * t).powi(2)).sqrt();
+            if d > worst.0 {
+                worst = (d, k);
+            }
+        }
+        if worst.0 > tol {
+            keep[worst.1] = true;
+            stack.push((lo, worst.1));
+            stack.push((worst.1, hi));
+        }
+    }
+    pts.iter()
+        .zip(&keep)
+        .filter(|(_, k)| **k)
+        .map(|(p, _)| *p)
+        .collect()
+}
+
+/// One map polyline cut at every heightmap cell edge it crosses and refined along terrace
+/// walls, as points on the ground (kilometres, ground height).
+fn ground_chain(scene: &Scene, km: &[(f32, f32)]) -> Vec<RoadPoint> {
     let hm = &scene.heightmap;
     let (dx, dy) = hm.cell_degrees();
+    let mut flat: Vec<(f32, f32)> = vec![km[0]];
+    for w in km.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        // Parameters where the segment crosses a grid line of the heightmap.
+        let (la, lb) = (line_lonlat(scene, a), line_lonlat(scene, b));
+        let mut ts = vec![0.0f32, 1.0];
+        let cross = |ua: f32, ub: f32, ts: &mut Vec<f32>| {
+            let (lo, hi) = (ua.min(ub).floor() as i32, ua.max(ub).floor() as i32);
+            for k in lo + 1..=hi {
+                let t = (k as f32 - ua) / (ub - ua);
+                if t > 0.0 && t < 1.0 {
+                    ts.push(t);
+                }
+            }
+        };
+        cross(
+            (la.0 - hm.bounds.west) / dx,
+            (lb.0 - hm.bounds.west) / dx,
+            &mut ts,
+        );
+        cross(
+            (hm.bounds.north - la.1) / dy,
+            (hm.bounds.north - lb.1) / dy,
+            &mut ts,
+        );
+        ts.sort_by(|p, q| p.total_cmp(q));
+        for pair in ts.windows(2) {
+            let at = |t: f32| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+            if pair[1] - pair[0] > 1e-6 {
+                follow_ground(scene, at(pair[0]), at(pair[1]), &mut flat, 0);
+            }
+        }
+    }
+    let mut pts = Vec::with_capacity(flat.len());
+    let mut along = 0.0f32;
+    for (i, p) in flat.iter().enumerate() {
+        if i > 0 {
+            let q = flat[i - 1];
+            along += ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt();
+        }
+        pts.push(RoadPoint {
+            xyz: [p.0, p.1, ground_z(scene, p.0, p.1) + ROAD_LIFT_KM],
+            along,
+        });
+    }
+    pts
+}
+
+/// Roads and railways as chains of points on the ground, every map segment kept.
+pub fn road_chains(scene: &Scene) -> Vec<(u8, Vec<RoadPoint>)> {
+    scene
+        .lines
+        .iter()
+        .map(|line| {
+            let km: Vec<(f32, f32)> = line
+                .points
+                .iter()
+                .map(|p| scene.projection.to_km(p.0, p.1))
+                .collect();
+            (line.class, ground_chain(scene, &km))
+        })
+        .collect()
+}
+
+/// The chains one zoom band draws: only its classes, Douglas-Peucker simplified, and with a
+/// segment dropped when an interstate, a railway or another line of the same class already
+/// runs within a cell of it (near-parallel duplicates merge into one corridor).
+pub fn road_chains_for_band(scene: &Scene, band: &RoadBand) -> Vec<(u8, Vec<RoadPoint>)> {
+    let s = band.merge_km;
+    let mut order: Vec<usize> = (0..scene.lines.len())
+        .filter(|i| scene.lines[*i].class <= band.max_class && scene.lines[*i].points.len() >= 2)
+        .collect();
+    order.sort_by_key(|i| (class_priority(scene.lines[*i].class), *i));
+    // Cell occupancy: priority and line of whoever claimed the cell first.
+    let mut cells: HashMap<(i32, i32), (u8, usize)> = HashMap::new();
     let mut out = Vec::new();
-    for line in &scene.lines {
+    for li in order {
+        let line = &scene.lines[li];
+        let prio = class_priority(line.class);
         let km: Vec<(f32, f32)> = line
             .points
             .iter()
             .map(|p| scene.projection.to_km(p.0, p.1))
             .collect();
-        let mut flat: Vec<(f32, f32)> = vec![km[0]];
+        let km = douglas_peucker(&km, s * 0.6);
+        let mut run: Vec<(f32, f32)> = Vec::new();
+        let flush = |run: &mut Vec<(f32, f32)>, out: &mut Vec<(u8, Vec<RoadPoint>)>| {
+            if run.len() >= 2 {
+                out.push((line.class, ground_chain(scene, run)));
+            }
+            run.clear();
+        };
         for w in km.windows(2) {
             let (a, b) = (w[0], w[1]);
-            // Parameters where the segment crosses a grid line of the heightmap.
-            let (la, lb) = (line_lonlat(scene, a), line_lonlat(scene, b));
-            let mut ts = vec![0.0f32, 1.0];
-            let cross = |ua: f32, ub: f32, ts: &mut Vec<f32>| {
-                let (lo, hi) = (ua.min(ub).floor() as i32, ua.max(ub).floor() as i32);
-                for k in lo + 1..=hi {
-                    let t = (k as f32 - ua) / (ub - ua);
-                    if t > 0.0 && t < 1.0 {
-                        ts.push(t);
-                    }
-                }
+            let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+            let n = (len / (s * 0.5)).ceil().max(1.0) as usize;
+            let samples: Vec<(i32, i32)> = (0..=n)
+                .map(|k| {
+                    let t = k as f32 / n as f32;
+                    (
+                        ((a.0 + (b.0 - a.0) * t) / s).floor() as i32,
+                        ((a.1 + (b.1 - a.1) * t) / s).floor() as i32,
+                    )
+                })
+                .collect();
+            let foreign = |c: (i32, i32)| {
+                (-1..=1).any(|ox| {
+                    (-1..=1).any(|oy| {
+                        cells
+                            .get(&(c.0 + ox, c.1 + oy))
+                            .is_some_and(|(p, l)| *p < prio || (*p == prio && *l != li))
+                    })
+                })
             };
-            cross(
-                (la.0 - hm.bounds.west) / dx,
-                (lb.0 - hm.bounds.west) / dx,
-                &mut ts,
-            );
-            cross(
-                (hm.bounds.north - la.1) / dy,
-                (hm.bounds.north - lb.1) / dy,
-                &mut ts,
-            );
-            ts.sort_by(|p, q| p.total_cmp(q));
-            for pair in ts.windows(2) {
-                let at = |t: f32| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
-                if pair[1] - pair[0] > 1e-6 {
-                    follow_ground(scene, at(pair[0]), at(pair[1]), &mut flat, 0);
-                }
+            if samples.iter().all(|c| foreign(*c)) {
+                flush(&mut run, &mut out);
+                continue;
             }
-        }
-        let mut pts = Vec::with_capacity(flat.len());
-        let mut along = 0.0f32;
-        for (i, p) in flat.iter().enumerate() {
-            if i > 0 {
-                let q = flat[i - 1];
-                along += ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt();
+            for c in &samples {
+                cells.entry(*c).or_insert((prio, li));
             }
-            pts.push(RoadPoint {
-                xyz: [p.0, p.1, ground_z(scene, p.0, p.1) + ROAD_LIFT_KM],
-                along,
-            });
+            if run.is_empty() {
+                run.push(a);
+            }
+            run.push(b);
         }
-        out.push((line.class, pts));
+        flush(&mut run, &mut out);
     }
     out
 }
@@ -717,37 +872,85 @@ fn line_lonlat(scene: &Scene, p: (f32, f32)) -> (f32, f32) {
     scene.projection.to_lonlat(p.0, p.1)
 }
 
-/// Roads and railways as one ribbon quad per segment. Each vertex carries its own end, the far
-/// end and a side; the shader extrudes by a width in screen pixels, so lines stay crisp at any
-/// zoom. Classes are drawn by priority through the depth the shader writes.
-pub fn roads(scene: &Scene) -> Mesh {
-    let mut m = Mesh::default();
-    for (class, pts) in road_chains(scene) {
+/// Edge of a road tile in kilometres. Roads are grouped by tile so a frame draws only the
+/// tiles in view.
+const ROAD_TILE_KM: f32 = 80.0;
+
+/// A tile of road ribbons: its ground bounding box and its slice of the index list.
+pub struct RoadTile {
+    pub min: [f32; 2],
+    pub max: [f32; 2],
+    pub first: u32,
+    pub count: u32,
+}
+
+/// The road ribbons of one zoom band, ordered by tile.
+pub struct RoadMesh {
+    pub mesh: Mesh,
+    pub tiles: Vec<RoadTile>,
+}
+
+/// Roads and railways of a zoom band as one ribbon quad per unique segment. Each vertex
+/// carries its own end, the far end and a side; the shader extrudes by a width in screen
+/// pixels, so lines stay crisp at any zoom. Classes are drawn by priority through the depth
+/// the shader writes.
+pub fn roads(scene: &Scene, band: usize) -> RoadMesh {
+    type Seg = (u8, [f32; 3], f32, [f32; 3], f32);
+    let mut by_tile: BTreeMap<(i32, i32), Vec<Seg>> = BTreeMap::new();
+    for (class, pts) in road_chains_for_band(scene, &ROAD_BANDS[band]) {
         for w in pts.windows(2) {
             let (a, b) = (&w[0], &w[1]);
             if (a.xyz[0] - b.xyz[0]).abs() + (a.xyz[1] - b.xyz[1]).abs() < 1e-5 {
                 continue;
             }
+            let key = (
+                (((a.xyz[0] + b.xyz[0]) * 0.5) / ROAD_TILE_KM).floor() as i32,
+                (((a.xyz[1] + b.xyz[1]) * 0.5) / ROAD_TILE_KM).floor() as i32,
+            );
+            by_tile
+                .entry(key)
+                .or_default()
+                .push((class, a.xyz, a.along, b.xyz, b.along));
+        }
+    }
+    let mut m = Mesh::default();
+    let mut tiles = Vec::new();
+    for segs in by_tile.values() {
+        let first = m.indices.len() as u32;
+        let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
+        for (class, a, a_along, b, b_along) in segs {
+            for p in [a, b] {
+                for k in 0..2 {
+                    lo[k] = lo[k].min(p[k]);
+                    hi[k] = hi[k].max(p[k]);
+                }
+            }
             let base = m.vertices.len() as u32;
-            let colour = [class, 0, 0, KIND_ROAD];
+            let colour = [*class, 0, 0, KIND_ROAD];
             // Corners: (this end, other end, side, along at this end).
-            for (this, other, side, end) in [
-                (a, b, -1.0f32, 0.0f32),
-                (a, b, 1.0, 0.0),
-                (b, a, 1.0, 1.0),
-                (b, a, -1.0, 1.0),
+            for (this, other, side, end, along, other_along) in [
+                (a, b, -1.0f32, 0.0f32, *a_along, *b_along),
+                (a, b, 1.0, 0.0, *a_along, *b_along),
+                (b, a, 1.0, 1.0, *b_along, *a_along),
+                (b, a, -1.0, 1.0, *b_along, *a_along),
             ] {
                 m.vertices.push(Vertex {
-                    pos: this.xyz,
-                    normal: other.xyz,
+                    pos: *this,
+                    normal: *other,
                     colour,
-                    local: [side, end, this.along],
-                    uv: [other.along, 0.0],
+                    local: [side, end, along],
+                    uv: [other_along, 0.0],
                 });
             }
             m.indices
                 .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
         }
+        tiles.push(RoadTile {
+            min: lo,
+            max: hi,
+            first,
+            count: m.indices.len() as u32 - first,
+        });
     }
-    m
+    RoadMesh { mesh: m, tiles }
 }

@@ -58,8 +58,8 @@ impl CloudLevel {
     fn thresholds(self) -> (f32, f32) {
         match self {
             CloudLevel::Off => (2.0, 2.0),
-            CloudLevel::Thin => (0.993, 0.999),
-            CloudLevel::Light => (0.986, 0.996),
+            CloudLevel::Thin => (0.9955, 0.9995),
+            CloudLevel::Light => (0.9915, 0.998),
             CloudLevel::Heavy => (0.92, 0.97),
         }
     }
@@ -76,12 +76,12 @@ impl Default for Style {
             clouds: CloudLevel::Light,
             buildings: true,
             roads: true,
-            road_detail_km: 1100.0,
+            road_detail_km: 450.0,
             texel_km: (0.5, 4.0),
             texel_min_px: 2.0,
             cloud_altitude_km: 18.0,
             dither: 2.5,
-            cloud_clear_km: (420.0, 1500.0),
+            cloud_clear_km: (600.0, 1800.0),
         }
     }
 }
@@ -171,12 +171,21 @@ struct GpuMesh {
     triangles: usize,
 }
 
+/// The road ribbons of one zoom band. The index buffer is rewritten each frame with only the
+/// tiles in view, so the road pass stays a single draw call.
+struct GpuRoads {
+    vb: wgpu::Buffer,
+    ib: wgpu::Buffer,
+    mesh: mesh::RoadMesh,
+}
+
 struct GpuScene {
     id: *const Scene,
     terrain: GpuMesh,
     buildings: GpuMesh,
     clouds: GpuMesh,
-    roads: GpuMesh,
+    /// Road ribbons per zoom band, built the first time a camera needs the band.
+    roads: [Option<GpuRoads>; 3],
     cloud_altitude: f32,
     building_tier: f32,
     earth: wgpu::TextureView,
@@ -519,7 +528,7 @@ impl Renderer {
             buildings: self.upload_mesh(&mesh::buildings(scene, tier), "buildings"),
             building_tier: tier,
             clouds: self.upload_mesh(&mesh::cloud_sheet(scene, style.cloud_altitude_km), "clouds"),
-            roads: self.upload_mesh(&mesh::roads(scene), "roads"),
+            roads: [None, None, None],
             cloud_altitude: style.cloud_altitude_km,
             earth: self.rgba_texture(scene.earth.w, scene.earth.h, &scene.earth.rgba, "earth"),
             cloud_tex: self.rgba_texture(
@@ -551,6 +560,35 @@ impl Renderer {
         self.cache = Some(gpu);
     }
 
+    fn ensure_roads(&mut self, scene: &Scene, band: usize) {
+        let built = self.cache.as_ref().is_some_and(|c| c.roads[band].is_some());
+        if built {
+            return;
+        }
+        let mesh = mesh::roads(scene, band);
+        let vertices = if mesh.mesh.vertices.is_empty() {
+            vec![Vertex::zeroed()]
+        } else {
+            mesh.mesh.vertices.clone()
+        };
+        let vb = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("roads"),
+                contents: bytemuck::cast_slice(&vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let ib = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("roads"),
+            size: (mesh.mesh.indices.len().max(1) * 4) as u64,
+            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        if let Some(c) = &mut self.cache {
+            c.roads[band] = Some(GpuRoads { vb, ib, mesh });
+        }
+    }
+
     /// Render the scene from the camera and read it back. The result is deterministic for a
     /// given adapter and driver.
     pub fn render_to_rgba(
@@ -562,6 +600,10 @@ impl Renderer {
         height: u32,
     ) -> Frame {
         self.prepare(scene, style, camera);
+        let road_band = mesh::road_band(camera.width_km);
+        if style.roads {
+            self.ensure_roads(scene, road_band);
+        }
         let ps = style.pixel_scale.max(1);
         let (rw, rh) = ((width / ps).max(1), (height / ps).max(1));
         let aspect = rw as f32 / rh as f32;
@@ -605,9 +647,9 @@ impl Renderer {
         // width is a whole number of pixels, odd so the line has a centre pixel.
         let (inter_px, main_px, rail_px) = match camera.width_km {
             w if w > 1500.0 => (1.0, 0.0, 0.0),
-            w if w > 1000.0 => (3.0, 0.0, 1.0),
-            w if w > 450.0 => (5.0, 1.0, 1.0),
-            _ => (7.0, 3.0, 3.0),
+            w if w > 900.0 => (3.0, 0.0, 0.0),
+            w if w > 450.0 => (3.0, 0.0, 1.0),
+            _ => (5.0, 1.0, 3.0),
         };
         let detail = if camera.width_km <= style.road_detail_km {
             1.0
@@ -661,6 +703,24 @@ impl Renderer {
             .write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&globals));
 
         let gpu = self.cache.as_ref().expect("prepared");
+        // Road tiles in view: their indices are gathered into the band's index buffer.
+        let mut visible_road_indices = 0u32;
+        if style.roads
+            && let Some(r) = &gpu.roads[road_band]
+        {
+            let mut gathered: Vec<u32> = Vec::new();
+            for t in &r.mesh.tiles {
+                if tile_in_view(&view.view_proj, t) {
+                    let a = t.first as usize;
+                    gathered.extend_from_slice(&r.mesh.mesh.indices[a..a + t.count as usize]);
+                }
+            }
+            visible_road_indices = gathered.len() as u32;
+            if !gathered.is_empty() {
+                self.queue
+                    .write_buffer(&r.ib, 0, bytemuck::cast_slice(&gathered));
+            }
+        }
         let shadow_tex = depth_texture(&self.device, style.shadow_size, "shadow");
         let shadow_view = shadow_tex.create_view(&Default::default());
         let group = |shadow: &wgpu::TextureView| {
@@ -812,9 +872,16 @@ impl Renderer {
             for m in meshes {
                 draw(&mut pass, m, &mut stats, true);
             }
-            if style.roads {
+            if style.roads
+                && let Some(r) = &gpu.roads[road_band]
+            {
                 pass.set_pipeline(&self.road_pipeline);
-                draw(&mut pass, &gpu.roads, &mut stats, true);
+                pass.set_vertex_buffer(0, r.vb.slice(..));
+                pass.set_index_buffer(r.ib.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..visible_road_indices, 0, 0..1);
+                stats.draw_calls += 1;
+                stats.vertices += visible_road_indices as usize / 6 * 4;
+                stats.triangles += visible_road_indices as usize / 3;
                 pass.set_pipeline(&self.main_pipeline);
             }
             if clouds_on {
@@ -903,6 +970,26 @@ fn upload(device: &wgpu::Device, m: &Mesh, label: &str) -> GpuMesh {
         vertices: m.vertices.len(),
         triangles: m.triangles(),
     }
+}
+
+/// False when every corner of the tile's box lies outside the same clip plane.
+fn tile_in_view(view_proj: &glam::Mat4, t: &mesh::RoadTile) -> bool {
+    let mut outside = [true; 4];
+    for x in [t.min[0], t.max[0]] {
+        for y in [t.min[1], t.max[1]] {
+            for z in [0.0f32, 6.0] {
+                let c = *view_proj * glam::Vec4::new(x, y, z, 1.0);
+                if c.w <= 1e-3 {
+                    return true;
+                }
+                outside[0] &= c.x < -c.w;
+                outside[1] &= c.x > c.w;
+                outside[2] &= c.y < -c.w;
+                outside[3] &= c.y > c.w;
+            }
+        }
+    }
+    !outside.iter().any(|o| *o)
 }
 
 fn draw(pass: &mut wgpu::RenderPass<'_>, m: &GpuMesh, stats: &mut FrameStats, count: bool) {

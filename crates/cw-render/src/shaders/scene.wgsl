@@ -158,12 +158,11 @@ fn variant_at(tc: vec2<i32>) -> u32 {
 // step darker, 2 one step lighter. They tile in world space, so they never swim with the camera.
 const TILE_FOREST = array<u32, 8>(0x02200000u, 0x02210000u, 0x00110220u, 0x00000221u, 0x00000011u, 0x22000000u, 0x22102200u, 0x01102210u);
 const TILE_ROCK = array<u32, 8>(0x00100002u, 0x00002000u, 0x10000010u, 0x00200000u, 0x00001000u, 0x02000002u, 0x00010000u, 0x00000200u);
-const TILE_SOIL = array<u32, 8>(0x00000000u, 0x00010000u, 0x00000000u, 0x00000100u, 0x00000000u, 0x01000000u, 0x00000000u, 0x00000010u);
+const TILE_SOIL = array<u32, 8>(0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u);
 const TILE_SNOW = array<u32, 8>(0x00000000u, 0x01110000u, 0x00000000u, 0x00000000u, 0x00000001u, 0x00000000u, 0x11100000u, 0x00000000u);
 const TILE_URBAN = array<u32, 8>(0x11111111u, 0x10000000u, 0x10000000u, 0x10000000u, 0x10000000u, 0x10000000u, 0x10000000u, 0x10000000u);
 const TILE_CORE = array<u32, 8>(0x11111111u, 0x10002221u, 0x10002221u, 0x10002221u, 0x11111111u, 0x12220001u, 0x12220001u, 0x12220001u);
 const TILE_WAVE = array<u32, 8>(0x00000000u, 0x02220000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000222u, 0x00000000u, 0x00000000u);
-const FIELD_ROWS = array<u32, 4>(0u, 0u, 0u, 1u);
 
 fn nib(row: u32, tx: i32) -> u32 {
     return (row >> (28u - 4u * u32(tx & 7))) & 15u;
@@ -178,11 +177,10 @@ fn class_texel(cls: u32, variant: u32, tx: i32, ty: i32) -> i32 {
     var v = 0u;
     if (cls == 0u) { v = tile_value(TILE_FOREST, tx, ty); }
     else if (cls == 1u) {
-        var k = u32(ty) & 3u;
-        if (variant == 1u) { k = u32(tx) & 3u; }
-        else if (variant == 2u) { k = u32(tx + ty) & 3u; }
-        else if (variant == 3u) { k = u32(tx - ty) & 3u; }
-        v = FIELD_ROWS[k];
+        // Survey grid fields: rows run east-west or north-south by patch, one dark row in six,
+        // and half the patches stay plain. Never diagonal.
+        if (variant == 0u) { if (((ty % 6) + 6) % 6 == 0) { v = 1u; } }
+        else if (variant == 1u) { if (((tx % 6) + 6) % 6 == 0) { v = 1u; } }
     }
     else if (cls == 2u) { v = tile_value(TILE_SOIL, tx, ty); }
     else if (cls == 3u) { v = tile_value(TILE_ROCK, tx, ty); }
@@ -249,13 +247,14 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         let a = cloud_alpha(ll);
         if (a < thr || g.cloud.w < 0.5) { discard; }
         let away = -normalize(g.sun.xy);
-        let outline = cloud_alpha(lonlat(in.world.xy + away * px_km * 1.0)) < thr;
-        let band = cloud_alpha(lonlat(in.world.xy + away * px_km * 3.5)) < thr;
+        let outline = cloud_alpha(lonlat(in.world.xy + away * px_km * 2.6)) < thr
+            || cloud_alpha(lonlat(in.world.xy - away * px_km * 1.6)) < thr;
+        let band = cloud_alpha(lonlat(in.world.xy + away * px_km * 9.0)) < thr;
         let rim = cloud_alpha(lonlat(in.world.xy - away * px_km * 2.5)) < thr;
         var step = 2;
         if (a >= g.cloud.y || rim) { step = 3; }
-        if (band) { step = 1; }
-        if (outline) { step = 0; }
+        if (band) { step = 0; }
+        if (outline) { return vec4<f32>(pal(RAMP_URBAN, 1), 1.0); }
         return vec4<f32>(pal(RAMP_CLOUD, step), 1.0);
     }
 
@@ -268,7 +267,7 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         let sh = lit(in.world, n);
         let in_cloud = g.cloud.w > 0.5 && cloud_alpha(ll + g.cloud2.xy) >= g.cloud.x;
         var shade = 0;
-        if (in_cloud) { shade = 1; }
+        if (in_cloud) { shade = 2; }
 
         if (is_water(m)) {
             if (in.kind == 1u) { return vec4<f32>(pal(RAMP_WATER, 0), 1.0); }
@@ -337,7 +336,14 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         if (g.tex.y > 0.5) {
             let tx = i32(floor(in.world.x / g.tex.x));
             let ty = i32(floor(in.world.y / g.tex.x));
-            step = step + class_texel(cls, variant_at(tc), tx, ty);
+            let tv = class_texel(cls, variant_at(tc), tx, ty);
+            if (player) {
+                // Gold holdings: every other textured texel shows the land through.
+                if (tv != 0 && cls < 5u && ((tx + ty) & 1) == 0) { return vec4<f32>(pal(ramp_of(cls), 2 - shade), 1.0); }
+                step = step + tv;
+            } else {
+                step = step + tv;
+            }
         }
         return vec4<f32>(pal(ramp, step), 1.0);
     }
@@ -432,21 +438,25 @@ fn fs_road(in: ROut) -> RFOut {
     let hw = w * 0.5;
     let d = abs(in.across);
     if (is_water(m) || d >= hw) { discard; }
-    var c = pal(RAMP_ROCK, 1);
+    var c = pal(RAMP_ROCK, 2);
     let detail = g.road.w > 0.5;
     if (in.kind == 0u) {
-        // Interstate: dark edge, asphalt, and up close a gold dashed centre line.
-        if (w > 1.5 && d >= hw - 1.0) { c = pal(RAMP_INK, 1); }
-        else if (detail && d < 0.75 && fract(in.along / 7.0) < 0.5) { c = pal(RAMP_GOLD, 3); }
+        // Interstate: mid grey asphalt, a slightly darker one pixel edge and, up close, a gold
+        // dashed centre line.
+        if (w > 2.5 && d >= hw - 1.0) { c = pal(RAMP_ROCK, 1); }
+        else if (detail && w > 4.5 && d < 0.75 && fract(in.along / 7.0) < 0.5) { c = pal(RAMP_GOLD, 3); }
     } else if (in.kind == 1u) {
-        // Main road: thinner and lighter.
-        c = pal(RAMP_ROCK, 2);
-        if (w > 1.5 && d >= hw - 1.0) { c = pal(RAMP_INK, 1); }
+        // Main road: one step lighter than the ground it crosses, so it reads as a faint line.
+        let cls = class_at(vec2<i32>(floor(ground_tc(ll))));
+        var ramp = ramp_of(cls);
+        var base = 2;
+        if (m.a > 1.5) { ramp = RAMP_GOLD; base = gold_base(cls); }
+        c = pal(ramp, base + 1);
     } else {
-        // Railway: a thin dark line, with sleepers across it up close.
-        c = pal(RAMP_INK, 3);
+        // Railway: a thin light grey-brown line, with sleepers across it up close.
+        c = pal(RAMP_SOIL, 3);
         if (detail && d >= 0.75) {
-            if (fract(in.along / 3.5) < 0.43) { c = pal(RAMP_SOIL, 1); } else { discard; }
+            if (fract(in.along / 3.5) < 0.43) { c = pal(RAMP_SOIL, 2); } else { discard; }
         }
     }
     var out: RFOut;

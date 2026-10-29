@@ -71,3 +71,26 @@ fn road_geometry_is_deterministic() {
         }
     }
 }
+
+#[test]
+fn zoom_bands_keep_the_right_classes_and_stay_on_the_ground() {
+    use cw_render::{LINE_INTERSTATE, ROAD_BANDS, road_chains_for_band};
+    let scene = Scene::tiny();
+    let full: usize = road_chains(&scene).iter().map(|c| c.1.len()).sum();
+    for (i, band) in ROAD_BANDS.iter().enumerate() {
+        let chains = road_chains_for_band(&scene, band);
+        assert!(!chains.is_empty(), "band {i} drew nothing");
+        let n: usize = chains.iter().map(|c| c.1.len()).sum();
+        assert!(n <= full, "band {i} has more points than the full set");
+        for (class, pts) in &chains {
+            assert!(*class <= band.max_class);
+            if i == 0 {
+                assert_eq!(*class, LINE_INTERSTATE);
+            }
+            for p in pts {
+                let err = (p.xyz[2] - LIFT - ground_z(&scene, p.xyz[0], p.xyz[1])).abs();
+                assert!(err <= SLACK, "band {i} road {err:.3} km off the ground");
+            }
+        }
+    }
+}

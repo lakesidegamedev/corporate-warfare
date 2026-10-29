@@ -97,6 +97,20 @@ fn main() {
             &f.rgba,
         );
     }
+    // Cloud check: the heaviest setting on the scenario view shows the outline, underside band
+    // and ground shadow; the default (light) is in scenario-day.
+    let heavy = Style {
+        pixel_scale: 2,
+        clouds: cw_render::CloudLevel::Heavy,
+        ..Style::default()
+    };
+    let f = renderer.render_to_rgba(&scene, &Camera::scenario(), &heavy, 1600, 1000);
+    save_png(
+        &out.join("clouds-heavy-scenario.png"),
+        f.width,
+        f.height,
+        &f.rgba,
+    );
     if !timing {
         return;
     }
