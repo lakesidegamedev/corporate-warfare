@@ -362,7 +362,8 @@ private fun CareerLine(career: CareerSummary) {
 /** The Hall of Careers for the open career: chapters in order, achievements as badges, the score, then past careers. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun HallScreen(store: GameStore, settings: AppSettings = LocalAppSettings.current, modifier: Modifier = Modifier) {
+fun HallScreen(store: GameStore, settings: AppSettings? = LocalAppSettings.current, modifier: Modifier = Modifier) {
+    val earlier = settings?.careers.orEmpty()
     DisposableEffect(store) {
         store.hallOpen = true
         onDispose { store.hallOpen = false }
@@ -408,24 +409,24 @@ fun HallScreen(store: GameStore, settings: AppSettings = LocalAppSettings.curren
                 }
             }
         }
-        if (settings.careers.isNotEmpty()) {
+        if (earlier.isNotEmpty()) {
             item { Eyebrow("Earlier careers") }
-            items(settings.careers.size) { CareerLine(settings.careers[it]) }
+            items(earlier.size) { CareerLine(earlier[it]) }
         }
     }
 }
 
 /** The main menu's list of careers across games. */
 @Composable
-fun CareerListScreen(settings: AppSettings, onBack: () -> Unit) {
+fun CareerListScreen(careers: List<CareerSummary>, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Palette.ink).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { BackLabel("Back", Palette.gold) }
         }
         ScreenHeader("Hall of Careers", "Every career you have left or finished")
-        if (settings.careers.isEmpty()) Callout("No finished careers yet. Leave a career from its menu and it is kept here.", Palette.secondary)
+        if (careers.isEmpty()) Callout("No finished careers yet. Leave a career from its menu and it is kept here.", Palette.secondary)
         Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            settings.careers.forEach { CareerLine(it) }
+            careers.forEach { CareerLine(it) }
         }
     }
 }

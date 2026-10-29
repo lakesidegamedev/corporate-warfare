@@ -82,7 +82,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
     val settings = LocalAppSettings.current
     if (careers) {
         BackAction { careers = false }
-        CareerListScreen(settings) { careers = false }
+        CareerListScreen(settings?.careers.orEmpty()) { careers = false }
         return
     }
     if (editing) {
@@ -124,7 +124,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
             }
             MenuButton("New game", primary = !store.hasAutosave) { setup = true }
             if (store.hasAutosave) MenuButton("Load game") { loading = true }
-            if (settings.careers.isNotEmpty()) MenuButton("Hall of Careers") { careers = true }
+            if (settings?.careers?.isNotEmpty() == true) MenuButton("Hall of Careers") { careers = true }
             MenuButton("Scenario editor") { editing = true }
             MenuButton("Settings", onClick = onSettings)
             if (onQuit != null) MenuButton("Quit", onClick = onQuit)

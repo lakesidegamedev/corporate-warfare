@@ -134,7 +134,7 @@ class ChaptersRenderTest {
         render("result-desktop", 700, 220, settings) { Column(Modifier.padding(12.dp)) { ChapterResultPanel(first, {}) } }
         render("hall-desktop", 1280, 900, settings) { HallScreen(store, settings) }
         render("hall-phone", 412, 1500, settings) { HallScreen(store, settings) }
-        render("menu-careers-phone", 412, 700, settings) { CareerListScreen(settings) {} }
+        render("menu-careers-phone", 412, 700, settings) { CareerListScreen(settings.careers) {} }
         println("chapters: " + hall.chapters.joinToString { "${it.name} ${it.outcome}" })
     }
 
