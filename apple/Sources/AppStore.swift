@@ -811,6 +811,19 @@ final class AppStore: ObservableObject {
         ]))
     }
 
+    /// When the statements, charts and systems displays reload. Paused, after every command and
+    /// week; while time runs, every four weeks, so redrawing their charts never holds up the main
+    /// thread at top speed.
+    var historyRefreshKey: String {
+        guard let overview else { return "none" }
+        return runSpeed > 0 ? "run-\(overview.tick / 4)" : "rev-\(overview.revision)"
+    }
+
+    /// Read from the engine off the main actor: statements, history and the systems displays.
+    func read<T>(_ block: (SessionHandle) -> T) async -> T? {
+        await engine.read(block)
+    }
+
     /// A company's full page, with what the investor may see of it.
     func companyPage(_ firm: UInt64) async -> CompanyPageDto? {
         await engine.companyPage(firm: firm)

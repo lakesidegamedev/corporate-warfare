@@ -93,6 +93,8 @@ heading.
   quarter and see the goods you both sell, head to head.
 - Economy history in the economy panel: the corridor share index, the bank rate and inflation,
   the price level, companies operating and gone, raids and household spending, with date ranges.
+- The financials, the new charts and these systems displays are on iPhone and iPad too, in the same
+  8-bit style.
 - Five years of weekly history behind these displays. Saves from earlier versions load and start
   the history from the next week.
 - Deeper company financials: every company page and the Stats page have tabs for an overview,
