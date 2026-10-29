@@ -11,21 +11,31 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- Scenario history. Each scenario now has dated events from its own period that play out in your
+  career: a regional bank failure and the 1986 oil collapse in Texas, the technology bust and the
+  2001 recession in the Great Lakes, a browser listing boom and the dot-com bust in Silicon
+  Valley, the reunification boom and the 1992 currency crisis on the Ruhr and Rhine. Every event
+  is announced a few weeks ahead, then changes prices, demand, lending costs, central bank
+  mood or the law for a while. New games choose Historical (the default), Off or Shuffled, which
+  keeps the same events but moves their dates by up to half a year. The app screens for this come
+  in a later update.
+- The frame counter (Settings, Graphics, Show frame rate) now also shows how the game is drawing
+  (Direct3D, OpenGL, Metal or Software) and the size of the map in pixels. Software drawing shows in
+  amber, because it is far slower than a graphics card.
+
 ### Changed
 
+- Saves written by this version cannot be opened by older versions of the game. Careers saved in
+  1.8.0 and the earlier 1.9 previews open as normal, carry on without scenario history (their
+  dates are not invented backwards) and are saved in the new format from then on.
 - The map is much smoother on Windows and Linux, most of all on big screens. The ground, the day and
   night shading, the clouds and the menu globe are now painted ahead of time in the background, and
   while you drag or zoom the game slides the last finished picture into place instead of redrawing it,
   so moving the map no longer waits on drawing. A fresh picture replaces it a moment later.
-- Clouds are drawn in one pass instead of one per layer and shadow, where the computer can do it.
 - A new install with no graphics choice saved starts on Medium when the window is large or the
   computer is drawing in software, so the first look is smooth. Your own choice is never changed.
-
-### Added
-
-- The frame counter (Settings, Graphics, Show frame rate) now also shows how the game is drawing
-  (Direct3D, OpenGL, Metal or Software) and the size of the map in pixels. Software drawing shows in
-  amber, because it is far slower than a graphics card.
 
 ### Fixed
 

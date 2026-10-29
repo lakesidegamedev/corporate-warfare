@@ -50,6 +50,7 @@ fn main() {
             economy: "historic".into(),
             starting_capital_cents: None,
             price_path: String::new(),
+            timeline: String::new(),
         })
         .unwrap();
         for _ in 0..weeks {

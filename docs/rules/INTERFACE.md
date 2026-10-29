@@ -132,7 +132,11 @@ each changed struct as it was, converted on load with neutral defaults for the n
 (empty, zero or false, never invented history). The engine reads every released schema from
 `MIN_SCHEMA_VERSION` up and refuses newer ones with a version error. Schema 1 covers releases
 through 1.8 preview 2; schema 2 adds plant cut yields, the production lock and household
-wanted/unmet demand. Data kept outside the payload (custom scenario, currencies, freight read-out,
+wanted/unmet demand; schema 3 (1.9) adds the scenario timeline cursor (`SystemicState.timeline`:
+mode, the events with their play dates and which have been announced and fired, and the price
+shocks and credit squeezes in force). A schema 2 save loads with the timeline off and empty: dates
+are never invented for weeks already played. A save written by 3 is refused by a build that reads
+only up to 2 with the usual unsupported version message. Data kept outside the payload (custom scenario, currencies, freight read-out,
 history archives) travels in tagged trailers that older readers skip, independent of the schema.
 Each schema change adds a save written by the last released build as a test fixture.
 

@@ -8,7 +8,8 @@
 //! decode their frozen copy and convert it, filling new fields with neutral defaults.
 //!
 //! Layout 1: releases up to 1.8 preview 2. Layout 2 added `Facility.cut_bps`,
-//! `Policies.production_locked` and `Household.wanted_milli` / `unmet_milli`.
+//! `Policies.production_locked` and `Household.wanted_milli` / `unmet_milli`. Layout 3 added
+//! `SystemicState.timeline`, the scenario timeline cursor.
 
 use std::cell::Cell;
 use std::collections::BTreeMap;
@@ -18,10 +19,11 @@ use cw_core::ids::Handle;
 use cw_core::quantity::MilliLots;
 use serde::Deserialize;
 
+use crate::economy::systemic::{Incident, KINDS, SystemicState};
 use crate::state::{Facility, FacilityStatus, Household, Policies, PricePosture};
 
 /// The layout this build writes.
-pub const LAYOUT: u32 = 2;
+pub const LAYOUT: u32 = 3;
 /// The oldest layout this build can read.
 pub const MIN_LAYOUT: u32 = 1;
 
@@ -171,11 +173,30 @@ impl From<HouseholdV1> for Household {
     }
 }
 
+#[derive(Deserialize)]
+pub(crate) struct SystemicStateV2 {
+    incidents: Vec<Incident>,
+    counts: [u32; KINDS],
+}
+
+impl From<SystemicStateV2> for SystemicState {
+    fn from(old: SystemicStateV2) -> Self {
+        SystemicState {
+            incidents: old.incidents,
+            counts: old.counts,
+            // No timeline was ever set up for this career: it plays no dated events, and none
+            // are invented for the weeks already played.
+            timeline: crate::economy::timeline::TimelineState::default(),
+        }
+    }
+}
+
 /// Serde glue for a struct whose layout changed: the derive is generated as inherent functions
 /// (`#[serde(remote = "Self")]`) and the trait impls pick the frozen copy when reading an older
-/// layout. Writing always uses the current layout.
+/// layout. Writing always uses the current layout. `$below` is the first layout that has the
+/// current struct; anything older decodes `$old`.
 macro_rules! versioned {
-    ($current:ty, $v1:ty) => {
+    ($current:ty, $old:ty, $below:expr) => {
         impl serde::Serialize for $current {
             fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
                 <$current>::serialize(self, serializer)
@@ -183,8 +204,8 @@ macro_rules! versioned {
         }
         impl<'de> serde::Deserialize<'de> for $current {
             fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                if reading() < 2 {
-                    <$v1 as serde::Deserialize>::deserialize(deserializer).map(Into::into)
+                if reading() < $below {
+                    <$old as serde::Deserialize>::deserialize(deserializer).map(Into::into)
                 } else {
                     <$current>::deserialize(deserializer)
                 }
@@ -193,6 +214,7 @@ macro_rules! versioned {
     };
 }
 
-versioned!(Facility, FacilityV1);
-versioned!(Policies, PoliciesV1);
-versioned!(Household, HouseholdV1);
+versioned!(Facility, FacilityV1, 2);
+versioned!(Policies, PoliciesV1, 2);
+versioned!(Household, HouseholdV1, 2);
+versioned!(SystemicState, SystemicStateV2, 3);

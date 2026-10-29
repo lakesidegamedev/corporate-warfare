@@ -279,6 +279,7 @@ pub fn year_on_year_growth(history: &[MacroPoint]) -> i32 {
 /// borrower's grade.
 pub fn lending_premium_bps(world: &World) -> i32 {
     (-world.macro_state.cycle.output_gap_bps).max(0) / 4
+        + crate::economy::timeline::credit_spread_bps(world)
 }
 
 /// Nominal prices outside the firms' control drift with inflation: the price index, background

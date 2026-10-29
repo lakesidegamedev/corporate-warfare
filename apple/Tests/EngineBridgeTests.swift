@@ -33,9 +33,9 @@ final class EngineBridgeTests: XCTestCase {
         // and multi-output plants changed the dataset, and in 1.7 preview 4 when the world gained
         // government laws, the reserve and systemic incidents, and in 1.7 preview 5 when rivals chose
         // moves by temperament and the world gained grudges and alliances, and in 1.7.1 when seed
-        // shares began from an opening earnings prior and the world gained its start year. This needs
+        // shares began from an opening earnings prior and the world gained its start year, and in 1.9 when save schema 3 added the scenario timeline cursor (four empty bytes in this fixture, which names no scenario). This needs
         // a fresh simulator run on the Mac runner before R05 is claimed again.
-        XCTAssertEqual(session.canonicalHash(), "fddf778e8fe5e78f4379bf5c7688e45bf4dffa3c1449a89aa6c4e73cf8834a56")
+        XCTAssertEqual(session.canonicalHash(), "2d104b6095f5d8996848d9abfddcf531d23ea0aa71aaf7e2fa566b0b36e1124c")
 
         let data = try session.exportSave()
         XCTAssertGreaterThan(data.count, 1_000)
