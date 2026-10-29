@@ -63,16 +63,23 @@ class LettersRenderTest {
     /** The player raids the first rival market the rules allow, then a week passes. */
     private fun raidARival(h: uniffi.cw_ffi.SessionHandle) {
         val me = h.overview().primaryFirm ?: return
-        for (plant in h.mapPlants().filter { !it.player }) {
+        val plants = h.mapPlants()
+        val mine = plants.filter { it.player }.map { it.region to it.industry }.toSet()
+        println("player markets: $mine")
+        for (plant in plants.filter { !it.player && (it.region to it.industry) in mine }) {
             val check = h.raidCheck(me, plant.firm, plant.region, plant.industry)
-            val option = check.option ?: continue
-            if (!check.raidable) continue
+            val option = check.option
+            println("raid check ${plant.firmName} ${plant.region} ${plant.industry}: ${check.kind} raidable=${check.raidable} ready=${option?.readyWeek} now=${h.overview().tick}")
+            if (option == null || !check.raidable) continue
             val json = CommandJson.command(
                 "RaidMarket", "firm" to me, "target" to option.target, "region" to option.regionIndex,
                 "industry" to option.industryIndex, "budget_cents" to option.suggestedBudgetCents,
             )
-            if (h.submitJson(json).accepted) {
-                h.dismissPause(); h.advance(1u)
+            val receipt = h.submitJson(json)
+            println("raid receipt accepted=${receipt.accepted} ${receipt.errorKey} ${receipt.errorDetail}")
+            if (receipt.accepted) {
+                repeat(3) { h.dismissPause(); h.advance(1u) }
+                println("raids: ${h.recentRaids().size}")
                 return
             }
         }
@@ -113,7 +120,7 @@ class LettersRenderTest {
     fun theInboxAndALetterRender() {
         val texas = career("texas-1981", 76u)
         check("texas-w76", texas, "analyst")
-        val lakes = career("great-lakes-2000", 40u, raid = true)
+        val lakes = career("great-lakes-2000", 80u, raid = true)
         assertTrue(lakes.letters.any { it.kind == "rival" }, "the raid wrote a letter")
         check("great-lakes-raid", lakes, "rival")
     }
