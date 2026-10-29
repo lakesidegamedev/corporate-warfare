@@ -23,7 +23,6 @@ pub const CORRIDOR_WORKERS: i64 = 60_000;
 const TIER_SPLIT_BPS: [i64; 3] = [5_800, 3_200, 1_000];
 const PARTICIPATION_BPS: i64 = 9_500;
 const HOUSEHOLD_SAVINGS_WEEKS: i64 = 13;
-const BASE_POLICY_RATE_BPS: i32 = 600;
 
 const OUTSIDE_INVESTORS: [(&str, i64, i32); 8] = [
     ("Cedar Ridge Holdings", 250_000_000, 10_000),
@@ -74,7 +73,7 @@ pub fn build_with(
 ) -> World {
     let capital = options.capital();
     let (cycle, opening_rate, opening_inflation) =
-        crate::state::Cycle::for_start(options.economy, BASE_POLICY_RATE_BPS);
+        crate::state::Cycle::for_start(options.economy, &dataset.opening_macro);
     let mut world = World {
         tick: Tick::OPENING,
         revision: 0,
@@ -222,6 +221,14 @@ pub fn build_with(
         }
     }
     world
+}
+
+/// The rate an opening loan carries: the period's policy rate, its opening credit spread and
+/// the grade B spread the opening firms are rated at.
+fn opening_loan_rate_bps(world: &World, dataset: &Dataset) -> i32 {
+    world.macro_state.policy_rate_bps
+        + dataset.opening_macro.credit_spread_bps
+        + Grade::B.spread_bps()
 }
 
 fn build_regions(world: &mut World, dataset: &Dataset) {
@@ -501,7 +508,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
                     borrower: handle,
                     lender: Lender::Outside(0),
                     principal_remaining_cents: loan,
-                    rate_bps: BASE_POLICY_RATE_BPS + Grade::B.spread_bps(),
+                    rate_bps: opening_loan_rate_bps(world, dataset),
                     weekly_principal_cents: loan / 104,
                     remaining_weeks: 104,
                     collateral: None,
@@ -833,7 +840,7 @@ fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
         borrower: handle,
         lender: Lender::Outside(1),
         principal_remaining_cents: loan,
-        rate_bps: BASE_POLICY_RATE_BPS + Grade::B.spread_bps(),
+        rate_bps: opening_loan_rate_bps(world, dataset),
         weekly_principal_cents: loan / 104,
         remaining_weeks: 104,
         collateral: None,

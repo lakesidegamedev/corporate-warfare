@@ -15,7 +15,7 @@ use cw_data::Dataset;
 /// Weeks between central bank meetings.
 pub const MEETING_WEEKS: u32 = 6;
 const RATE_FLOOR_BPS: i32 = 25;
-const RATE_CEILING_BPS: i32 = 1_500;
+const RATE_CEILING_BPS: i32 = 2_000;
 
 /// Advance the economy one week and apply its effects.
 pub fn weekly(world: &mut World, dataset: &Dataset) {
@@ -150,7 +150,7 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
     rotate_chair(world, dataset);
     world.macro_state.policy_rate_bps = new_rate;
     world.macro_state.real_growth_bps = growth;
-    apply_nominal_drift(world, new_inflation);
+    apply_nominal_drift(world, dataset, new_inflation);
     apply_demand(world, gap);
 
     // Tell the player when the economy turns: the same cards the old regime draw used.
@@ -255,7 +255,7 @@ pub fn ten_year_yield_bps(world: &World) -> i32 {
     let now = world.macro_state.policy_rate_bps;
     (now + 3 * long_run) / 4
         + 75
-        + (world.macro_state.inflation_bps - c.target_inflation_bps).max(0) / 4
+        + (world.macro_state.inflation_bps - c.target_inflation_bps).max(0) / 8
 }
 
 /// Real growth over the last 52 weeks, or annualised over what history there is.
@@ -279,30 +279,47 @@ pub fn year_on_year_growth(history: &[MacroPoint]) -> i32 {
 /// borrower's grade.
 pub fn lending_premium_bps(world: &World) -> i32 {
     (-world.macro_state.cycle.output_gap_bps).max(0) / 4
+        + (world.macro_state.inflation_bps - world.macro_state.cycle.target_inflation_bps).max(0)
+            / 10
         + crate::economy::timeline::credit_spread_bps(world)
 }
 
 /// Nominal prices outside the firms' control drift with inflation: the price index, background
 /// wages (so prevailing wages follow) and the gateway import and export prices. Firms' own
 /// prices follow through the market.
-fn apply_nominal_drift(world: &mut World, inflation: i32) {
+fn apply_nominal_drift(world: &mut World, dataset: &Dataset, inflation: i32) {
     let before = world.macro_state.price_index_bps.max(1);
     let after = (before + before * inflation as i64 / (52 * 10_000)).max(1);
     world.macro_state.price_index_bps = after;
-    if after == before {
-        return;
-    }
+    // Wages open at the period's own growth and fade into inflation over two years.
+    let wage_rate = inflation + opening_wage_gap_bps(dataset, world.tick.0);
+    let wage_after = (before + before * wage_rate as i64 / (52 * 10_000)).max(1);
     let scale =
         |value: i64| -> i64 { (value as i128 * after as i128 / before as i128).max(1) as i64 };
+    let wage_scale = |value: i64| -> i64 {
+        (value as i128 * wage_after as i128 / before as i128).max(1) as i64
+    };
     for region in &mut world.regions {
         for wage in region.background_wage_cents.iter_mut() {
-            *wage = scale(*wage);
+            *wage = wage_scale(*wage);
         }
+    }
+    if after == before {
+        return;
     }
     for gateway in &mut world.gateways {
         gateway.sell_price_cents = scale(gateway.sell_price_cents);
         gateway.buy_price_cents = scale(gateway.buy_price_cents);
     }
+}
+
+/// How far wage growth runs above inflation in week `week`: the gap the scenario opened with,
+/// fading evenly to nothing over `WAGE_FADE_WEEKS`.
+pub fn opening_wage_gap_bps(dataset: &Dataset, week: u32) -> i32 {
+    let m = &dataset.opening_macro;
+    let gap = (m.wage_growth_bps - m.inflation_bps) as i64;
+    let left = cw_data::opening_macro::WAGE_FADE_WEEKS.saturating_sub(week) as i64;
+    (gap * left / cw_data::opening_macro::WAGE_FADE_WEEKS as i64) as i32
 }
 
 /// Household demand everywhere rises and falls with the output gap: a 1 percent gap moves

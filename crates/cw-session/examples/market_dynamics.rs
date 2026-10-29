@@ -63,6 +63,10 @@ fn main() {
     let mut groups: BTreeMap<(usize, u32), [i64; 4]> = BTreeMap::new();
     // Player-less career: the investor's net worth at the end and at the start, summed over seeds.
     let mut worth = [0i64; 2];
+    // year -> policy rate, inflation, ten-year yield, price index, background wage index (tier 0,
+    // first region), summed over seeds at the last week of the year.
+    let mut macros: BTreeMap<u32, [i64; 5]> = BTreeMap::new();
+    let mut wage0 = 0i64;
     for seed in 1..=seeds {
         let config = cw_session::ScenarioConfig {
             seed,
@@ -90,6 +94,17 @@ fn main() {
             }
             let world = &session.world;
             let dataset = &session.dataset;
+            if week == 1 {
+                wage0 = world.regions[0].background_wage_cents[0];
+            }
+            if week % 52 == 0 {
+                let row = macros.entry(week / 52).or_default();
+                row[0] += world.macro_state.policy_rate_bps as i64;
+                row[1] += world.macro_state.inflation_bps as i64;
+                row[2] += cw_sim::economy::macro_cycle::ten_year_yield_bps(world) as i64;
+                row[3] += world.macro_state.price_index_bps;
+                row[4] += world.regions[0].background_wage_cents[0] * 10_000 / wage0.max(1);
+            }
             {
                 let year = (week - 1) / 52 + 1;
                 let row = trade.entry(year).or_default();
@@ -294,6 +309,18 @@ fn main() {
             row[2],
             row[3],
             row[4]
+        );
+    }
+    println!("by year end: policy rate, inflation, ten-year yield (percent), price index and background wage index (start 100), mean over seeds");
+    for (year, row) in &macros {
+        let n = seeds as i64;
+        println!(
+            "  year {year}: rate {:.2}  inflation {:.2}  ten-year {:.2}  prices {:.1}  wages {:.1}",
+            row[0] as f64 / n as f64 / 100.0,
+            row[1] as f64 / n as f64 / 100.0,
+            row[2] as f64 / n as f64 / 100.0,
+            row[3] as f64 / n as f64 / 100.0,
+            row[4] as f64 / n as f64 / 100.0
         );
     }
     println!(

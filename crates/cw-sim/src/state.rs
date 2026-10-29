@@ -1278,11 +1278,21 @@ pub struct RateDecision {
 }
 
 impl Cycle {
-    /// The opening cycle for a chosen starting economy.
-    pub fn for_start(start: EconomyStart, policy_rate_bps: i32) -> (Cycle, i32, i32) {
+    /// The opening cycle for a chosen starting economy. A historic start opens at the inflation,
+    /// expectations, policy rate and neutral rate of the scenario's own period; the other
+    /// starts are the same generic economy in every scenario.
+    pub fn for_start(
+        start: EconomyStart,
+        period: &cw_data::OpeningMacro,
+    ) -> (Cycle, i32, i32) {
         let mut c = Cycle::default();
         let (rate, inflation) = match start {
-            EconomyStart::Historic => (policy_rate_bps, 300),
+            EconomyStart::Historic => {
+                c.expected_inflation_bps = period.expected_inflation_bps;
+                c.target_inflation_bps = period.target_inflation_bps;
+                c.neutral_real_bps = period.neutral_real_bps;
+                (period.policy_rate_bps, period.inflation_bps)
+            }
             EconomyStart::Calm => {
                 c.output_gap_bps = 0;
                 c.credit_bps = 150;
