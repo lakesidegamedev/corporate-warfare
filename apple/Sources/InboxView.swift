@@ -4,6 +4,7 @@ import SwiftUI
 /// categories are not shown; a quiet week is one line.
 struct InboxView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var showingPaper = false
 
     private var subtitle: String {
         [store.selectedFirmDto?.name, store.overview?.weekLabel].compactMap { $0 }.joined(separator: " · ")
@@ -17,7 +18,13 @@ struct InboxView: View {
     }
 
     var body: some View {
-        TabScreen(title: "Inbox", subtitle: subtitle) {
+        TabScreen(title: "Inbox", subtitle: subtitle, trailing: {
+            Button { showingPaper = true } label: {
+                Text("THE PAPER").font(Pixel.font(11)).foregroundStyle(Theme.gold)
+                    .padding(.horizontal, 10).padding(.vertical, 6).background(Theme.panelRaised)
+            }
+            .buttonStyle(.plain)
+        }) {
             if mandatory > 0 {
                 CalloutRow(icon: "hand",
                            text: "\(mandatory) decision\(mandatory == 1 ? "" : "s") needed before time can advance.",
@@ -55,6 +62,14 @@ struct InboxView: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showingPaper) {
+            NavigationStack {
+                PaperView()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingPaper = false } } }
+            }
+            .environmentObject(store)
+            .presentationBackground(Theme.ink)
         }
     }
 

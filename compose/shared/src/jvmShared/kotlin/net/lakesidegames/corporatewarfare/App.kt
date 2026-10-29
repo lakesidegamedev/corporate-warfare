@@ -181,10 +181,12 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
             Row(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { overlay = null }) { BackLabel("Back", Palette.gold) }
             }
+            if (page != "paper") TickerBar(store) { overlay = "paper" }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (page) {
                     "actions" -> CommandCenterScreen(store)
                     "research" -> ResearchScreen(store)
+                    "paper" -> PaperScreen(store)
                     else -> StatsScreen(store) { overlay = null }
                 }
             }
@@ -233,13 +235,14 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
             // The map has its own time controls; every other tab gets the strip, so time can be
             // paused or slowed from anywhere.
             if (tab != Tab.Map) TimeStrip(store)
+            TickerBar(store) { open("paper") }
             TutorialPanel(compact = true, modifier = Modifier.fillMaxWidth(), researchHint = store.research?.let { r -> store.selectedFirmDto?.let { Tutorial.researchHint(it.cashCents, r) } })
             Box(Modifier.weight(1f)) {
             when (tab) {
                 Tab.Map -> MapScreen(store)
                 Tab.Office -> OfficeScreen(store, ::open)
                 Tab.Markets -> MarketsScreen(store)
-                Tab.Inbox -> InboxScreen(store)
+                Tab.Inbox -> InboxScreen(store, ::open)
                 Tab.Portfolio -> PortfolioScreen(store, onSettings)
             }
             }
@@ -582,9 +585,13 @@ fun PauseBanner(store: GameStore, modifier: Modifier = Modifier) {
 // MARK: Inbox
 
 @Composable
-private fun InboxScreen(store: GameStore) {
+private fun InboxScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
     TabList {
-        item { ScreenHeader("Inbox", listOfNotNull(store.selectedFirmDto?.name, store.overview?.weekLabel).joinToString(" · ")) }
+        item {
+            ScreenHeader("Inbox", listOfNotNull(store.selectedFirmDto?.name, store.overview?.weekLabel).joinToString(" · ")) {
+                OutlinedButton(onClick = { onOpen("paper") }) { Text("The paper", color = Palette.primaryText, fontSize = 12.sp) }
+            }
+        }
         val due = store.events.count { it.mandatory }
         if (due > 0) item { Callout("$due decision${if (due == 1) "" else "s"} needed before time can advance.", Palette.warning) }
         if (store.events.isEmpty() && store.rivalFeed.isEmpty()) item { Callout("Quiet week. Decisions show up here when they happen.", Palette.secondary) }

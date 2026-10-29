@@ -58,6 +58,8 @@ struct LaneTrack {
     let km: Double
     /// The player owns or ships on it, so its vehicles wear the gold livery.
     var mine = false
+    /// Who moves the goods: the player's gold, a rival's sector colour, or the outside carriers' grey.
+    var owner = FreightLook.outside
     /// Whether each of `LaneWater.samples` points from a to b is over water, so ships never sail
     /// over land and trucks never drive on a lake.
     var water: [Bool]?
@@ -422,6 +424,8 @@ final class MapGeometry {
         let look: MapLook
         let freight: Bool
         let displayScale: Double
+        let routes: Int
+        let firmSector: [UInt64: String]
     }
 
     private var overlayKey: OverlayKey?
@@ -429,7 +433,8 @@ final class MapGeometry {
 
     /// What the moving layer needs, rebuilt only when the camera or the data under it changes.
     func overlay(lanes: [LaneDto], divisions: [DivisionMarker], selected: String?, heights: [String: Double],
-                 look: MapLook, freightLayer: Bool, displayScale: Double = 2) -> OverlayGeometry {
+                 look: MapLook, freightLayer: Bool, displayScale: Double = 2,
+                 firmSector: [UInt64: String] = [:]) -> OverlayGeometry {
         var hasher = Hasher()
         for lane in lanes {
             hasher.combine(lane.id)
@@ -437,13 +442,14 @@ final class MapGeometry {
             hasher.combine(lane.outsideLots)
         }
         let key = OverlayKey(lanes: hasher.finalize(), divisions: divisions, selected: selected, heights: heights,
-                             look: look, freight: freightLayer, displayScale: displayScale)
+                             look: look, freight: freightLayer, displayScale: displayScale, routes: Routes.generation,
+                             firmSector: firmSector)
         if let overlayHeld, overlayKey == key { return overlayHeld }
         let p = projection
         let raised = look.raised(p.t)
         let ground: [String: Double]? = raised ? heights : nil
         let laneCount = look.traffic >= 2 || freightLayer ? 120 : look.traffic == 1 ? 60 : 0
-        let tracks = p.t > 0.5 && laneCount > 0 ? laneTracks(lanes, count: laneCount) : []
+        let tracks = p.t > 0.5 && laneCount > 0 ? laneTracks(lanes, count: laneCount, firmSector: firmSector) : []
         let roadLines = look.traffic > 0 && detail >= 2 && camera.zoom > 9
             ? MapPolyline.build(p, map.interstates, lift: raised ? plinth : 0, size: size) : []
         // Beacons and smoke only where the models stand.
@@ -476,17 +482,24 @@ final class MapGeometry {
     }
 
     /// The busiest lanes as untilted tracks, seeded so particles never line up between lanes.
-    private func laneTracks(_ lanes: [LaneDto], count: Int) -> [LaneTrack] {
+    private func laneTracks(_ lanes: [LaneDto], count: Int, firmSector: [UInt64: String]) -> [LaneTrack] {
         let busiest = lanes.sorted { ($0.capacityLots + $0.outsideLots) > ($1.capacityLots + $1.outsideLots) }.prefix(count)
         guard let first = busiest.first else { return [] }
         let top = Double(max(first.capacityLots + first.outsideLots, 1))
         let p = projection
-        return busiest.compactMap { lane -> LaneTrack? in
+        var missing: [Routes.Request] = []
+        let tracks = busiest.compactMap { lane -> LaneTrack? in
             guard let a = map.anchor(of: lane.a).flatMap({ p.ground(lon: $0.lon, lat: $0.lat) }),
                   let b = map.anchor(of: lane.b).flatMap({ p.ground(lon: $0.lon, lat: $0.lat) }) else { return nil }
             // Trucks and trains follow the real interstates and railways where there is a route.
+            // Routes are worked out in the background; a lane waits for its own.
+            let request = Routes.Request(mode: lane.modeId, a: lane.a, b: lane.b)
+            guard let known = Routes.cached(map, request), let water = LaneWater.cached(map, lane.a, lane.b) else {
+                missing.append(request)
+                return nil
+            }
             var points: [CGPoint]?
-            if let route = Routes.of(map, mode: lane.modeId, lane.a, lane.b) {
+            if let route = known {
                 let projected = route.compactMap { p.ground(lon: $0.lon, lat: $0.lat) }
                 if projected.count == route.count { points = projected }
             }
@@ -494,11 +507,14 @@ final class MapGeometry {
             if let points {
                 length = zip(points, points.dropFirst()).reduce(0) { $0 + Double(hypot($1.1.x - $1.0.x, $1.1.y - $1.0.y)) }
             }
-            let track = LaneTrack(a: a, b: b, mode: lane.modeId, weight: Double(lane.capacityLots + lane.outsideLots) / top,
+            var track = LaneTrack(a: a, b: b, mode: lane.modeId, weight: Double(lane.capacityLots + lane.outsideLots) / top,
                                   length: max(length, 8), seed: Double(stableHash(lane.a + lane.b) % 1000) / 1000,
-                                  km: max(Double(lane.km), 20), mine: laneIsMine(lane), water: LaneWater.along(map, lane.a, lane.b))
+                                  km: max(Double(lane.km), 20), mine: laneIsMine(lane), water: water)
+            track.owner = FreightLook.ownerColor(lane, firmSector: firmSector)
             return points.map { track.following($0) } ?? track
         }
+        if !missing.isEmpty { Routes.prewarm(map, missing) }
+        return tracks
     }
 }
 
@@ -523,12 +539,17 @@ enum LaneWater {
     private static var held: [String: [Bool]] = [:]
     private static let lock = NSLock()
 
+    /// The crossings if already worked out, without working them out.
+    static func cached(_ map: WorldMap, _ a: String, _ b: String) -> [Bool]? {
+        lock.lock()
+        defer { lock.unlock() }
+        return held["\(map.scenarioId ?? "")/\(a)>\(b)"]
+    }
+
     /// Whether each of `samples` points between two places is in a lake or outside every country.
     static func along(_ map: WorldMap, _ a: String, _ b: String) -> [Bool]? {
         let key = "\(map.scenarioId ?? "")/\(a)>\(b)"
-        lock.lock()
-        defer { lock.unlock() }
-        if let hit = held[key] { return hit }
+        if let hit = cached(map, a, b) { return hit }
         guard let from = map.anchor(of: a), let to = map.anchor(of: b) else { return nil }
         let lon0 = from.lon, lat0 = from.lat, lon1 = to.lon, lat1 = to.lat
         // Only the rings whose box the lane passes through.
@@ -552,7 +573,9 @@ enum LaneWater {
             let lat = lat0 + (lat1 - lat0) * t
             return lakes.contains { inside($0, lon, lat) } || !land.contains { inside($0, lon, lat) }
         }
+        lock.lock()
         held[key] = out
+        lock.unlock()
         return out
     }
 
@@ -820,6 +843,8 @@ struct MapScene {
     var space = true
     /// Pixels per point, for the half-resolution light layers.
     var displayScale = 2.0
+    /// Remembers which labels showed last frame, so they hold steady while the map moves.
+    var labelPlanner: LabelPlanner?
 
     static let spaceColor = RGB(hex: 0x05090E)
     private static let outsideLand = RGB(hex: 0x25282B)
@@ -866,12 +891,19 @@ struct MapScene {
         if zoom > 3 {
             let close = zoom > 14
             let nightNow = sun != nil
-            // Each big city on screen is a voxel city block sized by its population, a step smaller
-            // than the player's buildings so those stay the stars; then the divisions, nearest last.
-            var cityTops: [Int: CGFloat] = [:]
+            // Each big city on screen is a voxel city block sized by its population, a step smaller than the
+            // player's buildings so those stay the stars, shaped by what the city is known for (a port, a steel
+            // town, a car town); then rivals' plants a step smaller again, then the player's divisions.
             // Voxels in true 3D: points a voxel for the player's buildings, a step down for the rest.
             let unit = VoxelModels.unit(g.scale, displayScale: displayScale)
             let e = p.east
+            let planner = labelPlanner ?? LabelPlanner()
+            let box = VoxelModels.Bounds()
+            var cityBox: [Int: CGRect] = [:]
+            // Buildings and badges are reserved first, so a label that would cross one is the label that goes.
+            planner.begin()
+            defer { planner.end() }
+            func reserved() { if let r = box.rect { planner.reserve(r) } }
             // The diorama up close: trees, fields, barns, rocks and the houses round each city.
             if look.countryside && look.buildings >= 2 && look.earth && g.closeUp && t > 0.5 {
                 Countryside.draw(in: &context, projection: p, map: map, week: week, unit: unit * 0.6,
@@ -884,32 +916,39 @@ struct MapScene {
                 let ink = VoxelModels.inked(cityUnit, displayScale: displayScale)
                 for (i, block) in g.cityBlocks(ground).enumerated() {
                     let at = CGPoint(x: block.gx, y: block.gy)
-                    if let top = VoxelModels.draw(VoxelModels.sized("city", plants: block.plants), projection: p, ground: at,
-                                                  floor: block.floor, unit: cityUnit, tone: tone, ink: ink, in: &context) {
-                        cityTops[block.index] = top
-                    }
+                    var kind = CityKinds.of(map.cities[block.index].name)
+                    if !VoxelModels.has(VoxelModels.sized(kind, plants: block.plants)) { kind = "city" }
+                    box.reset()
+                    VoxelModels.draw(VoxelModels.sized(kind, plants: block.plants), projection: p, ground: at,
+                                     floor: block.floor, unit: cityUnit, tone: tone, ink: ink, bounds: box, in: &context)
+                    if let r = box.rect { cityBox[block.index] = r }
+                    reserved()
                     if (economyPhase == "boom" || economyPhase == "expansion" && i % 3 == 0) && i < 12 {
                         let k = 9 * cityUnit
+                        box.reset()
                         VoxelModels.draw(VoxelModels.sized("crane", plants: economyPhase == "boom" ? 8 : 2), projection: p,
                                          ground: CGPoint(x: block.gx + e.dx * k, y: block.gy + e.dy * k), floor: block.floor,
-                                         unit: cityUnit, ink: ink, in: &context)
+                                         unit: cityUnit, ink: ink, bounds: box, in: &context)
+                        reserved()
                     }
                 }
             }
             if look.buildings > 0 && g.closeUp && t > 0.5 {
-                // Rivals' plants first, smaller and greyed, so the player's own stand over them.
-                let rivalUnit = unit * 0.75
+                // Rivals' plants first, in their sector's colour with a dark roof and about 60 percent of the
+                // player's size, so the player's own stand over them.
+                let rivalUnit = unit * 0.6
                 let rivalInk = VoxelModels.inked(rivalUnit, displayScale: displayScale)
                 let rivalStates = PlantState.of(plants.filter { !$0.player }, byFirm: true)
+                let rivalRoof = RGB(hex: 0x2A2F36)
                 for b in look.rivals ? g.rivalBuildings(plants, ground) : [] {
                     let at = CGPoint(x: b.gx, y: b.gy)
-                    let (name, tone): (String, VoxelModels.Tone) = switch rivalStates[b.key] {
-                    case .site: (VoxelModels.sized("site", plants: b.plants), .muted)
-                    case .mothballed: (VoxelModels.sized(b.sector, plants: b.plants), .dark)
-                    default: (VoxelModels.sized(b.sector, plants: b.plants), .muted)
-                    }
+                    let state = rivalStates[b.key]
+                    let name = state == .site ? VoxelModels.sized("site", plants: b.plants) : VoxelModels.sized(b.sector, plants: b.plants)
+                    let tone: VoxelModels.Tone = state == .site ? .muted : state == .mothballed ? .dark : .sector(FreightLook.sectorColor(b.sector))
+                    box.reset()
                     VoxelModels.draw(name, projection: p, ground: at, floor: b.floor, unit: rivalUnit, tone: tone, ink: rivalInk,
-                                     in: &context)
+                                     roof: state == .site || state == .mothballed ? nil : rivalRoof, bounds: box, in: &context)
+                    reserved()
                 }
                 let ink = VoxelModels.inked(unit, displayScale: displayScale)
                 let states = PlantState.of(plants.filter(\.player))
@@ -917,26 +956,30 @@ struct MapScene {
                     // Each division is a voxel building for its industry, shown as it stands: a
                     // building site while its plants go up, a crane beside it while one is added or
                     // retooled, dark when mothballed, a gold flag when just taken over. A plain box
-                    // if the model is missing.
+                    // if the model is missing. The player's roofs are gold.
                     let at = CGPoint(x: b.gx, y: b.gy)
                     let base = p.lift(at, b.floor)
                     let state = states[b.key] ?? .running
                     let spriteTop: CGFloat?
+                    box.reset()
                     switch state {
                     case .site:
                         spriteTop = VoxelModels.draw(VoxelModels.sized("site", plants: b.plants), projection: p, ground: at,
-                                                     floor: b.floor, unit: unit, ink: ink, in: &context)
+                                                     floor: b.floor, unit: unit, ink: ink, bounds: box, in: &context)
                     case .mothballed:
                         spriteTop = VoxelModels.draw(VoxelModels.sized(b.sector, plants: b.plants), projection: p, ground: at,
-                                                     floor: b.floor, unit: unit, tone: .dark, ink: ink, in: &context)
+                                                     floor: b.floor, unit: unit, tone: .dark, ink: ink, bounds: box, in: &context)
                     default:
                         spriteTop = VoxelModels.draw(VoxelModels.sized(b.sector, plants: b.plants), projection: p, ground: at,
-                                                     floor: b.floor, unit: unit, ink: ink, in: &context)
+                                                     floor: b.floor, unit: unit, ink: ink, roof: RGB.gold, bounds: box, in: &context)
                     }
+                    reserved()
                     if state == .growing {
                         let k = 9 * unit
+                        box.reset()
                         VoxelModels.draw("crane/0", projection: p, ground: CGPoint(x: b.gx + e.dx * k, y: b.gy + e.dy * k),
-                                         floor: b.floor, unit: unit, ink: ink, in: &context)
+                                         floor: b.floor, unit: unit, ink: ink, bounds: box, in: &context)
+                        reserved()
                     }
                     if acquired.contains(b.key), let spriteTop {
                         MapScene.drawFlag(in: &context, at: CGPoint(x: base.x + 4 * unit, y: spriteTop - 2 / max(displayScale, 1)),
@@ -954,8 +997,10 @@ struct MapScene {
                     let badge = CGPoint(x: topAt.x, y: topAt.y - 12)
                     let count = context.resolve(Text("\(b.plants)").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.ink))
                     let measured = count.measure(in: CGSize(width: 200, height: 50))
-                    context.fill(disc(badge, max(measured.width, measured.height) / 2 + 3), with: .color(Theme.gold))
+                    let radius = max(measured.width, measured.height) / 2 + 3
+                    context.fill(disc(badge, radius), with: .color(Theme.gold))
                     context.draw(count, at: badge)
+                    planner.reserve(CGRect(x: badge.x - radius, y: badge.y - radius, width: radius * 2, height: radius * 2))
                 }
             } else if t > 0.9 && g.zoomRatio >= 0.7 {
                 // Around the scenario's framing: a small badge per division. Further out, nothing.
@@ -964,30 +1009,46 @@ struct MapScene {
             if look.cityLights && lit && (sun != nil || t < 1) {
                 GlobeLighting.cityLights(in: &context, cities: map.cities, projection: p, sun: light, lift: plinth, scale: 1)
             }
-            // City names last, with the region names below, so no building ever covers them.
+            // City names over every building. Sentence case, one weight. A name sits beside its block (right,
+            // left, above, below); one that fits nowhere is dropped, and the biggest cities choose first.
             for (index, city) in map.cities.prefix(look.labels >= 1 ? (close ? 40 : 14) : 0).enumerated() {
                 if !close && city.country != "USA" { continue }
                 let geo = GeoPoint(e4: city.x, city.y)
                 guard let at = p.at(lon: geo.lon, lat: geo.lat, height: g.cityFloor(index, ground)) else { continue }
                 context.fill(disc(at, 2.5), with: .color(Theme.primaryText.opacity(0.85)))
-                labels.draw(
-                    Text(city.name).font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.primaryText.opacity(0.9)),
-                    at: CGPoint(x: at.x + 6, y: min(cityTops[index] ?? at.y, at.y)), anchor: .leading
-                )
+                let text = context.resolve(Text(city.name).font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.primaryText.opacity(0.9)))
+                let size = text.measure(in: CGSize(width: 400, height: 60))
+                let slots: [CGPoint]
+                if let b = cityBox[index] {
+                    let mid = b.midY - size.height / 2
+                    let cx = b.midX - size.width / 2
+                    slots = [CGPoint(x: b.maxX + 3, y: mid), CGPoint(x: b.minX - 3 - size.width, y: mid),
+                             CGPoint(x: cx, y: b.minY - 3 - size.height), CGPoint(x: cx, y: b.maxY + 3)]
+                } else {
+                    slots = [CGPoint(x: at.x + 6, y: at.y - size.height / 2), CGPoint(x: at.x - 6 - size.width, y: at.y - size.height / 2),
+                             CGPoint(x: at.x - size.width / 2, y: at.y - size.height - 5), CGPoint(x: at.x - size.width / 2, y: at.y + 5)]
+                }
+                if let corner = planner.place("c:\(city.name)", size: size, slots: slots) {
+                    labels.draw(text, at: corner, anchor: .topLeading)
+                }
+            }
+            // Region names last and lowest in priority: small caps with tracking, and only these.
+            if zoom > 14 && look.labels >= 2 {
+                for region in map.regions {
+                    guard let anchor = map.anchor(of: region.code),
+                          let at = p.at(lon: anchor.lon, lat: anchor.lat, height: g.regionLift(region.code, ground)) else { continue }
+                    let text = context.resolve(Text(region.name.uppercased()).font(.system(size: 9, weight: .medium)).tracking(0.8)
+                        .foregroundStyle(Theme.secondary.opacity(0.8)))
+                    let size = text.measure(in: CGSize(width: 400, height: 60))
+                    let slots = [CGPoint(x: at.x - size.width / 2, y: at.y + 30), CGPoint(x: at.x - size.width / 2, y: at.y - 30 - size.height),
+                                 CGPoint(x: at.x - size.width / 2, y: at.y + 34 + size.height)]
+                    if let corner = planner.place("r:\(region.code)", size: size, slots: slots) {
+                        labels.draw(text, at: corner, anchor: .topLeading)
+                    }
+                }
             }
         } else if look.cityLights && lit && t < 1 {
             GlobeLighting.cityLights(in: &context, cities: map.cities, projection: p, sun: light, lift: 0, scale: 0.7)
-        }
-        if zoom > 14 && look.labels >= 2 {
-            for region in map.regions {
-                guard let anchor = map.anchor(of: region.code),
-                      let at = p.at(lon: anchor.lon, lat: anchor.lat, height: g.regionLift(region.code, ground)) else { continue }
-                labels.draw(
-                    Text(region.name.uppercased()).font(.system(size: 9, weight: .semibold)).tracking(0.8)
-                        .foregroundStyle(Theme.secondary.opacity(0.8)),
-                    at: CGPoint(x: at.x, y: at.y + 30), anchor: .top
-                )
-            }
         }
     }
 
@@ -1255,7 +1316,7 @@ struct MapScene {
                      part: OverlayPart = .all) {
         let p = g.projection
         let o = g.overlay(lanes: lanes, divisions: divisions, selected: selected, heights: heights, look: look,
-                          freightLayer: freightLayer, displayScale: displayScale)
+                          freightLayer: freightLayer, displayScale: displayScale, firmSector: FreightLook.firmSectors(plants))
         let zoom = camera.zoom
         let traffic = part != .effects
         let effects = part != .traffic
@@ -1272,8 +1333,11 @@ struct MapScene {
                 // Trucks and trains run only where a real road or railway carries them; a lane
                 // with no route shows nothing rather than a line across country.
                 if lane.mode != "sea" && !lane.routed { continue }
-                let count = 1 + Int(lane.weight * per)
-                let color = MapScene.modeColors[lane.mode] ?? RGB(hex: 0xE8E8E8)
+                // Up close a lane holds only as many vehicles as keep two vehicle lengths between neighbours.
+                let vehicleLength = o.vehicleUnit * (lane.mode == "rail" ? 21 : lane.mode == "sea" ? 12 : 7)
+                var count = 1 + Int(lane.weight * per)
+                if vehicles != nil { count = min(count, FreightLook.maxPerLane(laneLength: lane.length, vehicleLength: vehicleLength)) }
+                let color = lane.owner
                 let speed = MapScene.modeSpeed[lane.mode] ?? 40
                 var cores = Path()
                 for k in 0..<count {
@@ -1303,7 +1367,9 @@ struct MapScene {
         // the ground, in degrees, so cars hold their pace and places while the camera moves; closer
         // in they simply look further apart and faster. The Freight mode hides them with the freight.
         if traffic && look.traffic > 0 && look.detail >= 2 && zoom > 9 && !o.roads.isEmpty && !freightLayer {
-            let spacing = vehicles != nil ? (look.traffic >= 2 ? 0.12 : 0.24) : look.traffic >= 2 ? 0.035 : 0.07
+            // Close in, never nearer than two car lengths (a car is four voxels long) however far in the camera is.
+            let spacing = vehicles != nil ? max(look.traffic >= 2 ? 0.12 : 0.24, 8 * o.vehicleUnit / max(p.r * .pi / 180, 1e-3))
+                : look.traffic >= 2 ? 0.035 : 0.07
             let pace = 0.012
             let step = 3 / max(p.r * .pi / 180, 1e-3)
             let detailFade = clamp((zoom - 7) / 5)
@@ -1330,7 +1396,7 @@ struct MapScene {
                             let side = CGFloat(2.4 * o.vehicleUnit) * sign
                             vehicles!.append(VehicleSpot(type: "car", mine: false,
                                                          ground: CGPoint(x: at.x - dy / len * side, y: at.y + dx / len * side),
-                                                         dir: CGVector(dx: dx, dy: dy)))
+                                                         dir: CGVector(dx: dx, dy: dy), tone: .livery(FreightLook.outside)))
                         }
                     } else {
                         let at = road.point(at: d)
@@ -1431,25 +1497,26 @@ struct MapScene {
         let ry = ux * sign
         // A straight lane between two hubs can cross a lake; a routed one keeps to its road.
         let wet: Bool? = lane.routed ? false : lane.water.map { $0[Int((f * Double(LaneWater.samples - 1)).rounded())] }
+        let tone: VoxelModels.Tone = lane.mine ? .plain : .livery(lane.owner)
         switch lane.mode {
         case "rail":
             guard wet != true else { return }
             // Wagons trail the locomotive along the track, spaced by a vehicle's length on the ground.
             let gap = 7 * unit / max(lane.length, 1)
-            out.append(VehicleSpot(type: "loco", mine: lane.mine, ground: at, dir: dir))
+            out.append(VehicleSpot(type: "loco", mine: lane.mine, ground: at, dir: dir, tone: tone))
             for w in 1...2 {
                 let t = f - sign * gap * Double(w)
-                if t >= 0 && t <= 1 { out.append(VehicleSpot(type: "wagon", mine: lane.mine, ground: lane.at(t), dir: dir)) }
+                if t >= 0 && t <= 1 { out.append(VehicleSpot(type: "wagon", mine: lane.mine, ground: lane.at(t), dir: dir, tone: tone)) }
             }
         case "sea":
             // Ships keep to their own side of the channel.
             guard wet != false else { return }
             out.append(VehicleSpot(type: "ship", mine: lane.mine,
-                                   ground: CGPoint(x: Double(at.x) + rx * 4 * unit, y: Double(at.y) + ry * 4 * unit), dir: dir))
+                                   ground: CGPoint(x: Double(at.x) + rx * 4 * unit, y: Double(at.y) + ry * 4 * unit), dir: dir, tone: tone))
         default:
             guard wet != true else { return }
             out.append(VehicleSpot(type: "truck", mine: lane.mine,
-                                   ground: CGPoint(x: Double(at.x) + rx * 2.2 * unit, y: Double(at.y) + ry * 2.2 * unit), dir: dir))
+                                   ground: CGPoint(x: Double(at.x) + rx * 2.2 * unit, y: Double(at.y) + ry * 2.2 * unit), dir: dir, tone: tone))
         }
     }
 
@@ -1458,8 +1525,8 @@ struct MapScene {
                              in context: inout GraphicsContext) {
         let name = "\(v.type)/\(v.mine ? "player" : "neutral")"
         VoxelModels.draw(name, projection: p, ground: v.ground, floor: o.plinth + v.height, unit: o.vehicleUnit,
-                         heading: VoxelModels.heading(v.dir, projection: p), ink: VoxelModels.inked(o.vehicleUnit, displayScale: displayScale),
-                         alpha: alpha, in: &context)
+                         heading: VoxelModels.heading(v.dir, projection: p), tone: v.tone,
+                         ink: VoxelModels.inked(o.vehicleUnit, displayScale: displayScale), alpha: alpha, in: &context)
     }
 
     /// A cargo plane up close: the voxel plane high over the map, its shadow on the ground and a
@@ -1484,7 +1551,7 @@ struct MapScene {
     /// With nothing moving, only the selected region's outline.
     func drawSelection(in context: inout GraphicsContext, geometry g: MapGeometry) {
         let o = g.overlay(lanes: lanes, divisions: divisions, selected: selected, heights: heights, look: look,
-                          freightLayer: freightLayer, displayScale: displayScale)
+                          freightLayer: freightLayer, displayScale: displayScale, firmSector: FreightLook.firmSectors(plants))
         if let top = o.selectedTop { context.stroke(top, with: .color(Theme.gold), lineWidth: 2.5) }
     }
 }
@@ -1552,6 +1619,7 @@ struct WorldMapView: View {
     @State private var meter = FrameMeter()
     @State private var world = WorldClock()
     @State private var takeovers = TakeoverLog()
+    @State private var labelPlanner = LabelPlanner()
     @State private var acquired: Set<String> = []
     @State private var countrysideReady = 0
 
@@ -1610,7 +1678,10 @@ struct WorldMapView: View {
                 }
                 if look.moves {
                     TimelineView(.animation(minimumInterval: interval, paused: !running || gameSpeed <= 0)) { timeline in
+                        // Redrawn when the lanes' routes arrive from the background.
+                        let ready = countrysideReady
                         Canvas { context, canvasSize in
+                            _ = ready
                             let now = MapClock.seconds(timeline.date)
                             let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
                             MainStalls.time("map.traffic") {
@@ -1777,6 +1848,8 @@ struct WorldMapView: View {
         // rival's last week and is the player's now.
         .onAppear { acquired = takeovers.update(plants, week: Int(week)) }
         .onReceive(NotificationCenter.default.publisher(for: Countryside.ready)) { _ in countrysideReady += 1 }
+        .onReceive(NotificationCenter.default.publisher(for: VoxelModels.ready)) { _ in countrysideReady += 1 }
+        .onReceive(NotificationCenter.default.publisher(for: Routes.ready)) { _ in countrysideReady += 1 }
         .onChange(of: plants) { _, new in acquired = takeovers.update(new, week: Int(week)) }
         .onChange(of: shading) { old, new in
             ease.retarget(from: old, to: new, now: MapClock.now, animate: animate && extrude)
@@ -1801,7 +1874,7 @@ struct WorldMapView: View {
             heights: layer == .freight ? [:] : ease.value(at: now, target: shading),
             selected: selected, divisions: divisions, lanes: lanes, freightLayer: layer == .freight, pickedLane: pickedLane,
             sun: look.dayNight ? MapSun.moving(gameSeconds(now)) : nil, plants: plants, economyPhase: economyPhase,
-            acquired: acquired, week: seasonWeek, displayScale: displayScale
+            acquired: acquired, week: seasonWeek, displayScale: displayScale, labelPlanner: labelPlanner
         )
     }
 
