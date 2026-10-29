@@ -273,7 +273,10 @@ fn count_word(n: usize) -> String {
     const WORDS: [&str; 11] = [
         "No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
     ];
-    WORDS.get(n).map(|w| (*w).to_owned()).unwrap_or_else(|| n.to_string())
+    WORDS
+        .get(n)
+        .map(|w| (*w).to_owned())
+        .unwrap_or_else(|| n.to_string())
 }
 
 /// What a plant of an industry is called in the paper.
@@ -1516,8 +1519,17 @@ mod tests {
             }
         }
         // Same week, same words.
-        let one = weekly_paper(&s.world, &s.dataset, 30).lead.unwrap().headline;
-        assert_eq!(one, weekly_paper(&s.world, &s.dataset, 30).lead.unwrap().headline);
+        let one = weekly_paper(&s.world, &s.dataset, 30)
+            .lead
+            .unwrap()
+            .headline;
+        assert_eq!(
+            one,
+            weekly_paper(&s.world, &s.dataset, 30)
+                .lead
+                .unwrap()
+                .headline
+        );
         // Weeks 30 to 32 are inside the bid's window; the verbs differ between them.
         assert!(seen.len() >= 3, "{seen:?}");
     }
