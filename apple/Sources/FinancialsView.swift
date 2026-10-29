@@ -112,7 +112,7 @@ struct CompanyFinancialsSection: View {
             }
         }
         .task(id: "\(firm)-\(store.overview?.revision ?? 0)") {
-            let firm = firm, name = name, industry = industry
+            let firm = self.firm, name = self.name, industry = self.industry
             data = await store.read { FinancialData.load($0, firm: firm, name: name, industry: industry) }
         }
     }

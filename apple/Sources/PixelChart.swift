@@ -304,7 +304,7 @@ struct PixelChart: View {
             // the last stretch of the plot rather than as a bare edge at the right.
             let step = zip(weeks, weeks.dropFirst()).map { $1 - $0 }.min() ?? period.weeks
             let stretch = CGFloat(last + step - first)
-            let index = Dictionary(weeks.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+            let index = Dictionary(weeks.enumerated().map { ($0.element, $0.offset) }, uniquingKeysWith: { a, _ in a })
             func x(_ week: Int) -> CGFloat {
                 kind == .bar ? snap(CGFloat(index[week] ?? 0) * slot) : snap(CGFloat(week - first) / stretch * size.width)
             }

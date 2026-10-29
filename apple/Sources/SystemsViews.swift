@@ -318,7 +318,7 @@ struct GoodDepthSection: View {
     let referenceCents: Int64
 
     var body: some View {
-        let product = product
+        let product = self.product
         EngineSection(key: "good-\(product)", load: { h in (Figures.points(h.goodPriceHistory(product: product)), h.goodDepth(product: product)) }) { loaded in
             VStack(alignment: .leading, spacing: 12) {
                 if loaded.0.count >= 2 {
@@ -336,7 +336,7 @@ struct StockHistorySection: View {
     var height: CGFloat = 150
 
     var body: some View {
-        let firm = firm
+        let firm = self.firm
         EngineSection(key: "share-\(firm)", load: { h in (Figures.points(h.sharePriceHistory(firm: firm)), Figures.points(h.corridorIndexHistory())) }) { loaded in
             if loaded.0.count >= 2 {
                 Panel(padding: 12) { StockHistoryChart(share: loaded.0, index: loaded.1, height: height) }
@@ -352,7 +352,7 @@ struct RegionDossierSection: View {
     let region: UInt32
 
     var body: some View {
-        let region = region
+        let region = self.region
         let firm = store.selectedFirm ?? store.overview?.primaryFirm ?? 0
         EngineSection(key: "region-\(region)-\(firm)", load: { $0.regionDossier(region: region, firm: firm) }) { d in
             RegionDossierView(d: d) { industry in
