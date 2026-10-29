@@ -123,8 +123,11 @@ struct PlotFlow: Layout {
 
     private func sizes(_ subviews: Subviews, _ limit: CGFloat) -> [CGSize] {
         subviews.map { view in
+            // Rounded up a point, so text measured at its exact width is not cut short when placed.
             let natural = view.sizeThatFits(.unspecified)
-            return natural.width <= limit ? natural : view.sizeThatFits(ProposedViewSize(width: limit, height: nil))
+            let width = (natural.width + 1).rounded(.up)
+            return width <= limit ? CGSize(width: width, height: natural.height)
+                : view.sizeThatFits(ProposedViewSize(width: limit, height: nil))
         }
     }
 
