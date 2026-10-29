@@ -27,7 +27,7 @@ class LettersRenderTest {
         Pixel.font = desktopPixelFont()
     }
 
-    private fun career(scenario: String, week: UInt, stopWhen: (uniffi.cw_ffi.SessionHandle) -> Boolean = { false }): GameStore {
+    private fun career(scenario: String, week: UInt, raid: Boolean = false): GameStore {
         val dir = kotlin.io.path.createTempDirectory("cwletters").toFile()
         val store = GameStore(dir, CoroutineScope(Dispatchers.Default))
         store.startCareer(
@@ -42,13 +42,14 @@ class LettersRenderTest {
         val finalTick = kotlinx.coroutines.runBlocking {
             store.read { h ->
                 var guard = 0
-                while (guard++ < 200 && h.overview().tick < week && !stopWhen(h)) {
+                while (guard++ < 200 && h.overview().tick < week) {
                     // Answer waiting decisions the way a player would, then run on.
                     for (e in h.events().filter { it.mandatory }) {
                         e.choices.firstOrNull()?.let { c -> h.submitJson(CommandJson.command("RespondEvent", "event" to e.id, "choice" to c.id)) }
                     }
                     h.dismissPause(); h.advance(1u)
                 }
+                if (raid) raidARival(h)
                 h.overview().tick
             }
         }!!
@@ -57,6 +58,24 @@ class LettersRenderTest {
         while (((store.overview?.tick ?: 0u) < finalTick || store.busy) && System.currentTimeMillis() < settled) Thread.sleep(100)
         assertTrue((store.overview?.tick ?: 0u) >= finalTick, "the store caught up to week $finalTick")
         return store
+    }
+
+    /** The player raids the first rival market the rules allow, then a week passes. */
+    private fun raidARival(h: uniffi.cw_ffi.SessionHandle) {
+        val me = h.overview().primaryFirm ?: return
+        for (plant in h.mapPlants().filter { !it.player }) {
+            val check = h.raidCheck(me, plant.firm, plant.region, plant.industry)
+            val option = check.option ?: continue
+            if (!check.raidable) continue
+            val json = CommandJson.command(
+                "RaidMarket", "firm" to me, "target" to option.target, "region" to option.regionIndex,
+                "industry" to option.industryIndex, "budget_cents" to option.suggestedBudgetCents,
+            )
+            if (h.submitJson(json).accepted) {
+                h.dismissPause(); h.advance(1u)
+                return
+            }
+        }
     }
 
     private fun render(name: String, width: Int, height: Int, content: @androidx.compose.runtime.Composable () -> Unit) {
@@ -94,7 +113,8 @@ class LettersRenderTest {
     fun theInboxAndALetterRender() {
         val texas = career("texas-1981", 76u)
         check("texas-w76", texas, "analyst")
-        val lakes = career("great-lakes-2000", 150u) { h -> h.letters(1u).any { it.kind == "rival" } }
+        val lakes = career("great-lakes-2000", 40u, raid = true)
+        assertTrue(lakes.letters.any { it.kind == "rival" }, "the raid wrote a letter")
         check("great-lakes-raid", lakes, "rival")
     }
 }
