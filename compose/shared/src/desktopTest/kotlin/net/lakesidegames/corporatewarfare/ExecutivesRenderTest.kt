@@ -80,7 +80,7 @@ class ExecutivesRenderTest {
         assertTrue(data.posts.size == 3, "three posts")
         assertTrue(data.posts.any { it.holder != null }, "a chief financial officer was hired")
         val text = data.posts.joinToString(" ") { it.blurb + (it.holder?.effect ?: "") } + data.candidates.flatMap { it.people }.joinToString(" ") { it.effect }
-        assertTrue(!text.contains("bps") && !text.contains('–') && !text.contains('—'), "plain words")
+        assertTrue(!text.contains("bps") && !text.contains('\u2013') && !text.contains('\u2014'), "plain words")
         val empty = data.posts.first { it.holder == null }
         val list = data.candidates.first { it.postCode == empty.postCode }.people.take(3)
         assertTrue(list.isNotEmpty(), "candidates to hire")
