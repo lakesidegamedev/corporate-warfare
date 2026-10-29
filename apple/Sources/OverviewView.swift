@@ -628,6 +628,11 @@ struct SettingsView: View {
                                 .tint(Theme.gold)
                             Button("Restart the tutorial") { store.tutorial.restart() }
                                 .tint(Theme.gold)
+                            Button("Set up again") {
+                                dismiss()
+                                store.showSetup = true
+                            }
+                            .tint(Theme.gold)
                             if store.sessionReady {
                                 Button("Replay the guided walkthrough") {
                                     dismiss()

@@ -169,6 +169,11 @@ final class TutorialModel: ObservableObject {
         startTick = nil
     }
 
+    func setHidden(_ value: Bool) {
+        hidden = value
+        persist()
+    }
+
     func hide() {
         hidden = true
         persist()

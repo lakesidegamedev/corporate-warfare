@@ -45,6 +45,15 @@ heading.
   mood or the law for a while. New games choose Historical (the default), Off or Shuffled, which
   keeps the same events but moves their dates by up to half a year. The app screens for this come
   in a later update.
+- First-run setup on every platform. The first time you open the game it walks you through a few short
+  steps: a welcome, a one-second graphics test that suggests Low, Medium or High for your device and shows
+  a preview of each, which version track to follow (Windows, Linux and directly downloaded Android only),
+  whether to share anonymous market data with the plain explanation, and whether to use the tutorial, with
+  the folder your saves are kept in on a computer. Skip takes the defaults, and nothing is saved until you
+  press Play or Skip. On Windows and Linux the test also tells you how the game is drawing and warns in plain
+  words if it is in slow software mode. You can run it again from Settings with Set up again. If you are
+  upgrading from 1.8, you see one What's new screen instead, with a button to run setup, and none of your
+  settings change.
 - The frame counter (Settings, Graphics, Show frame rate) now also shows how the game is drawing
   (Direct3D, OpenGL, Metal or Software) and the size of the map in pixels. Software drawing shows in
   amber, because it is far slower than a graphics card.
