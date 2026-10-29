@@ -82,6 +82,8 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
     androidx.compose.runtime.SideEffect {
         store.preferredCurrency = settings.reportingCurrency
         store.pauseOnWarnings = settings.pauseOnWarnings
+        store.briefCollapsed = settings.briefCollapsed
+        store.onBriefCollapsed = { settings.chooseBriefCollapsed(it) }
         store.onCurrencyChosen = { settings.chooseReportingCurrency(it) }
         store.onCareerEnded = { settings.recordCareer(it) }
         val installId = settings.installId
@@ -117,7 +119,10 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                     }
                     store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         if (maxWidth >= DesktopBreakpoint) {
-                            Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) { DesktopShell(store, onSettings = { showSettings = true }) }
+                            Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                                DesktopShell(store, onSettings = { showSettings = true })
+                                if (settings.showBriefEachWeek) BriefWeeklyHost(store)
+                            }
                         }
                         else MainScreen(store, onSettings = { showSettings = true })
                     }
@@ -314,6 +319,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
             item { FoundCompanyPanel(store, scroll = false) }
             return@TabList
         }
+        item { BriefPanel(store, firm.currency) }
         chapterItems(store)
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -487,7 +493,7 @@ internal fun PricingRow(line: ProductLineDto, onClick: () -> Unit) {
 
 /** Automatic pricing, a step against the market, or a markup over the company's own cost. */
 @Composable
-internal fun PostureDialog(store: GameStore, line: ProductLineDto, onDismiss: () -> Unit) {
+internal fun PostureDialog(store: GameStore, line: ProductLineDto, presetBps: Int? = null, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Palette.panel,
@@ -501,6 +507,12 @@ internal fun PostureDialog(store: GameStore, line: ProductLineDto, onDismiss: ()
                     fontSize = 13.sp,
                 )
                 Text("Buyers take the cheapest offer first. Undercut to sell out; price above the market for margin and risk unsold stock.", color = Palette.secondary, fontSize = 12.sp)
+                presetBps?.let { bps ->
+                    GoldButton("Apply the suggested price: %+.0f%% against the market".format(bps / 100.0)) {
+                        store.setPosture(line.product, 1, bps)
+                        onDismiss()
+                    }
+                }
                 OutlinedButton(onClick = { store.setPosture(line.product, 0, 0); onDismiss() }) {
                     Text(if (line.mode == "auto") "Automatic (on)" else "Automatic", color = Palette.primaryText)
                 }
