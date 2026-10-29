@@ -18,6 +18,7 @@ uniffi::setup_scaffolding!();
 
 mod cast;
 mod catalogue;
+mod chapters;
 mod company;
 mod custom;
 mod paper;
@@ -1781,49 +1782,6 @@ fn recipe_dtos(dataset: &cw_data::Dataset) -> Vec<RecipeDto> {
 }
 
 /// The full strategy catalogue with inputs and reference margins.
-/// Player-facing title and detail for an objective.
-fn objective_copy(
-    dataset: &cw_data::Dataset,
-    kind: &cw_sim::economy::objectives::ObjectiveKind,
-) -> (String, String) {
-    use cw_sim::economy::objectives::ObjectiveKind;
-    let money = |cents: i64| {
-        let dollars = cents / 100;
-        if dollars.abs() >= 1_000 {
-            format!("${}K", dollars / 1_000)
-        } else {
-            format!("${dollars}")
-        }
-    };
-    match kind {
-        ObjectiveKind::NewRegion { .. } => (
-            "Enter a new region".to_owned(),
-            "Open a division in a region where the company does not operate yet.".to_owned(),
-        ),
-        ObjectiveKind::NewState { .. } => (
-            "Expand into another state".to_owned(),
-            "Open a division in a state where the company does not operate yet.".to_owned(),
-        ),
-        ObjectiveKind::WeeklyEbit { target_cents } => (
-            format!("Lift operating profit to {} a week", money(*target_cents)),
-            "Average weekly operating profit over the last four weeks.".to_owned(),
-        ),
-        ObjectiveKind::MarketShare {
-            region,
-            industry,
-            target_bps,
-        } => (
-            format!(
-                "Take {}% of {} in {}",
-                target_bps / 100,
-                cw_sim::state::INDUSTRY_NAMES[*industry as usize].replace('_', " "),
-                dataset.regions[*region as usize].name
-            ),
-            "Capacity share of the market, counting unmet imports.".to_owned(),
-        ),
-    }
-}
-
 fn pct_text(bps: i64) -> String {
     format!("{}.{:02}%", bps / 100, (bps % 100).abs())
 }
@@ -3668,36 +3626,44 @@ impl SessionHandle {
         }
     }
 
-    /// The board's current objective, if one is open.
+    /// The board's mandate in force for the player's primary company, if one was taken. The
+    /// 1.2 quarterly objective this call used to return is now the chapter mandate; the full
+    /// record is `hall_of_careers`.
     pub fn objective(&self) -> Option<ObjectiveDto> {
         let session = self.lock();
         let world = &session.world;
         let dataset = &session.dataset;
-        let objective = world.objective.as_ref()?;
-        let (title, detail) = objective_copy(dataset, &objective.kind);
+        let mandate = world.chapters.active.get(&world.investor.primary_group?)?;
+        let (title, detail) = chapters::mandate_copy(dataset, &mandate.kind);
+        let progress = cw_sim::economy::chapters::progress(world, dataset, mandate);
         Some(ObjectiveDto {
             title,
             detail,
-            progress_bps: cw_sim::economy::objectives::progress_bps(world, dataset, objective)
-                as i32,
-            due_week: objective.due,
-            weeks_left: objective.due.saturating_sub(world.tick.0),
+            progress_bps: progress.bps as i32,
+            due_week: mandate.due,
+            weeks_left: mandate.due.saturating_sub(world.tick.0),
         })
     }
 
-    /// Closed objectives, newest first.
+    /// Closed mandates of the player's chapters, newest first.
     pub fn objective_history(&self) -> Vec<ObjectiveResultDto> {
+        use cw_sim::economy::chapters::Outcome;
         let session = self.lock();
         session
             .world
-            .objective_history
+            .chapters
+            .log
             .iter()
             .rev()
-            .map(|result| ObjectiveResultDto {
-                title: objective_copy(&session.dataset, &result.objective.kind).0,
-                met: result.met,
-                closed_week: result.closed,
-                bonus_cents: result.bonus_cents,
+            .filter(|c| matches!(c.outcome, Some(Outcome::Met | Outcome::Missed)))
+            .filter_map(|c| {
+                let kind = c.offered.get(c.chosen? as usize)?;
+                Some(ObjectiveResultDto {
+                    title: chapters::mandate_copy(&session.dataset, kind).0,
+                    met: c.outcome == Some(Outcome::Met),
+                    closed_week: c.closed,
+                    bonus_cents: c.bonus_cents,
+                })
             })
             .collect()
     }

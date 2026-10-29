@@ -38,6 +38,11 @@ const ARCHIVE_MAGIC: &[u8; 4] = b"HIST";
 /// Marks the systems history trailer, last: the weekly market, region, division, freight and
 /// economy figures. Outside the hashed world; a save without it loads with empty history.
 const SYSTEMS_MAGIC: &[u8; 4] = b"SYST";
+/// Marks the chapters trailer, last: the board mandates on offer and in force, the player's
+/// chapter log and the achievements earned (1.9). Unlike HIST and SYST it is future-affecting, so
+/// `canonical_hash` folds it in; it stays outside the postcard payload so the save schema does not
+/// move. A save without it loads with no chapter state and opens the current chapter fresh.
+const CHAPTERS_MAGIC: &[u8; 4] = b"CHAP";
 
 pub fn encode(world: &World, career_id: u64) -> Result<Vec<u8>, DomainError> {
     encode_with(world, career_id, None)
@@ -125,6 +130,21 @@ pub fn encode_with(
             });
         }
         out.extend_from_slice(SYSTEMS_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.chapters.is_empty() {
+        let bytes =
+            postcard::to_allocvec(&world.chapters).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(CHAPTERS_MAGIC);
         out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
         out.extend_from_slice(&bytes);
@@ -270,6 +290,13 @@ pub fn decode_with(
     if rest.len() >= 4 && &rest[..4] == SYSTEMS_MAGIC {
         let body = trailer_body(rest)?;
         world.systems = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+        rest = &rest[40 + body.len()..];
+    }
+    if rest.len() >= 4 && &rest[..4] == CHAPTERS_MAGIC {
+        let body = trailer_body(rest)?;
+        world.chapters = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
             detail: SaveFault::MalformedPayload,
         })?;
     }
