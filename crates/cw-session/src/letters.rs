@@ -1557,7 +1557,7 @@ mod tests {
     #[test]
     fn a_strong_quarter_is_a_short_memo_from_the_cfo() {
         let mut s = quiet("great-lakes-2000", 26);
-        book_weeks(&mut s, 14, 26, 1_000_000_00, 0);
+        book_weeks(&mut s, 14, 26, 100_000_000, 0);
         let l = letters(&s.world, &s.dataset, 20)
             .into_iter()
             .find(|l| l.id == "cfo:q:26")
@@ -1569,7 +1569,7 @@ mod tests {
         assert!(text(&l).contains("strong quarter"));
         // Thin margins are not a strong quarter.
         let mut t = quiet("great-lakes-2000", 26);
-        book_weeks(&mut t, 14, 26, 1_000_000_00, 995_000_00);
+        book_weeks(&mut t, 14, 26, 100_000_000, 99_500_000);
         assert!(
             letters(&t.world, &t.dataset, 20)
                 .iter()
@@ -1586,8 +1586,8 @@ mod tests {
             .get_mut(handle)
             .unwrap()
             .policies
-            .research_budget_cents = 5_000_000_00;
-        book_weeks(&mut s, 24, 30, 1_000_000_00, 6_000_000_00);
+            .research_budget_cents = 500_000_000;
+        book_weeks(&mut s, 24, 30, 100_000_000, 600_000_000);
         let advice = crate::cfo::advice(&s.world, &s.dataset, handle.0);
         assert!(!advice.is_empty(), "the setup should make the CFO speak");
         let l = letters(&s.world, &s.dataset, 25)
