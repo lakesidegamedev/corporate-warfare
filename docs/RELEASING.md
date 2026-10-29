@@ -59,6 +59,8 @@ increases with every upload.
 
 ## Windows setup program
 
+Desktop installers come from the release tasks (`packageReleaseMsi`, `packageReleaseDeb`, `createReleaseDistributable`), which run ProGuard with `compose/shared/desktop-rules.pro`. If a library is added and the release build starts failing or a screen misbehaves only in the installed game, check those keep rules first. The desktop jobs use JDK 21.
+
 Each Windows build produces `CorporateWarfare-<version>-setup.exe` (Inno Setup 6, script and
 checks under `compose/shared/packaging/windows/`, pictures from `tools/installer_art.py`) beside
 the MSI. `release-others.yml` and `preview.yml` build and attach it; the PR workflow builds it and

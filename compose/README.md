@@ -8,8 +8,9 @@ built as a shared library and called through uniffi's Kotlin bindings, which loa
   is one source directory shared by both rather than an intermediate source set.
 - `androidApp/`: the Android application (`net.lakesidegames.corporatewarfare`).
 - Desktop app (Windows, Linux): `shared/src/desktopMain/.../Main.kt`, the same app in a window.
-  `./gradlew :shared:run` runs it; `:shared:packageMsi` (on Windows) and `:shared:packageDeb` (on
-  Linux) build installers. Headless machines need `SKIKO_RENDER_API=SOFTWARE`.
+  `./gradlew :shared:run` runs it; `:shared:packageReleaseMsi` (on Windows) and `:shared:packageReleaseDeb` (on
+  Linux) build the installers, and `:shared:createReleaseDistributable` the plain app folder. The release
+  tasks run ProGuard (rules in `shared/desktop-rules.pro`); the plain `package*` tasks do not. Headless machines need `SKIKO_RENDER_API=SOFTWARE`.
 
 Build:
 

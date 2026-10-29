@@ -117,6 +117,11 @@ heading.
 
 ### Changed
 
+- A smaller Windows and Linux download. The desktop game now ships without a large icon library
+  it never used and with the unused parts of the screen toolkit trimmed away, so the Linux
+  package drops from about 109 MB to about 63 MB. The Windows setup program also squeezes its
+  files harder. The game looks and plays the same, and it reaches the main menu in the same
+  time as before.
 - Smaller downloads and a quicker start. The Android download is much smaller because the app
   is now trimmed of code it never uses and the direct download carries only the phone version
   of the game engine (the Play Store bundle already delivered just the right one). The game
