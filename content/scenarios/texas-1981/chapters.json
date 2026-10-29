@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "note": "Chapter names for this scenario. Eras name a chapter in which the timeline event with that id plays; the others are used in order when no era applies. Fictional and plain.",
+  "eras": {
+    "tx-tight-money": "The Squeeze",
+    "tx-regional-bank-failure": "The Bank Run",
+    "tx-lending-pullback": "Dry Credit",
+    "tx-gulf-pipeline": "The New Pipeline",
+    "tx-oil-collapse": "The Collapse",
+    "tx-savings-crisis": "The Reckoning",
+    "tx-stockpile-programme": "The Stockpile",
+    "tx-slow-recovery": "Steadier Ground"
+  },
+  "names": [
+    "The First Wells",
+    "Boom Town",
+    "High Plains",
+    "The Long Haul",
+    "Dust and Diesel",
+    "Hard Bargains",
+    "The Quiet Years",
+    "Second Wind",
+    "Open Range",
+    "The Old Guard"
+  ]
+}

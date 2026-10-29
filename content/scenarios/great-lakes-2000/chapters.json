@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "note": "Chapter names for this scenario. Eras name a chapter in which the timeline event with that id plays; the others are used in order when no era applies. Fictional and plain.",
+  "eras": {
+    "gl-tech-bust": "The Bust",
+    "gl-recession": "The Slowdown",
+    "gl-credit-aftermath": "Tight Lenders",
+    "gl-steel-tariffs": "Walls Go Up",
+    "gl-lake-ports-dispute": "The Closed Port",
+    "gl-recovery": "Growth Returns",
+    "gl-housing-boom": "The Building Boom",
+    "gl-export-boom": "Ships Full",
+    "gl-credit-crunch": "The Crunch"
+  },
+  "names": [
+    "Lakeshore",
+    "Steel and Grain",
+    "The Freight Years",
+    "Winter Contracts",
+    "Iron Ore",
+    "The Long Shift",
+    "Harbour Lights",
+    "Midwest Pride",
+    "The Rust Belt Turns",
+    "Fresh Water"
+  ]
+}

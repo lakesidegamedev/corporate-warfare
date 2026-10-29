@@ -154,6 +154,20 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             vec![firm()],
         ),
         a(
+            "ChooseMandate",
+            "Board",
+            "Take a board mandate",
+            "At the start of each chapter the board offers three mandates. Take one in the first four weeks: meet it by the end of the chapter for a management bonus and better standing with the board, miss it and the board loses confidence.",
+            "chapter mandate board goal objective",
+            vec![
+                firm(),
+                f("pick", "Mandate", "choice").choices(
+                    "number",
+                    &[("0", "First offer"), ("1", "Second offer"), ("2", "Third offer")],
+                ),
+            ],
+        ),
+        a(
             "SetSectorFocus",
             "Company",
             "Change sector focus",
