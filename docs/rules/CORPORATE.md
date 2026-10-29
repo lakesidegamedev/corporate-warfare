@@ -119,7 +119,14 @@ permits asset sale, equity raise or approved rescheduling. After grace, enter re
 secured claims paid from collateral, administrative/payroll claims next, unsecured
 including deposits/bonds proportionately next, equity residual last. No assets distributed
 before claim resolution. Restructuring offers creditors 50 percent principal repayment
-with four-quarter schedule; accept only if estimated liquidation recovery is lower.
+with four-quarter schedule; accept only if estimated liquidation recovery is lower, and only
+against a plan: every operating plant that does not pay its way at reference prices is mothballed
+(output sold less inputs, payroll at the firm's own wages, upkeep and land; a carrier plant is
+judged on whether it moves a quarter of its capacity, a terminal is not judged alone), so the firm
+returns after its year with a smaller cost base. A firm whose judged plants all lose money has no
+plan and is liquidated; the player's request to restructure is refused for the same reason. The
+firm stays in restructuring for its full 52 weeks: a bill it defers meanwhile joins its overdue
+payables and does not turn the plan back into a four-week grace and a second haircut.
 Otherwise liquidate assets at 40 percent carrying value through finite outside buyer
 funds. Insufficient buyers delay sale, never mint cash. Parent guarantee shortfalls become
 claims against guarantor up to the contracted cap. No implied guarantee for siblings.

@@ -163,12 +163,42 @@ pub fn clear_week(world: &mut World, dataset: &Dataset) {
         gateway.last_import_lots = 0;
         gateway.last_export_lots = 0;
     }
+    resell_exports_abroad(world);
     let opening = world.outside.gateway_book.cash().max(0);
     world.outside.gateway_floor_cents = opening - opening / 100;
     crate::ph!("markets::intermediate", clear_intermediate(world, dataset));
     crate::ph!("markets::households", clear_households(world, dataset));
     crate::ph!("markets::government", clear_government(world, dataset));
     crate::ph!("markets::public_works", clear_public_works(world, dataset));
+}
+
+/// Weeks the outside account holds what it bought from the corridor before the wider world has
+/// taken it: each week it sells on a thirteenth of the stock on its books.
+pub const OUTSIDE_RESALE_WEEKS: i64 = 13;
+
+/// The outside account is a trader, not a vault. What it buys from the corridor it sells on to
+/// the rest of the world, at what it paid for it, so the cash it paid out comes back a quarter
+/// later and exports stay payable for as long as the corridor sells. Without this the goods sat
+/// on its books forever while its cash only fell, and every export-heavy scenario ran its
+/// account dry within a few years (Texas from $855 million to $360 million in four).
+/// Resale is at cost, so it books no profit and mints no money: it turns an asset it already
+/// holds back into cash.
+fn resell_exports_abroad(world: &mut World) {
+    let stock = world
+        .outside
+        .gateway_book
+        .balance(Account::Inventory)
+        .max(0);
+    let sold = (stock + OUTSIDE_RESALE_WEEKS - 1) / OUTSIDE_RESALE_WEEKS;
+    if sold <= 0 {
+        return;
+    }
+    let _ = world.outside.gateway_book.commit(
+        world.tick,
+        Txn::new()
+            .debit(Account::Cash, sold, "resale abroad")
+            .credit(Account::Inventory, sold, "resale abroad"),
+    );
 }
 
 /// Room a gateway adds after a week its exports filled it, in basis points of its capacity.
@@ -1988,6 +2018,51 @@ mod tests {
             .balance(Account::Revenue);
         assert!(after.0 < before.0, "surplus power leaves");
         assert!(revenue_after > revenue_before, "the gateway pays for it");
+    }
+
+    #[test]
+    fn the_outside_account_sells_on_a_thirteenth_of_its_stock_a_week_at_cost() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            9,
+            crate::state::ScenarioKind::Guided,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        // Worked by hand: 1,300 of stock is 100 a week; 1,301 rounds up to 101; nothing sells
+        // nothing. Each sale moves value from stock to cash at cost, so the total never changes.
+        let book = |w: &World| {
+            (
+                w.outside.gateway_book.cash(),
+                w.outside.gateway_book.balance(Account::Inventory),
+            )
+        };
+        let (cash0, stock0) = book(&world);
+        assert_eq!(stock0, 0);
+        resell_exports_abroad(&mut world);
+        assert_eq!(book(&world), (cash0, 0), "no stock, no sale");
+        let _ = world.outside.gateway_book.commit(
+            world.tick,
+            Txn::new()
+                .credit(Account::Cash, 1_301, "export purchase")
+                .debit(Account::Inventory, 1_301, "export purchase"),
+        );
+        resell_exports_abroad(&mut world);
+        assert_eq!(book(&world), (cash0 - 1_301 + 101, 1_200));
+        resell_exports_abroad(&mut world);
+        assert_eq!(
+            book(&world),
+            (cash0 - 1_301 + 101 + 93, 1_107),
+            "1,200 / 13 rounds up to 93"
+        );
+        assert!(world.outside.gateway_book.is_balanced());
+        // Stock drains toward zero and stops there; cash plus stock never changed.
+        for _ in 0..200 {
+            resell_exports_abroad(&mut world);
+        }
+        let (cash, stock) = book(&world);
+        assert_eq!(stock, 0);
+        assert_eq!(cash, cash0);
     }
 
     #[test]
