@@ -22,6 +22,12 @@ heading.
 
 ### Changed
 
+- Faster weeks in long careers. The weekly statements archive and the systems history now read
+  each market once per week instead of once per company and division, cutting their cost by about
+  two thirds: a week ten years into a career runs roughly a tenth faster. Results are identical.
+- Smoother top speed on desktop. The autosave every four weeks no longer holds up the clock while
+  the file is written to disk, and the time a week takes now counts toward its slot, so 4 weeks a
+  second really is 4 weeks a second instead of slipping on busy weeks.
 - Export ports grow with use. When a state's exports of a good fill its port for a week, the
   port gains one percent more room, so surpluses no longer pile up at a port sized for the
   plants that ran at the start. Grain, for example, now leaves the corridor instead of sitting
