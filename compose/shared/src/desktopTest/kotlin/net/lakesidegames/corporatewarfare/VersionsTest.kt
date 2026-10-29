@@ -209,6 +209,8 @@ class VersionsTest {
         assertTrue("CloseMessage=\"yes\"" in close)
         assertTrue("TerminateProcess=" in close)
         assertTrue("RebootPrompt=\"no\"" in close)
+        // Closed before any file is removed, not just before new files go in.
+        assertTrue("<Custom Action=\"WixCloseApplications\" Before=\"RemoveFiles\">" in wxs)
         // The rest is jpackage's own template: upgrades and downgrades behave as before.
         assertTrue("<RemoveExistingProducts Before=\"CostInitialize\"/>" in wxs)
         assertTrue("Property=\"JP_DOWNGRADABLE_FOUND\"" in wxs)

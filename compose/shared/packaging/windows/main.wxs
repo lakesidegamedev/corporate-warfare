@@ -2,9 +2,10 @@
 <!--
   Corporate Warfare's copy of jpackage's main.wxs (JDK 17, jdk17u
   src/jdk.jpackage/windows/classes/jdk/jpackage/internal/resources/main.wxs), passed with
-  resource-dir from shared/build.gradle.kts. The one change is the CloseApplication element: on
-  install, upgrade and uninstall the installer asks every running copy of the game to close, and
-  ends any copy still open after the timeout, so it never waits on the game's files in use.
+  resource-dir from shared/build.gradle.kts. The one change is the CloseApplication element and
+  its place in InstallExecuteSequence: on install, upgrade and uninstall the installer asks every
+  running copy of the game to close, and ends any copy still open after the timeout, so it never
+  waits on the game's files in use.
   Keep the rest identical to the JDK template; jpackage fills every $(var.Jp...) value.
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
@@ -137,6 +138,9 @@
       <Custom Action="JpDisallowDowngrade" After="FindRelatedProducts">JP_DOWNGRADABLE_FOUND</Custom>
       <?endif?>
       <RemoveExistingProducts Before="CostInitialize"/>
+      <!-- Corporate Warfare: WiX puts this just before InstallFiles, after RemoveFiles; close the
+           game before any file is removed too. It must stay after InstallInitialize. -->
+      <Custom Action="WixCloseApplications" Before="RemoveFiles">VersionNT &gt; 400</Custom>
     </InstallExecuteSequence>
 
   </Product>
