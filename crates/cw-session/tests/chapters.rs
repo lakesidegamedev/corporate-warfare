@@ -363,7 +363,7 @@ fn event_mandates_latch_and_cash_cover_breaks() {
         .firms
         .iter()
         .map(|(h, _)| h)
-        .find(|h| *h != firm && !session.world.chapters.offers.contains_key(h) || *h != firm)
+        .find(|h| *h != firm)
         .unwrap();
     let mut holders = BTreeMap::new();
     holders.insert(
@@ -426,7 +426,7 @@ fn reload_in_a_chapter_keeps_the_hash_and_the_future() {
     let mut original = Session::create(config(31)).unwrap();
     run(&mut original, 10);
     let firm = primary(&original);
-    choose(&mut original, INVESTOR_ACTOR, firm, 0, 1).unwrap_or_else(|_| ()); // window may have closed
+    let _ = choose(&mut original, INVESTOR_ACTOR, firm, 0, 1); // the window may have closed
     let bytes = original.export_save().unwrap();
     let mut loaded = Session::import_save(&bytes).unwrap();
     assert_eq!(original.canonical_hash(), loaded.canonical_hash());

@@ -211,7 +211,7 @@ pub fn holds(world: &World, dataset: &Dataset) -> Vec<&'static str> {
             "ten_companies" => player.len() >= 10,
             "three_states" => states.len() >= 3,
             "five_divisions" => divisions >= 5,
-            "market_leader" => now % 4 == 0 && score::footprint(world, dataset).2 >= 1,
+            "market_leader" => now.is_multiple_of(4) && score::footprint(world, dataset).2 >= 1,
             "thousand_workers" => workers >= 1_000,
             "net_worth_double" => start_worth > 0 && worth >= start_worth * 2,
             "net_worth_tenfold" => start_worth > 0 && worth >= start_worth * 10,
