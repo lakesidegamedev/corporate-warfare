@@ -43,14 +43,14 @@ pub struct PaperLink {
 }
 
 impl PaperLink {
-    fn none() -> PaperLink {
+    pub(crate) fn none() -> PaperLink {
         PaperLink {
             kind: "none".to_owned(),
             ..PaperLink::default()
         }
     }
 
-    fn company(handle: Handle) -> PaperLink {
+    pub(crate) fn company(handle: Handle) -> PaperLink {
         PaperLink {
             kind: "company".to_owned(),
             id: handle.0,
@@ -58,7 +58,7 @@ impl PaperLink {
         }
     }
 
-    fn region(index: u8) -> PaperLink {
+    pub(crate) fn region(index: u8) -> PaperLink {
         PaperLink {
             kind: "region".to_owned(),
             id: index as u64,
@@ -66,7 +66,7 @@ impl PaperLink {
         }
     }
 
-    fn deal(handle: Handle) -> PaperLink {
+    pub(crate) fn deal(handle: Handle) -> PaperLink {
         PaperLink {
             kind: "deal".to_owned(),
             id: handle.0,
@@ -74,7 +74,7 @@ impl PaperLink {
         }
     }
 
-    fn event(id: &str) -> PaperLink {
+    pub(crate) fn event(id: &str) -> PaperLink {
         PaperLink {
             kind: "event".to_owned(),
             id: 0,
@@ -196,7 +196,7 @@ pub fn clip(text: &str, max: usize) -> String {
     }
 }
 
-fn lower_first(text: &str) -> String {
+pub(crate) fn lower_first(text: &str) -> String {
     let mut chars = text.chars();
     match chars.next() {
         Some(first) => first.to_lowercase().collect::<String>() + chars.as_str(),
@@ -205,7 +205,7 @@ fn lower_first(text: &str) -> String {
 }
 
 /// The first one or two sentences of a text.
-fn lead_sentences(text: &str, count: usize) -> String {
+pub(crate) fn lead_sentences(text: &str, count: usize) -> String {
     let mut out = String::new();
     let mut seen = 0;
     for part in text.split_inclusive(". ") {
@@ -218,7 +218,7 @@ fn lead_sentences(text: &str, count: usize) -> String {
     out.trim().to_owned()
 }
 
-fn money(world: &World, dataset: &Dataset, firm: Handle, cents: i64) -> String {
+pub(crate) fn money(world: &World, dataset: &Dataset, firm: Handle, cents: i64) -> String {
     let symbol = if world.fx.active {
         let index = cw_sim::economy::fx::currency_of(world, firm) as usize;
         dataset
@@ -252,7 +252,7 @@ fn money(world: &World, dataset: &Dataset, firm: Handle, cents: i64) -> String {
 }
 
 /// A game week in the paper's own date form, as in the date line: `week 21, 1982`.
-fn date_phrase(world: &World, tick: Tick) -> String {
+pub(crate) fn date_phrase(world: &World, tick: Tick) -> String {
     format!(
         "week {}, {}",
         tick.week_of_year(),
@@ -269,7 +269,7 @@ fn article(word: &str) -> &'static str {
 }
 
 /// A count in words up to ten.
-fn count_word(n: usize) -> String {
+pub(crate) fn count_word(n: usize) -> String {
     const WORDS: [&str; 11] = [
         "No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
     ];
@@ -331,11 +331,11 @@ fn ground_story(dataset: &Dataset, firm: &str, note: &str) -> (String, String) {
     (headline, body)
 }
 
-fn percent(bps: i64) -> String {
+pub(crate) fn percent(bps: i64) -> String {
     format!("{}.{:02}", bps.abs() / 100, bps.abs() % 100)
 }
 
-fn firm_name(world: &World, firm: Handle) -> Option<String> {
+pub(crate) fn firm_name(world: &World, firm: Handle) -> Option<String> {
     world.firms.get(firm).map(|f| f.name.clone())
 }
 
@@ -357,7 +357,7 @@ fn firm_by_exact_name(world: &World, name: &str) -> Option<Handle> {
         .map(|(h, _)| h)
 }
 
-fn region_name(world: &World, index: u8) -> String {
+pub(crate) fn region_name(world: &World, index: u8) -> String {
     world
         .regions
         .get(index as usize)
@@ -413,8 +413,8 @@ fn in_window(fact_week: u32, week: u32) -> bool {
     fact_week >= 1 && fact_week <= week && week - fact_week < WINDOW
 }
 
-pub fn weekly_paper(world: &World, dataset: &Dataset, week: u32) -> Paper {
-    let week = week.clamp(1, world.tick.0.max(1));
+/// Every story the facts of an issue's window support, unranked.
+fn collect(world: &World, dataset: &Dataset, week: u32) -> Vec<Candidate> {
     let mut found: Vec<Candidate> = Vec::new();
     raids(world, dataset, week, &mut found);
     rival_moves(world, dataset, week, &mut found);
@@ -426,6 +426,21 @@ pub fn weekly_paper(world: &World, dataset: &Dataset, week: u32) -> Paper {
     politics(world, week, &mut found);
     distress(world, week, &mut found);
     results(world, dataset, week, &mut found);
+    found
+}
+
+/// The stories of the four weeks up to `week`, for the letters to reuse.
+pub(crate) fn stories(world: &World, dataset: &Dataset, week: u32) -> Vec<Story> {
+    let week = week.clamp(1, world.tick.0.max(1));
+    collect(world, dataset, week)
+        .into_iter()
+        .map(|c| c.story)
+        .collect()
+}
+
+pub fn weekly_paper(world: &World, dataset: &Dataset, week: u32) -> Paper {
+    let week = week.clamp(1, world.tick.0.max(1));
+    let mut found = collect(world, dataset, week);
 
     found.sort_by(|a, b| {
         b.score(week)

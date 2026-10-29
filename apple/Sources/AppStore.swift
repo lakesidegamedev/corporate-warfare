@@ -50,6 +50,10 @@ final class AppStore: ObservableObject {
     @Published var insurance: [InsuranceDto] = []
     @Published var deals: [DealDto] = []
     @Published var events: [EventDto] = []
+    /// The Inbox's letters: the last eight weeks, decisions pinned on top. Read with the rest of the week.
+    @Published var letters: [LetterDto] = []
+    /// The Inbox badge: unread letters plus decisions already read but still due.
+    var inboxBadge: Int { letters.filter { !$0.read || $0.mandatory }.count }
     /// The economy, central bank and government, for the Markets economy card and the status bar.
     @Published var economy: EconomyDto?
     /// The selected company's technology position.
@@ -395,6 +399,8 @@ final class AppStore: ObservableObject {
             catalogues = (await engine.strategies(), await engine.recipes(), await engine.products())
         }
         let events = await engine.events()
+        let now = overview?.tick ?? 0
+        let letters = await engine.letters(since: now > inboxWeeks ? now - inboxWeeks : 1)
         let economy = await engine.economy()
         let commodities = await engine.commodityBoard()
         let stocks = await engine.stockBoard()
@@ -432,6 +438,7 @@ final class AppStore: ObservableObject {
                 catalogueScenario = scenario
             }
             put(\.events, events)
+            put(\.letters, letters)
             put(\.economy, economy)
             put(\.commodities, commodities)
             put(\.stocks, stocks)
@@ -927,6 +934,18 @@ final class AppStore: ObservableObject {
             self.handle(receipt)
             await self.reload()
         }
+    }
+
+    /// Opening a letter marks it read; the engine keeps the flag and the list updates in place.
+    func markLettersRead(_ ids: [String]) async {
+        guard !ids.isEmpty else { return }
+        letters = letters.map { letter in
+            guard ids.contains(letter.id), !letter.read else { return letter }
+            var read = letter
+            read.read = true
+            return read
+        }
+        await engine.markLettersRead(ids)
     }
 
     func respond(event: UInt64, choice: String) async {
