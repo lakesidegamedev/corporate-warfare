@@ -85,10 +85,10 @@ class ExecutivesRenderTest {
         val list = data.candidates.first { it.postCode == empty.postCode }.people.take(3)
         assertTrue(list.isNotEmpty(), "candidates to hire")
         for ((label, width) in listOf("desktop" to 520, "phone" to 412)) {
-            render("executives-section-$label", width, 560) {
+            render("executives-section-$label", width, 720) {
                 Box(Modifier.padding(12.dp)) { Panel { Eyebrow("Executives"); ExecutivesBody(data, currency, false, {}, {}) } }
             }
-            render("executives-hire-list-$label", width, 760) {
+            render("executives-hire-list-$label", width, 1000) {
                 Box(Modifier.padding(12.dp)) { Panel { Eyebrow("Hire a ${empty.title.lowercase()}"); HireListBody(list, currency, false) {} } }
             }
         }
