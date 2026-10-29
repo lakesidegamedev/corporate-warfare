@@ -55,8 +55,8 @@ private val windows = System.getProperty("os.name").lowercase().contains("win")
 
 /**
  * Windows installs a downloaded version itself: a short script waits for the game to close, runs
- * the installer with a progress bar and no questions, then starts the game again. Going back to an
- * older version first uninstalls the current one, since the MSI refuses to downgrade
+ * the installer with a progress bar and no questions, then starts the game again. An older version
+ * goes into the same folder, with an uninstall and second try if that fails
  * ([WindowsInstall.plan]). Linux and Mac open the release page, where the package or app is one
  * click.
  */

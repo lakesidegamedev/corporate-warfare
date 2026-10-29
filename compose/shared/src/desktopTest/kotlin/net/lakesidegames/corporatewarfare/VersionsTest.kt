@@ -118,7 +118,7 @@ class VersionsTest {
     }
 
     @Test
-    fun windowsUpgradeRunsTheMsiAndDowngradeUninstallsFirst() {
+    fun windowsUpgradeRunsTheMsiAndDowngradeFallsBackToUninstall() {
         val app = "C:\\Program Files\\Corporate Warfare\\Corporate Warfare.exe"
         val up = WindowsInstall.plan("C:\\u\\new.msi", "1.8.0", "1.8.0-preview.4", app)
         assertEquals(
@@ -130,16 +130,31 @@ class VersionsTest {
             ),
             up,
         )
+        assertFalse(up.any { it.startsWith("powershell") })
+
         val down = WindowsInstall.plan("C:\\u\\old.msi", "1.8.0-preview.3", "1.8.0-preview.4", app)
-        assertEquals(5, down.size)
-        val uninstall = down[2]
+        val install = "msiexec /i \"C:\\u\\old.msi\" /passive /norestart INSTALLDIR=\"C:\\Program Files\\Corporate Warfare\""
+        // The older MSI goes into the same folder first; success, restart-pending or cancel stop there.
+        assertEquals(install, down[2])
+        assertEquals(
+            listOf("if %errorlevel%==0 goto started", "if %errorlevel%==3010 goto started", "if %errorlevel%==1602 goto started"),
+            down.subList(3, 6),
+        )
+        // Any other failure removes the installed game by its upgrade code and installs again.
+        val uninstall = down[6]
         assertTrue(uninstall.startsWith("powershell "))
         assertTrue("RelatedProducts('{5B6F6B2E-3C1D-4B8E-9F1A-0C7D2E4A9B31}')" in uninstall)
         assertTrue("'/x', \$p, '/passive'" in uninstall)
-        assertEquals("msiexec /i \"C:\\u\\old.msi\" /passive /norestart INSTALLDIR=\"C:\\Program Files\\Corporate Warfare\"", down[3])
-        assertEquals("start \"\" \"$app\"", down[4])
-        // Same version: a repair-style reinstall, never an uninstall.
+        assertEquals(install, down[7])
+        assertEquals(":started", down[8])
+        assertEquals("start \"\" \"$app\"", down[9])
+
+        // Same version: an ordinary install, never an uninstall.
         assertFalse(WindowsInstall.plan("x.msi", "1.8.0", "1.8.0", app).any { it.startsWith("powershell") })
+        // No known app path (a dev run): no folder and no relaunch.
+        val bare = WindowsInstall.plan("x.msi", "1.8.0", "1.8.1", null)
+        assertEquals("msiexec /i \"x.msi\" /passive /norestart", bare[2])
+        assertFalse(bare.any { it.startsWith("start") })
     }
 
     @Test

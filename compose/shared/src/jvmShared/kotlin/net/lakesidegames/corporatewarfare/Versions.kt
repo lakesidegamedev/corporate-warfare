@@ -119,24 +119,34 @@ object WindowsInstall {
     const val UPGRADE_CODE = "5b6f6b2e-3c1d-4b8e-9f1a-0c7d2e4a9b31"
 
     /**
-     * An upgrade runs the newer MSI, which replaces the old install itself. The MSI refuses to
-     * install over a newer version, so a downgrade first removes every installed Corporate
-     * Warfare (found by the upgrade code), then installs the older MSI into the same folder.
-     * Saves live in the player's AppData folder, which uninstalling leaves alone.
+     * An upgrade runs the newer MSI, which replaces the old install itself. A downgrade runs the
+     * older MSI into the same folder: its Upgrade table finds the newer install and removes it
+     * first (jpackage MSIs carry no downgrade block; see the 1.8 versions report). Should that
+     * install still fail, for any reason but the player cancelling, the script removes every
+     * installed Corporate Warfare by the upgrade code and installs the older MSI again. Saves live
+     * in the player's AppData folder, which neither step touches.
      */
     fun plan(msi: String, target: String, installed: String, relaunch: String?): List<String> = buildList {
-        val downgrade = Versions.isDowngrade(target, installed)
         add("@echo off")
         add("timeout /t 2 /nobreak >nul")
-        if (downgrade) {
+        if (!Versions.isDowngrade(target, installed)) {
+            add("msiexec /i \"$msi\" /passive /norestart")
+        } else {
+            val folder = relaunch?.let { File(it.replace('\\', '/')).parent?.replace('/', '\\') }
+            val install = "msiexec /i \"$msi\" /passive /norestart" + if (folder != null) " INSTALLDIR=\"$folder\"" else ""
+            add(install)
+            // 0 done, 3010 done but wants a restart, 1602 the player cancelled.
+            add("if %errorlevel%==0 goto started")
+            add("if %errorlevel%==3010 goto started")
+            add("if %errorlevel%==1602 goto started")
             add(
                 "powershell -NoProfile -ExecutionPolicy Bypass -Command \"\$i = New-Object -ComObject WindowsInstaller.Installer; " +
                     "foreach (\$p in \$i.RelatedProducts('{${UPGRADE_CODE.uppercase()}}')) { " +
                     "Start-Process msiexec.exe -ArgumentList '/x', \$p, '/passive', '/norestart' -Wait }\"",
             )
+            add(install)
+            add(":started")
         }
-        val folder = relaunch?.let { File(it.replace('\\', '/')).parent?.replace('/', '\\') }
-        add("msiexec /i \"$msi\" /passive /norestart" + if (downgrade && folder != null) " INSTALLDIR=\"$folder\"" else "")
         if (relaunch != null) add("start \"\" \"$relaunch\"")
     }
 }
