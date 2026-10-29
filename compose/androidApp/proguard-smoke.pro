@@ -9,3 +9,15 @@
 -keep class kotlin.coroutines.CoroutineContext
 # The test runner's Kotlin code calls the compiler's null-check helpers, which R8 otherwise trims.
 -keep,allowobfuscation class kotlin.jvm.internal.** { *; }
+# Libraries the androidx.test runner loads from the app's classes at start; R8 trims them from the
+# shrunk app because the game never calls them. Kept for the smoke build only.
+-keep class androidx.tracing.** { *; }
+-keep class androidx.concurrent.futures.** { *; }
+-keep class com.google.common.util.concurrent.ListenableFuture { *; }
+-keep class androidx.lifecycle.** { *; }
+-keep class androidx.core.app.** { *; }
+-keep class androidx.activity.** { *; }
+-keep class kotlin.collections.** { *; }
+-keep class kotlin.text.** { *; }
+-dontwarn androidx.tracing.**
+-dontwarn androidx.concurrent.futures.**
