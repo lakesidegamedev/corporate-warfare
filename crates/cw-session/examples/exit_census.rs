@@ -68,7 +68,11 @@ fn main() {
                     cw_sim::state::FirmStatus::Dissolved => "dissolved",
                 };
                 let age = w.saturating_sub(f.founding_week.0);
-                let plants = f.facilities.iter().filter_map(|h| world.facilities.get(*h)).count();
+                let plants = f
+                    .facilities
+                    .iter()
+                    .filter_map(|h| world.facilities.get(*h))
+                    .count();
                 let class = if age <= 52 { "young" } else { "established" };
                 let key = format!(
                     "{status:13} {class:11} plants={} {}",
@@ -87,7 +91,9 @@ fn main() {
             *final_states.entry(s).or_default() += 1;
         }
     }
-    println!("exits {exits}, returned later {returned}; final states over all seeds {final_states:?}");
+    println!(
+        "exits {exits}, returned later {returned}; final states over all seeds {final_states:?}"
+    );
     println!("operative firms first seen after week 1, by year: {founded_by_year:?}");
     let mut totals: BTreeMap<String, [i64; 5]> = BTreeMap::new();
     for ((k, y), n) in &by {

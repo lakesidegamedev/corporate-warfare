@@ -25,8 +25,23 @@ fn main() {
     let mut session = cw_session::Session::create(config).unwrap();
     {
         let w = &session.world;
-        let cap: i64 = w.gateways.iter().map(|g| cw_sim::economy::fx::region_to_numeraire(w, &session.dataset, g.region, g.capacity_lots * g.buy_price_cents)).sum();
-        println!("gateway export room at the bid, numeraire cents: {} ($k a week {})", cap, cap / 100_000);
+        let cap: i64 = w
+            .gateways
+            .iter()
+            .map(|g| {
+                cw_sim::economy::fx::region_to_numeraire(
+                    w,
+                    &session.dataset,
+                    g.region,
+                    g.capacity_lots * g.buy_price_cents,
+                )
+            })
+            .sum();
+        println!(
+            "gateway export room at the bid, numeraire cents: {} ($k a week {})",
+            cap,
+            cap / 100_000
+        );
     }
     for _ in 1..=week {
         let r = session.advance(1);
@@ -37,8 +52,69 @@ fn main() {
             session.dismiss_pause();
         }
     }
+    {
+        let w = &session.world;
+        let mut blocks: std::collections::BTreeMap<String, (i64, i64)> = Default::default();
+        for (_, f) in w.facilities.iter() {
+            let out = session.dataset.recipes[f.recipe as usize].output.clone();
+            let e = blocks.entry(out).or_default();
+            match f.status {
+                cw_sim::state::FacilityStatus::Operating => e.0 += f.blocks as i64,
+                cw_sim::state::FacilityStatus::Building => e.1 += f.blocks as i64,
+                _ => {}
+            }
+        }
+        let pick = [
+            "grain",
+            "food_raw",
+            "livestock",
+            "freight",
+            "crude_oil",
+            "construction",
+        ];
+        let line: Vec<String> = pick
+            .iter()
+            .map(|g| {
+                let (o, b) = blocks.get(*g).copied().unwrap_or_default();
+                format!("{g} {o}+{b}")
+            })
+            .collect();
+        println!(
+            "BLOCKS operating+building at week {week}: {}",
+            line.join("  ")
+        );
+    }
     let snap = session.market_snapshot();
-    println!("{:22} {:>7} {:>7} {:>7} {:>7} {:>9} {:>8}", "good", "made", "sold", "import", "export", "made$k", "export%");
+    for g in snap.goods.iter().filter(|g| {
+        ["grain", "food_raw", "steel", "crude_oil", "food_retail"].contains(&g.id.as_str())
+    }) {
+        println!(
+            "PRICE week {week} {}: reference {} median ask {} sold ask {}",
+            g.id, g.reference_cents, g.median_ask_cents, g.sold_ask_cents
+        );
+    }
+    {
+        let code = session.dataset.product_code("grain").unwrap();
+        let g = session
+            .world
+            .gateways
+            .iter()
+            .find(|g| g.product == code && g.region == 0)
+            .unwrap();
+        println!(
+            "GATEWAY week {week} grain region0 buy {} sell {} capacity {}",
+            g.buy_price_cents, g.sell_price_cents, g.capacity_lots
+        );
+    }
+    println!(
+        "WAGE week {week} region0 tier0 {} macro price index {}",
+        session.world.regions[0].background_wage_cents[0],
+        session.world.macro_state.price_index_bps
+    );
+    println!(
+        "{:22} {:>7} {:>7} {:>7} {:>7} {:>9} {:>8}",
+        "good", "made", "sold", "import", "export", "made$k", "export%"
+    );
     let (mut made_v, mut exp_v, mut imp_v, mut sold_v) = (0i64, 0i64, 0i64, 0i64);
     for g in &snap.goods {
         let r = g.reference_cents;
@@ -87,5 +163,8 @@ fn main() {
             l.totals.lots_by_mode, l.totals.outside_lots_by_mode
         );
     }
-    println!("outside gateway cash ${}k", session.world.outside.gateway_book.cash() / 100_000);
+    println!(
+        "outside gateway cash ${}k",
+        session.world.outside.gateway_book.cash() / 100_000
+    );
 }

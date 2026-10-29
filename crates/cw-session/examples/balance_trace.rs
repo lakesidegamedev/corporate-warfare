@@ -64,7 +64,10 @@ fn main() {
                 let wage: Vec<i64> = (0..dataset.regions.len())
                     .map(|r| world.regions[r].background_wage_cents[0])
                     .collect();
-                println!("seed {seed} w{w} fx value_ppm {v:?} outside gateway cash ${}k tier0 wage by region {wage:?}", world.outside.gateway_book.cash() / 100_000);
+                println!(
+                    "seed {seed} w{w} fx value_ppm {v:?} outside gateway cash ${}k tier0 wage by region {wage:?}",
+                    world.outside.gateway_book.cash() / 100_000
+                );
             }
             if w == week {
                 for (h, firm) in world.firms.iter().filter(|(_, f)| f.operative()) {
@@ -86,10 +89,7 @@ fn main() {
                         Some(p) => dataset.recipes[p.recipe as usize].output.to_string(),
                         None => "none".to_owned(),
                     };
-                    let key = format!(
-                        "{key}@{}",
-                        dataset.regions[firm.region as usize].country
-                    );
+                    let key = format!("{key}@{}", dataset.regions[firm.region as usize].country);
                     let e = if net < 0 {
                         cohort.push((h.0, key.clone()));
                         groups.entry(key).or_default()
@@ -123,7 +123,9 @@ fn main() {
         }
     }
     let print = |title: &str, m: &BTreeMap<String, Acc>| {
-        println!("{title}: per firm per week, cents/100 (rev cogs wages opex dep int other+tax net), cash/100");
+        println!(
+            "{title}: per firm per week, cents/100 (rev cogs wages opex dep int other+tax net), cash/100"
+        );
         let mut rows: Vec<_> = m.iter().collect();
         rows.sort_by_key(|(_, e)| -e.n);
         for (k, e) in rows {

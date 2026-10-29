@@ -1344,6 +1344,48 @@ pub fn bps_of(value: i64, bps: i32) -> i64 {
 mod tests {
     use super::*;
 
+    /// Independent oracle: the weekly surplus is rebuilt here by hand from the opening plants and
+    /// household baselines for the one good that matters, coal, and checked against the sum's
+    /// coal term; the account is then the floor or 450 weeks of the whole sum, whichever is more.
+    #[test]
+    fn the_outside_account_opens_with_450_weeks_of_the_opening_trade_surplus_at_least_the_floor() {
+        for (scenario, heavy) in [("ruhr-rhine-1991", true), ("great-lakes-2000", false)] {
+            let dataset = Dataset::load_scenario(scenario).unwrap();
+            let world = build(&dataset, 3, ScenarioKind::Guided, ScenarioMode::Sandbox);
+            let coal = dataset.product_code("coal").unwrap();
+            let (mut made, mut used) = (0i64, 0i64);
+            for (_, facility) in world.facilities.iter() {
+                let recipe = &dataset.recipes[facility.recipe as usize];
+                for (id, lots) in recipe.outputs() {
+                    if id == "coal" {
+                        made += lots * facility.blocks as i64;
+                    }
+                }
+                if let Some(qty) = recipe.weekly_inputs_lots.get("coal") {
+                    used += qty * facility.blocks as i64;
+                }
+            }
+            used += world
+                .regions
+                .iter()
+                .filter_map(|r| r.households.baseline_lots.get(&coal))
+                .sum::<i64>();
+            let coal_term = (made - used).max(0) * dataset.reference_price(coal) * 85 / 100;
+            let surplus = opening_export_surplus_cents(&world, &dataset);
+            assert!(coal_term > 0 && surplus >= coal_term, "{scenario}");
+            let expected = OUTSIDE_CAPITAL_FLOOR_CENTS.max(surplus * 450);
+            assert_eq!(world.outside.gateway_book.cash(), expected, "{scenario}");
+            assert!(world.outside.gateway_book.is_balanced());
+            if heavy {
+                // An exporting heavy-industry scenario gets an outside world several times the floor.
+                assert!(expected > OUTSIDE_CAPITAL_FLOOR_CENTS * 3, "{scenario}");
+            } else {
+                // The tuned reference keeps exactly the old five hundred million dollars.
+                assert_eq!(expected, OUTSIDE_CAPITAL_FLOOR_CENTS, "{scenario}");
+            }
+        }
+    }
+
     #[test]
     fn founder_and_guided_worlds_open_balanced() {
         let dataset = Dataset::load().unwrap();
