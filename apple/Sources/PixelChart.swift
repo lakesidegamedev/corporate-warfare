@@ -121,20 +121,28 @@ enum GameDates {
 struct PlotFlow: Layout {
     var spacing: CGFloat = 6
 
-    private func sizes(_ subviews: Subviews, _ limit: CGFloat) -> [CGSize] {
-        subviews.map { view in
+    /// Each item's natural size, measured once per change of content rather than on every pass.
+    func makeCache(subviews: Subviews) -> [CGSize] {
+        subviews.map { $0.sizeThatFits(.unspecified) }
+    }
+
+    func updateCache(_ cache: inout [CGSize], subviews: Subviews) {
+        cache = makeCache(subviews: subviews)
+    }
+
+    private func sizes(_ subviews: Subviews, _ natural: [CGSize], _ limit: CGFloat) -> [CGSize] {
+        zip(subviews, natural).map { view, size in
             // Rounded up a point, so text measured at its exact width is not cut short when placed.
-            let natural = view.sizeThatFits(.unspecified)
-            let width = (natural.width + 1).rounded(.up)
-            return width <= limit ? CGSize(width: width, height: natural.height)
+            let width = (size.width + 1).rounded(.up)
+            return width <= limit ? CGSize(width: width, height: size.height)
                 : view.sizeThatFits(ProposedViewSize(width: limit, height: nil))
         }
     }
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout [CGSize]) -> CGSize {
         let limit = proposal.width ?? 10_000
         var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0, widest: CGFloat = 0
-        for size in sizes(subviews, limit) {
+        for size in sizes(subviews, cache, limit) {
             if x > 0 && x + size.width > limit {
                 x = 0
                 y += row + spacing
@@ -147,9 +155,9 @@ struct PlotFlow: Layout {
         return CGSize(width: widest, height: y + row)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout [CGSize]) {
         var x = bounds.minX, y = bounds.minY, row: CGFloat = 0
-        for (view, size) in zip(subviews, sizes(subviews, bounds.width)) {
+        for (view, size) in zip(subviews, sizes(subviews, cache, bounds.width)) {
             if x > bounds.minX && x + size.width > bounds.maxX {
                 x = bounds.minX
                 y += row + spacing
