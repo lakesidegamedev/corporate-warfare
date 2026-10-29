@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
                 paint.asFrameworkPaint(),
             )
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) MeshCanvas.cloudFlow = { image -> androidCloudFlow(image) }
+        // androidCloudFlow (Android 13 and up) is ready but not installed: it needs checking on a device first.
         Images.decode = { bytes ->
             android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
         }

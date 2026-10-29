@@ -66,8 +66,7 @@ class PerfRenderCompare {
             MeshCanvas.cloudFlow = null
             val geo = MapGeometryCache()
             val (before, a) = frame { ground(geo, MapPhase.Ground); clouds(geo); ground(geo, MapPhase.Structures) }
-            // After: baked layers, the clouds through the runtime shader.
-            MeshCanvas.cloudFlow = desktopCloudFlow
+            // After: baked layers, the clouds as in the game (meshes).
             val layer = AsyncLayer(CoroutineScope(Job()))
             val sky = AsyncLayer(CoroutineScope(Job()))
             layer.bakeNow(cam, g.pitch, null, size, Density(1f)) { geo2 -> ground(geo2, MapPhase.Ground) }
@@ -78,7 +77,22 @@ class PerfRenderCompare {
                 with(sky) { drawBitmap(sky.baked!!.image) }
                 ground(ui, MapPhase.Structures)
             }
+            // The runtime shader's clouds, for comparison with the meshes.
+            MeshCanvas.cloudFlow = desktopCloudFlow
+            val shaderSky = AsyncLayer(CoroutineScope(Job()))
+            shaderSky.bakeNow(cam, g.pitch, null, size, Density(1f)) { geo2 -> clouds(geo2) }
+            val (shaded, c) = frame {
+                with(layer) { drawBitmap(layer.baked!!.image) }
+                with(shaderSky) { drawBitmap(shaderSky.baked!!.image) }
+                ground(ui, MapPhase.Structures)
+            }
             MeshCanvas.cloudFlow = null
+            File(dir, "shader-$name.png").writeBytes(shaded)
+            var shaderTotal = 0L; var shaderWorst = 0
+            for (i in a.indices) for (shift in intArrayOf(0, 8, 16)) {
+                val d = abs(((a[i] shr shift) and 255) - ((c[i] shr shift) and 255)); shaderTotal += d; shaderWorst = maxOf(shaderWorst, d)
+            }
+            report.append("$name shader clouds against meshes: mean channel difference %.3f, worst %d of 255\n".format(shaderTotal / (a.size * 3.0), shaderWorst))
             File(dir, "before-$name.png").writeBytes(before)
             File(dir, "after-$name.png").writeBytes(after)
             var total = 0L; var worst = 0

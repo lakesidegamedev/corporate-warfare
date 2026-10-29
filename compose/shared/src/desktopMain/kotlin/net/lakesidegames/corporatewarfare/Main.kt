@@ -117,7 +117,8 @@ private fun game() = application {
     Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
     MeshCanvas.draw = desktopMeshDraw
     MapBake.enabled = true
-    MeshCanvas.cloudFlow = desktopCloudFlow
+    // The one-pass cloud shader is measured slower than the meshes while the layers are baked on the CPU, so it is opt-in.
+    if (System.getenv("CW_CLOUD_SHADER") != null) MeshCanvas.cloudFlow = desktopCloudFlow
     Pixel.font = desktopPixelFont()
     MeshCanvas.shader = desktopLinearShader
     val settings = remember { AppSettings(File(saveDirectory(), "settings.properties")) }
