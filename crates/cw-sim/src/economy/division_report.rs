@@ -128,7 +128,7 @@ pub fn report(
         let Some(plant) = world.facilities.get(*handle) else {
             continue;
         };
-        let full = plant.full_weekly_output(dataset).0;
+        let full = crate::economy::production::season_full_output(world, dataset, plant).0;
         let operating = plant.is_operating();
         if operating {
             made_full += full;
@@ -523,10 +523,18 @@ mod tests {
         let mut world = seed::build(&dataset, 711, ScenarioKind::Guided, ScenarioMode::Sandbox);
         let (firm, region, industry) = first_division(&world, &dataset);
         let handles = sectors::division_plants(&world, &dataset, firm, region, industry);
+        // Half of this week's real full run, the season's yield included.
+        let mut halves = 0i64;
         for h in &handles {
+            let full = crate::economy::production::season_full_output(
+                &world,
+                &dataset,
+                world.facilities.get(*h).unwrap(),
+            );
+            halves += full.0 / 2;
             let p = world.facilities.get_mut(*h).unwrap();
             p.status = FacilityStatus::Operating;
-            p.last_output = cw_core::quantity::MilliLots(p.full_weekly_output(&dataset).0 / 2);
+            p.last_output = cw_core::quantity::MilliLots(full.0 / 2);
         }
         let r = report(&world, &dataset, firm, region, industry).unwrap();
         assert!(r.plants.iter().all(|p| p.utilisation_bps == 5_000));
@@ -534,18 +542,7 @@ mod tests {
             assert_eq!(input.used_milli, input.need_milli / 2);
         }
         for output in r.outputs.iter().filter(|o| !o.by_product) {
-            let full: i64 = handles
-                .iter()
-                .map(|h| {
-                    world
-                        .facilities
-                        .get(*h)
-                        .unwrap()
-                        .full_weekly_output(&dataset)
-                        .0
-                })
-                .sum();
-            assert_eq!(output.made_milli, full / 2);
+            assert_eq!(output.made_milli, halves);
         }
     }
 

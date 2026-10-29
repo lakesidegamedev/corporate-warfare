@@ -1140,7 +1140,16 @@ fn long_careers_keep_history_bounded_and_lifetime_figures_consistent() {
         archive < 1024 * 1024,
         "the history archive grew to {archive} bytes in 110 weeks"
     );
-    let envelope = bytes.len() - archive;
+    // The systems history is capped at five years of weeks; at 110 weeks it must stay small
+    // enough that 260 weeks fits in about two megabytes.
+    let systems = postcard::to_allocvec(&session.world.systems)
+        .expect("systems history encodes")
+        .len();
+    assert!(
+        systems * 260 / 110 < 2 * 1024 * 1024,
+        "the systems history grew to {systems} bytes in 110 weeks"
+    );
+    let envelope = bytes.len() - archive - systems;
     assert!(
         // The corridor keeps forty-plus renewable supply contracts and thirteen weeks of sales
         // history per firm, so the observed envelope is larger than the original empty-world

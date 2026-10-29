@@ -68,7 +68,7 @@ internal fun DivisionDetailDialog(store: GameStore, division: DivisionDto, onClo
     AlertDialog(
         onDismissRequest = onClose,
         containerColor = Palette.panel,
-        modifier = Modifier.widthIn(min = 360.dp, max = 640.dp),
+        modifier = Modifier.widthIn(min = 360.dp, max = 980.dp),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectorBadge(division.industry, 28)
@@ -81,11 +81,12 @@ internal fun DivisionDetailDialog(store: GameStore, division: DivisionDto, onClo
         },
         text = {
             val d = detail
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.heightIn(max = 640.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 if (d == null) {
                     Text("Loading the division.", color = Palette.secondary, fontSize = 13.sp)
                 } else {
                     Financials(d)
+                    DivisionOpsSection(store, live)
                     Strategy(store, d, live) { editing = true }
                     Inputs(d)
                     Outputs(d)
