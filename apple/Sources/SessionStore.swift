@@ -61,6 +61,10 @@ actor Engine {
         session?.weeklyBrief(firm: firm)
     }
 
+    func executives(firm: UInt64) -> ExecutivesDto? {
+        session?.executives(firm: firm)
+    }
+
     func cfoAdvice(firm: UInt64) -> [CfoAdviceDto] {
         session?.cfoAdvice(firm: firm) ?? []
     }

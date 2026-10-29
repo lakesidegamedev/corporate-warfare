@@ -72,6 +72,7 @@ struct PersonLine: View {
 /// A rival's chief executive, their style, background and what the firm has done lately.
 struct DossierBody: View {
     let dossier: DossierDto
+    var currency: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -104,6 +105,7 @@ struct DossierBody: View {
                     Text(line).font(.caption).foregroundStyle(Theme.primaryText)
                 }
             }
+            RivalExecutivesList(posts: dossier.executives, currency: currency)
             RaidMarketsList(firm: dossier.firm)
             if !dossier.moves.isEmpty {
                 Eyebrow(text: "Recent moves")
@@ -129,7 +131,7 @@ struct DossierSection: View {
                 Panel(padding: 12) {
                     VStack(alignment: .leading, spacing: 8) {
                         Eyebrow(text: "Who runs it")
-                        DossierBody(dossier: dossier)
+                        DossierBody(dossier: dossier, currency: store.firms.first { $0.handle == firm }?.currency ?? store.selectedFirmDto?.currency ?? "")
                     }
                 }
             }

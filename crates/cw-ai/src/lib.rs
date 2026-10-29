@@ -68,6 +68,35 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
                 intent: CommandIntent::ChooseMandate { firm: handle, pick },
             });
         }
+        // Executives for hire, taken through the same commands a player uses: only when the
+        // effect pays and the firm can carry the pay.
+        if let Some((post, person)) =
+            cw_sim::economy::executives::rival_pick(world, dataset, handle)
+        {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::HireExecutive {
+                    firm: handle,
+                    post: post.code(),
+                    person,
+                },
+            });
+        } else if let Some((from, post, offer_cents)) = cw_sim::economy::executives::rival_poach(
+            world,
+            dataset,
+            handle,
+            cw_sim::economy::cast::temperament(world, dataset, handle),
+        ) {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::PoachExecutive {
+                    firm: handle,
+                    from,
+                    post: post.code(),
+                    offer_cents,
+                },
+            });
+        }
         cw_sim::ph!("ai::urgent", urgent(world, dataset, handle, &mut proposals));
         // Production follows sell-through plant by plant in the weekly tick, the same planner
         // as the player's automatic production (cw_sim::economy::pricing::plan).

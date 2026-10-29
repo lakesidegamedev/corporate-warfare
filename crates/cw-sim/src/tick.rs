@@ -268,6 +268,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         crate::economy::chapters::weekly(world, dataset)
     );
     crate::ph!(
+        "executives::weekly",
+        crate::economy::executives::weekly(world, dataset)
+    );
+    crate::ph!(
         "score::update",
         crate::economy::score::update(world, dataset)
     );

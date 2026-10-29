@@ -13,6 +13,26 @@ heading.
 
 ### Added
 
+- Executives. Every company can hire a chief financial officer, a chief operating officer and a
+  logistics chief, and your rivals do too. Each is a named person with a portrait, a level from 1 to
+  5 and a temperament, and each changes one real number. A chief financial officer takes up to
+  0.75 points off the interest on loans and bonds and adds a little interest on idle cash. A chief
+  operating officer cuts the time to build by up to a fifth and lets a full plant run a few percent
+  above its rating. A logistics chief takes up to a quarter off what outside carriers charge above
+  the owners' rate, and a little off lane reservations. Pay grows with level and company size, a
+  contract runs two years, and a dismissal costs severance. In the CEO Office, the new Executives
+  section shows each post, the person, what they change in plain words with the number, their pay
+  and the time left, with Hire (a candidate list showing what each would do at your company, the cost
+  and how soon it pays back) and Dismiss (with the severance quoted first). A rival's page lists its
+  executives and what it would take to tempt one away. You can offer a rival's executive more pay;
+  a speculator takes a small raise, a cautious person wants a lot. Rivals hire only when the saving
+  pays for the pay, and some will try to poach yours. New hires introduce themselves by letter in
+  their own voice, a poached executive's old boss writes, and hires and departures make the paper.
+  The weekly brief suggests a hire when it would pay for itself inside two years. After two missed
+  board goals in a row the board now names a new chief executive for your company, with a letter from
+  the chair, and the count of misses starts again. Saves written before this load as they were and
+  draw the pool of people on the next week.
+
 - The weekly brief. At the top of the CEO Office, one panel says what changed this week (up to
   three facts, biggest first: profit and cash, a price move on a good you sell, a rival raid on
   you, a world event, a met board goal), what is due (decisions, the board's goal offer, loan

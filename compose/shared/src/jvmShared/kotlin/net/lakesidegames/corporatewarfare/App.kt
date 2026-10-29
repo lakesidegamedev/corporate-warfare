@@ -321,6 +321,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
         }
         item { BriefPanel(store, firm.currency) }
         chapterItems(store)
+        item { ExecutivesPanel(store, firm.currency) }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectorBadge(firm.industry, 40)

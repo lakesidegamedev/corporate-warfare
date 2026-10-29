@@ -254,6 +254,69 @@ with no primary company earns none.
 
 **Size of the reward.** One bonus a year at most, at the old 2% rate on a year of profit, where the old objectives could pay four a year on a quarter each. The reputation steps are the size of the lobbying penalties already in the rules (100 to 250 basis points).
 
+## Executives (1.9)
+
+Every company has three executive posts: chief financial officer, chief operating officer and
+logistics chief. Each post holds one person at a time, with a level from 1 to 5 and a temperament,
+and each level moves one real number for that company only:
+
+| Post | What it moves | Per level | At level 5 |
+|---|---|---|---|
+| Chief financial officer | Credit spread on loan and bond quotes (the quote, the rate floor a loan must meet, and the bank loan rate) | 15 basis points off, never below 25 | 0.75 points off |
+| | Interest earned on cash, paid by the outside world | 4 basis points a year | 0.20 points |
+| Chief operating officer | Build lead time (new plants and expansions), rounded down, at least 1 week | 4 percent shorter | 20 percent shorter |
+| | Ceiling for a plant that is fully staffed, powered and rated at full output (not utilities) | 80 basis points above rating | 4 points above rating |
+| Logistics chief | What outside carriers charge over the owners' empty-lane rate, for the shipper's own shipments | 5 percent of that premium | 25 percent of that premium |
+| | Fee for reserving lane capacity | 100 basis points off | 5 percent off |
+
+**Candidates.** A pool is drawn in a world's first week from the generated people in
+`content/cast.json` (the extras, with their temperaments and portraits): eight for each post, levels
+weighted 30, 28, 22, 14 and 6 percent for levels 1 to 5, nobody twice. A post with fewer than three
+people available gets two more every thirteen weeks. A person who leaves a post is away for 26 weeks.
+
+**Pay and contract.** Weekly pay is `level rate x sqrt(total assets in dollars) x 10 cents`, with
+the level rate 3, 5, 8, 12 and 18 tenths of a dollar for levels 1 to 5, so pay grows with level and
+with the square root of company size. A temperament adds to the ask: raider and speculator 8
+percent, financier 3 percent, builder and integrator nothing, cautious 4 percent less. The company
+pays four weeks of pay when it signs and must keep another 26 weeks of pay in cash after it.
+A contract runs 104 weeks. At the end the person renews at the current ask if the effect is worth
+at least half a year of the new pay, 85 percent of the time (a draw named by the world seed, the
+company and the week); otherwise they leave. Pay is a cash cost paid to the outside world; a
+company that cannot pay a week of it loses the executive. Dismissal costs severance of a quarter of
+the pay left on the contract, at least 4 and at most 26 weeks of pay.
+
+**Commands.** `HireExecutive { firm, post, person }`, `DismissExecutive { firm, post }` and
+`PoachExecutive { firm, from, post, offer_cents }` are validated the same for player and rival: the
+company must be operating, the post empty for a hire or a poach, and the cash covered.
+
+**Poaching.** An offer is accepted when it is at least the executive's current pay plus the
+temperament's hurdle: speculator 8, raider 10, financier 15, builder 20, integrator 25 and cautious
+35 percent. A refused offer still counts as the company's attempt. The poacher pays eight weeks of
+the new pay on signing. The move is one story in the paper, and the old boss writes to the player
+when the player took their executive.
+
+**Rivals.** Every fourth week a rival with a vacant post hires the candidate whose yearly effect, at
+the rival's own figures, exceeds a year of their pay by the most, provided the effect is at least 1.5
+times a year of pay and the company holds the fee plus 26 weeks of pay. Effect values: the CFO is
+debt times the spread cut plus cash times the yield; the COO is half of a year of last week's
+revenue times the ceiling bonus plus 5 percent of a plant's cost per week of lead time saved per
+plant being built; the logistics chief is the outside premium share of last week's outside carrier
+spend times the cut plus the lane fees times the fee cut. A raider or speculator led rival may
+instead offer a level 3 or better executive of another company the price that moves them, at most
+once every 26 weeks, when the effect is at least 1.5 times a year of that pay.
+
+**The board and the player's chief.** When the player's primary company has missed two board
+mandates in a row (lapsed offers do not count), the board names a chief executive from the free
+cast people at the close of the second missed chapter, with a letter from the board chair. The
+count of misses starts again after that chapter, so an activist is not drawn by the same record.
+
+**Brief.** The weekly brief suggests a hire when the effect, less the pay, pays back the signing
+fee inside 104 weeks and the company can afford it.
+
+**Save.** Executives and the candidate pool are saved state that affects play: they travel in the
+`EXEC` trailer outside the postcard payload and `canonical_hash` folds them in while they are not
+empty (see INTERFACE.md). No schema bump is needed.
+
 ## State rescue, nationalisation and privatisation (1.7)
 
 A firm is strategic when it carries freight, stores goods or makes energy, or is a bank or
