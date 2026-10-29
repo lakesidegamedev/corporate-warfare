@@ -50,6 +50,20 @@ heading.
   machine without a GPU it uses the Mesa software driver. `tools/render_bake.py` fetches the
   elevation and bakes the small heightmap. The crate is not linked into the game or the apps
   yet and changes nothing players see, no saves and no hashes.
+- A proper Windows setup program, in the look of the game, replaces the plain installer screens.
+  It has a welcome page with the game's art, the licence, a choice of folder, Start menu and
+  desktop shortcuts, a progress page and a finish page with Play Corporate Warfare now. It
+  installs just for you by default, with no administrator prompt, into your local programs
+  folder, and offers all users instead. The same setup program installs any version over any
+  other, newer or older, so changing version never needs an uninstall first, and it never touches
+  your saved careers and settings. If the game is open, setup tells you to close it first.
+- Uninstalling asks whether to keep your saved careers and settings. Keeping them is the default,
+  the folder is shown with a button to open it so you can copy your saves, and they are only
+  deleted if you choose that and confirm. A silent uninstall always keeps them.
+- Setup removes a 1.8 Windows installer (MSI) copy of the game first and keeps your saves. Windows
+  asks for permission once, because the old copy was installed for all users. A release can ship
+  both files: the in-game updater and version list use the setup program when a release has one
+  and the MSI when it does not.
 
 ### Changed
 

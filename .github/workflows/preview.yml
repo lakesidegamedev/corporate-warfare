@@ -61,6 +61,25 @@ jobs:
           name: preview-${{ matrix.name }}
           path: out/*
           retention-days: 30
+      # The branded setup program, beside the MSI. Its name ends -setup.exe, which the updater
+      # prefers over the MSI.
+      - name: Setup program (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        working-directory: compose
+        run: ./gradlew --no-daemon $PROPS :shared:packageWindowsSetup
+        shell: bash
+      - name: Name the setup program (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: bash
+        run: |
+          mkdir -p setup-out
+          cp compose/shared/build/compose/binaries/main/setup/*-setup.exe "setup-out/CorporateWarfare-${TAG#v}-setup.exe"
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.os == 'windows-latest' }}
+        with:
+          name: preview-windows-setup.exe
+          path: setup-out/*
+          retention-days: 30
 
   android:
     runs-on: ubuntu-latest
