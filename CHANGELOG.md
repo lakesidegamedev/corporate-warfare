@@ -140,6 +140,14 @@ heading.
 
 ### Fixed
 
+- Big cities keep their names on the close map. A city of a million people or more now always shows its
+  name while its buildings are on screen, even when your own plants crowd the usual spots: the name
+  moves further out and a thin line ties it back to the city. Region names and smaller towns give way
+  first, never a big city.
+- Traffic on the close map is cheaper to draw. Cars, trucks, trains and ships are prepared once as
+  small pictures for each direction they can face and then simply placed, so busy roads cost less at
+  large window sizes. While the picture for a new camera angle is still being prepared, vehicles are
+  drawn the old way, so nothing flickers.
 - Ruhr and Rhine firms can make money. The scenario sells far more coal, steel, chemicals and cars
   than its own households and plants use, and the outside world that buys the rest only had the
   same fixed purse as every other scenario, so by year 3 it could no longer pay and exports fell
