@@ -11,6 +11,26 @@ heading.
 
 ## [Unreleased]
 
+### Changed
+
+- The map is much smoother on Windows and Linux, most of all on big screens. The ground, the day and
+  night shading, the clouds and the menu globe are now painted ahead of time in the background, and
+  while you drag or zoom the game slides the last finished picture into place instead of redrawing it,
+  so moving the map no longer waits on drawing. A fresh picture replaces it a moment later.
+- Clouds are drawn in one pass instead of one per layer and shadow, where the computer can do it.
+- A new install with no graphics choice saved starts on Medium when the window is large or the
+  computer is drawing in software, so the first look is smooth. Your own choice is never changed.
+
+### Added
+
+- The frame counter (Settings, Graphics, Show frame rate) now also shows how the game is drawing
+  (Direct3D, OpenGL, Metal or Software) and the size of the map in pixels. Software drawing shows in
+  amber, because it is far slower than a graphics card.
+
+### Fixed
+
+- Roads on raised tiles now sit on the tile they cross instead of floating at one shared height.
+
 ## [1.8.0] - 2026-10-29
 
 A living map and a deeper company: true 3D voxel buildings and vehicles on the real Earth with seasons and satellite clouds, trucks and trains on real interstates and railways, a clean Freight mode, more map modes, full company financials with customizable charts, deeper views of markets, regions, divisions, freight, rivals and the economy, markets that respond to stock, spare capacity, imports and inflation, choose previews or full releases and install any version from 1.8 on, one copy of the game at a time, faster weeks, and an 8-bit interface. Careers saved in 1.7.1 and the 1.8 previews load in 1.8.0 and carry on.

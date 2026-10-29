@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
                 paint.asFrameworkPaint(),
             )
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) MeshCanvas.cloudFlow = { image -> androidCloudFlow(image) }
         Images.decode = { bytes ->
             android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
         }

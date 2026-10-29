@@ -110,6 +110,21 @@ internal class AsyncLayer(private val scope: CoroutineScope) {
         val t = stalePlacement(b.cam, b.pitch, cam, pitch, size)
         if (t == null) { drawBitmap(b.image); return }
         val (a, d, s, rot) = t
+        // A pure pan lands on whole pixels and is copied as it is: cheap, and half a pixel is not visible in motion.
+        if (rot == 0.0 && abs(s - 1f) < 0.0005f) {
+            val dx = kotlin.math.round(d.x - a.x); val dy = kotlin.math.round(d.y - a.y)
+            // Only the strips the bitmap no longer reaches are filled.
+            if (fill != null) {
+                val w = b.image.width.toFloat(); val h = b.image.height.toFloat()
+                if (dx > 0) drawRect(fill, Offset.Zero, Size(dx, h)) else if (dx < 0) drawRect(fill, Offset(w + dx, 0f), Size(-dx, h))
+                if (dy > 0) drawRect(fill, Offset.Zero, Size(w, dy)) else if (dy < 0) drawRect(fill, Offset(0f, h + dy), Size(w, -dy))
+            }
+            drawImage(
+                b.image, IntOffset.Zero, IntSize(b.image.width, b.image.height), IntOffset(dx.toInt(), dy.toInt()), IntSize(b.image.width, b.image.height),
+                filterQuality = FilterQuality.None,
+            )
+            return
+        }
         // Where the view's corners fall in the old bitmap decides whether any of the view is uncovered.
         if (fill != null) {
             val rad = -rot * PI / 180

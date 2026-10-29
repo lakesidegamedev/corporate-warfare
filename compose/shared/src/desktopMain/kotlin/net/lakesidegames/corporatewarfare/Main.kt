@@ -117,6 +117,7 @@ private fun game() = application {
     Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
     MeshCanvas.draw = desktopMeshDraw
     MapBake.enabled = true
+    MeshCanvas.cloudFlow = desktopCloudFlow
     Pixel.font = desktopPixelFont()
     MeshCanvas.shader = desktopLinearShader
     val settings = remember { AppSettings(File(saveDirectory(), "settings.properties")) }

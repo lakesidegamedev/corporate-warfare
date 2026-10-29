@@ -62,8 +62,12 @@ class PerfRenderCompare {
                 val ints = IntArray(pixels.size / 4) { i -> (pixels[4 * i + 2].toInt() and 255) or ((pixels[4 * i + 1].toInt() and 255) shl 8) or ((pixels[4 * i].toInt() and 255) shl 16) }
                 return image.encodeToData(EncodedImageFormat.PNG)!!.bytes to ints
             }
+            // Before: everything on the UI thread, the clouds as meshes.
+            MeshCanvas.cloudFlow = null
             val geo = MapGeometryCache()
             val (before, a) = frame { ground(geo, MapPhase.Ground); clouds(geo); ground(geo, MapPhase.Structures) }
+            // After: baked layers, the clouds through the runtime shader.
+            MeshCanvas.cloudFlow = desktopCloudFlow
             val layer = AsyncLayer(CoroutineScope(Job()))
             val sky = AsyncLayer(CoroutineScope(Job()))
             layer.bakeNow(cam, g.pitch, null, size, Density(1f)) { geo2 -> ground(geo2, MapPhase.Ground) }
@@ -74,6 +78,7 @@ class PerfRenderCompare {
                 with(sky) { drawBitmap(sky.baked!!.image) }
                 ground(ui, MapPhase.Structures)
             }
+            MeshCanvas.cloudFlow = null
             File(dir, "before-$name.png").writeBytes(before)
             File(dir, "after-$name.png").writeBytes(after)
             var total = 0L; var worst = 0

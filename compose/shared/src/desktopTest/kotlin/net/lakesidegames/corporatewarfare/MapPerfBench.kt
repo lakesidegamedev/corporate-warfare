@@ -41,6 +41,7 @@ class MapPerfBench {
         val map = WorldMap.shared!!
         val report = StringBuilder()
         report.append("HOST load ${java.io.File("/proc/loadavg").takeIf { it.exists() }?.readText()?.trim() ?: "n/a"}\n")
+        MeshCanvas.cloudFlow = null
         val only = System.getenv("CW_PERF_SIZES")?.split(',')
         for ((w, h) in listOf(1200 to 800, 2560 to 1440)) if (only == null || "${w}x$h" in only) benchAt(map, w, h, report)
         println(report)
@@ -103,6 +104,11 @@ class MapPerfBench {
                 }
                 val bakeGround = time(runs(6)) { ground.bakeNow(cam, g.pitch, null, size, Density(1f)) { geo -> paintGround(cam, geo) } }
                 val bakeSky = if (g.clouds > 0) time(runs(6)) { sky.bakeNow(cam, g.pitch, null, size, Density(1f)) { geo -> paintClouds(cam, geo) } } else 0.0
+                // The same clouds through the runtime shader, in one pass.
+                MeshCanvas.cloudFlow = desktopCloudFlow
+                val bakeShader = if (g.clouds > 0) time(runs(6)) { sky.bakeNow(cam, g.pitch, null, size, Density(1f)) { geo -> paintClouds(cam, geo) } } else 0.0
+                val cloudsShader = time(runs(10)) { i -> frame { with(Weather) { drawWeather(geo.p, sun, i / 8.0, g.clouds, map.playBounds, 46.0 * geo.scale * geo.p.t, cam.zoom, g.lighting > 0, map.scenarioId) } } }
+                MeshCanvas.cloudFlow = null
                 val uiCache = MapGeometryCache()
                 val ui = time(runs(10)) { i ->
                     val c = cam.copy(lon = cam.lon + i * 0.001)
@@ -128,7 +134,7 @@ class MapPerfBench {
                     }
                 }
                 report.append("UIPART $tag ${preset.name.padEnd(6)} ${name.padEnd(8)} ground blit %6.1f  cloud blit %6.1f  structures %6.1f  overlay %6.1f\n".format(tGround, tSky, tStructures, tOverlay))
-                report.append("BAKED $tag ${preset.name.padEnd(6)} ${name.padEnd(8)} ui-frame %6.1f (legacy %6.1f)  bake ground %6.1f  bake clouds %6.1f\n".format(ui, pan + overlay + clouds, bakeGround, bakeSky))
+                report.append("BAKED $tag ${preset.name.padEnd(6)} ${name.padEnd(8)} ui-frame %6.1f (legacy %6.1f)  bake ground %6.1f  bake clouds %6.1f  bake clouds (shader) %6.1f  clouds frame mesh %6.1f shader %6.1f\n".format(ui, pan + overlay + clouds, bakeGround, bakeSky, bakeShader, clouds, cloudsShader))
             }
         }
         // What each effect costs: High with one thing switched off, on a still scenario and globe frame.
