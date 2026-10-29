@@ -90,6 +90,88 @@ final class SnapshotTests: XCTestCase {
         render("settings-phone", phone, compact: true,
                ScrollView { GraphicsSettingsPanel().padding(16) }.background(Theme.ink))
         if let home { renderSplitView(store, region: home.code) }
+        await renderDeeperViews(store)
+    }
+
+    /// The financials, the shared chart and the systems displays on a phone and an iPad, after
+    /// thirty weeks so quarters close and every history has points. Each view is fed the engine's
+    /// own figures so the capture does not race a background load.
+    private func renderDeeperViews(_ store: AppStore) async {
+        for _ in 0..<20 {
+            await store.advance(weeks: 1)
+            await store.continueCareer()
+        }
+        guard let firm = store.selectedFirm ?? store.overview?.primaryFirm,
+              let you = store.firms.first(where: { $0.handle == firm }) else {
+            return XCTFail("the player has a company")
+        }
+        let phone = CGSize(width: 393, height: 1800)
+        let pad = CGSize(width: 1180, height: 1400)
+        func both<V: View>(_ name: String, _ view: V) {
+            let page = ScrollView { view.padding(16) }.background(Theme.ink).environmentObject(store)
+            render("\(name)-phone", phone, compact: true, page)
+            render("\(name)-pad", pad, compact: false, page)
+        }
+
+        guard let data = await store.read({ FinancialData.load($0, firm: firm, name: you.name, industry: you.industry) }) else {
+            return XCTFail("financials load")
+        }
+        XCTAssertGreaterThanOrEqual(data.quarters.count, 2, "thirty weeks close at least two quarters")
+        XCTAssertFalse(data.weeks.isEmpty, "weekly statements are kept")
+        for tab in FinanceTab.allCases {
+            let key = tab.rawValue.lowercased().replacingOccurrences(of: " ", with: "-")
+            both("finance-\(key)", CompanyFinancials(data: data, columns: 3, tab: tab))
+        }
+        both("finance-weekly", CompanyFinancials(data: data, columns: 3, tab: .income, period: .weekly))
+        both("chart", Panel(padding: 12) {
+            PixelChart([
+                PlotSeries(name: "Revenue", color: Theme.gold, points: Figures.points(data.weeks) { $0.revenueCents }),
+                PlotSeries(name: "Net income", color: Theme.positive, points: Figures.points(data.weeks) { $0.netIncomeCents }),
+            ], title: "Revenue and profit", initialKind: .area)
+        })
+        if let stock = store.stocks.first(where: { $0.controlledByYou }) {
+            render("stock-history-phone", phone, compact: true, StockSheet(stock: stock).environmentObject(store))
+        }
+
+        let product = store.productLines.first?.product ?? store.commodities.first?.product ?? 0
+        if let depth = await store.read({ $0.goodDepth(product: product) }) ?? nil {
+            XCTAssertFalse(depth.drivers.isEmpty, "the price has a reason to move or a note")
+            both("good-depth", GoodDepthView(d: depth))
+        } else {
+            XCTFail("market depth loads")
+        }
+        if let line = store.commodities.first(where: { $0.product == product }) {
+            render("commodity-sheet-phone", phone, compact: true, GoodDepthSection(product: line.product, referenceCents: line.referenceCents)
+                .padding(16).background(Theme.ink).environmentObject(store))
+        }
+        if let division = store.divisions.first,
+           let board = store.boards.first(where: { $0.code == division.region }) {
+            if let dossier = await store.read({ $0.regionDossier(region: board.index, firm: firm) }) ?? nil {
+                both("region-dossier", RegionDossierView(d: dossier))
+            } else {
+                XCTFail("the region dossier loads")
+            }
+            if let ops = await store.read({ $0.divisionOps(firm: firm, region: division.region, industry: division.industry) }) ?? nil {
+                both("division-ops", DivisionOpsView(d: ops))
+            } else {
+                XCTFail("division operations load")
+            }
+        }
+        if let freight = await store.read({ $0.logisticsStats(firm: firm) }) ?? nil {
+            both("logistics", LogisticsStatsView(d: freight))
+        }
+        let rows = await store.read { $0.rivalsBoard() } ?? []
+        XCTAssertGreaterThan(rows.count, 1, "the rivals board lists companies")
+        if let rival = rows.first(where: { !$0.yours }) {
+            let compare = await store.read {
+                RivalCompare(you: $0.statements(firm: firm, period: "quarter"), them: $0.statements(firm: rival.firm, period: "quarter"),
+                             goods: $0.headToHead(you: firm, rival: rival.firm))
+            }
+            both("rivals", RivalsBoardView(rows: rows, picked: rival.firm, onPick: { _ in }, compare: compare))
+        }
+        if let economy = await store.read({ EconomyHistory(series: $0.economySeries(), index: $0.corridorIndexHistory()) }) {
+            both("economy-history", EconomyHistoryView(d: economy))
+        }
     }
 
     /// The app in iPad Split View and Slide Over on a 13-inch iPad (1032 by 1376 points): a third,

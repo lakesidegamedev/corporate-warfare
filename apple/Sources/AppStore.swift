@@ -811,6 +811,11 @@ final class AppStore: ObservableObject {
         ]))
     }
 
+    /// Read from the engine off the main actor: statements, history and the systems displays.
+    func read<T>(_ block: (SessionHandle) -> T) async -> T? {
+        await engine.read(block)
+    }
+
     /// A company's full page, with what the investor may see of it.
     func companyPage(_ firm: UInt64) async -> CompanyPageDto? {
         await engine.companyPage(firm: firm)

@@ -66,6 +66,7 @@ struct CEOOfficeView: View {
                 PricingPanel()
                 if !store.divisions.isEmpty {
                     Panel { DivisionShipping() }
+                    LogisticsStatsSection()
                 }
                 boardPanel
                 plantsPanel

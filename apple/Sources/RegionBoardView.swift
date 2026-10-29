@@ -146,6 +146,8 @@ struct RegionBoardView: View {
                     }
                 }
 
+                RegionDossierSection(region: board.index)
+
                 if !ours.isEmpty {
                     Panel {
                         VStack(alignment: .leading, spacing: 8) {
