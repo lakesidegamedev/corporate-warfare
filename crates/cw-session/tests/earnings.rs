@@ -373,7 +373,7 @@ fn a_missed_range_invites_the_activists_through_the_ordinary_path() {
     w.structure.last_activist.remove(&firm);
     w.structure.campaigns.retain(|c| c.target != firm);
     // The scan visits each firm one week in thirteen; find that week.
-    let slot = (firm.slot() % 13) as u32;
+    let slot = firm.slot() % 13;
     let mut week = 26 + 1;
     while week % 13 != slot {
         week += 1;
@@ -438,7 +438,7 @@ fn an_overvalued_firm_draws_a_short_campaign_and_a_bounded_price_hit() {
     }
     w.structure.last_activist.remove(&firm);
     w.structure.campaigns.retain(|c| c.target != firm);
-    let slot = (firm.slot() % 13) as u32;
+    let slot = firm.slot() % 13;
     let mut week = 27;
     while week % 13 != slot {
         week += 1;
