@@ -11,6 +11,10 @@ heading.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-29
+
+A living map and a deeper company: true 3D voxel buildings and vehicles on the real Earth with seasons and satellite clouds, trucks and trains on real interstates and railways, a clean Freight mode, more map modes, full company financials with customizable charts, deeper views of markets, regions, divisions, freight, rivals and the economy, markets that respond to stock, spare capacity, imports and inflation, choose previews or full releases and install any version from 1.8 on, one copy of the game at a time, faster weeks, and an 8-bit interface. Careers saved in 1.7.1 and the 1.8 previews load in 1.8.0 and carry on.
+
 ### Added
 
 - Choose your updates. Settings, Updates now asks whether you want full releases or previews.
@@ -33,6 +37,138 @@ heading.
   to the shareholders. Rival companies do the same after half a year with nothing running, so
   about three idle, money-losing shells per game close instead of bleeding cash. Your main company
   cannot be wound down.
+- Market analytics split the companies losing money into established companies, new entrants and
+  shells with no working plant, so a rise in losses can be told apart from young or idle firms.
+- Market analytics report a new sales-weighted asking price for each good, which shows what sellers
+  that actually sold were asking. The existing median asking price is unchanged, so older servers
+  and app versions keep working.
+- Market depth for every good: tap a good on the Markets screen to see how much is made, sold,
+  imported and exported each week, the stock held and how many weeks of sales it covers, your
+  share of sales over time, the top sellers and buyers with their shares, and in plain words
+  why the price is moving this week (buyers short of stock, unsold stock on the shelves,
+  reliance on imports, or spare capacity for services).
+- Region dossiers: tap a region for its workforce and how many are without a job, wages by
+  skill, land price, what households spend their money on, who competes there in each sector
+  with their shares, and your divisions there with their profit, with charts over time.
+- Division operations: each division shows how hard its plants run, what it made against what
+  it sold, and what one lot costs (inputs, labour, upkeep, land, depreciation and freight)
+  against its price, with the margin per lot and charts of output, use and cost per lot.
+- Freight stats on the company shipping panel: lots moved, cost per lot, who carried them
+  (your own carriers, other companies or outside carriers when lanes are full), and your own
+  carriers' capacity used and idle, week by week.
+- A rivals board: every company side by side (revenue, profit, cash, debt, share price,
+  divisions and best market share), sorted by any column. Pick one to chart it against you by
+  quarter and see the goods you both sell, head to head.
+- Economy history in the economy panel: the corridor share index, the bank rate and inflation,
+  the price level, companies operating and gone, raids and household spending, with date ranges.
+- The financials, the new charts and these systems displays are on iPhone and iPad too, in the same
+  8-bit style.
+- Five years of weekly history behind these displays. Saves from earlier versions load and start
+  the history from the next week.
+- Deeper company financials: every company page and the Stats page have tabs for an overview,
+  the income statement, the balance sheet, the cash flow statement, divisions and ratios. Pick
+  weekly, quarterly or yearly periods and compare the last several side by side. Ratios cover
+  gross and net margin, return on equity and on assets, debt to equity, the current ratio,
+  interest cover and revenue growth.
+- A cash flow statement for every period: opening cash, operating, investing, financing and tax,
+  and closing cash, worked out from the company's own books so it always adds up.
+- Division results by quarter: revenue, costs, profit, plants and market share for each division.
+- New charts across the app (company pages, Stats, share and goods details, the economy panel): line,
+  bar or area, date ranges from four weeks to everything kept, weekly, quarterly or yearly points,
+  several series at once with a legend (your revenue against the two largest rivals in your sector
+  whose figures you can see, a share against the corridor index, a good against its reference
+  price), the value under the pointer or finger, and dates such as 2001 Q3 along the bottom. A
+  quarter or year still under way is marked "to date".
+- Longer history: ten years of weekly share and goods prices, a year of weekly statements and
+  quarterly statements for the whole career. Saves from earlier versions still load and start
+  their longer history from the year of prices they already hold.
+- Every company on the stock board shows its statements, floated or not, and area charts draw the
+  largest series at the back with every line on top, so a balance sheet shows assets, liabilities
+  and equity together.
+- Seven more map modes: your share, competition, demand, workforce skill, infrastructure (roads,
+  power and broadband), land price and population, each with a legend showing what its colours
+  mean.
+- More map settings: countryside, rivals' buildings, interstates and seasons on or off, and labels
+  (off, cities, or cities and regions).
+- Interstates are drawn as 8-bit roads with a dark edge, grey asphalt and, up close, a dashed gold
+  centre line, over the regions' shading and under traffic and buildings, from the scenario's
+  framing inwards.
+- Zoomed in, the countryside fills in as a voxel diorama on the real ground: forests (pines in the
+  north), farm fields and barns, rocks on dry land, and houses round every city that spread out in
+  a boom and pull in during a recession. Trees turn in the autumn and everything wears snow in
+  winter.
+- Voxel trucks, trains on visible tracks, ships on the lakes and cargo planes carry the freight up
+  close; the lanes you use run in your gold livery. Trucks follow the real interstates and trains
+  the real railways (Natural Earth, public domain) between the region hubs, not straight lines.
+- The map tells the story: a plant still going up shows as a building site with scaffold and a
+  crane, a division adding or retooling plants has a crane beside it, a mothballed one goes dark,
+  and one you have just taken over flies a gold flag for six weeks. Rivals' sites and closures show
+  the same way. In a boom cranes rise beside the cities; in a slowdown or recession their lights dim.
+- The real Earth under the map: NASA's Blue Marble imagery (public domain) on the globe, the menu and
+  the scenario, sharp close up. The seasons follow the game's calendar: a snow line that creeps south
+  in winter, autumn colour, and browner winters in the mid-latitudes, half a year apart in the south.
+  Over it your regions lie flat and see-through. Switch it off under Settings, Satellite Earth, for the
+  painted map with raised regions. `tools/earth_tex.py` bakes the images.
+- Zoomed in, your divisions stand on the map as front-on, cel-shaded voxel buildings, square to
+  the map like classic 8-bit games, one model per industry (a farm
+  with barn and silos, a mine headframe, a refinery, a chemical works, a factory, a building site,
+  a port, a shop, a hospital, an office tower, a studio, a mast, apartments, a base, a bank) in
+  three sizes that grow with the division's plants. Cities on the map are voxel city blocks too,
+  a town, a city or a metropolis by population, a step smaller so your buildings stand out.
+  At the scenario's framing they are small badges instead, and further out nothing marks them.
+  Zoomed in, rivals' plants stand there too, smaller and greyed, so you can see who you face where.
+  `tools/voxel_sprites.py` bakes them.
+- Zoomed in on Android, Windows and Linux, the map's traffic becomes little voxel vehicles doing
+  the business: trucks on road lanes, trains of a locomotive and wagons on a thin track on rail
+  lanes, cargo ships on the lakes (never over land), cars on the highways and cargo planes with a
+  short faint contrail overhead. Each faces the way it is moving, even on a turned map. Busier
+  lanes carry more of them, and lanes where you ship or hold capacity run in your gold livery.
+  Zoomed out the traffic stays as dots. `tools/voxel_vehicles.py` bakes the sprites.
+- Turn the map: twist with two fingers, or drag with the right mouse button on desktop. Buildings
+  and labels stay upright, and an N button turns it back to north. Dragging now reaches almost to
+  the poles.
+- Android adaptive launcher icon with a themed (monochrome) layer, so Android 8 and later no longer
+  shows the icon in a white circle.
+- Google Play listing assets: the 512 pixel icon, a 1024 by 500 feature graphic built from the
+  game's own menu and globe, and draft listing copy for review (`store/play/`).
+- Store declaration drafts: one table of what the app sends, mapped onto App Store App Privacy and
+  Google Play Data safety and app content answers (`store/declarations.md`); the privacy policy
+  draft now covers the desktop and direct-download update check and where each platform keeps the
+  analytics switch.
+- App Store screenshots at the sizes Connect accepts, rendered from a real career: iPhone 6.9-inch (1320 x 2868) and 13-inch iPad (2064 x 2752), flattened to RGB because a screenshot with an alpha channel is rejected. The Apple smoke workflow collects them as the `store-screenshots` artifact and the test asserts the PNG carries no alpha.
+- The map is now 3D. As you zoom in it tilts away into the distance, and the scenario's regions
+  stand up as lit tiles whose height shows the layer you are looking at, rising and falling as you
+  switch layers. The globe is lit by the sun, with an atmosphere, a glint on the ocean, land
+  coloured by climate, and a night side that fades in smoothly with cities glowing in the dark.
+  Your divisions stand as buildings with lit windows and their plant counts, big cities get
+  skylines with blinking rooftop lights, freight moves along the lanes, cars run the highways up
+  close, planes cross between the big cities trailing contrails, shallow water glows along the
+  coasts, the selected region glows, and a new week sends a ring out from every plant. A 3D button
+  flattens the map again.
+- Real clouds: the map and the menu globe carry a real satellite cloud map of the whole Earth,
+  with its fronts, storms and tropical clusters, drifting west on the trade winds and east on the
+  westerlies. Each scenario has its own sharp close-up clouds, and clouds clear as you zoom in.
+  Clouds can be off, thin, light or heavy (heavy clouds cast shadows), set in Settings or in one
+  tap with the new cloud button on the map. Cloud imagery:
+  Solar System Scope (CC BY 4.0), based on NASA Blue Marble.
+- A sharper 8-bit look: stepped corners, hard bevelled edges and hard shadows on panels and
+  buttons, and a pixel font (Silkscreen, SIL Open Font License) for headings, labels, buttons and
+  tabs. Body text and figures stay in the regular font so they are easy to read. No glass or blur.
+  On iPhone, iPad and Mac the app no longer uses iOS 26's Liquid Glass: system bars, buttons and
+  sheets are solid and gold-accented to match.
+- iPad Split View and Slide Over are checked at a third, a half and two thirds of the screen in
+  both orientations; the week controls stay pinned on screen at every width, where at half width
+  Next week used to scroll out of reach. Snapshots are kept in `evidence/ipad-multitasking/`.
+- The main menu's globe now turns in sunlight with its night side lit by cities, gold trade
+  routes arc between the world's great cities, satellites circle it, the sun glares from the
+  side, and a band of light crosses the logo.
+- Graphics settings: Low, Medium, High and Ultra presets, and separate choices for map detail,
+  3D tilt, raised regions, lighting, day and night, city lights, traffic, buildings,
+  frame rate (30, 60 or unlimited), animations and an on-screen frame counter. Low looks and costs
+  the same as before. Moving effects only redraw what moves, at the chosen frame rate, and stop
+  when the map is off screen.
+- Google Play can take a release: the release workflow builds a signed Android App Bundle, verifies its signature, manifest and arm64 library, and attaches it to the release. The APK stays for direct downloads.
+- Notes for Review for the first App Store submission: the offline game, the anonymous market snapshot and its switch, and the absence of purchases.
 
 ### Changed
 
@@ -94,6 +230,7 @@ heading.
 - Freight routes no longer show outside the Freight mode. Elsewhere trucks drive on the real
   interstates and trains on the real railways, which are now drawn when zoomed in; a route with no
   road or track simply shows no vehicles.
+- The requirement ledger and release evidence now record every uploaded TestFlight build from 5 to 15 in `evidence/releases/testflight-builds-5-15.md`.
 
 ### Fixed
 
@@ -106,104 +243,6 @@ heading.
   nothing is installed and the game says so.
 - Installing or uninstalling on Windows while the game is open no longer gets stuck. The installer
   now closes the running game first, and ends it if it does not close within 15 seconds.
-
-### Added
-
-- Market analytics split the companies losing money into established companies, new entrants and
-  shells with no working plant, so a rise in losses can be told apart from young or idle firms.
-- Market analytics report a new sales-weighted asking price for each good, which shows what sellers
-  that actually sold were asking. The existing median asking price is unchanged, so older servers
-  and app versions keep working.
-- Market depth for every good: tap a good on the Markets screen to see how much is made, sold,
-  imported and exported each week, the stock held and how many weeks of sales it covers, your
-  share of sales over time, the top sellers and buyers with their shares, and in plain words
-  why the price is moving this week (buyers short of stock, unsold stock on the shelves,
-  reliance on imports, or spare capacity for services).
-- Region dossiers: tap a region for its workforce and how many are without a job, wages by
-  skill, land price, what households spend their money on, who competes there in each sector
-  with their shares, and your divisions there with their profit, with charts over time.
-- Division operations: each division shows how hard its plants run, what it made against what
-  it sold, and what one lot costs (inputs, labour, upkeep, land, depreciation and freight)
-  against its price, with the margin per lot and charts of output, use and cost per lot.
-- Freight stats on the company shipping panel: lots moved, cost per lot, who carried them
-  (your own carriers, other companies or outside carriers when lanes are full), and your own
-  carriers' capacity used and idle, week by week.
-- A rivals board: every company side by side (revenue, profit, cash, debt, share price,
-  divisions and best market share), sorted by any column. Pick one to chart it against you by
-  quarter and see the goods you both sell, head to head.
-- Economy history in the economy panel: the corridor share index, the bank rate and inflation,
-  the price level, companies operating and gone, raids and household spending, with date ranges.
-- The financials, the new charts and these systems displays are on iPhone and iPad too, in the same
-  8-bit style.
-- Five years of weekly history behind these displays. Saves from earlier versions load and start
-  the history from the next week.
-- Deeper company financials: every company page and the Stats page have tabs for an overview,
-  the income statement, the balance sheet, the cash flow statement, divisions and ratios. Pick
-  weekly, quarterly or yearly periods and compare the last several side by side. Ratios cover
-  gross and net margin, return on equity and on assets, debt to equity, the current ratio,
-  interest cover and revenue growth.
-- A cash flow statement for every period: opening cash, operating, investing, financing and tax,
-  and closing cash, worked out from the company's own books so it always adds up.
-- Division results by quarter: revenue, costs, profit, plants and market share for each division.
-- New charts across the app (company pages, Stats, share and goods details, the economy panel): line,
-  bar or area, date ranges from four weeks to everything kept, weekly, quarterly or yearly points,
-  several series at once with a legend (your revenue against the two largest rivals in your sector
-  whose figures you can see, a share against the corridor index, a good against its reference
-  price), the value under the pointer or finger, and dates such as 2001 Q3 along the bottom. A
-  quarter or year still under way is marked "to date".
-- Longer history: ten years of weekly share and goods prices, a year of weekly statements and
-  quarterly statements for the whole career. Saves from earlier versions still load and start
-  their longer history from the year of prices they already hold.
-- Every company on the stock board shows its statements, floated or not, and area charts draw the
-  largest series at the back with every line on top, so a balance sheet shows assets, liabilities
-  and equity together.
-
-- Seven more map modes: your share, competition, demand, workforce skill, infrastructure (roads,
-  power and broadband), land price and population, each with a legend showing what its colours
-  mean.
-- More map settings: countryside, rivals' buildings, interstates and seasons on or off, and labels
-  (off, cities, or cities and regions).
-- Interstates are drawn as 8-bit roads with a dark edge, grey asphalt and, up close, a dashed gold
-  centre line, over the regions' shading and under traffic and buildings, from the scenario's
-  framing inwards.
-- Zoomed in, the countryside fills in as a voxel diorama on the real ground: forests (pines in the
-  north), farm fields and barns, rocks on dry land, and houses round every city that spread out in
-  a boom and pull in during a recession. Trees turn in the autumn and everything wears snow in
-  winter.
-- Voxel trucks, trains on visible tracks, ships on the lakes and cargo planes carry the freight up
-  close; the lanes you use run in your gold livery. Trucks follow the real interstates and trains
-  the real railways (Natural Earth, public domain) between the region hubs, not straight lines.
-- The map tells the story: a plant still going up shows as a building site with scaffold and a
-  crane, a division adding or retooling plants has a crane beside it, a mothballed one goes dark,
-  and one you have just taken over flies a gold flag for six weeks. Rivals' sites and closures show
-  the same way. In a boom cranes rise beside the cities; in a slowdown or recession their lights dim.
-- The real Earth under the map: NASA's Blue Marble imagery (public domain) on the globe, the menu and
-  the scenario, sharp close up. The seasons follow the game's calendar: a snow line that creeps south
-  in winter, autumn colour, and browner winters in the mid-latitudes, half a year apart in the south.
-  Over it your regions lie flat and see-through. Switch it off under Settings, Satellite Earth, for the
-  painted map with raised regions. `tools/earth_tex.py` bakes the images.
-- Zoomed in, your divisions stand on the map as front-on, cel-shaded voxel buildings, square to
-  the map like classic 8-bit games, one model per industry (a farm
-  with barn and silos, a mine headframe, a refinery, a chemical works, a factory, a building site,
-  a port, a shop, a hospital, an office tower, a studio, a mast, apartments, a base, a bank) in
-  three sizes that grow with the division's plants. Cities on the map are voxel city blocks too,
-  a town, a city or a metropolis by population, a step smaller so your buildings stand out.
-  At the scenario's framing they are small badges instead, and further out nothing marks them.
-  Zoomed in, rivals' plants stand there too, smaller and greyed, so you can see who you face where.
-  `tools/voxel_sprites.py` bakes them.
-- Zoomed in on Android, Windows and Linux, the map's traffic becomes little voxel vehicles doing
-  the business: trucks on road lanes, trains of a locomotive and wagons on a thin track on rail
-  lanes, cargo ships on the lakes (never over land), cars on the highways and cargo planes with a
-  short faint contrail overhead. Each faces the way it is moving, even on a turned map. Busier
-  lanes carry more of them, and lanes where you ship or hold capacity run in your gold livery.
-  Zoomed out the traffic stays as dots. `tools/voxel_vehicles.py` bakes the sprites.
-
-- Turn the map: twist with two fingers, or drag with the right mouse button on desktop. Buildings
-  and labels stay upright, and an N button turns it back to north. Dragging now reaches almost to
-  the poles.
-
-### Fixed
-
 - Freight space no longer sits empty after companies began moving their own goods between
   states. A rival used to size a new pipeline on everything it made in a state rather than what
   it actually shipped, and point it at the busiest truck route rather than the one its goods
@@ -264,65 +303,12 @@ heading.
 - On iPhone and iPad the app no longer stalls at the top speed: the game runs off the interface
   thread and the screen refreshes at most a few times a second at high speed. Every tab now has
   the pause and speed buttons, not only the map, and so does every tab on Android phones.
-
-### Added
-
-- Android adaptive launcher icon with a themed (monochrome) layer, so Android 8 and later no longer
-  shows the icon in a white circle.
-- Google Play listing assets: the 512 pixel icon, a 1024 by 500 feature graphic built from the
-  game's own menu and globe, and draft listing copy for review (`store/play/`).
-- Store declaration drafts: one table of what the app sends, mapped onto App Store App Privacy and
-  Google Play Data safety and app content answers (`store/declarations.md`); the privacy policy
-  draft now covers the desktop and direct-download update check and where each platform keeps the
-  analytics switch.
-- App Store screenshots at the sizes Connect accepts, rendered from a real career: iPhone 6.9-inch (1320 x 2868) and 13-inch iPad (2064 x 2752), flattened to RGB because a screenshot with an alpha channel is rejected. The Apple smoke workflow collects them as the `store-screenshots` artifact and the test asserts the PNG carries no alpha.
-
-- The map is now 3D. As you zoom in it tilts away into the distance, and the scenario's regions
-  stand up as lit tiles whose height shows the layer you are looking at, rising and falling as you
-  switch layers. The globe is lit by the sun, with an atmosphere, a glint on the ocean, land
-  coloured by climate, and a night side that fades in smoothly with cities glowing in the dark.
-  Your divisions stand as buildings with lit windows and their plant counts, big cities get
-  skylines with blinking rooftop lights, freight moves along the lanes, cars run the highways up
-  close, planes cross between the big cities trailing contrails, shallow water glows along the
-  coasts, the selected region glows, and a new week sends a ring out from every plant. A 3D button
-  flattens the map again.
-- Real clouds: the map and the menu globe carry a real satellite cloud map of the whole Earth,
-  with its fronts, storms and tropical clusters, drifting west on the trade winds and east on the
-  westerlies. Each scenario has its own sharp close-up clouds, and clouds clear as you zoom in.
-  Clouds can be off, thin, light or heavy (heavy clouds cast shadows), set in Settings or in one
-  tap with the new cloud button on the map. Cloud imagery:
-  Solar System Scope (CC BY 4.0), based on NASA Blue Marble.
-- A sharper 8-bit look: stepped corners, hard bevelled edges and hard shadows on panels and
-  buttons, and a pixel font (Silkscreen, SIL Open Font License) for headings, labels, buttons and
-  tabs. Body text and figures stay in the regular font so they are easy to read. No glass or blur.
-  On iPhone, iPad and Mac the app no longer uses iOS 26's Liquid Glass: system bars, buttons and
-  sheets are solid and gold-accented to match.
-- iPad Split View and Slide Over are checked at a third, a half and two thirds of the screen in
-  both orientations; the week controls stay pinned on screen at every width, where at half width
-  Next week used to scroll out of reach. Snapshots are kept in `evidence/ipad-multitasking/`.
-- The main menu's globe now turns in sunlight with its night side lit by cities, gold trade
-  routes arc between the world's great cities, satellites circle it, the sun glares from the
-  side, and a band of light crosses the logo.
-- Graphics settings: Low, Medium, High and Ultra presets, and separate choices for map detail,
-  3D tilt, raised regions, lighting, day and night, city lights, traffic, buildings,
-  frame rate (30, 60 or unlimited), animations and an on-screen frame counter. Low looks and costs
-  the same as before. Moving effects only redraw what moves, at the chosen frame rate, and stop
-  when the map is off screen.
-- Google Play can take a release: the release workflow builds a signed Android App Bundle, verifies its signature, manifest and arm64 library, and attaches it to the release. The APK stays for direct downloads.
-- Notes for Review for the first App Store submission: the offline game, the anonymous market snapshot and its switch, and the absence of purchases.
-
-### Fixed
-
 - Android back now returns one level at a time, closing settings, overlays, the new-game steps,
   the load and scenario editor screens, and stepping back through companies opened from a company
   page, instead of leaving the app. From another tab it returns to the map first.
 - On Android 15 and later, the menu, settings, new-game, load, scenario editor and tablet screens
   keep clear of the status and navigation bars.
 - A build installed from Google Play no longer offers the GitHub self-updater, because Play requires updates to come through Play. The direct-download APK still updates itself.
-
-### Changed
-
-- The requirement ledger and release evidence now record every uploaded TestFlight build from 5 to 15 in `evidence/releases/testflight-builds-5-15.md`.
 
 ## [1.7.1] - 2026-10-28
 
