@@ -161,13 +161,16 @@ tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageT
         check(args.isFile) { "jpackage arguments not found at $args; the Compose plugin changed, see shared/build.gradle.kts" }
         template.copyRecursively(composeResources.get().asFile, overwrite = true)
         output.get().asFile.listFiles { file -> file.extension == "msi" }?.forEach { it.delete() }
-        val process = ProcessBuilder(File(jdk.get(), "bin/jpackage.exe").path, "@${args.path}").inheritIO()
+        val process = ProcessBuilder(File(jdk.get(), "bin/jpackage.exe").path, "@${args.path}", "--verbose").redirectErrorStream(true)
         wixDir.orNull?.asFile?.let { wix ->
             val env = process.environment()
             val key = env.keys.firstOrNull { it.equals("PATH", ignoreCase = true) } ?: "PATH"
             env[key] = wix.path + File.pathSeparator + env[key].orEmpty()
         }
-        val code = process.start().waitFor()
-        check(code == 0) { "jpackage with packaging/windows/main.wxs failed with exit code $code" }
+        val run = process.start()
+        val log = run.inputStream.bufferedReader().readText()
+        val code = run.waitFor()
+        logger.lifecycle(log)
+        check(code == 0) { "jpackage with packaging/windows/main.wxs failed with exit code $code; arguments:\n${args.readText()}" }
     }
 }
