@@ -36,16 +36,20 @@ heading.
 - The frame counter (Settings, Graphics, Show frame rate) now also shows how the game is drawing
   (Direct3D, OpenGL, Metal or Software) and the size of the map in pixels. Software drawing shows in
   amber, because it is far slower than a graphics card.
-
-### Fixed
-
-- On iPhone and iPad at the fastest speed, the screen no longer freezes for up to a second when you
-  switch tabs or open a division. The division sheet now draws only what is on screen and does not
-  rebuild when nothing in it changed, and the map's building models are read in the background
-  from launch, with the drawing set-up warmed behind the main menu, so the map's first view opens
-  much faster. The division sheet now opens as a light page first and fills in its sections a
-  moment later, and the pixel font, buttons and sliders are warmed behind the main menu, so the
-  first time you open a division no longer catches.
+- Developer tooling: a new `cw-render` crate holds the first prototype of the 1.9 GPU map
+  renderer. It draws the Great Lakes 2000 scenario offscreen with wgpu, in one fixed 48 colour
+  palette, clean land cover patches (dither only across the border between two ground types),
+  gently stepped terrace terrain from public elevation data that keeps the Midwest nearly flat
+  and shows the Appalachian plateau, greedy meshed into a few thousand quads, flat water with
+  a lighter shoreline and static wave dashes, gold player holdings over visible ground with one
+  pixel borders, outlined voxel buildings at each region's anchor city on grey city footprints,
+  region borders, a sun with hard shadows for
+  terraces and voxel buildings, floating clouds with an outline, a ground shadow and less coverage as the camera zooms in, and a night
+  palette with lit windows. Run `cargo run --release -p cw-render --example render_scene -- <out_dir>`
+  to write the scenario, close and turned views and print frame times and draw counts; on a
+  machine without a GPU it uses the Mesa software driver. `tools/render_bake.py` fetches the
+  elevation and bakes the small heightmap. The crate is not linked into the game or the apps
+  yet and changes nothing players see, no saves and no hashes.
 
 ### Changed
 
@@ -61,6 +65,13 @@ heading.
 
 ### Fixed
 
+- On iPhone and iPad at the fastest speed, the screen no longer freezes for up to a second when you
+  switch tabs or open a division. The division sheet now draws only what is on screen and does not
+  rebuild when nothing in it changed, and the map's building models are read in the background
+  from launch, with the drawing set-up warmed behind the main menu, so the map's first view opens
+  much faster. The division sheet now opens as a light page first and fills in its sections a
+  moment later, and the pixel font, buttons and sliders are warmed behind the main menu, so the
+  first time you open a division no longer catches.
 - Roads on raised tiles now sit on the tile they cross instead of floating at one shared height.
 
 ## [1.8.0] - 2026-10-29
