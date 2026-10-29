@@ -1011,7 +1011,16 @@ struct MapScene {
             }
             // City names over every building. Sentence case, one weight. A name sits beside its block (right,
             // left, above, below); one that fits nowhere is dropped, and the biggest cities choose first.
-            for (index, city) in map.cities.prefix(look.labels >= 1 ? (close ? 40 : 14) : 0).enumerated() {
+            // A city above the town size always keeps its name while its block is on screen: it chooses before the
+            // smaller ones, tries further slots with a leader line, and is never dropped for a region name.
+            var named = look.labels >= 1 ? Array(map.cities.enumerated().prefix(close ? 40 : 14)) : []
+            if look.labels >= 1 {
+                let listed = Set(named.map(\.offset))
+                for (index, city) in map.cities.enumerated() where !listed.contains(index) && cityBox[index] != nil
+                    && Int(city.population) >= LabelPlanner.townPopulation { named.append((offset: index, element: city)) }
+            }
+            named.sort { $0.element.population > $1.element.population }
+            for (index, city) in named {
                 if !close && city.country != "USA" { continue }
                 let geo = GeoPoint(e4: city.x, city.y)
                 guard let at = p.at(lon: geo.lon, lat: geo.lat, height: g.cityFloor(index, ground)) else { continue }
@@ -1028,7 +1037,19 @@ struct MapScene {
                     slots = [CGPoint(x: at.x + 6, y: at.y - size.height / 2), CGPoint(x: at.x - 6 - size.width, y: at.y - size.height / 2),
                              CGPoint(x: at.x - size.width / 2, y: at.y - size.height - 5), CGPoint(x: at.x - size.width / 2, y: at.y + 5)]
                 }
-                if let corner = planner.place("c:\(city.name)", size: size, slots: slots) {
+                if let b = cityBox[index], Int(city.population) >= LabelPlanner.townPopulation {
+                    let put = planner.placeCity("c:\(city.name)", size: size, slots: slots, center: CGPoint(x: b.midX, y: b.midY),
+                                                reach: max(b.width, b.height) / 2 + 6)
+                    if put.leader {
+                        // One point line from the name's nearest edge to the block it belongs to.
+                        var line = Path()
+                        line.move(to: CGPoint(x: min(max(b.midX, put.corner.x), put.corner.x + size.width),
+                                              y: min(max(b.midY, put.corner.y), put.corner.y + size.height)))
+                        line.addLine(to: CGPoint(x: b.midX, y: b.midY))
+                        context.stroke(line, with: .color(Theme.primaryText.opacity(0.7)), lineWidth: 1)
+                    }
+                    labels.draw(text, at: put.corner, anchor: .topLeading)
+                } else if let corner = planner.place("c:\(city.name)", size: size, slots: slots) {
                     labels.draw(text, at: corner, anchor: .topLeading)
                 }
             }

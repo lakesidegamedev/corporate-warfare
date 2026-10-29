@@ -102,6 +102,14 @@ heading.
 
 ### Fixed
 
+- Big cities keep their names on the close map. A city of a million people or more now always shows its
+  name while its buildings are on screen, even when your own plants crowd the usual spots: the name
+  moves further out and a thin line ties it back to the city. Region names and smaller towns give way
+  first, never a big city.
+- Traffic on the close map is cheaper to draw. Cars, trucks, trains and ships are prepared once as
+  small pictures for each direction they can face and then simply placed, so busy roads cost less at
+  large window sizes. While the picture for a new camera angle is still being prepared, vehicles are
+  drawn the old way, so nothing flickers.
 - On iPhone and iPad at the fastest speed, the screen no longer freezes for up to a second when you
   switch tabs or open a division. The division sheet now draws only what is on screen and does not
   rebuild when nothing in it changed, and the map's building models are read in the background

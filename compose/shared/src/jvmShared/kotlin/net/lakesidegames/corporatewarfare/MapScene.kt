@@ -862,7 +862,10 @@ private fun DrawScope.drawVehicle3d(v: VehicleSpot, o: OverlayGeometry) {
     val n = p.north
     // The ground direction in world east and north, so the model heads along the road whatever the camera.
     val heading = atan2((v.dir.x * n.x + v.dir.y * n.y).toDouble(), (v.dir.x * e.x + v.dir.y * e.y).toDouble())
-    with(VoxelModels) { drawModel("${v.type}/${if (v.mine) "player" else "neutral"}", p, v.g.x, v.g.y, o.plinth + v.height, o.vehicleScale, heading, tone = v.tone) }
+    val name = "${v.type}/${if (v.mine) "player" else "neutral"}"
+    // On the ground it is one blit of a ready picture; planes and any vehicle whose picture is not ready yet are drawn as models.
+    if (v.height == 0.0 && with(VehicleSprites) { drawSprite(name, p, v.g.x, v.g.y, o.plinth, o.vehicleScale, heading, v.tone) }) return
+    with(VoxelModels) { drawModel(name, p, v.g.x, v.g.y, o.plinth + v.height, o.vehicleScale, heading, tone = v.tone) }
 }
 
 /** A cargo plane up close: the voxel plane high over the map, its shadow on the ground and a short faint contrail. */

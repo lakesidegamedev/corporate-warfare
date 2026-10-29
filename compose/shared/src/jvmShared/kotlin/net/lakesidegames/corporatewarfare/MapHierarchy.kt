@@ -94,6 +94,64 @@ internal class LabelPlanner {
         }
         return -1
     }
+
+    /**
+     * A big city's name: the preferred [slots] first, then rings further out round ([cx], [cy]) with a leader line,
+     * and when nothing at all is clear the place that covers least. It is never dropped.
+     */
+    fun placeCity(key: String, w: Float, h: Float, slots: FloatArray, cx: Float, cy: Float, reach: Float): CityLabel {
+        val all = slots + ringSlots(cx, cy, w, h, reach)
+        val near = slots.size / 2
+        var i = place(key, w, h, all)
+        if (i < 0) {
+            // Crowded to the edge: take the place that overlaps the least and let the label sit over it.
+            var best = Float.MAX_VALUE
+            for (j in 0 until all.size / 2) {
+                val o = overlap(all[2 * j], all[2 * j + 1], all[2 * j] + w, all[2 * j + 1] + h)
+                if (o < best) { best = o; i = j }
+            }
+            reserve(all[2 * i], all[2 * i + 1], all[2 * i] + w, all[2 * i + 1] + h)
+            next += key
+            nextSlot[key] = i
+        }
+        return CityLabel(all[2 * i], all[2 * i + 1], i >= near)
+    }
+
+    private fun overlap(l: Float, t: Float, r: Float, b: Float): Float {
+        var sum = 0f
+        for (i in 0 until count) {
+            val w = minOf(r, taken[i * 4 + 2]) - maxOf(l, taken[i * 4])
+            val h = minOf(b, taken[i * 4 + 3]) - maxOf(t, taken[i * 4 + 1])
+            if (w > 0 && h > 0) sum += w * h
+        }
+        return sum
+    }
+}
+
+/** Where [LabelPlanner.placeCity] put a name: its top-left corner, and whether a leader line must tie it to the city. */
+internal class CityLabel(val x: Float, val y: Float, val leader: Boolean)
+
+/** Population from which a city is a city and not a town: its name always shows while its block is on screen. */
+internal const val TOWN_POPULATION = 1_000_000
+
+/**
+ * Candidate top-left corners for a name of size ([w], [h]) on rings round ([cx], [cy]), nearest first, [reach] pixels
+ * from the centre to the first ring. Twelve places a ring, rings 14 px apart, six rings.
+ */
+internal fun ringSlots(cx: Float, cy: Float, w: Float, h: Float, reach: Float): FloatArray {
+    val out = FloatArray(6 * 12 * 2)
+    var n = 0
+    for (ring in 0 until 6) {
+        val r = reach + ring * 14f
+        for (a in 0 until 12) {
+            val ang = a * (Math.PI.toFloat() * 2f / 12f)
+            val dx = kotlin.math.cos(ang); val dy = kotlin.math.sin(ang)
+            // Put the label's nearest edge, not its corner, on the ring.
+            out[n++] = cx + dx * r - w / 2f + dx * w / 2f
+            out[n++] = cy + dy * r - h / 2f + dy * h / 2f
+        }
+    }
+    return out
 }
 
 /** Label layouts kept between frames, so panning and zooming never lay the same text out twice. */
