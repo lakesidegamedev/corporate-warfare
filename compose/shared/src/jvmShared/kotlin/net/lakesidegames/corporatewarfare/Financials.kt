@@ -151,6 +151,7 @@ fun CompanyFinancials(data: FinancialData, columns: Int = 4, initialTab: Finance
                             listOf(ChartSeries("Share", Palette.gold, GameDates.lastClose(share, sharePeriod)), ChartSeries("Corridor index", Palette.secondary, GameDates.lastClose(index, sharePeriod))),
                             title = "Share price against the index (100 at start)", period = sharePeriod, periods = periods, onPeriod = { sharePeriod = it },
                             format = { "%.1f".format(it / 100.0) }, partialLast = GameDates.partial(share.last().week, sharePeriod),
+                            scale = ChartScale.Level,
                         )
                     }
                 }
@@ -209,6 +210,7 @@ fun CompanyFinancials(data: FinancialData, columns: Int = 4, initialTab: Finance
                             ChartSeries("Equity", Palette.positive, rows.points { it.equityCents }),
                         ),
                         title = "Balance sheet at each close", initialKind = ChartKind.Area, period = period, periods = periods, onPeriod = pick, partialLast = open,
+                        scale = ChartScale.Level,
                     )
                 }
             }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -131,9 +132,35 @@ private fun Split(left: @Composable () -> Unit, right: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ChartPanel(title: String, series: List<ChartSeries>, kind: ChartKind = ChartKind.Line, format: (Long) -> String = { Format.compact(it) }) {
+private fun ChartPanel(
+    title: String, series: List<ChartSeries>, kind: ChartKind = ChartKind.Line, format: (Long) -> String = { Format.compact(it) },
+    scale: ChartScale = ChartScale.Zero,
+) {
     if (series.all { it.points.size < 2 }) return
-    Panel { Chart(series, title = title, initialKind = kind, initialRange = ChartRange.Y1, height = 130.dp, format = format) }
+    Panel { Chart(series, title = title, initialKind = kind, initialRange = ChartRange.Y1, height = 130.dp, format = format, scale = scale) }
+}
+
+/** One chart for a [ChartGrid]: what [ChartPanel] takes. */
+private class PanelSpec(
+    val title: String, val series: List<ChartSeries>, val kind: ChartKind = ChartKind.Line,
+    val format: (Long) -> String = { Format.compact(it) }, val scale: ChartScale = ChartScale.Zero,
+)
+
+/** Charts in rows of two when there is room, so the columns stay level; one per row on a phone. */
+@Composable
+private fun ChartGrid(specs: List<PanelSpec>) {
+    val shown = specs.filter { spec -> spec.series.any { it.points.size >= 2 } }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val perRow = if (maxWidth >= 700.dp) 2 else 1
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            shown.chunked(perRow).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    row.forEach { p -> Column(Modifier.weight(1f)) { ChartPanel(p.title, p.series, p.kind, p.format, p.scale) } }
+                    repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -180,24 +207,22 @@ fun GoodDepthView(d: GoodDepthDto) {
         }
         val s = d.series
         if (s.all { it.weeks.size < 2 }) EmptyHistory()
-        Split(
-            {
-                ChartPanel(
+        ChartGrid(
+            listOfNotNull(
+                PanelSpec(
                     "Made, sold and trade per week",
                     listOf(
                         ChartSeries("Made", Palette.gold, s.of("made")), ChartSeries("Sold", Palette.positive, s.of("sold")),
                         ChartSeries("Imported", Palette.negative, s.of("imported")), ChartSeries("Exported", blue, s.of("exported")),
                     ),
                     format = { Format.count(it) },
-                )
-            },
-            {
-                ChartPanel("Stock held", listOf(ChartSeries("Stock", violet, s.of("stock"))), ChartKind.Area, format = { Format.count(it) })
-                ChartPanel("Weeks of cover", listOf(ChartSeries("Cover", blue, s.of("cover_x100"))), format = { "%.1f".format(it / 100.0) })
+                ),
+                PanelSpec("Stock held", listOf(ChartSeries("Stock", violet, s.of("stock"))), ChartKind.Area, format = { Format.count(it) }, scale = ChartScale.Level),
+                PanelSpec("Weeks of cover", listOf(ChartSeries("Cover", blue, s.of("cover_x100"))), format = { "%.1f".format(it / 100.0) }, scale = ChartScale.Level),
                 if (s.of("your_share_bps").any { it.value > 0 }) {
-                    ChartPanel("Your share of sales", listOf(ChartSeries("You", Palette.gold, s.of("your_share_bps"))), ChartKind.Area, format = { pctOf(it) })
-                }
-            },
+                    PanelSpec("Your share of sales", listOf(ChartSeries("You", Palette.gold, s.of("your_share_bps"))), ChartKind.Area, format = { pctOf(it) }, scale = ChartScale.Level)
+                } else null,
+            ),
         )
         Split(
             {
@@ -264,20 +289,18 @@ fun RegionDossierView(d: RegionDossierDto, onDivision: (String) -> Unit = {}) {
         )
         val s = d.series
         if (s.all { it.weeks.size < 2 }) EmptyHistory()
-        Split(
-            {
-                ChartPanel("Workers and jobs", listOf(ChartSeries("Workforce", blue, s.of("population")), ChartSeries("Employed", Palette.positive, s.of("employed"))), format = { Format.count(it) })
-                ChartPanel("Average wage", listOf(ChartSeries("Wage", Palette.gold, s.of("wage"))), format = { Format.money(it) })
-            },
-            {
-                ChartPanel("Land price (100 is the corridor)", listOf(ChartSeries("Land", Palette.warning, s.of("land_index"))), format = { "%.0f".format(it / 100.0) })
-                ChartPanel("Household spending per week", listOf(ChartSeries("Spend", violet, s.of("spend"))), ChartKind.Bar)
-                val shares = s.filter { it.key.startsWith("share:") }
-                val colours = listOf(Palette.gold, Palette.positive, blue, violet, Palette.warning)
+        val shares = s.filter { it.key.startsWith("share:") }
+        val colours = listOf(Palette.gold, Palette.positive, blue, violet, Palette.warning)
+        ChartGrid(
+            listOfNotNull(
+                PanelSpec("Workers and jobs", listOf(ChartSeries("Workforce", blue, s.of("population")), ChartSeries("Employed", Palette.positive, s.of("employed"))), format = { Format.count(it) }, scale = ChartScale.Level),
+                PanelSpec("Average wage", listOf(ChartSeries("Wage", Palette.gold, s.of("wage"))), format = { Format.money(it) }, scale = ChartScale.Level),
+                PanelSpec("Land price (100 is the corridor)", listOf(ChartSeries("Land", Palette.warning, s.of("land_index"))), format = { "%.0f".format(it / 100.0) }, scale = ChartScale.Level),
+                PanelSpec("Household spending per week", listOf(ChartSeries("Spend", violet, s.of("spend"))), ChartKind.Bar),
                 if (shares.isNotEmpty()) {
-                    ChartPanel("Your share by sector", shares.mapIndexed { i, x -> ChartSeries(Sectors.name(x.key.removePrefix("share:")), colours[i % colours.size], x.points()) }, format = { pctOf(it) })
-                }
-            },
+                    PanelSpec("Your share by sector", shares.mapIndexed { i, x -> ChartSeries(Sectors.name(x.key.removePrefix("share:")), colours[i % colours.size], x.points()) }, format = { pctOf(it) }, scale = ChartScale.Level)
+                } else null,
+            ),
         )
     }
 }
@@ -303,7 +326,7 @@ fun DivisionOpsView(d: DivisionOpsDto) {
         StatGroup(
             null,
             listOf(
-                Stat("Utilisation", pctOf(d.utilisationBps), if (d.utilisationBps < 6_000) Palette.warning else Palette.primaryText, note = if (d.utilisationBps > 10_000) "season above normal run" else null),
+                Stat("Utilisation", pctOf(d.utilisationBps), if (d.utilisationBps < 6_000) Palette.warning else Palette.primaryText, note = "of this week's full run"),
                 Stat("Made / wk", milliLots(d.madeMilli)),
                 Stat("Sold / wk", milliLots(d.soldMilli), if (d.soldMilli < d.madeMilli * 9 / 10) Palette.warning else Palette.primaryText),
                 Stat("Capacity / wk", milliLots(d.capacityMilli)),
@@ -311,32 +334,30 @@ fun DivisionOpsView(d: DivisionOpsDto) {
                 Stat("Margin per lot", Format.signed(d.marginPerLotCents), if (d.marginPerLotCents < 0) Palette.negative else Palette.positive),
             ),
         )
-        Split(
-            {
-                Eyebrow("What a lot costs against its price")
-                if (d.madeMilli <= 0) Text("Nothing made last week, so there is no cost per lot.", color = Palette.secondary, fontSize = 12.sp)
-                else {
-                    val scale = maxOf(d.priceCents, d.unitCostCents, 1L).toDouble()
-                    d.unitCosts.forEach { BarRow(costNames[it.key] ?: it.key, it.cents, scale, Palette.negative) }
-                    BarRow("Total cost", d.unitCostCents, scale, Palette.warning)
-                    BarRow("Price", d.priceCents, scale, Palette.gold)
-                }
-            },
-            {
-                val s = d.series
-                if (s.all { it.weeks.size < 2 }) EmptyHistory()
-                ChartPanel(
+        Eyebrow("What a lot costs against its price")
+        if (d.madeMilli <= 0) Text("Nothing made last week, so there is no cost per lot.", color = Palette.secondary, fontSize = 12.sp)
+        else {
+            val scale = maxOf(d.priceCents, d.unitCostCents, 1L).toDouble()
+            d.unitCosts.forEach { BarRow(costNames[it.key] ?: it.key, it.cents, scale, Palette.negative) }
+            BarRow("Total cost", d.unitCostCents, scale, Palette.warning)
+            BarRow("Price", d.priceCents, scale, Palette.gold)
+        }
+        val s = d.series
+        if (s.all { it.weeks.size < 2 }) EmptyHistory()
+        ChartGrid(
+            listOf(
+                PanelSpec(
                     "Output against sales",
                     listOf(
                         ChartSeries("Made", Palette.gold, s.of("made") { it / 1_000 }), ChartSeries("Sold", Palette.positive, s.of("sold") { it / 1_000 }),
                         ChartSeries("Capacity", Palette.secondary, s.of("capacity") { it / 1_000 }),
                     ),
                     format = { Format.count(it) },
-                )
-                ChartPanel("Utilisation", listOf(ChartSeries("Used", blue, s.of("utilisation_bps"))), ChartKind.Area, format = { pctOf(it) })
-                ChartPanel("Cost per lot", listOf(ChartSeries("Cost", Palette.negative, s.of("unit_cost"))), format = { Format.money(it) })
-                ChartPanel("Revenue and costs", listOf(ChartSeries("Revenue", Palette.gold, s.of("revenue")), ChartSeries("Costs", Palette.negative, s.of("costs"))), ChartKind.Bar)
-            },
+                ),
+                PanelSpec("Utilisation", listOf(ChartSeries("Used", blue, s.of("utilisation_bps"))), ChartKind.Area, format = { pctOf(it) }),
+                PanelSpec("Cost per lot", listOf(ChartSeries("Cost", Palette.negative, s.of("unit_cost"))), format = { Format.money(it) }, scale = ChartScale.Level),
+                PanelSpec("Revenue and costs", listOf(ChartSeries("Revenue", Palette.gold, s.of("revenue")), ChartSeries("Costs", Palette.negative, s.of("costs"))), ChartKind.Bar),
+            ),
         )
     }
 }
@@ -378,7 +399,7 @@ fun LogisticsStatsView(d: LogisticsStatsDto) {
                     listOf(ChartSeries("Own", Palette.gold, s.of("own")), ChartSeries("Other carriers", blue, s.of("other")), ChartSeries("Outside", Palette.negative, s.of("outside"))),
                     ChartKind.Bar, format = { Format.count(it) },
                 )
-                ChartPanel("Cost per lot", listOf(ChartSeries("Per lot", Palette.warning, s.of("cents_per_lot"))), format = { Format.money(it) })
+                ChartPanel("Cost per lot", listOf(ChartSeries("Per lot", Palette.warning, s.of("cents_per_lot"))), format = { Format.money(it) }, scale = ChartScale.Level)
             },
             {
                 if (s.of("carrier_cap").any { it.value > 0 }) {
@@ -400,7 +421,8 @@ fun LogisticsStatsView(d: LogisticsStatsDto) {
 enum class RivalSort(val title: String, val key: (RivalRowDto) -> Long) {
     Revenue("Revenue", { it.revenueCents }), Profit("Profit", { it.profitCents }), Cash("Cash", { it.cashCents }),
     Debt("Debt", { it.debtCents }), Price("Share", { it.sharePriceCents }), Divisions("Divs", { it.divisions.toLong() }),
-    Top("Top share", { it.topShareBps }),
+    // No revenue sorts below every margin, losses included.
+    Margin("Net margin", { it.netMarginBps ?: Long.MIN_VALUE }),
 }
 
 /** What the rival comparison shows: both companies by quarter and their goods head to head. */
@@ -441,7 +463,7 @@ fun RivalsBoardView(rows: List<RivalRowDto>, picked: ULong?, onPick: (ULong) -> 
             val columns = if (wide) RivalSort.entries else listOf(RivalSort.Revenue, RivalSort.Profit, RivalSort.Cash, RivalSort.Price)
             fun cell(r: RivalRowDto, c: RivalSort) = when (c) {
                 RivalSort.Divisions -> "${r.divisions}"
-                RivalSort.Top -> pctOf(r.topShareBps)
+                RivalSort.Margin -> r.netMarginBps?.let { pctOf(it) } ?: "n/a"
                 RivalSort.Price -> Format.price(r.sharePriceCents)
                 else -> Format.compact(c.key(r))
             }
@@ -459,7 +481,6 @@ fun RivalsBoardView(rows: List<RivalRowDto>, picked: ULong?, onPick: (ULong) -> 
         val rival = rows.firstOrNull { it.firm == picked } ?: return@Column
         val c = compare ?: return@Column
         Eyebrow("You against ${rival.name}")
-        if (rival.topShareLabel.isNotEmpty()) Text("Their strongest market: ${Sectors.name(rival.topShareLabel.substringBefore(" in "))} in ${rival.topShareLabel.substringAfter(" in ")}, ${pctOf(rival.topShareBps)}.", color = Palette.secondary, fontSize = 12.sp)
         fun pts(s: List<StatementDto>, v: (StatementDto) -> Long) = s.map { ChartPoint(it.firstWeek.toInt(), v(it)) }
         Split(
             {
@@ -467,8 +488,8 @@ fun RivalsBoardView(rows: List<RivalRowDto>, picked: ULong?, onPick: (ULong) -> 
                 ChartPanel("Net income by quarter", listOf(ChartSeries("You", Palette.gold, pts(c.you) { it.netIncomeCents }), ChartSeries(rival.name, blue, pts(c.them) { it.netIncomeCents })), ChartKind.Bar)
             },
             {
-                ChartPanel("Cash at each close", listOf(ChartSeries("You", Palette.gold, pts(c.you) { it.cashCents }), ChartSeries(rival.name, blue, pts(c.them) { it.cashCents })))
-                ChartPanel("Share price", listOf(ChartSeries("You", Palette.gold, pts(c.you) { it.sharePriceCents }), ChartSeries(rival.name, blue, pts(c.them) { it.sharePriceCents })), format = { Format.price(it) })
+                ChartPanel("Cash at each close", listOf(ChartSeries("You", Palette.gold, pts(c.you) { it.cashCents }), ChartSeries(rival.name, blue, pts(c.them) { it.cashCents })), scale = ChartScale.Level)
+                ChartPanel("Share price", listOf(ChartSeries("You", Palette.gold, pts(c.you) { it.sharePriceCents }), ChartSeries(rival.name, blue, pts(c.them) { it.sharePriceCents })), format = { Format.price(it) }, scale = ChartScale.Level)
             },
         )
         Eyebrow("Head to head, last week")
@@ -500,13 +521,13 @@ fun EconomyDashboardView(d: EconomyHistory) {
         if (s.all { it.weeks.size < 2 }) EmptyHistory()
         Split(
             {
-                ChartPanel("Corridor share index", listOf(ChartSeries("Index", Palette.gold, d.index.map { ChartPoint(it.week.toInt(), it.cents) })), ChartKind.Area, format = { "%.1f".format(it / 100.0) })
+                ChartPanel("Corridor share index", listOf(ChartSeries("Index", Palette.gold, d.index.map { ChartPoint(it.week.toInt(), it.cents) })), ChartKind.Area, format = { "%.1f".format(it / 100.0) }, scale = ChartScale.Level)
                 ChartPanel(
                     "Bank rate and inflation",
                     listOf(ChartSeries("Bank rate", Palette.gold, s.of("policy_rate_bps")), ChartSeries("Inflation", Palette.negative, s.of("inflation_bps"))),
                     format = { pctOf(it) },
                 )
-                ChartPanel("Price level", listOf(ChartSeries("Prices", violet, s.of("price_index_bps"))), format = { "%.1f".format(it / 100.0) })
+                ChartPanel("Price level", listOf(ChartSeries("Prices", violet, s.of("price_index_bps"))), format = { "%.1f".format(it / 100.0) }, scale = ChartScale.Level)
             },
             {
                 ChartPanel(

@@ -115,6 +115,18 @@ heading.
 
 ### Fixed
 
+- Charts of levels, such as wages, land prices, the workforce, weeks of cover, stock, prices,
+  share prices, cash and the balance sheet, now fit their scale to the figures shown, so real
+  movement no longer reads as a flat line. Flows per week and bar charts still start at zero.
+- A division's utilisation is measured against what it could make this week at the season's
+  harvest, so a farm in a good season reads up to 100 percent instead of 130.
+- The rivals board shows each company's net margin over 13 weeks in place of its best market
+  share, which read 100 percent for nearly everyone. Market shares stay in the head to head.
+- Banks count the interest they earn as revenue on the rivals board, in their statements and in
+  their charts, alongside the premiums insurers already counted.
+- Market depth lays its charts out in even rows of two on wide screens, without the large gap
+  under the first chart.
+
 - No more pulsing: the rings round buildings, the weekly ripple, the breathing selection outline
   and the menu's pulsing scenario glow are gone; rooftop lights are steady.
 - Traffic, planes, clouds and the sun stop when the game is paused and run faster at higher
