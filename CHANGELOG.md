@@ -137,6 +137,9 @@ heading.
 
 ### Changed
 
+- Tooling: every change to the Android app now starts the trimmed release build on an emulator in
+  CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
+  so a trimming mistake fails the check and not a phone.
 - Smaller downloads and a quicker start. The Android download is much smaller because the app
   is now trimmed of code it never uses and the direct download carries only the phone version
   of the game engine (the Play Store bundle already delivered just the right one). The game
@@ -171,6 +174,7 @@ heading.
 
 ### Fixed
 
+- New careers on Windows, Linux and Android no longer stop with an engine error around week 5. The inbox asked for letters from a week before the career began, which the engine could not count back to. Found by the new Android emulator check.
 - Each scenario now opens in the money conditions of its own time. Texas 1981 starts with
   inflation near 10 percent and interest rates near 16 percent, and both fall over the next
   years as the central bank holds firm. Ruhr and Rhine 1991 starts with the Bundesbank rate near
