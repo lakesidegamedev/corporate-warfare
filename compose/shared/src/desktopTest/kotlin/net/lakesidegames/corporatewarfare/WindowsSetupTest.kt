@@ -92,7 +92,7 @@ class WindowsSetupTest {
         assertTrue("OutputBaseFilename=CorporateWarfare-{#DisplayVersion}-setup" in iss)
         // Per user by default; the updater's /RELAUNCH is understood.
         assertTrue("PrivilegesRequired=lowest" in iss)
-        assertTrue("CmdLineParamExists('/RELAUNCH')" in iss)
+        assertTrue("CompareText(ParamStr(I), '/RELAUNCH') = 0" in iss)
         // Program files are cleared on a version change; the saves folder is only ever deleted on an explicit answer.
         assertTrue("Name: \"{app}\\app\"" in iss)
         assertEquals(1, Regex("DelTree\\(").findAll(iss).count())

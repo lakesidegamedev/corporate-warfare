@@ -105,8 +105,13 @@ var
   ReplacedVersion: String;
 
 function RelaunchRequested: Boolean;
+var
+  I: Integer;
 begin
-  Result := CmdLineParamExists('/RELAUNCH');
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/RELAUNCH') = 0 then
+      Result := True;
 end;
 
 function SavesFolder: String;
