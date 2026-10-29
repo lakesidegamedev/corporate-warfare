@@ -1818,7 +1818,7 @@ fn room_now(world: &World, dataset: &Dataset, product: u16, region: u8, corridor
                     _ => false,
                 }
         })
-        .map(|(_, plant)| &*plant)
+        .map(|(_, plant)| plant)
         .filter(|plant| {
             dataset.recipes[plant.recipe as usize].output == dataset.products[product as usize].id
         })
