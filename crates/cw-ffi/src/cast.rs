@@ -54,6 +54,8 @@ pub struct DossierDto {
     pub grudges: Vec<String>,
     /// Who the firm is friendly with, strongest first, in plain words.
     pub allies: Vec<String>,
+    /// The executives it has hired, with the pay a rival would need to offer to move each.
+    pub executives: Vec<crate::executives::ExecutivePostDto>,
 }
 
 pub fn person_dto(ds: &Dataset, p: u8) -> Option<PersonDto> {
@@ -274,6 +276,7 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
         firm,
         grudges,
         allies,
+        executives: crate::executives::posts(world, handle, true),
         firm_name: entity.name.clone(),
         ceo_weeks: if ceo.is_some() {
             world.tick.0.saturating_sub(since)
