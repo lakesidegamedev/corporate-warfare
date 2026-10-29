@@ -302,6 +302,7 @@ impl Candidate {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn candidate(
     id: String,
     week: u32,
