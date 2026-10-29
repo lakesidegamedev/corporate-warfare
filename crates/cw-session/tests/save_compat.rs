@@ -121,3 +121,16 @@ fn an_old_layout_read_does_not_leak_into_later_reads() {
     let _ = save::decode(&mislabelled);
     assert!(save::decode(&current).is_ok());
 }
+
+#[test]
+fn a_loaded_career_quotes_freight_at_its_saved_price_level_before_the_first_week() {
+    let mut session = Session::import_save(PREVIEW2).unwrap();
+    // Push the price index off par so a base-rate quote and an indexed one differ.
+    session.world.macro_state.price_index_bps = 11_500;
+    let bytes = session.export_save().unwrap();
+    let reloaded = Session::import_save(&bytes).unwrap();
+    let logistics = &reloaded.world.logistics;
+    assert_eq!(logistics.price_level_bps, 11_500);
+    // 1.15 times a 10,000 bps rate, not the base rate.
+    assert_eq!(logistics.at_price_level(10_000), 11_500);
+}
