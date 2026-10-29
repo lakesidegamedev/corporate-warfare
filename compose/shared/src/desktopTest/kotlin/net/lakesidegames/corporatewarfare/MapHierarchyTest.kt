@@ -90,8 +90,8 @@ class MapHierarchyTest {
         val sectors = firmSectors(HierarchyScene.plants)
         val colors = HierarchyScene.lanes.map { FreightLook.ownerColor(it, sectors) }
         assertEquals(Palette.gold, colors[0])
-        assertEquals(Sectors.color("chemical_industries"), colors[1], "a rival's lane takes its biggest sector's colour")
-        assertEquals(Sectors.color("retail"), colors[2])
+        assertEquals(Sectors.color("manufacturing"), colors[1], "a rival's lane takes its biggest sector's colour")
+        assertEquals(Sectors.color("financial"), colors[2])
         assertEquals(FreightLook.outside, colors[3], "outside carriers carry more than the rival does")
         // The neutral livery turns into the owner colour; the rest of the vehicle is untouched.
         val tone = FreightLook.tone(Color.Red)
