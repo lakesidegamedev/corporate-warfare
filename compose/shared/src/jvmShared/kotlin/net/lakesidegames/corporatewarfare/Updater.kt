@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.net.HttpURLConnection
@@ -19,14 +20,24 @@ interface UpdatePlatform {
     /** The release file this platform installs itself, for example ".msi"; null opens the page. */
     val installerSuffix: String?
 
-    /** Run a downloaded installer and close the game; the installer reopens it when done. */
-    fun install(file: File)
+    /** How this platform goes back to an older version. */
+    val downgrade: Downgrade get() = Downgrade.Direct
+
+    /** Run a downloaded installer for [version] and close the game; the installer reopens it when done. */
+    fun install(file: File, version: String)
 
     fun open(url: String)
 }
 
-/** The newest published release, from the public GitHub releases feed. */
-data class Release(val version: String, val notes: String, val page: String, val installer: Asset?)
+/** A published release, from the public GitHub releases feed. [date] is the publish day, YYYY-MM-DD. */
+data class Release(
+    val version: String,
+    val notes: String,
+    val page: String,
+    val installer: Asset?,
+    val date: String = "",
+    val prerelease: Boolean = false,
+)
 
 data class Asset(val name: String, val url: String, val bytes: Long)
 
@@ -37,6 +48,7 @@ private data class GitHubRelease(
     @SerialName("html_url") val page: String,
     val draft: Boolean = false,
     val prerelease: Boolean = false,
+    @SerialName("published_at") val published: String? = null,
     val assets: List<GitHubAsset> = emptyList(),
 )
 
@@ -48,36 +60,125 @@ sealed interface UpdateStatus {
     data object Checking : UpdateStatus
     data object Current : UpdateStatus
     data class Available(val release: Release) : UpdateStatus
+
+    /** The player picked an older version: warn, and say where the saves will be copied. */
+    data class ConfirmDowngrade(val release: Release, val backup: File?) : UpdateStatus
+
+    /** The saves are copied; the older version's page is open for the player to install. */
+    data class BackedUp(val release: Release, val backup: File) : UpdateStatus
+
+    /** Android will not install an older version over a newer one. */
+    data class NeedsUninstall(val release: Release) : UpdateStatus
     data class Downloading(val release: Release, val fraction: Float) : UpdateStatus
     data class Failed(val reason: String) : UpdateStatus
 }
 
+/** The version picker's list, loaded only when the player opens it. */
+sealed interface VersionList {
+    data object Idle : VersionList
+    data object Loading : VersionList
+    data class Loaded(val releases: List<Release>) : VersionList
+    data class Failed(val reason: String) : VersionList
+}
+
 /**
- * Checks for a newer Corporate Warfare release and installs it where the platform allows. The
- * only network call is a read of the public releases feed and, when the player chooses to
- * update, the installer download.
+ * Checks for a newer Corporate Warfare release on the player's chosen channel, lists the versions
+ * they can move to, and installs one where the platform allows. The only network calls are reads
+ * of the public releases feed and, when the player picks a version, its installer download.
+ * [saveDir] is where the saves live, for the backup before going back to an older version.
  */
-class Updater(private val platform: UpdatePlatform, private val scope: CoroutineScope, private val cacheDir: File) {
+class Updater(
+    private val platform: UpdatePlatform,
+    private val scope: CoroutineScope,
+    private val cacheDir: File,
+    private val saveDir: File? = null,
+    private val channel: () -> UpdateChannel = { UpdateChannel.build },
+    private val feed: () -> List<Release>? = { null },
+    val current: String = BuildInfo.VERSION,
+) {
     var status by mutableStateOf<UpdateStatus>(UpdateStatus.Idle); private set
+    var versions by mutableStateOf<VersionList>(VersionList.Idle); private set
 
-    val current: String = BuildInfo.VERSION
-
-    /** Preview builds follow pre-releases too; stable builds only full releases. */
-    private val preview = BuildInfo.CHANNEL == "preview"
+    val downgrade: Downgrade get() = platform.downgrade
 
     fun check() {
         if (status is UpdateStatus.Checking || status is UpdateStatus.Downloading) return
         status = UpdateStatus.Checking
         scope.launch {
-            status = withContext(Dispatchers.IO) {
-                runCatching { latest() }.fold(
-                    onSuccess = { release ->
-                        if (release != null && isNewer(release.version, current)) UpdateStatus.Available(release) else UpdateStatus.Current
-                    },
-                    onFailure = { UpdateStatus.Failed("Could not reach the update server.") },
-                )
+            val releases = withContext(Dispatchers.IO) { runCatching { fetch() }.getOrNull() }
+            if (releases == null) {
+                status = UpdateStatus.Failed("Could not reach the update server.")
+            } else {
+                show(releases)
+                status = Versions.offer(releases, channel(), current)?.let { UpdateStatus.Available(it) } ?: UpdateStatus.Current
             }
         }
+    }
+
+    /** Load the versions the player can pick from, on their channel. */
+    fun loadVersions() {
+        if (versions is VersionList.Loading) return
+        versions = VersionList.Loading
+        scope.launch {
+            val releases = withContext(Dispatchers.IO) { runCatching { fetch() }.getOrNull() }
+            if (releases == null) versions = VersionList.Failed("Could not reach the update server.") else show(releases)
+        }
+    }
+
+    /** Show a fetched release list in the picker, filtered to the channel and the minimum version. */
+    internal fun show(releases: List<Release>) {
+        all = releases
+        versions = VersionList.Loaded(Versions.listed(releases, channel()))
+    }
+
+    /** After the player changes channel: re-filter the list and check again. */
+    fun channelChanged() {
+        all?.let { versions = VersionList.Loaded(Versions.listed(it, channel())) }
+        if (status !is UpdateStatus.Downloading) {
+            status = UpdateStatus.Idle
+            check()
+        }
+    }
+
+    private var all: List<Release>? = null
+
+    /**
+     * The player picked a version. Newer installs straight away; older first warns and backs up
+     * the saves, or on Android explains that it needs an uninstall.
+     */
+    fun choose(release: Release) {
+        if (!Versions.isDowngrade(release.version, current)) {
+            update(release)
+            return
+        }
+        status = when (platform.downgrade) {
+            Downgrade.UninstallFirst -> UpdateStatus.NeedsUninstall(release)
+            Downgrade.Direct -> UpdateStatus.ConfirmDowngrade(release, saveDir?.let { SaveBackup.target(it, current) })
+        }
+    }
+
+    /** The player read the warning: copy the saves, then install the older version. */
+    fun confirmDowngrade(confirm: UpdateStatus.ConfirmDowngrade) {
+        val backup = confirm.backup
+        scope.launch {
+            val copied = if (backup != null && saveDir != null) {
+                withContext(Dispatchers.IO) { runCatching { SaveBackup.copy(saveDir, backup) }.isSuccess }
+            } else {
+                true
+            }
+            when {
+                !copied -> status = UpdateStatus.Failed("Could not copy your saves, so nothing was installed.")
+                confirm.release.installer == null || platform.installerSuffix == null -> {
+                    platform.open(confirm.release.page)
+                    status = if (backup != null) UpdateStatus.BackedUp(confirm.release, backup) else UpdateStatus.Idle
+                }
+                else -> update(confirm.release)
+            }
+        }
+    }
+
+    fun cancel() {
+        status = UpdateStatus.Idle
     }
 
     /** Download and run the installer, or open the release page where the platform cannot. */
@@ -95,15 +196,17 @@ class Updater(private val platform: UpdatePlatform, private val scope: Coroutine
             if (file == null) {
                 status = UpdateStatus.Failed("The download did not finish. Try again, or get it from the release page.")
             } else {
-                platform.install(file)
+                platform.install(file, release.version)
             }
         }
     }
 
     fun openPage(release: Release) = platform.open(release.page)
 
-    private fun latest(): Release? {
-        val connection = (URL(if (preview) LIST else FEED).openConnection() as HttpURLConnection).apply {
+    /** Every published release, previews included; the channel filter applies afterwards. */
+    private fun fetch(): List<Release>? {
+        feed()?.let { return it }
+        val connection = (URL(LIST).openConnection() as HttpURLConnection).apply {
             connectTimeout = 6_000
             readTimeout = 6_000
             setRequestProperty("Accept", "application/vnd.github+json")
@@ -112,23 +215,7 @@ class Updater(private val platform: UpdatePlatform, private val scope: Coroutine
         try {
             if (connection.responseCode != 200) return null
             val text = connection.inputStream.bufferedReader().readText()
-            val release = if (preview) {
-                json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(GitHubRelease.serializer()), text)
-                    .filter { !it.draft }
-                    .maxWithOrNull { a, b -> compare(a.tag.removePrefix("v"), b.tag.removePrefix("v")) }
-                    ?: return null
-            } else {
-                json.decodeFromString(GitHubRelease.serializer(), text)
-            }
-            if (release.draft || (release.prerelease && !preview)) return null
-            val suffix = platform.installerSuffix
-            val asset = suffix?.let { s -> release.assets.firstOrNull { it.name.endsWith(s, ignoreCase = true) } }
-            return Release(
-                version = release.tag.removePrefix("v"),
-                notes = release.body.orEmpty(),
-                page = release.page,
-                installer = asset?.let { Asset(it.name, it.url, it.size) },
-            )
+            return parse(text, platform.installerSuffix)
         } finally {
             connection.disconnect()
         }
@@ -169,8 +256,7 @@ class Updater(private val platform: UpdatePlatform, private val scope: Coroutine
     }
 
     companion object {
-        const val FEED = "https://api.github.com/repos/lakesidegamedev/corporate-warfare/releases/latest"
-        const val LIST = "https://api.github.com/repos/lakesidegamedev/corporate-warfare/releases?per_page=30"
+        const val LIST = "https://api.github.com/repos/lakesidegamedev/corporate-warfare/releases?per_page=100"
 
         /** The Play Store's installer package. */
         const val PLAY_STORE = "com.android.vending"
@@ -183,20 +269,26 @@ class Updater(private val platform: UpdatePlatform, private val scope: Coroutine
         fun selfUpdateAllowed(installerPackage: String?): Boolean = installerPackage != PLAY_STORE
         private val json = Json { ignoreUnknownKeys = true }
 
+        /** The releases feed as releases, drafts left out, each with this platform's installer if it has one. */
+        fun parse(text: String, installerSuffix: String?): List<Release> =
+            json.decodeFromString(ListSerializer(GitHubRelease.serializer()), text)
+                .filter { !it.draft }
+                .map { release ->
+                    val asset = installerSuffix?.let { s -> release.assets.firstOrNull { it.name.endsWith(s, ignoreCase = true) } }
+                    Release(
+                        version = release.tag.removePrefix("v"),
+                        notes = release.body.orEmpty(),
+                        page = release.page,
+                        installer = asset?.let { Asset(it.name, it.url, it.size) },
+                        date = release.published.orEmpty().take(10),
+                        prerelease = release.prerelease,
+                    )
+                }
+
         /** True when [candidate] is later than [installed]: MAJOR.MINOR.PATCH, then a release beats
          * its previews and preview.3 beats preview.2. */
         fun isNewer(candidate: String, installed: String): Boolean = compare(candidate, installed) > 0
 
-        fun compare(a: String, b: String): Int {
-            fun parts(v: String): List<Int> {
-                val core = v.substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 } + List(3) { 0 }
-                val pre = if ('-' in v) v.substringAfterLast('.').toIntOrNull() ?: 0 else Int.MAX_VALUE
-                return core.take(3) + pre
-            }
-            val x = parts(a)
-            val y = parts(b)
-            for (i in 0 until 4) if (x[i] != y[i]) return x[i].compareTo(y[i])
-            return 0
-        }
+        fun compare(a: String, b: String): Int = Versions.compare(a, b)
     }
 }

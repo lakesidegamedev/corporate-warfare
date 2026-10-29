@@ -13,6 +13,20 @@ heading.
 
 ### Added
 
+- Choose your updates. Settings, Updates now asks whether you want full releases or previews.
+  It starts on the kind of build you installed, and the game follows your choice when it checks
+  for updates. If you are on a preview and switch to full releases, you are offered the newest
+  full release even when its number is lower than your preview, and the game says so.
+- Install any version from 1.8 preview 3 on. Choose a version in Settings, Updates lists every
+  release on your channel, newest first, with its date and a line about what changed, and marks
+  the one you have. Going back to an older version first warns that careers saved by this version
+  may not open in the older one, and copies your saves, settings and custom scenarios to a dated
+  backup folder whose location is shown. On Windows the game removes the newer install and puts
+  the older one in the same folder; on Linux it opens the release page (install the package with
+  `sudo apt install --allow-downgrades`); on Android, which will not install an older version
+  over a newer one, it explains that going back needs an uninstall, which deletes the careers on
+  the device. Versions before 1.8 preview 3 are not offered, because they cannot open newer saves
+  or come back by themselves.
 - Wind a company down. A company with nothing left to run (no working site, no stake in another
   company, no open bills) that can pay everyone it owes can now close itself: its remaining sites
   and stock are sold at salvage value, lenders and unpaid bills are paid in full, and the rest goes
