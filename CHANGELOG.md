@@ -70,8 +70,10 @@ heading.
   Valley, the reunification boom and the 1992 currency crisis on the Ruhr and Rhine. Every event
   is announced a few weeks ahead, then changes prices, demand, lending costs, central bank
   mood or the law for a while. New games choose Historical (the default), Off or Shuffled, which
-  keeps the same events but moves their dates by up to half a year. The app screens for this come
-  in a later update.
+  keeps the same events but moves their dates by up to half a year. The new game screen has a
+  Scenario history choice with a plain line on what each does, and the economy panel on the
+  Markets screen has a History card listing announced events ("in about 4 weeks") and the ones
+  that already happened, newest first. Tap a past event to read that week's paper.
 - First-run setup on every platform. The first time you open the game it walks you through a few short
   steps: a welcome, a one-second graphics test that suggests Low, Medium or High for your device and shows
   a preview of each, which version track to follow (Windows, Linux and directly downloaded Android only),
@@ -115,6 +117,13 @@ heading.
 
 ### Changed
 
+- Smaller downloads and a quicker start. The Android download is much smaller because the app
+  is now trimmed of code it never uses and the direct download carries only the phone version
+  of the game engine (the Play Store bundle already delivered just the right one). The game
+  engine files are about a third smaller on every platform, and the Windows and Linux apps
+  carry a leaner Java runtime and remember what they loaded last time, so they open sooner
+  after the first run. Nothing about the game changes: saves, results and the pictures are the
+  same. Setting CW_STARTUP_TIMELINE prints how long each step of starting takes.
 - The map is easier to read when you zoom in close. Rival companies' plants now show in their
   industry's colour with a dark roof and are about 60 percent of the size of yours, while your
   own are full size with a gold roof and the plant count on top. Cities no longer look like

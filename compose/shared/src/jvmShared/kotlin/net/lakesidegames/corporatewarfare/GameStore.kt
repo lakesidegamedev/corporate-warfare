@@ -151,6 +151,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     val actions: List<uniffi.cw_ffi.ActionDto> by lazy { uniffi.cw_ffi.actionCatalogue() }
     var productCatalogue by mutableStateOf<List<ProductDto>>(emptyList()); private set
     private var catalogueOf: SessionHandle? = null
+    /** A back issue of the paper to open on the next visit, set by the History card. */
+    var paperWeek by mutableStateOf<Int?>(null)
+
     /** The economy, central bank and government. */
     var economy by mutableStateOf<uniffi.cw_ffi.EconomyDto?>(null); private set
     /** The selected company's research position. */

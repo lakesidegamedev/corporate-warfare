@@ -37,6 +37,27 @@ jobs:
           name: corporate-warfare-android-debug
           path: compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk
           retention-days: 14
+      # The shrunk release build must still start the engine, so it is built (unsigned) on every run.
+      # One APK per ABI: arm64-v8a is the direct download, x86_64 is for emulators.
+      - name: Release APKs and bundle (unsigned, shrunk)
+        working-directory: compose
+        # AGP cannot build per-ABI APKs and a bundle in one run, so they are two runs.
+        run: |
+          ./gradlew --no-daemon :androidApp:bundleRelease
+          ./gradlew --no-daemon :androidApp:assembleRelease -Pcw.splitAbi=true
+      - name: Shrinking kept the engine bindings
+        working-directory: compose
+        run: |
+          # JNA finds the engine's classes by name, so R8 must not rename or remove them.
+          grep -q "^uniffi.cw_ffi.UniffiLib -> uniffi.cw_ffi.UniffiLib:" androidApp/build/outputs/mapping/release/mapping.txt
+          grep -q "^com.sun.jna.Native -> com.sun.jna.Native:" androidApp/build/outputs/mapping/release/mapping.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corporate-warfare-android-release-unsigned
+          path: |
+            compose/androidApp/build/outputs/apk/release/*.apk
+            compose/androidApp/build/outputs/bundle/release/*.aab
+          retention-days: 14
 
   desktop:
     strategy:
