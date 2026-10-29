@@ -124,7 +124,7 @@ compose.desktop {
             // :shared:suggestRuntimeModules): drawing and windows, the management beans the startup
             // timeline reads, logging, the HTTPS the updater and telemetry use (certificate name checks
             // need java.naming, elliptic curves need jdk.crypto.ec), and the unsafe access Skiko needs.
-            modules("java.desktop", "java.logging", "java.management", "java.naming", "jdk.crypto.ec", "jdk.unsupported")
+            modules("java.desktop", "java.instrument", "java.logging", "java.management", "java.naming", "jdk.crypto.ec", "jdk.unsupported")
             // Class data sharing: from Java 19 the first run saves a class archive next to the app and
             // later runs map it instead of loading classes again. A folder that cannot be written (a
             // system-wide Linux install) just runs without it, and the first option lets older Javas
