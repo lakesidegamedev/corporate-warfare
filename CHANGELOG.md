@@ -59,8 +59,10 @@ heading.
   Valley, the reunification boom and the 1992 currency crisis on the Ruhr and Rhine. Every event
   is announced a few weeks ahead, then changes prices, demand, lending costs, central bank
   mood or the law for a while. New games choose Historical (the default), Off or Shuffled, which
-  keeps the same events but moves their dates by up to half a year. The app screens for this come
-  in a later update.
+  keeps the same events but moves their dates by up to half a year. The new game screen has a
+  Scenario history choice with a plain line on what each does, and the economy panel on the
+  Markets screen has a History card listing announced events ("in about 4 weeks") and the ones
+  that already happened, newest first. Tap a past event to read that week's paper.
 - First-run setup on every platform. The first time you open the game it walks you through a few short
   steps: a welcome, a one-second graphics test that suggests Low, Medium or High for your device and shows
   a preview of each, which version track to follow (Windows, Linux and directly downloaded Android only),
