@@ -944,7 +944,10 @@ fn coming_carrier_lots(
         .filter(|(_, plant)| {
             let recent = match plant.status {
                 FacilityStatus::Building => true,
-                FacilityStatus::Operating => now.saturating_sub(plant.completes.0) < 13,
+                // Plants that open with the scenario have completion week 0 and are not new.
+                FacilityStatus::Operating => {
+                    plant.completes.0 > 0 && now.saturating_sub(plant.completes.0) < 13
+                }
                 _ => false,
             };
             let recipe = &dataset.recipes[plant.recipe as usize];
