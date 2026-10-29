@@ -812,21 +812,40 @@ internal fun DrawScope.drawWorldMap(
             }
             // City names, over every building. Sentence case, one weight. A name sits beside its block (right, left,
             // above, below); one that fits nowhere is dropped, and the biggest cities choose first.
-            if (graphics.labels >= 1) map.cities.take(if (close) 40 else 14).forEach { (city, point) ->
-                if (!close && city.country != "USA") return@forEach
-                val floor = g.cityFloor(city.name, ground)
-                val at = p.project(point, floor) ?: return@forEach
-                drawCircle(Palette.primaryText.copy(alpha = 0.85f), radius = 2.5f, center = at)
-                val label = LabelText.measure(measurer, city.name, CityStyle, "city")
-                val w = label.size.width.toFloat(); val h = label.size.height.toFloat()
-                val block = cityBox[city.name]
-                val slots = if (block != null) {
-                    val mid = (block.top + block.bottom) / 2f - h / 2f
-                    val cx = (block.left + block.right) / 2f - w / 2f
-                    floatArrayOf(block.right + 3f, mid, block.left - 3f - w, mid, cx, block.top - 3f - h, cx, block.bottom + 3f)
-                } else floatArrayOf(at.x + 6f, at.y - h / 2f, at.x - 6f - w, at.y - h / 2f, at.x - w / 2f, at.y - h - 5f, at.x - w / 2f, at.y + 5f)
-                val slot = place("c:${city.name}", w, h, slots)
-                if (slot >= 0) synchronized(LabelText.guard) { drawText(label, topLeft = Offset(slots[2 * slot], slots[2 * slot + 1])) }
+            // A city above the town size always keeps its name while its block is on screen: it chooses before the
+            // smaller ones, tries further slots with a leader line, and is never dropped for a region name.
+            if (graphics.labels >= 1) {
+                val listed = map.cities.take(if (close) 40 else 14)
+                val named = (listed + map.cities.filter { (c, _) -> c.population >= TOWN_POPULATION && cityBox.containsKey(c.name) && listed.none { it.first.name == c.name } })
+                    .sortedByDescending { it.first.population }
+                named.forEach { (city, point) ->
+                    if (!close && city.country != "USA") return@forEach
+                    val floor = g.cityFloor(city.name, ground)
+                    val at = p.project(point, floor) ?: return@forEach
+                    drawCircle(Palette.primaryText.copy(alpha = 0.85f), radius = 2.5f, center = at)
+                    val label = LabelText.measure(measurer, city.name, CityStyle, "city")
+                    val w = label.size.width.toFloat(); val h = label.size.height.toFloat()
+                    val block = cityBox[city.name]
+                    val slots = if (block != null) {
+                        val mid = (block.top + block.bottom) / 2f - h / 2f
+                        val cx = (block.left + block.right) / 2f - w / 2f
+                        floatArrayOf(block.right + 3f, mid, block.left - 3f - w, mid, cx, block.top - 3f - h, cx, block.bottom + 3f)
+                    } else floatArrayOf(at.x + 6f, at.y - h / 2f, at.x - 6f - w, at.y - h / 2f, at.x - w / 2f, at.y - h - 5f, at.x - w / 2f, at.y + 5f)
+                    if (city.population >= TOWN_POPULATION && block != null) {
+                        val cx = (block.left + block.right) / 2f; val cy = (block.top + block.bottom) / 2f
+                        val reach = max(block.width, block.height) / 2f + 6f
+                        val put = placeCity("c:${city.name}", w, h, slots, cx, cy, reach, size.width, size.height)
+                        if (put.leader) {
+                            // One pixel line from the name's nearest edge to the block it belongs to.
+                            val lx = cx.coerceIn(put.x, put.x + w); val ly = cy.coerceIn(put.y, put.y + h)
+                            drawLine(Palette.primaryText.copy(alpha = 0.7f), Offset(lx, ly), Offset(cx, cy), strokeWidth = 1f)
+                        }
+                        synchronized(LabelText.guard) { drawText(label, topLeft = Offset(put.x, put.y)) }
+                    } else {
+                        val slot = place("c:${city.name}", w, h, slots)
+                        if (slot >= 0) synchronized(LabelText.guard) { drawText(label, topLeft = Offset(slots[2 * slot], slots[2 * slot + 1])) }
+                    }
+                }
             }
             if (graphics.cityLights && lit && (sun != null || t < 1)) drawCityLights(map.cities, p, light, plinth, 1f)
             // Region names last and lowest in priority: small caps with tracking, and only these.

@@ -59,6 +59,15 @@ class HierarchyBench {
                 val cache = MapGeometryCache()
                 val direct = time(runs) { i -> frame { paint(cam.copy(lon = cam.lon + i * 0.001), cache, MapPhase.Structures) } }
                 val overlayCache = MapGeometryCache()
+                // Vehicle pictures are painted in the background after first sight: let a few frames ask, then wait for them.
+                repeat(40) { i ->
+                    frame {
+                        val geo = overlayCache.of(map, cam, size, g.detail, g.pitch)
+                        val o = geo.overlay(HierarchyScene.lanes, HierarchyScene.divisions, "MI-DET", HierarchyScene.shading, g, false)
+                        drawMapOverlay(o, g, 5.0 + i / 30.0, false, sun, map.playBounds, cam.zoom, 0.3, 1f, map.scenarioId, part = OverlayPart.Traffic)
+                    }
+                }
+                VehicleSprites.settle()
                 val traffic = time(runs * 2) { i ->
                     frame {
                         val geo = overlayCache.of(map, cam, size, g.detail, g.pitch)

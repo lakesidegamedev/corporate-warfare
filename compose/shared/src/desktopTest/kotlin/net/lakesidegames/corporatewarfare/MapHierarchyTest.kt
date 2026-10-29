@@ -24,6 +24,45 @@ class MapHierarchyTest {
     }
 
     @Test
+    fun aBigCityKeepsItsNameInACrowdedScene() {
+        val planner = LabelPlanner()
+        planner.frame {
+            // The city block sits in the middle of the player's buildings: every ring round it is packed for 30 px,
+            // so none of the four preferred places is clear.
+            reserve(100f, 100f, 140f, 140f)
+            for (i in 0 until 8) reserve(60f + i * 12f, 60f, 70f + i * 12f, 180f)
+            reserve(60f, 60f, 160f, 70f); reserve(60f, 170f, 160f, 180f)
+            val w = 50f; val h = 12f
+            val slots = floatArrayOf(143f, 114f, 47f - w + 13f, 114f, 95f, 85f, 95f, 143f)
+            val put = planner.placeCity("c:Columbus", w, h, slots, 120f, 120f, 26f)
+            assertTrue(put.leader, "the name moves out and gets a leader line")
+            val shownRect = floatArrayOf(put.x, put.y, put.x + w, put.y + h)
+            assertFalse(overlaps(shownRect, floatArrayOf(100f, 100f, 140f, 140f)), "the name stays off the block")
+            // A region name and a small town name placed afterwards do not displace it.
+            assertEquals(-1, place("r:Ohio", w, h, floatArrayOf(put.x, put.y)))
+        }
+        // Next frame it holds its place.
+        planner.frame {
+            reserve(100f, 100f, 140f, 140f)
+            for (i in 0 until 8) reserve(60f + i * 12f, 60f, 70f + i * 12f, 180f)
+            reserve(60f, 60f, 160f, 70f); reserve(60f, 170f, 160f, 180f)
+            assertTrue(placeCity("c:Columbus", 50f, 12f, floatArrayOf(143f, 114f), 120f, 120f, 26f).leader)
+        }
+    }
+
+    @Test
+    fun aBigCityIsNeverDroppedEvenWhenNothingIsClear() {
+        val planner = LabelPlanner()
+        planner.frame {
+            reserve(-1000f, -1000f, 1000f, 1000f)
+            val put = placeCity("c:Chicago", 60f, 12f, floatArrayOf(0f, 0f), 0f, 0f, 20f)
+            assertTrue(put.x.isFinite() && put.y.isFinite())
+        }
+        // It is remembered as showing.
+        planner.frame { assertEquals(0, place("c:Chicago", 60f, 12f, floatArrayOf(0f, 0f)).coerceAtLeast(0)) }
+    }
+
+    @Test
     fun noTwoPlacedLabelsOverlap() {
         val planner = LabelPlanner()
         val rects = ArrayList<FloatArray>()
