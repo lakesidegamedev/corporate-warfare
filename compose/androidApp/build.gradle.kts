@@ -30,8 +30,23 @@ android {
         versionCode = gameVersionCode
         versionName = gameVersion
         // The engine is built for these two ABIs only (scripts/build-engine.sh).
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+        // (With per-ABI APKs the splits block below chooses them instead; AGP rejects both.)
+        if (findProperty("cw.splitAbi") != "true") {
+            ndk {
+                abiFilters += listOf("arm64-v8a", "x86_64")
+            }
+        }
+    }
+
+    // -Pcw.splitAbi=true makes assembleRelease produce one APK per ABI instead of one holding both.
+    // The direct download is the arm64-v8a one (every current phone); the x86_64 one is for
+    // emulators and stays a CI artifact. The Play bundle splits by ABI on its own and ignores this.
+    splits {
+        abi {
+            isEnable = findProperty("cw.splitAbi") == "true"
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
         }
     }
 
@@ -51,7 +66,9 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfigs.findByName("upload")?.let { signingConfig = it }
         }
     }

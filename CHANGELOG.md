@@ -106,6 +106,13 @@ heading.
 
 ### Changed
 
+- Smaller downloads and a quicker start. The Android download is much smaller because the app
+  is now trimmed of code it never uses and the direct download carries only the phone version
+  of the game engine (the Play Store bundle already delivered just the right one). The game
+  engine files are about a third smaller on every platform, and the Windows and Linux apps
+  carry a leaner Java runtime and remember what they loaded last time, so they open sooner
+  after the first run. Nothing about the game changes: saves, results and the pictures are the
+  same. Setting CW_STARTUP_TIMELINE prints how long each step of starting takes.
 - The map is easier to read when you zoom in close. Rival companies' plants now show in their
   industry's colour with a dark roof and are about 60 percent of the size of yours, while your
   own are full size with a gold roof and the plant count on top. Cities no longer look like
