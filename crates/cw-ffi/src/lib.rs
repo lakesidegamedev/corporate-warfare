@@ -5368,6 +5368,73 @@ mod tests {
         );
     }
 
+    /// The timeline DTO lists announced events ahead and events that happened, and never an
+    /// event that has not been announced.
+    #[test]
+    fn the_timeline_lists_only_announced_events_ahead_and_the_past_with_dates() {
+        let start = |timeline: &str| {
+            SessionHandle::start(NewGameDto {
+                seed: 3,
+                scenario_id: "texas-1981".to_owned(),
+                guided: true,
+                five_year: false,
+                difficulty: "standard".to_owned(),
+                economy: "historic".to_owned(),
+                starting_capital_cents: None,
+                price_path: String::new(),
+                timeline: timeline.to_owned(),
+            })
+            .unwrap()
+        };
+        let off = start("off");
+        let on = start("");
+        assert_eq!(off.timeline().mode, "off");
+        assert_eq!(on.timeline().mode, "historical");
+        // Texas: tight money in 1981 week 30, noticed 6 weeks ahead from week 24.
+        let step = |handle: &SessionHandle, until: u32| {
+            while handle.lock().world.tick.0 < until {
+                handle.advance(1);
+                let mut session = handle.lock();
+                for event in session.world.events.pending.iter_mut() {
+                    event.resolved = true;
+                }
+                session.dismiss_pause();
+            }
+        };
+        step(&on, 23);
+        let t = on.timeline();
+        assert!(
+            t.upcoming.is_empty() && t.past.is_empty(),
+            "nothing is announced yet"
+        );
+        step(&on, 24);
+        let t = on.timeline();
+        assert_eq!(t.upcoming.len(), 1);
+        assert_eq!(t.upcoming[0].id, "tx-tight-money");
+        assert_eq!(
+            (
+                t.upcoming[0].year,
+                t.upcoming[0].week_of_year,
+                t.upcoming[0].weeks_away
+            ),
+            (1981, 30, 6)
+        );
+        step(&on, 30);
+        let t = on.timeline();
+        assert!(t.upcoming.is_empty());
+        assert_eq!(
+            (
+                t.past[0].id.as_str(),
+                t.past[0].year,
+                t.past[0].week_of_year
+            ),
+            ("tx-tight-money", 1981, 30)
+        );
+        step(&off, 30);
+        let t = off.timeline();
+        assert!(t.upcoming.is_empty() && t.past.is_empty());
+    }
+
     /// Every firm has a face, a name and a logo, and a page shows only what the investor may know.
     #[test]
     fn every_firm_has_a_ceo_a_logo_and_a_page_that_follows_the_information_rules() {
