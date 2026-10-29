@@ -135,6 +135,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     private var briefWeek = -1
     private var briefRevision = 0uL
     private var briefFirm: ULong? = null
+    /** The selected company's executives and the people it could hire. Read only while the section is on screen. */
+    var executives by mutableStateOf<uniffi.cw_ffi.ExecutivesDto?>(null); private set
+    var executivesOpen: Boolean = false
+    private var executivesRevision = -1L
     /** The five-year score, when the career is scored. */
     var score by mutableStateOf<uniffi.cw_ffi.ScoreDto?>(null); private set
     /** The Hall of Careers page is open, so the chapter data is kept current even at speed. */
@@ -696,6 +700,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         loadMarkets()
         loadHall()
         loadBrief()
+        loadExecutives()
     }
 
     /**
@@ -718,6 +723,29 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         val dto = withContext(engine) { handle.weeklyBrief(firm) }
         if (session === handle) brief = dto
     }
+
+    private suspend fun loadExecutives(force: Boolean = false) {
+        val handle = session ?: return
+        val firm = selectedFirm
+        val now = overview ?: return
+        if (firm == null) { executives = null; return }
+        val stamp = now.revision.toLong() * 7 + now.tick.toLong()
+        if (!force && (!executivesOpen || stamp == executivesRevision)) return
+        executivesRevision = stamp
+        val dto = withContext(engine) { handle.executives(firm) }
+        if (session === handle) executives = dto
+    }
+
+    fun refreshExecutives() { scope.launch { loadExecutives(force = true) } }
+
+    fun hireExecutive(firm: ULong, post: Int, person: Int) =
+        submit(CommandJson.command("HireExecutive", "firm" to firm, "post" to post, "person" to person))
+
+    fun dismissExecutive(firm: ULong, post: Int) =
+        submit(CommandJson.command("DismissExecutive", "firm" to firm, "post" to post))
+
+    fun poachExecutive(firm: ULong, from: ULong, post: Int, offerCents: Long) =
+        submit(CommandJson.command("PoachExecutive", "firm" to firm, "from" to from, "post" to post, "offer_cents" to offerCents))
 
     /** Read the brief now, for the panel when it opens or the weekly pop-up. */
     fun refreshBrief() { scope.launch { loadBrief(force = true) } }

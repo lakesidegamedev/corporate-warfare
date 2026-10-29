@@ -573,6 +573,8 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
                     CfoPanel(store, firm.currency)
                     Spacer(Modifier.height(10.dp))
                 }
+                ExecutivesPanel(store, firm.currency)
+                Spacer(Modifier.height(10.dp))
                 RivalsCard(store)
                 Spacer(Modifier.height(10.dp))
                 store.finance?.takeIf { it.firm == firm.handle && it.recentWeeks.isNotEmpty() }?.let { ProfitDrivers(it.recentWeeks) }

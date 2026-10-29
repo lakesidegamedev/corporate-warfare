@@ -89,7 +89,7 @@ fun PersonLine(person: PersonDto, role: String, portrait: Dp = 36.dp) {
 
 /** A rival's chief executive, their style, background and what the firm has done lately. */
 @Composable
-fun DossierBody(d: DossierDto) {
+fun DossierBody(d: DossierDto, currency: String = "") {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val ceo = d.ceo
         if (ceo == null) {
@@ -110,6 +110,7 @@ fun DossierBody(d: DossierDto) {
             Text(temperamentNote(ceo.temperament), color = Palette.primaryText, fontSize = 12.sp)
             Text(ceo.background, color = Palette.secondary, fontSize = 12.sp)
         }
+        RivalExecutives(d.executives, currency)
         d.grudges.forEach { line ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 PixelIcon("target", size = 12.dp, tint = Palette.negative)
@@ -139,7 +140,7 @@ fun DossierSection(store: GameStore, firm: ULong) {
     dossier?.let { d ->
         if (d.ceo != null || d.moves.isNotEmpty() || d.grudges.isNotEmpty() || d.allies.isNotEmpty()) {
             Eyebrow("Who runs it")
-            DossierBody(d)
+            DossierBody(d, store.firms.firstOrNull { it.handle == firm }?.currency ?: store.selectedFirmDto?.currency.orEmpty())
         }
     }
     RaidMarketsList(store, firm)
