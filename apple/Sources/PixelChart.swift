@@ -206,7 +206,7 @@ struct PlotLegend: View {
     var body: some View {
         HStack(spacing: 4) {
             Rectangle().fill(color).frame(width: 8, height: 8)
-            Text(name).font(.caption2).foregroundStyle(Theme.secondary).lineLimit(1)
+            Text(name).font(.caption2).foregroundStyle(Theme.secondary).lineLimit(1).fixedSize()
         }
     }
 }
@@ -294,6 +294,7 @@ struct PixelChart: View {
                             Text(s.points.last(where: { $0.week <= readWeek }).map { format($0.value) } ?? "n/a")
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(Theme.primaryText)
+                                .fixedSize()
                         }
                     }
                 }
