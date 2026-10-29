@@ -241,7 +241,7 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
                 continue;
             }
             // Buy only what the paced outside account can pay for in full.
-            let price = dataset.reference_price(service).max(1);
+            let price = crate::economy::pricing::price_reference(world, dataset, service);
             let affordable = world.outside.gateway_spendable() / price * 1_000;
             let qty = qty.min(MilliLots(affordable));
             if qty.0 <= 0 {
@@ -1091,7 +1091,7 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
             if category_budget <= 0 {
                 continue;
             }
-            let reference = dataset.reference_price(product).max(1);
+            let reference = crate::economy::pricing::price_reference(world, dataset, product);
             let last = last_prices
                 .get(&product)
                 .copied()
@@ -1247,7 +1247,7 @@ fn clear_government(world: &mut World, dataset: &Dataset) {
             if offers.is_empty() || remaining <= 0 {
                 continue;
             }
-            let reference = dataset.reference_price(product);
+            let reference = crate::economy::pricing::price_reference(world, dataset, product);
             let affordable = remaining / reference.max(1);
             if affordable <= 0 {
                 continue;

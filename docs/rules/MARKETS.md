@@ -199,7 +199,11 @@ is no dead band and no fixed step, so a price moves continuously with supply and
 instead of swinging. A service cannot be stored, so spare capacity is its unsold stock: it reads
 the share of its installed capacity (operating plants at full run) that sold, asks reference at 85
 percent, 0.6 percent of reference more or less for every point above or below, up to 15 percent
-over reference (no import quote) and down to 20 percent under. Unsold service output expires each
+over reference (no import quote) and down to 20 percent under. A service's reference is its
+catalogue price carried to today's price index (the index background wages follow), so its band,
+floor and ceiling rise with its payroll; goods keep their catalogue reference and follow the price
+level through import and export prices. Household demand and public works read services against
+the same indexed reference. Unsold service output expires each
 week. Stock a firm keeps as input cover for its own plants does not count as unsold. Rivals price
 this way in the weekly tick, not through their slower strategic review.
 
@@ -465,7 +469,9 @@ the outside price (125 percent) as the lane fills, along a smooth square curve, 
 meets the outside price with no cliff. A group ships on its own carriers at operating cost
 (65 percent) and first. Lots beyond capacity go to outside carriers at 125 percent, so goods
 never stop; pipelines have none, so a shipment either fits or takes another mode. Truck prices
-also move with road condition.
+also move with road condition. Every rate (owners', own operating cost, outside, lane contracts)
+is the base rate carried to the price index at the start of the week, so freight rises with the
+wages and costs carriers pay.
 
 **Charging.** A shipment is charged once. The shipper's cash pays exactly what carriers and the
 outside sector receive; a shipper short of cash pays what it has and every receipt shrinks

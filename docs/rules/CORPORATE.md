@@ -306,7 +306,9 @@ the parent wholly owns, with working capital of 5 percent of book (at least $100
 keeps at least one other division. The division takes its trade with it: the parent's supply
 contracts shipped from the division's state for a good its plants make, and its purchase
 contracts delivered to that state for an input its plants use that no plant the parent keeps
-there uses, pass to the new company (contracts holding escrow stay with the parent). A listing sells 5 to 49 percent of a subsidiary's votes to
+there uses, pass to the new company (contracts holding escrow stay with the parent). A purchase
+contract delivered to that state for an input that neither the new company's plants nor any plant
+the parent keeps there uses ends at the carve-out, with no penalty on either side. A listing sells 5 to 49 percent of a subsidiary's votes to
 outside investors at 95 percent of its mark, after 13 weeks of results, never giving up control;
 the fee is 2 percent (at least $100,000). A spin-off hands the parent's whole stake to its
 shareholders in proportion to their shares, with no cash.

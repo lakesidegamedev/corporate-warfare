@@ -1593,7 +1593,10 @@ pub fn carve_out(
 /// division's state for a good its plants make, and its purchase contracts delivered to that state
 /// for an input they use that no plant the parent keeps there uses, pass to the new company. Left
 /// behind, the parent defaulted every week on sales it could no longer make and paid for inputs
-/// it could no longer use. Contracts holding escrow stay with the parent, which holds the money.
+/// it could no longer use. A purchase contract into that state for an input that neither the new
+/// company's plants nor any plant the parent keeps there uses ends, with no penalty on either
+/// side: the parent has nothing there to feed. Contracts holding escrow stay with the parent,
+/// which holds the money.
 fn move_division_contracts(
     world: &mut World,
     dataset: &Dataset,
@@ -1626,6 +1629,7 @@ fn move_division_contracts(
         .map(|f| f.facilities.clone())
         .unwrap_or_default();
     let (_, still_used) = uses(world, &kept);
+    let mut ending: Vec<Handle> = Vec::new();
     let moving: Vec<(Handle, bool)> = world
         .contracts
         .iter()
@@ -1633,17 +1637,31 @@ fn move_division_contracts(
         .filter_map(|(h, c)| {
             if c.seller == parent && c.from_region == region && made.contains(&c.product) {
                 Some((h, true))
-            } else if c.buyer == parent
-                && c.to_region == region
-                && used.contains(&c.product)
-                && !still_used.contains(&c.product)
+            } else if c.buyer == parent && c.to_region == region && !still_used.contains(&c.product)
             {
-                Some((h, false))
+                if used.contains(&c.product) {
+                    Some((h, false))
+                } else {
+                    ending.push(h);
+                    None
+                }
             } else {
                 None
             }
         })
         .collect();
+    for handle in ending {
+        let seller = world.contracts.get(handle).map(|c| c.seller);
+        if let Some(c) = world.contracts.get_mut(handle) {
+            c.status = crate::state::ContractStatus::Cancelled;
+        }
+        if let Some(p) = world.firms.get_mut(parent) {
+            p.contracts_buy.retain(|h| *h != handle);
+        }
+        if let Some(s) = seller.and_then(|s| world.firms.get_mut(s)) {
+            s.contracts_sell.retain(|h| *h != handle);
+        }
+    }
     for (handle, sell) in moving {
         if let Some(c) = world.contracts.get_mut(handle) {
             if sell {

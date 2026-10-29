@@ -250,7 +250,7 @@ fn spill(world: &mut World, ds: &Dataset, key: LaneKey, weeks: u32) {
             key.b,
             key.mode,
             cap as i64 * 2,
-            ds.logistics.empty_lane_bps,
+            world.logistics.at_price_level(ds.logistics.empty_lane_bps),
         );
         crate::economy::events_engine::pay_service(world, firm, bill, "pipeline spill clean-up");
     }

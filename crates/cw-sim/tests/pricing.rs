@@ -718,3 +718,71 @@ fn set_target(world: &mut World, dataset: &Dataset, firm: Handle, target_bps: i3
     )
     .unwrap();
 }
+
+#[test]
+fn service_prices_and_freight_rates_follow_the_price_level() {
+    let dataset = Dataset::load().unwrap();
+    let mut world = seed::build(&dataset, 77, ScenarioKind::Guided, ScenarioMode::Sandbox);
+    let telecom = dataset.product_index["telecom"];
+    let steel = dataset.product_index["steel"];
+    let (r_tel, r_steel) = (
+        dataset.reference_price(telecom),
+        dataset.reference_price(steel),
+    );
+    // Fifteen percent of inflation since the start: wages are fifteen percent up, so a service's
+    // reference is too. A good keeps its catalogue reference and follows its import price.
+    world.macro_state.price_index_bps = 11_500;
+    assert_eq!(
+        pricing::price_reference(&world, &dataset, telecom),
+        r_tel * 115 / 100
+    );
+    assert_eq!(pricing::price_reference(&world, &dataset, steel), r_steel);
+    // An idle telecom firm (nothing sold) walks down to the floor, 80 percent of the reference
+    // carried to today's level (92 percent of the catalogue price), not 80 percent of the
+    // catalogue price as when wages were fifteen percent lower.
+    let firm = world
+        .firms
+        .iter()
+        .map(|(h, _)| h)
+        .find(|h| pricing::outputs(&world, &dataset, *h).contains(&telecom))
+        .expect("a telecom firm");
+    world.firms.get_mut(firm).unwrap().sales_history.clear();
+    world
+        .firms
+        .get_mut(firm)
+        .unwrap()
+        .policies
+        .prices
+        .insert(telecom, r_tel * 80 / 100);
+    for _ in 0..200 {
+        let price = pricing::target_price(&world, &dataset, firm, telecom);
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .policies
+            .prices
+            .insert(telecom, price);
+    }
+    let settled = world.firms.get(firm).unwrap().policies.prices[&telecom];
+    assert!(
+        (settled - r_tel * 92 / 100).abs() <= r_tel / 100,
+        "settled at {settled}, floor {}",
+        r_tel * 92 / 100
+    );
+    // Freight: every rate a shipper pays, outside carriers' included, scales with the level.
+    use cw_sim::economy::logistics as lg;
+    let (a, b) = (
+        dataset.region_index["OH-CEN"],
+        dataset.region_index["PA-WES"],
+    );
+    let key = lg::LaneKey::new(a, b, 0);
+    world.logistics.price_level_bps = 10_000;
+    let base = lg::lane_rate_cents_per_lot(&dataset, &world.logistics, key);
+    world.logistics.price_level_bps = 11_500;
+    let inflated = lg::lane_rate_cents_per_lot(&dataset, &world.logistics, key);
+    assert!(
+        (inflated - base * 115 / 100).abs() <= 1,
+        "{base} at the start, {inflated} after 15 percent inflation"
+    );
+}

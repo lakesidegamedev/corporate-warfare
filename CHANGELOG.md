@@ -162,6 +162,19 @@ heading.
 
 ### Fixed
 
+- Freight space no longer sits empty after companies began moving their own goods between
+  states. A rival used to size a new pipeline on everything it made in a state rather than what
+  it actually shipped, and point it at the busiest truck route rather than the one its goods
+  took, so a pipeline built for a few dozen loads a week ran one percent full. Pipelines are now
+  sized on the company's own loads on the route and pointed where its goods go. Carrier space is
+  about 72 percent used again, up from 54.
+- Freight and service prices keep up with inflation. Their normal price was fixed at the opening
+  level while wages rose about three percent a year, so carriers and other service firms earned
+  less every year. Freight rates and the normal price of every service now rise with the
+  economy's price level, for players and rivals alike.
+- Carving out a division no longer leaves the parent paying for supplies delivered to a state
+  where it has nothing left to use them. Those purchase contracts end at the carve-out with no
+  penalty for either side; supplies the new company uses go with it, as before.
 - Pig iron pays again. The one integrated steel company that makes pig iron used to sell all of
   it abroad at the cheap export price while its own steel mill in the next state bought the same
   amount from abroad at the dear import price, and it lost money every quarter. A company now

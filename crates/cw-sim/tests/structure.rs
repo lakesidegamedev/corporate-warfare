@@ -11,7 +11,9 @@ use cw_core::quantity::MilliLots;
 use cw_data::Dataset;
 use cw_sim::commands::{CommandEnvelope, CommandIntent, apply};
 use cw_sim::economy::{credit, equity, freight, ownership, sectors, seed, structure};
-use cw_sim::state::{FacilityStatus, HolderId, ScenarioKind, ScenarioMode, ShareLot, World};
+use cw_sim::state::{
+    ContractStatus, FacilityStatus, HolderId, ScenarioKind, ScenarioMode, ShareLot, World,
+};
 
 fn world(seed_value: u64) -> (World, Dataset) {
     let dataset = Dataset::load().unwrap();
@@ -1418,6 +1420,70 @@ fn a_carved_out_division_takes_the_contracts_for_what_it_makes_and_uses() {
     assert!(
         parent.contracts_sell.contains(&elsewhere) && parent.contracts_sell.contains(&escrowed)
     );
+    assert!(all_balanced(&world));
+}
+
+#[test]
+fn a_carve_out_ends_the_parents_purchases_into_a_state_where_nothing_uses_them() {
+    let (mut world, dataset, firm, r1, _i1, r2, i2) = two_division_firm();
+    let plants = sectors::division_plants(&world, &dataset, firm, r2, i2);
+    // Every input any plant in the carved state uses, the parent's or the division's.
+    let used: Vec<u16> = world
+        .facilities
+        .iter()
+        .filter(|(_, p)| p.region == r2)
+        .flat_map(|(_, p)| dataset.recipes[p.recipe as usize].weekly_inputs_lots.keys())
+        .map(|id| dataset.product_index[id])
+        .collect();
+    let unused = (0..dataset.products.len() as u16)
+        .find(|p| !used.contains(p) && !dataset.products[*p as usize].kind.is_service())
+        .expect("a good no plant in the state uses");
+    let input = dataset.product_index[dataset.recipes
+        [world.facilities.get(plants[0]).unwrap().recipe as usize]
+        .weekly_inputs_lots
+        .keys()
+        .next()
+        .unwrap()];
+    let other = world
+        .firms
+        .iter()
+        .map(|(h, _)| h)
+        .find(|h| *h != firm)
+        .unwrap();
+    // Coal for a plant the parent closed long ago, bought into the state it is leaving.
+    let stale = contract(&mut world, other, firm, unused, (r1, r2), 0);
+    let used_input = contract(&mut world, other, firm, input, (r1, r2), 0);
+    let child = structure::carve_out(&mut world, &dataset, firm, r2, i2, "Carved Co".to_owned())
+        .expect("carve-out");
+    let c = |w: &cw_sim::state::World, h: Handle| w.contracts.get(h).unwrap().clone();
+    assert_eq!(c(&world, stale).status, ContractStatus::Cancelled);
+    assert_eq!(c(&world, stale).buyer, firm, "nobody takes it on");
+    assert_eq!(
+        c(&world, used_input).buyer,
+        child,
+        "what the division uses goes with it"
+    );
+    assert!(!world.firm(firm).unwrap().contracts_buy.contains(&stale));
+    assert!(!world.firm(other).unwrap().contracts_sell.contains(&stale));
+    assert!(!world.firm(child).unwrap().contracts_buy.contains(&stale));
+    // Ended, it is never delivered, short or penalised: neither side's cash moves for it.
+    let cash = |w: &cw_sim::state::World, f: Handle| w.firm(f).unwrap().book.cash();
+    // Only the ended contract is left to settle.
+    let others: Vec<Handle> = world
+        .contracts
+        .iter()
+        .map(|(h, _)| h)
+        .filter(|h| *h != stale)
+        .collect();
+    for h in others {
+        world.contracts.get_mut(h).unwrap().status = ContractStatus::Cancelled;
+    }
+    let (buyer_cash, seller_cash) = (cash(&world, firm), cash(&world, other));
+    world.tick = Tick(world.tick.0 + 1);
+    freight::settle(&mut world, &dataset);
+    assert_eq!(c(&world, stale).shortfalls, MilliLots::ZERO);
+    assert_eq!(cash(&world, firm), buyer_cash);
+    assert_eq!(cash(&world, other), seller_cash);
     assert!(all_balanced(&world));
 }
 
