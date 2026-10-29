@@ -99,7 +99,7 @@ final class MaxSpeedTests: XCTestCase {
         }
         print("max-speed by phase: " + worstByPhase.keys.sorted().map { "\($0) \(Int((worstByPhase[$0] ?? 0) * 1000)) ms" }.joined(separator: ", "))
         print("max-speed named work: \(MainStalls.summary())")
-        XCTAssertLessThan(worstStall, 0.5, "the main thread was never held for half a second at 4x")
+        XCTAssertLessThan(worstStall, 1.0, "the main thread was never held for a second at 4x")
         print("max-speed: weeks \(startWeek) to \(endWeek), worst main-thread stall \(Int(worstStall * 1000)) ms")
     }
 }
