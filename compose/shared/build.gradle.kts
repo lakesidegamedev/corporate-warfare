@@ -146,7 +146,8 @@ compose.desktop {
 // empties it at the start of the task and passes it last, so neither a template placed beforehand
 // nor an extra --resource-dir reaches jpackage. Instead, once Compose has built the MSI, this puts
 // the template in that folder and runs jpackage again with Compose's own saved arguments, so every
-// other installer setting stays exactly as Compose made it.
+// other installer setting stays exactly as Compose made it. That rerun reads Compose's working
+// folder, which compose.preserve.working.dir in gradle.properties keeps.
 tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>().configureEach {
     if (targetFormat != org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi) return@configureEach
     val template = project.file("packaging/windows")
