@@ -170,19 +170,25 @@ pub fn cut_yields(world: &World, dataset: &Dataset, handle: Handle) -> Vec<i32> 
     }
 }
 
-/// A plant's real full-run output this week: its full weekly output at this season's yield, the
-/// most it can make running flat out with every input and hand it needs.
+/// A plant's real full-run output of its primary product this week: its full weekly output at
+/// this season's yield and at the share of its cut the primary takes (a refinery leaning toward
+/// its primary fraction can make more of it than the recipe's split), the most it can make
+/// running flat out with every input and hand it needs.
 pub fn season_full_output(
     world: &World,
     dataset: &Dataset,
     plant: &crate::state::Facility,
 ) -> cw_core::quantity::MilliLots {
-    plant
+    let full = plant
         .full_weekly_output(dataset)
         .scale_bps(season_yield_bps(
             world,
             &dataset.recipes[plant.recipe as usize],
-        ))
+        ));
+    match plant.cut_bps.first() {
+        Some(cut) if *cut > 0 => full.scale_bps(*cut),
+        _ => full,
+    }
 }
 
 /// Produce the whole week: utilities first, then goods and services.
