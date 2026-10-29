@@ -25,6 +25,15 @@ heading.
   folds away and remembers it. On desktop, a new setting, Show the brief each week, opens it
   when a week starts while time is paused or at normal speed. It is never read at faster speeds
   more than once a week.
+- The weekly brief never goes quiet when the company is losing money. If the last four weeks
+  add up to a loss, the CFO's reasons lead the moves, biggest weekly cost first, each with its
+  one-button fix and how much it saves a week. With no single reason, the brief says where the
+  money goes ("Wages are 62 percent of revenue") and opens the weakest division. "Hold your
+  course" now comes only with a reason, such as how profit moved. Builds are judged on the
+  division's margin at today's prices up to ten years, shown in years, and rank last unless they
+  pay back inside three years. On Apple, Review opens the game's own build, raid, lane, pricing,
+  board offer and division sheets, and the brief has a snapshot test.
+
 - Letters from the people in your world. The Inbox is now correspondence. A rival chief writes
   after a raid on you or by you, and after a joint venture or a friendly deal. A bidder writes
   when they bid for your company. The central bank chair writes after a rate decision and gives
@@ -163,6 +172,8 @@ heading.
 
 ### Fixed
 
+- Amounts from one thousand to under ten thousand in the brief, letters and papers now show a
+  comma ("$5,399", not "$5399").
 - Big cities keep their names on the close map. A city of a million people or more now always shows its
   name while its buildings are on screen, even when your own plants crowd the usual spots: the name
   moves further out and a thin line ties it back to the city. Region names and smaller towns give way
