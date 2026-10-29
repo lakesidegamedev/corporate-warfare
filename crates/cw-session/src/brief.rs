@@ -27,8 +27,14 @@ pub const MAX_DUE: usize = 5;
 const PRICE_NEWS_BPS: i64 = 500;
 /// A raid is worth suggesting when it is at least this likely to work, in basis points.
 const RAID_GOOD_BPS: i32 = 5_500;
-/// A build or lane reservation must pay back inside this many weeks to be suggested.
+/// A raid must pay back inside this many weeks to be suggested.
 const MAX_PAYBACK_WEEKS: i64 = 260;
+/// A build must pay back inside this many weeks to be suggested: ten years at today's prices.
+const BUILD_MAX_PAYBACK_WEEKS: i64 = 520;
+/// A build that takes this long or longer to pay back ranks after every other move: three years.
+const SLOW_BUILD_WEEKS: i64 = 156;
+/// Weeks of results that decide whether the company is losing money.
+const LOSS_WINDOW: usize = 4;
 /// Stock over this many weeks of sales is a pile; a price cut is suggested.
 const PILE_WEEKS: i64 = 4;
 /// The posture a suggested price move uses, in basis points against the market.
@@ -55,7 +61,7 @@ pub struct BriefDue {
 /// What a suggested move opens when the player presses Review.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MoveTarget {
-    /// build, pricing, lane, mandate, raid or production.
+    /// build, pricing, lane, mandate, raid, production, division or cfo.
     pub dialog: String,
     pub region: String,
     pub region_to: String,
@@ -98,6 +104,8 @@ pub struct Brief {
     pub changes: Vec<BriefChange>,
     pub due: Vec<BriefDue>,
     pub moves: Vec<BriefMove>,
+    /// Why there is nothing to do, in a few words. Empty whenever there is a move.
+    pub hold: String,
 }
 
 fn json(intent: CommandIntent) -> String {
@@ -357,6 +365,15 @@ fn payback(cost: i64, gain: i64) -> Option<i64> {
     Some(weeks)
 }
 
+/// A payback in plain time: weeks under a year, years to one decimal after.
+pub fn payback_text(weeks: i64) -> String {
+    if weeks < 52 {
+        return format!("{weeks} weeks");
+    }
+    let tenths = weeks * 10 / 52;
+    format!("{}.{} years", tenths / 10, tenths % 10)
+}
+
 fn recipe_name(dataset: &Dataset, recipe: u16) -> String {
     let t = &dataset.recipes[recipe as usize];
     if t.name.is_empty() {
@@ -370,7 +387,7 @@ fn recipe_name(dataset: &Dataset, recipe: u16) -> String {
 /// imports no local plant meets, priced by the engine's build quote and paid back from the
 /// division's own margin.
 fn build_move(world: &World, dataset: &Dataset, firm: Handle) -> Option<BriefMove> {
-    build_move_within(world, dataset, firm, MAX_PAYBACK_WEEKS)
+    build_move_within(world, dataset, firm, BUILD_MAX_PAYBACK_WEEKS)
 }
 
 fn build_move_within(
@@ -413,10 +430,10 @@ fn build_move_within(
                 region.name
             ),
             detail: format!(
-                "Imports into {} are filling demand your plants do not meet. One more block costs {} and, at your margin in that division, pays itself back in about {} weeks.",
+                "Imports into {} are filling demand your plants do not meet. One more block costs {} and, at your margin in that division at today's prices, pays itself back in about {}.",
                 region.name,
                 paper::money(world, dataset, firm, cost),
-                weeks
+                payback_text(weeks)
             ),
             cost_cents: cost,
             weekly_gain_cents: gain,
@@ -706,7 +723,7 @@ fn raid_move(world: &World, dataset: &Dataset, firm: Handle) -> Option<BriefMove
                 key: "raid".to_owned(),
                 headline: format!("Raid {name} in {}", region.name),
                 detail: format!(
-                    "A campaign of {} has a {} percent chance to take {} of {}'s {} plants there, and pays back in about {} weeks if it works. Its cost stays within half of what you earned over the last quarter.",
+                    "A campaign of {} has a {} percent chance to take {} of {}'s {} plants there, and pays back in about {} if it works. Its cost stays within half of what you earned over the last quarter.",
                     paper::money(world, dataset, firm, campaign),
                     q.chance_bps / 100,
                     if q.blocks_at_stake == 1 {
@@ -716,7 +733,7 @@ fn raid_move(world: &World, dataset: &Dataset, firm: Handle) -> Option<BriefMove
                     },
                     name,
                     cw_sim::state::INDUSTRY_NAMES[d.industry as usize].replace('_', " "),
-                    weeks
+                    payback_text(weeks)
                 ),
                 cost_cents: expected_cost,
                 weekly_gain_cents: gain,
@@ -775,12 +792,24 @@ fn production_move(world: &World, dataset: &Dataset, firm: Handle) -> Option<Bri
     })
 }
 
-/// Quickest payback first; free moves count as zero weeks, biggest gain first among equals, and
-/// a move with no figure behind it goes last.
+/// Where a move sits: ordinary moves first, a move with no figure after them, and a build that
+/// takes three years or more to pay back after everything else.
+fn rank(m: &BriefMove) -> u8 {
+    if m.key == "build" && m.payback_weeks >= SLOW_BUILD_WEEKS {
+        2
+    } else if m.has_payback {
+        0
+    } else {
+        1
+    }
+}
+
+/// Quickest payback first; free moves count as zero weeks, biggest gain first among equals, a
+/// move with no figure behind it after those, and a slow build last of all.
 fn order(all: &mut [BriefMove]) {
     all.sort_by(|a, b| {
-        (!a.has_payback)
-            .cmp(&!b.has_payback)
+        rank(a)
+            .cmp(&rank(b))
             .then(a.payback_weeks.cmp(&b.payback_weeks))
             .then(b.weekly_gain_cents.cmp(&a.weekly_gain_cents))
             .then(a.key.cmp(&b.key))
@@ -788,9 +817,194 @@ fn order(all: &mut [BriefMove]) {
     });
 }
 
-/// Up to three suggested moves, quickest payback first. Moves with no up-front cost come
-/// first, biggest weekly gain first; a mandate to pick, which has no figure, comes last.
+/// What the last four closed weeks add up to, when there are any. Negative means losing.
+fn recent_net(world: &World, firm: Handle) -> Option<i64> {
+    let weeks = world.firms.get(firm)?.book.recent_weeks();
+    let recent = &weeks[weeks.len().saturating_sub(LOSS_WINDOW)..];
+    if recent.is_empty() {
+        return None;
+    }
+    Some(recent.iter().map(|w| w.net_income).sum())
+}
+
+/// The CFO's reasons as moves, biggest weekly cost first. Each carries its one-button fix and
+/// the weekly saving as its figure.
+fn cfo_moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefMove> {
+    let mut items = cfo::advice(world, dataset, firm.0);
+    items.sort_by(|a, b| b.weekly_cents.cmp(&a.weekly_cents).then(a.key.cmp(&b.key)));
+    items
+        .into_iter()
+        .map(|advice| {
+            // A single underpriced good opens its pricing sheet; the rest open the plain
+            // confirmation with the fix ready.
+            let dialog = if advice.key == "below_cost" && advice.commands.len() == 1 {
+                "pricing"
+            } else {
+                "cfo"
+            };
+            let product = advice
+                .commands
+                .first()
+                .and_then(|c| serde_json::from_str::<CommandIntent>(c).ok())
+                .and_then(|c| match c {
+                    CommandIntent::SetPricePosture { product, .. } => Some(product as u32),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            BriefMove {
+                key: format!("cfo_{}", advice.key),
+                headline: advice.headline,
+                detail: format!(
+                    "{} It saves about {} a week.",
+                    advice.detail,
+                    paper::money(world, dataset, firm, advice.weekly_cents)
+                ),
+                cost_cents: 0,
+                weekly_gain_cents: advice.weekly_cents,
+                payback_weeks: 0,
+                has_payback: true,
+                action_label: advice.action_label,
+                target: MoveTarget {
+                    dialog: dialog.to_owned(),
+                    product,
+                    ..Default::default()
+                },
+                commands: advice.commands,
+            }
+        })
+        .collect()
+}
+
+/// The division with the worst margin at today's prices: its region code, industry name and
+/// margin in basis points.
+fn worst_division(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+) -> Option<(String, String, String, i32)> {
+    let mut worst: Option<(i32, String, String, String)> = None;
+    for d in sectors::divisions_of(world, dataset, firm) {
+        let Some(report) = division_report::report(world, dataset, firm, d.region, d.industry)
+        else {
+            continue;
+        };
+        if worst.as_ref().is_none_or(|(m, ..)| report.margin_bps < *m) {
+            let region = &dataset.regions[d.region as usize];
+            worst = Some((
+                report.margin_bps,
+                region.code.clone(),
+                region.name.clone(),
+                cw_sim::state::INDUSTRY_NAMES[d.industry as usize].to_owned(),
+            ));
+        }
+    }
+    worst.map(|(m, code, name, industry)| (code, name, industry, m))
+}
+
+/// A losing company the CFO has no named reason for still sees where the money goes: the
+/// biggest line of the income statement against revenue, and the weakest division to open.
+fn diagnosis_move(world: &World, dataset: &Dataset, firm: Handle, net: i64) -> BriefMove {
+    let weeks = world
+        .firms
+        .get(firm)
+        .map(|f| f.book.recent_weeks())
+        .unwrap_or(&[]);
+    let recent = &weeks[weeks.len().saturating_sub(LOSS_WINDOW)..];
+    let count = recent.len().max(1) as i64;
+    let revenue = recent.iter().map(|w| w.revenue).sum::<i64>() / count;
+    let lines: [(&str, &str, i64); 5] = [
+        (
+            "Wages",
+            "are",
+            recent.iter().map(|w| w.wages).sum::<i64>() / count,
+        ),
+        (
+            "The cost of making what you sell",
+            "is",
+            recent.iter().map(|w| w.cost_of_goods).sum::<i64>() / count,
+        ),
+        (
+            "Running costs",
+            "are",
+            recent.iter().map(|w| w.operating_expense).sum::<i64>() / count,
+        ),
+        (
+            "Interest on your debt",
+            "is",
+            recent
+                .iter()
+                .map(|w| w.interest_expense - w.interest_income)
+                .sum::<i64>()
+                / count,
+        ),
+        (
+            "Depreciation",
+            "is",
+            recent.iter().map(|w| w.depreciation).sum::<i64>() / count,
+        ),
+    ];
+    let biggest = lines
+        .iter()
+        .max_by_key(|l| l.2)
+        .copied()
+        .unwrap_or(lines[0]);
+    let headline = if revenue <= 0 {
+        "The company is not selling anything yet".to_owned()
+    } else {
+        format!(
+            "{} {} {} percent of revenue",
+            biggest.0,
+            biggest.1,
+            biggest.2 * 100 / revenue
+        )
+    };
+    let weekly_loss = paper::money(world, dataset, firm, (-net / count).max(0));
+    let mut detail = format!(
+        "The company has lost about {weekly_loss} a week over the last {} weeks.",
+        recent.len()
+    );
+    let mut target = MoveTarget::default();
+    if let Some((code, name, industry, margin)) = worst_division(world, dataset, firm) {
+        detail += &format!(
+            " The weakest division is {} in {name}, at a margin of {} percent. Open it to see where the money goes.",
+            industry.replace('_', " "),
+            margin / 100
+        );
+        target = MoveTarget {
+            dialog: "division".to_owned(),
+            region: code,
+            industry,
+            ..Default::default()
+        };
+    }
+    BriefMove {
+        key: "losing".to_owned(),
+        headline,
+        detail,
+        cost_cents: 0,
+        weekly_gain_cents: 0,
+        payback_weeks: 0,
+        has_payback: false,
+        action_label: "Review".to_owned(),
+        target,
+        commands: Vec::new(),
+    }
+}
+
+/// Up to three suggested moves. A company that lost money over the last four weeks sees the
+/// CFO's reasons first, biggest weekly cost first, and always at least one move. Otherwise (and
+/// after those) quickest payback first: moves with no up-front cost come first, biggest weekly
+/// gain first; a mandate to pick, which has no figure, after them; a slow build last.
 fn moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefMove> {
+    let losing = recent_net(world, firm).is_some_and(|net| net < 0);
+    let mut lead: Vec<BriefMove> = Vec::new();
+    if losing {
+        lead = cfo_moves(world, dataset, firm);
+        if lead.is_empty() {
+            let net = recent_net(world, firm).unwrap_or_default();
+            lead.push(diagnosis_move(world, dataset, firm, net));
+        }
+    }
     let mut all: Vec<BriefMove> = Vec::new();
     all.extend(build_move(world, dataset, firm));
     all.extend(lane_move(world, dataset, firm));
@@ -798,9 +1012,43 @@ fn moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefMove> {
     all.extend(production_move(world, dataset, firm));
     all.extend(mandate_move(world, dataset, firm));
     all.extend(raid_move(world, dataset, firm));
+    // The same fix is not offered twice.
+    all.retain(|m| !lead.iter().any(|l| l.commands == m.commands));
     order(&mut all);
-    all.truncate(MAX_MOVES);
-    all
+    lead.extend(all);
+    lead.truncate(MAX_MOVES);
+    lead
+}
+
+/// Why a profitable company with nothing to do is told to hold: profit against the four weeks
+/// before, and the payback limit nothing met.
+fn hold_reason(world: &World, firm: Handle) -> String {
+    let Some(entity) = world.firms.get(firm) else {
+        return String::new();
+    };
+    let weeks = entity.book.recent_weeks();
+    if weeks.is_empty() {
+        return "No week has closed yet; nothing pays back inside ten years.".to_owned();
+    }
+    let split = weeks.len().saturating_sub(LOSS_WINDOW);
+    let now: i64 = weeks[split..].iter().map(|w| w.net_income).sum();
+    let before: i64 = weeks[split.saturating_sub(LOSS_WINDOW)..split]
+        .iter()
+        .map(|w| w.net_income)
+        .sum();
+    let profit = if now == 0 {
+        "The company is breaking even".to_owned()
+    } else if split == 0 || before <= 0 {
+        "The company is profitable".to_owned()
+    } else {
+        let pct = (now - before) * 100 / before;
+        match pct {
+            0 => "Profit is flat".to_owned(),
+            p if p > 0 => format!("Profit is up {p} percent"),
+            p => format!("Profit is down {} percent", -p),
+        }
+    };
+    format!("{profit}; nothing pays back inside ten years.")
 }
 
 /// The brief for a firm at the top of the week. Pure in the world.
@@ -809,11 +1057,18 @@ pub fn weekly_brief(world: &World, dataset: &Dataset, firm: u64) -> Brief {
     if world.firms.get(handle).is_none() {
         return Brief::default();
     }
+    let moves = moves(world, dataset, handle);
+    let hold = if moves.is_empty() {
+        hold_reason(world, handle)
+    } else {
+        String::new()
+    };
     Brief {
         week: world.tick.0,
         changes: changes(world, dataset, handle),
         due: due(world, dataset, handle),
-        moves: moves(world, dataset, handle),
+        moves,
+        hold,
     }
 }
 
@@ -1133,9 +1388,13 @@ mod tests {
         for g in s.world.gateways.iter_mut() {
             g.smoothed_import_lots = 1_000_000;
         }
-        // A block here takes about six years to pay back: too long to advise at the default.
-        assert!(build_move(&s.world, &s.dataset, me).is_none());
-        let mv = build_move_within(&s.world, &s.dataset, me, 1_000).expect("a build");
+        // A block here takes about six years to pay back: too long for three years, fine for ten.
+        assert!(build_move_within(&s.world, &s.dataset, me, 100).is_none());
+        let mv = build_move(&s.world, &s.dataset, me).expect("a build inside ten years");
+        assert!(
+            mv.payback_weeks >= SLOW_BUILD_WEEKS && mv.payback_weeks <= BUILD_MAX_PAYBACK_WEEKS
+        );
+        assert!(mv.detail.contains(" years"), "{}", mv.detail);
         let d = sectors::divisions_of(&s.world, &s.dataset, me)
             .into_iter()
             .find(|d| s.dataset.regions[d.region as usize].code == mv.target.region)
@@ -1210,6 +1469,156 @@ mod tests {
         let (s, me) = trading();
         // Nothing is idle on a company on automatic production.
         assert!(production_move(&s.world, &s.dataset, me).is_none());
+    }
+
+    /// A young company that pays for research, marketing and training it cannot afford, run
+    /// for five weeks: it is in the red with named reasons.
+    fn losing() -> (Session, Handle) {
+        use cw_sim::commands::{CommandEnvelope, INVESTOR_ACTOR};
+        let mut s = Session::create(ScenarioConfig {
+            seed: 7,
+            scenario: ScenarioKind::Guided,
+            mode: ScenarioMode::Sandbox,
+            dataset_hash: String::new(),
+            difficulty: cw_data::Difficulty::Standard,
+            economy_start: Default::default(),
+            starting_capital_cents: None,
+            prices: Default::default(),
+        })
+        .unwrap();
+        let me = you(&s);
+        for (low, intent) in [
+            CommandIntent::SetResearchBudget {
+                firm: me,
+                amount_cents: 6_000_000,
+            },
+            CommandIntent::SetMarketingBudget {
+                firm: me,
+                amount_cents: 3_000_000,
+            },
+            CommandIntent::SetTrainingBudget {
+                firm: me,
+                amount_cents: 2_500_000,
+            },
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let envelope = CommandEnvelope {
+                command_id_high: 0xB01,
+                command_id_low: low as u64,
+                actor: INVESTOR_ACTOR,
+                expected_revision: s.revision(),
+                submitted_tick: s.world.tick.0,
+                intent,
+            };
+            s.submit(envelope).unwrap();
+        }
+        s.advance(5);
+        s.dismiss_pause();
+        (s, me)
+    }
+
+    #[test]
+    fn a_losing_company_always_sees_a_move_and_the_cfos_reasons_come_first_in_cost_order() {
+        let (s, me) = losing();
+        assert!(recent_net(&s.world, me).unwrap() < 0);
+        let brief = weekly_brief(&s.world, &s.dataset, me.0);
+        assert!(!brief.moves.is_empty());
+        assert!(brief.hold.is_empty());
+        let reasons = cfo::advice(&s.world, &s.dataset, me.0);
+        assert!(reasons.len() >= 2);
+        let mut cost_order = reasons.clone();
+        cost_order.sort_by(|a, b| b.weekly_cents.cmp(&a.weekly_cents).then(a.key.cmp(&b.key)));
+        let moves = cfo_moves(&s.world, &s.dataset, me);
+        assert_eq!(moves.len(), reasons.len());
+        for (mv, reason) in moves.iter().zip(&cost_order) {
+            assert_eq!(mv.key, format!("cfo_{}", reason.key));
+            assert_eq!(mv.weekly_gain_cents, reason.weekly_cents);
+            assert_eq!(mv.commands, reason.commands);
+            assert!(mv.detail.contains("saves about $"), "{}", mv.detail);
+        }
+        assert!(
+            moves
+                .windows(2)
+                .all(|w| w[0].weekly_gain_cents >= w[1].weekly_gain_cents)
+        );
+        // They lead the brief, ahead of whatever else the company could do.
+        let lead = brief.moves.len().min(moves.len());
+        for (shown, reason) in brief.moves.iter().zip(&moves).take(lead) {
+            assert_eq!(shown.key, reason.key);
+        }
+    }
+
+    #[test]
+    fn a_losing_company_with_no_named_reason_is_told_where_the_money_goes() {
+        let (mut s, me) = losing();
+        {
+            let policies = &mut s.world.firms.get_mut(me).unwrap().policies;
+            policies.research_budget_cents = 0;
+            policies.marketing_budget_cents = 0;
+            policies.training_budget_cents = 0;
+            policies.quality_budgets_cents.clear();
+        }
+        let brief = weekly_brief(&s.world, &s.dataset, me.0);
+        let first = brief.moves.first().expect("a losing company sees a move");
+        if first.key == "losing" {
+            assert!(
+                first.headline.contains(" percent of revenue")
+                    || first.headline.contains("not selling"),
+                "{}",
+                first.headline
+            );
+            assert!(!first.has_payback && first.commands.is_empty());
+            if first.target.dialog == "division" {
+                assert!(!first.target.region.is_empty() && !first.target.industry.is_empty());
+            }
+        }
+        assert!(brief.hold.is_empty());
+    }
+
+    #[test]
+    fn a_profitable_company_with_nothing_to_do_is_told_why() {
+        let s = session();
+        let me = you(&s);
+        let reason = hold_reason(&s.world, me);
+        assert!(
+            reason.ends_with("nothing pays back inside ten years."),
+            "{reason}"
+        );
+        assert!(!reason.contains('\u{2013}') && !reason.contains('\u{2014}'));
+    }
+
+    #[test]
+    fn payback_reads_in_years_past_a_year_and_a_slow_build_ranks_last() {
+        assert_eq!(payback_text(30), "30 weeks");
+        assert_eq!(payback_text(52), "1.0 years");
+        assert_eq!(payback_text(321), "6.1 years");
+        let mk = |key: &str, has: bool, weeks: i64| BriefMove {
+            key: key.to_owned(),
+            headline: key.to_owned(),
+            detail: String::new(),
+            cost_cents: 1,
+            weekly_gain_cents: 1,
+            payback_weeks: weeks,
+            has_payback: has,
+            action_label: String::new(),
+            target: MoveTarget::default(),
+            commands: Vec::new(),
+        };
+        let mut all = vec![
+            mk("build", true, 300),
+            mk("mandate", false, 0),
+            mk("raid", true, 200),
+        ];
+        order(&mut all);
+        assert_eq!(
+            all.iter().map(|m| m.key.as_str()).collect::<Vec<_>>(),
+            vec!["raid", "mandate", "build"]
+        );
+        let mut quick = vec![mk("mandate", false, 0), mk("build", true, 100)];
+        order(&mut quick);
+        assert_eq!(quick[0].key, "build");
     }
 
     #[test]

@@ -23,7 +23,7 @@ pub struct BriefDueDto {
 /// `dialog` carry values.
 #[derive(Clone, uniffi::Record)]
 pub struct BriefTargetDto {
-    /// build, pricing, lane, mandate, raid or production.
+    /// build, pricing, lane, mandate, raid, production, division or cfo.
     pub dialog: String,
     pub region: String,
     pub region_to: String,
@@ -60,6 +60,8 @@ pub struct BriefDto {
     pub changes: Vec<BriefChangeDto>,
     pub due: Vec<BriefDueDto>,
     pub moves: Vec<BriefMoveDto>,
+    /// Why there is nothing to do; empty whenever there is a move.
+    pub hold: String,
 }
 
 fn change_dto(c: BriefChange) -> BriefChangeDto {
@@ -115,6 +117,7 @@ fn brief_dto(b: Brief) -> BriefDto {
         changes: b.changes.into_iter().map(change_dto).collect(),
         due: b.due.into_iter().map(due_dto).collect(),
         moves: b.moves.into_iter().map(move_dto).collect(),
+        hold: b.hold,
     }
 }
 
@@ -161,8 +164,11 @@ mod tests {
             "a trading company always has a profit line"
         );
         for m in &brief.moves {
-            assert!(!m.commands.is_empty() && !m.target.dialog.is_empty());
+            assert!(!m.target.dialog.is_empty());
             assert!(m.commands.iter().all(|c| !c.is_empty()));
+        }
+        if brief.moves.is_empty() {
+            assert!(!brief.hold.is_empty());
         }
         // Reading it twice agrees, and moves no hash and no revision.
         let again = career.weekly_brief(firm);
