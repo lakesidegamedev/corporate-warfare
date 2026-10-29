@@ -1603,6 +1603,12 @@ pub struct World {
     /// `economy::chapters`.
     #[serde(skip)]
     pub chapters: crate::economy::chapters::ChapterState,
+    /// Executives and the pool of people who can be hired (1.9). Outside the postcard encoding
+    /// like the chapter state, folded into the hash while not empty, saved in its own `EXEC`
+    /// trailer. A save without the trailer loads with it empty and the pool is drawn on the
+    /// next week. See `economy::executives`.
+    #[serde(skip)]
+    pub executives: crate::economy::executives::ExecState,
     /// Which letters the player has read. Outside the encoding and the hash, in its own save
     /// trailer; no rule reads it. See `economy::mail`.
     #[serde(skip)]
@@ -1999,6 +2005,12 @@ pub fn canonical_hash(world: &World) -> String {
             if !world.chapters.is_empty() {
                 match postcard::to_allocvec(&world.chapters) {
                     Ok(chapters) => bytes.extend_from_slice(&chapters),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.executives.is_empty() {
+                match postcard::to_allocvec(&world.executives) {
+                    Ok(executives) => bytes.extend_from_slice(&executives),
                     Err(_) => return String::from("unhashable"),
                 }
             }

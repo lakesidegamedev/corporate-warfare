@@ -529,6 +529,11 @@ fn run_facility(
     ratio = (ratio as i64
         * crate::economy::operations::output_bps(world, dataset, handle, utility) as i64
         / 10_000) as i32;
+    // A chief operating officer lets a plant that is fully staffed, powered and rated for full
+    // output run a little above its rating (overtime and tighter scheduling).
+    if ratio >= 10_000 && !utility {
+        ratio += crate::economy::executives::ceiling_bonus_bps(world, firm_handle);
+    }
     if ratio <= 0 {
         update_facility_result(world, handle, MilliLots::ZERO, staff_ratio, true);
         return MilliLots::ZERO;

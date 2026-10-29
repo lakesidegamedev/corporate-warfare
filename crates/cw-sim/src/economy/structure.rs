@@ -1104,6 +1104,7 @@ pub fn credit_spread(world: &World, firm: Handle, extra: i64) -> (i32, i32, i32)
 
 pub fn bond_quote(world: &World, firm: Handle, principal: i64, weeks: u32) -> BondQuote {
     let (spread, leverage, coverage) = credit_spread(world, firm, principal);
+    let spread = crate::economy::executives::spread_after_cut(world, firm, spread);
     let base = bond_base_bps(world, weeks);
     let rating = match spread {
         s if s < 150 => 'A',

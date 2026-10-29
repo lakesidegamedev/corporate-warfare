@@ -277,7 +277,11 @@ pub fn approve_loan(
     }
     let rate = world.macro_state.policy_rate_bps
         + crate::economy::macro_cycle::lending_premium_bps(world)
-        + crate::economy::credit::assess_grade(world, borrower).spread_bps();
+        + crate::economy::executives::spread_after_cut(
+            world,
+            borrower,
+            crate::economy::credit::assess_grade(world, borrower).spread_bps(),
+        );
     let _ = world.firms.get_mut(bank).unwrap().book.commit(
         world.tick,
         Txn::new()

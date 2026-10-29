@@ -1002,6 +1002,8 @@ fn close_stats(world: &mut World, ds: &Dataset) {
 struct Ctx {
     own_carrier: Vec<bool>,
     own_contract: Vec<bool>,
+    /// Percent the shipper's logistics chief takes off the outside carriers' premium.
+    premium_cut_pct: i64,
 }
 
 impl Ctx {
@@ -1030,7 +1032,25 @@ impl Ctx {
         Ctx {
             own_carrier: st.carriers.iter().map(|c| same(c.firm)).collect(),
             own_contract: st.contracts.iter().map(|c| same(c.holder)).collect(),
+            premium_cut_pct: crate::economy::executives::premium_cut_pct_for(
+                crate::economy::executives::level(
+                    world,
+                    shipper,
+                    crate::economy::executives::Post::Logistics,
+                ),
+            ),
         }
+    }
+}
+
+/// The outside price multiplier after the shipper's logistics chief, which takes a share off the
+/// premium over the owners' empty-lane rate and never goes below it.
+fn cut_premium(ds: &Dataset, ctx: &Ctx, mult_bps: i64) -> i64 {
+    let floor = ds.logistics.empty_lane_bps;
+    if ctx.premium_cut_pct == 0 || mult_bps <= floor {
+        mult_bps
+    } else {
+        floor + (mult_bps - floor) * (100 - ctx.premium_cut_pct) / 100
     }
 }
 
@@ -1161,7 +1181,7 @@ fn quote_leg(
                 to,
                 mode,
                 left,
-                st.at_price_level(ds.logistics.outside_premium_bps),
+                st.at_price_level(cut_premium(ds, ctx, ds.logistics.outside_premium_bps)),
             ),
         });
         max_fill = 10_000;
@@ -2008,7 +2028,8 @@ pub fn reserve_lane(
             actual: "no room on the lane",
         });
     }
-    let fee = contract_fee_cents(world, ds, key, lots);
+    let fee =
+        crate::economy::executives::lane_fee_after_cut(world, firm, contract_fee_cents(world, ds, key, lots));
     let id = world.logistics.next_contract;
     world.logistics.next_contract += 1;
     let tick = world.tick.0;
@@ -2455,7 +2476,8 @@ pub fn reserve_quote(
     if cap <= 0 || lots < 1 {
         return None;
     }
-    let fee = contract_fee_cents(world, ds, key, lots);
+    let fee =
+        crate::economy::executives::lane_fee_after_cut(world, firm, contract_fee_cents(world, ds, key, lots));
     let spot = lane_rate_cents_per_lot(ds, &world.logistics, key);
     let used = group_lane_lots(world, firm, key).min(lots).max(0);
     let weekly_fee = fee * lots as i64;
