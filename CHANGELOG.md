@@ -13,6 +13,25 @@ heading.
 
 ### Added
 
+- Earnings season. Every listed company now reports each quarter. At the start of the quarter an
+  analyst writes an estimate of its operating profit from its trend, its sector and a little
+  luck, so estimates can miss. On results day the share price moves on the surprise: a beat lifts
+  it, a miss drops it, bigger surprises and repeated surprises move it more, and no move is ever
+  more than 12 percent. Prices move and nothing else: no money is created or lost. Each listed
+  company has an analyst rating (buy, hold or sell) from its value against its price. Company
+  pages show the estimate, the last results against it, the rating and when it reports, and the
+  stock board marks companies reporting this week. The weekly brief lists "Results in 5 weeks:
+  analysts expect $X" under what is due, the paper runs the biggest surprises, and the analyst
+  writes to you before and after your own results.
+- Guidance. On your company's page, Give guidance tells the analysts a range for the quarter's
+  operating profit and explains the risk first. They move their estimate toward the middle of the
+  range. Meet the low end and the market trusts your numbers more, so a later miss moves the
+  price less. Miss it and the company loses reputation and trust, and a second miss in a row (or a
+  deep one) brings activist investors. A low end well under what the analysts expect is seen as sandbagging and earns no trust.
+  Rival companies give guidance too, with the same rules.
+- Short campaigns. A company whose price runs to twice what it is worth, yours included, can
+  now draw an activist campaign against it, which knocks a few percent off the price when it
+  opens and then runs like any other activist campaign.
 - Executives. Every company can hire a chief financial officer, a chief operating officer and a
   logistics chief, and your rivals do too. Each is a named person with a portrait, a level from 1 to
   5 and a temperament, and each changes one real number. A chief financial officer takes up to
