@@ -41,7 +41,11 @@ A command batch runs at the next opening boundary, not at arbitrary UI wall-cloc
 9. AI observes permitted closing data and queues next-week commands.
 
 Fixed contract delivery failure first tries documented supplier stock, then records
-shortfall and contractual penalty. Never silently buy an unlimited replacement off-map.
+shortfall and contractual penalty. A contract ships from where the seller makes the good: when
+the seller holds none of it in the contract's origin state and runs no plant making it there
+(the plant was sold, closed or carved out), the origin moves to the state of its largest
+operating plant for the good, or failing that the state where it holds the most beyond its own
+input cover, and the buyer pays freight from there. Never silently buy an unlimited replacement off-map.
 Contract precedence is a deliberate priority paid for by commitment, not free extra supply.
 
 ## Labour clearing
@@ -159,7 +163,11 @@ product metadata allows it. No double counting of household demand.
 Retail, leases and electricity clear in each of the 31 economic regions. Goods sold between
 firms clear on one corridor commodity exchange per product: every buyer's need in any region
 meets every seller's stock in any region beyond that seller's own input cover, plus the import
-offer of the buyer's region. Each pairing is priced as delivered, the seller's asking price plus
+offer of the buyer's region. A firm never buys from itself, but its own stock beyond input cover
+in another state feeds its own plants first: the goods move at their carrying cost and the firm
+pays only the freight, so an integrated steelworks takes its furnace's pig iron instead of
+exporting it at the gateway bid and importing it at the ask. Speculative buying into held stock
+never moves own stock. Each pairing is priced as delivered, the seller's asking price plus
 freight over the lane. Pairings fill cheapest delivered first; buyers tied on one source at one
 price share it in proportion to what each still wants and can pay for; imports are the last
 resort at equal price. The seller receives its asking price and the buyer pays the freight.

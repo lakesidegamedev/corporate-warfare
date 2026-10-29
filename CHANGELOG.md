@@ -162,6 +162,16 @@ heading.
 
 ### Fixed
 
+- Pig iron pays again. The one integrated steel company that makes pig iron used to sell all of
+  it abroad at the cheap export price while its own steel mill in the next state bought the same
+  amount from abroad at the dear import price, and it lost money every quarter. A company now
+  ships its own stock to its own factories in other states, paying only the freight. Its pig iron
+  imports fell from about 80 loads a week to none, and it now earns a 2 to 5 percent margin.
+- A carved-out division takes its contracts with it. When a company split a steel works into a
+  subsidiary, the old company kept that works' steel sales contracts and paid a late-delivery
+  penalty on them every week. Sales and purchase contracts for what the division makes and uses
+  now move to the new company, and any contract whose seller no longer makes the good where the
+  contract says now ships from where it does.
 - Careers saved in 1.8 preview 1 and preview 2 load in this version and keep playing. The save
   format records its layout version, and an older save is converted on load, with the new market
   figures starting empty and filling in from the first week played. Saves written by this version

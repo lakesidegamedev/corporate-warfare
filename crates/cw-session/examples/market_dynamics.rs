@@ -7,7 +7,10 @@
 //! last thirteen weeks, split into established firms (an operating plant, founded over a year
 //! ago), entrants (an operating plant, younger) and shells (no operating plant). Freight is also
 //! read by lot-km: carrier fill is lot-km moved over lot-km of capacity, capacity weighted, and
-//! the outside share is the leg lots that overflowed to outside carriers.
+//! the outside share is the leg lots that overflowed to outside carriers. Established firms that
+//! run a plant making pig iron, freight, components, plastics, timber or fuel are also reported by
+//! year: losing share and net margin over their last thirteen weeks (a firm counts in each group
+//! it runs a plant in).
 //!
 //! cargo run --release -p cw-session --example market_dynamics -- [seeds] [weeks]
 use std::collections::BTreeMap;
@@ -38,6 +41,16 @@ fn main() {
     let mut freight = [0i64; 4];
     // year -> export value (numeraire cents), export lots, raids, successful raids, firm exits.
     let mut trade: BTreeMap<u32, [i64; 5]> = BTreeMap::new();
+    // (good, year) -> established firms counted, losing, revenue and net income over 13 weeks.
+    const GROUPS: [&str; 6] = [
+        "pig_iron",
+        "freight",
+        "components",
+        "plastics",
+        "timber",
+        "fuel",
+    ];
+    let mut groups: BTreeMap<(usize, u32), [i64; 4]> = BTreeMap::new();
     for seed in 1..=seeds {
         let config = cw_session::ScenarioConfig {
             seed,
@@ -97,6 +110,25 @@ fn main() {
                     let kind = cw_session::telemetry::firm_kind(world, firm);
                     kinds[kind].0 += (net < 0) as i64;
                     kinds[kind].1 += 1;
+                    if kind != 0 {
+                        continue;
+                    }
+                    let revenue: i64 = firm.book.recent_weeks().iter().map(|w| w.revenue).sum();
+                    for (index, good) in GROUPS.iter().enumerate() {
+                        let runs = firm.facilities.iter().any(|handle| {
+                            world.facilities.get(*handle).is_some_and(|plant| {
+                                plant.status == cw_sim::state::FacilityStatus::Operating
+                                    && dataset.recipes[plant.recipe as usize].output == *good
+                            })
+                        });
+                        if runs {
+                            let row = groups.entry((index, year)).or_default();
+                            row[0] += 1;
+                            row[1] += (net < 0) as i64;
+                            row[2] += revenue;
+                            row[3] += net;
+                        }
+                    }
                 }
                 let snapshot = session.market_snapshot();
                 for good in snapshot.goods.iter().filter(|g| g.sold_lots > 0) {
@@ -212,6 +244,24 @@ fn main() {
             cell(kinds[2]),
             (ask / goods.max(&1) - 10_000) / 100
         );
+    }
+    println!(
+        "by year: established firms running a plant of each good, losing of counted (quarterly \
+         snapshots) and net margin over their last 13 weeks"
+    );
+    for (index, good) in GROUPS.iter().enumerate() {
+        let cells: Vec<String> = (1..=weeks.div_ceil(52))
+            .filter_map(|year| groups.get(&(index, year)))
+            .map(|r| {
+                format!(
+                    "{}/{} {:+.1}%",
+                    r[1],
+                    r[0],
+                    r[3] as f64 * 100.0 / r[2].max(1) as f64
+                )
+            })
+            .collect();
+        println!("  {good:<12} {}", cells.join("  "));
     }
     println!(
         "by year: exports a week (value at the gateway bid in numeraire, lots), raids (successful), \
