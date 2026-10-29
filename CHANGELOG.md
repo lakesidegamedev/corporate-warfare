@@ -13,6 +13,18 @@ heading.
 
 ### Added
 
+- The weekly brief. At the top of the CEO Office, one panel says what changed this week (up to
+  three facts, biggest first: profit and cash, a price move on a good you sell, a rival raid on
+  you, a world event, a met board goal), what is due (decisions, the board's goal offer, loan
+  payments, takeover bids, with weeks left) and up to three suggested moves. Each move comes with
+  the game's own figures: build more where imports are filling demand you do not meet, with its
+  cost and payback; reserve a freight lane where outside carriers take a lot of your money; cut
+  or raise a price where stock piles up or sells out; match output to demand; pick a board goal;
+  raid a rival when the odds are good and you can afford it from what you earned. Review opens
+  the usual dialog already filled in, and nothing is sent until you confirm there. The panel
+  folds away and remembers it. On desktop, a new setting, Show the brief each week, opens it
+  when a week starts while time is paused or at normal speed. It is never read at faster speeds
+  more than once a week.
 - Letters from the people in your world. The Inbox is now correspondence. A rival chief writes
   after a raid on you or by you, and after a joint venture or a friendly deal. A bidder writes
   when they bid for your company. The central bank chair writes after a rate decision and gives
