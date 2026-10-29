@@ -10,6 +10,10 @@ struct DivisionDetailSheet: View {
     @State private var detail: DivisionDetailDto?
     @State private var posture: ProductLineDto?
     @State private var transfer: Double = 10_000
+    /// How much of the sheet is mounted. The sheet opens as a light shell (title and the money
+    /// lines) and the heavier sections mount one pass at a time, so no single pass holds the
+    /// main thread through the sheet's first presentation.
+    @State private var stage = 0
 
     private static let costNames = [
         "materials": "Materials", "wages": "Wages", "maintenance": "Maintenance",
@@ -23,17 +27,34 @@ struct DivisionDetailSheet: View {
     }
 
     var body: some View {
+        let _ = MainStalls.mark("sheet.body")
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                // Lazy, so opening the sheet lays out the sections on screen and not all seven,
+                // and the sections below the fold (and their engine reads) wait until scrolled to.
+                LazyVStack(alignment: .leading, spacing: 14) {
                     if let d = detail {
-                        financials(d)
-                        DivisionOpsSection(division: live)
-                        strategy(d)
-                        inputs(d)
-                        outputs(d)
-                        plants(d)
-                        labour(d)
+                        MainStalls.time("sheet.financials") { financials(d) }
+                        if stage >= 1 {
+                            DivisionOpsSection(division: live)
+                        } else {
+                            Color.clear.frame(height: 220)
+                        }
+                        if stage >= 2 {
+                            MainStalls.time("sheet.strategy") { strategy(d) }
+                        } else {
+                            Color.clear.frame(height: 420)
+                        }
+                        if stage >= 3 {
+                            MainStalls.time("sheet.rest") {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    inputs(d)
+                                    outputs(d)
+                                    plants(d)
+                                    labour(d)
+                                }
+                            }
+                        }
                     } else {
                         Text("Loading the division.").font(.callout).foregroundStyle(Theme.secondary)
                     }
@@ -45,9 +66,20 @@ struct DivisionDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
         }
+        .task {
+            // One short beat per stage lets the sheet finish presenting before the next mounts.
+            for next in 1...3 {
+                try? await Task.sleep(nanoseconds: 60_000_000)
+                MainStalls.mark("sheet.stage\(next)")
+                stage = next
+            }
+        }
         .task(id: reloadKey) {
-            detail = await store.divisionDetail(division)
-            if let d = detail { transfer = Double(d.transferBps) }
+            let fresh = await store.divisionDetail(division)
+            // An unchanged week must not rebuild the whole sheet.
+            guard fresh != detail else { return }
+            detail = fresh
+            if let d = fresh { transfer = Double(d.transferBps) }
         }
         .sheet(item: $posture) { line in
             PostureSheet(line: line)

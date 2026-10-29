@@ -153,12 +153,14 @@ final class MapGroundLockTests: XCTestCase {
             let north = CGVector(dx: p.north.dx, dy: p.north.dy)
             XCTAssertEqual(VoxelModels.heading(north, projection: p), .pi / 2, accuracy: 1e-9, "north is north at bearing \(bearing)")
         }
+        VoxelModels.loadNow()
         XCTAssertTrue(VoxelModels.has("manufacturing/1"), "the box models load")
         XCTAssertTrue(VoxelModels.has("truck/player"), "the vehicle models load")
     }
 
     /// The same building drawn at four bearings shows different sides: no two renders match.
     func testABuildingShowsItsSidesAsTheMapTurns() throws {
+        VoxelModels.loadNow()
         let size = CGSize(width: 160, height: 160)
         let map = WorldMap.shared
         var images: [[UInt8]] = []

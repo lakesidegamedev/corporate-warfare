@@ -22,55 +22,69 @@ enum VoxelModels {
         let boxes: [Box]
     }
 
-    private struct File: Decodable {
-        let models: [String: ModelFile]
+    static let ready = Notification.Name("VoxelModels.ready")
+    private static var loaded: [String: Model]?
+    private static var loading = false
+    private static let lock = NSLock()
+
+    /// The models, or nothing while they are read in the background: a building is drawn as a
+    /// plain box until they arrive, and the map redraws when they do. Cheap to call every frame.
+    static var models: [String: Model] {
+        lock.lock()
+        if let loaded {
+            lock.unlock()
+            return loaded
+        }
+        lock.unlock()
+        preload()
+        return [:]
     }
 
-    private struct ModelFile: Decodable {
-        let w: Double
-        let d: Double
-        let h: Double
-        let boxes: [[BoxValue]]
-    }
-
-    /// A box is six numbers and a colour in one array.
-    private enum BoxValue: Decodable {
-        case number(Double)
-        case text(String)
-
-        init(from decoder: Decoder) throws {
-            let value = try decoder.singleValueContainer()
-            if let number = try? value.decode(Double.self) {
-                self = .number(number)
-            } else {
-                self = .text(try value.decode(String.self))
-            }
+    /// Starts reading the models off the main thread, once. Called at launch so the first map
+    /// draw never waits for them.
+    static func preload() {
+        lock.lock()
+        if loaded != nil || loading {
+            lock.unlock()
+            return
         }
-
-        var number: Double {
-            if case let .number(n) = self { return n }
-            return 0
-        }
-
-        var text: String {
-            if case let .text(t) = self { return t }
-            return ""
+        loading = true
+        lock.unlock()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let models = read()
+            lock.lock()
+            loaded = models
+            loading = false
+            lock.unlock()
+            DispatchQueue.main.async { NotificationCenter.default.post(name: ready, object: nil) }
         }
     }
 
-    static let models: [String: Model] = {
+    /// Reads the models now, for tests.
+    static func loadNow() {
+        let models = read()
+        lock.lock()
+        loaded = models
+        lock.unlock()
+    }
+
+    /// The file is `{"models": {name: {w, d, h, boxes: [[x0, y0, z0, x1, y1, z1, "#rrggbb"]]}}}`.
+    private static func read() -> [String: Model] {
         guard let url = Bundle.main.url(forResource: "voxel-models", withExtension: "json"),
               let data = try? Data(contentsOf: url),
-              let file = try? JSONDecoder().decode(File.self, from: data) else { return [:] }
-        return file.models.mapValues { m in
-            Model(w: m.w, d: m.d, h: m.h, boxes: m.boxes.compactMap { b in
-                guard b.count >= 7 else { return nil }
-                let hex = UInt32(b[6].text.replacingOccurrences(of: "#", with: ""), radix: 16) ?? 0x808080
-                return Box(x0: b[0].number, y0: b[1].number, z0: b[2].number, x1: b[3].number, y1: b[4].number,
-                           z1: b[5].number, color: RGB(hex: hex))
-            })
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let files = root["models"] as? [String: [String: Any]] else { return [:] }
+        return files.mapValues { m in
+            let boxes = (m["boxes"] as? [[Any]] ?? []).compactMap { b -> Box? in
+                guard b.count >= 7, let hex = b[6] as? String else { return nil }
+                let n = b.prefix(6).map { ($0 as? NSNumber)?.doubleValue ?? 0 }
+                return Box(x0: n[0], y0: n[1], z0: n[2], x1: n[3], y1: n[4], z1: n[5],
+                           color: RGB(hex: UInt32(hex.replacingOccurrences(of: "#", with: ""), radix: 16) ?? 0x808080))
+            }
+            return Model(w: (m["w"] as? NSNumber)?.doubleValue ?? 0, d: (m["d"] as? NSNumber)?.doubleValue ?? 0,
+                         h: (m["h"] as? NSNumber)?.doubleValue ?? 0, boxes: boxes)
         }
-    }()
+    }
 
     static func has(_ name: String) -> Bool { models[name] != nil }
 

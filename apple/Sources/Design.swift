@@ -407,7 +407,9 @@ struct TabScreen<Trailing: View, Content: View>: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                // Lazy, so a tab builds the panels on screen when it opens and the ones below
+                // (with their engine reads) only as they are scrolled to.
+                LazyVStack(alignment: .leading, spacing: 12) {
                     ScreenHeader(title: title, subtitle: subtitle, trailing: trailing)
                     content()
                 }

@@ -422,6 +422,7 @@ final class MapGeometry {
         let look: MapLook
         let freight: Bool
         let displayScale: Double
+        let routes: Int
     }
 
     private var overlayKey: OverlayKey?
@@ -437,7 +438,7 @@ final class MapGeometry {
             hasher.combine(lane.outsideLots)
         }
         let key = OverlayKey(lanes: hasher.finalize(), divisions: divisions, selected: selected, heights: heights,
-                             look: look, freight: freightLayer, displayScale: displayScale)
+                             look: look, freight: freightLayer, displayScale: displayScale, routes: Routes.generation)
         if let overlayHeld, overlayKey == key { return overlayHeld }
         let p = projection
         let raised = look.raised(p.t)
@@ -481,12 +482,19 @@ final class MapGeometry {
         guard let first = busiest.first else { return [] }
         let top = Double(max(first.capacityLots + first.outsideLots, 1))
         let p = projection
-        return busiest.compactMap { lane -> LaneTrack? in
+        var missing: [Routes.Request] = []
+        let tracks = busiest.compactMap { lane -> LaneTrack? in
             guard let a = map.anchor(of: lane.a).flatMap({ p.ground(lon: $0.lon, lat: $0.lat) }),
                   let b = map.anchor(of: lane.b).flatMap({ p.ground(lon: $0.lon, lat: $0.lat) }) else { return nil }
             // Trucks and trains follow the real interstates and railways where there is a route.
+            // Routes are worked out in the background; a lane waits for its own.
+            let request = Routes.Request(mode: lane.modeId, a: lane.a, b: lane.b)
+            guard let known = Routes.cached(map, request), let water = LaneWater.cached(map, lane.a, lane.b) else {
+                missing.append(request)
+                return nil
+            }
             var points: [CGPoint]?
-            if let route = Routes.of(map, mode: lane.modeId, lane.a, lane.b) {
+            if let route = known {
                 let projected = route.compactMap { p.ground(lon: $0.lon, lat: $0.lat) }
                 if projected.count == route.count { points = projected }
             }
@@ -496,9 +504,11 @@ final class MapGeometry {
             }
             let track = LaneTrack(a: a, b: b, mode: lane.modeId, weight: Double(lane.capacityLots + lane.outsideLots) / top,
                                   length: max(length, 8), seed: Double(stableHash(lane.a + lane.b) % 1000) / 1000,
-                                  km: max(Double(lane.km), 20), mine: laneIsMine(lane), water: LaneWater.along(map, lane.a, lane.b))
+                                  km: max(Double(lane.km), 20), mine: laneIsMine(lane), water: water)
             return points.map { track.following($0) } ?? track
         }
+        if !missing.isEmpty { Routes.prewarm(map, missing) }
+        return tracks
     }
 }
 
@@ -523,12 +533,17 @@ enum LaneWater {
     private static var held: [String: [Bool]] = [:]
     private static let lock = NSLock()
 
+    /// The crossings if already worked out, without working them out.
+    static func cached(_ map: WorldMap, _ a: String, _ b: String) -> [Bool]? {
+        lock.lock()
+        defer { lock.unlock() }
+        return held["\(map.scenarioId ?? "")/\(a)>\(b)"]
+    }
+
     /// Whether each of `samples` points between two places is in a lake or outside every country.
     static func along(_ map: WorldMap, _ a: String, _ b: String) -> [Bool]? {
         let key = "\(map.scenarioId ?? "")/\(a)>\(b)"
-        lock.lock()
-        defer { lock.unlock() }
-        if let hit = held[key] { return hit }
+        if let hit = cached(map, a, b) { return hit }
         guard let from = map.anchor(of: a), let to = map.anchor(of: b) else { return nil }
         let lon0 = from.lon, lat0 = from.lat, lon1 = to.lon, lat1 = to.lat
         // Only the rings whose box the lane passes through.
@@ -552,7 +567,9 @@ enum LaneWater {
             let lat = lat0 + (lat1 - lat0) * t
             return lakes.contains { inside($0, lon, lat) } || !land.contains { inside($0, lon, lat) }
         }
+        lock.lock()
         held[key] = out
+        lock.unlock()
         return out
     }
 
@@ -1610,7 +1627,10 @@ struct WorldMapView: View {
                 }
                 if look.moves {
                     TimelineView(.animation(minimumInterval: interval, paused: !running || gameSpeed <= 0)) { timeline in
+                        // Redrawn when the lanes' routes arrive from the background.
+                        let ready = countrysideReady
                         Canvas { context, canvasSize in
+                            _ = ready
                             let now = MapClock.seconds(timeline.date)
                             let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
                             MainStalls.time("map.traffic") {
@@ -1777,6 +1797,8 @@ struct WorldMapView: View {
         // rival's last week and is the player's now.
         .onAppear { acquired = takeovers.update(plants, week: Int(week)) }
         .onReceive(NotificationCenter.default.publisher(for: Countryside.ready)) { _ in countrysideReady += 1 }
+        .onReceive(NotificationCenter.default.publisher(for: VoxelModels.ready)) { _ in countrysideReady += 1 }
+        .onReceive(NotificationCenter.default.publisher(for: Routes.ready)) { _ in countrysideReady += 1 }
         .onChange(of: plants) { _, new in acquired = takeovers.update(new, week: Int(week)) }
         .onChange(of: shading) { old, new in
             ease.retarget(from: old, to: new, now: MapClock.now, animate: animate && extrude)

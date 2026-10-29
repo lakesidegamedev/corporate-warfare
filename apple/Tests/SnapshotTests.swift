@@ -224,6 +224,7 @@ final class SnapshotTests: XCTestCase {
             framed.lon = home.lon * 180 / .pi
             framed.lat = home.lat * 180 / .pi
         }
+        VoxelModels.loadNow()
         Countryside.prepare(map)
         let now = Earth.week(of: store.overview?.weekLabel)
         // The bearings show the buildings' sides turning; the pan pair shows the roads staying on
