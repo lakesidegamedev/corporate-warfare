@@ -681,9 +681,14 @@ fn rate_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Lett
         };
         let mut fact = format!("The bank {verb} the policy rate, now {rate} percent");
         if decision.change_bps != 0 {
+            let dir = if decision.change_bps > 0 {
+                "up"
+            } else {
+                "down"
+            };
             fact.push_str(&format!(
-                ", a move of {} basis points",
-                decision.change_bps.abs()
+                ", {dir} {} of a point",
+                paper::percent(decision.change_bps.abs() as i64)
             ));
         }
         fact.push_str(&format!(
