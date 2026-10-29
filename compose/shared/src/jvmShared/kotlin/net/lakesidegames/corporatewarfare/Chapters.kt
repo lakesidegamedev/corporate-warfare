@@ -210,7 +210,7 @@ fun MandateStrip(store: GameStore, chapter: ChapterDto, mandate: MandateDto, mod
 private fun bonusText(chapter: ChapterDto): String {
     val rep = chapter.reputationBps / 100.0
     val repText = "%s%.1f reputation".format(if (rep >= 0) "+" else "", rep)
-    return if (chapter.bonusCents > 0) "Paid a bonus of ${Format.compact(chapter.bonusCents)} and $repText." else "Cost $repText."
+    return if (chapter.bonusCents > 0) "Paid a bonus of ${Format.compact(chapter.bonusCents)} and $repText." else "Cost %.1f reputation.".format(kotlin.math.abs(rep))
 }
 
 /** Shown once when a chapter closes with a goal met or missed. */
@@ -375,7 +375,7 @@ fun HallScreen(store: GameStore, settings: AppSettings? = LocalAppSettings.curre
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { ScreenHeader("Hall of Careers", hall?.let { "${it.weeks / 52u} years in" }) }
+        item { ScreenHeader("Hall of Careers", hall?.let { h -> (h.weeks / 52u).let { if (it == 1u) "1 year in" else "$it years in" } }) }
         if (hall == null) {
             item { Callout("The record opens once the career is running.", Palette.secondary) }
             return@LazyColumn

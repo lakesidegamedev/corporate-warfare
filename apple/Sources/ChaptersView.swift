@@ -36,7 +36,7 @@ struct PixelBar: View {
 private func bonusText(_ chapter: ChapterDto) -> String {
     let rep = Double(chapter.reputationBps) / 100
     let repText = String(format: "%@%.1f reputation", rep >= 0 ? "+" : "", rep)
-    return chapter.bonusCents > 0 ? "Paid a bonus of \(Format.moneyCompact(chapter.bonusCents)) and \(repText)." : "Cost \(repText)."
+    return chapter.bonusCents > 0 ? "Paid a bonus of \(Format.moneyCompact(chapter.bonusCents)) and \(repText)." : String(format: "Cost %.1f reputation.", abs(rep))
 }
 
 /// The board's offer: the chapter, the goals, and a Choose button on each. Not a pause.
