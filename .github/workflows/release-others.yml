@@ -38,9 +38,12 @@ jobs:
         run: |
           test -n "$KEYSTORE_B64" || { echo "blocked: Android signing secrets missing" >&2; exit 2; }
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
-          CW_ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/upload.jks" ./gradlew --no-daemon :androidApp:bundleRelease :androidApp:assembleRelease
+          CW_ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/upload.jks" ./gradlew --no-daemon :androidApp:bundleRelease
+          # AGP cannot build per-ABI APKs and a bundle in one run, so the APKs are a second run.
+          CW_ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/upload.jks" ./gradlew --no-daemon :androidApp:assembleRelease -Pcw.splitAbi=true
           aab=androidApp/build/outputs/bundle/release/androidApp-release.aab
-          apk=androidApp/build/outputs/apk/release/androidApp-release.apk
+          # The direct download is arm64-v8a only; emulators use the x86_64 APK from the CI artifacts.
+          apk=androidApp/build/outputs/apk/release/androidApp-arm64-v8a-release.apk
           # Play only accepts an App Bundle; the APK stays for direct downloads.
           jarsigner -verify "$aab" | grep -q "jar verified"
           unzip -l "$aab" | grep -q "base/manifest/AndroidManifest.xml"
