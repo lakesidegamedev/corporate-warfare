@@ -43,6 +43,9 @@ val Resolutions = listOf(1280 to 720, 1366 to 768, 1600 to 900, 1920 to 1080, 25
  * Player settings that live outside any career, saved to a small file beside the saves. Desktop
  * builds also read the window settings here.
  */
+/** Window pixels above which a first start suggests Medium: 2.5 million, a little over 1920 by 1200. */
+internal const val SUGGEST_MEDIUM_ABOVE = 2_500_000L
+
 class AppSettings(private val file: File) {
     private val props = Properties().apply { if (file.exists()) file.inputStream().use { load(it) } }
 
@@ -51,6 +54,9 @@ class AppSettings(private val file: File) {
      * animations and takes High for the rest.
      */
     var graphics by mutableStateOf(loadGraphics()); private set
+
+    /** True once the player (or an older version of the game) has saved a graphics choice; a suggested preset is never saved. */
+    private var graphicsChosen = props.getProperty("preset") != null || props.getProperty("mapDetail") != null
     val mapDetail: MapDetail get() = graphics.detail
     val animations: Boolean get() = graphics.animations
     var autoUpdate by mutableStateOf(props.getProperty("autoUpdate")?.toBoolean() ?: true); private set
@@ -74,7 +80,18 @@ class AppSettings(private val file: File) {
     val installId: String = props.getProperty("installId")?.takeIf { it.length == 36 }
         ?: java.util.UUID.randomUUID().toString().also { props.setProperty("installId", it); store() }
 
-    fun chooseGraphics(value: GraphicsConfig) { graphics = value; store() }
+    fun chooseGraphics(value: GraphicsConfig) { graphics = value; graphicsChosen = true; store() }
+
+    /**
+     * On a first start with no graphics choice saved, a big window or software drawing starts at Medium instead of High,
+     * so the first look is smooth. Judged from the window's pixels, not a benchmark. Never replaces a saved choice and is
+     * not saved itself, so it is judged again at the next start until the player picks a preset. Returns whether it applied.
+     */
+    fun suggestGraphics(windowPixels: Long, software: Boolean): Boolean {
+        if (graphicsChosen || !(software || windowPixels > SUGGEST_MEDIUM_ABOVE)) return false
+        graphics = GraphicsPreset.Medium.config(graphics.animations, graphics.showFps)
+        return true
+    }
     fun choosePreset(preset: GraphicsPreset) = chooseGraphics(preset.config(graphics.animations, graphics.showFps))
     fun chooseAutoUpdate(value: Boolean) { autoUpdate = value; store() }
     fun chooseUpdateChannel(value: UpdateChannel) { updateChannel = value; store() }
@@ -87,7 +104,7 @@ class AppSettings(private val file: File) {
     fun chooseResolution(value: Pair<Int, Int>) { resolution = value; store() }
 
     private fun store() {
-        graphics.let { g ->
+        if (graphicsChosen) graphics.let { g ->
             props.setProperty("mapDetail", g.detail.name)
             props.setProperty("animations", g.animations.toString())
             props.setProperty("preset", g.preset?.name?.lowercase() ?: "custom")

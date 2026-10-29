@@ -142,12 +142,16 @@ internal class CloudMask(image: ImageBitmap) {
 internal fun cloudStrength(amount: Int): Float = when (amount) { 1 -> 0.4f; 2 -> 0.72f; else -> 1f }
 
 internal object Weather {
-    private val mesh = Mesh()
+    // Clouds draw on a bake thread and, before the first bake lands, on the UI thread: a scratch mesh each.
+    private val meshes = ThreadLocal.withInitial { Mesh() }
+    private val mesh: Mesh get() = meshes.get()
     private val masks = HashMap<ImageBitmap, CloudMask>()
 
+    @Synchronized
     private fun mask(image: ImageBitmap) = masks.getOrPut(image) { CloudMask(image) }
     private val paints = HashMap<ImageBitmap, Paint>()
 
+    @Synchronized
     private fun paint(image: ImageBitmap, repeatX: Boolean): Paint = paints.getOrPut(image) {
         Paint().apply {
             shader = MeshCanvas.shader?.invoke(image, repeatX)

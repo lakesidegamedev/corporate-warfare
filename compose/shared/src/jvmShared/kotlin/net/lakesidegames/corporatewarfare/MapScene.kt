@@ -107,6 +107,7 @@ internal object Sprites {
     private val filters = HashMap<Color, ColorFilter>()
 
     /** A cached tint so a frame allocates nothing. */
+    @Synchronized
     fun tint(color: Color): ColorFilter = filters.getOrPut(color) { ColorFilter.tint(color, BlendMode.Modulate) }
 }
 

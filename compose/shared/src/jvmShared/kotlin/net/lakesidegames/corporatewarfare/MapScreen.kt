@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -201,6 +202,9 @@ fun WorldMapView(
         }
     }
     val geometry = remember(map) { MapGeometryCache() }
+    val groundLayer = remember { AsyncLayer(scope) }
+    val cloudLayer = remember { AsyncLayer(scope) }
+    DisposableEffect(groundLayer, cloudLayer) { onDispose { groundLayer.close(); cloudLayer.close() } }
     val shaded = remember(layer, store.boards, store.mapDivisions) { shading(store, layer) }
     val heights = animatedHeights(if (layer == MapLayer.Freight) emptyMap() else shaded, graphics.animations)
     val clock = rememberFrameSeconds(graphics.moves || graphics.showFps, graphics.frameRate)
@@ -304,12 +308,24 @@ fun WorldMapView(
                         )
                     },
             ) {
-                drawWorldMap(
-                    map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shaded, selected, store.mapDivisions, measurer,
-                    lanes = store.lanes, freightLayer = layer == MapLayer.Freight, pickedLane = pickedLane,
-                    geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Ground,
-                    week = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28,
-                )
+                val cam = camera ?: MapCamera.scenario(size, map)
+                val tint = layerTint(layer)
+                val lanes = store.lanes
+                val freight = layer == MapLayer.Freight
+                val week = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28
+                val paintGround: DrawScope.(MapGeometryCache) -> Unit = { geo ->
+                    drawWorldMap(
+                        map, cam, tint, shaded, selected, store.mapDivisions, measurer, lanes = lanes, freightLayer = freight, pickedLane = pickedLane,
+                        geometry = geo, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Ground, week = week,
+                    )
+                }
+                // The ground is baked off the UI thread; the sun and the week change it slowly, so those wait out a gap.
+                if (MapBake.enabled) {
+                    groundLayer.draw(
+                        this, cam, pitch, listOf(tint, shaded, selected, lanes, freight, pickedLane, graphics.copy(showFps = false), sun, heights, week),
+                        minGapMs = 400, fill = Color(0xFF05090E), bake = paintGround, direct = { paintGround(geometry) },
+                    )
+                } else paintGround(geometry)
             }
             // Layers, bottom to top: the ground, traffic on it, clouds, buildings and labels, then
             // effects. Traffic runs under the buildings; buildings stand clear of the clouds.
@@ -331,10 +347,18 @@ fun WorldMapView(
                 Canvas(Modifier.fillMaxSize().graphicsLayer()) {
                     val seconds = cloudTick
                     val cam = camera ?: MapCamera.scenario(size, map)
-                    val g = geometry.of(map, cam, size, graphics.detail, pitch)
-                    with(Weather) {
-                        drawWeather(g.p, sun ?: Sun.fixed(g.p), seconds, graphics.clouds, map.playBounds, 46.0 * g.scale * g.p.t, cam.zoom, graphics.lighting > 0, map.scenarioId)
+                    val paintClouds: DrawScope.(MapGeometryCache) -> Unit = { geo ->
+                        val g = geo.of(map, cam, size, graphics.detail, pitch)
+                        with(Weather) {
+                            drawWeather(g.p, sun ?: Sun.fixed(g.p), seconds, graphics.clouds, map.playBounds, 46.0 * g.scale * g.p.t, cam.zoom, graphics.lighting > 0, map.scenarioId)
+                        }
                     }
+                    if (MapBake.enabled) {
+                        cloudLayer.draw(
+                            this, cam, pitch, listOf(seconds, graphics.clouds, graphics.lighting > 0, sun),
+                            minGapMs = 500, fill = null, bake = paintClouds, direct = { paintClouds(geometry) },
+                        )
+                    } else paintClouds(geometry)
                 }
             }
             Canvas(Modifier.fillMaxSize().graphicsLayer()) {
@@ -583,6 +607,27 @@ internal fun DrawScope.drawWorldMap(
             drawPath(g.lakes, water)
         }
         MapProfiler.mark("regions")
+        // Railways and interstates. Each raised tile carries the roads that cross it at its own height; flat, they share one offset.
+        val roadLayer: DrawScope.() -> Unit = {
+            // The real railways once close, so trains have track to run on: rails over dark
+            // sleepers cut on the ground.
+            if (g.closeUp && t > 0.5 && graphics.traffic > 0) {
+                drawPath(g.sleepers, Color(0xFF3A3028).copy(alpha = 0.9f), style = Stroke(3f, cap = StrokeCap.Butt))
+                drawPath(g.railroads, Color(0xFF9AA1A8).copy(alpha = 0.85f), style = Stroke(1f))
+        }
+        // Interstates over the regions and their shading, under the traffic and the buildings:
+        // an 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line
+        // whose dashes are cut on the ground: a screen dash pattern crawled as the camera moved.
+        val highways = if (detailLevel == MapDetail.Low) 0f else smoothstep(0.85, 1.2, g.zoomRatio).toFloat()
+        if (graphics.interstates && highways > 0f && t > 0.5) {
+            val wide = (1.6f + 1.2f * g.scale.coerceAtMost(2.5f))
+            drawPath(g.interstates, Color(0xFF1C2228).copy(alpha = 0.9f * highways), style = Stroke(wide + 2f, cap = StrokeCap.Square))
+            drawPath(g.interstates, Color(0xFF6E757D).copy(alpha = highways), style = Stroke(wide, cap = StrokeCap.Square))
+            if (g.closeUp) {
+                drawPath(g.centreLines, Palette.gold.copy(alpha = 0.85f * highways), style = Stroke(1f, cap = StrokeCap.Butt))
+            }
+        }
+        }
         translate(top = up) {
             if (detail > 0) {
                 drawPath(g.rivers, water.copy(alpha = 0.9f * detail), style = Stroke(1.4f))
@@ -598,23 +643,13 @@ internal fun DrawScope.drawWorldMap(
                 if (lit && t > 0.5) drawPath(it, Color(0xFF8EC5FF).copy(alpha = 0.10f), style = Stroke(4f))
                 drawPath(it, Color(0xFFD2DEEA).copy(alpha = 0.85f), style = Stroke(if (cam.zoom > 3) 2f else 1f))
             }
-            // The real railways once close, so trains have track to run on: rails over dark
-            // sleepers cut on the ground.
-            if (g.closeUp && t > 0.5 && graphics.traffic > 0) {
-                drawPath(g.sleepers, Color(0xFF3A3028).copy(alpha = 0.9f), style = Stroke(3f, cap = StrokeCap.Butt))
-                drawPath(g.railroads, Color(0xFF9AA1A8).copy(alpha = 0.85f), style = Stroke(1f))
-            }
-            // Interstates over the regions and their shading, under the traffic and the buildings:
-            // an 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line
-            // whose dashes are cut on the ground: a screen dash pattern crawled as the camera moved.
-            val highways = if (detailLevel == MapDetail.Low) 0f else smoothstep(0.85, 1.2, g.zoomRatio).toFloat()
-            if (graphics.interstates && highways > 0f && t > 0.5) {
-                val wide = (1.6f + 1.2f * g.scale.coerceAtMost(2.5f))
-                drawPath(g.interstates, Color(0xFF1C2228).copy(alpha = 0.9f * highways), style = Stroke(wide + 2f, cap = StrokeCap.Square))
-                drawPath(g.interstates, Color(0xFF6E757D).copy(alpha = highways), style = Stroke(wide, cap = StrokeCap.Square))
-                if (g.closeUp) {
-                    drawPath(g.centreLines, Palette.gold.copy(alpha = 0.85f * highways), style = Stroke(1f, cap = StrokeCap.Butt))
-                }
+            if (!raised) roadLayer()
+        }
+        if (raised) {
+            val view = Rect(Offset.Zero, size)
+            g.raised(heights).forEach { solid ->
+                if (!solid.bounds.overlaps(view)) return@forEach
+                clipPath(solid.top) { translate(top = -solid.lift.toFloat()) { roadLayer() } }
             }
         }
         // Night falls on the globe whenever it is lit, and on the flat map with day and night on.
