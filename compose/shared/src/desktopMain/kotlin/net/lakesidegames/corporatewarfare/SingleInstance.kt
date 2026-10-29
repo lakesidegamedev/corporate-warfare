@@ -1,5 +1,9 @@
 package net.lakesidegames.corporatewarfare
 
+import com.sun.jna.Library
+import com.sun.jna.Native
+import com.sun.jna.Pointer
+import com.sun.jna.WString
 import java.io.File
 import java.io.RandomAccessFile
 import java.net.InetAddress
@@ -77,8 +81,24 @@ class SingleInstance private constructor(
                 portFile.delete()
                 temp.renameTo(portFile)
             }
+            holdMutex()
             Thread({ listen(server, token, onActivate) }, "single-instance").apply { isDaemon = true }.start()
             return Start.First(SingleInstance(channel, lock, server))
+        }
+
+        /** The Windows API call that creates (or opens) a named mutex. */
+        interface Kernel32 : Library {
+            fun CreateMutexW(attributes: Pointer?, initialOwner: Boolean, name: WString): Pointer?
+        }
+
+        /** The mutex handle, kept for the life of the process: Windows frees it when the game ends, even on a crash. */
+        @Volatile
+        private var mutex: Pointer? = null
+
+        private fun holdMutex() {
+            if (!System.getProperty("os.name").lowercase().contains("win")) return
+            mutex = runCatching { Native.load("kernel32", Kernel32::class.java).CreateMutexW(null, false, WString(WindowsInstall.MUTEX)) }
+                .getOrNull()
         }
 
         private fun listen(server: ServerSocket, token: String, onActivate: () -> Unit) {

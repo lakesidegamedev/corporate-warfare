@@ -175,3 +175,28 @@ tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageT
         check(code == 0) { "jpackage with packaging/windows/main.wxs failed with exit code $code; arguments:\n${args.readText()}" }
     }
 }
+
+// The branded Windows setup program (packaging/windows/setup.iss, Inno Setup 6) wraps the same
+// app image Compose builds for the MSI. `:shared:packageWindowsSetup` builds the image, then the
+// setup program, into build/compose/binaries/main/setup/CorporateWarfare-<version>-setup.exe.
+// Windows only; CI installs Inno Setup when the runner lacks it.
+val windowsHost = System.getProperty("os.name").lowercase().contains("win")
+tasks.register<Exec>("packageWindowsSetup") {
+    group = "distribution"
+    description = "Builds CorporateWarfare-<version>-setup.exe with Inno Setup (Windows only)."
+    dependsOn("createDistributable")
+    onlyIf { windowsHost }
+    val packaging = project.file("packaging/windows")
+    val image = layout.buildDirectory.dir("compose/binaries/main/app/Corporate Warfare")
+    val out = layout.buildDirectory.dir("compose/binaries/main/setup")
+    inputs.dir(packaging)
+    inputs.dir(image)
+    outputs.dir(out)
+    commandLine(
+        "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", File(packaging, "build-setup.ps1").path,
+        "-DisplayVersion", displayVersion,
+        "-NumericVersion", installerVersion,
+        "-AppImage", image.get().asFile.path,
+        "-OutDir", out.get().asFile.path,
+    )
+}

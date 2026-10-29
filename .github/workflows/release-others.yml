@@ -87,6 +87,19 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+      # The branded setup program, attached beside the MSI for this release cycle. Players on 1.8
+      # still update through the MSI; the updater prefers the setup program when a release has both.
+      - name: Setup program (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        working-directory: compose
+        run: ./gradlew --no-daemon :shared:packageWindowsSetup
+        shell: bash
+      - name: Attach the setup program (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: gh release upload "$TAG" compose/shared/build/compose/binaries/main/setup/*-setup.exe --clobber
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   mac:
     if: ${{ !github.event.release.prerelease }}

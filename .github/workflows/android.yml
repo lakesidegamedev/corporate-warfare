@@ -1,10 +1,10 @@
 name: Android and desktop
 on:
   pull_request:
-    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
+    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "tools/installer_art.py", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
   push:
     branches: [main]
-    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
+    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "tools/installer_art.py", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -72,4 +72,23 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.path }}
+          retention-days: 14
+      - name: Setup program (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        working-directory: compose
+        run: ./gradlew --no-daemon :shared:packageWindowsSetup
+        shell: bash
+      - name: Setup program install, downgrade and uninstall check (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem compose/shared/build/compose/binaries/main/setup -Filter '*-setup.exe').FullName
+          ./compose/shared/packaging/windows/test-setup.ps1 -Setup $setup `
+            -AppImage "$PWD/compose/shared/build/compose/binaries/main/app/Corporate Warfare" `
+            -Work "$env:RUNNER_TEMP/cw-setup-test"
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.os == 'windows-latest' }}
+        with:
+          name: corporate-warfare-windows-setup
+          path: compose/shared/build/compose/binaries/main/setup/*-setup.exe
           retention-days: 14
