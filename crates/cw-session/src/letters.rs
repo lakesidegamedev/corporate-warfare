@@ -906,7 +906,14 @@ const ANALYST_FIRST: [&str; 8] = [
     "Marion", "Teodor", "Priya", "Gideon", "Lucia", "Anders", "Naomi", "Calvin",
 ];
 const ANALYST_LAST: [&str; 8] = [
-    "Whitlock", "Okafor", "Brandt", "Castellanos", "Hargrove", "Lindqvist", "Mbeki", "Rourke",
+    "Whitlock",
+    "Okafor",
+    "Brandt",
+    "Castellanos",
+    "Hargrove",
+    "Lindqvist",
+    "Mbeki",
+    "Rourke",
 ];
 
 /// The scenario's equity analyst, the same person all career: generated from the world seed.
@@ -971,7 +978,12 @@ fn earnings_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<
         ));
     }
     // After: what happened.
-    for r in world.earnings.log.iter().filter(|r| r.firm == handle && r.week >= since) {
+    for r in world
+        .earnings
+        .log
+        .iter()
+        .filter(|r| r.firm == handle && r.week >= since)
+    {
         let beat = r.actual_cents >= r.estimate_cents;
         let mut facts = vec![format!(
             "{} reported {} in operating profit, {} our {}. The shares {} {} percent.",

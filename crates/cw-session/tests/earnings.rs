@@ -242,7 +242,11 @@ fn guidance_is_validated_pulls_the_estimate_and_is_given_once() {
         let issued = f.shares.issued;
         let held = f.shares.qty(cw_sim::state::HolderId::Investor);
         let sold = (issued / 10).min(held / 2).max(1);
-        f.shares.holders.get_mut(&cw_sim::state::HolderId::Investor).unwrap().qty -= sold;
+        f.shares
+            .holders
+            .get_mut(&cw_sim::state::HolderId::Investor)
+            .unwrap()
+            .qty -= sold;
         f.shares.holders.insert(
             cw_sim::state::HolderId::Outside(0),
             cw_sim::state::ShareLot {
@@ -276,7 +280,13 @@ fn guidance_is_validated_pulls_the_estimate_and_is_given_once() {
     assert!(e.cents > raw && e.cents <= raw + scale * 15 / 100);
     // Only one range a quarter.
     assert!(give(&mut s, firm, low, high, 5).is_err());
-    assert!(s.world.earnings.firms[&firm].guidance.as_ref().unwrap().honest);
+    assert!(
+        s.world.earnings.firms[&firm]
+            .guidance
+            .as_ref()
+            .unwrap()
+            .honest
+    );
 }
 
 #[test]
@@ -310,7 +320,15 @@ fn meeting_guidance_builds_credibility_and_missing_it_costs_standing() {
     setup(&mut missed, a + SCALE / 10, a + SCALE / 5);
     {
         // Park the scale at SCALE for the oracle.
-        missed.earnings.firms.get_mut(&firm).unwrap().estimate.as_mut().unwrap().scale_cents = SCALE;
+        missed
+            .earnings
+            .firms
+            .get_mut(&firm)
+            .unwrap()
+            .estimate
+            .as_mut()
+            .unwrap()
+            .scale_cents = SCALE;
     }
     earnings::weekly(&mut missed, &s.dataset);
     let fe = &missed.earnings.firms[&firm];
@@ -327,7 +345,15 @@ fn meeting_guidance_builds_credibility_and_missing_it_costs_standing() {
     // An unhonest (sandbagged) range that is met earns nothing.
     let mut sandbag = s.world.clone();
     setup(&mut sandbag, a - 1_000, a + 1_000);
-    sandbag.earnings.firms.get_mut(&firm).unwrap().guidance.as_mut().unwrap().honest = false;
+    sandbag
+        .earnings
+        .firms
+        .get_mut(&firm)
+        .unwrap()
+        .guidance
+        .as_mut()
+        .unwrap()
+        .honest = false;
     earnings::weekly(&mut sandbag, &s.dataset);
     assert_eq!(sandbag.earnings.firms[&firm].credibility_bps, 3_000);
     s.world.tick = Tick(26);
@@ -442,7 +468,11 @@ fn the_state_survives_a_save_and_moves_the_hash() {
         w.earnings = Default::default();
         cw_sim::state::canonical_hash(&w)
     };
-    assert_ne!(empty_hash, s.canonical_hash(), "earnings state is in the hash");
+    assert_ne!(
+        empty_hash,
+        s.canonical_hash(),
+        "earnings state is in the hash"
+    );
     let bytes = s.export_save().unwrap();
     let back = Session::import_save(&bytes).unwrap();
     assert_eq!(back.world.earnings, s.world.earnings);
@@ -463,7 +493,12 @@ fn the_paper_the_letters_and_the_brief_read_the_season() {
     let paper = cw_session::paper::weekly_paper(&s.world, &s.dataset, 39);
     let all: Vec<_> = paper.lead.iter().chain(paper.briefs.iter()).collect();
     let _ = firm;
-    let on_results_week = s.world.earnings.log.iter().any(|r| r.week == 39 && r.move_bps != 0);
+    let on_results_week = s
+        .world
+        .earnings
+        .log
+        .iter()
+        .any(|r| r.week == 39 && r.move_bps != 0);
     if on_results_week {
         assert!(
             all.iter().any(|st| st.id.starts_with("earnings:")),

@@ -14,7 +14,8 @@ fn main() {
     let scenario_id = args.next().unwrap_or_default();
     // year -> index sum over seeds (in basis points of the start), count
     let mut years: BTreeMap<u32, (i128, i64)> = BTreeMap::new();
-    let (mut worst_index, mut worst_share, mut big_weeks, mut share_weeks) = (0i64, 0i64, 0i64, 0i64);
+    let (mut worst_index, mut worst_share, mut big_weeks, mut share_weeks) =
+        (0i64, 0i64, 0i64, 0i64);
     let (mut low, mut high) = (i64::MAX, i64::MIN);
     let (mut losing, mut counted) = (0i64, 0i64);
     for seed in 1..=seeds {
@@ -85,7 +86,11 @@ fn main() {
     }
     println!(
         "scenario {} seeds {seeds} weeks {weeks}",
-        if scenario_id.is_empty() { "default" } else { &scenario_id }
+        if scenario_id.is_empty() {
+            "default"
+        } else {
+            &scenario_id
+        }
     );
     let path: Vec<String> = years
         .iter()

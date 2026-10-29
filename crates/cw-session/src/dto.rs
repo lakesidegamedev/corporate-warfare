@@ -1059,13 +1059,17 @@ pub fn earnings_line(world: &World, handle: cw_core::ids::Handle) -> EarningsLin
     }
     let tick = world.tick.0;
     let fe = world.earnings.firms.get(&handle);
-    let estimate = fe.and_then(|f| f.estimate.as_ref()).filter(|x| x.due >= tick);
+    let estimate = fe
+        .and_then(|f| f.estimate.as_ref())
+        .filter(|x| x.due >= tick);
     let guidance = fe.and_then(|f| f.guidance.as_ref());
     let last = fe.and_then(|f| f.last.as_ref());
     let weeks = estimate.map(|x| x.due - tick).unwrap_or(0);
     EarningsLine {
         covered: true,
-        rating: e::rating_for(firm.shares.fair_cents, firm.shares.mark_cents).key().to_owned(),
+        rating: e::rating_for(firm.shares.fair_cents, firm.shares.mark_cents)
+            .key()
+            .to_owned(),
         has_estimate: estimate.is_some(),
         estimate_cents: estimate.map(|x| x.cents).unwrap_or(0),
         weeks_to_results: weeks,

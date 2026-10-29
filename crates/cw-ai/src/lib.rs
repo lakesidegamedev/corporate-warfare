@@ -69,7 +69,9 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
             });
         }
         // Management guidance, through the same command and checks as the player's.
-        if let Some((low_cents, high_cents)) = cw_sim::economy::earnings::rival_guidance(world, handle) {
+        if let Some((low_cents, high_cents)) =
+            cw_sim::economy::earnings::rival_guidance(world, handle)
+        {
             proposals.push(Proposal {
                 actor: handle.0,
                 intent: CommandIntent::GiveGuidance {

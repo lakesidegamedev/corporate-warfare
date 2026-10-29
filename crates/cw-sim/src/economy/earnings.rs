@@ -258,7 +258,11 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
     if tick == 0 || tick % QUARTER != 0 {
         return;
     }
-    let covered_firms: Vec<Handle> = alive.iter().copied().filter(|h| covered(world, *h)).collect();
+    let covered_firms: Vec<Handle> = alive
+        .iter()
+        .copied()
+        .filter(|h| covered(world, *h))
+        .collect();
     // Close the quarter for every covered firm, in handle order.
     let mut actuals: BTreeMap<Handle, i64> = BTreeMap::new();
     for firm in &covered_firms {
@@ -290,10 +294,14 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
 /// Results day for one firm: set the actual against the estimate and move the mark.
 fn report(world: &mut World, firm: Handle, actual: i64) {
     let tick = world.tick.0;
-    let fe = world.earnings.firms.entry(firm).or_insert_with(|| FirmEarnings {
-        credibility_bps: CREDIBILITY_START_BPS,
-        ..FirmEarnings::default()
-    });
+    let fe = world
+        .earnings
+        .firms
+        .entry(firm)
+        .or_insert_with(|| FirmEarnings {
+            credibility_bps: CREDIBILITY_START_BPS,
+            ..FirmEarnings::default()
+        });
     fe.quarters.push(actual);
     if fe.quarters.len() > QUARTERS_KEPT {
         fe.quarters.remove(0);
@@ -306,7 +314,8 @@ fn report(world: &mut World, firm: Handle, actual: i64) {
         }
     };
     let guidance = fe.guidance.take().filter(|g| g.due == tick);
-    let rel = ((actual as i128 - estimate.cents as i128) * 10_000 / estimate.scale_cents.max(1) as i128)
+    let rel = ((actual as i128 - estimate.cents as i128) * 10_000
+        / estimate.scale_cents.max(1) as i128)
         .clamp(-10_000, 10_000) as i64;
     // Streak of the same surprise.
     let old_streak = fe.streak;
@@ -318,13 +327,18 @@ fn report(world: &mut World, firm: Handle, actual: i64) {
         0
     };
     let same_direction = (rel > 0 && old_streak > 0) || (rel < 0 && old_streak < 0);
-    let run = if same_direction { old_streak.abs().min(STREAK_MAX) as i64 } else { 0 };
+    let run = if same_direction {
+        old_streak.abs().min(STREAK_MAX) as i64
+    } else {
+        0
+    };
     let mut weight = 10_000 + run * STREAK_STEP_BPS;
     if rel < 0 {
         let damp = fe.credibility_bps as i64 * MISS_DAMP_AT_FULL_BPS / 10_000;
         weight = weight * (10_000 - damp) / 10_000;
     }
-    let mv = (rel * MOVE_PER_FULL_SURPRISE_PCT / 100 * weight / 10_000).clamp(-MOVE_CAP_BPS, MOVE_CAP_BPS);
+    let mv = (rel * MOVE_PER_FULL_SURPRISE_PCT / 100 * weight / 10_000)
+        .clamp(-MOVE_CAP_BPS, MOVE_CAP_BPS);
 
     // Guidance outcome.
     let mut guidance_met = None;
@@ -394,13 +408,16 @@ fn sector_trends(world: &World, firms: &[Handle]) -> BTreeMap<u8, i64> {
         }
         let (last, prev) = (fe.quarters[n - 1], fe.quarters[n - 2]);
         let scale = scale_of(world, *firm, prev);
-        let change = ((last as i128 - prev as i128) * 10_000 / scale as i128).clamp(-3_000, 3_000) as i64;
+        let change =
+            ((last as i128 - prev as i128) * 10_000 / scale as i128).clamp(-3_000, 3_000) as i64;
         let industry = world.firms.get(*firm).map(|f| f.industry).unwrap_or(0);
         let e = sums.entry(industry).or_default();
         e.0 += change;
         e.1 += 1;
     }
-    sums.into_iter().map(|(k, (s, n))| (k, s / n.max(1))).collect()
+    sums.into_iter()
+        .map(|(k, (s, n))| (k, s / n.max(1)))
+        .collect()
 }
 
 /// Write the analyst's estimate for the quarter that starts now.
@@ -423,7 +440,11 @@ fn estimate(world: &mut World, _dataset: &Dataset, firm: Handle, sector: &BTreeM
     let industry = world.firms.get(firm).map(|f| f.industry).unwrap_or(0);
     let sector_bps = sector.get(&industry).copied().unwrap_or(0) / 4;
     let sector_part = (scale as i128 * sector_bps.clamp(-1_000, 1_000) as i128 / 10_000) as i64;
-    let mut rng = Rng::entity_stream(world.seed, TAG_EARNINGS, Handle(firm.0 ^ ((tick as u64) << 40)));
+    let mut rng = Rng::entity_stream(
+        world.seed,
+        TAG_EARNINGS,
+        Handle(firm.0 ^ ((tick as u64) << 40)),
+    );
     let noise = rng.uniform_inclusive(-NOISE_BPS, NOISE_BPS);
     let noise_part = (scale as i128 * noise as i128 / 10_000) as i64;
     let raw = last + trend + sector_part + noise_part;
@@ -474,7 +495,9 @@ pub fn give_guidance(world: &mut World, firm: Handle, low: i64, high: i64) -> Do
                 actual: "guidance already given",
             });
         }
-        credibility = fe.map(|f| f.credibility_bps).unwrap_or(CREDIBILITY_START_BPS);
+        credibility = fe
+            .map(|f| f.credibility_bps)
+            .unwrap_or(CREDIBILITY_START_BPS);
         (est.raw_cents, est.scale_cents, est.due)
     };
     let limit = scale * RANGE_LIMIT_BPS / 10_000;
