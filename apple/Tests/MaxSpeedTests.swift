@@ -30,14 +30,26 @@ final class MaxSpeedTests: XCTestCase {
         store.setSpeed(4)
         XCTAssertEqual(store.runSpeed, 4)
 
+        MainStalls.reset()
+        MainStalls.enabled = true
+        defer { MainStalls.enabled = false }
         var worstStall = 0.0
+        var phase = "start"
+        var worstByPhase: [String: Double] = [:]
+        var stalls: [(phase: String, start: Double, end: Double)] = []
         /// Sleeps in short slices and records the longest the main actor was late to wake.
         func breathe(_ seconds: Double, measured: Bool = true) async {
             let end = Date.timeIntervalSinceReferenceDate + seconds
             while Date.timeIntervalSinceReferenceDate < end {
                 let before = Date.timeIntervalSinceReferenceDate
                 try? await Task.sleep(nanoseconds: 20_000_000)
-                if measured { worstStall = max(worstStall, Date.timeIntervalSinceReferenceDate - before - 0.02) }
+                let after = Date.timeIntervalSinceReferenceDate
+                let late = after - before - 0.02
+                if late > 0.1 { stalls.append((measured ? phase : phase + " (unmeasured)", before, after)) }
+                if measured {
+                    worstStall = max(worstStall, late)
+                    worstByPhase[phase] = max(worstByPhase[phase] ?? 0, late)
+                }
                 // A decision or warning stops time; answer it the way a player would and run on.
                 if store.overview?.pause != nil {
                     await store.continueCareer()
@@ -49,6 +61,7 @@ final class MaxSpeedTests: XCTestCase {
         await breathe(1, measured: false)
         await breathe(1)
         for tab in [AppTab.office, .markets, .inbox, .portfolio, .map, .office] {
+            phase = "\(tab)"
             host.rootView = AnyView(RootView(initialTab: tab).id(tab).environmentObject(store))
             // The new tab's first render is the navigation itself, not the run loop holding the
             // main thread, so it settles unmeasured; the time after it is measured.
@@ -57,6 +70,7 @@ final class MaxSpeedTests: XCTestCase {
         }
 
         // A sheet opens and closes while time runs.
+        phase = "sheet"
         if let division = store.divisions.first {
             store.openDivision = division
             var presented = false
@@ -78,6 +92,13 @@ final class MaxSpeedTests: XCTestCase {
         store.setSpeed(0)
         XCTAssertEqual(store.runSpeed, 0, "pause takes at once")
         XCTAssertGreaterThan(endWeek, startWeek + 2, "time really ran at 4x")
+        for stall in stalls.sorted(by: { $0.end - $0.start > $1.end - $1.start }).prefix(8) {
+            let named = MainStalls.inside(from: stall.start, to: stall.end).prefix(4)
+                .map { "\($0.label) \(Int($0.seconds * 1000)) ms" }.joined(separator: ", ")
+            print("max-speed stall: \(Int((stall.end - stall.start - 0.02) * 1000)) ms in \(stall.phase); named work: \(named.isEmpty ? "none" : named)")
+        }
+        print("max-speed by phase: " + worstByPhase.keys.sorted().map { "\($0) \(Int((worstByPhase[$0] ?? 0) * 1000)) ms" }.joined(separator: ", "))
+        print("max-speed named work: \(MainStalls.summary())")
         XCTAssertLessThan(worstStall, 1.0, "the main thread was never held for a second at 4x")
         print("max-speed: weeks \(startWeek) to \(endWeek), worst main-thread stall \(Int(worstStall * 1000)) ms")
     }

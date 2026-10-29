@@ -113,6 +113,54 @@ pub fn report(
     region: u8,
     industry: u8,
 ) -> Option<DivisionReport> {
+    build(
+        world,
+        dataset,
+        firm,
+        region,
+        industry,
+        true,
+        &mut Corridors::default(),
+    )
+}
+
+/// Corridor prices read once per good for many reports against one unchanged world.
+#[derive(Default)]
+pub struct Corridors(Vec<Option<i64>>);
+
+impl Corridors {
+    fn get(&mut self, world: &World, dataset: &Dataset, code: u16) -> i64 {
+        let i = code as usize;
+        if self.0.len() <= i {
+            self.0.resize(i + 1, None);
+        }
+        *self.0[i].get_or_insert_with(|| pricing::corridor_price(world, dataset, code))
+    }
+}
+
+/// The figures the weekly records keep, at a fraction of the report's cost: revenue, costs,
+/// operating profit and every line's made and sold, exactly as `report` has them. The text,
+/// buyer names, market prices and revenue trend are left empty.
+pub fn figures(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    region: u8,
+    industry: u8,
+    corridors: &mut Corridors,
+) -> Option<DivisionReport> {
+    build(world, dataset, firm, region, industry, false, corridors)
+}
+
+fn build(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    region: u8,
+    industry: u8,
+    detail: bool,
+    corridors: &mut Corridors,
+) -> Option<DivisionReport> {
     let entity = world.firms.get(firm)?;
     let plant_handles = sectors::division_plants(world, dataset, firm, region, industry);
     let first = world.facilities.get(*plant_handles.first()?)?;
@@ -189,7 +237,7 @@ pub fn report(
         } else {
             held.map(|l| l.qty.0).unwrap_or(0)
         };
-        let corridor = pricing::corridor_price(world, dataset, code);
+        let corridor = corridors.get(world, dataset, code);
         let group_seller = world
             .structure
             .links
@@ -211,17 +259,23 @@ pub fn report(
                 .unwrap_or_default();
             let (_, _, transfer) =
                 structure::transfer_quote(world, dataset, seller, code, region, s_industry);
-            (
-                format!(
-                    "Group: {}",
-                    world
-                        .firms
-                        .get(seller)
-                        .map(|f| f.name.as_str())
-                        .unwrap_or("a sister company")
-                ),
-                transfer,
-            )
+            if !detail {
+                (String::new(), transfer)
+            } else {
+                (
+                    format!(
+                        "Group: {}",
+                        world
+                            .firms
+                            .get(seller)
+                            .map(|f| f.name.as_str())
+                            .unwrap_or("a sister company")
+                    ),
+                    transfer,
+                )
+            }
+        } else if !detail {
+            (String::new(), corridor)
         } else if service {
             ("Local service market".to_owned(), corridor)
         } else if own_plants {
@@ -295,7 +349,7 @@ pub fn report(
             .unwrap_or_else(|| dataset.reference_price(code))
             .max(1);
         revenue += sold_milli * price / 1_000;
-        for (i, week) in entity.sales_history.iter().enumerate() {
+        for (i, week) in entity.sales_history.iter().enumerate().filter(|_| detail) {
             let lots = week.get(&(region, code)).copied().unwrap_or(0);
             let milli = lots * 1_000 * share_bps / 10_000;
             if trend_units.len() <= i {
@@ -308,6 +362,7 @@ pub fn report(
             .structure
             .links
             .iter()
+            .filter(|_| detail)
             .filter(|((_, seller, product), _)| *seller == firm && *product == code)
             .filter_map(|((buyer, _, _), _)| world.firms.get(*buyer).map(|f| f.name.clone()))
             .collect();
@@ -318,7 +373,11 @@ pub fn report(
             sold_milli,
             stored_milli: stored,
             price_cents: price,
-            market_cents: pricing::market_price(world, dataset, firm, code),
+            market_cents: if detail {
+                pricing::market_price(world, dataset, firm, code)
+            } else {
+                0
+            },
             buyers,
             store_class: class_key(dataset, code),
         });
@@ -402,17 +461,21 @@ pub fn report(
     let inputs_text = recipe
         .weekly_inputs_lots
         .keys()
+        .filter(|_| detail)
         .filter_map(|id| dataset.product_index.get(id))
         .map(|c| dataset.products[*c as usize].name.to_lowercase())
         .collect::<Vec<_>>()
         .join(", ");
     let made_text = recipe
         .outputs()
+        .filter(|_| detail)
         .filter_map(|(id, _)| dataset.product_index.get(id))
         .map(|c| dataset.products[*c as usize].name.to_lowercase())
         .collect::<Vec<_>>()
         .join(" and ");
-    let meaning = if inputs_text.is_empty() {
+    let meaning = if !detail {
+        String::new()
+    } else if inputs_text.is_empty() {
         format!("Makes {made_text} with no bought inputs.")
     } else {
         format!("Turns {inputs_text} into {made_text}.")

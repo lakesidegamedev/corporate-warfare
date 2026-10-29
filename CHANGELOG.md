@@ -36,6 +36,20 @@ heading.
 
 ### Changed
 
+- Faster weeks in long careers. The weekly statements archive and the systems history now read
+  each market once per week instead of once per company and division, cutting their cost by about
+  two thirds: a week ten years into a career runs roughly a tenth faster. Results are identical.
+- Smoother top speed on desktop. The autosave every four weeks no longer holds up the clock while
+  the file is written to disk, and the time a week takes now counts toward its slot, so 4 weeks a
+  second really is 4 weeks a second instead of slipping on busy weeks.
+- Faster market clearing. The weekly spot markets no longer recheck the strategic reserve's price
+  history once per region for every good, so clearing the markets takes about a third less time
+  (roughly 1.4 ms less per week ten years in) and rival planning reads each import price once per
+  week instead of once per idea. Results are identical.
+- Fewer hitches on iPhone and iPad at top speed. The autosave every four weeks now writes its
+  file in the background instead of on the screen's thread, and the save list is no longer reread
+  from disk on every refresh. In the 4x test the longest freeze fell from a little over a second
+  to about 0.8 seconds; switching tabs now catches for at most about 0.3 seconds.
 - Export ports grow with use. When a state's exports of a good fill its port for a week, the
   port gains one percent more room, so surpluses no longer pile up at a port sized for the
   plants that ran at the start. Grain, for example, now leaves the corridor instead of sitting

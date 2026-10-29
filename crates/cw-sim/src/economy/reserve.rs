@@ -169,24 +169,36 @@ pub fn phase(world: &World, ds: &Dataset, product: u16) -> Phase {
 
 /// What the reserve offers a region this week: (asking price per lot, milli-lots).
 pub fn release_offer(world: &World, ds: &Dataset, product: u16, region: u8) -> Option<(i64, i64)> {
-    if phase(world, ds, product) != Phase::Selling {
-        return None;
+    release_offers(world, ds, product).remove(&region)
+}
+
+/// `release_offer` for every region holding the good, keyed by region. The phase and the price
+/// band are read once for the good instead of once per region.
+pub fn release_offers(world: &World, ds: &Dataset, product: u16) -> BTreeMap<u8, (i64, i64)> {
+    let mut offers = BTreeMap::new();
+    let stock = &world.politics.reserve.stock;
+    let regions = world.regions.len();
+    let holding = stock
+        .range((product, 0)..=(product, u8::MAX))
+        .any(|(&(_, region), &held)| held > 0 && (region as usize) < regions);
+    if !holding || phase(world, ds, product) != Phase::Selling {
+        return offers;
     }
-    let held = world
-        .politics
-        .reserve
-        .stock
-        .get(&(product, region))
-        .copied()
-        .unwrap_or(0);
-    if held <= 0 {
-        return None;
+    let Some((now, _)) = band(world, ds, product) else {
+        return offers;
+    };
+    for (&(_, region), &held) in stock.range((product, 0)..=(product, u8::MAX)) {
+        if held > 0 && (region as usize) < regions {
+            offers.insert(
+                region,
+                (
+                    (now * 90 / 100).max(1),
+                    held.min(SELL_LOTS_PER_WEEK * 1_000),
+                ),
+            );
+        }
     }
-    let (now, _) = band(world, ds, product)?;
-    Some((
-        (now * 90 / 100).max(1),
-        held.min(SELL_LOTS_PER_WEEK * 1_000),
-    ))
+    offers
 }
 
 /// Book a sale out of the reserve: the buyer paid `paid` cents for `qty`.

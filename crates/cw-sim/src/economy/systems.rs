@@ -176,6 +176,76 @@ pub fn good_week(world: &World, dataset: &Dataset, code: u16) -> GoodWeek {
     }
 }
 
+/// `good_week` for every tracked good with any activity, in code order, reading each firm,
+/// plant, gateway and store once instead of once per good.
+pub fn goods_week(world: &World, dataset: &Dataset) -> Vec<GoodWeek> {
+    let n = dataset.products.len();
+    let mut made = vec![0i64; n];
+    for (_, f) in world.facilities.iter() {
+        let mut codes: Vec<(u16, &str)> = dataset.recipes[f.recipe as usize]
+            .outputs()
+            .filter_map(|(id, _)| dataset.product_index.get(id).map(|c| (*c, id)))
+            .collect();
+        codes.sort_unstable();
+        codes.dedup_by_key(|(code, _)| *code);
+        for (code, id) in codes {
+            made[code as usize] += f.last_made(dataset, id).lots();
+        }
+    }
+    let (mut sold, mut your_sold, mut unsold) = (vec![0i64; n], vec![0i64; n], vec![0i64; n]);
+    for (handle, firm) in world.firms.iter() {
+        let mut by_code: std::collections::BTreeMap<u16, i64> = Default::default();
+        if let Some(week) = firm.last_closed_sales() {
+            for ((_, p), q) in week {
+                *by_code.entry(*p).or_default() += *q;
+            }
+        }
+        let player = crate::economy::events_engine::player_side(world, handle);
+        let outputs = crate::economy::pricing::outputs(world, dataset, handle);
+        for code in tracked_goods(dataset) {
+            let lots = by_code.get(&code).copied().unwrap_or(0);
+            let i = code as usize;
+            sold[i] += lots;
+            if player {
+                your_sold[i] += lots;
+            }
+            if lots > 0 || outputs.contains(&code) {
+                unsold[i] += crate::economy::pricing::free_stock(world, dataset, handle, code);
+            }
+        }
+    }
+    let (mut imported, mut exported) = (vec![0i64; n], vec![0i64; n]);
+    for g in &world.gateways {
+        if let Some(i) = imported.get_mut(g.product as usize) {
+            *i += g.last_import_lots;
+            exported[g.product as usize] += g.last_export_lots;
+        }
+    }
+    let mut stock = vec![0i64; n];
+    for (_, f) in world.firms.iter() {
+        for ((p, _), lot) in f.inventory.iter() {
+            if let Some(s) = stock.get_mut(*p as usize) {
+                *s += lot.qty.lots();
+            }
+        }
+    }
+    tracked_goods(dataset)
+        .map(|code| code as usize)
+        .filter(|&i| made[i] | sold[i] | imported[i] | exported[i] | stock[i] != 0)
+        .map(|i| GoodWeek {
+            product: i as u16,
+            made: made[i],
+            sold: sold[i],
+            imported: imported[i],
+            exported: exported[i],
+            stock: stock[i],
+            unsold: unsold[i],
+            ask_cents: crate::economy::pricing::corridor_price(world, dataset, i as u16),
+            your_sold: your_sold[i],
+        })
+        .collect()
+}
+
 /// The goods the history follows: every priced, non-financial good.
 pub fn tracked_goods(dataset: &Dataset) -> impl Iterator<Item = u16> + '_ {
     (0..dataset.products.len() as u16).filter(|code| {
@@ -224,12 +294,19 @@ pub fn division_capacity_milli(
         .sum()
 }
 
-fn division_weeks(world: &World, dataset: &Dataset, firm: Handle) -> Vec<DivisionWeek> {
+fn division_weeks(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    shares: &mut crate::economy::sectors::ShareCache,
+    corridors: &mut crate::economy::division_report::Corridors,
+) -> Vec<DivisionWeek> {
     crate::economy::sectors::divisions_of(world, dataset, firm)
         .into_iter()
         .map(|d| {
-            let report =
-                crate::economy::division_report::report(world, dataset, firm, d.region, d.industry);
+            let report = crate::economy::division_report::figures(
+                world, dataset, firm, d.region, d.industry, corridors,
+            );
             let (made, sold, revenue, profit) = report
                 .as_ref()
                 .map(|r| {
@@ -251,9 +328,7 @@ fn division_weeks(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Divisio
                 capacity_milli: division_capacity_milli(world, dataset, &d),
                 revenue_cents: revenue,
                 costs_cents: revenue.saturating_sub(profit),
-                share_bps: crate::economy::sectors::share_bps(
-                    world, dataset, firm, d.region, d.industry, 0,
-                ),
+                share_bps: shares.share_bps(world, dataset, firm, d.region, d.industry),
             }
         })
         .collect()
@@ -326,10 +401,7 @@ pub fn record(world: &mut World, dataset: &Dataset) {
     if world.systems.weeks.last().is_some_and(|w| w.week >= week) {
         return;
     }
-    let goods = tracked_goods(dataset)
-        .map(|code| good_week(world, dataset, code))
-        .filter(|g| g.made | g.sold | g.imported | g.exported | g.stock != 0)
-        .collect();
+    let goods = goods_week(world, dataset);
     let regions = (0..world.regions.len() as u8)
         .map(|i| region_week(world, i))
         .collect();
@@ -341,9 +413,11 @@ pub fn record(world: &mut World, dataset: &Dataset) {
         })
         .map(|(h, _)| h)
         .collect();
+    let mut shares = crate::economy::sectors::ShareCache::default();
+    let mut corridors = crate::economy::division_report::Corridors::default();
     let divisions = players
         .iter()
-        .flat_map(|h| division_weeks(world, dataset, *h))
+        .flat_map(|h| division_weeks(world, dataset, *h, &mut shares, &mut corridors))
         .collect();
     let freight = players.iter().map(|h| freight_week(world, *h)).collect();
     let entry = SystemsWeek {
@@ -408,5 +482,60 @@ mod tests {
             }
         }
         assert!(farms > 0, "no farm produced in a harvest quarter");
+    }
+
+    /// The batched goods pass, the lean division figures and the share cache give exactly what
+    /// the per-good, full-report and per-call reads give, every week of a busy run.
+    #[test]
+    fn batched_records_match_the_one_at_a_time_reads() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 181, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let mut divisions = 0;
+        for _ in 1..=40 {
+            crate::tick::advance(&mut world, &dataset);
+            let one_at_a_time: Vec<GoodWeek> = tracked_goods(&dataset)
+                .map(|code| good_week(&world, &dataset, code))
+                .filter(|g| g.made | g.sold | g.imported | g.exported | g.stock != 0)
+                .collect();
+            assert_eq!(goods_week(&world, &dataset), one_at_a_time);
+            let mut shares = crate::economy::sectors::ShareCache::default();
+            let mut corridors = crate::economy::division_report::Corridors::default();
+            for (h, _) in world.firms.iter() {
+                for d in crate::economy::sectors::divisions_of(&world, &dataset, h) {
+                    let full = crate::economy::division_report::report(
+                        &world, &dataset, h, d.region, d.industry,
+                    )
+                    .unwrap();
+                    let lean = crate::economy::division_report::figures(
+                        &world,
+                        &dataset,
+                        h,
+                        d.region,
+                        d.industry,
+                        &mut corridors,
+                    )
+                    .unwrap();
+                    assert_eq!(full.revenue_cents, lean.revenue_cents);
+                    assert_eq!(full.operating_profit_cents, lean.operating_profit_cents);
+                    assert_eq!(full.primary_product, lean.primary_product);
+                    assert_eq!(full.costs, lean.costs);
+                    let lines = |r: &crate::economy::division_report::DivisionReport| {
+                        r.outputs
+                            .iter()
+                            .map(|o| (o.product, o.made_milli, o.sold_milli))
+                            .collect::<Vec<_>>()
+                    };
+                    assert_eq!(lines(&full), lines(&lean));
+                    assert_eq!(
+                        shares.share_bps(&world, &dataset, h, d.region, d.industry),
+                        crate::economy::sectors::share_bps(
+                            &world, &dataset, h, d.region, d.industry, 0
+                        )
+                    );
+                    divisions += 1;
+                }
+            }
+        }
+        assert!(divisions > 100);
     }
 }
