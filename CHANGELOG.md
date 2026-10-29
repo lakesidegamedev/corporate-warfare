@@ -11,6 +11,10 @@ heading.
 
 ## [Unreleased]
 
+### Changed
+
+- Tooling: a 1.9 cast proposal, not wired into the game. `content/cast-1.9.json` lists 40 fictional people (ten per scenario, with voice notes), `tools/cast_portraits_v2.py` draws 32 by 32 busts with neutral, pleased and displeased expressions, a derived 16 by 16 version, 64 by 64 office portraits for chief executives and a larger extras kit, written to `apple/Resources/cast-portraits-v2.json`. Awaiting owner approval of the roster and portraits.
+
 ## [1.8.0] - 2026-10-29
 
 A living map and a deeper company: true 3D voxel buildings and vehicles on the real Earth with seasons and satellite clouds, trucks and trains on real interstates and railways, a clean Freight mode, more map modes, full company financials with customizable charts, deeper views of markets, regions, divisions, freight, rivals and the economy, markets that respond to stock, spare capacity, imports and inflation, choose previews or full releases and install any version from 1.8 on, one copy of the game at a time, faster weeks, and an 8-bit interface. Careers saved in 1.7.1 and the 1.8 previews load in 1.8.0 and carry on.
