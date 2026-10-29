@@ -36,18 +36,20 @@ import kotlin.math.min
 object MeshCanvas {
     /** A smoothly sampled shader for a texture, where the platform's default would not be. */
     var shader: ((ImageBitmap, repeatX: Boolean) -> androidx.compose.ui.graphics.Shader)? = null
+    /** Runs the clouds' flow layers as one shader pass for a texture, where the platform can; null keeps the mesh per layer. */
+    var cloudFlow: ((ImageBitmap) -> CloudFlow?)? = null
     var draw: ((canvas: Canvas, positions: FloatArray, tex: FloatArray, colors: IntArray, indices: ShortArray, vertices: Int, indexCount: Int, paint: Paint) -> Unit)? = null
 }
 
 /** Reusable arrays for one mesh, so a frame allocates nothing per vertex. */
 internal class Mesh {
-    var positions = FloatArray(0); var tex = FloatArray(0); var colors = IntArray(0); var indices = ShortArray(0)
+    var positions = FloatArray(0); var tex = FloatArray(0); var tex2 = FloatArray(0); var colors = IntArray(0); var indices = ShortArray(0)
     var visible = BooleanArray(0)
     var count = 0; var indexCount = 0
 
     fun reset(vertices: Int) {
         if (positions.size < vertices * 2) {
-            positions = FloatArray(vertices * 2); tex = FloatArray(vertices * 2); colors = IntArray(vertices)
+            positions = FloatArray(vertices * 2); tex = FloatArray(vertices * 2); tex2 = FloatArray(vertices * 2); colors = IntArray(vertices)
             visible = BooleanArray(vertices); indices = ShortArray(vertices * 6)
             require(vertices <= Short.MAX_VALUE) { "a mesh this big needs splitting" }
         }
@@ -142,12 +144,25 @@ internal class CloudMask(image: ImageBitmap) {
 internal fun cloudStrength(amount: Int): Float = when (amount) { 1 -> 0.4f; 2 -> 0.72f; else -> 1f }
 
 internal object Weather {
-    private val mesh = Mesh()
+    // Clouds draw on a bake thread and, before the first bake lands, on the UI thread: a scratch mesh each.
+    private val meshes = ThreadLocal.withInitial { Mesh() }
+    private val mesh: Mesh get() = meshes.get()
     private val masks = HashMap<ImageBitmap, CloudMask>()
 
+    // A flow's shader is replaced for each pass, so each thread keeps its own.
+    private val flows = ThreadLocal.withInitial { HashMap<ImageBitmap, CloudFlow?>() }
+
+    private fun flow(image: ImageBitmap): CloudFlow? {
+        val make = MeshCanvas.cloudFlow ?: return null
+        val held = flows.get()
+        return if (image in held) held[image] else make(image).also { held[image] = it }
+    }
+
+    @Synchronized
     private fun mask(image: ImageBitmap) = masks.getOrPut(image) { CloudMask(image) }
     private val paints = HashMap<ImageBitmap, Paint>()
 
+    @Synchronized
     private fun paint(image: ImageBitmap, repeatX: Boolean): Paint = paints.getOrPut(image) {
         Paint().apply {
             shader = MeshCanvas.shader?.invoke(image, repeatX)
@@ -186,6 +201,27 @@ internal object Weather {
         }
         val tw = image.width / 360.0
         val th = image.height / 180.0
+        val flow = flow(image)
+        if (flow != null) {
+            val (slide0, w0) = flowPhase(seconds, 0)
+            val (slide1, w1) = flowPhase(seconds, 1)
+            drawIntoCanvas { canvas ->
+                for (shadow in if (shadows && amount >= 3 && altitude > 0) listOf(true, false) else listOf(false)) {
+                    flow.set(strength * near, w0, w1, (slide1 - slide0).toFloat(), tw.toFloat(), th.toFloat(), shadow)
+                    fill(p, west, east, south, north, step, if (shadow) 0.0 else altitude,
+                        if (shadow) Offset((altitude * 0.5).toFloat(), (altitude * 0.32).toFloat()) else Offset.Zero, sun, shadow, mask(image), true, dual = true) { lon, lat, out ->
+                        out[0] = (lon + 180 - windAt(lat) * slide0) * tw
+                        out[1] = (90 - lat) * th
+                        // The shader weighs the layers and fades the poles; the mesh only carries the globe's limb.
+                        out[2] = 1.0
+                        out[3] = (lon + 180 - windAt(lat) * slide1 + 133.0) * tw
+                        out[4] = out[1]
+                    }
+                    mesh.draw(canvas, flow.paint)
+                }
+            }
+            return
+        }
         val canvasPaint = paint(image, true)
         drawIntoCanvas { canvas ->
             for (layer in 0..1) {
@@ -239,9 +275,9 @@ internal object Weather {
 
     private inline fun fill(
         p: MapProjection, west: Double, east: Double, south: Double, north: Double, step: Double, up: Double, shift: Offset, sun: Sun?, shadow: Boolean,
-        clouds: CloudMask, repeatX: Boolean, place: (lon: Double, lat: Double, out: DoubleArray) -> Unit,
+        clouds: CloudMask, repeatX: Boolean, dual: Boolean = false, place: (lon: Double, lat: Double, out: DoubleArray) -> Unit,
     ) {
-        val out = DoubleArray(3)
+        val out = DoubleArray(5)
         val nx = ((east - west) / step).toInt() + 1
         val ny = ((north - south) / step).toInt() + 1
         mesh.reset(nx * ny)
@@ -252,6 +288,7 @@ internal object Weather {
             val latDeg = north - j * step
             place(lonDeg, latDeg, out)
             mesh.tex[2 * k] = out[0].toFloat(); mesh.tex[2 * k + 1] = out[1].toFloat()
+            if (dual) { mesh.tex2[2 * k] = out[3].toFloat(); mesh.tex2[2 * k + 1] = out[4].toFloat() }
             val a0 = out[2].toFloat()
             val lon = lonDeg * PI / 180
             val lat = latDeg * PI / 180
@@ -264,7 +301,8 @@ internal object Weather {
             mesh.visible[k] = true
             // Clouds on the night side are lit only faintly; their shadows only fall by day.
             val light = if (sun == null) 1f else (0.18 + 0.82 * smoothstep(-0.15, 0.1, sun.facing(lon, lat))).toFloat()
-            mesh.colors[k] = if (shadow) Color.Black.copy(alpha = (0.14f * a * light).coerceIn(0f, 1f)).toArgb()
+            // In one pass the shader already holds the shadow's 0.14.
+            mesh.colors[k] = if (shadow) Color.Black.copy(alpha = ((if (dual) 1f else 0.14f) * a * light).coerceIn(0f, 1f)).toArgb()
             else Color(light, light, (light * 1.03f).coerceAtMost(1f), a.coerceIn(0f, 1f)).toArgb()
         }
         for (j in 0 until ny - 1) for (i in 0 until nx - 1) {
@@ -280,7 +318,14 @@ internal object Weather {
             val t = mesh.tex
             val u0 = minOf(t[2 * k], t[2 * c1], t[2 * c2], t[2 * c3]); val u1 = maxOf(t[2 * k], t[2 * c1], t[2 * c2], t[2 * c3])
             val v0 = minOf(t[2 * k + 1], t[2 * c1 + 1], t[2 * c2 + 1], t[2 * c3 + 1]); val v1 = maxOf(t[2 * k + 1], t[2 * c1 + 1], t[2 * c2 + 1], t[2 * c3 + 1])
-            if (!clouds.anyCloud(u0, v0, u1, v1, repeatX)) continue
+            var any = clouds.anyCloud(u0, v0, u1, v1, repeatX)
+            if (!any && dual) {
+                val t2 = mesh.tex2
+                val s0 = minOf(t2[2 * k], t2[2 * c1], t2[2 * c2], t2[2 * c3]); val s1 = maxOf(t2[2 * k], t2[2 * c1], t2[2 * c2], t2[2 * c3])
+                val r0 = minOf(t2[2 * k + 1], t2[2 * c1 + 1], t2[2 * c2 + 1], t2[2 * c3 + 1]); val r1 = maxOf(t2[2 * k + 1], t2[2 * c1 + 1], t2[2 * c2 + 1], t2[2 * c3 + 1])
+                any = clouds.anyCloud(s0, r0, s1, r1, repeatX)
+            }
+            if (!any) continue
             val n = mesh.indexCount
             mesh.indices[n] = k.toShort(); mesh.indices[n + 1] = c1.toShort(); mesh.indices[n + 2] = c2.toShort()
             mesh.indices[n + 3] = c1.toShort(); mesh.indices[n + 4] = c3.toShort(); mesh.indices[n + 5] = c2.toShort()

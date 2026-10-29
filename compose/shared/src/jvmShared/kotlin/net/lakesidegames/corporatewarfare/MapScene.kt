@@ -107,6 +107,7 @@ internal object Sprites {
     private val filters = HashMap<Color, ColorFilter>()
 
     /** A cached tint so a frame allocates nothing. */
+    @Synchronized
     fun tint(color: Color): ColorFilter = filters.getOrPut(color) { ColorFilter.tint(color, BlendMode.Modulate) }
 }
 
@@ -954,6 +955,19 @@ internal fun divisionSlots(divisions: List<MapDivisionDto>): List<Triple<String,
     return divisions.groupBy { it.region to it.industry }
         .map { (key, items) -> Triple(key.first, key.second, items.sumOf { it.blocks.toInt() }) }
         .sortedWith(compareBy({ it.first }, { order.indexOf(it.second).let { i -> if (i < 0) 99 else i } }))
+}
+
+/** Which Skia backend draws the window; set by the desktop shell, absent on Android. */
+internal object RenderInfo {
+    @Volatile var backend: String? = null
+
+    /** Software drawing: the map is much slower than on Direct3D, OpenGL or Metal. */
+    val software: Boolean get() = backend?.startsWith("SOFTWARE") == true
+
+    /** The backend as a short name for the frame counter. */
+    fun label(): String? = backend?.let {
+        when (it) { "DIRECT3D" -> "Direct3D"; "OPENGL" -> "OpenGL"; "METAL" -> "Metal"; "VULKAN" -> "Vulkan"; "ANGLE" -> "ANGLE"; "UNKNOWN" -> null; else -> "Software" }
+    }
 }
 
 /** Rolling frames-a-second for the optional counter. */

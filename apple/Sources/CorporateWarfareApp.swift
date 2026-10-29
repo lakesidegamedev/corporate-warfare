@@ -16,6 +16,8 @@ struct CorporateWarfareApp: App {
         Pixel.configureSystemBars()
         // Start the shared clock at launch, so the sun begins over the Americas at noon.
         _ = MapClock.now
+        // Read in the background now, so the first map draw never waits for the models.
+        VoxelModels.preload()
         if Self.isUITesting {
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("CorporateWarfareUITests", isDirectory: true)
@@ -42,6 +44,9 @@ struct CorporateWarfareApp: App {
             .task {
                 // The app opens on the main menu; Continue there resumes the latest save.
                 store.refreshSaves()
+                // Behind the menu, so the map's first frame does not pay for the renderer's setup.
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                RenderWarmup.run()
             }
             .onChange(of: scenePhase) { _, phase in
                 // Background asks for one bounded stop-and-save. Foreground never replays an

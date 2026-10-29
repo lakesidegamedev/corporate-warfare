@@ -33,12 +33,35 @@ heading.
   mood or the law for a while. New games choose Historical (the default), Off or Shuffled, which
   keeps the same events but moves their dates by up to half a year. The app screens for this come
   in a later update.
+- The frame counter (Settings, Graphics, Show frame rate) now also shows how the game is drawing
+  (Direct3D, OpenGL, Metal or Software) and the size of the map in pixels. Software drawing shows in
+  amber, because it is far slower than a graphics card.
+
+### Fixed
+
+- On iPhone and iPad at the fastest speed, the screen no longer freezes for up to a second when you
+  switch tabs or open a division. The division sheet now draws only what is on screen and does not
+  rebuild when nothing in it changed, and the map's building models are read in the background
+  from launch, with the drawing set-up warmed behind the main menu, so the map's first view opens
+  much faster. The division sheet now opens as a light page first and fills in its sections a
+  moment later, and the pixel font, buttons and sliders are warmed behind the main menu, so the
+  first time you open a division no longer catches.
 
 ### Changed
 
 - Saves written by this version cannot be opened by older versions of the game. Careers saved in
   1.8.0 and the earlier 1.9 previews open as normal, carry on without scenario history (their
   dates are not invented backwards) and are saved in the new format from then on.
+- The map is much smoother on Windows and Linux, most of all on big screens. The ground, the day and
+  night shading, the clouds and the menu globe are now painted ahead of time in the background, and
+  while you drag or zoom the game slides the last finished picture into place instead of redrawing it,
+  so moving the map no longer waits on drawing. A fresh picture replaces it a moment later.
+- A new install with no graphics choice saved starts on Medium when the window is large or the
+  computer is drawing in software, so the first look is smooth. Your own choice is never changed.
+
+### Fixed
+
+- Roads on raised tiles now sit on the tile they cross instead of floating at one shared height.
 
 ## [1.8.0] - 2026-10-29
 
