@@ -151,6 +151,27 @@ heading.
 
 ### Fixed
 
+- Big cities keep their names on the close map. A city of a million people or more now always shows its
+  name while its buildings are on screen, even when your own plants crowd the usual spots: the name
+  moves further out and a thin line ties it back to the city. Region names and smaller towns give way
+  first, never a big city.
+- Traffic on the close map is cheaper to draw. Cars, trucks, trains and ships are prepared once as
+  small pictures for each direction they can face and then simply placed, so busy roads cost less at
+  large window sizes. While the picture for a new camera angle is still being prepared, vehicles are
+  drawn the old way, so nothing flickers.
+- Ruhr and Rhine firms can make money. The scenario sells far more coal, steel, chemicals and cars
+  than its own households and plants use, and the outside world that buys the rest only had the
+  same fixed purse as every other scenario, so by year 3 it could no longer pay and exports fell
+  by four fifths. Four in ten firms were losing money by year 5, and the same firms kept going
+  bust and restructuring. The outside world's purse now scales with how much the scenario has
+  to sell abroad (Great Lakes keeps its old purse), and about two in ten Ruhr and Rhine firms
+  lose money in year 5, level with Great Lakes. Texas improves as well.
+- Losses no longer creep up as a career goes on. Rival companies paid for raids out of cash they
+  held, whatever the raid cost against what they earned, so a raid quarter turned a profitable
+  company into a loss maker. A raid campaign now costs at most half of what the company earned in
+  the last thirteen weeks. Rivals also stop all building for the same imports at once: a plant
+  that is still being built, or opened in the last two months, counts against the room other
+  rivals see.
 - On iPhone and iPad at the fastest speed, the screen no longer freezes for up to a second when you
   switch tabs or open a division. The division sheet now draws only what is on screen and does not
   rebuild when nothing in it changed, and the map's building models are read in the background

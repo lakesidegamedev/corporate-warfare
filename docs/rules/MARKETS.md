@@ -137,8 +137,13 @@ lots they import and export each week and keep a smoothed import average; that a
 the "room to build" shown on a state's board and used by rival expansion. No local
 back-to-back transaction can profit from the bid/ask spread.
 
-The outside economy settles through one finite account opened with $500 million: imports
-pay into it, and exports and background public works are paid from it. Each week it may
+The outside economy settles through one finite account: imports
+pay into it, and exports and background public works are paid from it. It opens with the larger of
+$500 million and 450 weeks (about nine years) of the scenario's opening trade surplus. The surplus
+is what the opening plants make of each traded good beyond what the opening plants and the
+households use, valued at the gateway bid (85 percent of reference), so a scenario built on
+exporting heavy industry (Ruhr and Rhine, where almost half of what the plants make leaves through
+a gateway) has an outside world that can pay for it, and Great Lakes keeps exactly $500 million. Each week it may
 draw at most one percent of its opening cash, net of that week's import receipts, so a
 corridor running a sustained trade surplus sees exports taper toward balance rather than
 stop at once. It buys only what it can pay for in full; a seller never hands over goods

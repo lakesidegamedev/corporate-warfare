@@ -78,6 +78,53 @@ final class LabelPlanner {
         }
         return nil
     }
+
+    /// Where [placeCity] put a name, and whether a leader line must tie it to its city.
+    struct CityLabel { var corner: CGPoint; var leader: Bool }
+
+    /// Population from which a city is a city and not a town: its name always shows while its block is on screen.
+    static let townPopulation = 1_000_000
+
+    /// Candidate corners for a name on rings round `center`, nearest first, `reach` points to the first ring.
+    /// Twelve places a ring, rings 14 apart, six rings; the label's nearest edge sits on the ring.
+    static func ringSlots(center: CGPoint, size: CGSize, reach: CGFloat) -> [CGPoint] {
+        var out: [CGPoint] = []
+        for ring in 0..<6 {
+            let r = reach + CGFloat(ring) * 14
+            for a in 0..<12 {
+                let ang = Double(a) * 2 * Double.pi / 12
+                let dx = CGFloat(cos(ang)), dy = CGFloat(sin(ang))
+                out.append(CGPoint(x: center.x + dx * r - size.width / 2 + dx * size.width / 2,
+                                   y: center.y + dy * r - size.height / 2 + dy * size.height / 2))
+            }
+        }
+        return out
+    }
+
+    /// A big city's name: the preferred slots first, then rings further out with a leader line, and when
+    /// nothing at all is clear the place that covers least. It is never dropped.
+    func placeCity(_ key: String, size: CGSize, slots: [CGPoint], center: CGPoint, reach: CGFloat, view: CGSize? = nil) -> CityLabel {
+        // Only places that are on screen, when any are: a name off the edge of the view is no name at all.
+        let every = slots + LabelPlanner.ringSlots(center: center, size: size, reach: reach)
+        let onScreen = view.map { v in every.filter { $0.x >= 0 && $0.y >= 0 && $0.x + size.width <= v.width && $0.y + size.height <= v.height } } ?? every
+        let all = onScreen.isEmpty ? every : onScreen
+        let preferred = Set(slots)
+        if let corner = place(key, size: size, slots: all) {
+            return CityLabel(corner: corner, leader: !preferred.contains(corner))
+        }
+        var best = 0
+        var least = CGFloat.greatestFiniteMagnitude
+        for (j, at) in all.enumerated() {
+            let rect = CGRect(origin: at, size: size)
+            var sum: CGFloat = 0
+            for t in taken { let o = rect.intersection(t); if !o.isNull { sum += o.width * o.height } }
+            if sum < least { least = sum; best = j }
+        }
+        taken.append(CGRect(origin: all[best], size: size))
+        next.insert(key)
+        nextSlot[key] = best
+        return CityLabel(corner: all[best], leader: true)
+    }
 }
 
 /// How freight on a lane is coloured: the player gold, a rival in its sector's colour, outside carriers grey.
