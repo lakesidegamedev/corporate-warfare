@@ -11,6 +11,19 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- Developer tooling: a new `cw-render` crate holds the first prototype of the 1.9 GPU map
+  renderer. It draws the Great Lakes 2000 scenario offscreen with wgpu, in one fixed 48 colour
+  palette with ordered dithering, stepped terrace terrain from public elevation data, flat
+  water with a hard shoreline, region tint with one pixel borders, a sun with hard shadows for
+  terraces and voxel buildings, thresholded clouds with a one step ground shadow, and a night
+  palette with lit windows. Run `cargo run --release -p cw-render --example render_scene -- <out_dir>`
+  to write the scenario, close and turned views and print frame times and draw counts; on a
+  machine without a GPU it uses the Mesa software driver. `tools/render_bake.py` fetches the
+  elevation and bakes the small heightmap. The crate is not linked into the game or the apps
+  yet and changes nothing players see, no saves and no hashes.
+
 ## [1.8.0] - 2026-10-29
 
 A living map and a deeper company: true 3D voxel buildings and vehicles on the real Earth with seasons and satellite clouds, trucks and trains on real interstates and railways, a clean Freight mode, more map modes, full company financials with customizable charts, deeper views of markets, regions, divisions, freight, rivals and the economy, markets that respond to stock, spare capacity, imports and inflation, choose previews or full releases and install any version from 1.8 on, one copy of the game at a time, faster weeks, and an 8-bit interface. Careers saved in 1.7.1 and the 1.8 previews load in 1.8.0 and carry on.
