@@ -61,7 +61,7 @@ pub struct BriefDue {
 /// What a suggested move opens when the player presses Review.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MoveTarget {
-    /// build, pricing, lane, mandate, raid, production, division or cfo.
+    /// build, pricing, lane, mandate, raid, production, division, cfo or executive.
     pub dialog: String,
     pub region: String,
     pub region_to: String,
@@ -821,6 +821,72 @@ fn production_move(world: &World, dataset: &Dataset, firm: Handle) -> Option<Bri
     })
 }
 
+/// Weeks within which a hire must pay back its signing fee, from what the executive's effect
+/// saves or earns over their pay.
+pub const HIRE_MAX_PAYBACK_WEEKS: i64 = 104;
+
+/// Suggest filling a vacant executive post when the executive's effect, at the company's own
+/// figures, covers their pay and pays back the signing fee inside two years.
+pub fn hire_move(world: &World, dataset: &Dataset, firm: Handle) -> Option<BriefMove> {
+    use cw_sim::economy::executives as ex;
+    let cash = world.firms.get(firm)?.book.cash();
+    let mut best: Option<(i64, ex::Post, u16, i64, i64, i64)> = None;
+    for post in ex::Post::ALL {
+        if world.executives.holder(firm, post).is_some() {
+            continue;
+        }
+        for c in ex::candidates(world, post) {
+            let ask = ex::ask_cents(world, firm, c);
+            let fee = ask * ex::SIGNING_WEEKS;
+            if cash < fee + ask * ex::CASH_COVER_WEEKS {
+                continue;
+            }
+            let value = ex::yearly_value_cents(world, dataset, firm, post, c.level);
+            let gain = value / 52 - ask;
+            if gain <= 0 {
+                continue;
+            }
+            let weeks = (fee + gain - 1) / gain;
+            if weeks > HIRE_MAX_PAYBACK_WEEKS {
+                continue;
+            }
+            if best.is_none_or(|(g, ..)| gain > g) {
+                best = Some((gain, post, c.id, fee, weeks, ask));
+            }
+        }
+    }
+    let (gain, post, id, fee, weeks, ask) = best?;
+    let c = world.executives.person(id)?;
+    Some(BriefMove {
+        key: "hire".to_owned(),
+        headline: format!("Hire {} as {}", ex::name_of(c), post.title().to_lowercase()),
+        detail: format!(
+            "{}. At your figures that is worth about {} a week over their pay of {}, and the {} signing fee is back in {} weeks.",
+            ex::effect_text(post, c.level),
+            paper::money(world, dataset, firm, gain),
+            paper::money(world, dataset, firm, ask),
+            paper::money(world, dataset, firm, fee),
+            weeks
+        ),
+        cost_cents: fee,
+        weekly_gain_cents: gain,
+        payback_weeks: weeks,
+        has_payback: true,
+        action_label: "Review".to_owned(),
+        target: MoveTarget {
+            dialog: "executive".to_owned(),
+            mode: post.code() as u32,
+            target: id as u64,
+            ..Default::default()
+        },
+        commands: vec![json(CommandIntent::HireExecutive {
+            firm,
+            post: post.code(),
+            person: id,
+        })],
+    })
+}
+
 /// Where a move sits: ordinary moves first, a move with no figure after them, and a build that
 /// takes three years or more to pay back after everything else.
 fn rank(m: &BriefMove) -> u8 {
@@ -1060,6 +1126,7 @@ fn moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefMove> {
     all.extend(price_moves(world, dataset, firm));
     all.extend(production_move(world, dataset, firm));
     all.extend(mandate_move(world, dataset, firm));
+    all.extend(hire_move(world, dataset, firm));
     all.extend(raid_move(world, dataset, firm));
     // The same fix is not offered twice.
     all.retain(|m| !lead.iter().any(|l| l.commands == m.commands));

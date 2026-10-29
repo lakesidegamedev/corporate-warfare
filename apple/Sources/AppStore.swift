@@ -38,6 +38,10 @@ final class AppStore: ObservableObject {
     /// 2x or 4x no more than once a week.
     @Published var brief: BriefDto?
     var briefOpen = false
+    /// The selected company's executives and the people it could hire. Read only while the CEO
+    /// Office shows them.
+    @Published var executives: ExecutivesDto?
+    var executivesOpen = false
     private var briefWeek: UInt32?
     private var briefRevision: UInt64?
     private var briefFirm: UInt64?
@@ -175,6 +179,25 @@ final class AppStore: ObservableObject {
         briefRevision = overview?.revision
         briefFirm = firm
         if fresh != brief { brief = fresh }
+    }
+
+    /// Read the executives now, for the section when it opens or a command changed them.
+    func refreshExecutives() async {
+        guard let firm = selectedFirm else { return }
+        let fresh = await engine.executives(firm: firm)
+        if fresh != executives { executives = fresh }
+    }
+
+    func hireExecutive(firm: UInt64, post: Int, person: Int) async -> CommandRejection? {
+        let result = await submit(CommandJSON.command("HireExecutive", ["firm": firm, "post": post, "person": person]))
+        await refreshExecutives()
+        return result
+    }
+
+    func dismissExecutive(firm: UInt64, post: Int) async -> CommandRejection? {
+        let result = await submit(CommandJSON.command("DismissExecutive", ["firm": firm, "post": post]))
+        await refreshExecutives()
+        return result
     }
 
     /// Read the chapter data now, for the Hall page when it opens or the week moves.

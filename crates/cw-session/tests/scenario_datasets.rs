@@ -68,9 +68,12 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// and in 1.9 when scenarios began opening with the rates and inflation of their own period (Great
 /// Lakes 2000: inflation 3.4 percent not 3, policy rate 6.5 percent not 6, expected inflation and
 /// opening loan rates to match; this moves the fixture path too, from the first week), and in 1.9
-/// when earnings season began (estimates are written at week 13, results move share prices from
-/// week 26 and rivals give guidance, so every pinned path moves from week 26: the 52-week pins and
-/// the 26-week engine fixture path; the first 13 weeks are unchanged).
+/// when companies gained executives (rivals hire a chief financial, operating or logistics officer
+/// when it pays, which changes their loans, builds and freight inside the first year, and the pool
+/// of people to hire is drawn in week one and hashed), and in 1.9 when earnings season began
+/// (estimates are written at week 13, results move share prices from week 26 and rivals give
+/// guidance, so every pinned path moves from week 26: the 52-week pins and the 26-week engine
+/// fixture path; the first 13 weeks are unchanged).
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -82,15 +85,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "ad43496b2ba53763b2a5790ef408214e62f3188654fb864bcad3a280cc5e23b9",
+            "d3006be91bac411e03d35bf703becb9d7940c2a3ace571e37132b93b90607bcc",
         ),
         (
             2,
-            "843a8b68e4789a79278e6814cf998bb1f38f882656c18bc01e2bf6f0d287b18e",
+            "423efdf3997784c502c110fd685ecae4dad35652fdbf15d1c717f311733360e6",
         ),
         (
             3,
-            "a47a2b5909c27cd38630be70139408cb4889626202591190b87e73f5c9577b81",
+            "18f25640a6ce1004b323d5d3d4250c217f2d275ce36a31a1fb8a674456db76e6",
         ),
     ];
     for (seed, hash) in pins {
@@ -102,12 +105,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "ff4d638401e7c8449f1a079fb4b52f009cef90f7a4c965949edbbbd8b0cabe4e"
+        "04627bee7cdd449714db8e8f24a23d73878e18f36f25ba9c8f03d38eb153632b"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "645191f31b146de4ba881386b7dd7758f52bd14ccfc08b586ce512808ff7407b"
+        "f13abe9e554c5502ed32e5b0918980e79f87141f82a0e2145eee2aebc3a18b14"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();

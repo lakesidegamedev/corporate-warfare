@@ -500,6 +500,25 @@ pub enum CommandIntent {
         firm: Handle,
         pick: u8,
     },
+    /// Hire a candidate into a vacant executive post (0 chief financial officer, 1 chief
+    /// operating officer, 2 logistics chief). Last in the list, like the commands before it.
+    HireExecutive {
+        firm: Handle,
+        post: u8,
+        person: u16,
+    },
+    /// Let an executive go and pay severance.
+    DismissExecutive {
+        firm: Handle,
+        post: u8,
+    },
+    /// Offer a rival's executive a weekly pay to move to this company.
+    PoachExecutive {
+        firm: Handle,
+        from: Handle,
+        post: u8,
+        offer_cents: i64,
+    },
     /// Tell the analysts what operating profit to expect for the quarter: a low and a high end,
     /// in cents. Last in the list so older command logs keep their variant numbers.
     GiveGuidance {
@@ -604,6 +623,9 @@ impl CommandIntent {
             CommandIntent::SellBond { .. } => "sell_bond",
             CommandIntent::RespondActivist { .. } => "respond_activist",
             CommandIntent::WindDown { .. } => "wind_down",
+            CommandIntent::HireExecutive { .. } => "hire_executive",
+            CommandIntent::DismissExecutive { .. } => "dismiss_executive",
+            CommandIntent::PoachExecutive { .. } => "poach_executive",
         }
     }
 }
@@ -1080,7 +1102,11 @@ fn apply_intent(
             let cost = sectors::build_cost(world, dataset, owner, region, recipe_index, *blocks)
                 .capex_cents;
             let (excess, capacity) = sectors::construction_excess(world, owner, *blocks);
-            let lead = sectors::stretched_weeks(recipe.build_weeks, excess, capacity);
+            let lead = crate::economy::executives::build_weeks(
+                world,
+                owner,
+                sectors::stretched_weeks(recipe.build_weeks, excess, capacity),
+            );
             let debt = firm_ref(world, owner)?.book.debt();
             if governance::approval_required(world, owner, debt, cost)
                 && !governance::large_action_authorised(world, owner)
@@ -2029,7 +2055,7 @@ fn apply_intent(
             let grade = firm_ref(world, *firm)?.grade;
             let rate = world.macro_state.policy_rate_bps
                 + crate::economy::macro_cycle::lending_premium_bps(world)
-                + grade.spread_bps();
+                + crate::economy::executives::spread_after_cut(world, *firm, grade.spread_bps());
             // The outside lenders hold the numeraire and lend it in the borrower's money.
             let amount_numeraire =
                 crate::economy::fx::firm_to_numeraire_world(world, *firm, *amount_cents);
@@ -2082,7 +2108,11 @@ fn apply_intent(
             }
             let quoted = world.macro_state.policy_rate_bps
                 + crate::economy::macro_cycle::lending_premium_bps(world)
-                + firm_ref(world, *firm)?.grade.spread_bps();
+                + crate::economy::executives::spread_after_cut(
+                    world,
+                    *firm,
+                    firm_ref(world, *firm)?.grade.spread_bps(),
+                );
             if *rate_bps < quoted {
                 return Err(DomainError::SolvencyRestriction {
                     entity: firm.0,
@@ -2906,6 +2936,26 @@ fn apply_intent(
             require_control(world, actor, *firm)?;
             crate::economy::chapters::choose(world, *firm, *pick)
         }
+        CommandIntent::HireExecutive { firm, post, person } => {
+            require_control(world, actor, *firm)?;
+            let post = executive_post(*post)?;
+            crate::economy::executives::hire(world, *firm, post, *person)
+        }
+        CommandIntent::DismissExecutive { firm, post } => {
+            require_control(world, actor, *firm)?;
+            let post = executive_post(*post)?;
+            crate::economy::executives::dismiss(world, *firm, post).map(|_| ())
+        }
+        CommandIntent::PoachExecutive {
+            firm,
+            from,
+            post,
+            offer_cents,
+        } => {
+            require_control(world, actor, *firm)?;
+            let post = executive_post(*post)?;
+            crate::economy::executives::poach(world, *firm, *from, post, *offer_cents)
+        }
         CommandIntent::GiveGuidance {
             firm,
             low_cents,
@@ -2923,6 +2973,12 @@ fn apply_intent(
             structure::exit_jv(world, *venture, *firm)
         }
     }
+}
+
+fn executive_post(code: u8) -> DomainResult<crate::economy::executives::Post> {
+    crate::economy::executives::Post::from_code(code).ok_or(DomainError::Arithmetic {
+        detail: ArithmeticFault::OutOfRange,
+    })
 }
 
 /// Pay a construction bill to named contractors in the region, or to the finite outside
@@ -3177,7 +3233,11 @@ fn start_facility(
 ) -> Facility {
     let template = &dataset.recipes[recipe as usize];
     let (excess, capacity) = sectors::construction_excess(world, firm, blocks);
-    let mut weeks = sectors::stretched_weeks(template.build_weeks, excess, capacity);
+    let mut weeks = crate::economy::executives::build_weeks(
+        world,
+        firm,
+        sectors::stretched_weeks(template.build_weeks, excess, capacity),
+    );
     if world.regions[region as usize]
         .policy
         .permit_bonus_until

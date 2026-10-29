@@ -1110,6 +1110,7 @@ pub fn credit_spread(world: &World, firm: Handle, extra: i64) -> (i32, i32, i32)
 
 pub fn bond_quote(world: &World, firm: Handle, principal: i64, weeks: u32) -> BondQuote {
     let (spread, leverage, coverage) = credit_spread(world, firm, principal);
+    let spread = crate::economy::executives::spread_after_cut(world, firm, spread);
     let base = bond_base_bps(world, weeks);
     let rating = match spread {
         s if s < 150 => 'A',
@@ -2385,9 +2386,14 @@ fn grievance(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Reason, 
     // Two missed board mandates in a row, for the player's primary company. A chapter the player
     // never took a mandate in does not count either way.
     if world.investor.primary_group == Some(firm) {
+        // A chief the board named ends the count: only chapters after it can draw an activist.
+        let named = crate::economy::executives::board_chapter(world, firm);
         let missed = world
             .chapters
-            .results()
+            .log
+            .iter()
+            .filter(|c| c.number > named)
+            .filter_map(|c| c.outcome)
             .filter(|o| {
                 !matches!(
                     o,

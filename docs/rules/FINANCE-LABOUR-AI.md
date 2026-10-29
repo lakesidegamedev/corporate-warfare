@@ -154,7 +154,7 @@ each of its last six four-week periods since the appointment lost money, there i
 chance the board replaces the chief executive with a free person, preferring a different
 temperament. The old chief is benched for 104 weeks. Merged and liquidating firms release their
 chief. Each change is news with the new person's portrait, a dossier move and a telemetry count.
-An activist demand for a new chief executive replaces the named person the same way. A firm's
+An activist demand for a new chief executive replaces the named person the same way. In the player's primary company the board takes the same step after two missed mandates in a row (CORPORATE.md, Executives). Rivals also hire a chief financial officer, chief operating officer and logistics chief through the same commands as the player, only when the effect pays for the pay. A firm's
 structure weights (borrowing, transfer pricing, listing, partnering, resistance) are its
 archetype's habits pulled three parts in four toward the chief executive's temperament.
 Telemetry carries counts only, never names. Portraits are `apple/Resources/cast-portraits.json`,

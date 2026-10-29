@@ -182,6 +182,63 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             ],
         ),
         a(
+            "HireExecutive",
+            "Board",
+            "Hire an executive",
+            "Fill an empty post (chief financial officer, chief operating officer or logistics chief) with a person from the candidate list. You pay four weeks of their pay up front, then their weekly pay on a two-year contract. Each moves one real number: the cost of borrowing, build time and plant ceiling, or what outside carriers charge.",
+            "executive hire cfo coo logistics chief officer",
+            vec![
+                firm(),
+                f("post", "Post", "choice").choices(
+                    "number",
+                    &[
+                        ("0", "Chief financial officer"),
+                        ("1", "Chief operating officer"),
+                        ("2", "Logistics chief"),
+                    ],
+                ),
+                f("person", "Candidate number", "integer"),
+            ],
+        ),
+        a(
+            "DismissExecutive",
+            "Board",
+            "Dismiss an executive",
+            "Let an executive go. You pay severance, a quarter of the pay left on the contract (at least four and at most twenty-six weeks of pay). The post is open at once.",
+            "executive dismiss fire severance cfo coo logistics",
+            vec![
+                firm(),
+                f("post", "Post", "choice").choices(
+                    "number",
+                    &[
+                        ("0", "Chief financial officer"),
+                        ("1", "Chief operating officer"),
+                        ("2", "Logistics chief"),
+                    ],
+                ),
+            ],
+        ),
+        a(
+            "PoachExecutive",
+            "Board",
+            "Poach a rival's executive",
+            "Offer a rival's executive a weekly pay to move to you. They accept only if the offer beats their pay by enough for their temperament; a cautious person wants far more than a speculator. Their old boss will not forget it.",
+            "executive poach offer raise rival cfo coo logistics",
+            vec![
+                firm(),
+                f("from", "Rival company", "firm"),
+                f("post", "Post", "choice").choices(
+                    "number",
+                    &[
+                        ("0", "Chief financial officer"),
+                        ("1", "Chief operating officer"),
+                        ("2", "Logistics chief"),
+                    ],
+                ),
+                money("offer_cents", "Weekly pay offered").range(100_000, 0, 10_000, 5_000_000),
+            ],
+        ),
+        a(
             "SetSectorFocus",
             "Company",
             "Change sector focus",

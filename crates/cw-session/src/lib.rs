@@ -2166,7 +2166,10 @@ mod tests {
         // encoded fields), and refineries began shifting their cut. In 1.9 it moved from
         // dd84b0b3... when scenarios began opening with the inflation, policy rate and expected
         // inflation of their own period (Great Lakes 2000: 3.4 percent and 6.5 percent, not 3 and 6),
-        // which changes the opening loans, wages and rates from the first week. The Swift
+        // which changes the opening loans, wages and rates from the first week. In 1.9 it moved
+        // from 1bf6e771... when the world gained its executive state (the pool of people who can
+        // be hired is drawn in the first week and is hashed, like the chapter state), with no
+        // change to any rule this fixture exercises. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2192,7 +2195,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "1bf6e771d88fb63c498ad929846d96d2cd2505713935dda654f79b32d96d2a70"
+            "141f3b980f12a30ae75bb9fa9b5d30017fa8345ba0fe38211d0ff0a118b648d9"
         );
     }
 

@@ -10,6 +10,7 @@ pub mod division_report;
 pub mod earnings;
 pub mod equity;
 pub mod events_engine;
+pub mod executives;
 pub mod fiscal;
 pub mod freight;
 pub mod fx;
