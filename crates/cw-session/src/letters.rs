@@ -903,7 +903,7 @@ fn analyst_letters(
 }
 
 /// What a mandate kind asks, in a few plain words for the chair's letter.
-fn mandate_label(key: &str) -> &'static str {
+pub(crate) fn mandate_label(key: &str) -> &'static str {
     match key {
         "market_share" => "win more of a market",
         "profit_growth" => "grow operating profit",

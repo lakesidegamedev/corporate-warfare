@@ -4,6 +4,7 @@
 //! weekly advances. It exposes immutable read models, a versioned save envelope and a replay log.
 //! Swift keeps file I/O and lifecycle; it never computes a financial identity.
 
+pub mod brief;
 pub mod cfo;
 pub mod dto;
 pub mod letters;
