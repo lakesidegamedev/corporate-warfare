@@ -85,7 +85,12 @@ internal fun BriefBody(brief: BriefDto, currency: String, onReview: (BriefMoveDt
         }
 
         BriefHeading("What to do")
-        if (brief.moves.isEmpty()) Text("No move stands out. Hold your course.", color = Palette.secondary, fontSize = 12.sp)
+        if (brief.moves.isEmpty()) {
+            Text(
+                if (brief.hold.isEmpty()) "No move stands out. Hold your course." else "Hold your course. ${brief.hold}",
+                color = Palette.secondary, fontSize = 12.sp,
+            )
+        }
         brief.moves.forEach { move ->
             Column(
                 Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.panelRaised).border(1.dp, Palette.stroke, Pixel.shape).padding(10.dp),
@@ -110,8 +115,12 @@ private fun BriefHeading(text: String) {
 private fun figures(move: BriefMoveDto, currency: String): String = buildList {
     if (move.weeklyGainCents > 0) add("About ${Format.compact(move.weeklyGainCents, currency)} a week")
     if (move.costCents > 0) add("costs ${Format.compact(move.costCents, currency)}")
-    if (move.hasPayback && move.costCents > 0 && move.paybackWeeks > 0) add("pays back in about ${move.paybackWeeks} weeks")
+    if (move.hasPayback && move.costCents > 0 && move.paybackWeeks > 0) add("pays back in about ${paybackText(move.paybackWeeks)}")
 }.joinToString(", ")
+
+/** Weeks under a year, years to one decimal after. */
+internal fun paybackText(weeks: Long): String =
+    if (weeks < 52) "$weeks weeks" else "${weeks * 10 / 52 / 10}.${weeks * 10 / 52 % 10} years"
 
 /** Opens the existing dialog for a suggestion, filled in. */
 @Composable
@@ -156,6 +165,10 @@ internal fun BriefReview(store: GameStore, move: BriefMoveDto, onClose: () -> Un
             )
         }
         "raid" -> RaidDialog(store, t.target, t.region, t.industry, onClose)
+        "division" -> {
+            val division = store.divisions.firstOrNull { it.region == t.region && it.industry == t.industry }
+            if (division == null) onClose() else DivisionDetailDialog(store, division, onClose)
+        }
         else -> AlertDialog(
             onDismissRequest = onClose,
             containerColor = Palette.panel,

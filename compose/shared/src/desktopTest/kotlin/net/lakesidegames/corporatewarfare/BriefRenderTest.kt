@@ -28,12 +28,12 @@ class BriefRenderTest {
         Pixel.font = desktopPixelFont()
     }
 
-    private fun career(week: UInt, losing: Boolean): GameStore {
+    private fun career(week: UInt, losing: Boolean, scenario: String = "great-lakes-2000"): GameStore {
         val dir = kotlin.io.path.createTempDirectory("cwbrief").toFile()
         val store = GameStore(dir, CoroutineScope(Dispatchers.Default))
         store.startCareer(
             uniffi.cw_ffi.NewGameDto(
-                seed = 7uL, scenarioId = "great-lakes-2000", guided = true, fiveYear = false, difficulty = "standard", economy = "historic",
+                seed = 7uL, scenarioId = scenario, guided = true, fiveYear = false, difficulty = "standard", economy = "historic",
                 startingCapitalCents = null, pricePath = "historical", timeline = "historical",
             ),
         )
@@ -92,6 +92,8 @@ class BriefRenderTest {
         assertTrue(brief != null, "$label has a brief")
         println("$label week ${brief!!.week}: changes=${brief.changes.map { it.text }} due=${brief.due.map { it.text }} moves=${brief.moves.map { it.key }}")
         assertTrue(brief.changes.size <= 3 && brief.moves.size <= 3, "$label is within its limits")
+        assertTrue(brief.moves.isNotEmpty() || brief.hold.isNotEmpty(), "$label says what to do or why to hold")
+        if (!label.startsWith("great-lakes")) assertTrue(brief.moves.isNotEmpty(), "$label loses money and still sees a move")
         val text = (brief.changes.map { it.text } + brief.due.map { it.text } + brief.moves.map { it.detail }).joinToString(" ")
         assertTrue(!text.contains("bps") && !text.contains('\u2013') && !text.contains('\u2014'), "$label uses plain words")
         val currency = store.selectedFirmDto?.currency.orEmpty()
@@ -103,5 +105,6 @@ class BriefRenderTest {
     fun theBriefRendersForAThrivingAndALosingCompany() {
         check("great-lakes-week-30", career(30u, losing = false))
         check("losing", career(40u, losing = true))
+        check("texas-1981-week-40", career(40u, losing = true, scenario = "texas-1981"))
     }
 }
