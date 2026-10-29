@@ -126,9 +126,8 @@ fn changes(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefChange> {
     if let Some(last) = weeks.last() {
         let before = weeks.len().checked_sub(2).map(|i| weeks[i].net_income);
         let mut text = format!(
-            "Profit last week was {}, cash is now {}",
-            signed(world, dataset, firm, last.net_income),
-            paper::money(world, dataset, firm, entity.book.cash())
+            "Profit last week was {}",
+            signed(world, dataset, firm, last.net_income)
         );
         let mut size = last.net_income.abs();
         if let Some(before) = before {
@@ -140,6 +139,10 @@ fn changes(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefChange> {
                 paper::money(world, dataset, firm, swing.abs())
             );
         }
+        text += &format!(
+            ". Cash is now {}",
+            paper::money(world, dataset, firm, entity.book.cash())
+        );
         items.push((
             size,
             BriefChange {
