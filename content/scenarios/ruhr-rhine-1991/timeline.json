@@ -1,0 +1,200 @@
+{
+  "schema": 1,
+  "note": "Dated events for this scenario, drawn only from mechanics the engine already has. Dates are the year and the week of that year. Magnitudes follow docs/rules/CONTENT-PACING.md. Titles and summaries are fictional framing with no real company or person names.",
+  "events": [
+    {
+      "id": "rr-reunification-boom",
+      "date": {
+        "year": 1991,
+        "week": 10
+      },
+      "title": "Reunification spending boom",
+      "summary": "Billions flow east to rebuild roads, homes and factories. Western builders and suppliers are flooded with orders.",
+      "foreshadow_weeks": 5,
+      "effects": [
+        {
+          "kind": "demand_regime",
+          "sector": "construction",
+          "percent": 9,
+          "weeks": 52
+        },
+        {
+          "kind": "demand_regime",
+          "sector": "all",
+          "percent": 4,
+          "weeks": 52
+        }
+      ]
+    },
+    {
+      "id": "rr-rate-hikes",
+      "date": {
+        "year": 1991,
+        "week": 45
+      },
+      "title": "The central bank raises rates again",
+      "summary": "Reunification spending is pushing prices up and the central bank answers with higher rates. Credit gets dearer.",
+      "foreshadow_weeks": 8,
+      "effects": [
+        {
+          "kind": "central_bank_stance",
+          "shift": 20
+        },
+        {
+          "kind": "credit_tightening",
+          "spread_bps": 60,
+          "weeks": 52
+        }
+      ]
+    },
+    {
+      "id": "rr-privatisation-sales",
+      "date": {
+        "year": 1992,
+        "week": 10
+      },
+      "title": "State firms go up for sale",
+      "summary": "A public agency starts selling off the eastern state firms. Buyers are lining up for the better ones, and the rest face closure.",
+      "foreshadow_weeks": 12,
+      "effects": [
+        {
+          "kind": "law_change",
+          "law": "privatise",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": "rr-currency-crisis",
+      "date": {
+        "year": 1992,
+        "week": 37
+      },
+      "title": "The currency system comes under strain",
+      "summary": "Speculators attack weaker currencies in the exchange rate system. Lenders turn cautious and export orders slow.",
+      "foreshadow_weeks": 6,
+      "effects": [
+        {
+          "kind": "credit_tightening",
+          "spread_bps": 150,
+          "weeks": 26
+        },
+        {
+          "kind": "central_bank_stance",
+          "shift": -10
+        },
+        {
+          "kind": "demand_regime",
+          "sector": "all",
+          "percent": -4,
+          "weeks": 26
+        }
+      ]
+    },
+    {
+      "id": "rr-steel-slump",
+      "date": {
+        "year": 1993,
+        "week": 5
+      },
+      "title": "The steel industry slumps",
+      "summary": "Cheap imports and weak demand push steel prices down. Mills cut shifts across the valley.",
+      "foreshadow_weeks": 8,
+      "effects": [
+        {
+          "kind": "price_shock",
+          "good": "steel",
+          "percent": -20,
+          "weeks": 39
+        },
+        {
+          "kind": "demand_regime",
+          "sector": "manufacturing",
+          "percent": -6,
+          "weeks": 39
+        }
+      ]
+    },
+    {
+      "id": "rr-recession",
+      "date": {
+        "year": 1993,
+        "week": 20
+      },
+      "title": "The economy shrinks",
+      "summary": "The reunification boom is over and output falls for the first time in years. The central bank starts cutting.",
+      "foreshadow_weeks": 8,
+      "effects": [
+        {
+          "kind": "demand_regime",
+          "sector": "all",
+          "percent": -6,
+          "weeks": 39
+        },
+        {
+          "kind": "central_bank_stance",
+          "shift": -20
+        }
+      ]
+    },
+    {
+      "id": "rr-coal-subsidy-cut",
+      "date": {
+        "year": 1994,
+        "week": 20
+      },
+      "title": "Coal subsidies are cut",
+      "summary": "The government trims the support that kept deep mines open. Coal prices fall and mining towns lose demand.",
+      "foreshadow_weeks": 13,
+      "effects": [
+        {
+          "kind": "price_shock",
+          "good": "coal",
+          "percent": -15,
+          "weeks": 52
+        },
+        {
+          "kind": "demand_regime",
+          "sector": "extraction",
+          "percent": -8,
+          "weeks": 52
+        }
+      ]
+    },
+    {
+      "id": "rr-recovery",
+      "date": {
+        "year": 1995,
+        "week": 10
+      },
+      "title": "Growth returns",
+      "summary": "Export orders recover and factories hire again.",
+      "foreshadow_weeks": 0,
+      "effects": [
+        {
+          "kind": "demand_regime",
+          "sector": "all",
+          "percent": 4,
+          "weeks": 39
+        }
+      ]
+    },
+    {
+      "id": "rr-currency-union-prep",
+      "date": {
+        "year": 1997,
+        "week": 15
+      },
+      "title": "Preparing for a shared currency",
+      "summary": "Governments tighten budgets to meet the entry rules for a shared currency. Lenders raise their spreads for a while.",
+      "foreshadow_weeks": 8,
+      "effects": [
+        {
+          "kind": "credit_tightening",
+          "spread_bps": 40,
+          "weeks": 26
+        }
+      ]
+    }
+  ]
+}

@@ -23,6 +23,7 @@ fn session_with(seed: u64, pick: impl Fn(usize) -> Temperament) -> Session {
         prices: PriceSetup {
             scenario_id: "great-lakes-2000".to_owned(),
             path: Some(PricePath::HistoricalVariance),
+            ..Default::default()
         },
     })
     .unwrap();

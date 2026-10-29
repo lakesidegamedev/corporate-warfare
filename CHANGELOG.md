@@ -11,6 +11,23 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- Scenario history. Each scenario now has dated events from its own period that play out in your
+  career: a regional bank failure and the 1986 oil collapse in Texas, the technology bust and the
+  2001 recession in the Great Lakes, a browser listing boom and the dot-com bust in Silicon
+  Valley, the reunification boom and the 1992 currency crisis on the Ruhr and Rhine. Every event
+  is announced a few weeks ahead, then changes prices, demand, lending costs, central bank
+  mood or the law for a while. New games choose Historical (the default), Off or Shuffled, which
+  keeps the same events but moves their dates by up to half a year. The app screens for this come
+  in a later update.
+
+### Changed
+
+- Saves written by this version cannot be opened by older versions of the game. Careers saved in
+  1.8.0 and the earlier 1.9 previews open as normal, carry on without scenario history (their
+  dates are not invented backwards) and are saved in the new format from then on.
+
 ## [1.8.0] - 2026-10-29
 
 A living map and a deeper company: true 3D voxel buildings and vehicles on the real Earth with seasons and satellite clouds, trucks and trains on real interstates and railways, a clean Freight mode, more map modes, full company financials with customizable charts, deeper views of markets, regions, divisions, freight, rivals and the economy, markets that respond to stock, spare capacity, imports and inflation, choose previews or full releases and install any version from 1.8 on, one copy of the game at a time, faster weeks, and an 8-bit interface. Careers saved in 1.7.1 and the 1.8 previews load in 1.8.0 and carry on.

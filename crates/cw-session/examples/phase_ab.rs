@@ -22,6 +22,7 @@ fn main() {
         prices: cw_session::PriceSetup {
             scenario_id: "great-lakes-2000".to_string(),
             path: None,
+            ..Default::default()
         },
     };
     let mut session = cw_session::Session::create(config).unwrap();

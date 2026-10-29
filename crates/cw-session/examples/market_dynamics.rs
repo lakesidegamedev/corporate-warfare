@@ -12,7 +12,10 @@
 //! year: losing share and net margin over their last thirteen weeks (a firm counts in each group
 //! it runs a plant in).
 //!
-//! cargo run --release -p cw-session --example market_dynamics -- [seeds] [weeks]
+//! cargo run --release -p cw-session --example market_dynamics -- [seeds] [weeks] [scenario-id] [timeline]
+//!
+//! With a scenario id the career gets that scenario's world prices and, by `timeline` (historical,
+//! off or shuffled; historical when not given), its dated history.
 use std::collections::BTreeMap;
 
 #[derive(Default)]
@@ -32,6 +35,10 @@ fn main() {
     let mut args = std::env::args().skip(1);
     let seeds: u64 = args.next().and_then(|v| v.parse().ok()).unwrap_or(4);
     let weeks: u32 = args.next().and_then(|v| v.parse().ok()).unwrap_or(260);
+    let scenario_id = args.next().unwrap_or_default();
+    let timeline = args
+        .next()
+        .and_then(|key| cw_sim::economy::timeline::TimelineMode::from_key(&key));
     let mut rows: BTreeMap<String, Row> = BTreeMap::new();
     let (mut losing, mut reporting) = (0i64, 0i64);
     let mut by_year: BTreeMap<u32, (i64, i64, i64, i64)> = BTreeMap::new();
@@ -60,7 +67,11 @@ fn main() {
             difficulty: cw_data::Difficulty::Standard,
             economy_start: Default::default(),
             starting_capital_cents: None,
-            prices: Default::default(),
+            prices: cw_session::PriceSetup {
+                scenario_id: scenario_id.clone(),
+                path: None,
+                timeline,
+            },
         };
         let mut session = cw_session::Session::create(config).unwrap();
         let mut alive: Vec<u64> = Vec::new();
