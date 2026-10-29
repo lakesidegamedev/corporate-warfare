@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
             // A Play install updates through Play; only the direct-download APK keeps the updater.
             val updater = remember {
                 if (Updater.selfUpdateAllowed(installerPackage())) {
-                    Updater(AndroidUpdates(this), scope, java.io.File(cacheDir, "updates"))
+                    Updater(AndroidUpdates(this), scope, java.io.File(cacheDir, "updates"), filesDir, channel = { settings.updateChannel })
                 } else {
                     null
                 }
@@ -63,11 +63,15 @@ class MainActivity : ComponentActivity() {
     }.getOrNull()
 }
 
-/** Android opens the release's APK in the browser; the system installer takes it from there. */
+/**
+ * Android opens the release's APK in the browser; the system installer takes it from there. It
+ * refuses a lower version over the installed app, so going back needs an uninstall first.
+ */
 private class AndroidUpdates(private val activity: ComponentActivity) : UpdatePlatform {
     override val installerSuffix: String? = null
+    override val downgrade = Downgrade.UninstallFirst
 
-    override fun install(file: java.io.File) = Unit
+    override fun install(file: java.io.File, version: String) = Unit
 
     override fun open(url: String) {
         runCatching {

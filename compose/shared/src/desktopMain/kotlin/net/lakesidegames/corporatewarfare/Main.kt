@@ -54,24 +54,19 @@ private fun saveDirectory(): File {
 private val windows = System.getProperty("os.name").lowercase().contains("win")
 
 /**
- * Windows installs a downloaded update itself: a short script waits for the game to close, runs
- * the installer with a progress bar and no questions, then starts the game again. Linux and Mac
- * open the release page, where the package or app is one click.
+ * Windows installs a downloaded version itself: a short script waits for the game to close, runs
+ * the installer with a progress bar and no questions, then starts the game again. Going back to an
+ * older version first uninstalls the current one, since the MSI refuses to downgrade
+ * ([WindowsInstall.plan]). Linux and Mac open the release page, where the package or app is one
+ * click.
  */
 private object DesktopUpdates : UpdatePlatform {
     override val installerSuffix: String? = if (windows) ".msi" else null
 
-    override fun install(file: File) {
+    override fun install(file: File, version: String) {
         val app = System.getProperty("jpackage.app-path")
         val script = File(file.parentFile, "install-update.cmd")
-        script.writeText(
-            buildString {
-                appendLine("@echo off")
-                appendLine("timeout /t 2 /nobreak >nul")
-                appendLine("msiexec /i \"${file.absolutePath}\" /passive /norestart")
-                if (app != null) appendLine("start \"\" \"$app\"")
-            },
-        )
+        script.writeText(WindowsInstall.plan(file.absolutePath, version, BuildInfo.VERSION, app).joinToString("\r\n", postfix = "\r\n"))
         ProcessBuilder("cmd", "/c", "start", "\"\"", "/min", script.absolutePath).start()
         exitProcess(0)
     }
@@ -139,7 +134,9 @@ fun main() = application {
     ) {
         val scope = rememberCoroutineScope()
         val store = remember { GameStore(saveDirectory(), scope) }
-        val updater = remember { Updater(DesktopUpdates, scope, File(saveDirectory(), "updates")) }
+        val updater = remember {
+            Updater(DesktopUpdates, scope, File(saveDirectory(), "updates"), saveDirectory(), channel = { settings.updateChannel })
+        }
         CorporateWarfareApp(store, settings, updater, onQuit = ::exitApplication)
     }
 }
