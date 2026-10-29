@@ -61,7 +61,16 @@ final class MaxSpeedTests: XCTestCase {
             }
         }
 
-        await breathe(1, measured: false)
+        // Attaching the window runs the app's launch work (first layout of every tab, the map's
+        // first frame). That is start-up, not the run loop, so it settles unmeasured: wait until
+        // a whole second passes with no stall over 150 ms (at most eight seconds).
+        var quietSeconds = 0
+        for _ in 0..<8 {
+            let before = stalls.count
+            await breathe(1, measured: false)
+            if !stalls[before...].contains(where: { $0.end - $0.start - 0.02 > 0.15 }) { quietSeconds += 1 }
+            if quietSeconds >= 1 { break }
+        }
         await breathe(1)
         for tab in [AppTab.office, .markets, .inbox, .portfolio, .map, .office] {
             phase = "\(tab)"
