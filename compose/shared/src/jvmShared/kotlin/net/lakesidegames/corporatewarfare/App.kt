@@ -1,5 +1,6 @@
 package net.lakesidegames.corporatewarfare
 
+import uniffi.cw_ffi.LetterDto
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -202,7 +203,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
                         selected = tab == item,
                         onClick = { open(item.name.lowercase()) },
                         icon = {
-                            val due = store.events.count { it.mandatory }
+                            val due = store.inboxBadge
                             if (item == Tab.Inbox && due > 0) {
                                 BadgedBox(badge = { Badge { Text("$due") } }) { PixelIcon(item.icon, size = 24.dp) }
                             } else {
@@ -584,18 +585,31 @@ fun PauseBanner(store: GameStore, modifier: Modifier = Modifier) {
 
 // MARK: Inbox
 
+/**
+ * The Inbox is correspondence: a stack of letters, decisions pinned on top, one open at a time.
+ * Rival moves stay below as a compact feed: most of them (a plant, a wind-down) involve no one
+ * writing to you, so a letter for each would be invented.
+ */
 @Composable
 private fun InboxScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
+    var openId by remember { mutableStateOf<String?>(null) }
+    var picked by remember { mutableStateOf<LetterDto?>(null) }
+    // A letter stays open after it leaves the Inbox window (the archive); a answered card is gone.
+    val letter = store.letters.firstOrNull { it.id == openId } ?: picked?.takeIf { it.id == openId && it.event == null }
     TabList {
         item {
             ScreenHeader("Inbox", listOfNotNull(store.selectedFirmDto?.name, store.overview?.weekLabel).joinToString(" · ")) {
                 OutlinedButton(onClick = { onOpen("paper") }) { Text("The paper", color = Palette.primaryText, fontSize = 12.sp) }
             }
         }
+        if (letter != null) {
+            item { TextButton(onClick = { openId = null; picked = null }) { Text("Back to letters", color = Palette.gold) } }
+            item { LetterPaper(store, store.letters.firstOrNull { it.id == letter.id } ?: letter) }
+            return@TabList
+        }
         val due = store.events.count { it.mandatory }
         if (due > 0) item { Callout("$due decision${if (due == 1) "" else "s"} needed before time can advance.", Palette.warning) }
-        if (store.events.isEmpty() && store.rivalFeed.isEmpty()) item { Callout("Quiet week. Decisions show up here when they happen.", Palette.secondary) }
-        items(store.events.size) { index -> DecisionCard(store, store.events[index]) }
+        item { LetterStack(store, openId) { openId = it.id; picked = it } }
         if (store.rivalFeed.isNotEmpty()) {
             item {
                 Panel {

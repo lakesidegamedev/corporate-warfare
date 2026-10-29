@@ -78,6 +78,10 @@ final class SnapshotTests: XCTestCase {
         }
         render("markets-pad", pad, compact: false, MarketsView().environmentObject(store))
         render("inbox-phone", phone, compact: true, InboxView().environmentObject(store))
+        if let letter = store.letters.first {
+            render("letter-phone", phone, compact: true,
+                   ScrollView { LetterPaperView(letter: letter).padding(14) }.background(Theme.ink).environmentObject(store))
+        }
         render("root-phone", phone, compact: true, RootView().environmentObject(store))
         // Each tab inside the real tab bar, so content against the bar is reviewed as shipped.
         render("tab-office-phone", phone, compact: true, RootView(initialTab: .office).environmentObject(store))
