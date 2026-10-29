@@ -53,6 +53,20 @@ heading.
 
 ### Changed
 
+- The map is easier to read when you zoom in close. Rival companies' plants now show in their
+  industry's colour with a dark roof and are about 60 percent of the size of yours, while your
+  own are full size with a gold roof and the plant count on top. Cities no longer look like
+  identical grey blocks: ports have cranes and stacked containers, steel towns have tall stacks,
+  car towns have a long assembly shed, and the rest stay as towers. Town and city names are in
+  plain sentence case in one weight, and only region names keep the spaced capital letters. Names
+  no longer overlap each other or sit on top of a building: when two compete, the region name
+  gives way to the city name, and the city name to your own plant badge, and a name that is
+  showing stays put instead of blinking while you pan. Trucks, trains and ships keep at least two
+  vehicle lengths apart, so a busy road looks busy without becoming one unbroken line, and they
+  carry their owner's colour: gold for yours, the industry colour for a rival's, grey for outside
+  carriers. On the desktop app the buildings and names are now drawn in the background like the
+  ground, so panning and zooming close in stays smooth.
+
 - Saves written by this version cannot be opened by older versions of the game. Careers saved in
   1.8.0 and the earlier 1.9 previews open as normal, carry on without scenario history (their
   dates are not invented backwards) and are saved in the new format from then on.

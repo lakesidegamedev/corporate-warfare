@@ -20,6 +20,28 @@ enum VoxelModels {
         let d: Double
         let h: Double
         let boxes: [Box]
+        /// The top of the main roof: the highest broad box, so chimneys and cranes are left alone.
+        let roofZ: Double
+    }
+
+    /// The screen rectangle a model covered, filled by `draw` when asked.
+    final class Bounds {
+        private(set) var minX = CGFloat.greatestFiniteMagnitude
+        private(set) var minY = CGFloat.greatestFiniteMagnitude
+        private(set) var maxX = -CGFloat.greatestFiniteMagnitude
+        private(set) var maxY = -CGFloat.greatestFiniteMagnitude
+
+        var rect: CGRect? { minX <= maxX && minY <= maxY ? CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY) : nil }
+
+        func reset() {
+            minX = .greatestFiniteMagnitude; minY = .greatestFiniteMagnitude
+            maxX = -CGFloat.greatestFiniteMagnitude; maxY = -CGFloat.greatestFiniteMagnitude
+        }
+
+        func add(_ x: CGFloat, _ y: CGFloat) {
+            minX = min(minX, x); maxX = max(maxX, x)
+            minY = min(minY, y); maxY = max(maxY, y)
+        }
     }
 
     static let ready = Notification.Name("VoxelModels.ready")
@@ -81,8 +103,9 @@ enum VoxelModels {
                 return Box(x0: n[0], y0: n[1], z0: n[2], x1: n[3], y1: n[4], z1: n[5],
                            color: RGB(hex: UInt32(hex.replacingOccurrences(of: "#", with: ""), radix: 16) ?? 0x808080))
             }
+            let roofZ = boxes.filter { ($0.x1 - $0.x0) * ($0.y1 - $0.y0) >= 6 }.map(\.z1).max() ?? -1
             return Model(w: (m["w"] as? NSNumber)?.doubleValue ?? 0, d: (m["d"] as? NSNumber)?.doubleValue ?? 0,
-                         h: (m["h"] as? NSNumber)?.doubleValue ?? 0, boxes: boxes)
+                         h: (m["h"] as? NSNumber)?.doubleValue ?? 0, boxes: boxes, roofZ: roofZ)
         }
     }
 
@@ -114,11 +137,20 @@ enum VoxelModels {
     /// How a model is coloured: as made, greyed for rivals, dark for closures.
     enum Tone {
         case plain, muted, dark
+        /// A rival's building: the model's colours pulled towards its sector's colour.
+        case sector(RGB)
+        /// A vehicle with the neutral livery swapped for its owner's colour.
+        case livery(RGB)
+
+        /// The baked neutral liveries of the trucks, cars, locomotives and ships.
+        private static let neutralLivery = [RGB(hex: 0x4F7FAF), RGB(hex: 0xC24A40), RGB(hex: 0xE5D04A), RGB(hex: 0x2E4A66)]
 
         func apply(_ c: RGB) -> RGB {
             let g = (c.r + c.g + c.b) / 3
             switch self {
             case .plain: return c
+            case .sector(let sector): return c.mixed(with: sector, 0.4)
+            case .livery(let owner): return Tone.neutralLivery.contains(c) ? owner : c
             case .muted: return RGB((g + (c.r - g) * 0.25) * 0.8, (g + (c.g - g) * 0.25) * 0.82, (g + (c.b - g) * 0.25) * 0.88)
             case .dark: return RGB((g + (c.r - g) * 0.15) * 0.5, (g + (c.g - g) * 0.15) * 0.52, (g + (c.b - g) * 0.15) * 0.58)
             }
@@ -131,6 +163,7 @@ enum VoxelModels {
     @discardableResult
     static func draw(_ name: String, projection p: MapProjection, ground: CGPoint, floor: Double, unit: Double,
                      heading: Double = 0, tone: Tone = .plain, ink: Bool = true, alpha: Double = 1,
+                     roof: RGB? = nil, bounds: Bounds? = nil,
                      in context: inout GraphicsContext) -> CGFloat? {
         guard let model = models[name] else { return nil }
         let e = p.east
@@ -193,12 +226,14 @@ enum VoxelModels {
             corner(6, b.x1, b.y1, b.z1)
             corner(7, b.x0, b.y1, b.z1)
             let base = tone.apply(b.color)
+            if let bounds { for i in 0..<8 { bounds.add(xs[i], ys[i]) } }
+            let isRoof = roof != nil && (b.x1 - b.x0) * (b.y1 - b.y0) >= 6 && b.z1 >= model.roofZ - 0.01
             // South, east, north, west sides, then the top: corners anticlockwise seen from outside.
             _ = face(0, 1, 5, 4, side(0, -1), base)
             _ = face(1, 2, 6, 5, side(1, 0), base)
             _ = face(2, 3, 7, 6, side(0, 1), base)
             _ = face(3, 0, 4, 7, side(-1, 0), base)
-            if face(4, 5, 6, 7, 1, base) { top = min(top, min(min(ys[4], ys[5]), min(ys[6], ys[7]))) }
+            if face(4, 5, 6, 7, 1, isRoof ? roof! : base) { top = min(top, min(min(ys[4], ys[5]), min(ys[6], ys[7]))) }
         }
         return top == .greatestFiniteMagnitude ? nil : top
     }
