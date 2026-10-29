@@ -78,6 +78,13 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
     var setup by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
+    var careers by remember { mutableStateOf(false) }
+    val settings = LocalAppSettings.current
+    if (careers) {
+        BackAction { careers = false }
+        CareerListScreen(settings?.careers.orEmpty()) { careers = false }
+        return
+    }
     if (editing) {
         ScenarioEditorScreen(store, baseId = null, existing = null, onBack = { editing = false })
         return
@@ -118,6 +125,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
             }
             MenuButton("New game", primary = !store.hasAutosave) { setup = true }
             if (store.hasAutosave) MenuButton("Load game") { loading = true }
+            if (settings?.careers?.isNotEmpty() == true) MenuButton("Hall of Careers") { careers = true }
             MenuButton("Scenario editor") { editing = true }
             MenuButton("Settings", onClick = onSettings)
             if (onQuit != null) MenuButton("Quit", onClick = onQuit)

@@ -170,7 +170,9 @@ integrator, consolidator financier, vulture raider). The style does five things.
    bypass the selector. Every move still passes the common command validator.
 3. Sharpness: Easy misjudges a move's value by up to 40 percent either way, Standard 15,
    Hard not at all, again by stable draw.
-4. Money habits: the cautious hold a reserve target half again as large; raiders spend 70
+4. Money habits: a raid campaign (budget plus surcharge) may cost at most half of what the firm
+   earned over its last thirteen weeks, and a firm with no profit does not raid, on top of the cash
+   and reserve tests; the cautious hold a reserve target half again as large; raiders spend 70
    percent more on marketing; a raider accepts a raid short of paying for itself by up to
    `(weight - 100) / 4` percent of its budget; a speculator buys into store on a 5 percent dip
    in any phase but a boom.
@@ -223,6 +225,9 @@ the best importing gateway after freight from the site, so a distant site wins o
 lower costs outweigh the freight. Growth-minded archetypes (growth weight 3)
 build when imports cover four fifths of a plant; cautious ones (weight 2) only when imports cover
 a full plant; vultures do not build. A rival stops building new plants at thirty plants.
+Imports lag a new plant: the room a rival sees is the smoothed imports less the weekly output of
+plants of that good still being built or opened in the last eight weeks, never below zero, so
+rivals that see the same imports do not all build for them in one quarter.
 Acquisition candidate uses public fair estimate with 20 percent uncertainty haircut unless
 diligence reveals data. Require post-deal debt/assets <=60 percent and positive combined
 operating contribution. NPC public holders tender using CORPORATE reservation factors.

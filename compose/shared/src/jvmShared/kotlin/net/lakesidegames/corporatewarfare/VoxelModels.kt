@@ -45,6 +45,9 @@ internal object VoxelModels {
     /** How tall a model stands on screen above its base at [unit] pixels a voxel, before perspective. */
     fun lift(name: String, unit: Float): Double = (models[name]?.h ?: 0f) * unit * VERTICAL
 
+    /** A radius in pixels that holds the whole model drawn at [unit], from its ground anchor, in any heading and tilt. */
+    fun reach(name: String, unit: Float): Float = models[name]?.let { (it.w + it.d + it.h * VERTICAL.toFloat()) * unit } ?: 0f
+
     /** The model name for an industry or city at a plant count: small, medium or large. */
     fun sized(kind: String, plants: Int) = "$kind/${Voxels.size(plants)}"
 

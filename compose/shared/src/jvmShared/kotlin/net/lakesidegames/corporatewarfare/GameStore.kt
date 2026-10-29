@@ -120,6 +120,18 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     val unreadLetters: Int get() = letters.count { !it.read }
     /** The Inbox badge: unread letters plus decisions already read but still due. */
     val inboxBadge: Int get() = letters.count { !it.read || it.mandatory }
+    /** This career's chapters, board goals and achievements. Read only when it can be seen (see [loadHall]). */
+    var hall by mutableStateOf<uniffi.cw_ffi.HallDto?>(null); private set
+    /** The five-year score, when the career is scored. */
+    var score by mutableStateOf<uniffi.cw_ffi.ScoreDto?>(null); private set
+    /** The Hall of Careers page is open, so the chapter data is kept current even at speed. */
+    var hallOpen: Boolean = false
+    private var hallStale = false
+    /** The last chapter whose result the player has already been shown. */
+    private var resultSeen = 0
+    private var resultSeenFor: SessionHandle? = null
+    /** Called when a career is left, with its summary, so the main menu can list it. */
+    var onCareerEnded: (CareerSummary) -> Unit = {}
     /** Every plant in the world, so a rival's markets can be listed with a Raid button. */
     var mapPlants by mutableStateOf<List<MapPlantDto>>(emptyList()); private set
     var commodities by mutableStateOf<List<CommodityDto>>(emptyList()); private set
@@ -245,7 +257,13 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         runJob = null
         running = false
         save(wait = true)
+        loadHall(force = true)
+        val scenario = session?.let { h -> withContext(engine) { h.scenarioId() } }.orEmpty()
+        hall?.let { h -> overview?.let { o -> if (h.weeks > 0u) onCareerEnded(CareerSummary.of(o.primaryName, scenarioName(scenario), h)) } }
         session = null
+        hall = null
+        score = null
+        resultSeenFor = null
         ready = false
         overview = null
         selectedFirm = null
@@ -264,6 +282,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
             runJob?.cancel()
             runJob = null
             running = false
+            scope.launch { loadHall(force = true) }
             return
         }
         speed = weeksPerSecond
@@ -660,6 +679,56 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
             }
         }
         loadMarkets()
+        loadHall()
+    }
+
+    /**
+     * The chapter data is read when the Hall page is open, right after a choice, and when the week
+     * changes with time paused or at 1x. At 2x and 4x the week is too short to spend a call on it;
+     * pausing reads it once.
+     */
+    private suspend fun loadHall(force: Boolean = false) {
+        val handle = session ?: return
+        if (!force && !hallOpen && !hallStale && running && speed > 1) return
+        hallStale = false
+        val (dto, scoreNow) = withContext(engine) { handle.hallOfCareers() to runCatching { handle.score() }.getOrNull() }
+        if (session !== handle) return
+        if (resultSeenFor !== handle) {
+            // A result that was already waiting when the career opened is not news.
+            resultSeen = dto.chapters.lastOrNull { it.outcome == "met" || it.outcome == "missed" }?.number?.toInt() ?: 0
+            resultSeenFor = handle
+        }
+        hall = dto
+        score = scoreNow
+    }
+
+    /** Read the chapter data now, for the Hall page when it opens or the week moves. */
+    fun refreshHall() { scope.launch { loadHall(force = true) } }
+
+    /** The board's offer for the player's current chapter, if one can still be taken. */
+    val boardOffer: uniffi.cw_ffi.ChapterDto?
+        get() = hall?.chapters?.lastOrNull { it.status == "current" && it.chosen == null && it.offerWeeksLeft > 0u && it.offered.isNotEmpty() }
+
+    /** The goal in force for the current chapter. */
+    val activeMandate: Pair<uniffi.cw_ffi.ChapterDto, uniffi.cw_ffi.MandateDto>?
+        get() = hall?.chapters?.lastOrNull { it.status == "current" }?.let { chapter ->
+            val picked = chapter.chosen?.let { chapter.offered.getOrNull(it.toInt()) }
+            if (picked != null && chapter.outcome == "open") chapter to picked else null
+        }
+
+    /** A chapter that closed met or missed and has not been shown yet. */
+    val chapterResult: uniffi.cw_ffi.ChapterDto?
+        get() = hall?.chapters?.lastOrNull { (it.outcome == "met" || it.outcome == "missed") && it.number.toInt() > resultSeen }
+
+    fun dismissChapterResult() {
+        resultSeen = hall?.chapters?.maxOfOrNull { it.number.toInt() } ?: resultSeen
+        hall = hall
+    }
+
+    /** Take the board's goal in position [pick] (0 to 2) for [firm]. */
+    fun chooseMandate(firm: ULong, pick: Int) {
+        hallStale = true
+        submit(CommandJson.command("ChooseMandate", "firm" to firm, "pick" to pick))
     }
 
     private suspend fun loadMarkets() {

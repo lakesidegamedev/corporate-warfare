@@ -243,7 +243,7 @@ pub(crate) const SALUTATIONS: [[&str; 2]; 3] = [
 
 /// Opening and closing lines for a sender who is an office or a role, with no temperament,
 /// by kind of letter.
-pub(crate) const OFFICE_FRAMES: [(&str, &str, &str); 9] = [
+pub(crate) const OFFICE_FRAMES: [(&str, &str, &str); 10] = [
     (
         "decision",
         "This is an official notice for your attention.",
@@ -273,6 +273,11 @@ pub(crate) const OFFICE_FRAMES: [(&str, &str, &str); 9] = [
         "analyst",
         "A note from the desk on what we are watching.",
         "We will keep you posted.",
+    ),
+    (
+        "board",
+        "The board has met and set its goals for the year.",
+        "We look forward to your answer.",
     ),
     (
         "rival",
@@ -897,6 +902,63 @@ fn analyst_letters(
     }
 }
 
+/// What a mandate kind asks, in a few plain words for the chair's letter.
+fn mandate_label(key: &str) -> &'static str {
+    match key {
+        "market_share" => "win more of a market",
+        "profit_growth" => "grow operating profit",
+        "integrate" => "make an input you now buy",
+        "cash_cover" => "keep a cash cushion",
+        "debt_to_equity" => "cut debt against equity",
+        "win_raid" => "win a raid",
+        "list_subsidiary" => "list a subsidiary",
+        _ => "meet a target",
+    }
+}
+
+/// The chair of the board writes once a chapter, when the board puts its mandates on the table.
+fn board_letters(world: &World, since: u32, out: &mut Vec<Letter>) {
+    let window = cw_data::chapters::mandate_table().offer_window_weeks;
+    for log in world.chapters.log.iter().filter(|l| l.start >= since) {
+        let Some(firm) = log.firm else { continue };
+        if log.offered.is_empty() || !player_side(world, firm) {
+            continue;
+        }
+        let org = paper::firm_name(world, firm).unwrap_or_default();
+        let labels = log
+            .offered
+            .iter()
+            .map(|k| mandate_label(k.key()))
+            .collect::<Vec<_>>()
+            .join("; ");
+        let words = match log.offered.len() {
+            1 => "one goal",
+            2 => "two goals",
+            _ => "three goals",
+        };
+        out.push(finish(
+            world,
+            Draft {
+                id: format!("board:{}", log.number),
+                kind: "board",
+                week: log.start.max(1),
+                sender: office_sender("The chair of the board", "Chair of the board", &org),
+                tone: Tone::Formal,
+                addressee: org.clone(),
+                facts: vec![
+                    format!("{}. The board offers {words} for this year: {labels}.", log.name),
+                    format!(
+                        "Open the CEO Office to read each one and pick by week {}. Time keeps running while you decide, and an offer left alone lapses with no penalty.",
+                        log.start + window
+                    ),
+                ],
+                link: PaperLink::company(firm),
+            },
+            None,
+        ));
+    }
+}
+
 /// How much of a quarter's sales is profit before a quarter counts as strong, in percent.
 const STRONG_MARGIN_PCT: i64 = 10;
 
@@ -1119,6 +1181,7 @@ pub fn letters(world: &World, dataset: &Dataset, since_week: u32) -> Vec<Letter>
     union_letters(world, since, &mut out);
     analyst_letters(world, dataset, &stories, since, &mut out);
     cfo_letters(world, dataset, since, &mut out);
+    board_letters(world, since, &mut out);
     decision_letters(world, dataset, 1, &mut out);
 
     out.sort_by(|a, b| {
@@ -1557,6 +1620,39 @@ mod tests {
             firm.book.commit(Tick(week), txn).unwrap();
             firm.book.close_week(Tick(week));
         }
+    }
+
+    #[test]
+    fn the_chair_writes_when_the_board_offers_its_goals() {
+        let mut s = session("great-lakes-2000");
+        s.advance(3);
+        let found = letters(&s.world, &s.dataset, 1);
+        let l = found
+            .iter()
+            .find(|l| l.kind == "board")
+            .expect("a letter from the chair");
+        check(l);
+        assert_eq!(l.id, "board:1");
+        assert_eq!(l.sender.role, "Chair of the board");
+        assert!(l.sender.person.is_empty());
+        assert!(text(l).starts_with(office_frames("board").0));
+        assert!(
+            text(l).contains("Chapter 1:") && text(l).contains("three goals"),
+            "{}",
+            text(l)
+        );
+        assert_eq!(l.link.kind, "company");
+        assert!(
+            l.event.is_none() && !l.mandatory,
+            "an offer never stops the clock"
+        );
+        assert_eq!(found, letters(&s.world, &s.dataset, 1));
+        // A later window does not carry it.
+        assert!(
+            letters(&s.world, &s.dataset, 40)
+                .iter()
+                .all(|l| l.kind != "board")
+        );
     }
 
     #[test]

@@ -10,7 +10,8 @@
 //! the outside share is the leg lots that overflowed to outside carriers. Established firms that
 //! run a plant making pig iron, freight, components, plastics, timber or fuel are also reported by
 //! year: losing share and net margin over their last thirteen weeks (a firm counts in each group
-//! it runs a plant in).
+//! it runs a plant in). The last line is the investor's net worth over a career with no moves of
+//! the player's own, start and end, as a whole-economy health check.
 //!
 //! cargo run --release -p cw-session --example market_dynamics -- [seeds] [weeks] [scenario-id] [timeline]
 //!
@@ -49,15 +50,19 @@ fn main() {
     // year -> export value (numeraire cents), export lots, raids, successful raids, firm exits.
     let mut trade: BTreeMap<u32, [i64; 5]> = BTreeMap::new();
     // (good, year) -> established firms counted, losing, revenue and net income over 13 weeks.
-    const GROUPS: [&str; 6] = [
+    const GROUPS: [&str; 8] = [
         "pig_iron",
         "freight",
         "components",
         "plastics",
         "timber",
         "fuel",
+        "grain",
+        "food_raw",
     ];
     let mut groups: BTreeMap<(usize, u32), [i64; 4]> = BTreeMap::new();
+    // Player-less career: the investor's net worth at the end and at the start, summed over seeds.
+    let mut worth = [0i64; 2];
     for seed in 1..=seeds {
         let config = cw_session::ScenarioConfig {
             seed,
@@ -148,6 +153,8 @@ fn main() {
                 }
             }
             if week == weeks {
+                worth[0] += cw_sim::economy::seed::investor_net_worth(world, dataset);
+                worth[1] += world.investor.starting_net_worth_cents;
                 for raid in &world.raids {
                     let year = (raid.tick.max(1) - 1) / 52 + 1;
                     let row = trade.entry(year).or_default();
@@ -289,4 +296,10 @@ fn main() {
             row[4]
         );
     }
+    println!(
+        "player-less career net worth, mean over seeds: start ${}k, end ${}k ({:+}%)",
+        worth[1] / seeds as i64 / 100_000,
+        worth[0] / seeds as i64 / 100_000,
+        (worth[0] - worth[1]) * 100 / worth[1].max(1)
+    );
 }

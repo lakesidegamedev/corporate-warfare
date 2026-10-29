@@ -19,6 +19,40 @@ final class SnapshotTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
+    /// The board's offer, the goal in force and the Hall of Careers, from a career in its first year.
+    func testRenderChapterScreens() async throws {
+        let store = AppStore(saveManager: SaveManager(directory: directory))
+        await store.newCareer(guided: true, fiveYear: true, seed: 7)
+        XCTAssertTrue(store.sessionReady)
+        if let primary = store.overview?.primaryFirm { await store.selectFirm(primary) }
+        await store.advance(weeks: 2)
+        await store.continueCareer()
+        await store.refreshHall()
+        guard let offer = store.boardOffer else { return XCTFail("the board offers goals in the first weeks") }
+        XCTAssertEqual(offer.offered.count, 3)
+        let phone = CGSize(width: 393, height: 1100)
+        let pad = CGSize(width: 1180, height: 600)
+        func both<V: View>(_ name: String, _ view: V, phoneHeight: CGFloat = 1100) {
+            let page = ScrollView { view.padding(16) }.background(Theme.ink).environmentObject(store)
+            render("\(name)-phone", CGSize(width: phone.width, height: phoneHeight), compact: true, page)
+            render("\(name)-pad", pad, compact: false, page)
+        }
+        both("board-offer", BoardOfferCard(chapter: offer))
+        let rejection = await store.chooseMandate(firm: offer.firm, pick: 0)
+        XCTAssertNil(rejection, "the offer can be taken")
+        await store.refreshHall()
+        guard let active = store.activeMandate else { return XCTFail("the chosen goal is in force") }
+        XCTAssertNil(store.boardOffer, "a taken offer is off the table")
+        both("board-goal", MandateStrip(chapter: active.chapter, mandate: active.mandate), phoneHeight: 300)
+        for _ in 0..<54 {
+            await store.advance(weeks: 1)
+            await store.continueCareer()
+        }
+        await store.refreshHall()
+        XCTAssertGreaterThanOrEqual(store.hall?.chapters.count ?? 0, 2, "chapter 2 opened")
+        both("hall", HallView(), phoneHeight: 1800)
+    }
+
     func testRenderMainScreens() async throws {
         let store = AppStore(saveManager: SaveManager(directory: directory))
         await store.newCareer(guided: true, fiveYear: false, seed: 7)

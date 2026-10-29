@@ -73,6 +73,7 @@ private enum class Page(val id: String, val title: String, val icon: String, val
     Inbox("inbox", "Inbox", "inbox", "World", "F6"),
     Paper("paper", "Paper", "doc", "World", "F8"),
     Portfolio("portfolio", "Portfolio", "portfolio", "You", "F7"),
+    Hall("hall", "Hall of Careers", "star", "You", "F9"),
 }
 
 /**
@@ -115,6 +116,7 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                     event.key == Key.F6 -> { open(Page.Inbox); true }
                     event.key == Key.F7 -> { open(Page.Portfolio); true }
                     event.key == Key.F8 -> { open(Page.Paper); true }
+                    event.key == Key.F9 -> { open(Page.Hall); true }
                     else -> false
                 }
             },
@@ -143,6 +145,7 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                         Page.Inbox -> DesktopInbox(store)
                         Page.Portfolio -> DesktopPortfolio(store)
                         Page.Paper -> PaperScreen(store)
+                        Page.Hall -> HallScreen(store)
                     }
                 }
             }
@@ -555,10 +558,15 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
             Spacer(Modifier.weight(1f))
             OutlinedButton(onClick = { onOpen(Page.Research) }) { Text("Research", color = Palette.primaryText) }
             OutlinedButton(onClick = { onOpen(Page.Stats) }) { Text("Stats", color = Palette.primaryText) }
+            OutlinedButton(onClick = { onOpen(Page.Hall) }) { Text("Hall", color = Palette.primaryText) }
             GoldButton("Actions") { onOpen(Page.Actions) }
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(0.9f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                if (store.boardOffer != null || store.activeMandate != null || store.chapterResult != null) {
+                    ChapterBlock(store)
+                    Spacer(Modifier.height(10.dp))
+                }
                 if (store.cfoAdvice.isNotEmpty()) {
                     CfoPanel(store, firm.currency)
                     Spacer(Modifier.height(10.dp))

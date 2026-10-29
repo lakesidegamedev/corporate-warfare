@@ -48,11 +48,22 @@ heading.
   subsidiary. You take one in the first four weeks. Meet it and the company pays you a management
   bonus and its standing improves. Miss it and the board loses confidence, and two misses in a row can
   draw an activist investor. Rival companies pick goals the same way. These replace the old quarterly
-  board goals, so there is one set of goals now. The screens for this come in a later update.
+  board goals, so there is one set of goals now. On screen, the offer sits at the top of the CEO
+  Office as three cards. Each says what the goal is, how it is measured, what meeting it pays (a
+  management bonus and standing) and what missing it costs, with a Choose button and how many weeks you
+  have to decide. It never stops the clock, and an offer you leave alone lapses with no penalty. The chair
+  of the board also writes you a letter in the Inbox when the offer opens. Once you choose, the card
+  becomes a goal strip with a progress bar, a number and a plain sentence on where you stand, plus the
+  weeks left in the chapter. When a chapter closes, a short panel tells you once whether the goal was met
+  and what it paid or cost.
 - Twenty career achievements, such as your first raid won, a subsidiary listed, ten companies in your
   group, surviving a hostile bid, seeing a bank rescued, living through every event of a scenario and a
-  thirty year career. Each is earned once and remembered with its week. The Hall of Careers screen
-  comes in a later update.
+  thirty year career. Each is earned once and remembered with its week. The new Hall of Careers page
+  (from the CEO Office, the desktop sidebar under You, or F9) lists this career's chapters in order
+  with the goal you took and whether you met it, shows the achievements as 8-bit badges (locked ones
+  are dim, with their name), and shows the five-year score when the career is scored. Every career
+  you leave is kept as a short line (title, scenario, chapters, goals met and missed, achievements) in
+  the Hall of Careers on the main menu.
 - Scenario history. Each scenario now has dated events from its own period that play out in your
   career: a regional bank failure and the 1986 oil collapse in Texas, the technology bust and the
   2001 recession in the Great Lakes, a browser listing boom and the dot-com bust in Silicon
@@ -143,6 +154,27 @@ heading.
 
 ### Fixed
 
+- Big cities keep their names on the close map. A city of a million people or more now always shows its
+  name while its buildings are on screen, even when your own plants crowd the usual spots: the name
+  moves further out and a thin line ties it back to the city. Region names and smaller towns give way
+  first, never a big city.
+- Traffic on the close map is cheaper to draw. Cars, trucks, trains and ships are prepared once as
+  small pictures for each direction they can face and then simply placed, so busy roads cost less at
+  large window sizes. While the picture for a new camera angle is still being prepared, vehicles are
+  drawn the old way, so nothing flickers.
+- Ruhr and Rhine firms can make money. The scenario sells far more coal, steel, chemicals and cars
+  than its own households and plants use, and the outside world that buys the rest only had the
+  same fixed purse as every other scenario, so by year 3 it could no longer pay and exports fell
+  by four fifths. Four in ten firms were losing money by year 5, and the same firms kept going
+  bust and restructuring. The outside world's purse now scales with how much the scenario has
+  to sell abroad (Great Lakes keeps its old purse), and about two in ten Ruhr and Rhine firms
+  lose money in year 5, level with Great Lakes. Texas improves as well.
+- Losses no longer creep up as a career goes on. Rival companies paid for raids out of cash they
+  held, whatever the raid cost against what they earned, so a raid quarter turned a profitable
+  company into a loss maker. A raid campaign now costs at most half of what the company earned in
+  the last thirteen weeks. Rivals also stop all building for the same imports at once: a plant
+  that is still being built, or opened in the last two months, counts against the room other
+  rivals see.
 - On iPhone and iPad at the fastest speed, the screen no longer freezes for up to a second when you
   switch tabs or open a division. The division sheet now draws only what is on screen and does not
   rebuild when nothing in it changed, and the map's building models are read in the background
