@@ -452,14 +452,8 @@ fn rival_moves(world: &World, week: u32, out: &mut Vec<Candidate>) {
             continue;
         };
         let (headline, body, base) = match mv.class.as_str() {
-            "takeover" | "integrate" => {
-                let rest = mv.text.strip_prefix("Bid for ").unwrap_or(&mv.text);
-                (
-                    format!("{name} makes a takeover bid"),
-                    format!("{name} made a bid for {}", rest),
-                    6,
-                )
-            }
+            // Bids are reported from the deal itself, so a rival's logged bid adds nothing.
+            "takeover" | "integrate" => continue,
             "venture" => (
                 format!("{name} forms a venture"),
                 format!("{name} {}", lower_first(&mv.text)),
