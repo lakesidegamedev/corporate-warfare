@@ -31,6 +31,10 @@ const FX_MAGIC: &[u8; 4] = b"FXST";
 /// and the week in progress. Outside the hashed world, so a save without it loads with empty
 /// figures and no hash moves.
 const FREIGHT_MAGIC: &[u8; 4] = b"FRTS";
+/// Marks the history archive trailer, after the freight trailer: long price closes and the
+/// weekly and quarterly statements. Outside the hashed world, so a save without it loads with
+/// an empty archive and no hash moves.
+const ARCHIVE_MAGIC: &[u8; 4] = b"HIST";
 
 pub fn encode(world: &World, career_id: u64) -> Result<Vec<u8>, DomainError> {
     encode_with(world, career_id, None)
@@ -88,6 +92,21 @@ pub fn encode_with(
             detail: SaveFault::MalformedPayload,
         })?;
         out.extend_from_slice(FREIGHT_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.archive.is_empty() {
+        let bytes =
+            postcard::to_allocvec(&world.archive).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(ARCHIVE_MAGIC);
         out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
         out.extend_from_slice(&bytes);
@@ -218,8 +237,36 @@ pub fn decode_with(
             .map_err(|_| DomainError::InvalidSave {
                 detail: SaveFault::MalformedPayload,
             })?;
+        rest = &rest[40 + length..];
+    }
+    if rest.len() >= 4 && &rest[..4] == ARCHIVE_MAGIC {
+        let body = trailer_body(rest)?;
+        world.archive = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
     }
     Ok((world, career_id, custom))
+}
+
+/// The checked body of a trailer: magic, length, BLAKE3 sum, body.
+fn trailer_body(rest: &[u8]) -> Result<&[u8], DomainError> {
+    if rest.len() < 40 {
+        return Err(DomainError::InvalidSave {
+            detail: SaveFault::Truncated,
+        });
+    }
+    let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
+    let mut sum = [0u8; 32];
+    sum.copy_from_slice(&rest[8..40]);
+    let body = rest.get(40..40 + length).ok_or(DomainError::InvalidSave {
+        detail: SaveFault::Truncated,
+    })?;
+    if digest(DOMAIN_SAVE, body) != sum {
+        return Err(DomainError::InvalidSave {
+            detail: SaveFault::Checksum,
+        });
+    }
+    Ok(body)
 }
 
 fn write_string(out: &mut Vec<u8>, value: &str) {
@@ -320,6 +367,35 @@ mod tests {
         }
         let plain = encode(&self::world(), 9).unwrap();
         assert!(decode(&plain).unwrap().0.logistics.dest_last.is_empty());
+    }
+
+    #[test]
+    fn the_history_archive_survives_a_save_without_moving_the_hash() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = world();
+        for _ in 0..20 {
+            world.pending_pause = None;
+            cw_sim::tick::advance(&mut world, &dataset);
+        }
+        assert!(!world.archive.is_empty());
+        let hash = cw_sim::state::canonical_hash(&world);
+        let mut bare = world.clone();
+        bare.archive = Default::default();
+        assert_eq!(
+            cw_sim::state::canonical_hash(&bare),
+            hash,
+            "the archive is not hashed"
+        );
+        let bytes = encode(&world, 4).unwrap();
+        let (restored, _) = decode(&bytes).unwrap();
+        assert_eq!(restored.archive, world.archive);
+        assert_eq!(cw_sim::state::canonical_hash(&restored), hash);
+        for cut in 1..=8 {
+            assert!(decode(&bytes[..bytes.len() - cut]).is_err(), "cut {cut}");
+        }
+        // A save written before the archive existed loads with it empty.
+        let old = encode(&bare, 4).unwrap();
+        assert!(decode(&old).unwrap().0.archive.is_empty());
     }
 
     #[test]

@@ -15,6 +15,8 @@ enum Countryside {
         let latDeg: Double
         let kind: String
         let city: Double
+        /// Turns the prop its own way, so a field of trees never looks stamped.
+        let seed: Int
     }
 
     static let ready = Notification.Name("Countryside.ready")
@@ -74,6 +76,27 @@ enum Countryside {
             return true
         }
         guard drawn else { return [] }
+        // The land mask from the game's own outlines, so nothing stands in a lake.
+        var mask: (width: Int, height: Int, alpha: [UInt8])?
+        if let url = Bundle.main.url(forResource: "earth-land-\(id)", withExtension: "png"),
+           let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+           let land = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            var alpha = [UInt8](repeating: 0, count: land.width * land.height)
+            let ok = alpha.withUnsafeMutableBytes { raw -> Bool in
+                guard let context = CGContext(data: raw.baseAddress, width: land.width, height: land.height, bitsPerComponent: 8,
+                                              bytesPerRow: land.width, space: CGColorSpaceCreateDeviceGray(),
+                                              bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue) else { return false }
+                context.draw(land, in: CGRect(x: 0, y: 0, width: land.width, height: land.height))
+                return true
+            }
+            if ok { mask = (land.width, land.height, alpha) }
+        }
+        func onLand(_ lon: Double, _ lat: Double) -> Bool {
+            guard let mask else { return true }
+            let u = Int((lon - region.west) / (region.east - region.west) * Double(mask.width))
+            let v = Int((region.north - lat) / (region.north - region.south) * Double(mask.height))
+            return u >= 0 && u < mask.width && v >= 0 && v < mask.height && mask.alpha[v * mask.width + u] > 128
+        }
         let b = map.playBounds
         let west = b.west - 3
         let east = b.east + 3
@@ -94,6 +117,11 @@ enum Countryside {
                 let x = lon + jx
                 let y = lat + jy
                 let roll = (seed / 7) % 100
+                if !onLand(x, y) {
+                    lon += step
+                    col += 1
+                    continue
+                }
                 // Near a city: houses, thicker towards the middle.
                 var near = 9.0
                 if !cities.isEmpty {
@@ -133,7 +161,8 @@ enum Countryside {
                     }
                 }
                 if let kind {
-                    out.append(Prop(lon: x * .pi / 180, lat: y * .pi / 180, latDeg: y, kind: kind, city: near < 1 ? near : 0))
+                    out.append(Prop(lon: x * .pi / 180, lat: y * .pi / 180, latDeg: y, kind: kind, city: near < 1 ? near : 0,
+                                    seed: Int(seed % 4)))
                 }
                 lon += step
                 col += 1
@@ -146,8 +175,8 @@ enum Countryside {
 
     /// Draws the props on screen for the current camera, far ones first, at most `limit`. Houses
     /// further from a city than the economy supports are left out: towns grow in a boom.
-    static func draw(in context: inout GraphicsContext, projection p: MapProjection, map: WorldMap, week: Int, scale: Int,
-                     displayScale: Double, lift: Double, economyPhase: String?, size: CGSize, limit: Int = 900) {
+    static func draw(in context: inout GraphicsContext, projection p: MapProjection, map: WorldMap, week: Int, unit: Double,
+                     lift: Double, economyPhase: String?, size: CGSize, limit: Int = 500) {
         guard let props = props(map) else { return }
         let reach: Double
         switch economyPhase {
@@ -158,18 +187,19 @@ enum Countryside {
         case "recession": reach = 0.6
         default: reach = 0.85
         }
-        var shown: [(at: CGPoint, prop: Prop)] = []
+        var shown: [(at: CGPoint, ground: CGPoint, prop: Prop)] = []
         for prop in props {
             if prop.kind == "house" && prop.city > reach { continue }
             guard let g = p.ground(lon: prop.lon, lat: prop.lat) else { continue }
             let at = p.lift(g, lift)
             if at.x < -20 || at.y < -20 || at.x > size.width + 20 || at.y > size.height + 20 { continue }
-            shown.append((at, prop))
+            shown.append((at, g, prop))
             if shown.count >= limit { break }
         }
-        for (at, prop) in shown.sorted(by: { $0.at.y < $1.at.y }) {
-            Voxels.drawVariant(prop.kind, variant: Earth.season(week, prop.latDeg), ground: at, scale: scale,
-                               displayScale: displayScale, in: &context)
+        for item in shown.sorted(by: { $0.at.y < $1.at.y }) {
+            let prop = item.prop
+            VoxelModels.draw("\(prop.kind)/\(Earth.season(week, prop.latDeg))", projection: p, ground: item.ground, floor: lift,
+                             unit: unit, heading: Double(prop.seed) * .pi / 2, ink: false, in: &context)
         }
     }
 }

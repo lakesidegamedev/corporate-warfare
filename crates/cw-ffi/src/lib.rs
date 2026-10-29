@@ -20,10 +20,12 @@ mod cast;
 mod catalogue;
 mod company;
 mod custom;
+mod statements;
 pub use cast::{
     DossierDto, MoveDto, PersonDto, PostDto, RivalMoveFeedDto, RivalSummaryDto, RivalTagDto,
 };
 pub use catalogue::{ActionDto, FieldDto, OptionDto, action_catalogue};
+pub use statements::{DivisionPeriodDto, PricePointDto, StatementDto};
 
 #[derive(uniffi::Record)]
 pub struct EngineInfo {

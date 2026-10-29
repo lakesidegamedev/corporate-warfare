@@ -61,6 +61,26 @@ heading.
 - Market analytics report a new sales-weighted asking price for each good, which shows what sellers
   that actually sold were asking. The existing median asking price is unchanged, so older servers
   and app versions keep working.
+- Deeper company financials: every company page and the Stats page have tabs for an overview,
+  the income statement, the balance sheet, the cash flow statement, divisions and ratios. Pick
+  weekly, quarterly or yearly periods and compare the last several side by side. Ratios cover
+  gross and net margin, return on equity and on assets, debt to equity, the current ratio,
+  interest cover and revenue growth.
+- A cash flow statement for every period: opening cash, operating, investing, financing and tax,
+  and closing cash, worked out from the company's own books so it always adds up.
+- Division results by quarter: revenue, costs, profit, plants and market share for each division.
+- New charts across the app (company pages, Stats, share and goods details, the economy panel): line,
+  bar or area, date ranges from four weeks to everything kept, weekly, quarterly or yearly points,
+  several series at once with a legend (your revenue against the two largest rivals in your sector
+  whose figures you can see, a share against the corridor index, a good against its reference
+  price), the value under the pointer or finger, and dates such as 2001 Q3 along the bottom. A
+  quarter or year still under way is marked "to date".
+- Longer history: ten years of weekly share and goods prices, a year of weekly statements and
+  quarterly statements for the whole career. Saves from earlier versions still load and start
+  their longer history from the year of prices they already hold.
+- Every company on the stock board shows its statements, floated or not, and area charts draw the
+  largest series at the back with every line on top, so a balance sheet shows assets, liabilities
+  and equity together.
 
 - Seven more map modes: your share, competition, demand, workforce skill, infrastructure (roads,
   power and broadband), land price and population, each with a legend showing what its colours
@@ -112,6 +132,15 @@ heading.
   format records its layout version, and an older save is converted on load, with the new market
   figures starting empty and filling in from the first week played. Saves written by this version
   do not open in older versions, which refuse them with a clear version message.
+- Dashed road markings stay painted on the road as the camera moves: the interstates' gold centre
+  line and the railway sleepers no longer slide along the track when you pan, tilt, zoom or turn the
+  map, and the dashes on sea routes stay in place along their arc.
+- The Freight mode is clearer: it shows the 30 busiest routes plus every route you use, with
+  rivals and outside carriers drawn fainter so your gold reads first, and no cars or planes move
+  over the routes while it is open.
+- On iPhone and iPad the roads, borders and buildings no longer slide against the satellite ground
+  as you pan, tilt or turn the map: the photo is now laid on in true perspective, raised regions
+  carry their own roads, and buildings are placed along the ground rather than across the screen.
 - No more pulsing: the rings round buildings, the weekly ripple, the breathing selection outline
   and the menu's pulsing scenario glow are gone; rooftop lights are steady.
 - Traffic, planes, clouds and the sun stop when the game is paused and run faster at higher

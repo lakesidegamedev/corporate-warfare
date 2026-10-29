@@ -106,6 +106,66 @@ class GeoRing(flat: List<Int>) {
 }
 
 /**
+ * Dashed markings cut on the ground once per map, so each dash stays painted in one place while
+ * the camera moves. A screen dash pattern restarts at every projected line and stretches with the
+ * perspective, so it crawled along the road as the map panned, tilted, zoomed or turned.
+ */
+internal object GroundDashes {
+    const val EARTH_KM = 6371.0
+    /** The interstates' centre line: dash and gap in kilometres on the ground. */
+    const val CENTRE_DASH = 3.5
+    const val CENTRE_GAP = 3.5
+    /** The railways' sleepers. */
+    const val SLEEPER_DASH = 1.5
+    const val SLEEPER_GAP = 2.0
+
+    /** Kilometres between points [i] and [j] of a ring. */
+    fun km(ring: GeoRing, i: Int, j: Int): Double {
+        val dot = ring.cosLat[i] * ring.cosLat[j] * cos(ring.lon[i] - ring.lon[j]) + ring.sinLat[i] * ring.sinLat[j]
+        return acos(dot.coerceIn(-1.0, 1.0)) * EARTH_KM
+    }
+
+    /** A line cut into solid dashes of [dash] km with [gap] km between, from its first point. */
+    fun cut(line: GeoRing, dash: Double, gap: Double): List<GeoRing> {
+        val out = ArrayList<GeoRing>()
+        if (line.size == 0) return out
+        var flat = ArrayList<Int>()
+        var on = true
+        var left = dash
+        fun add(lon: Double, lat: Double) {
+            flat.add(Math.round(lon * 10_000).toInt())
+            flat.add(Math.round(lat * 10_000).toInt())
+        }
+        add(Math.toDegrees(line.lon[0]), Math.toDegrees(line.lat[0]))
+        for (i in 1 until line.size) {
+            val lonA = Math.toDegrees(line.lon[i - 1])
+            val latA = Math.toDegrees(line.lat[i - 1])
+            var dl = Math.toDegrees(line.lon[i]) - lonA
+            if (dl > 180) dl -= 360
+            if (dl < -180) dl += 360
+            val dLat = Math.toDegrees(line.lat[i]) - latA
+            val length = km(line, i - 1, i)
+            var done = 0.0
+            while (length - done >= left) {
+                done += left
+                val f = done / max(length, 1e-9)
+                add(lonA + dl * f, latA + dLat * f)
+                if (on) {
+                    out.add(GeoRing(flat))
+                    flat = ArrayList()
+                }
+                on = !on
+                left = if (on) dash else gap
+            }
+            left -= length - done
+            if (on) add(lonA + dl, latA + dLat)
+        }
+        if (on && flat.size >= 4) out.add(GeoRing(flat))
+        return out
+    }
+}
+
+/**
  * Geometry turned into sphere points once. A map is for one scenario: its playable states,
  * regions, counties, roads, rivers and cities. A file with no scenario list shows everything.
  */
@@ -139,6 +199,10 @@ class WorldMap private constructor(val file: WorldMapFile, val scenarioId: Strin
     val rivers = file.rivers.filter { owns(it.scenario) }.flatMap { r -> r.lines.map(::GeoRing) }
     val interstates = file.interstates.filter { owns(it.scenario) }.flatMap { r -> r.lines.map(::GeoRing) }
     val railroads = file.railroads.filter { owns(it.scenario) }.flatMap { r -> r.lines.map(::GeoRing) }
+    /** The interstates' gold centre line, cut on the ground. */
+    val centreDashes: List<GeoRing> by lazy { interstates.flatMap { GroundDashes.cut(it, GroundDashes.CENTRE_DASH, GroundDashes.CENTRE_GAP) } }
+    /** The railways' sleepers, cut on the ground. */
+    val sleeperDashes: List<GeoRing> by lazy { railroads.flatMap { GroundDashes.cut(it, GroundDashes.SLEEPER_DASH, GroundDashes.SLEEPER_GAP) } }
     val hubs: Map<String, GeoRing> = file.hubs.filterValues { it.size == 2 }
         .mapValues { GeoRing.point(it.value[0] / 10_000, it.value[1] / 10_000) }
     val cities: List<Pair<WorldMapFile.City, GeoRing>> = file.cities.filter { owns(it.scenario) }

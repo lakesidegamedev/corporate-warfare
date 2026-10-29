@@ -1135,14 +1135,24 @@ fn long_careers_keep_history_bounded_and_lifetime_figures_consistent() {
     // Compaction must not break the save: the round trip reproduces the hash, and the envelope
     // stays small because old postings are folded into the chained hash.
     let bytes = session.export_save().expect("export after compaction");
+    // The history archive rides in its own trailer with fixed caps (ten years of closes, a year
+    // of weekly and forty years of quarterly statements), so it is bounded on its own and left
+    // out of the compaction envelope.
+    let archive = postcard::to_allocvec(&session.world.archive)
+        .expect("archive encodes")
+        .len();
+    assert!(
+        archive < 1024 * 1024,
+        "the history archive grew to {archive} bytes in 110 weeks"
+    );
+    let envelope = bytes.len() - archive;
     assert!(
         // The corridor keeps forty-plus renewable supply contracts and thirteen weeks of sales
         // history per firm, so the observed envelope is larger than the original empty-world
         // fixture. The real bound is that it stays far below the 64 MB import cap and does not
         // grow with career length.
-        bytes.len() < 2 * 1024 * 1024,
-        "compacted save grew to {} bytes",
-        bytes.len()
+        envelope < 2 * 1024 * 1024,
+        "compacted save grew to {envelope} bytes"
     );
     let restored = Session::import_save(&bytes).expect("import after compaction");
     assert_eq!(restored.canonical_hash(), session.canonical_hash());

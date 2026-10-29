@@ -184,6 +184,7 @@ pub fn build_with(
         objective_history: Vec::new(),
         price_history: Vec::new(),
         firm_history: BTreeMap::new(),
+        archive: Default::default(),
         politics: crate::state::Politics::default(),
         logistics: Default::default(),
         systemic: Default::default(),
