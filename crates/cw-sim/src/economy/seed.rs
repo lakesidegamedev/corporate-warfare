@@ -195,23 +195,6 @@ pub fn build_with(
         fx: crate::economy::fx::init(dataset, seed),
     };
 
-    // Outside gateway capital is finite but real: exports are paid from it, imports add to it.
-    // The outside economy is large next to the corridor; weekly pacing in `clear_week` keeps
-    // a sustained surplus from emptying it at once.
-    let _ = world.outside.gateway_book.commit(
-        Tick::OPENING,
-        Txn::new()
-            .debit(
-                cw_core::ledger::Account::Cash,
-                50_000_000_000,
-                "gateway capital",
-            )
-            .credit(
-                cw_core::ledger::Account::ShareCapital,
-                50_000_000_000,
-                "gateway capital",
-            ),
-    );
     build_regions(&mut world, dataset);
     build_government(&mut world, dataset);
     seed_named_firms(&mut world, dataset);
@@ -224,6 +207,7 @@ pub fn build_with(
     seed_supply_contracts(&mut world, dataset);
     crate::economy::procurement::ensure_contracts(&mut world, dataset);
     compute_household_baselines(&mut world, dataset);
+    open_gateway_capital(&mut world, dataset);
     seed_share_marks(&mut world, dataset);
 
     world.investor.starting_net_worth_cents = investor_net_worth(&world, dataset);
@@ -969,6 +953,69 @@ fn compute_household_baselines(world: &mut World, dataset: &Dataset) {
         region.households.weights = weights;
         region.households.baseline_lots = baseline;
     }
+}
+
+/// The outside account's opening cash floor: five hundred million dollars.
+pub const OUTSIDE_CAPITAL_FLOOR_CENTS: i64 = 50_000_000_000;
+
+/// Weeks of the opening trade surplus the outside account can fund.
+pub const OUTSIDE_SURPLUS_WEEKS: i64 = 450;
+
+/// What the corridor's plants make beyond what its plants and households use, per week, valued
+/// at the gateway bid: the surplus the outside world has to buy. Goods only (and electricity),
+/// the things a gateway trades.
+pub fn opening_export_surplus_cents(world: &World, dataset: &Dataset) -> i64 {
+    let mut output: BTreeMap<u16, i64> = BTreeMap::new();
+    let mut used: BTreeMap<u16, i64> = BTreeMap::new();
+    for (_, facility) in world.facilities.iter() {
+        let recipe = &dataset.recipes[facility.recipe as usize];
+        for (id, qty) in &recipe.weekly_inputs_lots {
+            let code = dataset.product_index[id.as_str()];
+            *used.entry(code).or_default() += qty * facility.blocks as i64;
+        }
+        for (id, lots) in recipe.outputs() {
+            if let Some(code) = dataset.product_index.get(id) {
+                *output.entry(*code).or_default() += lots * facility.blocks as i64;
+            }
+        }
+    }
+    for region in &world.regions {
+        for (code, lots) in &region.households.baseline_lots {
+            *used.entry(*code).or_default() += lots;
+        }
+    }
+    let electricity = dataset.product_code("electricity");
+    output
+        .iter()
+        .filter(|(code, _)| {
+            Some(**code) == electricity
+                || dataset.products[**code as usize].kind == cw_data::ProductKind::Goods
+        })
+        .map(|(code, lots)| {
+            let surplus = (lots - used.get(code).copied().unwrap_or(0)).max(0);
+            surplus * dataset.reference_price(*code) * 85 / 100
+        })
+        .sum()
+}
+
+/// Outside gateway capital is finite but real: exports are paid from it, imports add to it.
+/// The outside economy is large next to the corridor, and weekly pacing in `clear_week` keeps a
+/// sustained surplus from emptying it at once. It opens with the larger of the five hundred
+/// million dollar floor and [`OUTSIDE_SURPLUS_WEEKS`] weeks of the opening trade surplus, so a
+/// scenario built on exporting heavy industry has an outside world that can pay for it.
+fn open_gateway_capital(world: &mut World, dataset: &Dataset) {
+    let surplus = opening_export_surplus_cents(world, dataset);
+    let capital = OUTSIDE_CAPITAL_FLOOR_CENTS.max(surplus.saturating_mul(OUTSIDE_SURPLUS_WEEKS));
+    let _ = world.outside.gateway_book.commit(
+        Tick::OPENING,
+        Txn::new()
+            .debit(cw_core::ledger::Account::Cash, capital, "gateway capital")
+            .credit(
+                cw_core::ledger::Account::ShareCapital,
+                capital,
+                "gateway capital",
+            ),
+    );
 }
 
 fn build_gateways(world: &mut World, dataset: &Dataset) {
