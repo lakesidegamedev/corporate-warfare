@@ -7,12 +7,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import installer_art  # noqa: E402
+try:
+    from PIL import Image
+    import installer_art  # noqa: E402
+except ImportError:  # Pillow is only installed where the pictures are drawn
+    installer_art = None
 
 
+@unittest.skipIf(installer_art is None, 'Pillow is not installed')
 class InstallerArt(unittest.TestCase):
     def test_sizes_and_palette(self):
         with tempfile.TemporaryDirectory() as tmp:
