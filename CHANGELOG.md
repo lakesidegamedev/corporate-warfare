@@ -13,6 +13,18 @@ heading.
 
 ### Added
 
+- Chapters and board mandates. Each year of a career is now a chapter with a name (for example
+  "Chapter 3: The Squeeze" when a historical event plays that year). At the start of each chapter the
+  board of every company offers three goals, such as holding a bigger share of a market, lifting
+  profit, making an input yourself, keeping cash in reserve, cutting debt, winning a raid or listing a
+  subsidiary. You take one in the first four weeks. Meet it and the company pays you a management
+  bonus and its standing improves. Miss it and the board loses confidence, and two misses in a row can
+  draw an activist investor. Rival companies pick goals the same way. These replace the old quarterly
+  board goals, so there is one set of goals now. The screens for this come in a later update.
+- Twenty career achievements, such as your first raid won, a subsidiary listed, ten companies in your
+  group, surviving a hostile bid, seeing a bank rescued, living through every event of a scenario and a
+  thirty year career. Each is earned once and remembered with its week. The Hall of Careers screen
+  comes in a later update.
 - Scenario history. Each scenario now has dated events from its own period that play out in your
   career: a regional bank failure and the 1986 oil collapse in Texas, the technology bust and the
   2001 recession in the Great Lakes, a browser listing boom and the dot-com bust in Silicon
@@ -27,6 +39,8 @@ heading.
 
 ### Changed
 
+- Saves from the earlier 1.9 previews carry on without chapter goals until the next chapter starts, and
+  the goal list and achievements are saved with the career. The save format number does not change.
 - Saves written by this version cannot be opened by older versions of the game. Careers saved in
   1.8.0 and the earlier 1.9 previews open as normal, carry on without scenario history (their
   dates are not invented backwards) and are saved in the new format from then on.
