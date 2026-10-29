@@ -25,5 +25,37 @@ enum RenderWarmup {
         let renderer = ImageRenderer(content: scene)
         renderer.scale = UIScreen.main.scale
         _ = renderer.cgImage
+        warmControls()
+    }
+
+    /// One hidden instance of the heavy controls the detail sheets use (pixel font, pixel button
+    /// style, value slider, a navigation stack with a lazy scroll), laid out offscreen, so the
+    /// first sheet does not pay for font loading, glyph caching and first-use setup.
+    private static func warmControls() {
+        _ = Pixel.uiFont(12, bold: true)
+        _ = Pixel.uiFont(14)
+        let controls = NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    Eyebrow(text: "Warm")
+                    Button("Go") {}
+                        .font(.caption.weight(.semibold)).buttonStyle(PixelButtonStyle()).tint(Theme.gold)
+                    Button("Go") {}.buttonStyle(PixelButtonStyle(prominent: true)).tint(Theme.gold)
+                    ValueSlider(value: .constant(5), range: 0...10, step: 1, ticks: 10,
+                                label: { "\(Int($0)) weeks" }, detail: { _ in "Warm" })
+                    Text("Warm").font(Pixel.font(12, bold: true))
+                    Divider().overlay(Theme.stroke)
+                }
+                .padding(16)
+            }
+            .background(Theme.panel)
+            .navigationTitle("Warm")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") {} } }
+        }
+        .preferredColorScheme(.dark)
+        let host = UIHostingController(rootView: controls)
+        host.view.frame = CGRect(x: 0, y: 0, width: 393, height: 852)
+        host.view.layoutIfNeeded()
     }
 }

@@ -28,7 +28,9 @@ heading.
   switch tabs or open a division. The division sheet now draws only what is on screen and does not
   rebuild when nothing in it changed, and the map's building models are read in the background
   from launch, with the drawing set-up warmed behind the main menu, so the map's first view opens
-  much faster.
+  much faster. The division sheet now opens as a light page first and fills in its sections a
+  moment later, and the pixel font, buttons and sliders are warmed behind the main menu, so the
+  first time you open a division no longer catches.
 
 ### Changed
 

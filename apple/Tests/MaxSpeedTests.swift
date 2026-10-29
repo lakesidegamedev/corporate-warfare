@@ -15,6 +15,8 @@ final class MaxSpeedTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let store = AppStore(saveManager: SaveManager(directory: directory))
         VoxelModels.preload()
+        // The app runs this behind the main menu at launch, before any sheet can open.
+        RenderWarmup.run()
         await store.newCareer(guided: true, fiveYear: false, seed: 7)
         XCTAssertTrue(store.sessionReady)
         if let primary = store.overview?.primaryFirm { await store.selectFirm(primary) }
@@ -72,6 +74,8 @@ final class MaxSpeedTests: XCTestCase {
 
         // A sheet opens and closes while time runs.
         phase = "sheet"
+        let sheetOpened = Date.timeIntervalSinceReferenceDate
+        MainStalls.mark("sheet.requested")
         if let division = store.divisions.first {
             store.openDivision = division
             var presented = false
@@ -98,6 +102,7 @@ final class MaxSpeedTests: XCTestCase {
                 .map { "\($0.label) \(Int($0.seconds * 1000)) ms" }.joined(separator: ", ")
             print("max-speed stall: \(Int((stall.end - stall.start - 0.02) * 1000)) ms in \(stall.phase); named work: \(named.isEmpty ? "none" : named)")
         }
+        print("max-speed sheet marks: \(MainStalls.markLines(since: sheetOpened))")
         print("max-speed by phase: " + worstByPhase.keys.sorted().map { "\($0) \(Int((worstByPhase[$0] ?? 0) * 1000)) ms" }.joined(separator: ", "))
         print("max-speed named work: \(MainStalls.summary())")
         print("max-speed: weeks \(startWeek) to \(endWeek), worst main-thread stall \(Int(worstStall * 1000)) ms")

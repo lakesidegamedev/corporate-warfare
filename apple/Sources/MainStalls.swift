@@ -28,9 +28,28 @@ enum MainStalls {
         return try body()
     }
 
+    /// Instants worth lining up against the stalls (a sheet's first body, each stage mounting).
+    private static var marks: [(label: String, at: Double)] = []
+
+    /// Records that something happened now. Only the first call per label counts.
+    static func mark(_ label: String) {
+        guard enabled else { return }
+        lock.lock()
+        if !marks.contains(where: { $0.label == label }) { marks.append((label, Date.timeIntervalSinceReferenceDate)) }
+        lock.unlock()
+    }
+
+    /// Marks as "label +ms" relative to `origin`, in order.
+    static func markLines(since origin: Double) -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return marks.filter { $0.at >= origin }.map { "\($0.label) +\(Int(($0.at - origin) * 1000)) ms" }.joined(separator: ", ")
+    }
+
     static func reset() {
         lock.lock()
         spans.removeAll()
+        marks.removeAll()
         lock.unlock()
     }
 
