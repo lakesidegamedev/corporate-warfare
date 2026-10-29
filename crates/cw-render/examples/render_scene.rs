@@ -68,6 +68,26 @@ fn main() {
             &f.rgba,
         );
     }
+    // Close-ups of the new road, rail, city and ground texture work.
+    let spot = |lon: f32, lat: f32, width_km: f32, tilt_deg: f32, heading_deg: f32| Camera {
+        lon,
+        lat,
+        width_km,
+        tilt_deg,
+        heading_deg,
+        fov_deg: 28.0,
+    };
+    let closeups = [
+        ("chicago-junction", spot(-87.75, 41.7, 150.0, 38.0, 0.0)),
+        ("pittsburgh-rails", spot(-80.05, 40.45, 170.0, 42.0, 0.0)),
+        ("ohio-farmland", spot(-83.6, 40.6, 150.0, 38.0, 0.0)),
+        ("michigan-forest", spot(-84.9, 45.0, 170.0, 38.0, 0.0)),
+        ("detroit-skyline", spot(-83.05, 42.3, 70.0, 48.0, 20.0)),
+    ];
+    for (name, cam) in &closeups {
+        let f = renderer.render_to_rgba(&scene, cam, &day, 1600, 1000);
+        save_png(&out.join(format!("{name}.png")), f.width, f.height, &f.rgba);
+    }
     for (name, cam) in &views {
         let f = renderer.render_to_rgba(&scene, cam, &night, 1600, 1000);
         save_png(
@@ -77,6 +97,20 @@ fn main() {
             &f.rgba,
         );
     }
+    // Cloud check: the heaviest setting on the scenario view shows the outline, underside band
+    // and ground shadow; the default (light) is in scenario-day.
+    let heavy = Style {
+        pixel_scale: 2,
+        clouds: cw_render::CloudLevel::Heavy,
+        ..Style::default()
+    };
+    let f = renderer.render_to_rgba(&scene, &Camera::scenario(), &heavy, 1600, 1000);
+    save_png(
+        &out.join("clouds-heavy-scenario.png"),
+        f.width,
+        f.height,
+        &f.rgba,
+    );
     if !timing {
         return;
     }

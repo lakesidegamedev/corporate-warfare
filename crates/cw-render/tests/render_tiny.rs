@@ -1,7 +1,7 @@
 //! Renders a tiny synthetic scene on whatever adapter exists. With no adapter at all (CI) the
 //! tests skip cleanly instead of failing.
 
-use cw_render::{Camera, Palette, Renderer, Scene, Style};
+use cw_render::{Camera, CloudLevel, Palette, Renderer, Scene, Style};
 
 fn renderer() -> Option<Renderer> {
     match Renderer::new() {
@@ -71,8 +71,8 @@ fn rendering_is_deterministic_and_counts_draws() {
     let b = r.render_to_rgba(&scene, &camera(), &small(), 96, 64);
     assert_eq!(a.rgba, b.rgba);
     assert!(a.stats.vertices > 0 && a.stats.triangles > 0);
-    // Shadow pass: terrain and buildings. Main pass: terrain, buildings and clouds.
-    assert_eq!(a.stats.draw_calls, 5);
+    // Shadow pass: terrain and buildings. Main pass: terrain, buildings, roads and clouds.
+    assert_eq!(a.stats.draw_calls, 6);
 }
 
 #[test]
@@ -91,4 +91,34 @@ fn pixel_scale_repeats_pixels() {
             assert_eq!(at(x, y), at(x, y + 1));
         }
     }
+}
+
+#[test]
+fn roads_are_drawn_and_clouds_levels_work() {
+    let Some(mut r) = renderer() else { return };
+    let scene = Scene::tiny();
+    let on = r.render_to_rgba(&scene, &camera(), &small(), 160, 100);
+    let off = r.render_to_rgba(
+        &scene,
+        &camera(),
+        &Style {
+            roads: false,
+            ..small()
+        },
+        160,
+        100,
+    );
+    assert_ne!(on.rgba, off.rgba, "roads left no pixels");
+    assert_eq!(off.stats.draw_calls, 5);
+    let none = r.render_to_rgba(
+        &scene,
+        &camera(),
+        &Style {
+            clouds: CloudLevel::Off,
+            ..small()
+        },
+        96,
+        64,
+    );
+    assert_eq!(none.stats.draw_calls, 5);
 }
