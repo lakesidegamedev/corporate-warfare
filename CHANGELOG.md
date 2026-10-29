@@ -13,6 +13,18 @@ heading.
 
 ### Added
 
+- The weekly paper. Every week the game prints a newspaper for your scenario (The Corridor
+  Times, The Gulf Ledger, The Valley Wire or Rhein-Ruhr Kurier) with a lead story, up to three
+  briefs, a markets column and a classified strip. Stories are only things that really happened
+  in the last four weeks: raids, takeover bids, strikes, rate decisions, elections and new laws,
+  incidents, scenario events, early warnings of what is coming, and your own quarterly results.
+  Anything you are involved in comes first. Tap a story to open the company, market, region or
+  deal it is about, and use the back issues buttons to read earlier weeks. A one line news
+  ticker under the top bar on every screen shows the top headline and cycles through the top
+  three while time runs (it holds still when time is paused or animations are off). On desktop
+  the paper is in the sidebar under World (F8); on phones, open it from the ticker or the Inbox.
+  Several bids for one company read as one story, dates read like "week 21, 1982", and the
+  ticker stays quiet at 2x and 4x speed.
 - Scenario history. Each scenario now has dated events from its own period that play out in your
   career: a regional bank failure and the 1986 oil collapse in Texas, the technology bust and the
   2001 recession in the Great Lakes, a browser listing boom and the dot-com bust in Silicon
@@ -33,18 +45,36 @@ heading.
 - The frame counter (Settings, Graphics, Show frame rate) now also shows how the game is drawing
   (Direct3D, OpenGL, Metal or Software) and the size of the map in pixels. Software drawing shows in
   amber, because it is far slower than a graphics card.
-
-### Fixed
-
-- On iPhone and iPad at the fastest speed, the screen no longer freezes for up to a second when you
-  switch tabs or open a division. The division sheet now draws only what is on screen and does not
-  rebuild when nothing in it changed, and the map's building models are read in the background
-  from launch, with the drawing set-up warmed behind the main menu, so the map's first view opens
-  much faster. The division sheet now opens as a light page first and fills in its sections a
-  moment later, and the pixel font, buttons and sliders are warmed behind the main menu, so the
-  first time you open a division no longer catches.
+- Developer tooling: a new `cw-render` crate holds the first prototype of the 1.9 GPU map
+  renderer. It draws the Great Lakes 2000 scenario offscreen with wgpu, in one fixed 48 colour
+  palette, clean land cover patches (dither only across the border between two ground types),
+  gently stepped terrace terrain from public elevation data that keeps the Midwest nearly flat
+  and shows the Appalachian plateau, greedy meshed into a few thousand quads, flat water with
+  a lighter shoreline and static wave dashes, gold player holdings over visible ground with one
+  pixel borders, outlined voxel buildings at each region's anchor city on grey city footprints,
+  region borders, a sun with hard shadows for
+  terraces and voxel buildings, floating clouds with an outline, a ground shadow and less coverage as the camera zooms in, and a night
+  palette with lit windows. Run `cargo run --release -p cw-render --example render_scene -- <out_dir>`
+  to write the scenario, close and turned views and print frame times and draw counts; on a
+  machine without a GPU it uses the Mesa software driver. `tools/render_bake.py` fetches the
+  elevation and bakes the small heightmap. The crate is not linked into the game or the apps
+  yet and changes nothing players see, no saves and no hashes.
 
 ### Changed
+
+- The map is easier to read when you zoom in close. Rival companies' plants now show in their
+  industry's colour with a dark roof and are about 60 percent of the size of yours, while your
+  own are full size with a gold roof and the plant count on top. Cities no longer look like
+  identical grey blocks: ports have cranes and stacked containers, steel towns have tall stacks,
+  car towns have a long assembly shed, and the rest stay as towers. Town and city names are in
+  plain sentence case in one weight, and only region names keep the spaced capital letters. Names
+  no longer overlap each other or sit on top of a building: when two compete, the region name
+  gives way to the city name, and the city name to your own plant badge, and a name that is
+  showing stays put instead of blinking while you pan. Trucks, trains and ships keep at least two
+  vehicle lengths apart, so a busy road looks busy without becoming one unbroken line, and they
+  carry their owner's colour: gold for yours, the industry colour for a rival's, grey for outside
+  carriers. On the desktop app the buildings and names are now drawn in the background like the
+  ground, so panning and zooming close in stays smooth.
 
 - Saves written by this version cannot be opened by older versions of the game. Careers saved in
   1.8.0 and the earlier 1.9 previews open as normal, carry on without scenario history (their
@@ -58,6 +88,13 @@ heading.
 
 ### Fixed
 
+- On iPhone and iPad at the fastest speed, the screen no longer freezes for up to a second when you
+  switch tabs or open a division. The division sheet now draws only what is on screen and does not
+  rebuild when nothing in it changed, and the map's building models are read in the background
+  from launch, with the drawing set-up warmed behind the main menu, so the map's first view opens
+  much faster. The division sheet now opens as a light page first and fills in its sections a
+  moment later, and the pixel font, buttons and sliders are warmed behind the main menu, so the
+  first time you open a division no longer catches.
 - Roads on raised tiles now sit on the tile they cross instead of floating at one shared height.
 
 ## [1.8.0] - 2026-10-29

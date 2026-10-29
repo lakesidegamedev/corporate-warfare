@@ -227,6 +227,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     fun advance() = perform { step() }
 
+    /** Read everything again from the engine, for tests that drive the engine handle directly. */
+    fun refresh() = perform { reload() }
+
     /** Save, stop time and close the career; the main menu offers it again under Continue. */
     fun exitToMenu() = perform {
         runJob?.cancel()

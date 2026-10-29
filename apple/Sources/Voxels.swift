@@ -235,4 +235,6 @@ struct VehicleSpot {
     let ground: CGPoint
     let dir: CGVector
     var height = 0.0
+    /// Recolours the livery by owner; plain keeps the model as baked.
+    var tone: VoxelModels.Tone = .plain
 }

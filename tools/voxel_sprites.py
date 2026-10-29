@@ -304,6 +304,64 @@ def rock(s):
     return Model().box(0, 0, 0, 3, 2, 1, stone).box(1, 0, 1, 2, 2, 2, stone)
 
 
+# ---- city kinds: a port, a steel town and a car town read differently from a plain city block ----
+# Same footprint and sizes as city(), so a kind can stand in for it. Exported as 3D models only
+# (tools/voxel_models.py); the flat sprite atlas keeps the plain block.
+
+def city_port(s):
+    """A port: low warehouses, stacked containers and gantry cranes along a quay."""
+    w = 8 + 3 * s
+    m = Model().box(0, 0, 0, w, w, 1, "#3A4450")
+    m.box(0, 0, 0, w, 2, 1, "#2F6F9A")
+    m.box(1, 3, 1, w - 1, 6, 3, "#8C98A4").box(1, 3, 3, w - 1, 6, 4, "#5E6B78")
+    for i, c in enumerate(("#C8503A", "#3A78B8", "#E2B04A", "#4C9A5A")):
+        x = 1 + 2 * i
+        if x + 2 <= w - 1:
+            m.box(x, w - 3, 1, x + 2, w - 1, 2 + (i % 2), c)
+    for k in range(1 + s):
+        x = 1 + 4 * k
+        if x + 3 > w:
+            break
+        m.box(x, 1, 1, x + 1, 2, 7, "#E2B04A").box(x + 2, 1, 1, x + 3, 2, 7, "#E2B04A")
+        m.box(x, 0, 7, x + 3, 3, 8, "#E2B04A").box(x + 1, 0, 8, x + 2, 1, 9, "#4A5560")
+    return m
+
+
+def city_steel(s):
+    """A steel town: a long dark mill with tall stacks, one glowing."""
+    w = 8 + 3 * s
+    m = Model().box(0, 0, 0, w, w, 1, "#3A4450")
+    m.box(1, 1, 1, w - 1, 5, 4 + s, "#6A5E58").box(1, 1, 4 + s, w - 1, 5, 5 + s, "#4A4440")
+    m.box(1, 6, 1, 4, w - 1, 3, "#8C98A4")
+    for k in range(2 + s):
+        x = 1 + 3 * k
+        if x + 2 > w - 1:
+            break
+        h = 9 + 2 * s + (k % 2) * 2
+        m.box(x, 2, 5 + s, x + 2, 4, h, "#7A7F86").box(x, 2, h - 1, x + 2, 4, h, "#C8503A")
+        if k == 0:
+            m.box(x, 2, h, x + 2, 4, h + 1, "#F0883A")
+    return m
+
+
+def city_auto(s):
+    """A car town: one long assembly shed with a sawtooth roof, a small office block and a lot of cars."""
+    w = 8 + 3 * s
+    m = Model().box(0, 0, 0, w, w, 1, "#3A4450")
+    m.box(0, 1, 1, w, 5, 3, "#B8C2CA")
+    for x in range(0, w, 2):
+        m.box(x, 1, 3, x + 1, 5, 4, "#8FA2B4")
+    m.box(w - 3, 5, 1, w - 1, 7, 5 + s, "#5E7184").box(w - 3, 5, 5 + s, w - 1, 7, 6 + s, "#8FA2B4")
+    for i, c in enumerate(("#C8503A", "#3A78B8", "#E8EEF4", "#2A2F36", "#E2B04A")):
+        x = 1 + 2 * i
+        if x + 1 <= w - 3:
+            m.box(x, w - 2, 1, x + 1, w - 1, 2, c)
+    return m
+
+
+CITY_KINDS = {f.__name__: f for f in (city_port, city_steel, city_auto)}
+
+
 MODELS = {
     f.__name__: f for f in (
         agriculture, extraction, energy, chemical_industries, manufacturing, construction, logistics,
