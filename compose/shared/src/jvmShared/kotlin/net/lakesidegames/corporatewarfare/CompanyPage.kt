@@ -104,6 +104,9 @@ fun CompanyPageBody(store: GameStore, p: CompanyPageDto, onOpenFirm: (ULong) -> 
                 ),
             )
             StockHistoryChart(store, p.firm)
+            var guide by remember { mutableStateOf(false) }
+            EarningsSection(s.earnings, if (p.kind == "yours") ({ guide = true }) else null)
+            if (guide) GuidanceDialog(s.earnings, { guide = false }) { low, high -> store.giveGuidance(p.firm, low, high) }
             if (onTrade != null) TextButton(onClick = onTrade) { Text("Buy or sell shares") }
         }
         if (p.finance != null || p.kind == "listed") {

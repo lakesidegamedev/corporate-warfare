@@ -679,7 +679,11 @@ fn systemic_events_strike_deterministically_and_through_a_save() {
         cw_sim::tick::advance(&mut a, &ds);
         if week == 70 {
             let bytes = postcard::to_allocvec(&a).unwrap();
-            copy = Some(postcard::from_bytes(&bytes).unwrap());
+            let mut reloaded: World = postcard::from_bytes(&bytes).unwrap();
+            // Earnings state travels in its own save trailer (cw-session), outside the payload;
+            // carry it across as a save would.
+            reloaded.earnings = a.earnings.clone();
+            copy = Some(reloaded);
         }
     }
     let mut c = copy.unwrap();

@@ -58,6 +58,7 @@ struct CompanyPageBody: View {
     var onTrade: (() -> Void)? = nil
     /// Set for your own company: a division row opens its detail.
     var onOpenDivision: ((DivisionLineDto) -> Void)? = nil
+    @State private var guiding = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -100,6 +101,8 @@ struct CompanyPageBody: View {
                     ]
                 )
                 StockHistorySection(firm: page.firm)
+                EarningsSection(earnings: s.earnings, onGiveGuidance: page.kind == "yours" ? { guiding = true } : nil)
+                    .sheet(isPresented: $guiding) { GuidanceSheet(firm: page.firm, earnings: s.earnings) }
                 if let onTrade {
                     Button("Buy or sell shares", action: onTrade).buttonStyle(PixelButtonStyle())
                 }
