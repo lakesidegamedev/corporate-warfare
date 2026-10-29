@@ -193,6 +193,9 @@ pub fn decode_with(
         .map_err(|_| DomainError::InvalidSave {
             detail: SaveFault::MalformedPayload,
         })?;
+    // Not saved: freight rates follow the price index, refreshed each week; until the first week
+    // after a load, quotes must already read the saved economy's level, not the base rate.
+    world.logistics.price_level_bps = world.macro_state.price_index_bps.max(1);
     let mut rest = &bytes[cursor + declared..];
     let mut custom_end = 0usize;
     let custom = if rest.len() >= 40 && &rest[..4] == CUSTOM_MAGIC {

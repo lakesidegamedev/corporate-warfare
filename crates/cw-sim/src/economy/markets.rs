@@ -241,7 +241,7 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
                 continue;
             }
             // Buy only what the paced outside account can pay for in full.
-            let price = dataset.reference_price(service).max(1);
+            let price = crate::economy::pricing::price_reference(world, dataset, service);
             let affordable = world.outside.gateway_spendable() / price * 1_000;
             let qty = qty.min(MilliLots(affordable));
             if qty.0 <= 0 {
@@ -545,6 +545,9 @@ fn clear_goods_exchange(
     #[derive(Clone, Copy)]
     enum Source {
         Firm(Handle, u8),
+        /// The buying firm's own stock in another region, moved to its plants at cost: the firm
+        /// pays only the freight, and the goods keep their carrying cost.
+        Own(u8),
         Gateway(usize),
         /// The strategic reserve's stock in one region, sold in that region only.
         Reserve(u8),
@@ -573,6 +576,19 @@ fn clear_goods_exchange(
         for (seller_key, _) in supply.iter() {
             let (seller, from) = *seller_key;
             if seller == buyer {
+                // A firm's stock beyond its input cover in one state feeds its own plants in
+                // another before anything is bought or imported: a steelworks takes its own
+                // furnace's pig iron rather than export it at the bid and import it at the ask.
+                // Speculative buying into held stock is a purchase, so it never moves own stock.
+                if caps.is_empty() && from != to {
+                    pairs.push((
+                        freight_per_lot(from, to).max(1),
+                        seller.0 ^ ((from as u64) << 56) ^ OWN_STOCK_KEY,
+                        buyer.0 ^ ((to as u64) << 56),
+                        *buyer_key,
+                        Source::Own(from),
+                    ));
+                }
                 continue;
             }
             let delivered = asking(world, seller, buyer) + freight_per_lot(from, to);
@@ -633,6 +649,7 @@ fn clear_goods_exchange(
         let source = tier[0].1;
         let available = match source {
             Source::Firm(seller, from) => supply.get(&(seller, from)).copied().unwrap_or(0),
+            Source::Own(from) => supply.get(&(tier[0].0.0, from)).copied().unwrap_or(0),
             Source::Gateway(gate) => *import_left
                 .entry(gate)
                 .or_insert(world.gateways[gate].capacity_lots * 1_000),
@@ -714,6 +731,35 @@ fn clear_goods_exchange(
                     let entry = demand.get_mut(&buyer_key).unwrap();
                     entry.0 -= qty;
                     entry.1 -= goods.0 + freight;
+                }
+                Source::Own(from) => {
+                    let (removed, carrying) = remove_stock(world, buyer, product, from, qty_lots);
+                    if !removed {
+                        continue;
+                    }
+                    if let Some(entity) = world.firms.get_mut(buyer) {
+                        entity
+                            .stock_lot_mut(product, to)
+                            .receive(qty_lots, Cents(carrying));
+                        entity.record_sale(to, product, qty_lots);
+                    }
+                    let freight = crate::economy::logistics::book(
+                        world,
+                        dataset,
+                        buyer,
+                        product,
+                        from,
+                        to,
+                        qty_lots,
+                        "own stock freight",
+                    )
+                    .cents;
+                    if let Some(left) = supply.get_mut(&(buyer, from)) {
+                        *left -= qty;
+                    }
+                    let entry = demand.get_mut(&buyer_key).unwrap();
+                    entry.0 -= qty;
+                    entry.1 -= freight;
                 }
                 Source::Reserve(region) => {
                     let ask = reserve_offers
@@ -1046,7 +1092,7 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
             if category_budget <= 0 {
                 continue;
             }
-            let reference = dataset.reference_price(product).max(1);
+            let reference = crate::economy::pricing::price_reference(world, dataset, product);
             let last = last_prices
                 .get(&product)
                 .copied()
@@ -1202,7 +1248,7 @@ fn clear_government(world: &mut World, dataset: &Dataset) {
             if offers.is_empty() || remaining <= 0 {
                 continue;
             }
-            let reference = dataset.reference_price(product);
+            let reference = crate::economy::pricing::price_reference(world, dataset, product);
             let affordable = remaining / reference.max(1);
             if affordable <= 0 {
                 continue;
@@ -1529,6 +1575,10 @@ fn remove_stock(
     (true, cost.0)
 }
 
+/// Marks a firm's own-stock source in the exchange's seller keys, so it never ties with the same
+/// stock offered to other buyers.
+const OWN_STOCK_KEY: u64 = 1 << 55;
+
 /// Gateway sellers are outside the entity namespace. Real handles never set the high bit
 /// because a slot generation would have to reach two billion reuses.
 const GATEWAY_ID_BASE: u64 = 1 << 63;
@@ -1661,6 +1711,88 @@ mod tests {
         assert_eq!(imports_after - imports_before, 3);
         assert_eq!(held(&world, local, to), 0);
         assert_eq!(held(&world, buyer, to), 23);
+    }
+
+    #[test]
+    fn a_firm_feeds_its_own_plants_from_its_stock_in_another_state_paying_only_freight() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = crate::economy::seed::build(
+            &dataset,
+            301,
+            crate::state::ScenarioKind::Founder,
+            crate::state::ScenarioMode::Sandbox,
+        );
+        let steel = dataset.product_index["steel"];
+        let firms: Vec<Handle> = world.firms.iter().map(|(h, _)| h).take(2).collect();
+        let (firm, local) = (firms[0], firms[1]);
+        let to = dataset.region_index["OH-CEN"];
+        let far = dataset.region_index["PA-WES"];
+        // No plants, so none of the stock is input cover in either state.
+        world.firms.get_mut(firm).unwrap().facilities.clear();
+        world.firms.get_mut(local).unwrap().facilities.clear();
+        stock(&mut world, &dataset, firm, steel, far, 10);
+        stock(&mut world, &dataset, local, steel, to, 10);
+        // A local seller asks well under the firm's own price and under its stock's cost.
+        world
+            .firms
+            .get_mut(local)
+            .unwrap()
+            .policies
+            .prices
+            .insert(steel, 20_000);
+        let book = |w: &World, a: Account| w.firms.get(firm).unwrap().book.balance(a);
+        let (cash, inventory, revenue) = (
+            book(&world, Account::Cash),
+            book(&world, Account::Inventory),
+            book(&world, Account::Revenue),
+        );
+        // The firm wants 15 lots in OH-CEN: its own ten from PA-WES first, then five local.
+        clear_goods_exchange(
+            &mut world,
+            &dataset,
+            steel,
+            vec![(firm, to, 15_000, 100_000_000)],
+            &BTreeMap::new(),
+        );
+        let held = |w: &World, f: Handle, r: u8| w.firms.get(f).unwrap().stock(steel, r).lots();
+        assert_eq!(held(&world, firm, far), 0);
+        assert_eq!(held(&world, firm, to), 15);
+        assert_eq!(held(&world, local, to), 5);
+        // Ten lots by outside truck at the reference rate plus the 120 percent premium.
+        let freight =
+            crate::economy::freight::freight_cost(&dataset, far, to, MilliLots::from_lots(10))
+                * dataset.logistics.outside_premium_bps
+                / 10_000;
+        assert_eq!(
+            cash - book(&world, Account::Cash),
+            freight + 5 * 20_000,
+            "own goods cost only their freight"
+        );
+        // The moved lots keep their carrying cost ($400 each); the bought five add $200 each.
+        assert_eq!(
+            book(&world, Account::Inventory) - inventory,
+            5 * 20_000,
+            "moving own stock changes no inventory value"
+        );
+        assert_eq!(book(&world, Account::Revenue), revenue, "no sale to itself");
+        let imported: i64 = world
+            .gateways
+            .iter()
+            .filter(|g| g.product == steel)
+            .map(|g| g.last_import_lots)
+            .sum();
+        assert_eq!(imported, 0);
+        // Speculative buying (a capped order) never moves own stock.
+        stock(&mut world, &dataset, firm, steel, far, 10);
+        let caps: BTreeMap<(Handle, u8), i64> = [((firm, to), 1_000_000)].into_iter().collect();
+        clear_goods_exchange(
+            &mut world,
+            &dataset,
+            steel,
+            vec![(firm, to, 5_000, 100_000_000)],
+            &caps,
+        );
+        assert_eq!(held(&world, firm, far), 10);
     }
 
     #[test]

@@ -1575,6 +1575,7 @@ pub fn carve_out(
     if let Some(c) = world.firms.get_mut(child_handle) {
         c.facilities = plants.clone();
     }
+    move_division_contracts(world, dataset, firm, child_handle, region, &plants);
     // The division's reputation goes with it.
     if let Some(rep) = world.structure.reputation.remove(&(firm, region, industry)) {
         world
@@ -1586,6 +1587,101 @@ pub fn carve_out(
     world.structure.carved.insert(firm, world.tick.0);
     world.structure.stats.carve_outs += 1;
     Ok(child_handle)
+}
+
+/// A carved-out division takes its trade with it: the parent's supply contracts shipped from the
+/// division's state for a good its plants make, and its purchase contracts delivered to that state
+/// for an input they use that no plant the parent keeps there uses, pass to the new company. Left
+/// behind, the parent defaulted every week on sales it could no longer make and paid for inputs
+/// it could no longer use. A purchase contract into that state for an input that neither the new
+/// company's plants nor any plant the parent keeps there uses ends, with no penalty on either
+/// side: the parent has nothing there to feed. Contracts holding escrow stay with the parent,
+/// which holds the money.
+fn move_division_contracts(
+    world: &mut World,
+    dataset: &Dataset,
+    parent: Handle,
+    child: Handle,
+    region: u8,
+    plants: &[Handle],
+) {
+    let uses = |world: &World, list: &[Handle]| {
+        let mut outputs = std::collections::BTreeSet::new();
+        let mut inputs = std::collections::BTreeSet::new();
+        for plant in list.iter().filter_map(|h| world.facilities.get(*h)) {
+            if plant.region != region {
+                continue;
+            }
+            let recipe = &dataset.recipes[plant.recipe as usize];
+            for (id, _) in recipe.outputs() {
+                outputs.extend(dataset.product_index.get(id).copied());
+            }
+            for id in recipe.weekly_inputs_lots.keys() {
+                inputs.extend(dataset.product_index.get(id).copied());
+            }
+        }
+        (outputs, inputs)
+    };
+    let (made, used) = uses(world, plants);
+    let kept: Vec<Handle> = world
+        .firms
+        .get(parent)
+        .map(|f| f.facilities.clone())
+        .unwrap_or_default();
+    let (_, still_used) = uses(world, &kept);
+    let mut ending: Vec<Handle> = Vec::new();
+    let moving: Vec<(Handle, bool)> = world
+        .contracts
+        .iter()
+        .filter(|(_, c)| c.status == crate::state::ContractStatus::Active && c.escrow_cents == 0)
+        .filter_map(|(h, c)| {
+            if c.seller == parent && c.from_region == region && made.contains(&c.product) {
+                Some((h, true))
+            } else if c.buyer == parent && c.to_region == region && !still_used.contains(&c.product)
+            {
+                if used.contains(&c.product) {
+                    Some((h, false))
+                } else {
+                    ending.push(h);
+                    None
+                }
+            } else {
+                None
+            }
+        })
+        .collect();
+    for handle in ending {
+        let seller = world.contracts.get(handle).map(|c| c.seller);
+        if let Some(c) = world.contracts.get_mut(handle) {
+            c.status = crate::state::ContractStatus::Cancelled;
+        }
+        if let Some(p) = world.firms.get_mut(parent) {
+            p.contracts_buy.retain(|h| *h != handle);
+        }
+        if let Some(s) = seller.and_then(|s| world.firms.get_mut(s)) {
+            s.contracts_sell.retain(|h| *h != handle);
+        }
+    }
+    for (handle, sell) in moving {
+        if let Some(c) = world.contracts.get_mut(handle) {
+            if sell {
+                c.seller = child;
+            } else {
+                c.buyer = child;
+            }
+        }
+        if let Some(p) = world.firms.get_mut(parent) {
+            p.contracts_sell.retain(|h| *h != handle);
+            p.contracts_buy.retain(|h| *h != handle);
+        }
+        if let Some(c) = world.firms.get_mut(child) {
+            if sell {
+                c.contracts_sell.push(handle);
+            } else {
+                c.contracts_buy.push(handle);
+            }
+        }
+    }
 }
 
 pub fn controlling_parent(world: &World, sub: Handle) -> DomainResult<Handle> {

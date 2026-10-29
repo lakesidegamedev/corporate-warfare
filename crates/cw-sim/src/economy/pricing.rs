@@ -369,13 +369,27 @@ fn service_capacity(world: &World, dataset: &Dataset, firm: Handle, product: u16
         .unwrap_or(0)
 }
 
+/// The reference a seller prices a good against, in cents. A good's reference is its catalogue
+/// price; goods follow the price level through their import and export prices, which drift with
+/// inflation. A service has no import to follow, so its reference is carried to today's price
+/// index directly, the index wages follow: its floor, ceiling and band rise with its payroll
+/// instead of holding at the opening price while costs inflate.
+pub fn price_reference(world: &World, dataset: &Dataset, product: u16) -> i64 {
+    let reference = dataset.reference_price(product).max(1);
+    if !dataset.products[product as usize].kind.is_service() {
+        return reference;
+    }
+    let level = world.macro_state.price_index_bps.max(1) as i128;
+    ((reference as i128 * level / 10_000) as i64).max(1)
+}
+
 /// The price the sell-through rule sets this week for one good.
 ///
 /// The firm works out the price it wants from its stock cover (see `wanted_bps`), then moves
 /// a sixth of the way there, never more than two percent in a week. The price is kept within
 /// half and twice reference and under the cheapest import, above which buyers import instead.
 pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> i64 {
-    let reference = dataset.reference_price(product).max(1);
+    let reference = price_reference(world, dataset, product);
     let Some(entity) = world.firms.get(firm) else {
         return reference;
     };
@@ -661,7 +675,7 @@ pub fn posture_price(world: &World, dataset: &Dataset, firm: Handle, product: u1
             unit_cost(world, dataset, firm, product)? * (10_000 + bps as i64) / 10_000
         }
     };
-    let reference = dataset.reference_price(product).max(1);
+    let reference = price_reference(world, dataset, product);
     Some(base.clamp(reference / 2, reference * 2).max(1))
 }
 

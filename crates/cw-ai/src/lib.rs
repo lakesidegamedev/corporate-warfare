@@ -636,7 +636,8 @@ fn speculate(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
 ///   than four sites builds on the lane with the most overflow to outside carriers, where a third
 ///   of the overflow priced at the lane rate over three years beats the build and its financing.
 ///   Rail and sea need a terminal or port at the lane's ends: the firm builds that first. A new
-///   pipeline is pinned to the hottest truck lane from its region.
+///   pipeline is pinned to the lane its group's goods leave its region on, else the hottest truck
+///   lane from there, and is sized on the lots the group ships on the lane.
 /// * An aggressive rival that owns at least a fifth of a lane and ships on it reserves up to two
 ///   fifths of what is still open for a quarter once the lane is three quarters full, when its
 ///   cash covers the fees: the lockout pushes other shippers onto dearer lanes.
@@ -678,7 +679,9 @@ fn logistics_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
         });
     }
 
-    // A pipeline with no pinned lane goes where truck freight is heaviest from its region.
+    // A pipeline with no pinned lane goes where its group's own goods leave its region, by any
+    // mode, else where truck freight is heaviest from there.
+    let pipeline_mode = dataset.logistics.mode_index("pipeline");
     for handle in &entity.facilities {
         let Some(plant) = world.facilities.get(*handle) else {
             continue;
@@ -690,13 +693,25 @@ fn logistics_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &m
         {
             continue;
         }
-        let best = world
+        let shipped = world
+            .logistics
+            .lanes
+            .keys()
+            .filter(|k| {
+                Some(k.mode) != pipeline_mode && (k.a == plant.region || k.b == plant.region)
+            })
+            .map(|k| (group_shipped(world, firm, *k), *k))
+            .filter(|(lots, _)| *lots > 0)
+            .max_by_key(|(lots, k)| (*lots, std::cmp::Reverse(*k)))
+            .map(|(_, k)| k);
+        let busiest = world
             .logistics
             .flows
             .iter()
             .filter(|(k, _)| k.mode == 0 && (k.a == plant.region || k.b == plant.region))
-            .max_by_key(|(k, v)| (**v, std::cmp::Reverse(**k)));
-        if let Some((key, _)) = best {
+            .max_by_key(|(k, v)| (**v, std::cmp::Reverse(**k)))
+            .map(|(k, _)| *k);
+        if let Some(key) = shipped.or(busiest) {
             let other = if key.a == plant.region { key.b } else { key.a };
             proposals.push(Proposal {
                 actor: firm.0,
@@ -892,6 +907,7 @@ fn pipeline_build(
                 continue;
             }
             // The firm must ship on the lane today: a pipeline replaces freight it pays for.
+            let mine = group_shipped(world, firm, hot.key);
             if lg::shipped_last_week(world, firm, hot.key) <= 0
                 && !world
                     .logistics
@@ -928,18 +944,21 @@ fn pipeline_build(
                 if entity.book.cash() < reserve * 2 + cost {
                     continue;
                 }
+                // Sized on what the group ships on the lane, not on all it makes in the
+                // region: a firm moving a few lots of its own stock does not fill a pipeline.
                 let room = recipe.weekly_output_lots;
-                let own_lots = own.min(room).min(hot.moved as i64);
+                let own_lots = own.min(room).min(mine);
                 let other_lots = (all - own)
                     .max(0)
                     .min(room - own_lots)
-                    .min(hot.moved as i64);
+                    .min((hot.moved as i64 - mine).max(0));
                 let mut mult = lg::spot_mult_bps(dataset, 5_000);
                 if world.politics.laws.common_carrier {
                     mult = mult.min(lg::regulated_cap_bps(dataset));
                 }
+                let level = world.logistics.at_price_level(mult);
                 let pipe_rate =
-                    lg::leg_cents(dataset, hot.key.a, hot.key.b, pipeline, 1, mult).max(1);
+                    lg::leg_cents(dataset, hot.key.a, hot.key.b, pipeline, 1, level).max(1);
                 let own_rate = pipe_rate * dataset.logistics.own_cost_bps / mult.max(1);
                 let saving = (hot.rate_cents - own_rate).max(0);
                 // A pipeline lasts for decades, so it is weighed over five years, not three.
@@ -953,6 +972,22 @@ fn pipeline_build(
         }
     }
     best.map(|(_, recipe, region)| (recipe, region))
+}
+
+/// Lots a firm's group shipped on a lane in the week just closed.
+fn group_shipped(world: &World, firm: Handle, key: cw_sim::economy::logistics::LaneKey) -> i64 {
+    world
+        .logistics
+        .lanes
+        .get(&key)
+        .map(|lane| {
+            lane.users
+                .iter()
+                .filter(|(f, _)| cw_sim::economy::ownership::same_group(world, firm, *f))
+                .map(|(_, lots)| *lots as i64)
+                .sum()
+        })
+        .unwrap_or(0)
 }
 
 /// Weekly lots of liquid or gas goods the plants in a region make, for one firm's group or all.
@@ -3158,12 +3193,61 @@ mod tests {
                 ..Default::default()
             },
         );
+        // Shipping a few lots of its own on the lane does not fill a pipeline, however much it
+        // makes in the region: 20 lots a week saved against a build of millions never pays.
+        world.logistics.lanes.insert(
+            key,
+            lg::LaneWeek {
+                users: vec![(chem, 20)],
+                ..Default::default()
+            },
+        );
+        assert!(pipeline_build(&world, &dataset, chem, 0).is_none());
+        // Shipping most of the lane's traffic itself, it pays.
+        world.logistics.lanes.insert(
+            key,
+            lg::LaneWeek {
+                users: vec![(chem, 2_500)],
+                ..Default::default()
+            },
+        );
         let (recipe, region) = pipeline_build(&world, &dataset, chem, 0).expect("a pipeline pays");
         assert_eq!(
             dataset.recipes[recipe as usize].transport_mode.as_deref(),
             Some("pipeline")
         );
         assert!(region == a || region == b);
+        // Built, it is pinned to the lane the firm's goods leave on, not the busiest truck lane.
+        let pipe = add_carrier(&mut world, &dataset, chem, a, "pipeline");
+        let rail = lg::LaneKey::new(a, b, 1);
+        world.logistics.lanes.clear();
+        world.logistics.lanes.insert(
+            rail,
+            lg::LaneWeek {
+                users: vec![(chem, 300)],
+                ..Default::default()
+            },
+        );
+        let busier = dataset.region_index["OH-NE"];
+        world
+            .logistics
+            .flows
+            .insert(lg::LaneKey::new(a, busier, 0), 5_000);
+        let mut proposals = Vec::new();
+        logistics_moves(&world, &dataset, chem, &mut proposals);
+        assert!(proposals.iter().any(|p| matches!(
+            &p.intent,
+            CommandIntent::SetCarrierLanes { facility, regions }
+                if *facility == pipe && regions == &vec![b]
+        )));
+        world.facilities.remove(pipe);
+        world
+            .firms
+            .get_mut(chem)
+            .unwrap()
+            .facilities
+            .retain(|h| *h != pipe);
+        world.logistics.lanes.clear();
         // Not congested: no pipeline.
         world.logistics.stats.clear();
         assert!(pipeline_build(&world, &dataset, chem, 0).is_none());
