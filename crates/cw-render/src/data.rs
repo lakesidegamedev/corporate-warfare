@@ -383,13 +383,13 @@ pub fn rasterise_mask(map_json: &str, bounds: Bounds, ppd: f32) -> Result<Mask, 
             }
         });
     }
-    let mut n = 0u8;
-    for r in map
+    for (i, r) in map
         .regions
         .iter()
         .filter(|r| GREAT_LAKES_STATES.contains(&r.state.as_str()))
+        .enumerate()
     {
-        n += 1;
+        let n = (i + 1) as u8;
         let tint = if PLAYER_REGIONS.contains(&r.code.as_str()) {
             TINT_PLAYER
         } else {

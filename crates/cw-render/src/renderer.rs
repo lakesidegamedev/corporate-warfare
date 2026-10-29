@@ -424,10 +424,11 @@ impl Renderer {
 
     fn prepare(&mut self, scene: &Scene, style: &Style) {
         let id = scene as *const Scene;
-        if let Some(c) = &self.cache {
-            if c.id == id && (c.cloud_altitude - style.cloud_altitude_km).abs() < 1e-6 {
-                return;
-            }
+        if let Some(c) = &self.cache
+            && c.id == id
+            && (c.cloud_altitude - style.cloud_altitude_km).abs() < 1e-6
+        {
+            return;
         }
         let gpu = GpuScene {
             id,
