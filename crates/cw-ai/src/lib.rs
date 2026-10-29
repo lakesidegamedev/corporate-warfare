@@ -14,6 +14,8 @@ mod selector;
 
 pub use selector::{Class, style};
 
+use std::collections::BTreeMap;
+
 use cw_core::ids::Handle;
 use cw_data::{Archetype, Dataset};
 use cw_sim::commands::{BargainingChoice, CommandIntent};
@@ -47,6 +49,7 @@ pub fn player_controlled(world: &World, firm: Handle) -> bool {
 
 /// Produce this week's bounded command proposals in stable order.
 pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
+    let _memo = Memo::open();
     let mut proposals = Vec::new();
     let mut handles: Vec<Handle> = world.firms.iter().map(|(handle, _)| handle).collect();
     handles.sort_unstable();
@@ -58,10 +61,10 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         if player_controlled(world, handle) || !firm.operative() {
             continue;
         }
-        urgent(world, dataset, handle, &mut proposals);
+        cw_sim::ph!("ai::urgent", urgent(world, dataset, handle, &mut proposals));
         // Production follows sell-through plant by plant in the weekly tick, the same planner
         // as the player's automatic production (cw_sim::economy::pricing::plan).
-        reopen(world, dataset, handle, &mut proposals);
+        cw_sim::ph!("ai::reopen", reopen(world, dataset, handle, &mut proposals));
         if wind_down(world, handle, &mut proposals) {
             continue;
         }
@@ -80,7 +83,10 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         if !due {
             continue;
         }
-        proposals.extend(slot_moves(world, dataset, handle));
+        proposals.extend(cw_sim::ph!(
+            "ai::slot_moves",
+            slot_moves(world, dataset, handle)
+        ));
     }
     proposals.truncate(WEEKLY_PROPOSALS);
     proposals
@@ -110,7 +116,10 @@ fn slot_moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Proposal> {
             proposal,
         });
     };
-    for candidate in strategic_candidates(world, dataset, firm) {
+    for candidate in cw_sim::ph!(
+        "ai::strategic_candidates",
+        strategic_candidates(world, dataset, firm)
+    ) {
         let class = selector::classify(dataset, &candidate.intent);
         let proposal = Proposal {
             actor: firm.0,
@@ -123,10 +132,22 @@ fn slot_moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Proposal> {
         }
     }
     let mut generated: Vec<Proposal> = Vec::new();
-    speculate(world, dataset, firm, &mut generated);
-    logistics_moves(world, dataset, firm, &mut generated);
-    structure_moves(world, dataset, firm, &mut generated);
-    storage_moves(world, dataset, firm, &mut generated);
+    cw_sim::ph!(
+        "ai::speculate",
+        speculate(world, dataset, firm, &mut generated)
+    );
+    cw_sim::ph!(
+        "ai::logistics_moves",
+        logistics_moves(world, dataset, firm, &mut generated)
+    );
+    cw_sim::ph!(
+        "ai::structure_moves",
+        structure_moves(world, dataset, firm, &mut generated)
+    );
+    cw_sim::ph!(
+        "ai::storage_moves",
+        storage_moves(world, dataset, firm, &mut generated)
+    );
     for proposal in generated {
         let class = selector::classify(dataset, &proposal.intent);
         match class {
@@ -134,7 +155,7 @@ fn slot_moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Proposal> {
             None => moves.push(Move::routine(proposal)),
         }
     }
-    if let Some(candidate) = supplier_bid(world, dataset, firm) {
+    if let Some(candidate) = cw_sim::ph!("ai::supplier_bid", supplier_bid(world, dataset, firm)) {
         let proposal = Proposal {
             actor: firm.0,
             intent: candidate.intent,
@@ -146,7 +167,7 @@ fn slot_moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Proposal> {
             proposal,
         );
     }
-    selector::choose(world, dataset, firm, moves)
+    cw_sim::ph!("ai::choose", selector::choose(world, dataset, firm, moves))
 }
 
 /// Structure verbs a rival uses on its own slot, weighted by its temperament
@@ -1614,7 +1635,77 @@ fn structural_contribution(world: &World, dataset: &Dataset, firm: Handle) -> i6
 
 /// Public price of a product in a state: the gateway import price where one quotes, else the
 /// reference price. No rival sees another firm's costs or order book.
+/// Gateway reads the planner repeats for every firm, recipe and region, kept for one `propose`
+/// pass. The world is borrowed unchanged for the whole pass, so a remembered read is the read.
+/// Outside a pass (tests, single helpers) every read is computed fresh.
+#[derive(Default)]
+struct Memo {
+    room: BTreeMap<(u16, u8), i64>,
+    public_price: BTreeMap<(u16, u8), i64>,
+    import_netback: BTreeMap<(u16, u8), Option<i64>>,
+    /// Holders of each (region, industry) cell with their shares.
+    cells: BTreeMap<(u8, u8), Vec<(Handle, i64)>>,
+}
+
+thread_local! {
+    static MEMO: std::cell::RefCell<Option<Memo>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Clears the pass's memo when dropped, so no read outlives the world it came from.
+struct MemoPass;
+
+impl Memo {
+    fn open() -> MemoPass {
+        MEMO.with(|memo| *memo.borrow_mut() = Some(Memo::default()));
+        MemoPass
+    }
+
+    fn read<K: Ord, T: Clone>(
+        table: fn(&mut Memo) -> &mut BTreeMap<K, T>,
+        key: K,
+        compute: impl FnOnce() -> T,
+    ) -> T {
+        if let Some(hit) = MEMO.with(|memo| {
+            memo.borrow_mut()
+                .as_mut()
+                .and_then(|m| table(m).get(&key).cloned())
+        }) {
+            return hit;
+        }
+        let value = compute();
+        MEMO.with(|memo| {
+            if let Some(m) = memo.borrow_mut().as_mut() {
+                table(m).insert(key, value.clone());
+            }
+        });
+        value
+    }
+}
+
+impl Drop for MemoPass {
+    fn drop(&mut self) {
+        MEMO.with(|memo| *memo.borrow_mut() = None);
+    }
+}
+
+/// The holders of a cell and their shares (`cw_sim::economy::sectors::cell`).
+fn cell_holders(world: &World, dataset: &Dataset, region: u8, sector: u8) -> Vec<(Handle, i64)> {
+    Memo::read(
+        |m| &mut m.cells,
+        (region, sector),
+        || cw_sim::economy::sectors::cell(world, dataset, region, sector).0,
+    )
+}
+
 fn public_price(world: &World, dataset: &Dataset, product: u16, region: u8) -> i64 {
+    Memo::read(
+        |m| &mut m.public_price,
+        (product, region),
+        || public_price_now(world, dataset, product, region),
+    )
+}
+
+fn public_price_now(world: &World, dataset: &Dataset, product: u16, region: u8) -> i64 {
     world
         .gateways
         .iter()
@@ -1626,6 +1717,14 @@ fn public_price(world: &World, dataset: &Dataset, product: u16, region: u8) -> i
 /// What a plant in `region` nets per lot of a good by replacing imports: the best importing
 /// gateway's price less freight from the plant. None when nothing of the good is imported.
 fn import_netback(world: &World, dataset: &Dataset, product: u16, region: u8) -> Option<i64> {
+    Memo::read(
+        |m| &mut m.import_netback,
+        (product, region),
+        || import_netback_now(world, dataset, product, region),
+    )
+}
+
+fn import_netback_now(world: &World, dataset: &Dataset, product: u16, region: u8) -> Option<i64> {
     world
         .gateways
         .iter()
@@ -1647,6 +1746,16 @@ fn import_netback(world: &World, dataset: &Dataset, product: u16, region: u8) ->
 /// corridor's; other products clear where they are made, so the room is the region's own.
 fn room(world: &World, dataset: &Dataset, product: u16, region: u8) -> i64 {
     let corridor = dataset.products[product as usize].kind == cw_data::ProductKind::Goods;
+    // A good's room is the corridor's, the same from every region.
+    let key = (product, if corridor { u8::MAX } else { region });
+    Memo::read(
+        |m| &mut m.room,
+        key,
+        || room_now(world, product, region, corridor),
+    )
+}
+
+fn room_now(world: &World, product: u16, region: u8, corridor: bool) -> i64 {
     world
         .gateways
         .iter()
@@ -1785,8 +1894,7 @@ fn best_expansion(
                 && occupants_of
                     .entry((region, sector))
                     .or_insert_with(|| {
-                        cw_sim::economy::sectors::cell(world, dataset, region, sector)
-                            .0
+                        cell_holders(world, dataset, region, sector)
                             .into_iter()
                             .map(|(holder, _)| holder)
                             .collect()
@@ -1850,8 +1958,7 @@ fn best_expansion(
             // player's markets most of all: invading makes the cell contested and raidable.
             if npv > 0 && fighter {
                 let occupants = occupants_of.entry((region, sector)).or_insert_with(|| {
-                    cw_sim::economy::sectors::cell(world, dataset, region, sector)
-                        .0
+                    cell_holders(world, dataset, region, sector)
                         .into_iter()
                         .map(|(holder, _)| holder)
                         .collect()
@@ -1895,7 +2002,7 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
     let reserve = reserve_target(world, dataset, firm);
     let mut best: Option<(i64, Handle, u8, u8, i64)> = None;
     for division in sectors::divisions_of(world, dataset, firm) {
-        let (firms, _) = sectors::cell(world, dataset, division.region, division.industry);
+        let firms = cell_holders(world, dataset, division.region, division.industry);
         for (rival, _) in firms {
             if rival == firm || cw_sim::economy::ownership::same_group(world, rival, firm) {
                 continue;

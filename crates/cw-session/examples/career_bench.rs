@@ -137,7 +137,7 @@ fn main() {
                 median(b)
             );
             phases.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
-            for (name, nanos) in phases.iter().take(12) {
+            for (name, nanos) in phases.iter().take(26) {
                 println!(
                     "    {name:<34} {:>8.3} ms/week",
                     *nanos as f64 / 1e6 / width as f64
