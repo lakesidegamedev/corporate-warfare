@@ -111,12 +111,12 @@ fn main() {
             if follow > 0 && w == follow {
                 for (id, key) in &cohort {
                     let e = groups.entry(key.clone()).or_default();
-                    if let Some((_, f)) = world.firms.iter().find(|(h, _)| h.0 == *id) {
-                        if f.operative() {
-                            e.still += 1;
-                            let net: i64 = f.book.recent_weeks().iter().map(|x| x.net_income).sum();
-                            e.still_losing += (net < 0) as i64;
-                        }
+                    if let Some((_, f)) = world.firms.iter().find(|(h, _)| h.0 == *id)
+                        && f.operative()
+                    {
+                        e.still += 1;
+                        let net: i64 = f.book.recent_weeks().iter().map(|x| x.net_income).sum();
+                        e.still_losing += (net < 0) as i64;
                     }
                 }
             }

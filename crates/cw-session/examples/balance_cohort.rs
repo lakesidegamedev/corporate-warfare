@@ -126,21 +126,21 @@ fn main() {
             } else {
                 "other"
             };
-            for si in 0..4 {
+            for (si, snap_rows) in rows.iter().enumerate() {
                 let e = acc.entry((class, si)).or_default();
                 e.n += 1;
-                if let Some(r) = rows[si].get(id) {
-                    if r[0] == 1 {
-                        e.alive += 1;
-                        e.losing += (r[6] < 0) as i64;
-                        e.rev += r[1];
-                        e.cogs += r[2];
-                        e.wages += r[3];
-                        e.opex += r[4];
-                        e.other += r[5];
-                        e.net += r[6];
-                        e.cash += r[7];
-                    }
+                if let Some(r) = snap_rows.get(id)
+                    && r[0] == 1
+                {
+                    e.alive += 1;
+                    e.losing += (r[6] < 0) as i64;
+                    e.rev += r[1];
+                    e.cogs += r[2];
+                    e.wages += r[3];
+                    e.opex += r[4];
+                    e.other += r[5];
+                    e.net += r[6];
+                    e.cash += r[7];
                 }
             }
         }
