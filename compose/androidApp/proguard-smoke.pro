@@ -17,7 +17,8 @@
 -keep class androidx.lifecycle.** { *; }
 -keep class androidx.core.app.** { *; }
 -keep class androidx.activity.** { *; }
--keep class kotlin.collections.** { *; }
--keep class kotlin.text.** { *; }
+# The test APK is compiled against the full Kotlin standard library and loads it from the app.
+-keep class kotlin.** { *; }
+-keep class kotlinx.coroutines.** { *; }
 -dontwarn androidx.tracing.**
 -dontwarn androidx.concurrent.futures.**
