@@ -62,7 +62,9 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// carve-outs began ending purchases nothing in the state uses, and in 1.9 when save schema 3
 /// added the scenario timeline cursor (four empty bytes in every world) and Great Lakes began
 /// playing its dated history by default (inside the first 52 weeks: the technology bust in week 15
-/// and the notice of the 2001 recession).
+/// and the notice of the 2001 recession), and in 1.9 when rival raid campaigns began to be paid
+/// out of earnings and rivals stopped building for imports that a plant under construction
+/// already covers (the fixture path pinned below does not move: neither rule bites in 26 weeks).
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -74,15 +76,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "c48d02e3f1c332eed25fa3ebe1b41d60e21c2a26db3b20fb9a375596b85818cd",
+            "d7c6784d8b964e0bea74bc1eaad8cc4503fdcb5a7b00f1a66da89147ab6d9c04",
         ),
         (
             2,
-            "3fe2a032bc0ac084e6f9f1c32b4f4527e9321209fe734f67923c11007b3b7bfd",
+            "757fb88372e298ebd089b3804108a1030450f415bf1d6ce995e380066390a403",
         ),
         (
             3,
-            "0dff71c000525b690de01a6fdec519ca71e580ae4d929a87dd90fcff10e458d3",
+            "4707af93bef94f4a3250ad02c43a597f20bee639a2b77453ee58c8e5f9ff1c45",
         ),
     ];
     for (seed, hash) in pins {
@@ -94,7 +96,7 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "b98eadb613df8b90230a39da99d7565808194c9a9688e240cf029550eb2edb23"
+        "397e27eed2e7d20d79c81ee2ce6e72f4cc8d4f7fc4f90b6d9000ee8a7b13ce7f"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
