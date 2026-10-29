@@ -1,0 +1,11 @@
+{
+  "classification": "calibrated game estimates drawn from the period; NOT measured series. US early 1981: consumer prices rising about 10 percent and starting to fall, the federal funds rate between 15 and 19 percent, the ten-year Treasury near 14 percent, lenders already cautious on oil and property.",
+  "inflation_bps": 1000,
+  "expected_inflation_bps": 650,
+  "policy_rate_bps": 1650,
+  "ten_year_bps": 1400,
+  "neutral_real_bps": 450,
+  "target_inflation_bps": 200,
+  "credit_spread_bps": 100,
+  "wage_growth_bps": 900
+}

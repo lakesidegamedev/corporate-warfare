@@ -332,6 +332,66 @@ fn the_reserve_buys_in_a_bust_sells_in_a_spike_and_moves_only_real_money() {
     );
 }
 
+#[test]
+fn the_reserve_buys_from_a_firm_in_another_money_and_pays_it_converted() {
+    let ds = Dataset::load_scenario("ruhr-rhine-1991").unwrap();
+    let mut w = seed::build(&ds, 9, ScenarioKind::Guided, ScenarioMode::Sandbox);
+    assert!(w.fx.active);
+    let product = ds.product_code("coal").unwrap();
+    assert!(reserve::strategic_goods(&ds).contains(&product));
+    let seller = w
+        .firms
+        .iter()
+        .map(|(h, _)| h)
+        .find(|h| {
+            !cw_sim::economy::fx::in_numeraire(&w, &ds, *h) && w.firms.get(*h).unwrap().operative()
+        })
+        .expect("a firm outside the numeraire");
+    let currency = cw_sim::economy::fx::currency_of(&w, seller);
+    let region = w.firms.get(seller).unwrap().region;
+    let mean = ds.reference_price(product);
+    for week in 0..40 {
+        w.price_history.push(cw_sim::state::PricePoint {
+            week,
+            goods: [(product, mean)].into_iter().collect(),
+            ..Default::default()
+        });
+    }
+    w.tick = Tick(41);
+    for (handle, firm) in w.firms.iter_mut() {
+        firm.policies.prices.insert(product, mean / 2);
+        if handle != seller {
+            firm.inventory.retain(|(p, _), _| *p != product);
+        }
+    }
+    w.firms
+        .get_mut(seller)
+        .unwrap()
+        .stock_lot_mut(product, region)
+        .receive(
+            MilliLots::from_lots(500),
+            cw_core::money::Cents(500 * mean / 2),
+        );
+    w.politics.laws.reserve = true;
+    let gov_before = w.government.book.cash();
+    let seller_cash = w.firms.get(seller).unwrap().book.cash();
+    reserve::weekly(&mut w, &ds);
+    let paid = w.politics.reserve.bought_cents;
+    assert!(paid > 0, "the reserve bought from the foreign firm");
+    assert_eq!(
+        gov_before - w.government.book.cash(),
+        paid,
+        "the treasury pays numeraire"
+    );
+    assert_eq!(
+        w.firms.get(seller).unwrap().book.cash() - seller_cash,
+        w.fx.convert(paid, 0, currency),
+        "the seller is paid the converted amount in its own money"
+    );
+    assert!(w.firms.get(seller).unwrap().book.is_balanced());
+    assert!(w.government.book.is_balanced());
+}
+
 /// Make a firm a failing strategic firm: a carrier, with overdue payables past the grace.
 fn fail(world: &mut World, ds: &Dataset, firm: Handle, owed: i64) {
     let region = world.firms.get(firm).unwrap().region;

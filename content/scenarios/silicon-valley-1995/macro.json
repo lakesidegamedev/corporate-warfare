@@ -1,0 +1,11 @@
+{
+  "classification": "calibrated game estimates drawn from the period; NOT measured series. US 1995: inflation near 2.8 percent, federal funds 5.5 to 6 percent, the ten-year Treasury near 6.5 percent.",
+  "inflation_bps": 280,
+  "expected_inflation_bps": 280,
+  "policy_rate_bps": 575,
+  "ten_year_bps": 650,
+  "neutral_real_bps": 250,
+  "target_inflation_bps": 200,
+  "credit_spread_bps": 50,
+  "wage_growth_bps": 340
+}

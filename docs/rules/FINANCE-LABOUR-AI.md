@@ -5,7 +5,20 @@ Use common ledger, permissions and versioned deterministic RNG. No special AI ca
 
 ## Credit
 
-Base annual policy rate starts at 600 basis points. Commercial spread by credit grade:
+The policy rate, inflation, expected inflation, neutral real rate, target inflation, opening
+credit spread and opening wage growth come from the scenario's `macro.json` (1.9): calibrated
+game estimates of its period, so Texas 1981 opens near 10 percent inflation with the policy rate
+at 16.5 percent, Ruhr and Rhine 1991 at 3.8 percent and 7 percent, Silicon Valley 1995 at 2.8
+and 5.75, Great Lakes 2000 at 3.4 and 6.5. The mechanics are the same in every scenario. The
+central bank meets every six weeks and moves a quarter point (half a point when far off) toward
+a Taylor rule around that neutral rate and target; the rate ceiling is 20 percent. The ten-year
+yield is derived: a quarter of the policy rate plus three quarters of (neutral real rate +
+expected inflation), a 75 point term premium and an eighth of inflation above target; a test
+holds each opening yield to the period's figure. Lenders add a tenth of inflation above target
+to every loan quote. Opening wage growth runs above or below inflation by the scenario's gap and
+fades into inflation evenly over 104 weeks; after that wages follow the price index. Opening
+loans carry the opening policy rate plus the opening credit spread plus the grade B spread.
+Commercial spread by credit grade:
 A 200, B 400, C 700, D 1200. Each week, grade uses trailing 13-week interest coverage
 and debt/tangible assets: A requires coverage >=4 and leverage <=30%; B >=2 and <=50%;
 C >=1 and <=70%; otherwise D. Missing positive earnings assigns C unless cash covers

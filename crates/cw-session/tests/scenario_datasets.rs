@@ -64,7 +64,10 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// playing its dated history by default (inside the first 52 weeks: the technology bust in week 15
 /// and the notice of the 2001 recession), and in 1.9 when rival raid campaigns began to be paid
 /// out of earnings and rivals stopped building for imports that a plant under construction
-/// already covers (the fixture path pinned below does not move: neither rule bites in 26 weeks).
+/// already covers (the fixture path pinned below does not move: neither rule bites in 26 weeks),
+/// and in 1.9 when scenarios began opening with the rates and inflation of their own period (Great
+/// Lakes 2000: inflation 3.4 percent not 3, policy rate 6.5 percent not 6, expected inflation and
+/// opening loan rates to match; this moves the fixture path too, from the first week).
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -76,15 +79,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "d7c6784d8b964e0bea74bc1eaad8cc4503fdcb5a7b00f1a66da89147ab6d9c04",
+            "d24fcae64cc60192a7274b2c603ee05c3c3dc97728632ebf2912d9b94275af49",
         ),
         (
             2,
-            "757fb88372e298ebd089b3804108a1030450f415bf1d6ce995e380066390a403",
+            "5764176a3cde04ddf64a2862f858d750f36f7a7c798dc93556adb1ab77eb3f4c",
         ),
         (
             3,
-            "4707af93bef94f4a3250ad02c43a597f20bee639a2b77453ee58c8e5f9ff1c45",
+            "c62d8bcb1226f0d94e22cb3b9d4b6130a69dcfa6c35210d75bcbf3c042f4d7a7",
         ),
     ];
     for (seed, hash) in pins {
@@ -96,12 +99,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "397e27eed2e7d20d79c81ee2ce6e72f4cc8d4f7fc4f90b6d9000ee8a7b13ce7f"
+        "ffc6e3d3f37998fe83112efb4d399c97db57d8f968c067ddc65fab68fde690f6"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "b2aa4b34e7dcd499202ac984ed79cdf3f7326a6c2066242e319a87b5dbb2b4e8"
+        "404a0d2fd7e0052dfa7ff0a43da82522002b6982db9699006de5a9ec47cfd5c6"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();

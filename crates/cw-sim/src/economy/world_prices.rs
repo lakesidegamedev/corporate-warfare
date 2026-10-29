@@ -633,4 +633,49 @@ mod tests {
         assert!((3_000..=4_500).contains(&low), "trough {low}");
         assert!(oil[0] == 10_000);
     }
+
+    #[test]
+    fn farm_gateway_bids_keep_pace_with_inflation_in_the_scenarios_with_a_farm_slide() {
+        // The path is relative to the general price level and the engine inflates every
+        // gateway price, so a farm's real bid may sag but must not fall far behind the wages
+        // that follow inflation. Over five years the grain and fertilizer bids stay within
+        // 15 percent of their day-one real level.
+        for scenario in ["texas-1981", "silicon-valley-1995"] {
+            let dataset = cw_data::Dataset::load_scenario(scenario).unwrap();
+            let mut world = seed::build(&dataset, 3, ScenarioKind::Guided, ScenarioMode::Sandbox);
+            init(
+                &mut world,
+                &dataset,
+                &PricePathFile::load(),
+                scenario,
+                PricePath::Historical,
+                3,
+            );
+            let grain = dataset.product_index["grain"];
+            let start = world
+                .gateways
+                .iter()
+                .find(|g| g.product == grain)
+                .unwrap()
+                .buy_price_cents;
+            let mut worst = i64::MAX;
+            for week in 1..=260u32 {
+                world.tick = Tick(week);
+                weekly(&mut world);
+                crate::economy::macro_cycle::weekly(&mut world, &dataset);
+                let bid = world
+                    .gateways
+                    .iter()
+                    .find(|g| g.product == grain)
+                    .unwrap()
+                    .buy_price_cents;
+                let real = bid * 10_000 / world.macro_state.price_index_bps.max(1);
+                worst = worst.min(real * 100 / start);
+            }
+            assert!(
+                worst >= 85,
+                "{scenario}: the real grain bid fell to {worst} percent of day one"
+            );
+        }
+    }
 }
