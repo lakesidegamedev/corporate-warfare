@@ -827,6 +827,21 @@ fn recent_net(world: &World, firm: Handle) -> Option<i64> {
     Some(recent.iter().map(|w| w.net_income).sum())
 }
 
+/// How many of the latest weeks show the loss: four when they add up to one, otherwise just
+/// the last week when it alone lost money, otherwise none.
+fn loss_weeks(world: &World, firm: Handle) -> usize {
+    let Some(entity) = world.firms.get(firm) else {
+        return 0;
+    };
+    if recent_net(world, firm).is_some_and(|net| net < 0) {
+        return LOSS_WINDOW;
+    }
+    match entity.book.recent_weeks().last() {
+        Some(last) if last.net_income < 0 => 1,
+        _ => 0,
+    }
+}
+
 /// The CFO's reasons as moves, biggest weekly cost first. Each carries its one-button fix and
 /// the weekly saving as its figure.
 fn cfo_moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefMove> {
@@ -903,14 +918,15 @@ fn worst_division(
 
 /// A losing company the CFO has no named reason for still sees where the money goes: the
 /// biggest line of the income statement against revenue, and the weakest division to open.
-fn diagnosis_move(world: &World, dataset: &Dataset, firm: Handle, net: i64) -> BriefMove {
+fn diagnosis_move(world: &World, dataset: &Dataset, firm: Handle, take: usize) -> BriefMove {
     let weeks = world
         .firms
         .get(firm)
         .map(|f| f.book.recent_weeks())
         .unwrap_or(&[]);
-    let recent = &weeks[weeks.len().saturating_sub(LOSS_WINDOW)..];
+    let recent = &weeks[weeks.len().saturating_sub(take)..];
     let count = recent.len().max(1) as i64;
+    let net: i64 = recent.iter().map(|w| w.net_income).sum();
     let revenue = recent.iter().map(|w| w.revenue).sum::<i64>() / count;
     let lines: [(&str, &str, i64); 5] = [
         (
@@ -959,10 +975,14 @@ fn diagnosis_move(world: &World, dataset: &Dataset, firm: Handle, net: i64) -> B
         )
     };
     let weekly_loss = paper::money(world, dataset, firm, (-net / count).max(0));
-    let mut detail = format!(
-        "The company has lost about {weekly_loss} a week over the last {} weeks.",
-        recent.len()
-    );
+    let mut detail = if recent.len() == 1 {
+        format!("The company lost {weekly_loss} last week.")
+    } else {
+        format!(
+            "The company has lost about {weekly_loss} a week over the last {} weeks.",
+            recent.len()
+        )
+    };
     let mut target = MoveTarget::default();
     if let Some((code, name, industry, margin)) = worst_division(world, dataset, firm) {
         detail += &format!(
@@ -992,17 +1012,17 @@ fn diagnosis_move(world: &World, dataset: &Dataset, firm: Handle, net: i64) -> B
 }
 
 /// Up to three suggested moves. A company that lost money over the last four weeks sees the
-/// CFO's reasons first, biggest weekly cost first, and always at least one move. Otherwise (and
+/// CFO's reasons first, biggest weekly cost first, and always at least one move. A company whose
+/// latest week lost money gets the same, with the plain reading of that week. Otherwise (and
 /// after those) quickest payback first: moves with no up-front cost come first, biggest weekly
 /// gain first; a mandate to pick, which has no figure, after them; a slow build last.
 fn moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefMove> {
-    let losing = recent_net(world, firm).is_some_and(|net| net < 0);
+    let losing = loss_weeks(world, firm);
     let mut lead: Vec<BriefMove> = Vec::new();
-    if losing {
+    if losing > 0 {
         lead = cfo_moves(world, dataset, firm);
         if lead.is_empty() {
-            let net = recent_net(world, firm).unwrap_or_default();
-            lead.push(diagnosis_move(world, dataset, firm, net));
+            lead.push(diagnosis_move(world, dataset, firm, losing));
         }
     }
     let mut all: Vec<BriefMove> = Vec::new();
@@ -1523,6 +1543,7 @@ mod tests {
     fn a_losing_company_always_sees_a_move_and_the_cfos_reasons_come_first_in_cost_order() {
         let (s, me) = losing();
         assert!(recent_net(&s.world, me).unwrap() < 0);
+        assert_eq!(loss_weeks(&s.world, me), LOSS_WINDOW);
         let brief = weekly_brief(&s.world, &s.dataset, me.0);
         assert!(!brief.moves.is_empty());
         assert!(brief.hold.is_empty());
