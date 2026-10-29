@@ -75,6 +75,10 @@ class AppSettings(private val file: File) {
     var analytics by mutableStateOf(props.getProperty("analytics")?.toBoolean() ?: true); private set
     /** Also stop the clock for warnings, not only for decisions that need an answer. */
     var pauseOnWarnings by mutableStateOf(props.getProperty("pauseOnWarnings")?.toBoolean() ?: false); private set
+    /** Open the weekly brief by itself when a new week starts with time paused or at 1x. Desktop only. */
+    var showBriefEachWeek by mutableStateOf(props.getProperty("showBriefEachWeek")?.toBoolean() ?: false); private set
+    /** The brief panel at the top of the CEO Office is folded away. */
+    var briefCollapsed by mutableStateOf(props.getProperty("briefCollapsed")?.toBoolean() ?: false); private set
     var uiScale by mutableStateOf(props.getProperty("uiScale")?.toFloatOrNull() ?: 1f); private set
     var windowMode by mutableStateOf(enumOr(props.getProperty("windowMode"), WindowMode.Windowed)); private set
     var resolution by mutableStateOf(
@@ -131,6 +135,8 @@ class AppSettings(private val file: File) {
     fun chooseTutorial(done: Set<String>, hidden: Boolean) { tutorialDone = done; tutorialHidden = hidden; store() }
     fun chooseReportingCurrency(value: String) { reportingCurrency = value; store() }
     fun choosePauseOnWarnings(value: Boolean) { pauseOnWarnings = value; store() }
+    fun chooseShowBriefEachWeek(value: Boolean) { showBriefEachWeek = value; store() }
+    fun chooseBriefCollapsed(value: Boolean) { briefCollapsed = value; store() }
     fun chooseUiScale(value: Float) { uiScale = value; store() }
     fun chooseWindowMode(value: WindowMode) { windowMode = value; store() }
     fun chooseResolution(value: Pair<Int, Int>) { resolution = value; store() }
@@ -166,6 +172,8 @@ class AppSettings(private val file: File) {
         props.setProperty("tutorial.hidden", tutorialHidden.toString())
         props.setProperty("reportingCurrency", reportingCurrency)
         props.setProperty("pauseOnWarnings", pauseOnWarnings.toString())
+        props.setProperty("showBriefEachWeek", showBriefEachWeek.toString())
+        props.setProperty("briefCollapsed", briefCollapsed.toString())
         props.setProperty("uiScale", uiScale.toString())
         props.setProperty("windowMode", windowMode.name)
         props.setProperty("resolution", "${resolution.first}x${resolution.second}")
@@ -237,6 +245,19 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                             onCheckedChange = { settings.choosePauseOnWarnings(it) },
                             colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
                         )
+                    }
+                    if (desktop) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Show the brief each week", color = Palette.primaryText)
+                                Text("Opens the weekly brief when a new week starts while time is paused or at normal speed. It never opens at faster speeds.", color = Palette.secondary, fontSize = 12.sp)
+                            }
+                            Switch(
+                                checked = settings.showBriefEachWeek,
+                                onCheckedChange = { settings.chooseShowBriefEachWeek(it) },
+                                colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
+                            )
+                        }
                     }
                 }
             }

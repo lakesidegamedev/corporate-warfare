@@ -563,6 +563,8 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(0.9f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                BriefPanel(store, firm.currency)
+                Spacer(Modifier.height(10.dp))
                 if (store.boardOffer != null || store.activeMandate != null || store.chapterResult != null) {
                     ChapterBlock(store)
                     Spacer(Modifier.height(10.dp))

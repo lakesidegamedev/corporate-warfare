@@ -57,6 +57,10 @@ actor Engine {
         session?.research(firm: firm)
     }
 
+    func weeklyBrief(firm: UInt64) -> BriefDto? {
+        session?.weeklyBrief(firm: firm)
+    }
+
     func cfoAdvice(firm: UInt64) -> [CfoAdviceDto] {
         session?.cfoAdvice(firm: firm) ?? []
     }

@@ -34,6 +34,13 @@ final class AppStore: ObservableObject {
     /// This career's chapters, board goals and achievements. Read when the Hall page is open, right
     /// after a choice, and when the week changes with time paused or at 1x; never at 2x or 4x.
     @Published var hall: HallDto?
+    /// The weekly brief for the selected company. Read only while the CEO Office shows it, and at
+    /// 2x or 4x no more than once a week.
+    @Published var brief: BriefDto?
+    var briefOpen = false
+    private var briefWeek: UInt32?
+    private var briefRevision: UInt64?
+    private var briefFirm: UInt64?
     var hallPageOpen = false
     private var hallStale = false
     /// The last chapter whose result the player has been shown.
@@ -158,6 +165,16 @@ final class AppStore: ObservableObject {
         guard !resultSeenReady, let hall else { return }
         resultSeen = hall.chapters.last { $0.outcome == "met" || $0.outcome == "missed" }?.number ?? 0
         resultSeenReady = true
+    }
+
+    /// Read the brief now, for the panel when it opens or is unfolded.
+    func refreshBrief() async {
+        guard let firm = selectedFirm else { return }
+        let fresh = await engine.weeklyBrief(firm: firm)
+        briefWeek = overview?.tick
+        briefRevision = overview?.revision
+        briefFirm = firm
+        if fresh != brief { brief = fresh }
     }
 
     /// Read the chapter data now, for the Hall page when it opens or the week moves.
@@ -457,6 +474,17 @@ final class AppStore: ObservableObject {
         let hallDue = hallPageOpen || hallStale || runSpeed <= 1
         let hall = hallDue ? await engine.hallOfCareers() : self.hall
         if hallDue { hallStale = false }
+        let briefFirmNow = selectedFirm
+        let briefDue = briefOpen && briefFirmNow != nil
+            && (overview?.tick != briefWeek || briefFirmNow != briefFirm
+                || (overview?.revision != briefRevision && runSpeed <= 1))
+        var brief = self.brief
+        if briefDue, let firm = briefFirmNow {
+            brief = await engine.weeklyBrief(firm: firm)
+            briefWeek = overview?.tick
+            briefRevision = overview?.revision
+            briefFirm = firm
+        }
         let scenario = await engine.scenarioId()
         var catalogues: (strategies: [StrategyDto], recipes: [RecipeDto], products: [ProductDto])?
         if strategyCatalogue.isEmpty || productCatalogue.isEmpty || scenario != catalogueScenario {
@@ -497,6 +525,7 @@ final class AppStore: ObservableObject {
             put(\.objectiveHistory, objectiveHistory)
             noteResultsSeen(hall)
             put(\.hall, hall)
+            put(\.brief, brief)
             if let catalogues {
                 put(\.strategyCatalogue, catalogues.strategies)
                 put(\.recipeOptions, catalogues.recipes)

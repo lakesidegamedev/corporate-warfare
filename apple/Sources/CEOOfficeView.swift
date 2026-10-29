@@ -57,6 +57,7 @@ struct CEOOfficeView: View {
                     .background(Theme.panel, in: Pixel.shape)
                 }
                 .tint(Theme.gold)
+                BriefPanel(currency: firm.currency, firmName: firm.name)
                 if !store.cfoAdvice.isEmpty {
                     CfoPanel(currency: firm.currency, rejection: $rejection)
                 }
