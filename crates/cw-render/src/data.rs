@@ -220,9 +220,57 @@ pub struct Scene {
     /// (row major). Both are derived from the fields above by `finish`.
     pub ground: Ground,
     pub levels: Vec<i32>,
+    /// The scenario's regions in mask order: region `i` is painted `i + 1` in the mask's red
+    /// channel. Hub positions are where a region's own buildings stand.
+    pub regions: Vec<RegionInfo>,
+    /// Bumped when the mask tints or the building placements change, so the renderer re-uploads
+    /// only what moved.
+    pub mask_rev: u64,
+    pub buildings_rev: u64,
 }
 
+/// One playable region of a scenario.
+#[derive(Clone, Debug)]
+pub struct RegionInfo {
+    pub code: String,
+    pub lon: f32,
+    pub lat: f32,
+}
+
+/// Tint classes of the mask's alpha channel: 1 play, 2 the player's holdings (gold), and
+/// `TINT_HEAT + n` for map modes, where `n` is 0 to 3 (low to high).
+pub const TINT_HEAT: u8 = 3;
+
 impl Scene {
+    /// Paint the regions' tint classes (region code to class). Codes not listed become `TINT_PLAY`.
+    pub fn set_region_tints(&mut self, tints: &HashMap<String, u8>) {
+        let mut lut = vec![TINT_PLAY; 256];
+        for (i, r) in self.regions.iter().enumerate() {
+            lut[i + 1] = tints.get(&r.code).copied().unwrap_or(TINT_PLAY);
+        }
+        for p in self.mask.rgba.chunks_exact_mut(4) {
+            if p[0] > 0 {
+                p[3] = lut[p[0] as usize];
+            }
+        }
+        self.mask_rev += 1;
+    }
+
+    /// Replace the placed buildings and mark them for upload.
+    pub fn set_buildings(&mut self, buildings: Vec<Placement>) {
+        self.buildings = buildings;
+        self.buildings_rev += 1;
+    }
+
+    /// The region at a position, from the same mask the renderer draws.
+    pub fn region_at(&self, lon: f32, lat: f32) -> Option<&RegionInfo> {
+        let p = self.mask.at(lon, lat);
+        if p[0] == 0 || p[2] == WATER_OCEAN || p[2] == WATER_LAKE {
+            return None;
+        }
+        self.regions.get(p[0] as usize - 1)
+    }
+
     /// Derive the ground classes and terrace levels. Call after the raw fields are filled.
     fn finish(mut self) -> Scene {
         self.levels = crate::mesh::build_levels(&self);
@@ -421,6 +469,8 @@ pub fn rasterise_mask(
     urban_json: Option<&str>,
     bounds: Bounds,
     ppd: f32,
+    states: &[&str],
+    player_regions: &[&str],
 ) -> Result<Mask, String> {
     let map: RawMap = serde_json::from_str(map_json).map_err(|e| e.to_string())?;
     let w = ((bounds.east - bounds.west) * ppd) as usize;
@@ -459,11 +509,11 @@ pub fn rasterise_mask(
     for (i, r) in map
         .regions
         .iter()
-        .filter(|r| GREAT_LAKES_STATES.contains(&r.state.as_str()))
+        .filter(|r| states.contains(&r.state.as_str()))
         .enumerate()
     {
         let n = (i + 1) as u8;
-        let tint = if PLAYER_REGIONS.contains(&r.code.as_str()) {
+        let tint = if player_regions.contains(&r.code.as_str()) {
             TINT_PLAYER
         } else {
             TINT_PLAY
@@ -494,7 +544,7 @@ pub fn rasterise_mask(
     // Cities and region hubs: a blobby fringe of urban ground sized from population, on land
     // only. The outline wobbles with the angle so footprints read as places, not discs.
     let (kx, ky) = (
-        (KM_PER_DEG_LON_EQ * 41.5f32.to_radians().cos()),
+        (KM_PER_DEG_LON_EQ * ((bounds.south + bounds.north) / 2.0).to_radians().cos()),
         KM_PER_DEG_LAT,
     );
     let mut sites: Vec<(f32, f32, f32)> = map
@@ -509,7 +559,7 @@ pub fn rasterise_mask(
         })
         .collect();
     for (code, p) in &map.hubs {
-        if GREAT_LAKES_STATES.contains(&&code[..2]) {
+        if states.contains(&&code[..2]) {
             sites.push((p[0] as f32 / 1e4, p[1] as f32 / 1e4, 4.0));
         }
     }
@@ -623,7 +673,11 @@ fn collect_lines(map: &RawMap, scenario: &str, b: &Bounds) -> Vec<Line> {
 /// A few small voxel blocks round the centre of every big city: more blocks for bigger cities,
 /// each picked and turned from the city's own position so the same map always builds the same
 /// skyline.
-fn downtown_blocks(cities: &[City], models: &HashMap<String, VoxelModel>) -> Vec<Placement> {
+fn downtown_blocks(
+    cities: &[City],
+    models: &HashMap<String, VoxelModel>,
+    lat: f32,
+) -> Vec<Placement> {
     const KINDS: [&str; 6] = [
         "financial/1",
         "city/1",
@@ -632,7 +686,7 @@ fn downtown_blocks(cities: &[City], models: &HashMap<String, VoxelModel>) -> Vec
         "city/2",
         "telecommunications/1",
     ];
-    let kx = KM_PER_DEG_LON_EQ * 41.5f32.to_radians().cos();
+    let kx = KM_PER_DEG_LON_EQ * lat.to_radians().cos();
     let mut out = Vec::new();
     for c in cities.iter().filter(|c| c.population >= 600_000) {
         let n = (2.0 + (c.population as f32 / 1.0e6).sqrt()).min(7.0) as usize;
@@ -673,30 +727,126 @@ fn empty_ground(bounds: Bounds) -> Ground {
     }
 }
 
+/// What differs between the four scenarios: where the terrain and satellite images sit and which
+/// states are in play. The game's scenarios are listed in [`SCENARIOS`].
+#[derive(Clone, Copy, Debug)]
+pub struct ScenarioSpec {
+    pub id: &'static str,
+    pub states: &'static [&'static str],
+    /// Box of the earth and cloud images (the same boxes the classic map uses).
+    pub image_bounds: Bounds,
+    /// Where the flat projection is anchored, and where the camera starts.
+    pub centre: (f32, f32),
+    pub start_width_km: f32,
+}
+
+const fn bounds(west: f32, south: f32, east: f32, north: f32) -> Bounds {
+    Bounds {
+        west,
+        south,
+        east,
+        north,
+    }
+}
+
+pub const SCENARIOS: [ScenarioSpec; 4] = [
+    ScenarioSpec {
+        id: "great-lakes-2000",
+        states: &GREAT_LAKES_STATES,
+        image_bounds: bounds(-122.0, 18.0, -42.0, 66.0),
+        centre: (-82.0, 41.5),
+        start_width_km: 2250.0,
+    },
+    ScenarioSpec {
+        id: "texas-1981",
+        states: &["LA", "OK", "TX"],
+        image_bounds: bounds(-137.0, 8.0, -57.0, 56.0),
+        centre: (-97.5, 31.0),
+        start_width_km: 2300.0,
+    },
+    ScenarioSpec {
+        id: "silicon-valley-1995",
+        states: &["CA"],
+        image_bounds: bounds(-160.0, 13.0, -80.0, 61.0),
+        centre: (-119.5, 37.0),
+        start_width_km: 1500.0,
+    },
+    ScenarioSpec {
+        id: "ruhr-rhine-1991",
+        states: &["BE", "DE", "FR", "LU", "NL"],
+        image_bounds: bounds(-32.0, 28.0, 48.0, 76.0),
+        centre: (8.0, 51.0),
+        start_width_km: 1500.0,
+    },
+];
+
+impl ScenarioSpec {
+    pub fn find(id: &str) -> Option<&'static ScenarioSpec> {
+        SCENARIOS.iter().find(|s| s.id == id)
+    }
+}
+
+/// Which files to read. The repository keeps them in two places and the app ships them in one
+/// folder, so both are given.
+pub struct AssetDirs<'a> {
+    /// world-map.json, earth-*.jpg, clouds-*.webp, voxel-models.json
+    pub resources: &'a Path,
+    /// heightmap-*.cwh and urban-*.json
+    pub baked: &'a Path,
+}
+
+/// How a scene starts: which regions are drawn as the player's holdings, and whether every
+/// region hub gets a building (the spike's look; the game places its own plants instead).
+#[derive(Default)]
+pub struct SceneOptions {
+    pub player_regions: Vec<String>,
+    pub hub_buildings: bool,
+}
+
 impl Scene {
     /// The Great Lakes 2000 scenario from the repository's own assets. `repo` is the
     /// repository root; the heightmap comes from crates/cw-render/assets.
     pub fn great_lakes_2000(repo: &Path) -> Result<Scene, String> {
-        let res = repo.join("apple/Resources");
+        Scene::for_scenario(
+            &AssetDirs {
+                resources: &repo.join("apple/Resources"),
+                baked: &repo.join("crates/cw-render/assets"),
+            },
+            &SCENARIOS[0],
+            &SceneOptions {
+                player_regions: PLAYER_REGIONS.iter().map(|s| s.to_string()).collect(),
+                hub_buildings: true,
+            },
+        )
+    }
+
+    /// Build a scenario's scene: terrain, region mask, land cover, roads, cities.
+    pub fn for_scenario(
+        dirs: &AssetDirs,
+        spec: &ScenarioSpec,
+        options: &SceneOptions,
+    ) -> Result<Scene, String> {
+        let res = dirs.resources;
         let read = |p: &Path| std::fs::read(p).map_err(|e| format!("{}: {e}", p.display()));
         let heightmap = Heightmap::parse(&read(
-            &repo.join("crates/cw-render/assets/heightmap-great-lakes-2000.cwh"),
+            &dirs.baked.join(format!("heightmap-{}.cwh", spec.id)),
         )?)?;
         let map_json =
             String::from_utf8(read(&res.join("world-map.json"))?).map_err(|e| e.to_string())?;
-        let urban_json = String::from_utf8(read(
-            &repo.join("crates/cw-render/assets/urban-great-lakes-2000.json"),
-        )?)
-        .map_err(|e| e.to_string())?;
-        let mask = rasterise_mask(&map_json, Some(&urban_json), heightmap.bounds, 120.0)?;
-        let region = Bounds {
-            west: -122.0,
-            south: 18.0,
-            east: -42.0,
-            north: 66.0,
-        };
-        let earth = load_geo_image(&res.join("earth-great-lakes-2000.jpg"), region)?;
-        let mut clouds = load_geo_image(&res.join("clouds-great-lakes-2000.webp"), region)?;
+        let urban_json = std::fs::read_to_string(dirs.baked.join(format!("urban-{}.json", spec.id)))
+            .ok();
+        let player: Vec<&str> = options.player_regions.iter().map(|s| s.as_str()).collect();
+        let mask = rasterise_mask(
+            &map_json,
+            urban_json.as_deref(),
+            heightmap.bounds,
+            120.0,
+            spec.states,
+            &player,
+        )?;
+        let region = spec.image_bounds;
+        let earth = load_geo_image(&res.join(format!("earth-{}.jpg", spec.id)), region)?;
+        let mut clouds = load_geo_image(&res.join(format!("clouds-{}.webp", spec.id)), region)?;
         blur_alpha(&mut clouds, 2, 2);
         let models = parse_models(
             &String::from_utf8(read(&res.join("voxel-models.json"))?).map_err(|e| e.to_string())?,
@@ -705,31 +855,46 @@ impl Scene {
         let mut codes: Vec<&String> = map
             .hubs
             .keys()
-            .filter(|c| GREAT_LAKES_STATES.contains(&&c[..2]))
+            .filter(|c| spec.states.contains(&&c[..2]))
             .collect();
         codes.sort();
-        let buildings = codes
+        let mut buildings: Vec<Placement> = if options.hub_buildings {
+            codes
+                .iter()
+                .enumerate()
+                .map(|(i, code)| {
+                    let p = map.hubs[*code];
+                    let model = BIG_HUBS
+                        .iter()
+                        .find(|(c, _)| c == code)
+                        .map(|(_, m)| *m)
+                        .unwrap_or(HUB_MODELS[i % HUB_MODELS.len()]);
+                    Placement {
+                        model: model.into(),
+                        lon: p[0] as f32 / 1e4,
+                        lat: p[1] as f32 / 1e4,
+                        yaw: 0.0,
+                        scale: 1.0,
+                    }
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let regions: Vec<RegionInfo> = map
+            .regions
             .iter()
-            .enumerate()
-            .map(|(i, code)| {
-                let p = map.hubs[*code];
-                let model = BIG_HUBS
-                    .iter()
-                    .find(|(c, _)| c == code)
-                    .map(|(_, m)| *m)
-                    .unwrap_or(HUB_MODELS[i % HUB_MODELS.len()]);
-                Placement {
-                    model: model.into(),
-                    lon: p[0] as f32 / 1e4,
-                    lat: p[1] as f32 / 1e4,
-                    yaw: 0.0,
-                    scale: 1.0,
+            .filter(|r| spec.states.contains(&r.state.as_str()))
+            .map(|r| {
+                let h = map.hubs.get(&r.code).copied().unwrap_or([0, 0]);
+                RegionInfo {
+                    code: r.code.clone(),
+                    lon: h[0] as f32 / 1e4,
+                    lat: h[1] as f32 / 1e4,
                 }
             })
             .collect();
-        let mut buildings: Vec<Placement> = buildings;
-        let heightmap_bounds = heightmap.bounds;
-        let heightmap_bounds_in = heightmap_bounds;
+        let hb = heightmap.bounds;
         let cities: Vec<City> = map
             .cities
             .iter()
@@ -738,23 +903,23 @@ impl Scene {
                 lat: c.y as f32 / 1e4,
                 population: c.population,
             })
-            .filter(|c| {
-                c.lon >= heightmap_bounds_in.west
-                    && c.lon <= heightmap_bounds_in.east
-                    && c.lat >= heightmap_bounds_in.south
-                    && c.lat <= heightmap_bounds_in.north
-            })
+            .filter(|c| c.lon >= hb.west && c.lon <= hb.east && c.lat >= hb.south && c.lat <= hb.north)
             .collect();
-        buildings.extend(downtown_blocks(&cities, &models).into_iter().filter(|b| {
-            let kind = mask.at(b.lon, b.lat)[2];
-            kind == WATER_NONE || kind == WATER_URBAN
-        }));
-        let lines = collect_lines(&map, "great-lakes-2000", &heightmap_bounds);
+        let mid_lat = (hb.south + hb.north) / 2.0;
+        buildings.extend(
+            downtown_blocks(&cities, &models, mid_lat)
+                .into_iter()
+                .filter(|b| {
+                    let kind = mask.at(b.lon, b.lat)[2];
+                    kind == WATER_NONE || kind == WATER_URBAN
+                }),
+        );
+        let lines = collect_lines(&map, spec.id, &hb);
 
         Ok(Scene {
             projection: Projection {
-                lon0: -82.0,
-                lat0: 41.5,
+                lon0: spec.centre.0,
+                lat0: spec.centre.1,
             },
             heightmap,
             mask,
@@ -768,8 +933,11 @@ impl Scene {
             exaggeration: 28.0,
             terrace_m: 200.0,
             terrace_offset_m: 60.0,
-            ground: empty_ground(heightmap_bounds),
+            ground: empty_ground(hb),
             levels: Vec::new(),
+            regions,
+            mask_rev: 0,
+            buildings_rev: 0,
         }
         .finish())
     }
@@ -793,6 +961,7 @@ impl Scene {
         for y in 0..64 {
             for x in 0..64 {
                 let i = (y * 64 + x) * 4;
+                rgba[i] = if x < 20 { 1 } else { 2 };
                 rgba[i + 2] = if x >= 44 { WATER_LAKE } else { WATER_NONE };
                 rgba[i + 3] = if x < 20 { TINT_PLAYER } else { TINT_PLAY };
             }
@@ -881,6 +1050,20 @@ impl Scene {
             terrace_offset_m: 0.0,
             ground: empty_ground(bounds),
             levels: Vec::new(),
+            regions: vec![
+                RegionInfo {
+                    code: "AA-ONE".into(),
+                    lon: -83.5,
+                    lat: 41.0,
+                },
+                RegionInfo {
+                    code: "AA-TWO".into(),
+                    lon: -82.4,
+                    lat: 41.0,
+                },
+            ],
+            mask_rev: 0,
+            buildings_rev: 0,
         }
         .finish()
     }

@@ -7,16 +7,21 @@
 
 mod camera;
 mod data;
+mod game;
 mod ground;
 mod mesh;
 mod palette;
+mod pick;
 mod renderer;
 
 pub use camera::Camera;
 pub use data::{
-    Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, LINE_INTERSTATE, LINE_MAIN, LINE_RAIL,
-    Line, Mask, PLAYER_REGIONS, Placement, Projection, Scene, VoxelBox, VoxelModel,
+    AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, LINE_INTERSTATE, LINE_MAIN, LINE_RAIL,
+    Line, Mask, PLAYER_REGIONS, Placement, Projection, RegionInfo, SCENARIOS, Scene, SceneOptions,
+    ScenarioSpec, TINT_HEAT, TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel,
 };
+pub use game::{PlantSite, SiteStatus, layout_plants, ramp_by_name, region_tints};
+pub use pick::{pick_ground, project};
 pub use palette::{COLOURS as PALETTE_COLOURS, Palette};
 pub use renderer::{AdapterSummary, CloudLevel, Frame, FrameStats, NoAdapter, Renderer, Style};
 

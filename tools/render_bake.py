@@ -13,7 +13,7 @@ averaged down to 0.05 degree cells, written into crates/cw-render/assets/:
                                header: magic "CWH1", u16 width, u16 height, i16 west, i16 south,
                                i16 east, i16 north (whole degrees)
 
-Run: python3 tools/render_bake.py            (all scenarios listed in AREAS)
+Run: python3 tools/render_bake.py [name ...]  (all scenarios listed in AREAS when no name is given)
 """
 
 from __future__ import annotations
@@ -31,7 +31,12 @@ CACHE = ROOT / "tools" / ".cache"
 OUT = ROOT / "crates" / "cw-render" / "assets"
 
 # West, south, east, north in whole degrees: the scenario's states with room around them.
-AREAS = {"great-lakes-2000": (-97, 34, -67, 50)}
+AREAS = {
+    "great-lakes-2000": (-97, 34, -67, 50),
+    "texas-1981": (-110, 23, -86, 39),
+    "silicon-valley-1995": (-127, 31, -112, 44),
+    "ruhr-rhine-1991": (-1, 45, 17, 57),
+}
 SOURCE_PER_DEGREE = 60
 CELL_DEGREES = 0.05
 ERDDAP = "https://coastwatch.pfeg.noaa.gov/erddap/griddap/etopo180.csv"
@@ -72,4 +77,5 @@ def bake(name: str, west: int, south: int, east: int, north: int) -> None:
 
 if __name__ == "__main__":
     for name, box in AREAS.items():
-        bake(name, *box)
+        if len(sys.argv) < 2 or name in sys.argv[1:]:
+            bake(name, *box)

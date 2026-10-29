@@ -128,7 +128,7 @@ class AppSettings(private val file: File) {
         graphics = GraphicsPreset.Medium.config(graphics.animations, graphics.showFps)
         return true
     }
-    fun choosePreset(preset: GraphicsPreset) = chooseGraphics(preset.config(graphics.animations, graphics.showFps))
+    fun choosePreset(preset: GraphicsPreset) = chooseGraphics(preset.config(graphics.animations, graphics.showFps).copy(newMap = graphics.newMap))
     fun chooseAutoUpdate(value: Boolean) { autoUpdate = value; store() }
     fun chooseUpdateChannel(value: UpdateChannel) { updateChannel = value; store() }
     fun chooseAnalytics(value: Boolean) { analytics = value; store() }
@@ -162,6 +162,7 @@ class AppSettings(private val file: File) {
             props.setProperty("interstates", g.interstates.toString())
             props.setProperty("seasons", g.seasons.toString())
             props.setProperty("labels", g.labels.toString())
+            props.setProperty("newMap", g.newMap.toString())
         }
         setupFlag?.let { props.setProperty("setupDone", it) }
         props.setProperty("careers", CareerSummary.encode(careers))
@@ -208,6 +209,7 @@ class AppSettings(private val file: File) {
             interstates = bool("interstates", base.interstates),
             seasons = bool("seasons", base.seasons),
             labels = int("labels", base.labels, 0..2),
+            newMap = bool("newMap", base.newMap),
         )
     }
 
@@ -368,7 +370,7 @@ private fun GraphicsChoices(settings: AppSettings) {
         if (g.preset == null) "Custom: your own mix of the options below." else "Picking a preset sets every option below. Change any of them to make your own mix.",
         color = Palette.secondary, fontSize = 12.sp,
     )
-    graphicsOptions.forEach { option ->
+    graphicsOptions.filter { !it.gpuOnly || GpuMapHost.opener != null }.forEach { option ->
         Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(option.title, color = Palette.primaryText)
             Choices(option.choices.indices.toList(), option.get(g), { option.choices[it] }) { settings.chooseGraphics(option.set(g, it)) }

@@ -23,6 +23,8 @@ mod chapters;
 mod company;
 mod custom;
 mod executives;
+#[cfg(feature = "gpu-map")]
+pub mod gpu_map;
 mod letters;
 mod paper;
 mod statements;

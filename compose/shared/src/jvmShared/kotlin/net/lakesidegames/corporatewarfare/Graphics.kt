@@ -39,6 +39,8 @@ data class GraphicsConfig(
     val seasons: Boolean = true,
     /** Names on the map: 0 none, 1 cities, 2 cities and regions. */
     val labels: Int = 2,
+    /** The new GPU map (desktop preview): stylized terrain, roads and buildings drawn on the graphics card. Off by default. */
+    val newMap: Boolean = false,
 ) {
     /** The tilt in radians once the map is flat. */
     val pitch: Double get() = when (tilt) { 0 -> 0.0; 1 -> 28 * PI / 180; else -> 48 * PI / 180 }
@@ -47,7 +49,7 @@ data class GraphicsConfig(
     val moves: Boolean get() = animations && (traffic > 0 || clouds > 0 || buildings > 0 || dayNight || lighting == 2)
 
     /** The preset this matches, or null when the player has mixed their own. */
-    val preset: GraphicsPreset? get() = GraphicsPreset.entries.firstOrNull { it.config(animations, showFps) == this }
+    val preset: GraphicsPreset? get() = GraphicsPreset.entries.firstOrNull { it.config(animations, showFps) == copy(newMap = false) }
 
     companion object {
         /** What the map draws with no settings file, as in tests and previews. */
@@ -79,6 +81,8 @@ internal class GraphicsOption(
     val choices: List<String>,
     val get: (GraphicsConfig) -> Int,
     val set: (GraphicsConfig, Int) -> GraphicsConfig,
+    /** Only shown where the desktop shell offers the GPU map. */
+    val gpuOnly: Boolean = false,
 )
 
 private fun Boolean.int() = if (this) 1 else 0
@@ -101,5 +105,10 @@ internal val graphicsOptions = listOf(
     GraphicsOption("Labels", { "Names on the map." }, listOf("Off", "Cities", "All"), { it.labels }, { c, v -> c.copy(labels = v) }),
     GraphicsOption("Frame rate", { "Lower saves battery." }, listOf("30", "60", "Unlimited"), { when (it.frameRate) { 30 -> 0; 60 -> 1; else -> 2 } }, { c, v -> c.copy(frameRate = listOf(30, 60, 0)[v]) }),
     GraphicsOption("Animations", { "Camera flights, the menu and moving effects." }, listOf("Off", "On"), { it.animations.int() }, { c, v -> c.copy(animations = v == 1) }),
+    GraphicsOption(
+        "New map (preview)",
+        { "A new look for the map, drawn on your graphics card: terrain, roads, rails and buildings. A preview for testers; the frame rate counter shows what it costs. If your computer has no usable graphics card the game keeps the current map." },
+        listOf("Off", "On"), { it.newMap.int() }, { c, v -> c.copy(newMap = v == 1) }, gpuOnly = true,
+    ),
     GraphicsOption("Show frame rate", { "A frame counter in the corner of the map." }, listOf("Off", "On"), { it.showFps.int() }, { c, v -> c.copy(showFps = v == 1) }),
 )
