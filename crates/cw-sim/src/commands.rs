@@ -2231,7 +2231,12 @@ fn apply_intent(
                 });
             }
             let debt = firm_ref(world, *firm)?.book.debt();
-            insolvency::restructure_for_owner(world, *firm, debt);
+            if !insolvency::restructure_for_owner(world, dataset, *firm, debt) {
+                return Err(DomainError::WrongPhase {
+                    expected: "a plant that pays its way",
+                    actual: "every plant loses money",
+                });
+            }
             Ok(())
         }
         CommandIntent::StartDiligence {
