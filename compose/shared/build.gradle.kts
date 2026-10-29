@@ -66,7 +66,6 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material3)
                 implementation(compose.ui)
-                implementation(compose.materialIconsExtended)
                 implementation("${libs.jna.get()}@aar")
                 implementation(libs.kotlinx.serialization.json)
             }
@@ -80,7 +79,6 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material3)
                 implementation(compose.ui)
-                implementation(compose.materialIconsExtended)
                 implementation(libs.jna)
                 implementation(libs.kotlinx.serialization.json)
                 // Skia's native renderer for the OS building the package (each OS packages its own).
@@ -113,6 +111,16 @@ android {
 compose.desktop {
     application {
         mainClass = "net.lakesidegames.corporatewarfare.MainKt"
+        // The release build (createReleaseDistributable, packageReleaseMsi, packageReleaseDeb) runs ProGuard
+        // to drop the Compose, Material and Kotlin classes the game never calls. Names are not obfuscated
+        // (so crash reports stay readable) and code is not rewritten, only removed. The keep rules for
+        // the engine bindings, JNA and Skia are in desktop-rules.pro.
+        buildTypes.release.proguard {
+            isEnabled.set(true)
+            obfuscate.set(false)
+            optimize.set(false)
+            configurationFiles.from(project.file("desktop-rules.pro"))
+        }
         nativeDistributions {
             targetFormats(
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
@@ -192,17 +200,17 @@ tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageT
 
 // The branded Windows setup program (packaging/windows/setup.iss, Inno Setup 6) wraps the same
 // app image Compose builds for the MSI. `:shared:packageWindowsSetup` builds the image, then the
-// setup program, into build/compose/binaries/main/setup/CorporateWarfare-<version>-setup.exe.
+// setup program, into build/compose/binaries/main-release/setup/CorporateWarfare-<version>-setup.exe.
 // Windows only; CI installs Inno Setup when the runner lacks it.
 val windowsHost = System.getProperty("os.name").lowercase().contains("win")
 tasks.register<Exec>("packageWindowsSetup") {
     group = "distribution"
     description = "Builds CorporateWarfare-<version>-setup.exe with Inno Setup (Windows only)."
-    dependsOn("createDistributable")
+    dependsOn("createReleaseDistributable")
     onlyIf { windowsHost }
     val packaging = project.file("packaging/windows")
-    val image = layout.buildDirectory.dir("compose/binaries/main/app/Corporate Warfare")
-    val out = layout.buildDirectory.dir("compose/binaries/main/setup")
+    val image = layout.buildDirectory.dir("compose/binaries/main-release/app/Corporate Warfare")
+    val out = layout.buildDirectory.dir("compose/binaries/main-release/setup")
     inputs.dir(packaging)
     inputs.dir(image)
     outputs.dir(out)
