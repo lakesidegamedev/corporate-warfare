@@ -75,6 +75,35 @@ final class SnapshotTests: XCTestCase {
         render("brief-pad", CGSize(width: 760, height: 900), compact: false, page)
     }
 
+    /// Earnings season on a company page: before results with guidance given, after a beat and
+    /// after a miss, built by hand so the three states always render.
+    func testRenderEarningsSection() throws {
+        func sample(last: Bool, guided: Bool, beat: Bool, weeks: UInt32, rating: String) -> EarningsDto {
+            EarningsDto(
+                covered: true, rating: rating, hasEstimate: true, estimateCents: 420_000_000, weeksToResults: weeks,
+                reportsThisWeek: weeks <= 1, hasGuidance: guided, guideLowCents: 400_000_000, guideHighCents: 450_000_000,
+                credibilityBps: guided ? 4_500 : 3_000, canGuide: !guided, hasLast: last, lastWeek: 26,
+                lastActualCents: beat ? 460_000_000 : 330_000_000, lastEstimateCents: 400_000_000,
+                lastMoveBps: beat ? 420 : -610, lastGuidanceMet: last && guided ? beat : nil, streak: beat ? 2 : -1
+            )
+        }
+        XCTAssertEqual(EarningsText.resultsWhen(sample(last: false, guided: false, beat: true, weeks: 1, rating: "hold")), "Reports this week")
+        XCTAssertEqual(EarningsText.resultsWhen(sample(last: false, guided: false, beat: true, weeks: 5, rating: "hold")), "Reports in 5 weeks")
+        XCTAssertEqual(EarningsText.rating("sell"), "Sell")
+        XCTAssertEqual(EarningsText.credibility(3_000), "Low")
+        let cases: [(String, EarningsDto)] = [
+            ("before", sample(last: false, guided: false, beat: true, weeks: 5, rating: "buy")),
+            ("guided", sample(last: false, guided: true, beat: true, weeks: 1, rating: "hold")),
+            ("beat", sample(last: true, guided: true, beat: true, weeks: 12, rating: "hold")),
+            ("miss", sample(last: true, guided: true, beat: false, weeks: 12, rating: "sell")),
+        ]
+        for (name, dto) in cases {
+            let page = VStack(alignment: .leading) { EarningsSection(earnings: dto, onGiveGuidance: dto.canGuide ? {} : nil) }
+                .padding(16).background(Theme.ink)
+            render("earnings-\(name)-phone", CGSize(width: 393, height: 380), compact: true, page)
+        }
+    }
+
     func testRenderMainScreens() async throws {
         let store = AppStore(saveManager: SaveManager(directory: directory))
         await store.newCareer(guided: true, fiveYear: false, seed: 7)
