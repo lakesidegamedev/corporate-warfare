@@ -57,6 +57,16 @@ increases with every upload.
    the next build number (`apple/RELEASE.md`). Record the Apple build state in
    `evidence/releases/`.
 
+## Windows setup program
+
+Each Windows build produces `CorporateWarfare-<version>-setup.exe` (Inno Setup 6, script and
+checks under `compose/shared/packaging/windows/`, pictures from `tools/installer_art.py`) beside
+the MSI. `release-others.yml` and `preview.yml` build and attach it; the PR workflow builds it and
+runs `test-setup.ps1` (install, downgrade, upgrade, silent uninstall, saves survive). The updater
+prefers an asset ending `-setup.exe` and falls back to `.msi`, so keep that name. The MSI stays for
+the 1.9 cycle because installed 1.8 games only know how to update through it. The setup program is
+unsigned, so Windows SmartScreen warns on first run until signing is added.
+
 ## Hotfixes
 
 A fix for a released version is a PATCH: branch from the release tag, fix, add the changelog

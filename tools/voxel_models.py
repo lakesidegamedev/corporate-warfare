@@ -82,6 +82,9 @@ def main() -> None:
     for name, make in sprites.MODELS.items():
         for size in range(3):
             models[f"{name}/{size}"] = export(make(size).v, face_south=True)
+    for name, make in sprites.CITY_KINDS.items():
+        for size in range(3):
+            models[f"{name}/{size}"] = export(make(size).v, face_south=True)
     for name, make in vehicles.MODELS.items():
         for livery, mine in (("neutral", False), ("player", True)):
             models[f"{name}/{livery}"] = export(make(mine).v, face_south=False)

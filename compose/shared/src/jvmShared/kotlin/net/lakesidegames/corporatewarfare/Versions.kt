@@ -113,8 +113,64 @@ object SaveBackup {
     }
 }
 
-/** The script lines Windows runs to install a downloaded MSI while the game is closed. */
+/** The script lines Windows runs to install a downloaded setup program or MSI while the game is closed. */
 object WindowsInstall {
+    /** The branded setup program's file ending. The MSI is kept for releases that have no setup program. */
+    const val SETUP_SUFFIX = "-setup.exe"
+
+    /**
+     * Release file endings Windows installs, best first: the setup program, then the MSI for
+     * releases that only have one. A release with both gives the setup program.
+     */
+    val SUFFIXES = listOf(SETUP_SUFFIX, ".msi")
+
+    /**
+     * What the setup program is run with: a progress window and no questions, closing any copy of
+     * the game still open, no restart, no message boxes, and `/RELAUNCH` (read by the setup script)
+     * to start the game again from wherever it installed.
+     */
+    const val SETUP_ARGS = "/SILENT /CLOSEAPPLICATIONS /NORESTART /SUPPRESSMSGBOXES /RELAUNCH"
+
+    /** The named mutex the running game holds, so setup and uninstall can tell it is open. */
+    const val MUTEX = "CorporateWarfareRunning"
+
+    fun isSetup(file: String): Boolean = file.endsWith(SETUP_SUFFIX, ignoreCase = true)
+
+    /** The plan for a downloaded [file]: the setup program's, or the MSI's for an older-style release. */
+    fun planFor(file: String, target: String, installed: String, relaunch: String?): List<String> =
+        if (isSetup(file)) setupPlan(file, relaunch) else plan(file, target, installed, relaunch)
+
+    /**
+     * Setup program: wait for the game to close, run it and wait for it. The same setup program
+     * upgrades and downgrades alike, replaces the program files in place and never touches the
+     * saves, so there is no separate downgrade path. It starts the game again itself (`/RELAUNCH`);
+     * only if it fails does this script tell the player and reopen the version that was there.
+     */
+    fun setupPlan(setup: String, relaunch: String?): List<String> = buildList {
+        add("@echo off")
+        add("call :closeall")
+        add("if errorlevel 1 goto running")
+        add("start \"\" /wait \"$setup\" $SETUP_ARGS")
+        add("if %errorlevel%==0 exit 0")
+        add(
+            "powershell -NoProfile -Command \"Add-Type -AssemblyName PresentationFramework; " +
+                "[System.Windows.MessageBox]::Show('$SETUP_FAILED', 'Corporate Warfare')\"",
+        )
+        if (relaunch != null) add("start \"\" \"$relaunch\"")
+        add("exit 1")
+        add(":running")
+        add(
+            "powershell -NoProfile -Command \"Add-Type -AssemblyName PresentationFramework; " +
+                "[System.Windows.MessageBox]::Show('$STILL_RUNNING', 'Corporate Warfare')\"",
+        )
+        add("exit 1")
+        addAll(closeAll())
+    }
+
+    /** Shown when the setup program ends with an error; your saves were not touched. */
+    const val SETUP_FAILED = "The new version was not installed. Your saves were not touched. " +
+        "Try again from the version list, or download it from the release page."
+
     /** The upgrade code in shared/build.gradle.kts; every Corporate Warfare MSI carries it. */
     const val UPGRADE_CODE = "5b6f6b2e-3c1d-4b8e-9f1a-0c7d2e4a9b31"
 

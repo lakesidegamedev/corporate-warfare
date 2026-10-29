@@ -62,9 +62,36 @@ heading.
   machine without a GPU it uses the Mesa software driver. `tools/render_bake.py` fetches the
   elevation and bakes the small heightmap. The crate is not linked into the game or the apps
   yet and changes nothing players see, no saves and no hashes.
+- A proper Windows setup program, in the look of the game, replaces the plain installer screens.
+  It has a welcome page with the game's art, the licence, a choice of folder, Start menu and
+  desktop shortcuts, a progress page and a finish page with Play Corporate Warfare now. It
+  installs just for you by default, with no administrator prompt, into your local programs
+  folder, and offers all users instead. The same setup program installs any version over any
+  other, newer or older, so changing version never needs an uninstall first, and it never touches
+  your saved careers and settings. If the game is open, setup tells you to close it first.
+- Uninstalling asks whether to keep your saved careers and settings. Keeping them is the default,
+  the folder is shown with a button to open it so you can copy your saves, and they are only
+  deleted if you choose that and confirm. A silent uninstall always keeps them.
+- Setup removes a 1.8 Windows installer (MSI) copy of the game first and keeps your saves. Windows
+  asks for permission once, because the old copy was installed for all users. A release can ship
+  both files: the in-game updater and version list use the setup program when a release has one
+  and the MSI when it does not.
 
 ### Changed
 
+- The map is easier to read when you zoom in close. Rival companies' plants now show in their
+  industry's colour with a dark roof and are about 60 percent of the size of yours, while your
+  own are full size with a gold roof and the plant count on top. Cities no longer look like
+  identical grey blocks: ports have cranes and stacked containers, steel towns have tall stacks,
+  car towns have a long assembly shed, and the rest stay as towers. Town and city names are in
+  plain sentence case in one weight, and only region names keep the spaced capital letters. Names
+  no longer overlap each other or sit on top of a building: when two compete, the region name
+  gives way to the city name, and the city name to your own plant badge, and a name that is
+  showing stays put instead of blinking while you pan. Trucks, trains and ships keep at least two
+  vehicle lengths apart, so a busy road looks busy without becoming one unbroken line, and they
+  carry their owner's colour: gold for yours, the industry colour for a rival's, grey for outside
+  carriers. On the desktop app the buildings and names are now drawn in the background like the
+  ground, so panning and zooming close in stays smooth.
 - Saves from the earlier 1.9 previews carry on without chapter goals until the next chapter starts, and
   the goal list and achievements are saved with the career. The save format number does not change.
 - Saves written by this version cannot be opened by older versions of the game. Careers saved in
