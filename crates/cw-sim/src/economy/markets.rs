@@ -807,6 +807,32 @@ fn own_input_cover_lots(
     (crate::economy::storage::reserved_milli(world, dataset, firm, region, product) + 999) / 1_000
 }
 
+/// Lots of a good the region's operating plants made last week as a by-product (a refinery's
+/// gasoline, a steel mill's scrap), or would make at their recipe yield, whichever is more. The
+/// gateway was sized at the start to the plants then running; a co-product of a plant built
+/// later must still be able to leave at the export price rather than pile up unsold, since the
+/// plant cannot stop making it without stopping its main output.
+pub fn coproduct_room(world: &World, dataset: &Dataset, region: u8, product: u16) -> i64 {
+    let id = &dataset.products[product as usize].id;
+    world
+        .facilities
+        .iter()
+        .filter(|(_, plant)| {
+            plant.region == region && plant.status == crate::state::FacilityStatus::Operating
+        })
+        .filter(|(_, plant)| {
+            let recipe = &dataset.recipes[plant.recipe as usize];
+            recipe.output != *id && recipe.by_products.iter().any(|by| by.product == *id)
+        })
+        .map(|(_, plant)| {
+            let base = dataset.recipes[plant.recipe as usize]
+                .lots_of(id)
+                .saturating_mul(plant.blocks as i64);
+            base.max(plant.last_made(dataset, id).lots())
+        })
+        .fold(0i64, |sum, lots| sum.saturating_add(lots))
+}
+
 fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, product: u16) {
     let Some(index) = world
         .gateways
@@ -819,7 +845,11 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
     if gateway.buy_price_cents <= 0 {
         return;
     }
-    let mut remaining = MilliLots::from_lots(gateway.capacity_lots);
+    let mut remaining = MilliLots::from_lots(
+        gateway
+            .capacity_lots
+            .max(coproduct_room(world, dataset, region, product)),
+    );
     if remaining.0 <= 0 {
         return;
     }
@@ -987,6 +1017,8 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
             .households
             .last_sale_price_cents
             .clone();
+        world.regions[region_index].households.wanted_milli.clear();
+        world.regions[region_index].households.unmet_milli.clear();
         for id in consumer_ids {
             let product = dataset.product_index[id];
             let weight = weights.get(&product).copied().unwrap_or(0);
@@ -1049,6 +1081,13 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
                     sources.push(source);
                 }
             }
+            // What households asked for, and what no seller had on the shelf for them.
+            let offered: i64 = offers.iter().map(|offer| offer.qty).sum();
+            let households = &mut world.regions[region_index].households;
+            households.wanted_milli.insert(product, requested);
+            households
+                .unmet_milli
+                .insert(product, (requested - offered).max(0));
             if offers.is_empty() {
                 // Unspent budget stays with the household, never with a phantom seller.
                 continue;
@@ -1926,6 +1965,8 @@ mod tests {
             baseline_lots: BTreeMap::new(),
             last_sale_price_cents: BTreeMap::new(),
             spend_cents: BTreeMap::new(),
+            wanted_milli: BTreeMap::new(),
+            unmet_milli: BTreeMap::new(),
         };
         let (budget, supplement) = weekly_household_budget(&household);
         assert_eq!(supplement, 10_000, "at most one percent of savings");

@@ -2059,6 +2059,24 @@ pub fn carrier_utilisation_bps(world: &World, facility: Handle) -> Option<i32> {
         .map(|c| (c.used_lot_km * 10_000 / (c.cap as i64 * REF_KM)).clamp(0, 10_000) as i32)
 }
 
+/// Lots that overflowed to outside carriers last week on the lanes a carrier plant had capacity
+/// on, and the lots those lanes moved in all. None for a plant that is not a running carrier.
+pub fn carrier_overflow(world: &World, facility: Handle) -> Option<(i32, i32)> {
+    let index = world
+        .logistics
+        .carriers
+        .iter()
+        .position(|c| c.facility == facility)?;
+    let (mut outside, mut moved) = (0i32, 0i32);
+    for lane in world.logistics.lanes.values() {
+        if lane.allocs.iter().any(|a| a.carrier as usize == index) {
+            outside = outside.saturating_add(lane.outside);
+            moved = moved.saturating_add(lane.moved());
+        }
+    }
+    Some((outside, moved))
+}
+
 /// A lane that is short of capacity: much of its freight went to outside carriers or it has run
 /// full for weeks.
 #[derive(Clone, Debug)]

@@ -257,6 +257,7 @@ fn add_facility(
         stock_plan: Default::default(),
         ship: Default::default(),
         serves: Vec::new(),
+        cut_bps: Vec::new(),
     };
     let handle = world.facilities.insert(facility);
     world

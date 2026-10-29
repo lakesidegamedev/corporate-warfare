@@ -3,17 +3,21 @@
 //!
 //! A firm sets one price per good it makes, every week, rival or player's automatic company.
 //! Weekly sales are its closed thirteen-week sales of the good in every region divided by
-//! thirteen; stock is everything it holds of the good beyond its own plants' input cover. The
-//! firm reads its weeks of cover against the cover it wants and works out the price it would
-//! ask, six percent of reference for every week of difference, then moves a sixth of the way
-//! there, at most two percent in a week. Services read how much of their capacity sold. The
-//! result stays within half and twice reference and under the cheapest import price in the
-//! corridor, above which buyers import instead (services, with no import quote, stop at fifteen
+//! thirteen; stock is everything it holds of the good beyond its own plants' input cover. Where
+//! plants buy the good, buyers left short of their input cover lift the price and the seller's
+//! unsold stock beyond its target cover cuts it, six percent of reference for every week; a good
+//! only households or the state buy reads the seller's cover against its target both ways.
+//! Services read how much of their installed capacity sold, so spare capacity cuts the price.
+//! The firm then moves a sixth of the way to the price it wants, at most two percent in a week.
+//! The result stays within half and twice reference and under the cheapest import price in the
+//! corridor, above which buyers import instead; where imports run a quarter or more over home
+//! output the seller asks just under the import (services, with no import quote, stop at fifteen
 //! percent over reference).
 
 use std::collections::BTreeSet;
 
 use cw_core::ids::Handle;
+use cw_core::quantity::MilliLots;
 use cw_data::Dataset;
 
 use crate::state::World;
@@ -147,16 +151,24 @@ const WANT_BPS_PER_HUNDREDTH_WEEK: i64 = 6;
 const PRICE_LAG_WEEKS: i64 = 6;
 /// No firm moves a price more than this share in a week, in basis points.
 const MAX_WEEKLY_MOVE_BPS: i64 = 200;
+/// A carrier running its lanes under this share full by lot-km cuts its run rate, in basis
+/// points, unless its lanes overflowed to outside carriers.
+pub const CARRIER_CUT_BPS: i32 = 8_500;
+/// A carrier whose lanes sent at least this share of their lots to outside carriers does not cut
+/// its run rate, in basis points.
+pub const CARRIER_OVERFLOW_BPS: i64 = 4_000;
+/// A carrier running its lanes at least this full raises its run rate, in basis points.
+pub const CARRIER_RAISE_BPS: i32 = 9_000;
 /// Weeks a price that has no sales signal takes to ease back toward reference.
 const IDLE_REVERSION_WEEKS: i64 = 26;
 
 /// What the firm wants to ask for a good, in basis points of reference, from how much of it is
-/// left on the shelf and how fast it sells. None when there is nothing to read (nothing sold and
-/// nothing held, as at a plant still starting up).
+/// left on the shelf, how short its buyers are and how much of its capacity sold. None when
+/// there is nothing to read (nothing sold and nothing held, as at a plant still starting up).
 ///
-/// Goods: weeks of free stock against weeks of cover wanted. Services keep no stock, so they read
-/// the share of the firm's output that sold: full order books lift the price, slack returns it
-/// to reference. Both are continuous, with no dead band, so a price moves as the market moves.
+/// Goods: see `goods_wanted_bps`. Services keep no stock, so they read the share of installed
+/// capacity that sold (see `service_wanted_bps`). Both are continuous, with no dead band, so a
+/// price moves as the market moves.
 fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> Option<i64> {
     let sold = weekly_sold(world, firm, product);
     if dataset.products[product as usize].kind.is_service() {
@@ -164,24 +176,180 @@ fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> O
         if capacity <= 0 {
             return None;
         }
-        // Sales against what the plants are set to make: a service sold out asks 9 percent over
-        // reference and one with slack asks reference. A service has no stock to clear and its
-        // buyers' budgets do not grow when it is cheaper, so a discount would only lose revenue.
-        let used_bps = (sold * 10_000 / capacity).clamp(0, 10_000);
-        return Some((10_000 + (used_bps - 8_500) * 6 / 10).clamp(10_000, 11_500));
+        let used_bps = (sold.saturating_mul(10_000) / capacity).clamp(0, 10_000);
+        return Some(service_wanted_bps(used_bps));
     }
     let stock = free_stock(world, dataset, firm, product);
     if sold <= 0 {
         return (stock > 0).then_some(7_000);
     }
-    let cover = stock * 100 / sold;
+    let cover = stock.saturating_mul(100) / sold;
     let target = cover_target_hundredths(dataset, product)
         + harvest_glut_extra(world, dataset, product) * 100;
-    let gap = (target - cover).clamp(-500, 500);
-    Some(10_000 + gap * WANT_BPS_PER_HUNDREDTH_WEEK)
+    let (mut short, mut need) = buyer_shortfall(world, dataset, product);
+    // Households keep no stock: a week of their demand that found nothing on the shelf counts
+    // as being short the seller's whole target cover, so a good households cannot find reads as
+    // scarce the way an empty shelf used to.
+    let (unmet, wanted) = household_unmet(world, product);
+    if wanted > 0 {
+        need = need.saturating_add(wanted);
+        short = short.saturating_add(unmet.saturating_mul(target) / 100);
+    }
+    // A good no plant or household at home buys, that the corridor exports, has an empty shelf
+    // because its surplus left at the export price, not because buyers went without: it does
+    // not read as scarce.
+    let cover = if need <= 0 && exported(world, product) {
+        cover.max(target)
+    } else {
+        cover
+    };
+    Some(goods_wanted_bps(cover, target, short, need))
 }
 
-/// Lots a firm's operating plants are set to make of a service in a week, at their run rates.
+/// Whole lots of a good households across the corridor found no seller for last week, and the
+/// lots they asked for. Zero and zero for a good households do not buy.
+pub fn household_unmet(world: &World, product: u16) -> (i64, i64) {
+    let (mut unmet, mut wanted) = (0i64, 0i64);
+    for region in &world.regions {
+        let households = &region.households;
+        unmet = unmet.saturating_add(households.unmet_milli.get(&product).copied().unwrap_or(0));
+        wanted = wanted.saturating_add(households.wanted_milli.get(&product).copied().unwrap_or(0));
+    }
+    (unmet / 1_000, wanted / 1_000)
+}
+
+/// Whether any of the good left the corridor through a gateway last week.
+pub fn exported(world: &World, product: u16) -> bool {
+    world
+        .gateways
+        .iter()
+        .any(|gateway| gateway.product == product && gateway.last_export_lots > 0)
+}
+
+/// Whether some plant or household at home buys the good. A good with no home buyer that the
+/// corridor exports is worth its export bid to the plant that makes it, whatever it asks.
+pub fn home_buyers(world: &World, dataset: &Dataset, product: u16) -> bool {
+    buyer_shortfall(world, dataset, product).1 > 0 || household_unmet(world, product).1 > 0
+}
+
+/// The price a seller of a good wants, in basis points of reference, from its weeks of unsold
+/// stock (`cover`, hundredths of a week) against the cover it aims for (`target`), and, where
+/// plants buy the good, the lots those plants are short of their input cover after this week's
+/// trade (`short`) against the lots they use in a week (`need`).
+///
+/// Where plants buy the good, the stock that matters is the whole corridor's: buyers keep weeks
+/// of input cover in their own yards and top it up every week, so a seller's shelf is nearly
+/// empty after trade even when every buyer is full. Reading that empty shelf as scarcity pinned
+/// prices at the top of the band while stock piled up at the buyers. Here only buyers left short
+/// lift the price, six percent for every week of their use they lack, and only a seller's unsold
+/// stock beyond its target cuts it, six percent for every week over. A seller that sells what it
+/// makes to buyers who are full asks reference. A good no plant buys (sold to households, the
+/// state or abroad) reads its own cover against the target both ways, as before. Either way the
+/// gap is held within five weeks, so the wanted price stays within 30 percent of reference.
+pub fn goods_wanted_bps(cover: i64, target: i64, short: i64, need: i64) -> i64 {
+    let gap = if need > 0 {
+        let short_weeks = short.max(0).saturating_mul(100) / need;
+        short_weeks - (cover - target).max(0)
+    } else {
+        target - cover
+    };
+    10_000 + gap.clamp(-500, 500) * WANT_BPS_PER_HUNDREDTH_WEEK
+}
+
+/// The price a seller of a service wants, in basis points of reference, from the share of its
+/// installed capacity that sold. A service cannot be stored, so spare capacity is its unsold
+/// stock: at 85 percent used it asks reference; every point above adds six hundredths of a
+/// percent (nine percent over when sold out) and every point below takes the same off, down to
+/// twenty percent under reference, where an idle plant still wins work from its rivals.
+pub fn service_wanted_bps(used_bps: i64) -> i64 {
+    (10_000 + (used_bps.clamp(0, 10_000) - 8_500) * 6 / 10).clamp(8_000, 11_500)
+}
+
+/// Lots that the operating plants buying a good are short of their input cover after this
+/// week's trade, and the lots those plants use in a week, over the whole corridor. A firm's
+/// plants in one state share their stock, so each firm and state is counted once against the
+/// sum of its plants' targets. Speculative held stock is not cover.
+pub fn buyer_shortfall(world: &World, dataset: &Dataset, product: u16) -> (i64, i64) {
+    let id = &dataset.products[product as usize].id;
+    let mut targets: std::collections::BTreeMap<(Handle, u8), i64> = Default::default();
+    let mut need = 0i64;
+    for (_, plant) in world.facilities.iter() {
+        if plant.status != crate::state::FacilityStatus::Operating {
+            continue;
+        }
+        let Some(weekly) = dataset.recipes[plant.recipe as usize]
+            .weekly_inputs_lots
+            .get(id)
+            .copied()
+        else {
+            continue;
+        };
+        let Some(entity) = world.firms.get(plant.firm).filter(|f| f.operative()) else {
+            continue;
+        };
+        let use_lots = weekly.saturating_mul(plant.blocks as i64);
+        let cover =
+            crate::economy::storage::plant_cover_weeks(world, dataset, entity, plant, product);
+        let demand = world.demand_ratio_bps(plant.region, Some(product));
+        need = need.saturating_add(use_lots);
+        *targets.entry((plant.firm, plant.region)).or_default() +=
+            use_lots.saturating_mul(cover).saturating_mul(demand) / 10_000;
+    }
+    let short = targets
+        .into_iter()
+        .map(|((firm, region), target)| {
+            let have = world
+                .firms
+                .get(firm)
+                .map(|f| {
+                    MilliLots(
+                        (f.stock(product, region).0 - f.storage.held_of(product, region).0).max(0),
+                    )
+                    .whole_lots_floor()
+                })
+                .unwrap_or(0);
+            (target - have).max(0)
+        })
+        .sum();
+    (short, need)
+}
+
+/// Imports of a good in basis points of what the corridor's own plants made last week, from
+/// the gateways' smoothed import lots. None when nothing is imported. 10,000 means imports
+/// match home output; a good imported with no home output reads as the cap, 1,000,000.
+pub fn import_dependence_bps(world: &World, dataset: &Dataset, product: u16) -> Option<i64> {
+    let imported: i64 = world
+        .gateways
+        .iter()
+        .filter(|gateway| gateway.product == product)
+        .map(|gateway| gateway.smoothed_import_lots.max(0))
+        .sum();
+    if imported <= 0 {
+        return None;
+    }
+    let id = &dataset.products[product as usize].id;
+    let made: i64 = world
+        .facilities
+        .iter()
+        .map(|(_, plant)| plant.last_made(dataset, id).lots())
+        .sum();
+    Some(dependence_bps(imported, made))
+}
+
+/// Imports against home output in basis points, capped at 1,000,000 (a hundred times).
+pub fn dependence_bps(imported: i64, made: i64) -> i64 {
+    if made <= 0 {
+        return 1_000_000;
+    }
+    (imported.saturating_mul(10_000) / made).min(1_000_000)
+}
+
+/// Imports at least this share of home output make a good import dependent: home sellers price
+/// near the import and rivals weigh building to replace it.
+pub const IMPORT_DEPENDENT_BPS: i64 = 12_500;
+
+/// Lots a firm's operating plants could make of a service in a week at full run. Capacity a firm
+/// has idled by planning is still capacity it could sell, so it is spare, not used.
 fn service_capacity(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> i64 {
     let id = &dataset.products[product as usize].id;
     world
@@ -194,10 +362,7 @@ fn service_capacity(world: &World, dataset: &Dataset, firm: Handle, product: u16
                 .filter_map(|handle| world.facilities.get(*handle))
                 .filter(|plant| plant.status == crate::state::FacilityStatus::Operating)
                 .map(|plant| {
-                    dataset.recipes[plant.recipe as usize].lots_of(id)
-                        * plant.blocks as i64
-                        * plant.target_bps.clamp(3_000, 10_000) as i64
-                        / 10_000
+                    dataset.recipes[plant.recipe as usize].lots_of(id) * plant.blocks as i64
                 })
                 .sum()
         })
@@ -223,19 +388,27 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
     // A local seller stays five percent under the cheapest import, so its goods still beat
     // imports once freight over a normal haul is added; asking the full import price made the
     // delivered price higher than imports and the corridor imported what it made.
-    let ceiling = world
+    let import = world
         .gateways
         .iter()
         .filter(|gateway| gateway.product == product)
         .map(|gateway| gateway.sell_price_cents)
         .filter(|price| *price > 0)
-        .min()
+        .min();
+    let ceiling = import
         .map(|import| import * 95 / 100)
         .unwrap_or(reference + reference * 15 / 100);
     let signal = wanted_bps(world, dataset, firm, product);
+    // Where imports run well over what the corridor makes, the corridor is short at any home
+    // price under the import, so home sellers ask just under it (the ceiling) whatever their
+    // own shelf says: buyers pay the import price for the rest anyway.
+    let dependent = import.is_some()
+        && import_dependence_bps(world, dataset, product)
+            .is_some_and(|bps| bps >= IMPORT_DEPENDENT_BPS);
     let wanted = signal
         .map(|bps| {
-            (reference * bps / 10_000)
+            let own = reference * bps / 10_000;
+            if dependent { own.max(ceiling) } else { own }
                 .clamp(reference / 2, reference * 2)
                 .min(ceiling)
         })
@@ -302,10 +475,23 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
                 .get(handle)
                 .is_some_and(|p| dataset.recipes[p.recipe as usize].transport_mode.is_some());
             let (glut, tight) = if carrier {
-                // A carrier follows how full its lanes ran: under 40 percent cuts, over 85 raises.
-                match crate::economy::logistics::carrier_utilisation_bps(world, handle) {
-                    Some(use_bps) => (use_bps < 4_000, use_bps >= 8_500),
-                    None => (false, false),
+                // A carrier trims toward 85 percent full by lot-km and raises from 90, but never
+                // trims while its own lanes turn much freight away to outside carriers: that
+                // capacity is wanted, only not where the plan put it. Unused carrying capacity
+                // expires each week like any service, so a carrier no longer idles at half full.
+                // Raising on overflow alone was tried and spread capacity onto lanes nobody used
+                // (fill fell to 49 percent and the outside share rose), so overflow only holds.
+                let used = crate::economy::logistics::carrier_utilisation_bps(world, handle);
+                let overflow = crate::economy::logistics::carrier_overflow(world, handle);
+                match (used, overflow) {
+                    (Some(use_bps), Some((outside, moved)))
+                        if outside as i64 * 10_000 >= moved as i64 * CARRIER_OVERFLOW_BPS
+                            && outside > 0 =>
+                    {
+                        (false, use_bps >= CARRIER_RAISE_BPS)
+                    }
+                    (Some(use_bps), _) => (use_bps < CARRIER_CUT_BPS, use_bps >= CARRIER_RAISE_BPS),
+                    (None, _) => (false, false),
                 }
             } else if dataset.products[product as usize].kind.is_service() {
                 // A service that goes unsold expires, so the plant is run toward what sold plus
@@ -531,14 +717,37 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
             }
         }
         // Automatic production follows sell-through too, unless the player set it by hand.
-        let manual = world
-            .firms
-            .get(firm)
-            .is_some_and(|f| f.policies.manual_production);
-        if !manual {
+        // A hand-set rate still lets service and carrier plants follow what sells beneath it,
+        // as rivals' do: unsold service and carrying capacity expires every week at full cost.
+        // Only an explicit lock holds them at the hand-set rate.
+        let Some(policies) = world.firms.get(firm).map(|f| f.policies.clone()) else {
+            continue;
+        };
+        if !policies.manual_production {
             plan(world, dataset, firm);
+        } else if !policies.production_locked {
+            for (handle, target) in plant_targets(world, dataset, firm) {
+                if !expiring_output(world, dataset, handle) {
+                    continue;
+                }
+                if let Some(plant) = world.facilities.get_mut(handle) {
+                    plant.target_bps = target.min(policies.production_target_bps);
+                }
+            }
         }
     }
+}
+
+/// Whether a plant's output expires when it goes unsold: a service or a carrier's capacity.
+pub fn expiring_output(world: &World, dataset: &Dataset, plant: Handle) -> bool {
+    world.facilities.get(plant).is_some_and(|p| {
+        let recipe = &dataset.recipes[p.recipe as usize];
+        recipe.transport_mode.is_some()
+            || dataset
+                .product_index
+                .get(&recipe.output)
+                .is_some_and(|code| dataset.products[*code as usize].kind.is_service())
+    })
 }
 
 /// Apply a firm-wide production target to the firm and every plant it runs.

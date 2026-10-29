@@ -13,6 +13,36 @@ heading.
 
 ### Changed
 
+- Markets respond to real supply and demand. A good stops creeping above its normal price just
+  because sellers sold out: prices now rise only when the factories that buy it are actually short,
+  and fall when unsold stock piles up beyond a few weeks of sales, by at most 2 percent a week.
+  Most industrial goods now trade close to their normal price instead of 8 to 12 percent over it.
+- Services such as care, telecom, software and advertising price on spare capacity: a provider
+  with idle capacity cuts its price (up to 20 percent) to win work from rivals, and one that is
+  sold out charges up to 9 percent more.
+- Goods the corridor mostly imports, such as fuel and petrochemical feedstock, now sell at home for
+  just under the import price, and rival companies are more willing to build plants that replace
+  those imports. Building one yourself is now a clearer opportunity.
+- Freight carriers trim their running rate when they run under 85 percent full, measured by how
+  far loads actually travel, but never while their own routes are turning much freight away to
+  outside carriers. Less carrying capacity goes to waste and slightly less freight has to go
+  outside.
+- Rival companies launch at most one market raid a year. Raids used to snowball as each one left
+  grudges that invited the next, and over a long career more and more healthy companies slipped
+  into losses from raid write-offs and failed campaigns. Raiding still happens, and you can raid
+  as often as before.
+- Refineries and gas plants shift their output toward the products that sell. A refinery can move
+  up to a quarter of a product's share of its run to the others, for example from gasoline that can
+  only be exported toward fuel the corridor imports. Its total output never grows.
+- A refinery's or mill's by-products can always leave through the region's export market, even
+  when the plant was built after the game started. Gasoline no longer piles up unsold for years.
+- When you set production by hand, service and freight divisions no longer keep running at full
+  cost for customers they do not have. They follow what they sell plus a margin, up to the rate you
+  set, as rival companies' do. Lock the rate to hold them at it anyway. The CFO now says plainly
+  when a division runs far above what it sells and offers to match output to demand.
+- Goods that shoppers buy, such as food and retail goods, now rise in price when shoppers find
+  shelves empty, and stay put when they find what they want. Goods nobody at home buys, that only
+  leave as exports, no longer creep up in price because the seller's shelf is empty.
 - Buildings, city blocks, the countryside and every vehicle are true 3D voxel models, drawn from the
   camera's angle each frame: turn the map and you see their sides, vehicles turn as they follow the
   road, and the sun lights a fixed side of each building as you go round it.
@@ -26,6 +56,11 @@ heading.
 
 ### Added
 
+- Market analytics split the companies losing money into established companies, new entrants and
+  shells with no working plant, so a rise in losses can be told apart from young or idle firms.
+- Market analytics report a new sales-weighted asking price for each good, which shows what sellers
+  that actually sold were asking. The existing median asking price is unchanged, so older servers
+  and app versions keep working.
 - Market depth for every good: tap a good on the Markets screen to see how much is made, sold,
   imported and exported each week, the stock held and how many weeks of sales it covers, your
   share of sales over time, the top sellers and buyers with their shares, and in plain words
@@ -47,7 +82,6 @@ heading.
   the price level, companies operating and gone, raids and household spending, with date ranges.
 - Five years of weekly history behind these displays. Saves from earlier versions load and start
   the history from the next week.
-
 - Deeper company financials: every company page and the Stats page have tabs for an overview,
   the income statement, the balance sheet, the cash flow statement, divisions and ratios. Pick
   weekly, quarterly or yearly periods and compare the last several side by side. Ratios cover
@@ -115,6 +149,10 @@ heading.
 
 ### Fixed
 
+- Careers saved in 1.8 preview 1 and preview 2 load in this version and keep playing. The save
+  format records its layout version, and an older save is converted on load, with the new market
+  figures starting empty and filling in from the first week played. Saves written by this version
+  do not open in older versions, which refuse them with a clear version message.
 - Charts of levels, such as wages, land prices, the workforce, weeks of cover, stock, prices,
   share prices, cash and the balance sheet, now fit their scale to the figures shown, so real
   movement no longer reads as a flat line. Flows per week and bar charts still start at zero.

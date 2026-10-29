@@ -44,7 +44,15 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// research stopped spending at the frontier, seed share prices began from an opening earnings
 /// prior and the world began carrying its scenario start year, and again when every good gained a
 /// producer in every scenario (new maintenance strategy and opening plants), every firm priced
-/// weekly on a damped rule and services followed demand.
+/// weekly on a damped rule and services followed demand, and again in 1.8 preview 3 when goods
+/// prices began rising on buyers' unmet input cover instead of the seller's empty post-trade
+/// shelf, services priced on spare installed capacity, import-dependent goods priced near the
+/// import, rivals weighed replacing imports and carriers cut below 60 percent lane fill, and again
+/// in the same preview when refineries began shifting their cut between fractions, co-products
+/// gained export room, household unmet demand began lifting prices and facilities, households
+/// and policies gained new encoded fields, and again in the same preview when carriers began
+/// trimming toward 85 percent fill by lot-km unless their lanes overflow and rival raiders began
+/// waiting a year between campaigns.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -56,15 +64,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "3c527cb0e95ceabcfe508ecac10d4cb372945ed8ba53f9516daf15378b2ad596",
+            "9b121ea1853731c5508275e5ebb5a3024565541bbe6dd91498fb6dfc5f6bd4ed",
         ),
         (
             2,
-            "626bdcaad830735c96801aa92dd9b472b794c0381ebc85da4b088b001f25549f",
+            "2c8ca3fb85e807ea9a851e0f6e5fe18223ecc5a3c5a70e4620ae55ba1676f26f",
         ),
         (
             3,
-            "acf7db36f858c20cbbd83ace30913aa5e68a3740303e599b0a74e86b2d6d9944",
+            "e56a7a1fa41f3a462288d74bce160ef49ae317a9c143820f5c5b348244208caf",
         ),
     ];
     for (seed, hash) in pins {
@@ -76,12 +84,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "813c409c1403938fe0cad5f7b84120d4520ed12f2991c238484dde83f16b2a58"
+        "1456a25707cef2b3d8b011f906fc91f6c9c5dae1a4f0023afacf5393c16bf9dc"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "04cc10fa94a54cecdd6c7a2825ebcdd6ee075c22bee0e50617387534ae0a3c07"
+        "2f7343a55c9a2fc8d072b291cdb2e610e0064251ace447f27777b630a1683533"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();

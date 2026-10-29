@@ -58,6 +58,7 @@ fn add_plant(
         stock_plan: Default::default(),
         ship: Default::default(),
         serves: Vec::new(),
+        cut_bps: Vec::new(),
     };
     let handle = world.facilities.insert(facility);
     world.firms.get_mut(firm).unwrap().facilities.push(handle);

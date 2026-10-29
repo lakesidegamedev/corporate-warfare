@@ -1007,6 +1007,13 @@ const MAX_GROWTH_BLOCKS: i64 = 30;
 /// Weeks a raided company is left alone by rival raiders.
 const RAID_RESPITE_WEEKS: u32 = 26;
 
+/// Weeks a raider waits after launching a campaign before the next. Without it raids grew
+/// fourfold over five years (each one leaves grudges that invite more) and the write-offs and
+/// spent campaigns pushed the share of established companies losing money from 13 to 18 percent
+/// between years 2 and 5; with it raids level off and that share goes from 12 to 16 percent
+/// (16 seeds, five years, about 2 points of seed noise).
+const RAID_COOLDOWN_WEEKS: u32 = 52;
+
 /// Cost leaders, consolidators and vultures fight for markets: they undercut, invade occupied
 /// markets and reconsider strategy twice as often.
 /// Whether a rival fights for share: on Easy none do, on Hard all do, on Standard the cost
@@ -1090,6 +1097,7 @@ fn urgent(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Pr
                 intent: CommandIntent::SetProductionTarget {
                     firm,
                     target_bps: 6_000,
+                    lock: false,
                 },
             });
         } else {
@@ -1780,6 +1788,15 @@ fn best_expansion(
                 * 156
                 - cost
                 - financing;
+            // A good the corridor imports a quarter or more over what it makes is a market to
+            // win back: home sellers already ask near the import, so a plant that replaces imports
+            // is worth a quarter more than the same plant in a market the corridor supplies.
+            if npv > 0
+                && cw_sim::economy::pricing::import_dependence_bps(world, dataset, output)
+                    .is_some_and(|bps| bps >= cw_sim::economy::pricing::IMPORT_DEPENDENT_BPS)
+            {
+                npv += npv / 4;
+            }
             // Aggressive rivals prefer to fight for a market someone already holds, and the
             // player's markets most of all: invading makes the cell contested and raidable.
             if npv > 0 && fighter {
@@ -1818,6 +1835,14 @@ fn best_expansion(
 fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, u8, u8, i64, i64)> {
     use cw_sim::economy::sectors;
     let entity = world.firms.get(firm)?;
+    // One campaign a year: a raider that launched one in the last year waits.
+    if world
+        .raids
+        .iter()
+        .any(|raid| raid.attacker == firm && raid.tick + RAID_COOLDOWN_WEEKS > world.tick.0)
+    {
+        return None;
+    }
     let reserve = reserve_target(world, dataset, firm);
     let mut best: Option<(i64, Handle, u8, u8, i64)> = None;
     for division in sectors::divisions_of(world, dataset, firm) {
@@ -3586,6 +3611,7 @@ mod tests {
             intent: CommandIntent::SetProductionTarget {
                 firm,
                 target_bps: 5_000,
+                lock: false,
             },
         };
         assert!(note(&world, &dataset, &price).is_none());

@@ -126,6 +126,16 @@ Envelope checksum also uses BLAKE3 over the encoded payload; validate declared c
 and decompressed lengths <=64MB, reject decompression beyond that bound. Never allow a
 small malicious compressed save to allocate an unbounded world.
 
+Save schema versions the postcard payload layout. Postcard is not self-describing, so adding a
+field to any saved struct bumps the schema (`cw_sim::legacy::LAYOUT`) and keeps a frozen copy of
+each changed struct as it was, converted on load with neutral defaults for the new fields
+(empty, zero or false, never invented history). The engine reads every released schema from
+`MIN_SCHEMA_VERSION` up and refuses newer ones with a version error. Schema 1 covers releases
+through 1.8 preview 2; schema 2 adds plant cut yields, the production lock and household
+wanted/unmet demand. Data kept outside the payload (custom scenario, currencies, freight read-out,
+history archives) travels in tagged trailers that older readers skip, independent of the schema.
+Each schema change adds a save written by the last released build as a test fixture.
+
 ## Bounded financial history
 
 Keep authoritative current account balances, construction/cost bases, receivables/payables,
