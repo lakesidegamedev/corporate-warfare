@@ -221,8 +221,11 @@ fn share_of(firms: &[(Handle, i64)], headroom: i64, firm: Handle, added_value: i
 /// divisions in it ask. Only valid while the world it read is not changed.
 #[derive(Default)]
 pub struct ShareCache {
-    cells: std::collections::BTreeMap<(u8, u8), (Vec<(Handle, i64)>, i64)>,
+    cells: std::collections::BTreeMap<(u8, u8), Cell>,
 }
+
+/// Each firm's capacity value in a cell, and the cell's import headroom.
+type Cell = (Vec<(Handle, i64)>, i64);
 
 impl ShareCache {
     /// `share_bps` with no added capacity.
