@@ -81,6 +81,18 @@ heading.
   interstates and trains on the real railways, which are now drawn when zoomed in; a route with no
   road or track simply shows no vehicles.
 
+### Fixed
+
+- Only one copy of the game opens on Windows and Linux. Starting it again brings the open game to
+  the front instead of opening a second copy, so two copies can no longer write the same saves. If
+  the open copy has stopped responding, the new one says so and does not open.
+- Updates and version changes on Windows now wait for every copy of the game to close before
+  installing. A copy still open after a minute is asked to close, and after 15 more seconds it is
+  ended, so the installer never runs while the game's files are in use. If a copy cannot be closed,
+  nothing is installed and the game says so.
+- Installing or uninstalling on Windows while the game is open no longer gets stuck. The installer
+  now closes the running game first, and ends it if it does not close within 15 seconds.
+
 ### Added
 
 - Market analytics split the companies losing money into established companies, new entrants and
