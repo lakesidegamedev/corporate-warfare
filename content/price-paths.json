@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "note": "World commodity price paths. Each scenario lists anchor points per price family as [quarters since the first day of the start year, index]. 100 is the price level on day one, so the opening gateway prices are the standard ones. Weeks are 13 to a quarter and the engine interpolates linearly between anchors, holding the last value after the final anchor. Values are relative indices shaped like the period, not claims of exact market history. A price family may cover many products: the products table maps a product id to its family, and ids that do not exist in the current content are ignored, so new products join a family by adding one line. Families a scenario does not list follow the neutral random walk. A scenario missing from this file runs every family that way.",
+ "note": "World commodity price paths, relative to the general price level: the engine inflates every gateway price with the period's inflation, so an index of 100 holds a good's real price and 80 is a fall of a fifth against everything else. Each scenario lists anchor points per price family as [quarters since the first day of the start year, index]. 100 is the price level on day one, so the opening gateway prices are the standard ones. Weeks are 13 to a quarter and the engine interpolates linearly between anchors, holding the last value after the final anchor. Values are relative indices shaped like the period, not claims of exact market history. A price family may cover many products: the products table maps a product id to its family, and ids that do not exist in the current content are ignored, so new products join a family by adding one line. Families a scenario does not list follow the neutral random walk. A scenario missing from this file runs every family that way.",
  "families": {
   "oil": {
    "label": "Oil and fuel",
@@ -291,21 +291,21 @@
     ],
     "grain": [
      [0, 100],
-     [4, 90],
-     [8, 95],
-     [12, 85],
-     [16, 70],
-     [20, 60],
-     [22, 55],
-     [24, 60],
-     [28, 70]
+     [4, 96],
+     [8, 97],
+     [12, 94],
+     [16, 92],
+     [20, 90],
+     [22, 88],
+     [24, 90],
+     [28, 94]
     ],
     "fertilizer": [
      [0, 100],
-     [8, 95],
-     [16, 85],
-     [24, 70],
-     [28, 75]
+     [8, 96],
+     [16, 90],
+     [24, 84],
+     [28, 86]
     ],
     "chemicals": [
      [0, 100],
@@ -404,17 +404,17 @@
     ],
     "grain": [
      [0, 100],
-     [4, 130],
-     [6, 125],
-     [8, 105],
-     [12, 85],
-     [16, 72],
-     [20, 75],
-     [24, 80],
-     [28, 82],
-     [32, 90],
-     [36, 95],
-     [40, 92]
+     [4, 112],
+     [6, 108],
+     [8, 102],
+     [12, 96],
+     [16, 92],
+     [20, 93],
+     [24, 94],
+     [28, 95],
+     [32, 96],
+     [36, 97],
+     [40, 96]
     ],
     "fertilizer": [
      [0, 100],

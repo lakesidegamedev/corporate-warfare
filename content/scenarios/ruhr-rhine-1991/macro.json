@@ -1,0 +1,11 @@
+{
+  "classification": "calibrated game estimates drawn from the period; NOT measured series. Germany 1991: inflation 3.5 to 4 percent and rising after reunification, the Bundesbank discount rate 6.5 to 8 percent and rising, the ten-year Bund near 8.5 percent.",
+  "inflation_bps": 380,
+  "expected_inflation_bps": 450,
+  "policy_rate_bps": 700,
+  "ten_year_bps": 850,
+  "neutral_real_bps": 350,
+  "target_inflation_bps": 200,
+  "credit_spread_bps": 75,
+  "wage_growth_bps": 600
+}

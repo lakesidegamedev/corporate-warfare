@@ -17,6 +17,7 @@ pub mod firms;
 pub mod geography;
 pub mod logistics;
 pub mod logo;
+pub mod opening_macro;
 pub mod price_paths;
 pub mod timeline;
 
@@ -33,6 +34,7 @@ pub use events::EventCard;
 pub use firms::{Archetype, ExtraPlant, SeedFirm};
 pub use geography::{Conditions, Geography, Lane, Region, StateInfo};
 pub use logistics::{GatewayLink, LogisticsData, LogisticsOverlay, ModeDef, SeaSystem};
+pub use opening_macro::OpeningMacro;
 
 pub const BALANCE_JSON: &str = include_str!("../../../content/initial-balance.json");
 pub const GEOGRAPHY_JSON: &str = include_str!("../../../content/geography/regions.json");
@@ -58,6 +60,8 @@ pub struct ScenarioContent {
     pub balance_json: Option<&'static str>,
     /// Countries and currencies, for a scenario that spans more than one money.
     pub currencies_json: Option<&'static str>,
+    /// Inflation and interest rates of the period the scenario opens in.
+    pub macro_json: &'static str,
     /// The region a guided career's opening company is in, and the strategy it runs there.
     pub player_region: &'static str,
     pub player_recipe: &'static str,
@@ -72,6 +76,7 @@ pub const SCENARIO_CONTENT: [ScenarioContent; 4] = [
         logistics_json: None,
         balance_json: None,
         currencies_json: None,
+        macro_json: include_str!("../../../content/scenarios/great-lakes-2000/macro.json"),
         player_region: "OH-CEN",
         player_recipe: "farm",
     },
@@ -86,6 +91,7 @@ pub const SCENARIO_CONTENT: [ScenarioContent; 4] = [
             "../../../content/scenarios/texas-1981/balance.json"
         )),
         currencies_json: None,
+        macro_json: include_str!("../../../content/scenarios/texas-1981/macro.json"),
         player_region: "TX-PMB",
         player_recipe: "oil_wells",
     },
@@ -100,6 +106,7 @@ pub const SCENARIO_CONTENT: [ScenarioContent; 4] = [
             "../../../content/scenarios/silicon-valley-1995/balance.json"
         )),
         currencies_json: None,
+        macro_json: include_str!("../../../content/scenarios/silicon-valley-1995/macro.json"),
         player_region: "CA-SJC",
         player_recipe: "hardware_maker",
     },
@@ -116,6 +123,7 @@ pub const SCENARIO_CONTENT: [ScenarioContent; 4] = [
         currencies_json: Some(include_str!(
             "../../../content/scenarios/ruhr-rhine-1991/currencies.json"
         )),
+        macro_json: include_str!("../../../content/scenarios/ruhr-rhine-1991/macro.json"),
         player_region: "DE-RUH",
         player_recipe: "steel_mill",
     },
@@ -232,6 +240,8 @@ pub struct Dataset {
     pub currencies: Option<CurrencySet>,
     /// The currency index of every region, parallel to `regions`; empty with one money.
     pub region_currency: Vec<u8>,
+    /// The inflation and interest rates the scenario opens with.
+    pub opening_macro: OpeningMacro,
     pub hash: String,
 }
 
@@ -365,6 +375,8 @@ impl Dataset {
                 region_currency.push(index as u8);
             }
         }
+        let opening_macro = OpeningMacro::parse(content.macro_json)
+            .map_err(|error| vec![format!("{} {error}", content.id)])?;
         let public_rail = flags(&logistics.public_rail);
         let public_ports = flags(&logistics.public_ports);
         let dataset = Dataset {
@@ -393,6 +405,7 @@ impl Dataset {
             public_ports,
             currencies,
             region_currency,
+            opening_macro,
             hash: String::new(),
         };
         let errors = dataset.validate();
@@ -1030,6 +1043,9 @@ impl Dataset {
                 hasher.u8(*region);
             }
         }
+        // The opening macro data is deliberately outside the hash: it only sets where the cycle
+        // starts and how opening wages fade, never a row a save indexes into, so saves written
+        // before it keep loading.
         hasher.finish_hex()
     }
 }
