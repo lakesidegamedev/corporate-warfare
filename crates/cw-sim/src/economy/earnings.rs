@@ -65,14 +65,17 @@ const RANGE_LIMIT_BPS: i64 = 5_000;
 /// Reputation lost by a missed range: base plus shortfall share, in basis points of reputation.
 const MISS_REPUTATION_BASE_BPS: i32 = 150;
 const MISS_REPUTATION_MAX_BPS: i32 = 400;
+/// A single miss this deep (basis points of the scale) is enough to draw activists.
+const GRIEVANCE_SHORTFALL_BPS: i32 = 5_000;
 /// How far noise can move an estimate, basis points of its scale.
 const NOISE_BPS: i64 = 1_000;
 /// Buy when value is this far over the price, sell when the price is this far over value
 /// (value over price in basis points).
 pub const BUY_AT_BPS: i64 = 12_000;
 pub const SELL_AT_BPS: i64 = 8_333;
-/// A sell this deep draws a short campaign (value over price, basis points).
-pub const SHORT_AT_BPS: i64 = 6_250;
+/// A sell this deep draws a short campaign: the price twice the value (value over price, basis
+/// points). About one listed firm in a hundred reaches it.
+pub const SHORT_AT_BPS: i64 = 5_000;
 /// Reports kept in the log, all firms, oldest dropped first.
 const LOG_KEPT: usize = 160;
 /// Quarters of operating profit kept per firm.
@@ -164,6 +167,8 @@ pub struct FirmEarnings {
     /// The week a guidance range was last missed, and how many in a row.
     pub missed_week: u32,
     pub missed_run: u8,
+    /// How far under the low end the last miss fell, basis points of the estimate's scale.
+    pub missed_short_bps: i32,
     pub last: Option<Report>,
 }
 
@@ -182,7 +187,9 @@ impl EarningsState {
     /// quarter, else none.
     pub fn guidance_grievance(&self, firm: Handle, tick: u32) -> Option<i32> {
         let fe = self.firms.get(&firm)?;
-        (fe.missed_run > 0 && tick.saturating_sub(fe.missed_week) <= QUARTER)
+        // One small miss is forgiven; two in a row, or one deep miss, is a grievance.
+        let grave = fe.missed_run >= 2 || fe.missed_short_bps >= GRIEVANCE_SHORTFALL_BPS;
+        (fe.missed_run > 0 && grave && tick.saturating_sub(fe.missed_week) <= QUARTER)
             .then(|| (5_000 + 1_500 * fe.missed_run as i32).min(9_000))
     }
 
@@ -353,6 +360,7 @@ fn report(world: &mut World, firm: Handle, actual: i64) {
                 fe.credibility_bps = (fe.credibility_bps + CREDIBILITY_GAIN_BPS).min(10_000);
             }
             fe.missed_run = 0;
+            fe.missed_short_bps = 0;
         } else {
             fe.credibility_bps = fe.credibility_bps * CREDIBILITY_KEPT_ON_MISS_PCT / 100;
             fe.missed_run = fe.missed_run.saturating_add(1);
@@ -360,6 +368,7 @@ fn report(world: &mut World, firm: Handle, actual: i64) {
             let short = ((g.low_cents as i128 - actual as i128) * 10_000
                 / estimate.scale_cents.max(1) as i128)
                 .clamp(0, 10_000) as i32;
+            fe.missed_short_bps = short;
             reputation_delta =
                 -(MISS_REPUTATION_BASE_BPS + short / 40).min(MISS_REPUTATION_MAX_BPS);
         }
@@ -531,8 +540,8 @@ pub fn give_guidance(world: &mut World, firm: Handle, low: i64, high: i64) -> Do
 }
 
 /// A rival's guidance for this quarter, if it gives one: the week after the estimate is
-/// written, every second listed firm in turn, a range of a tenth of the scale around the analyst's number when
-/// profit is not falling. Rivals use the same command and the same checks as the player.
+/// written, every fourth listed firm in turn, a range of plus or minus 15 percent of the scale around
+/// the analyst's number when profit is not falling. Rivals use the same command and the same checks as the player.
 pub fn rival_guidance(world: &World, firm: Handle) -> Option<(i64, i64)> {
     if !covered(world, firm) {
         return None;
@@ -542,14 +551,14 @@ pub fn rival_guidance(world: &World, firm: Handle) -> Option<(i64, i64)> {
     if fe.guidance.is_some() || world.tick.0 != est.made + 1 {
         return None;
     }
-    if !(firm.slot() + est.due / QUARTER).is_multiple_of(2) {
+    if !(firm.slot() + est.due / QUARTER).is_multiple_of(4) {
         return None;
     }
     let n = fe.quarters.len();
     if n >= 2 && fe.quarters[n - 1] < fe.quarters[n - 2] {
         return None;
     }
-    let room = est.scale_cents * 1_000 / 10_000;
+    let room = est.scale_cents * 1_500 / 10_000;
     Some((est.raw_cents - room, est.raw_cents + room))
 }
 

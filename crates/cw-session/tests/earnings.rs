@@ -340,8 +340,24 @@ fn meeting_guidance_builds_credibility_and_missing_it_costs_standing() {
         missed.firms.get(firm).unwrap().reputation_bps,
         rep_before - 175
     );
-    assert_eq!(missed.earnings.guidance_grievance(firm, 26), Some(6_500));
+    // One small miss is forgiven: no grievance yet.
+    assert_eq!(missed.earnings.guidance_grievance(firm, 26), None);
+    // A second in a row, or one of 50% of the scale or more, is a grievance for a quarter.
+    missed.earnings.firms.get_mut(&firm).unwrap().missed_run = 2;
+    assert_eq!(missed.earnings.guidance_grievance(firm, 26), Some(8_000));
     assert_eq!(missed.earnings.guidance_grievance(firm, 26 + 14), None);
+    let mut deep = s.world.clone();
+    setup(&mut deep, a + 6 * SCALE / 10, a + 7 * SCALE / 10);
+    deep.earnings
+        .firms
+        .get_mut(&firm)
+        .unwrap()
+        .estimate
+        .as_mut()
+        .unwrap()
+        .scale_cents = SCALE;
+    earnings::weekly(&mut deep, &s.dataset);
+    assert_eq!(deep.earnings.guidance_grievance(firm, 26), Some(6_500));
     // An unhonest (sandbagged) range that is met earns nothing.
     let mut sandbag = s.world.clone();
     setup(&mut sandbag, a - 1_000, a + 1_000);

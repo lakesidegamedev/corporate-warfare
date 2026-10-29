@@ -490,17 +490,18 @@ scale. On results day, actual at or above the low end meets it: credibility rise
 at 3,000, ceiling 10,000), unless the low end was more than 10 percent of the scale under the
 analyst's own number, which is sandbagging and earns nothing. Under the low end misses it:
 credibility halves, reputation falls by 150 plus a fortieth of the shortfall in basis points (at
-most 400), and for a quarter the firm has a grievance for the activists (`Reason::MissedGuidance`,
-justification 5,000 plus 1,500 per miss in a row, at most 9,000) that opens a campaign by the usual
-scan and cooldown. Rival firms guide on their own: the week after their estimate, every second
-listed firm in turn, a range of plus or minus 10 percent of the scale around the analyst's number,
+most 400). One small miss is forgiven; a second miss in a row, or one that falls 50 percent of the
+scale or more under the low end, gives the firm a grievance for a quarter that the activists can act on
+(`Reason::MissedGuidance`, justification 5,000 plus 1,500 per miss in a row, at most 9,000), which
+opens a campaign by the usual scan and cooldown. Rival firms guide on their own: the week after their estimate, every fourth
+listed firm in turn, a range of plus or minus 15 percent of the scale around the analyst's number,
 unless profit fell last quarter.
 
 **Ratings and short campaigns.** The analyst rates every listed firm from valuation against price:
 buy when fair value is at least 120 percent of the price, sell when it is at most 83.33 percent
-(the price 20 percent over value), otherwise hold. A firm whose fair value is 62.5 percent of the
-price or less (the price 60 percent over value) draws an activist short campaign
-(`Reason::Overvalued`, justification 1.5 times the gap, at most 9,000) through the ordinary
+(the price 20 percent over value), otherwise hold. A firm whose fair value is half the price or
+less (the price twice its value, about one listed firm in a hundred) draws an activist short
+campaign (`Reason::Overvalued`, justification 1.5 times the gap, at most 9,000) through the ordinary
 quarterly scan, player's firm included. The campaign knocks 3 to 8 percent off the mark when it
 opens (prices only), then runs as any other activist campaign.
 

@@ -26,10 +26,10 @@ heading.
 - Guidance. On your company's page, Give guidance tells the analysts a range for the quarter's
   operating profit and explains the risk first. They move their estimate toward the middle of the
   range. Meet the low end and the market trusts your numbers more, so a later miss moves the
-  price less. Miss it and the company loses reputation and trust, and activist investors take
-  notice. A low end well under what the analysts expect is seen as sandbagging and earns no trust.
+  price less. Miss it and the company loses reputation and trust, and a second miss in a row (or a
+  deep one) brings activist investors. A low end well under what the analysts expect is seen as sandbagging and earns no trust.
   Rival companies give guidance too, with the same rules.
-- Short campaigns. A company whose price runs far above what it is worth, yours included, can
+- Short campaigns. A company whose price runs to twice what it is worth, yours included, can
   now draw an activist campaign against it, which knocks a few percent off the price when it
   opens and then runs like any other activist campaign.
 - Executives. Every company can hire a chief financial officer, a chief operating officer and a
