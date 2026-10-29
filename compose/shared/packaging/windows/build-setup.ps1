@@ -32,6 +32,11 @@ if (-not (Test-Path (Join-Path $AppImage 'Corporate Warfare.exe'))) { throw "No 
 
 $art = Join-Path $OutDir 'art'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+python -c "import PIL" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    python -m pip install --quiet --disable-pip-version-check pillow
+    if ($LASTEXITCODE -ne 0) { throw 'Could not install Pillow for installer_art.py' }
+}
 python (Join-Path $repo 'tools\installer_art.py') $art
 if ($LASTEXITCODE -ne 0) { throw 'installer_art.py failed' }
 
