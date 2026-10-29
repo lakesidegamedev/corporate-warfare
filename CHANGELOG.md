@@ -22,6 +22,14 @@ heading.
   keeps the same events but moves their dates by up to half a year. The app screens for this come
   in a later update.
 
+### Fixed
+
+- On iPhone and iPad at the fastest speed, the screen no longer freezes for up to a second when you
+  switch tabs or open a division. The division sheet now draws only what is on screen and does not
+  rebuild when nothing in it changed, and the map's building models are read in the background
+  from launch, with the drawing set-up warmed behind the main menu, so the map's first view opens
+  much faster.
+
 ### Changed
 
 - Saves written by this version cannot be opened by older versions of the game. Careers saved in

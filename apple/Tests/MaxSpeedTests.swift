@@ -14,6 +14,7 @@ final class MaxSpeedTests: XCTestCase {
             .appendingPathComponent("CorporateWarfareMaxSpeed-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let store = AppStore(saveManager: SaveManager(directory: directory))
+        VoxelModels.preload()
         await store.newCareer(guided: true, fiveYear: false, seed: 7)
         XCTAssertTrue(store.sessionReady)
         if let primary = store.overview?.primaryFirm { await store.selectFirm(primary) }
@@ -99,7 +100,7 @@ final class MaxSpeedTests: XCTestCase {
         }
         print("max-speed by phase: " + worstByPhase.keys.sorted().map { "\($0) \(Int((worstByPhase[$0] ?? 0) * 1000)) ms" }.joined(separator: ", "))
         print("max-speed named work: \(MainStalls.summary())")
-        XCTAssertLessThan(worstStall, 1.0, "the main thread was never held for a second at 4x")
         print("max-speed: weeks \(startWeek) to \(endWeek), worst main-thread stall \(Int(worstStall * 1000)) ms")
+        XCTAssertLessThan(worstStall, 0.25, "the main thread was never held for a quarter of a second at 4x (worst \(Int(worstStall * 1000)) ms)")
     }
 }

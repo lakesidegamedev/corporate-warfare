@@ -25,7 +25,9 @@ struct DivisionDetailSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                // Lazy, so opening the sheet lays out the sections on screen and not all seven,
+                // and the sections below the fold (and their engine reads) wait until scrolled to.
+                LazyVStack(alignment: .leading, spacing: 14) {
                     if let d = detail {
                         financials(d)
                         DivisionOpsSection(division: live)
@@ -46,8 +48,11 @@ struct DivisionDetailSheet: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
         }
         .task(id: reloadKey) {
-            detail = await store.divisionDetail(division)
-            if let d = detail { transfer = Double(d.transferBps) }
+            let fresh = await store.divisionDetail(division)
+            // An unchanged week must not rebuild the whole sheet.
+            guard fresh != detail else { return }
+            detail = fresh
+            if let d = fresh { transfer = Double(d.transferBps) }
         }
         .sheet(item: $posture) { line in
             PostureSheet(line: line)

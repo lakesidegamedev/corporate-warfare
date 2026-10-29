@@ -1777,6 +1777,7 @@ struct WorldMapView: View {
         // rival's last week and is the player's now.
         .onAppear { acquired = takeovers.update(plants, week: Int(week)) }
         .onReceive(NotificationCenter.default.publisher(for: Countryside.ready)) { _ in countrysideReady += 1 }
+        .onReceive(NotificationCenter.default.publisher(for: VoxelModels.ready)) { _ in countrysideReady += 1 }
         .onChange(of: plants) { _, new in acquired = takeovers.update(new, week: Int(week)) }
         .onChange(of: shading) { old, new in
             ease.retarget(from: old, to: new, now: MapClock.now, animate: animate && extrude)
