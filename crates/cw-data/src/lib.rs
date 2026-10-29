@@ -17,6 +17,7 @@ pub mod geography;
 pub mod logistics;
 pub mod logo;
 pub mod price_paths;
+pub mod timeline;
 
 use std::collections::BTreeMap;
 

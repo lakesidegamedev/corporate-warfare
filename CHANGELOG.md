@@ -13,6 +13,17 @@ heading.
 
 ### Added
 
+- Scenario history. Each scenario now has dated events from its own period that play out in your
+  career: a regional bank failure and the 1986 oil collapse in Texas, the technology bust and the
+  2001 recession in the Great Lakes, a browser listing boom and the dot-com bust in Silicon
+  Valley, the reunification boom and the 1992 currency crisis on the Ruhr and Rhine. Every event
+  is announced a few weeks ahead, then changes prices, demand, lending costs, central bank
+  mood or the law for a while. New games choose Historical (the default), Off or Shuffled, which
+  keeps the same events but moves their dates by up to half a year. The app screens for this come
+  in a later update.
+- The frame counter (Settings, Graphics, Show frame rate) now also shows how the game is drawing
+  (Direct3D, OpenGL, Metal or Software) and the size of the map in pixels. Software drawing shows in
+  amber, because it is far slower than a graphics card.
 - Developer tooling: a new `cw-render` crate holds the first prototype of the 1.9 GPU map
   renderer. It draws the Great Lakes 2000 scenario offscreen with wgpu, in one fixed 48 colour
   palette, clean land cover patches (dither only across the border between two ground types),
@@ -27,6 +38,22 @@ heading.
   machine without a GPU it uses the Mesa software driver. `tools/render_bake.py` fetches the
   elevation and bakes the small heightmap. The crate is not linked into the game or the apps
   yet and changes nothing players see, no saves and no hashes.
+
+### Changed
+
+- Saves written by this version cannot be opened by older versions of the game. Careers saved in
+  1.8.0 and the earlier 1.9 previews open as normal, carry on without scenario history (their
+  dates are not invented backwards) and are saved in the new format from then on.
+- The map is much smoother on Windows and Linux, most of all on big screens. The ground, the day and
+  night shading, the clouds and the menu globe are now painted ahead of time in the background, and
+  while you drag or zoom the game slides the last finished picture into place instead of redrawing it,
+  so moving the map no longer waits on drawing. A fresh picture replaces it a moment later.
+- A new install with no graphics choice saved starts on Medium when the window is large or the
+  computer is drawing in software, so the first look is smooth. Your own choice is never changed.
+
+### Fixed
+
+- Roads on raised tiles now sit on the tile they cross instead of floating at one shared height.
 
 ## [1.8.0] - 2026-10-29
 

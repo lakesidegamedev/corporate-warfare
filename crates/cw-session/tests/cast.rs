@@ -16,6 +16,7 @@ fn config(seed: u64, scenario_id: &str) -> ScenarioConfig {
         prices: PriceSetup {
             scenario_id: scenario_id.to_owned(),
             path: None,
+            ..Default::default()
         },
     }
 }

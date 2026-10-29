@@ -76,6 +76,7 @@ pub fn config(seed: u64, scenario: &str) -> ScenarioConfig {
         prices: PriceSetup {
             scenario_id: scenario.to_owned(),
             path: None,
+            ..Default::default()
         },
     }
 }

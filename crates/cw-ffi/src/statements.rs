@@ -454,6 +454,7 @@ mod tests {
             economy: "historic".to_owned(),
             starting_capital_cents: None,
             price_path: "historical".to_owned(),
+            timeline: String::new(),
         })
         .unwrap();
         let mut guard = 0;

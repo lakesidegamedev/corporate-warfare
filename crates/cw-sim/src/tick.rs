@@ -152,6 +152,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     );
     crate::ph!("rivalry::weekly", crate::economy::rivalry::weekly(world));
     crate::ph!(
+        "timeline::weekly",
+        crate::economy::timeline::weekly(world, dataset)
+    );
+    crate::ph!(
         "world_prices::weekly",
         crate::economy::world_prices::weekly(world)
     );

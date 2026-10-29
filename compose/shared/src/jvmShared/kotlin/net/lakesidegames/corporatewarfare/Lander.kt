@@ -2,6 +2,8 @@ package net.lakesidegames.corporatewarfare
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -54,6 +56,10 @@ fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
     val clock = rememberFrameSeconds(graphics.animations, if (graphics.frameRate == 0) 0 else minOf(graphics.frameRate, 30))
     val world = remember { WorldCities() }
     val geometry = remember(map) { MapGeometryCache() }
+    val scope = rememberCoroutineScope()
+    val globeLayer = remember { AsyncLayer(scope) }
+    val skyLayer = remember { AsyncLayer(scope) }
+    DisposableEffect(globeLayer, skyLayer) { onDispose { globeLayer.close(); skyLayer.close() } }
     Canvas(modifier) {
         val seconds = if (graphics.animations) clock.value else 0.0
         val cinematic = graphics.lighting == 2
@@ -66,12 +72,29 @@ fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
             val p = MapProjection(camera, size)
             val sun = Sun.side(p)
             if (cinematic) drawGlare(p, sun)
-            drawWorldMap(
-                map, camera, Palette.gold, emptyMap(), null, emptyList(), measurer, space = false, geometry = geometry,
-                graphics = graphics.copy(detail = MapDetail.Low, extrude = false, buildings = 0, traffic = 0), sun = sun,
-            )
+            val globeGraphics = graphics.copy(detail = MapDetail.Low, extrude = false, buildings = 0, traffic = 0)
+            val offset = Offset(size.width * offsetX, size.height * 0.08f)
+            val paintGlobe: DrawScope.(MapGeometryCache) -> Unit = { geo ->
+                translate(left = offset.x, top = offset.y) {
+                    drawWorldMap(map, camera, Palette.gold, emptyMap(), null, emptyList(), measurer, space = false, geometry = geo, graphics = globeGraphics, sun = sun)
+                }
+            }
+            // The globe and its clouds are baked off the UI thread; the slow turn is all the moved bitmap needs to follow.
+            if (MapBake.enabled) {
+                // Drawn clear of this scope's offset: the bitmap already holds the globe where it sits.
+                translate(left = -offset.x, top = -offset.y) {
+                    globeLayer.draw(this, camera, 0.0, listOf(globeGraphics, sun, offset), minGapMs = 0, fill = null, bake = paintGlobe, direct = { paintGlobe(geometry) })
+                }
+            } else paintGlobe(geometry)
             if (graphics.cityLights && graphics.lighting > 0) drawHubLights(world, p, sun)
-            with(Weather) { drawWeather(p, sun, seconds * 3, graphics.clouds, map.playBounds, 0.0, 1.0, false) }
+            val paintSky: DrawScope.(MapGeometryCache) -> Unit = {
+                translate(left = offset.x, top = offset.y) { with(Weather) { drawWeather(p, sun, seconds * 3, graphics.clouds, map.playBounds, 0.0, 1.0, false) } }
+            }
+            if (MapBake.enabled && graphics.clouds > 0) {
+                translate(left = -offset.x, top = -offset.y) {
+                    skyLayer.draw(this, camera, 0.0, listOf(graphics.clouds, sun, offset, seconds), minGapMs = 0, fill = null, bake = paintSky, direct = { paintSky(geometry) })
+                }
+            } else if (graphics.clouds > 0) paintSky(geometry)
             drawScenarioGlow(map, p, seconds, measurer)
             if (graphics.lighting > 0) {
                 drawTradeArcs(world, p, seconds)

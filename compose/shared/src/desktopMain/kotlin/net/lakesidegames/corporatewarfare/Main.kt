@@ -116,6 +116,9 @@ fun main() {
 private fun game() = application {
     Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
     MeshCanvas.draw = desktopMeshDraw
+    MapBake.enabled = true
+    // The one-pass cloud shader is measured slower than the meshes while the layers are baked on the CPU, so it is opt-in.
+    if (System.getenv("CW_CLOUD_SHADER") != null) MeshCanvas.cloudFlow = desktopCloudFlow
     Pixel.font = desktopPixelFont()
     MeshCanvas.shader = desktopLinearShader
     val settings = remember { AppSettings(File(saveDirectory(), "settings.properties")) }
@@ -171,6 +174,19 @@ private fun game() = application {
         state = state,
     ) {
         frontWindow = window
+        // The frame counter shows which Skia backend draws this window.
+        androidx.compose.runtime.DisposableEffect(window) {
+            RenderInfo.backend = window.renderApi.name
+            window.onRenderApiChanged { RenderInfo.backend = window.renderApi.name }
+            onDispose { }
+        }
+        // With no saved graphics choice, a big window or software drawing starts at Medium.
+        LaunchedEffect(window) {
+            kotlinx.coroutines.delay(1500)
+            val scale = window.graphicsConfiguration?.defaultTransform
+            val pixels = window.width * (scale?.scaleX ?: 1.0) * window.height * (scale?.scaleY ?: 1.0)
+            settings.suggestGraphics(pixels.toLong(), RenderInfo.software)
+        }
         val scope = rememberCoroutineScope()
         val store = remember { GameStore(saveDirectory(), scope) }
         val updater = remember {
