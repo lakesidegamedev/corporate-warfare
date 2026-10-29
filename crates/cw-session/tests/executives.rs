@@ -114,7 +114,10 @@ fn rivals_hire_over_a_long_play_and_only_when_it_pays() {
         .executives
         .events
         .iter()
-        .filter(|e| e.kind == EventKind::Hired && !cw_sim::economy::events_engine::player_side(&session.world, e.firm))
+        .filter(|e| {
+            e.kind == EventKind::Hired
+                && !cw_sim::economy::events_engine::player_side(&session.world, e.firm)
+        })
         .count();
     let total: usize = session.world.executives.posts.len();
     eprintln!("rival hires seen {hires}, posts held {total}");
@@ -149,7 +152,12 @@ fn a_hire_writes_a_story_and_a_letter_in_the_executives_voice() {
         .find(|l| l.kind == "executive")
         .expect("the executive introduces themselves");
     assert_eq!(letter.sender.name, name);
-    assert!(letter.paragraphs.join(" ").contains("chief financial officer"));
+    assert!(
+        letter
+            .paragraphs
+            .join(" ")
+            .contains("chief financial officer")
+    );
 }
 
 #[test]

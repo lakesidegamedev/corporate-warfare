@@ -343,9 +343,10 @@ pub fn decode_with(
             rest = &rest[40 + body.len()..];
         } else if magic == EXEC_MAGIC {
             let body = trailer_body(rest)?;
-            world.executives = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
-                detail: SaveFault::MalformedPayload,
-            })?;
+            world.executives =
+                postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                    detail: SaveFault::MalformedPayload,
+                })?;
             rest = &rest[40 + body.len()..];
         } else if magic == MAIL_MAGIC {
             let body = trailer_body(rest)?;

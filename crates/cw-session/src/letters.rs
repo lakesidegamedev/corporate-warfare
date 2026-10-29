@@ -976,9 +976,7 @@ fn executive_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec
             event.kind
         );
         let candidate = world.executives.person(event.person);
-        let person = candidate
-            .and_then(ex::extra_of)
-            .map(|e| e.person());
+        let person = candidate.and_then(ex::extra_of).map(|e| e.person());
         let pay = paper::money(world, dataset, event.firm, event.cents);
         match event.kind {
             EventKind::Hired if yours => {
@@ -1009,10 +1007,9 @@ fn executive_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec
             }
             // A rival took one of ours, or we took one of theirs.
             EventKind::Hired if event.other.is_some_and(|o| player_side(world, o)) => {
-                let (Some(p), Some(new_boss)) = (
-                    person.as_ref(),
-                    paper::firm_name(world, event.firm),
-                ) else {
+                let (Some(p), Some(new_boss)) =
+                    (person.as_ref(), paper::firm_name(world, event.firm))
+                else {
                     continue;
                 };
                 out.push(finish(

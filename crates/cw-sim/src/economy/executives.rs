@@ -159,9 +159,7 @@ impl ExecState {
     }
 
     pub fn holder(&self, firm: Handle, post: Post) -> Option<&Executive> {
-        self.posts
-            .iter()
-            .find(|e| e.firm == firm && e.post == post)
+        self.posts.iter().find(|e| e.firm == firm && e.post == post)
     }
 
     pub fn of_firm(&self, firm: Handle) -> impl Iterator<Item = &Executive> {
@@ -558,7 +556,12 @@ fn release(
         return;
     };
     let e = world.executives.posts.remove(at);
-    if let Some(c) = world.executives.people.iter_mut().find(|c| c.id == e.person) {
+    if let Some(c) = world
+        .executives
+        .people
+        .iter_mut()
+        .find(|c| c.id == e.person)
+    {
         c.available_from = tick + AWAY_WEEKS;
     }
     world.executives.push_event(ExecEvent {
@@ -649,12 +652,25 @@ pub fn poach(
         person,
         cents: offer_cents,
     });
-    seat(world, firm, post, person, offer_cents, EventKind::Hired, Some(from));
+    seat(
+        world,
+        firm,
+        post,
+        person,
+        offer_cents,
+        EventKind::Hired,
+        Some(from),
+    );
     Ok(())
 }
 
 fn set_last_offer(world: &mut World, firm: Handle, tick: u32) {
-    match world.executives.last_offer.iter_mut().find(|(f, _)| *f == firm) {
+    match world
+        .executives
+        .last_offer
+        .iter_mut()
+        .find(|(f, _)| *f == firm)
+    {
         Some(entry) => entry.1 = tick,
         None => world.executives.last_offer.push((firm, tick)),
     }
@@ -700,7 +716,13 @@ fn add_candidate(world: &mut World, rng: &mut Rng, post: Post, taken: &mut Vec<u
     taken.push(at);
     // Levels one to five, middling ones commonest.
     let level = 1 + rng.weighted_index(&[30, 28, 22, 14, 6]) as u8;
-    let id = world.executives.people.iter().map(|c| c.id + 1).max().unwrap_or(1);
+    let id = world
+        .executives
+        .people
+        .iter()
+        .map(|c| c.id + 1)
+        .max()
+        .unwrap_or(1);
     world.executives.people.push(Candidate {
         id,
         extra: at,
@@ -742,10 +764,12 @@ fn pay_and_renew(world: &mut World, dataset: &Dataset) {
     let tick = world.tick.0;
     let posts: Vec<Executive> = world.executives.posts.clone();
     for e in posts {
-        let alive = world
-            .firms
-            .get(e.firm)
-            .is_some_and(|f| !matches!(f.status, FirmStatus::Merged { .. } | FirmStatus::Liquidating));
+        let alive = world.firms.get(e.firm).is_some_and(|f| {
+            !matches!(
+                f.status,
+                FirmStatus::Merged { .. } | FirmStatus::Liquidating
+            )
+        });
         if !alive {
             release(world, e.firm, e.post, EventKind::Left, 0, None);
             continue;
@@ -877,8 +901,10 @@ pub fn rival_poach(
     firm: Handle,
     temperament: Option<Temperament>,
 ) -> Option<(Handle, Post, i64)> {
-    if !matches!(temperament, Some(Temperament::Raider | Temperament::Speculator))
-        || !world.tick.0.is_multiple_of(AI_REVIEW_WEEKS)
+    if !matches!(
+        temperament,
+        Some(Temperament::Raider | Temperament::Speculator)
+    ) || !world.tick.0.is_multiple_of(AI_REVIEW_WEEKS)
     {
         return None;
     }

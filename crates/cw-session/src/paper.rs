@@ -543,7 +543,12 @@ fn raids(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) 
 /// Hires, departures, poaching and the board naming a chief executive.
 fn executives(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) {
     use cw_sim::economy::executives::{self as ex, EventKind};
-    for event in world.executives.events.iter().filter(|e| in_window(e.week, week)) {
+    for event in world
+        .executives
+        .events
+        .iter()
+        .filter(|e| in_window(e.week, week))
+    {
         let Some(firm) = firm_name(world, event.firm) else {
             continue;
         };
@@ -562,14 +567,16 @@ fn executives(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candida
         }
         let title = event.post.title().to_lowercase();
         let pay = money(world, dataset, event.firm, event.cents);
-        let mut yours = player_side(world, event.firm)
-            || event.other.is_some_and(|o| player_side(world, o));
+        let mut yours =
+            player_side(world, event.firm) || event.other.is_some_and(|o| player_side(world, o));
         let (headline, body, base) = match event.kind {
             EventKind::Hired => {
                 let (head, text) = match &other {
                     Some(from) => (
                         format!("{firm} lures {who} away from {from}"),
-                        format!("{who} joins {firm} as {title} on {pay} a week, up from their pay at {from}."),
+                        format!(
+                            "{who} joins {firm} as {title} on {pay} a week, up from their pay at {from}."
+                        ),
                     ),
                     None => (
                         format!("{firm} hires {who} as {title}"),
@@ -595,13 +602,21 @@ fn executives(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candida
                 yours = player_side(world, event.firm);
                 (
                     format!("{firm}'s board names {who} chief executive"),
-                    format!("After two missed goals in a row, the board of {firm} has brought in {who} as chief executive."),
+                    format!(
+                        "After two missed goals in a row, the board of {firm} has brought in {who} as chief executive."
+                    ),
                     5,
                 )
             }
         };
         out.push(candidate(
-            format!("exec:{}:{}:{}:{:?}", event.week, event.firm.0, event.post.code(), event.kind),
+            format!(
+                "exec:{}:{}:{}:{:?}",
+                event.week,
+                event.firm.0,
+                event.post.code(),
+                event.kind
+            ),
             event.week,
             &headline,
             body,

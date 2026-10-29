@@ -830,11 +830,7 @@ pub fn hire_move(world: &World, dataset: &Dataset, firm: Handle) -> Option<Brief
     let c = world.executives.person(id)?;
     Some(BriefMove {
         key: "hire".to_owned(),
-        headline: format!(
-            "Hire {} as {}",
-            ex::name_of(c),
-            post.title().to_lowercase()
-        ),
+        headline: format!("Hire {} as {}", ex::name_of(c), post.title().to_lowercase()),
         detail: format!(
             "{}. At your figures that is worth about {} a week over their pay of {}, and the {} signing fee is back in {} weeks.",
             ex::effect_text(post, c.level),

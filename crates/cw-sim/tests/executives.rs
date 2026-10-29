@@ -163,14 +163,26 @@ fn a_cfo_earns_interest_on_cash_at_four_points_a_level() {
     let (mut world, ds, firm) = setup(14);
     seat(&mut world, &ds, firm, Post::Cfo, 5);
     let cash = world.firm(firm).unwrap().book.cash();
-    let income_before = world.firm(firm).unwrap().book.balance(Account::InterestIncome);
+    let income_before = world
+        .firm(firm)
+        .unwrap()
+        .book
+        .balance(Account::InterestIncome);
     world.tick = Tick(world.tick.0 + 1);
     // Only the interest step: pay is separate, so read the income account.
     ex::weekly(&mut world, &ds);
-    let income = income_before - world.firm(firm).unwrap().book.balance(Account::InterestIncome);
+    let income = income_before
+        - world
+            .firm(firm)
+            .unwrap()
+            .book
+            .balance(Account::InterestIncome);
     // Interest is on the cash after the week's pay.
     let expected_high = cash * 20 / (10_000 * 52);
-    assert!(income > 0 && income <= expected_high, "{income} vs {expected_high}");
+    assert!(
+        income > 0 && income <= expected_high,
+        "{income} vs {expected_high}"
+    );
     assert_eq!(ex::cash_yield_for(5), 20);
 }
 
@@ -272,7 +284,11 @@ fn contracts_run_two_years_and_dismissal_pays_severance() {
 fn an_unpaid_executive_leaves_and_an_expired_contract_renews_or_ends() {
     let (mut world, ds, firm) = setup(19);
     seat(&mut world, &ds, firm, Post::Logistics, 2);
-    let expires = world.executives.holder(firm, Post::Logistics).unwrap().expires;
+    let expires = world
+        .executives
+        .holder(firm, Post::Logistics)
+        .unwrap()
+        .expires;
     world.tick = Tick(expires);
     ex::weekly(&mut world, &ds);
     let kinds: Vec<_> = world.executives.events.iter().map(|e| e.kind).collect();
@@ -288,7 +304,9 @@ fn a_rival_hires_only_when_the_effect_pays_for_the_pay() {
     let rival = world
         .firms
         .iter()
-        .find(|(h, f)| f.archetype.is_some() && f.operative() && Some(*h) != world.investor.primary_group)
+        .find(|(h, f)| {
+            f.archetype.is_some() && f.operative() && Some(*h) != world.investor.primary_group
+        })
         .map(|(h, _)| h)
         .unwrap();
     world.tick = Tick(4);
@@ -336,7 +354,9 @@ fn a_rival_hires_only_when_the_effect_pays_for_the_pay() {
     let poor_rival = poor
         .firms
         .iter()
-        .find(|(h, f)| f.archetype.is_some() && f.operative() && Some(*h) != poor.investor.primary_group)
+        .find(|(h, f)| {
+            f.archetype.is_some() && f.operative() && Some(*h) != poor.investor.primary_group
+        })
         .map(|(h, _)| h)
         .unwrap();
     let cash = poor.firm(poor_rival).unwrap().book.cash();
@@ -375,7 +395,9 @@ fn poaching_is_accepted_only_at_the_temperaments_price() {
         pay * (10_000 + ex::poach_hurdle_bps(t)) as i64 / 10_000
     );
     // A cautious person wants more than a speculator.
-    assert!(ex::poach_hurdle_bps(Temperament::Cautious) > ex::poach_hurdle_bps(Temperament::Speculator));
+    assert!(
+        ex::poach_hurdle_bps(Temperament::Cautious) > ex::poach_hurdle_bps(Temperament::Speculator)
+    );
     let low = envelope(
         &world,
         0,
@@ -404,11 +426,15 @@ fn poaching_is_accepted_only_at_the_temperaments_price() {
     let moved = world.executives.holder(player, Post::Cfo).unwrap();
     assert_eq!(moved.person, person);
     assert_eq!(moved.pay_cents, price);
-    assert!(world
-        .executives
-        .events
-        .iter()
-        .any(|e| e.kind == ex::EventKind::Poached && e.firm == rival && e.other == Some(player)));
+    assert!(
+        world
+            .executives
+            .events
+            .iter()
+            .any(|e| e.kind == ex::EventKind::Poached
+                && e.firm == rival
+                && e.other == Some(player))
+    );
     // The player cannot take their own executive, and cannot fill a filled post.
     let again = envelope(
         &world,
@@ -443,12 +469,18 @@ fn two_missed_mandates_in_a_row_bring_in_a_chief_from_the_board_once() {
         });
     }
     ex::weekly(&mut world, &ds);
-    let chief = world.firm(player).unwrap().ceo.expect("the board named a chief");
-    assert!(world
-        .executives
-        .events
-        .iter()
-        .any(|e| e.kind == ex::EventKind::BoardChief && e.firm == player));
+    let chief = world
+        .firm(player)
+        .unwrap()
+        .ceo
+        .expect("the board named a chief");
+    assert!(
+        world
+            .executives
+            .events
+            .iter()
+            .any(|e| e.kind == ex::EventKind::BoardChief && e.firm == player)
+    );
     assert_eq!(ex::board_chapter(&world, player), 2);
     // The same week again does nothing more.
     ex::weekly(&mut world, &ds);
@@ -468,7 +500,11 @@ fn two_missed_mandates_in_a_row_bring_in_a_chief_from_the_board_once() {
 fn one_missed_mandate_or_a_met_one_between_does_not_replace_the_chief() {
     let (mut world, ds, player) = setup(23);
     world.tick = Tick(105);
-    for (number, outcome) in [(1u32, Outcome::Missed), (2, Outcome::Met), (3, Outcome::Missed)] {
+    for (number, outcome) in [
+        (1u32, Outcome::Missed),
+        (2, Outcome::Met),
+        (3, Outcome::Missed),
+    ] {
         world.chapters.log.push(ChapterLog {
             number,
             name: String::new(),

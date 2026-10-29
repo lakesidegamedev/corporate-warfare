@@ -1075,7 +1075,12 @@ fn a_logistics_chief_cuts_what_outside_carriers_charge_by_the_stated_share() {
     let plain = route(&mut w);
     ex::weekly(&mut w, &dataset);
     let id = ex::candidates(&w, ex::Post::Logistics)[0].id;
-    w.executives.people.iter_mut().find(|c| c.id == id).unwrap().level = 5;
+    w.executives
+        .people
+        .iter_mut()
+        .find(|c| c.id == id)
+        .unwrap()
+        .level = 5;
     w.executives.posts.push(ex::Executive {
         firm: shipper,
         post: ex::Post::Logistics,
@@ -1089,7 +1094,9 @@ fn a_logistics_chief_cuts_what_outside_carriers_charge_by_the_stated_share() {
     let l = &dataset.logistics;
     let reference =
         cw_sim::economy::freight::freight_cost(&dataset, a, b, MilliLots::from_lots(30));
-    let expected = reference * (l.empty_lane_bps + (l.outside_premium_bps - l.empty_lane_bps) * 75 / 100) / 10_000;
+    let expected = reference
+        * (l.empty_lane_bps + (l.outside_premium_bps - l.empty_lane_bps) * 75 / 100)
+        / 10_000;
     assert!(plain > cut);
     assert!((cut - expected).abs() <= 1, "{cut} vs {expected}");
 }

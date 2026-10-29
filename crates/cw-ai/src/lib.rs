@@ -70,7 +70,8 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         }
         // Executives for hire, taken through the same commands a player uses: only when the
         // effect pays and the firm can carry the pay.
-        if let Some((post, person)) = cw_sim::economy::executives::rival_pick(world, dataset, handle)
+        if let Some((post, person)) =
+            cw_sim::economy::executives::rival_pick(world, dataset, handle)
         {
             proposals.push(Proposal {
                 actor: handle.0,

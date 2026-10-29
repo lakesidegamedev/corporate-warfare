@@ -2028,8 +2028,11 @@ pub fn reserve_lane(
             actual: "no room on the lane",
         });
     }
-    let fee =
-        crate::economy::executives::lane_fee_after_cut(world, firm, contract_fee_cents(world, ds, key, lots));
+    let fee = crate::economy::executives::lane_fee_after_cut(
+        world,
+        firm,
+        contract_fee_cents(world, ds, key, lots),
+    );
     let id = world.logistics.next_contract;
     world.logistics.next_contract += 1;
     let tick = world.tick.0;
@@ -2476,8 +2479,11 @@ pub fn reserve_quote(
     if cap <= 0 || lots < 1 {
         return None;
     }
-    let fee =
-        crate::economy::executives::lane_fee_after_cut(world, firm, contract_fee_cents(world, ds, key, lots));
+    let fee = crate::economy::executives::lane_fee_after_cut(
+        world,
+        firm,
+        contract_fee_cents(world, ds, key, lots),
+    );
     let spot = lane_rate_cents_per_lot(ds, &world.logistics, key);
     let used = group_lane_lots(world, firm, key).min(lots).max(0);
     let weekly_fee = fee * lots as i64;
