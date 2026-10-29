@@ -99,9 +99,15 @@ internal class LabelPlanner {
      * A big city's name: the preferred [slots] first, then rings further out round ([cx], [cy]) with a leader line,
      * and when nothing at all is clear the place that covers least. It is never dropped.
      */
-    fun placeCity(key: String, w: Float, h: Float, slots: FloatArray, cx: Float, cy: Float, reach: Float): CityLabel {
-        val all = slots + ringSlots(cx, cy, w, h, reach)
-        val near = slots.size / 2
+    fun placeCity(key: String, w: Float, h: Float, slots: FloatArray, cx: Float, cy: Float, reach: Float, viewW: Float = Float.MAX_VALUE, viewH: Float = Float.MAX_VALUE): CityLabel {
+        // Only places that are on screen, when any are: a name off the edge of the view is no name at all.
+        val every = slots + ringSlots(cx, cy, w, h, reach)
+        val keep = ArrayList<Float>(every.size)
+        for (i in 0 until every.size / 2) {
+            val x = every[2 * i]; val y = every[2 * i + 1]
+            if (x >= 0f && y >= 0f && x + w <= viewW && y + h <= viewH) { keep += x; keep += y }
+        }
+        val all = if (keep.isEmpty()) every else keep.toFloatArray()
         var i = place(key, w, h, all)
         if (i < 0) {
             // Crowded to the edge: take the place that overlaps the least and let the label sit over it.
@@ -114,7 +120,7 @@ internal class LabelPlanner {
             next += key
             nextSlot[key] = i
         }
-        return CityLabel(all[2 * i], all[2 * i + 1], i >= near)
+        return CityLabel(all[2 * i], all[2 * i + 1], (0 until slots.size / 2).none { j -> slots[2 * j] == all[2 * i] && slots[2 * j + 1] == all[2 * i + 1] })
     }
 
     private fun overlap(l: Float, t: Float, r: Float, b: Float): Float {

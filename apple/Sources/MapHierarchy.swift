@@ -103,10 +103,14 @@ final class LabelPlanner {
 
     /// A big city's name: the preferred slots first, then rings further out with a leader line, and when
     /// nothing at all is clear the place that covers least. It is never dropped.
-    func placeCity(_ key: String, size: CGSize, slots: [CGPoint], center: CGPoint, reach: CGFloat) -> CityLabel {
-        let all = slots + LabelPlanner.ringSlots(center: center, size: size, reach: reach)
-        if let corner = place(key, size: size, slots: all), let i = all.firstIndex(of: corner) {
-            return CityLabel(corner: corner, leader: i >= slots.count)
+    func placeCity(_ key: String, size: CGSize, slots: [CGPoint], center: CGPoint, reach: CGFloat, view: CGSize? = nil) -> CityLabel {
+        // Only places that are on screen, when any are: a name off the edge of the view is no name at all.
+        let every = slots + LabelPlanner.ringSlots(center: center, size: size, reach: reach)
+        let onScreen = view.map { v in every.filter { $0.x >= 0 && $0.y >= 0 && $0.x + size.width <= v.width && $0.y + size.height <= v.height } } ?? every
+        let all = onScreen.isEmpty ? every : onScreen
+        let preferred = Set(slots)
+        if let corner = place(key, size: size, slots: all) {
+            return CityLabel(corner: corner, leader: !preferred.contains(corner))
         }
         var best = 0
         var least = CGFloat.greatestFiniteMagnitude

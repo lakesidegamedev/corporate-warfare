@@ -834,7 +834,7 @@ internal fun DrawScope.drawWorldMap(
                     if (city.population >= TOWN_POPULATION && block != null) {
                         val cx = (block.left + block.right) / 2f; val cy = (block.top + block.bottom) / 2f
                         val reach = max(block.width, block.height) / 2f + 6f
-                        val put = placeCity("c:${city.name}", w, h, slots, cx, cy, reach)
+                        val put = placeCity("c:${city.name}", w, h, slots, cx, cy, reach, size.width, size.height)
                         if (put.leader) {
                             // One pixel line from the name's nearest edge to the block it belongs to.
                             val lx = cx.coerceIn(put.x, put.x + w); val ly = cy.coerceIn(put.y, put.y + h)

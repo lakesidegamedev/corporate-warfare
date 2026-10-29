@@ -1039,7 +1039,7 @@ struct MapScene {
                 }
                 if let b = cityBox[index], Int(city.population) >= LabelPlanner.townPopulation {
                     let put = planner.placeCity("c:\(city.name)", size: size, slots: slots, center: CGPoint(x: b.midX, y: b.midY),
-                                                reach: max(b.width, b.height) / 2 + 6)
+                                                reach: max(b.width, b.height) / 2 + 6, view: size)
                     if put.leader {
                         // One point line from the name's nearest edge to the block it belongs to.
                         var line = Path()
