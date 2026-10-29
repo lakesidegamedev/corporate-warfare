@@ -25,6 +25,16 @@ heading.
   (Direct3D, OpenGL, Metal or Software) and the size of the map in pixels. Software drawing shows in
   amber, because it is far slower than a graphics card.
 
+### Fixed
+
+- On iPhone and iPad at the fastest speed, the screen no longer freezes for up to a second when you
+  switch tabs or open a division. The division sheet now draws only what is on screen and does not
+  rebuild when nothing in it changed, and the map's building models are read in the background
+  from launch, with the drawing set-up warmed behind the main menu, so the map's first view opens
+  much faster. The division sheet now opens as a light page first and fills in its sections a
+  moment later, and the pixel font, buttons and sliders are warmed behind the main menu, so the
+  first time you open a division no longer catches.
+
 ### Changed
 
 - Saves written by this version cannot be opened by older versions of the game. Careers saved in

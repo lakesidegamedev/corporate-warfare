@@ -14,6 +14,9 @@ final class MaxSpeedTests: XCTestCase {
             .appendingPathComponent("CorporateWarfareMaxSpeed-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let store = AppStore(saveManager: SaveManager(directory: directory))
+        VoxelModels.preload()
+        // The app runs this behind the main menu at launch, before any sheet can open.
+        RenderWarmup.run()
         await store.newCareer(guided: true, fiveYear: false, seed: 7)
         XCTAssertTrue(store.sessionReady)
         if let primary = store.overview?.primaryFirm { await store.selectFirm(primary) }
@@ -58,7 +61,16 @@ final class MaxSpeedTests: XCTestCase {
             }
         }
 
-        await breathe(1, measured: false)
+        // Attaching the window runs the app's launch work (first layout of every tab, the map's
+        // first frame). That is start-up, not the run loop, so it settles unmeasured: wait until
+        // a whole second passes with no stall over 150 ms (at most eight seconds).
+        var quietSeconds = 0
+        for _ in 0..<8 {
+            let before = stalls.count
+            await breathe(1, measured: false)
+            if !stalls[before...].contains(where: { $0.end - $0.start - 0.02 > 0.15 }) { quietSeconds += 1 }
+            if quietSeconds >= 1 { break }
+        }
         await breathe(1)
         for tab in [AppTab.office, .markets, .inbox, .portfolio, .map, .office] {
             phase = "\(tab)"
@@ -71,6 +83,8 @@ final class MaxSpeedTests: XCTestCase {
 
         // A sheet opens and closes while time runs.
         phase = "sheet"
+        let sheetOpened = Date.timeIntervalSinceReferenceDate
+        MainStalls.mark("sheet.requested")
         if let division = store.divisions.first {
             store.openDivision = division
             var presented = false
@@ -97,9 +111,10 @@ final class MaxSpeedTests: XCTestCase {
                 .map { "\($0.label) \(Int($0.seconds * 1000)) ms" }.joined(separator: ", ")
             print("max-speed stall: \(Int((stall.end - stall.start - 0.02) * 1000)) ms in \(stall.phase); named work: \(named.isEmpty ? "none" : named)")
         }
+        print("max-speed sheet marks: \(MainStalls.markLines(since: sheetOpened))")
         print("max-speed by phase: " + worstByPhase.keys.sorted().map { "\($0) \(Int((worstByPhase[$0] ?? 0) * 1000)) ms" }.joined(separator: ", "))
         print("max-speed named work: \(MainStalls.summary())")
-        XCTAssertLessThan(worstStall, 1.0, "the main thread was never held for a second at 4x")
         print("max-speed: weeks \(startWeek) to \(endWeek), worst main-thread stall \(Int(worstStall * 1000)) ms")
+        XCTAssertLessThan(worstStall, 0.75, "the main thread was never held for three quarters of a second at 4x (worst \(Int(worstStall * 1000)) ms)")
     }
 }
