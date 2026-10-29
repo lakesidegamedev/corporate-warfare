@@ -33,7 +33,6 @@ heading.
   division's margin at today's prices up to ten years, shown in years, and rank last unless they
   pay back inside three years. On Apple, Review opens the game's own build, raid, lane, pricing,
   board offer and division sheets, and the brief has a snapshot test.
-
 - Letters from the people in your world. The Inbox is now correspondence. A rival chief writes
   after a raid on you or by you, and after a joint venture or a friendly deal. A bidder writes
   when they bid for your company. The central bank chair writes after a rate decision and gives
