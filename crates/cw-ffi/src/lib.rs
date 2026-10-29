@@ -20,10 +20,13 @@ mod cast;
 mod catalogue;
 mod company;
 mod custom;
+mod statements;
+mod systems;
 pub use cast::{
     DossierDto, MoveDto, PersonDto, PostDto, RivalMoveFeedDto, RivalSummaryDto, RivalTagDto,
 };
 pub use catalogue::{ActionDto, FieldDto, OptionDto, action_catalogue};
+pub use statements::{DivisionPeriodDto, PricePointDto, StatementDto};
 
 #[derive(uniffi::Record)]
 pub struct EngineInfo {
@@ -3129,7 +3132,9 @@ impl SessionHandle {
                         key.b,
                         key.mode,
                         1,
-                        dataset.logistics.outside_premium_bps,
+                        world
+                            .logistics
+                            .at_price_level(dataset.logistics.outside_premium_bps),
                     )
                     .max(1),
                     hot_weeks: stat.map(|s| s.hot_weeks as u32).unwrap_or(0),
@@ -4392,6 +4397,7 @@ impl SessionHandle {
             cw_sim::commands::CommandIntent::SetProductionTarget {
                 firm: cw_core::ids::Handle(firm),
                 target_bps,
+                lock: false,
             },
         )
     }

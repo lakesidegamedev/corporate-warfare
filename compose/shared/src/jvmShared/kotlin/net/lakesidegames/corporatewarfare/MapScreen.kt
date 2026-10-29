@@ -1,5 +1,6 @@
 package net.lakesidegames.corporatewarfare
 
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -57,7 +58,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -327,7 +327,7 @@ fun WorldMapView(
             }
             // Clouds drift a fraction of a degree a second, so their layer is redrawn eight times a
             // second rather than every frame.
-            if (graphics.clouds > 0) {
+            if (graphics.clouds > 0 && layer != MapLayer.Freight) {
                 Canvas(Modifier.fillMaxSize().graphicsLayer()) {
                     val seconds = cloudTick
                     val cam = camera ?: MapCamera.scenario(size, map)
@@ -369,7 +369,9 @@ fun WorldMapView(
                 }
             }
             // What the colours mean for the active mode.
-            if (layer != MapLayer.Freight) {
+            if (layer == MapLayer.Freight) {
+                FreightLegend(store.lanes, Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 24.dp))
+            } else {
                 MapLegend(layer, Modifier.align(if (controlsAtTop) Alignment.BottomStart else Alignment.BottomStart).padding(start = 12.dp, bottom = 24.dp))
             }
             // On desktop the tutorial card sits in the bottom corner, so the controls go to the top.
@@ -590,18 +592,22 @@ internal fun DrawScope.drawWorldMap(
                 if (lit && t > 0.5) drawPath(it, Color(0xFF8EC5FF).copy(alpha = 0.10f), style = Stroke(4f))
                 drawPath(it, Color(0xFFD2DEEA).copy(alpha = 0.85f), style = Stroke(if (cam.zoom > 3) 2f else 1f))
             }
+            // The real railways once close, so trains have track to run on: rails over dark
+            // sleepers cut on the ground.
+            if (g.closeUp && t > 0.5 && graphics.traffic > 0) {
+                drawPath(g.sleepers, Color(0xFF3A3028).copy(alpha = 0.9f), style = Stroke(3f, cap = StrokeCap.Butt))
+                drawPath(g.railroads, Color(0xFF9AA1A8).copy(alpha = 0.85f), style = Stroke(1f))
+            }
             // Interstates over the regions and their shading, under the traffic and the buildings:
-            // an 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line.
+            // an 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line
+            // whose dashes are cut on the ground: a screen dash pattern crawled as the camera moved.
             val highways = if (detailLevel == MapDetail.Low) 0f else smoothstep(0.85, 1.2, g.zoomRatio).toFloat()
             if (graphics.interstates && highways > 0f && t > 0.5) {
                 val wide = (1.6f + 1.2f * g.scale.coerceAtMost(2.5f))
                 drawPath(g.interstates, Color(0xFF1C2228).copy(alpha = 0.9f * highways), style = Stroke(wide + 2f, cap = StrokeCap.Square))
                 drawPath(g.interstates, Color(0xFF6E757D).copy(alpha = highways), style = Stroke(wide, cap = StrokeCap.Square))
                 if (g.closeUp) {
-                    drawPath(
-                        g.interstates, Palette.gold.copy(alpha = 0.85f * highways),
-                        style = Stroke(1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))),
-                    )
+                    drawPath(g.centreLines, Palette.gold.copy(alpha = 0.85f * highways), style = Stroke(1f, cap = StrokeCap.Butt))
                 }
             }
         }
@@ -628,8 +634,11 @@ internal fun DrawScope.drawWorldMap(
             drawCircle(water.copy(alpha = (0.3 * (1 - t)).toFloat()), radius = p.r.toFloat() + 4f, center = center, style = Stroke(6f))
         }
         translate(top = up) {
-            if (freightLayer && lanes.isNotEmpty()) drawLanes(map, p, lanes, selected, pickedLane)
-            else if (graphics.traffic > 0 && lanes.isNotEmpty() && t > 0.5) drawFaintLanes(map, p, lanes)
+            // Freight routes show only in the Freight mode, over a darkened map so they read clearly.
+            if (freightLayer && lanes.isNotEmpty()) {
+                drawRect(Color.Black.copy(alpha = 0.35f), topLeft = Offset(-size.width, -up - size.height), size = Size(size.width * 3, size.height * 3))
+                drawLanes(map, p, lanes, selected, pickedLane)
+            }
         }
     }
     MapProfiler.mark("lanes")
@@ -640,55 +649,57 @@ internal fun DrawScope.drawWorldMap(
         val nightNow = sun != null
         // City skylines, then the player's divisions as buildings, nearest drawn last.
         val cityTops = HashMap<String, Float>()
+        // Voxels in true 3D: pixels a voxel for the player's buildings, a step down for the rest.
+        val unit = (1.2f * g.scale * density).coerceIn(1.4f, 7f)
+        val e = p.east
         // The diorama up close: trees, fields, barns, rocks and the houses round each city.
         if (graphics.countryside && graphics.buildings >= 2 && graphics.earth && g.closeUp && t > 0.5) {
-            val propScale = (Voxels.scale(g.scale, density) - 1).coerceAtLeast(1)
-            with(Countryside) { drawCountryside(p, map, week, propScale, { plinth }, economyPhase) }
+            with(Countryside) { drawCountryside(p, map, week, unit * 0.6f, { plinth }, economyPhase) }
         }
         if (graphics.buildings >= 2 && g.closeUp && t > 0.5) {
-            // Each big city on screen is a voxel city block sized by its population, a step smaller
-            // than the player's buildings so those stay the stars.
-            val voxelScale = (Voxels.scale(g.scale, density) - 1).coerceAtLeast(1)
+            // Each big city on screen is a voxel city block sized by its population, smaller than
+            // the player's buildings so those stay the stars.
             // The economy shows in the cities: cranes rise in a boom, lights go out in a recession.
-            val dim = if (economyPhase == "recession" || economyPhase == "slowdown") Voxels.Dark else null
+            val dim = if (economyPhase == "recession" || economyPhase == "slowdown") VoxelModels.dark else null
             g.cityBlocks(ground).forEachIndexed { i, block ->
-                val base = p.lift(block.gx.toDouble(), block.gy.toDouble(), block.floor)
-                val top = with(Voxels) { drawBuilding("city", block.plants, base, voxelScale, dim) }
+                val top = with(VoxelModels) { drawModel(VoxelModels.sized("city", block.plants), p, block.gx, block.gy, block.floor, unit * 0.75f, tone = dim) }
                 if (top != null) cityTops[block.name] = top
                 if ((economyPhase == "boom" || economyPhase == "expansion" && i % 3 == 0) && i < 12) {
-                    with(Voxels) { drawBuilding("crane", if (economyPhase == "boom") 8 else 2, base + Offset(10f * voxelScale, 2f), voxelScale) }
+                    val k = 9f * unit * 0.75f
+                    with(VoxelModels) { drawModel(VoxelModels.sized("crane", if (economyPhase == "boom") 8 else 2), p, block.gx + e.x * k, block.gy + e.y * k, block.floor, unit * 0.75f) }
                 }
             }
         }
         if (graphics.buildings > 0 && g.closeUp && t > 0.5) {
-            // Rivals' plants first, a size smaller and muted, so the player's own stand over them.
-            val rivalScale = (Voxels.scale(g.scale, density) - 1).coerceAtLeast(1)
+            // Rivals' plants first, smaller and greyed, so the player's own stand over them.
             val rivalStatuses = plantStatuses(plants.filter { !it.player }, byFirm = true)
             if (graphics.rivals) g.rivalBuildings(plants, ground).forEach { b ->
-                val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
-                when (rivalStatuses[b.key]) {
-                    PlantState.Site -> with(Voxels) { drawBuilding("site", b.plants, base, rivalScale, Voxels.Muted) }
-                    PlantState.Mothballed -> with(Voxels) { drawBuilding(b.sector, b.plants, base, rivalScale, Voxels.Dark) }
-                    else -> with(Voxels) { drawBuilding(b.sector, b.plants, base, rivalScale, Voxels.Muted) }
+                val (name, tone) = when (rivalStatuses[b.key]) {
+                    PlantState.Site -> VoxelModels.sized("site", b.plants) to VoxelModels.muted
+                    PlantState.Mothballed -> VoxelModels.sized(b.sector, b.plants) to VoxelModels.dark
+                    else -> VoxelModels.sized(b.sector, b.plants) to VoxelModels.muted
                 }
+                with(VoxelModels) { drawModel(name, p, b.gx, b.gy, b.floor, unit * 0.75f, tone = tone) }
             }
-            val voxelScale = Voxels.scale(g.scale, density)
             val statuses = plantStatuses(plants.filter { it.player })
             g.buildings(divisions, ground).forEach { b ->
                 // Each division is a voxel building for its industry, shown as it stands: a building
                 // site while its plants go up, a crane beside it while one is added or retooled, dark
-                // when mothballed, a gold flag when just taken over. A plain box if the sprite is missing.
+                // when mothballed, a gold flag when just taken over. A plain box if the model is missing.
                 val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
                 val state = statuses[b.key] ?: PlantState.Running
-                val spriteTop = with(Voxels) {
+                val spriteTop = with(VoxelModels) {
                     when (state) {
-                        PlantState.Site -> drawBuilding("site", b.plants, base, voxelScale)
-                        PlantState.Mothballed -> drawBuilding(b.sector, b.plants, base, voxelScale, Voxels.Dark)
-                        else -> drawBuilding(b.sector, b.plants, base, voxelScale)
+                        PlantState.Site -> drawModel(VoxelModels.sized("site", b.plants), p, b.gx, b.gy, b.floor, unit)
+                        PlantState.Mothballed -> drawModel(VoxelModels.sized(b.sector, b.plants), p, b.gx, b.gy, b.floor, unit, tone = VoxelModels.dark)
+                        else -> drawModel(VoxelModels.sized(b.sector, b.plants), p, b.gx, b.gy, b.floor, unit)
                     }
                 }
-                if (state == PlantState.Growing) with(Voxels) { drawBuilding("crane", 2, base + Offset(12f * voxelScale, 3f), voxelScale) }
-                if (b.key in acquired && spriteTop != null) drawFlag(Offset(base.x + 6f * voxelScale, spriteTop - 2f), voxelScale)
+                if (state == PlantState.Growing) {
+                    val k = 9f * unit
+                    with(VoxelModels) { drawModel("crane/0", p, b.gx + e.x * k, b.gy + e.y * k, b.floor, unit) }
+                }
+                if (b.key in acquired && spriteTop != null) drawFlag(Offset(base.x + 4f * unit, spriteTop - 2f), unit.toInt().coerceAtLeast(1))
                 val topAt = if (spriteTop != null) Offset(base.x, spriteTop) else {
                     val windows = if (nightNow && light.facing(b.lon, b.lat) < 0) 0.85f else if (graphics.lighting == 2) 0.30f else 0f
                     drawBox(p, b.gx, b.gy, b.half, b.floor, b.top, Sectors.color(b.sector), windows, Palette.gold.copy(alpha = 0.9f))
@@ -874,6 +885,13 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
     val lakes: Path by lazy { p.polygons(map.lakes) }
     val rivers: Path by lazy { p.lines(map.rivers) }
     val interstates: Path by lazy { p.lines(map.interstates) }
+    val railroads: Path by lazy { p.lines(map.railroads) }
+    /**
+     * The centre line's dashes and the railways' sleepers, cut on the ground, projected like the
+     * roads and stroked solid, so they stay painted on as the camera moves.
+     */
+    val centreLines: Path by lazy { p.lines(map.centreDashes) }
+    val sleepers: Path by lazy { p.lines(map.sleeperDashes) }
     val playStates: List<Path> by lazy { map.playStates.map { p.polygons(it.rings) } }
 
     /** Pixels high for a region at a layer intensity, flattening towards the base up close. */
@@ -1078,9 +1096,10 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
         val roadLines = if (graphics.traffic > 0 && detailLevel == MapDetail.High && cam.zoom > 9) buildPolylines(p, map.interstates, if (raised) plinth else 0.0, size) else emptyList()
         val spots = if (graphics.buildings > 0 && closeUp && p.t > 0.5) buildings(divisions, ground).map { b ->
             val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
-            // The rooftop light and smoke sit on the sprite's top when there is one.
-            val frame = Voxels.frame(b.sector, Voxels.size(b.plants), Voxels.scale(scale, density))
-            val top = frame?.let { Offset(base.x, (base.y - it.ay + 4).toFloat()) } ?: p.lift(b.gx.toDouble(), b.gy.toDouble(), b.top)
+            // The rooftop light and smoke sit on the model's top.
+            val name = VoxelModels.sized(b.sector, b.plants)
+            val unit = (1.2f * scale * density).coerceIn(1.4f, 7f)
+            val top = if (VoxelModels.has(name)) p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor + VoxelModels.lift(name, unit)) else p.lift(b.gx.toDouble(), b.gy.toDouble(), b.top)
             BuildingSpot(base, top, Sectors.color(b.sector), smokes(b.sector), (stableHash(b.key) % 1000) / 1000f)
         } else emptyList()
         val top = selected?.let { code ->
@@ -1089,7 +1108,7 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
         }
         val airports = if (graphics.traffic > 0 && p.t > 0.5) map.cities.sortedByDescending { it.first.population }.take(14)
             .mapNotNull { (_, point) -> p.ground(point.lon[0], point.lat[0]).takeIf { it.isSpecified } } else emptyList()
-        val vehicleScale = (Voxels.scale(scale, density) - 1).coerceAtLeast(1)
+        val vehicleScale = (1.2f * scale * density).coerceIn(1.4f, 7f) * 0.6f
         return OverlayGeometry(p, tracks, roadLines, spots, top, scale, if (raised) plinth else 0.0, airports, closeUp && p.t > 0.5, vehicleScale).also {
             overlayValue = it
             overlayKey = key
@@ -1275,6 +1294,7 @@ internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () ->
     AlertDialog(
         onDismissRequest = onClose,
         containerColor = Palette.panel,
+        modifier = Modifier.widthIn(min = 360.dp, max = 980.dp),
         title = { Text(board.name) },
         text = {
             Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1296,6 +1316,7 @@ internal fun RegionSheet(store: GameStore, board: RegionBoardDto, onBuild: () ->
                     Eyebrow("Your storage here")
                     StorageLines(board.storage)
                 }
+                RegionDossierSection(store, board.index)
                 val ours = store.divisions.filter { it.region == board.code }
                 if (ours.isNotEmpty()) {
                     Eyebrow("Your divisions here")

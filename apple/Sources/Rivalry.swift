@@ -195,6 +195,7 @@ struct RaidMarketsList: View {
 struct RivalsCard: View {
     @EnvironmentObject private var store: AppStore
     @State private var raiding: RaidOptionDto?
+    @State private var board = false
 
     private var threats: [RivalSummaryDto] { store.rivals.filter { $0.tag.grudgeBps > 0 }.prefix(3).map { $0 } }
     private var allies: [RivalSummaryDto] { store.rivals.filter { $0.tag.ally }.prefix(3).map { $0 } }
@@ -208,7 +209,14 @@ struct RivalsCard: View {
         if !store.rivals.isEmpty {
             Panel(padding: 12) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Eyebrow(text: "Rivals")
+                    HStack {
+                        Eyebrow(text: "Rivals")
+                        Spacer()
+                        Button("Rivals board") { board = true }
+                            .font(Pixel.font(11))
+                            .foregroundStyle(Theme.gold)
+                            .buttonStyle(.plain)
+                    }
                     group("Threats", icon: "target", tint: Theme.negative, rows: threats, empty: "Nobody holds a grudge against you.")
                     group("Allies", icon: "people", tint: Theme.positive, rows: allies, empty: "No allies yet. A joint venture or a friendly deal makes one.")
                     VStack(alignment: .leading, spacing: 6) {
@@ -237,6 +245,9 @@ struct RivalsCard: View {
             }
             .sheet(item: $raiding) { option in
                 RaidSheet(option: option, regionName: WorldMap.shared.regionName(option.region)).environmentObject(store)
+            }
+            .sheet(isPresented: $board) {
+                RivalsBoardSheet().environmentObject(store).presentationBackground(Theme.panel)
             }
         }
     }

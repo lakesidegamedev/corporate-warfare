@@ -124,6 +124,7 @@ final class AppStore: ObservableObject {
         if let overview, sessionReady {
             await save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
         }
+        _ = await pendingWrite?.value
         saves = saveManager.list()
         sessionReady = false
         statusLine = ""
@@ -184,6 +185,7 @@ final class AppStore: ObservableObject {
     }
 
     func resume(_ save: StoredSave, silent: Bool = false) async {
+        _ = await pendingWrite?.value
         do {
             let data = try saveManager.load(save)
             let overview = try await engine.loadSave(data)
@@ -293,8 +295,9 @@ final class AppStore: ObservableObject {
             Telemetry.send(snapshotJSON: await engine.marketSnapshotJSON())
         }
         // Autosave on the four-week boundary only; background and manual saves cover the rest.
+        // The file write runs on the save queue, so the main thread never waits on the disk.
         if tick % 4 == 0 {
-            await save(slot: SaveManager.autosaveSlot(week: tick), kind: .autosave)
+            await save(slot: SaveManager.autosaveSlot(week: tick), kind: .autosave, wait: false)
         }
     }
 
@@ -406,61 +409,61 @@ final class AppStore: ObservableObject {
                 .flatMap { firm in boards.first { $0.name == firm.region }?.code }
             ?? boards.first?.code
         let rows = await marketRows(code: marketCode, regions: regions, products: products)
-        let saves = saveManager.list()
 
-        if let year = overview?.startYear { ResultBuckets.startYear = Int(year) }
-        Format.configure(fx: economy?.fx)
-        put(\.overview, overview)
-        put(\.firms, firms)
-        put(\.regions, regions)
-        put(\.boards, boards)
-        put(\.mapPlants, mapPlants)
-        put(\.mapDivisions, mapDivisions)
-        put(\.recentRaids, recentRaids)
-        put(\.rivalFeed, rivalFeed)
-        put(\.objective, objective)
-        put(\.objectiveHistory, objectiveHistory)
-        if let catalogues {
-            put(\.strategyCatalogue, catalogues.strategies)
-            put(\.recipeOptions, catalogues.recipes)
-            put(\.productCatalogue, catalogues.products)
-            catalogueScenario = scenario
+        MainStalls.time("publish") {
+            if let year = overview?.startYear { ResultBuckets.startYear = Int(year) }
+            Format.configure(fx: economy?.fx)
+            put(\.overview, overview)
+            put(\.firms, firms)
+            put(\.regions, regions)
+            put(\.boards, boards)
+            put(\.mapPlants, mapPlants)
+            put(\.mapDivisions, mapDivisions)
+            put(\.recentRaids, recentRaids)
+            put(\.rivalFeed, rivalFeed)
+            put(\.objective, objective)
+            put(\.objectiveHistory, objectiveHistory)
+            if let catalogues {
+                put(\.strategyCatalogue, catalogues.strategies)
+                put(\.recipeOptions, catalogues.recipes)
+                put(\.productCatalogue, catalogues.products)
+                catalogueScenario = scenario
+            }
+            put(\.events, events)
+            put(\.economy, economy)
+            put(\.commodities, commodities)
+            put(\.stocks, stocks)
+            put(\.deals, deals)
+            put(\.groupTree, groupTree)
+            put(\.institutions, institutions)
+            put(\.recovery, recovery)
+            put(\.fundingBuyers, fundingBuyers)
+            put(\.facilities, firm.facilities)
+            put(\.finance, firm.finance)
+            put(\.productLines, firm.productLines)
+            put(\.ownership, firm.ownership)
+            put(\.history, firm.history)
+            put(\.contracts, firm.contracts)
+            put(\.loans, firm.loans)
+            put(\.insurance, firm.insurance)
+            put(\.boardVotes, firm.boardVotes)
+            put(\.labour, firm.labour)
+            put(\.policyState, firm.policyState)
+            put(\.firmOps, firm.firmOps)
+            put(\.divisions, firm.divisions)
+            put(\.held, firm.held)
+            put(\.lanes, firm.lanes)
+            put(\.laneContracts, firm.laneContracts)
+            put(\.freight, firm.freight)
+            put(\.structure, firm.structure)
+            put(\.raidTargets, firm.raidTargets)
+            put(\.rivals, firm.rivals)
+            put(\.research, firm.research)
+            put(\.cfoAdvice, firm.cfoAdvice)
+            put(\.score, score)
+            put(\.marketRows, rows)
+            if let tick = overview?.tick { tutorial.week(tick) }
         }
-        put(\.events, events)
-        put(\.economy, economy)
-        put(\.commodities, commodities)
-        put(\.stocks, stocks)
-        put(\.deals, deals)
-        put(\.groupTree, groupTree)
-        put(\.institutions, institutions)
-        put(\.recovery, recovery)
-        put(\.fundingBuyers, fundingBuyers)
-        put(\.facilities, firm.facilities)
-        put(\.finance, firm.finance)
-        put(\.productLines, firm.productLines)
-        put(\.ownership, firm.ownership)
-        put(\.history, firm.history)
-        put(\.contracts, firm.contracts)
-        put(\.loans, firm.loans)
-        put(\.insurance, firm.insurance)
-        put(\.boardVotes, firm.boardVotes)
-        put(\.labour, firm.labour)
-        put(\.policyState, firm.policyState)
-        put(\.firmOps, firm.firmOps)
-        put(\.divisions, firm.divisions)
-        put(\.held, firm.held)
-        put(\.lanes, firm.lanes)
-        put(\.laneContracts, firm.laneContracts)
-        put(\.freight, firm.freight)
-        put(\.structure, firm.structure)
-        put(\.raidTargets, firm.raidTargets)
-        put(\.rivals, firm.rivals)
-        put(\.research, firm.research)
-        put(\.cfoAdvice, firm.cfoAdvice)
-        put(\.saves, saves)
-        put(\.score, score)
-        put(\.marketRows, rows)
-        if let tick = overview?.tick { tutorial.week(tick) }
     }
 
     /// Assigns a published value only when it changed, so an unchanged screen does not redraw.
@@ -606,7 +609,10 @@ final class AppStore: ObservableObject {
         let week = overview?.tick ?? 0
         let slot = SaveManager.autosaveSlot(week: week)
 
+        let previous = pendingWrite
         let save = Task.detached(priority: .userInitiated) { () -> StopSaveOutcome in
+            // An autosave still on the save queue lands first, so it cannot overwrite this one.
+            _ = await previous?.value
             do {
                 let data = try await engine.exportSave()
                 let hash = await engine.canonicalHash()
@@ -671,27 +677,54 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// The last save file write handed to the save queue. Writes run in the order they were made.
+    private var pendingWrite: Task<String?, Never>?
+
+    /// Export on the engine, then write the file off the main actor behind any earlier write.
+    /// With `wait` off the call returns once the bytes are exported and a failure is reported
+    /// when the write finishes.
     @discardableResult
-    private func save(slot: String, kind: SaveMetadata.Kind) async -> Bool {
+    private func save(slot: String, kind: SaveMetadata.Kind, wait: Bool = true) async -> Bool {
         guard sessionReady else { return false }
+        let data: Data
+        let hash: String
         do {
-            let data = try await engine.exportSave()
-            let hash = await engine.canonicalHash()
-            let week = overview?.tick ?? 0
-            _ = try saveManager.write(
-                data,
-                slot: slot,
-                week: week,
-                canonicalHash: hash,
-                kind: kind
-            )
-            return true
+            data = try await engine.exportSave()
+            hash = await engine.canonicalHash()
         } catch {
-            lastErrorKey = ErrorKey.of(error) ?? "error.save_write_failed"
-            statusLine = "Save failed. The previous save is unchanged."
-            errorMessage = SaveCopy.message(forKey: lastErrorKey)
+            saveFailed(ErrorKey.of(error) ?? "error.save_write_failed")
             return false
         }
+        let week = overview?.tick ?? 0
+        let manager = saveManager
+        let previous = pendingWrite
+        let write = Task.detached(priority: .userInitiated) { () -> String? in
+            _ = await previous?.value
+            do {
+                try manager.write(data, slot: slot, week: week, canonicalHash: hash, kind: kind)
+                return nil
+            } catch {
+                return ErrorKey.of(error) ?? "error.save_write_failed"
+            }
+        }
+        pendingWrite = write
+        guard wait else {
+            Task { [weak self] in
+                if let failure = await write.value { self?.saveFailed(failure) }
+            }
+            return true
+        }
+        if let failure = await write.value {
+            saveFailed(failure)
+            return false
+        }
+        return true
+    }
+
+    private func saveFailed(_ key: String) {
+        lastErrorKey = key
+        statusLine = "Save failed. The previous save is unchanged."
+        errorMessage = SaveCopy.message(forKey: lastErrorKey)
     }
 
     /// An import failed. The failing file is copied aside and left in place; the recovery screen
@@ -809,6 +842,19 @@ final class AppStore: ObservableObject {
             "recipe": recipe,
             "blocks": blocks
         ]))
+    }
+
+    /// When the statements, charts and systems displays reload. Paused, after every command and
+    /// week; while time runs, every four weeks, so redrawing their charts never holds up the main
+    /// thread at top speed.
+    var historyRefreshKey: String {
+        guard let overview else { return "none" }
+        return runSpeed > 0 ? "run-\(overview.tick / 4)" : "rev-\(overview.revision)"
+    }
+
+    /// Read from the engine off the main actor: statements, history and the systems displays.
+    func read<T>(_ block: (SessionHandle) -> T) async -> T? {
+        await engine.read(block)
     }
 
     /// A company's full page, with what the investor may see of it.

@@ -11,7 +11,9 @@ use cw_core::quantity::MilliLots;
 use cw_data::Dataset;
 use cw_sim::commands::{CommandEnvelope, CommandIntent, apply};
 use cw_sim::economy::{credit, equity, freight, ownership, sectors, seed, structure};
-use cw_sim::state::{FacilityStatus, HolderId, ScenarioKind, ScenarioMode, ShareLot, World};
+use cw_sim::state::{
+    ContractStatus, FacilityStatus, HolderId, ScenarioKind, ScenarioMode, ShareLot, World,
+};
 
 fn world(seed_value: u64) -> (World, Dataset) {
     let dataset = Dataset::load().unwrap();
@@ -1339,4 +1341,194 @@ fn a_squeeze_challenge_is_settled_by_restitution_and_prices_return_to_market() {
     );
     assert!(!g.world.structure.squeeze.contains_key(&g.buyer));
     assert!(all_balanced(&g.world));
+}
+
+fn contract(
+    world: &mut World,
+    seller: Handle,
+    buyer: Handle,
+    product: u16,
+    route: (u8, u8),
+    escrow_cents: i64,
+) -> Handle {
+    let handle = world.contracts.insert(cw_sim::state::Contract {
+        buyer,
+        seller,
+        product,
+        from_region: route.0,
+        to_region: route.1,
+        quantity_weekly: MilliLots::from_lots(5),
+        price_cents: 10_000,
+        penalty_bps: 500,
+        escrow_cents,
+        remaining_weeks: 52,
+        next_delivery: Tick(world.tick.0 + 1),
+        status: cw_sim::state::ContractStatus::Active,
+        shortfalls: MilliLots::ZERO,
+        auto_renew: true,
+    });
+    world
+        .firms
+        .get_mut(seller)
+        .unwrap()
+        .contracts_sell
+        .push(handle);
+    world
+        .firms
+        .get_mut(buyer)
+        .unwrap()
+        .contracts_buy
+        .push(handle);
+    handle
+}
+
+#[test]
+fn a_carved_out_division_takes_the_contracts_for_what_it_makes_and_uses() {
+    let (mut world, dataset, firm, r1, _i1, r2, i2) = two_division_firm();
+    let plants = sectors::division_plants(&world, &dataset, firm, r2, i2);
+    let recipe = &dataset.recipes[world.facilities.get(plants[0]).unwrap().recipe as usize];
+    let made = dataset.product_index[&recipe.output];
+    let input = recipe
+        .weekly_inputs_lots
+        .keys()
+        .map(|id| dataset.product_index[id])
+        .next()
+        .expect("the carved recipe uses an input");
+    let other = world
+        .firms
+        .iter()
+        .map(|(h, _)| h)
+        .find(|h| *h != firm)
+        .unwrap();
+    // Sales of the division's good from its state, and an input bought into its state: both go.
+    let sale = contract(&mut world, firm, other, made, (r2, r1), 0);
+    let purchase = contract(&mut world, other, firm, input, (r1, r2), 0);
+    // The same good sold from another state, and a contract holding escrow, stay.
+    let elsewhere = contract(&mut world, firm, other, made, (r1, r1), 0);
+    let escrowed = contract(&mut world, firm, other, made, (r2, r1), 1_000);
+    let child = structure::carve_out(&mut world, &dataset, firm, r2, i2, "Carved Co".to_owned())
+        .expect("carve-out");
+    let c = |h: Handle| world.contracts.get(h).unwrap();
+    assert_eq!(c(sale).seller, child);
+    assert_eq!(c(purchase).buyer, child);
+    assert_eq!(c(elsewhere).seller, firm);
+    assert_eq!(c(escrowed).seller, firm);
+    let parent = world.firm(firm).unwrap();
+    let kid = world.firm(child).unwrap();
+    assert!(!parent.contracts_sell.contains(&sale) && kid.contracts_sell.contains(&sale));
+    assert!(!parent.contracts_buy.contains(&purchase) && kid.contracts_buy.contains(&purchase));
+    assert!(
+        parent.contracts_sell.contains(&elsewhere) && parent.contracts_sell.contains(&escrowed)
+    );
+    assert!(all_balanced(&world));
+}
+
+#[test]
+fn a_carve_out_ends_the_parents_purchases_into_a_state_where_nothing_uses_them() {
+    let (mut world, dataset, firm, r1, _i1, r2, i2) = two_division_firm();
+    let plants = sectors::division_plants(&world, &dataset, firm, r2, i2);
+    // Every input any plant in the carved state uses, the parent's or the division's.
+    let used: Vec<u16> = world
+        .facilities
+        .iter()
+        .filter(|(_, p)| p.region == r2)
+        .flat_map(|(_, p)| dataset.recipes[p.recipe as usize].weekly_inputs_lots.keys())
+        .map(|id| dataset.product_index[id])
+        .collect();
+    let unused = (0..dataset.products.len() as u16)
+        .find(|p| !used.contains(p) && !dataset.products[*p as usize].kind.is_service())
+        .expect("a good no plant in the state uses");
+    let input = dataset.product_index[dataset.recipes
+        [world.facilities.get(plants[0]).unwrap().recipe as usize]
+        .weekly_inputs_lots
+        .keys()
+        .next()
+        .unwrap()];
+    let other = world
+        .firms
+        .iter()
+        .map(|(h, _)| h)
+        .find(|h| *h != firm)
+        .unwrap();
+    // Coal for a plant the parent closed long ago, bought into the state it is leaving.
+    let stale = contract(&mut world, other, firm, unused, (r1, r2), 0);
+    let used_input = contract(&mut world, other, firm, input, (r1, r2), 0);
+    let child = structure::carve_out(&mut world, &dataset, firm, r2, i2, "Carved Co".to_owned())
+        .expect("carve-out");
+    let c = |w: &cw_sim::state::World, h: Handle| w.contracts.get(h).unwrap().clone();
+    assert_eq!(c(&world, stale).status, ContractStatus::Cancelled);
+    assert_eq!(c(&world, stale).buyer, firm, "nobody takes it on");
+    assert_eq!(
+        c(&world, used_input).buyer,
+        child,
+        "what the division uses goes with it"
+    );
+    assert!(!world.firm(firm).unwrap().contracts_buy.contains(&stale));
+    assert!(!world.firm(other).unwrap().contracts_sell.contains(&stale));
+    assert!(!world.firm(child).unwrap().contracts_buy.contains(&stale));
+    // Ended, it is never delivered, short or penalised: neither side's cash moves for it.
+    let cash = |w: &cw_sim::state::World, f: Handle| w.firm(f).unwrap().book.cash();
+    // Only the ended contract is left to settle.
+    let others: Vec<Handle> = world
+        .contracts
+        .iter()
+        .map(|(h, _)| h)
+        .filter(|h| *h != stale)
+        .collect();
+    for h in others {
+        world.contracts.get_mut(h).unwrap().status = ContractStatus::Cancelled;
+    }
+    let (buyer_cash, seller_cash) = (cash(&world, firm), cash(&world, other));
+    world.tick = Tick(world.tick.0 + 1);
+    freight::settle(&mut world, &dataset);
+    assert_eq!(c(&world, stale).shortfalls, MilliLots::ZERO);
+    assert_eq!(cash(&world, firm), buyer_cash);
+    assert_eq!(cash(&world, other), seller_cash);
+    assert!(all_balanced(&world));
+}
+
+#[test]
+fn a_contract_ships_from_where_the_seller_makes_the_good() {
+    let (mut world, dataset, firm, r1, _i1, r2, i2) = two_division_firm();
+    let plant = sectors::division_plants(&world, &dataset, firm, r2, i2)[0];
+    let made = dataset.product_index
+        [&dataset.recipes[world.facilities.get(plant).unwrap().recipe as usize].output];
+    let other = world
+        .firms
+        .iter()
+        .map(|(h, _)| h)
+        .find(|h| *h != firm)
+        .unwrap();
+    // A state where the firm makes none of the good and holds none.
+    let empty = (0..world.regions.len() as u8)
+        .find(|r| {
+            *r != r1
+                && *r != r2
+                && world.firm(firm).unwrap().stock(made, *r).0 == 0
+                && !world
+                    .firm(firm)
+                    .unwrap()
+                    .facilities
+                    .iter()
+                    .any(|h| world.facilities.get(*h).unwrap().region == *r)
+        })
+        .unwrap();
+    let moved = contract(&mut world, firm, other, made, (empty, r1), 0);
+    freight::resource_contract(&mut world, &dataset, moved);
+    assert_eq!(world.contracts.get(moved).unwrap().from_region, r2);
+    // Stock at the origin keeps it there, even with no plant.
+    let kept = contract(&mut world, firm, other, made, (empty, r1), 0);
+    world
+        .firms
+        .get_mut(firm)
+        .unwrap()
+        .stock_lot_mut(made, empty)
+        .receive(MilliLots::from_lots(1), Cents(10_000));
+    freight::resource_contract(&mut world, &dataset, kept);
+    assert_eq!(world.contracts.get(kept).unwrap().from_region, empty);
+    // A plant making the good at the origin keeps it there, even with an empty shelf.
+    world.firms.get_mut(firm).unwrap().inventory.clear();
+    let home = contract(&mut world, firm, other, made, (r2, r1), 0);
+    freight::resource_contract(&mut world, &dataset, home);
+    assert_eq!(world.contracts.get(home).unwrap().from_region, r2);
 }

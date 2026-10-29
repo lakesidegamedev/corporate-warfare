@@ -53,6 +53,50 @@ fn food_firm(seed: u64, price: i64, stock: i64) -> (World, Dataset, Handle, u16)
     (world, dataset, firm, food)
 }
 
+/// Top every plant that buys `product` up to its input cover target, so no buyer is short.
+fn fill_buyers(world: &mut World, dataset: &Dataset, product: u16) {
+    let id = dataset.products[product as usize].id.clone();
+    let plants: Vec<(Handle, u8, i64)> = world
+        .facilities
+        .iter()
+        .filter_map(|(_, plant)| {
+            let weekly = dataset.recipes[plant.recipe as usize]
+                .weekly_inputs_lots
+                .get(&id)
+                .copied()?;
+            Some((plant.firm, plant.region, weekly * plant.blocks as i64 * 52))
+        })
+        .collect();
+    for (firm, region, lots) in plants {
+        if let Some(entity) = world.firms.get_mut(firm) {
+            entity.stock_lot_mut(product, region).receive(
+                cw_core::quantity::MilliLots::from_lots(lots),
+                cw_core::money::Cents(0),
+            );
+        }
+    }
+}
+
+/// Empty every firm's stock of `product` except the seller's, so every buyer is short, and set
+/// every firm to keep the default four weeks of input cover (two for a perishable).
+fn empty_buyers(world: &mut World, product: u16, seller: Handle) {
+    let firms: Vec<Handle> = world.firms.iter().map(|(h, _)| h).collect();
+    for handle in firms {
+        if let Some(entity) = world.firms.get_mut(handle) {
+            entity.policies.input_cover_weeks = 4;
+            if handle != seller {
+                entity.inventory.retain(|(p, _), _| *p != product);
+            }
+        }
+    }
+    let plants: Vec<Handle> = world.facilities.iter().map(|(h, _)| h).collect();
+    for handle in plants {
+        if let Some(plant) = world.facilities.get_mut(handle) {
+            plant.stock_plan.weeks = 0;
+        }
+    }
+}
+
 #[test]
 fn stock_cover_moves_the_price_a_sixth_of_the_way_and_never_past_two_percent() {
     // Sales are 100 lots a week. Food is perishable, so a week of cover is wanted; each week of
@@ -66,18 +110,23 @@ fn stock_cover_moves_the_price_a_sixth_of_the_way_and_never_past_two_percent() {
     // Two weeks of stock: wants 9,400; a sixth of 600 is 100.
     let (world, dataset, firm, food) = food_firm(55, 10_000, 200);
     assert_eq!(pricing::target_price(&world, &dataset, firm, food), 9_900);
-    // Exactly a week of stock is the price wanted: it holds. There is no dead band either side of
-    // it, so a few lots over or under move the price.
+    // Exactly a week of stock is the price wanted: it holds. A few lots over cut the price.
     let (world, dataset, firm, food) = food_firm(55, 10_000, 100);
     assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_000);
-    let (world, dataset, firm, food) = food_firm(55, 10_000, 90);
-    let below = pricing::target_price(&world, &dataset, firm, food);
-    assert!(below > 10_000, "{below}");
     let (world, dataset, firm, food) = food_firm(55, 10_000, 110);
     let above = pricing::target_price(&world, &dataset, firm, food);
     assert!(above < 10_000, "{above}");
-    // Half a week of stock wants 10,300, a sixth of the gap is 50 (kept under the import price).
-    let (world, dataset, firm, food) = food_firm(55, 10_000, 50);
+    // Plants buy food. Since 1.8 preview 3 a thin shelf alone no longer lifts the price of a good
+    // that plants buy: only buyers left short of their input cover do (see
+    // `short_buyers_lift_the_price_and_full_buyers_do_not` below). Under a week of stock with
+    // every buyer at its cover holds at reference. Before, this case rose, which pinned prices
+    // at the top of the band while stock sat in buyers' yards.
+    let (mut world, dataset, firm, food) = food_firm(55, 10_000, 90);
+    fill_buyers(&mut world, &dataset, food);
+    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_000);
+    // Half a week of stock with buyers short lifts the price; the step is a sixth of the gap,
+    // kept under the import price.
+    let (world, _, _, food) = food_firm(55, 10_000, 50);
     let ceiling = world
         .gateways
         .iter()
@@ -85,9 +134,15 @@ fn stock_cover_moves_the_price_a_sixth_of_the_way_and_never_past_two_percent() {
         .map(|g| g.sell_price_cents * 95 / 100)
         .min()
         .unwrap_or(i64::MAX);
+    // Every buyer holds no food: perishable input cover is two weeks, so buyers lack two weeks of
+    // their use and the price wants 12 percent over reference, 11,200, kept under 95 percent of
+    // the import; the price closes a sixth of that gap, at most 200.
+    let (mut world, dataset, firm, food) = food_firm(55, 10_000, 50);
+    empty_buyers(&mut world, food, firm);
+    let wanted = 11_200.min(ceiling);
     assert_eq!(
         pricing::target_price(&world, &dataset, firm, food),
-        10_050.min(ceiling)
+        10_000 + ((wanted - 10_000) / 6).min(200)
     );
     // Stock that does not sell is a glut: the price wants 30 percent under and falls two percent.
     let (mut world, dataset, firm, food) = food_firm(55, 10_000, 100);
@@ -397,5 +452,337 @@ fn a_cost_plus_posture_marks_up_the_cost_of_a_lot() {
     assert_eq!(
         world.firms.get(firm).unwrap().policies.prices[&food],
         expected
+    );
+}
+
+#[test]
+fn short_buyers_lift_the_price_and_full_buyers_do_not() {
+    // Cover and targets in hundredths of a week; six percent of reference per week of gap.
+    // Plants buy the good and all are full: a seller with an empty shelf asks reference.
+    assert_eq!(pricing::goods_wanted_bps(0, 200, 0, 1_000), 10_000);
+    // Buyers short 500 lots of the 1,000 they use a week: half a week short is 3 percent over.
+    assert_eq!(pricing::goods_wanted_bps(0, 200, 500, 1_000), 10_300);
+    // Buyers short two weeks: 12 percent over.
+    assert_eq!(pricing::goods_wanted_bps(0, 200, 2_000, 1_000), 11_200);
+    // Six weeks of unsold stock against a two-week target is four weeks over: 24 percent under.
+    assert_eq!(pricing::goods_wanted_bps(600, 200, 0, 1_000), 7_600);
+    // Shortage and glut together net out: a week short and a week over is reference.
+    assert_eq!(pricing::goods_wanted_bps(300, 200, 1_000, 1_000), 10_000);
+    // Stock under target with full buyers is no signal either way.
+    assert_eq!(pricing::goods_wanted_bps(150, 200, 0, 1_000), 10_000);
+    // The gap is held to five weeks: never more than 30 percent either side.
+    assert_eq!(pricing::goods_wanted_bps(0, 200, 99_000, 1_000), 13_000);
+    assert_eq!(pricing::goods_wanted_bps(5_000, 200, 0, 1_000), 7_000);
+    // No plant buys the good (households only): the seller's own cover reads both ways, as in
+    // 1.7: half a week under a one-week target is 3 percent over, two weeks over is 12 under.
+    assert_eq!(pricing::goods_wanted_bps(50, 100, 0, 0), 10_300);
+    assert_eq!(pricing::goods_wanted_bps(300, 100, 0, 0), 8_800);
+}
+
+#[test]
+fn a_glut_price_falls_at_a_bounded_weekly_rate_and_settles_without_overshoot() {
+    // Food, perishable: a one-week target. Every buyer is full, and the seller holds four weeks of
+    // sales. Three weeks over wants 10,000 - 3 * 600 = 8,200. Each week closes a sixth of the gap
+    // and never more than two percent of the current price.
+    let (mut world, dataset, firm, food) = food_firm(61, 10_000, 400);
+    fill_buyers(&mut world, &dataset, food);
+    let mut price = 10_000i64;
+    let mut weeks_to_settle = 0;
+    for week in 1..=60 {
+        let next = pricing::target_price(&world, &dataset, firm, food);
+        // Independent oracle for the step: a sixth of the gap, capped at 2 percent.
+        let expected = price - ((price - 8_200) / 6).clamp(1, price * 200 / 10_000);
+        let expected = if price == 8_200 {
+            8_200
+        } else {
+            expected.max(8_200)
+        };
+        assert_eq!(next, expected, "week {week} from {price}");
+        if next == 8_200 && weeks_to_settle == 0 {
+            weeks_to_settle = week;
+        }
+        price = next;
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .policies
+            .prices
+            .insert(food, next);
+    }
+    assert_eq!(price, 8_200);
+    assert!(
+        weeks_to_settle > 5,
+        "a two percent cap spreads the fall: {weeks_to_settle}"
+    );
+}
+
+#[test]
+fn services_price_on_spare_capacity() {
+    // 85 percent of installed capacity sold is reference; each point is six hundredths of a
+    // percent of reference, bounded at 20 percent under and 15 percent over.
+    assert_eq!(pricing::service_wanted_bps(8_500), 10_000);
+    assert_eq!(pricing::service_wanted_bps(10_000), 10_900);
+    assert_eq!(pricing::service_wanted_bps(6_000), 10_000 - 2_500 * 6 / 10);
+    assert_eq!(pricing::service_wanted_bps(6_000), 8_500);
+    assert_eq!(pricing::service_wanted_bps(4_000), 8_000);
+    assert_eq!(pricing::service_wanted_bps(0), 8_000);
+    // Out of range readings are clamped, not extrapolated.
+    assert_eq!(pricing::service_wanted_bps(20_000), 10_900);
+}
+
+#[test]
+fn import_dependence_reads_imports_against_home_output() {
+    // 372 lots imported against 52 made is 7.15 times home output.
+    assert_eq!(pricing::dependence_bps(372, 52), 71_538);
+    assert!(pricing::dependence_bps(372, 52) >= pricing::IMPORT_DEPENDENT_BPS);
+    // Imports a quarter over home output are the threshold; just under is not dependent.
+    assert_eq!(
+        pricing::dependence_bps(125, 100),
+        pricing::IMPORT_DEPENDENT_BPS
+    );
+    assert!(pricing::dependence_bps(124, 100) < pricing::IMPORT_DEPENDENT_BPS);
+    // Nothing made at home is the cap.
+    assert_eq!(pricing::dependence_bps(10, 0), 1_000_000);
+}
+
+#[test]
+fn an_import_dependent_good_prices_just_under_the_import() {
+    // Food with every gateway importing 1,000 lots a week and no farm making any: the seller
+    // asks just under the import whatever its own shelf says. Five weeks of stock would want a
+    // cut to 7,600, yet the price climbs toward 95 percent of the cheapest import.
+    let (mut world, dataset, firm, food) = food_firm(64, 10_000, 500);
+    fill_buyers(&mut world, &dataset, food);
+    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
+        gateway.smoothed_import_lots = 1_000;
+    }
+    for (_, plant) in world.facilities.iter_mut() {
+        plant.last_output = cw_core::quantity::MilliLots::ZERO;
+    }
+    let import = world
+        .gateways
+        .iter()
+        .filter(|g| g.product == food && g.sell_price_cents > 0)
+        .map(|g| g.sell_price_cents)
+        .min()
+        .unwrap();
+    let ceiling = import * 95 / 100;
+    assert!(
+        ceiling > 10_000,
+        "the import sits over reference here: {ceiling}"
+    );
+    // First step: a sixth of the gap to the ceiling, at most two percent.
+    let expected = 10_000 + ((ceiling - 10_000) / 6).min(200);
+    assert_eq!(
+        pricing::target_price(&world, &dataset, firm, food),
+        expected
+    );
+    // Without the imports the same shelf cuts the price.
+    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
+        gateway.smoothed_import_lots = 0;
+    }
+    assert!(pricing::target_price(&world, &dataset, firm, food) < 10_000);
+}
+
+#[test]
+fn a_refinery_cut_moves_toward_the_dearer_fractions_within_bounds() {
+    use cw_sim::economy::production::shift_cut;
+    // A refinery block's recipe: fuel 26, gasoline 36, jet fuel 8, feedstock 12 lots. Fuel asks
+    // 10 percent over reference, feedstock 15 over; gasoline and jet fuel leave at an export bid
+    // of 85 percent.
+    let bases = [26, 36, 8, 12];
+    let scores = [11_000, 8_500, 8_500, 11_500];
+    // Worked by hand: the yield-weighted mean score is 798,000 / 82 = 9,731. Gasoline and jet
+    // fuel sit 1,231 under it, so each gives 2,462 basis points of its yield (under the 2,500
+    // bound): 44 x 2,462 = 108,328 lot-basis-points. Fuel weighs 26 x 1,269 = 32,994 and
+    // feedstock 12 x 1,769 = 21,228 of 54,222; fuel takes 108,328 x 32,994 / 54,222 / 26 =
+    // 2,535 and feedstock 3,534 basis points.
+    let cut = shift_cut(&bases, &scores);
+    assert_eq!(cut, vec![12_535, 7_538, 7_538, 13_534]);
+    // Mass: the plant never makes more lots than its recipe, and loses under a lot to rounding.
+    let made: i64 = bases.iter().zip(&cut).map(|(b, c)| b * *c as i64).sum();
+    assert!(made <= 82 * 10_000 && made > 82 * 10_000 - 10_000, "{made}");
+    // Equal scores keep the recipe split.
+    assert_eq!(shift_cut(&bases, &[10_000; 4]), vec![10_000; 4]);
+    // A small taker is held to half again its yield and the giver gives only what it can take:
+    // mean (10 x 5,000 + 1 x 20,000) / 11 = 6,363; the giver would give the full 2,500 (25,000
+    // lot-bps), which would lift the taker 25,000 bps, so everything scales to 5,000 / 25,000:
+    // the giver gives 500 bps, the taker takes 5,000.
+    assert_eq!(shift_cut(&[10, 1], &[5_000, 20_000]), vec![9_500, 15_000]);
+}
+
+#[test]
+fn unmet_household_demand_lifts_a_household_good_like_short_buyers() {
+    let dataset = Dataset::load().unwrap();
+    let mut world = seed::build(&dataset, 3, ScenarioKind::Guided, ScenarioMode::Sandbox);
+    let food = dataset.product_index["food_retail"];
+    // Two regions: 30 + 20 lots of 60 + 40 asked for found no seller.
+    world.regions[0]
+        .households
+        .wanted_milli
+        .insert(food, 60_000);
+    world.regions[0].households.unmet_milli.insert(food, 30_000);
+    world.regions[1]
+        .households
+        .wanted_milli
+        .insert(food, 40_000);
+    world.regions[1].households.unmet_milli.insert(food, 20_000);
+    assert_eq!(pricing::household_unmet(&world, food), (50, 100));
+    // Half a week of demand unmet counts as half the two-week target short: 50 x 200 / 100 =
+    // 100 lots short against 100 a week, one week, six percent over reference.
+    assert_eq!(pricing::goods_wanted_bps(200, 200, 100, 100), 10_600);
+    // A week of trade records what households asked for, and never more unmet than asked.
+    let mut session_world = seed::build(&dataset, 3, ScenarioKind::Guided, ScenarioMode::Sandbox);
+    cw_sim::tick::advance(&mut session_world, &dataset);
+    let (unmet, wanted) = pricing::household_unmet(&session_world, food);
+    assert!(
+        wanted > 0 && (0..=wanted).contains(&unmet),
+        "{unmet} of {wanted}"
+    );
+}
+
+#[test]
+fn an_older_production_command_loads_without_a_lock_and_writes_the_same() {
+    let old = r#"{"SetProductionTarget":{"firm":7,"target_bps":9000}}"#;
+    let intent: CommandIntent = serde_json::from_str(old).unwrap();
+    assert!(matches!(
+        intent,
+        CommandIntent::SetProductionTarget {
+            target_bps: 9_000,
+            lock: false,
+            ..
+        }
+    ));
+    // An unlocked command serialises exactly as before, so recorded logs replay unchanged.
+    assert_eq!(serde_json::to_string(&intent).unwrap(), old);
+}
+
+#[test]
+fn a_hand_set_rate_caps_service_plants_that_still_follow_sales_unless_locked() {
+    let dataset = Dataset::load().unwrap();
+    let mut world = seed::build(&dataset, 5, ScenarioKind::Guided, ScenarioMode::Sandbox);
+    let firm = world.investor.primary_group.unwrap();
+    // Hand the player company a rival's operating service plant (not a carrier).
+    let service = world
+        .facilities
+        .iter()
+        .find(|(h, p)| {
+            p.status == cw_sim::state::FacilityStatus::Operating
+                && pricing::expiring_output(&world, &dataset, *h)
+                && dataset.recipes[p.recipe as usize].transport_mode.is_none()
+                && dataset.recipes[p.recipe as usize].storage_class.is_none()
+        })
+        .map(|(h, _)| h)
+        .expect("the corridor runs a service plant");
+    let owner = world.facilities.get(service).unwrap().firm;
+    world
+        .firms
+        .get_mut(owner)
+        .unwrap()
+        .facilities
+        .retain(|h| *h != service);
+    world.facilities.get_mut(service).unwrap().firm = firm;
+    world.firms.get_mut(firm).unwrap().facilities.push(service);
+    let product = dataset.product_index
+        [&dataset.recipes[world.facilities.get(service).unwrap().recipe as usize].output];
+    // Nothing sold: the plan wants the ten percent floor, fifteen points a week from full.
+    world.firms.get_mut(firm).unwrap().sales_history =
+        vec![[((0u8, product), 0)].into_iter().collect(); 13];
+    for (lock, expected) in [(false, 8_500), (true, 10_000)] {
+        set_target(&mut world, &dataset, firm, 10_000, lock);
+        pricing::weekly(&mut world, &dataset);
+        assert_eq!(
+            world.facilities.get(service).unwrap().target_bps,
+            expected,
+            "lock {lock}"
+        );
+    }
+}
+
+fn set_target(world: &mut World, dataset: &Dataset, firm: Handle, target_bps: i32, lock: bool) {
+    apply(
+        world,
+        dataset,
+        &CommandEnvelope {
+            command_id_high: 1,
+            command_id_low: world.tick.0 as u64 * 2 + lock as u64,
+            actor: INVESTOR_ACTOR,
+            expected_revision: world.revision,
+            submitted_tick: world.tick.0,
+            intent: CommandIntent::SetProductionTarget {
+                firm,
+                target_bps,
+                lock,
+            },
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn service_prices_and_freight_rates_follow_the_price_level() {
+    let dataset = Dataset::load().unwrap();
+    let mut world = seed::build(&dataset, 77, ScenarioKind::Guided, ScenarioMode::Sandbox);
+    let telecom = dataset.product_index["telecom"];
+    let steel = dataset.product_index["steel"];
+    let (r_tel, r_steel) = (
+        dataset.reference_price(telecom),
+        dataset.reference_price(steel),
+    );
+    // Fifteen percent of inflation since the start: wages are fifteen percent up, so a service's
+    // reference is too. A good keeps its catalogue reference and follows its import price.
+    world.macro_state.price_index_bps = 11_500;
+    assert_eq!(
+        pricing::price_reference(&world, &dataset, telecom),
+        r_tel * 115 / 100
+    );
+    assert_eq!(pricing::price_reference(&world, &dataset, steel), r_steel);
+    // An idle telecom firm (nothing sold) walks down to the floor, 80 percent of the reference
+    // carried to today's level (92 percent of the catalogue price), not 80 percent of the
+    // catalogue price as when wages were fifteen percent lower.
+    let firm = world
+        .firms
+        .iter()
+        .map(|(h, _)| h)
+        .find(|h| pricing::outputs(&world, &dataset, *h).contains(&telecom))
+        .expect("a telecom firm");
+    world.firms.get_mut(firm).unwrap().sales_history.clear();
+    world
+        .firms
+        .get_mut(firm)
+        .unwrap()
+        .policies
+        .prices
+        .insert(telecom, r_tel * 80 / 100);
+    for _ in 0..200 {
+        let price = pricing::target_price(&world, &dataset, firm, telecom);
+        world
+            .firms
+            .get_mut(firm)
+            .unwrap()
+            .policies
+            .prices
+            .insert(telecom, price);
+    }
+    let settled = world.firms.get(firm).unwrap().policies.prices[&telecom];
+    assert!(
+        (settled - r_tel * 92 / 100).abs() <= r_tel / 100,
+        "settled at {settled}, floor {}",
+        r_tel * 92 / 100
+    );
+    // Freight: every rate a shipper pays, outside carriers' included, scales with the level.
+    use cw_sim::economy::logistics as lg;
+    let (a, b) = (
+        dataset.region_index["OH-CEN"],
+        dataset.region_index["PA-WES"],
+    );
+    let key = lg::LaneKey::new(a, b, 0);
+    world.logistics.price_level_bps = 10_000;
+    let base = lg::lane_rate_cents_per_lot(&dataset, &world.logistics, key);
+    world.logistics.price_level_bps = 11_500;
+    let inflated = lg::lane_rate_cents_per_lot(&dataset, &world.logistics, key);
+    assert!(
+        (inflated - base * 115 / 100).abs() <= 1,
+        "{base} at the start, {inflated} after 15 percent inflation"
     );
 }

@@ -218,8 +218,13 @@ fun RivalsCard(store: GameStore) {
     val threats = rivals.filter { it.tag.grudgeBps > 0 }.take(3)
     val allies = rivals.filter { it.tag.ally }.take(3)
     val targets = rivals.filter { it.bestRaid != null }.sortedByDescending { it.bestRaid!!.quote.chanceBps }.take(3)
+    var board by remember { mutableStateOf(false) }
     Panel {
-        Eyebrow("Rivals")
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Eyebrow("Rivals")
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { board = true }) { Text("Rivals board", color = Palette.gold, fontSize = 12.sp) }
+        }
         RivalGroup("Threats", "target", Palette.negative, threats, "Nobody holds a grudge against you.")
         RivalGroup("Allies", "people", Palette.positive, allies, "No allies yet. A joint venture or a friendly deal makes one.")
         Text("Raid now", color = Palette.secondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -239,6 +244,7 @@ fun RivalsCard(store: GameStore) {
         }
     }
     raiding?.let { o -> RaidDialog(store, o.target, o.region, o.industry) { raiding = null } }
+    if (board) RivalsBoardDialog(store) { board = false }
 }
 
 @Composable

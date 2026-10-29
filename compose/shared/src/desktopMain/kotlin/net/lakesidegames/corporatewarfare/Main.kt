@@ -54,24 +54,20 @@ private fun saveDirectory(): File {
 private val windows = System.getProperty("os.name").lowercase().contains("win")
 
 /**
- * Windows installs a downloaded update itself: a short script waits for the game to close, runs
- * the installer with a progress bar and no questions, then starts the game again. Linux and Mac
- * open the release page, where the package or app is one click.
+ * Windows installs a downloaded version itself: a short script waits until no copy of the game
+ * runs (closing any that stay open), runs the installer with a progress bar and no questions, then
+ * starts the game again. An older version
+ * goes into the same folder, with an uninstall and second try if that fails
+ * ([WindowsInstall.plan]). Linux and Mac open the release page, where the package or app is one
+ * click.
  */
 private object DesktopUpdates : UpdatePlatform {
     override val installerSuffix: String? = if (windows) ".msi" else null
 
-    override fun install(file: File) {
+    override fun install(file: File, version: String) {
         val app = System.getProperty("jpackage.app-path")
         val script = File(file.parentFile, "install-update.cmd")
-        script.writeText(
-            buildString {
-                appendLine("@echo off")
-                appendLine("timeout /t 2 /nobreak >nul")
-                appendLine("msiexec /i \"${file.absolutePath}\" /passive /norestart")
-                if (app != null) appendLine("start \"\" \"$app\"")
-            },
-        )
+        script.writeText(WindowsInstall.plan(file.absolutePath, version, BuildInfo.VERSION, app).joinToString("\r\n", postfix = "\r\n"))
         ProcessBuilder("cmd", "/c", "start", "\"\"", "/min", script.absolutePath).start()
         exitProcess(0)
     }
@@ -81,7 +77,43 @@ private object DesktopUpdates : UpdatePlatform {
     }
 }
 
-fun main() = application {
+/** The game window, once open, so a second launch can bring it to the front. */
+@Volatile
+private var frontWindow: java.awt.Window? = null
+
+/** Show the open window above others; Windows only flashes the taskbar for a plain toFront. */
+private fun bringToFront() = java.awt.EventQueue.invokeLater {
+    val window = frontWindow ?: return@invokeLater
+    if (window is java.awt.Frame && window.extendedState and java.awt.Frame.ICONIFIED != 0) {
+        window.extendedState = window.extendedState and java.awt.Frame.ICONIFIED.inv()
+    }
+    window.isVisible = true
+    window.isAlwaysOnTop = true
+    window.toFront()
+    window.requestFocus()
+    window.isAlwaysOnTop = false
+}
+
+fun main() {
+    // One copy at a time: a second launch brings the open game forward and exits (SingleInstance).
+    when (SingleInstance.start(saveDirectory(), onActivate = ::bringToFront)) {
+        is SingleInstance.Start.First -> Unit
+        SingleInstance.Start.Signalled -> exitProcess(0)
+        SingleInstance.Start.Unresponsive -> {
+            javax.swing.JOptionPane.showMessageDialog(
+                null,
+                "Corporate Warfare is already open but is not responding.\n" +
+                    "Close it, or end it in Task Manager, then start the game again.",
+                "Corporate Warfare",
+                javax.swing.JOptionPane.INFORMATION_MESSAGE,
+            )
+            exitProcess(0)
+        }
+    }
+    game()
+}
+
+private fun game() = application {
     Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
     MeshCanvas.draw = desktopMeshDraw
     Pixel.font = desktopPixelFont()
@@ -100,6 +132,7 @@ fun main() = application {
             resizable = false,
             state = rememberWindowState(position = WindowPosition(Alignment.Center), size = DpSize(560.dp, 380.dp)),
         ) {
+            frontWindow = window
             Splash(progress, stage)
             LaunchedEffect(Unit) {
                 withContext(Dispatchers.Default) {
@@ -137,9 +170,12 @@ fun main() = application {
         title = "Corporate Warfare",
         state = state,
     ) {
+        frontWindow = window
         val scope = rememberCoroutineScope()
         val store = remember { GameStore(saveDirectory(), scope) }
-        val updater = remember { Updater(DesktopUpdates, scope, File(saveDirectory(), "updates")) }
+        val updater = remember {
+            Updater(DesktopUpdates, scope, File(saveDirectory(), "updates"), saveDirectory(), channel = { settings.updateChannel })
+        }
         CorporateWarfareApp(store, settings, updater, onQuit = ::exitApplication)
     }
 }

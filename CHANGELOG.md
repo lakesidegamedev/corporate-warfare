@@ -11,8 +11,80 @@ heading.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-29
+
+A living map and a deeper company: true 3D voxel buildings and vehicles on the real Earth with seasons and satellite clouds, trucks and trains on real interstates and railways, a clean Freight mode, more map modes, full company financials with customizable charts, deeper views of markets, regions, divisions, freight, rivals and the economy, markets that respond to stock, spare capacity, imports and inflation, choose previews or full releases and install any version from 1.8 on, one copy of the game at a time, faster weeks, and an 8-bit interface. Careers saved in 1.7.1 and the 1.8 previews load in 1.8.0 and carry on.
+
 ### Added
 
+- Choose your updates. Settings, Updates now asks whether you want full releases or previews.
+  It starts on the kind of build you installed, and the game follows your choice when it checks
+  for updates. If you are on a preview and switch to full releases, you are offered the newest
+  full release even when its number is lower than your preview, and the game says so.
+- Install any version from 1.8 preview 3 on. Choose a version in Settings, Updates lists every
+  release on your channel, newest first, with its date and a line about what changed, and marks
+  the one you have. Going back to an older version first warns that careers saved by this version
+  may not open in the older one, and copies your saves, settings and custom scenarios to a dated
+  backup folder whose location is shown. On Windows the game removes the newer install and puts
+  the older one in the same folder; on Linux it opens the release page (install the package with
+  `sudo apt install --allow-downgrades`); on Android, which will not install an older version
+  over a newer one, it explains that going back needs an uninstall, which deletes the careers on
+  the device. Versions before 1.8 preview 3 are not offered, because they cannot open newer saves
+  or come back by themselves.
+- Wind a company down. A company with nothing left to run (no working site, no stake in another
+  company, no open bills) that can pay everyone it owes can now close itself: its remaining sites
+  and stock are sold at salvage value, lenders and unpaid bills are paid in full, and the rest goes
+  to the shareholders. Rival companies do the same after half a year with nothing running, so
+  about three idle, money-losing shells per game close instead of bleeding cash. Your main company
+  cannot be wound down.
+- Market analytics split the companies losing money into established companies, new entrants and
+  shells with no working plant, so a rise in losses can be told apart from young or idle firms.
+- Market analytics report a new sales-weighted asking price for each good, which shows what sellers
+  that actually sold were asking. The existing median asking price is unchanged, so older servers
+  and app versions keep working.
+- Market depth for every good: tap a good on the Markets screen to see how much is made, sold,
+  imported and exported each week, the stock held and how many weeks of sales it covers, your
+  share of sales over time, the top sellers and buyers with their shares, and in plain words
+  why the price is moving this week (buyers short of stock, unsold stock on the shelves,
+  reliance on imports, or spare capacity for services).
+- Region dossiers: tap a region for its workforce and how many are without a job, wages by
+  skill, land price, what households spend their money on, who competes there in each sector
+  with their shares, and your divisions there with their profit, with charts over time.
+- Division operations: each division shows how hard its plants run, what it made against what
+  it sold, and what one lot costs (inputs, labour, upkeep, land, depreciation and freight)
+  against its price, with the margin per lot and charts of output, use and cost per lot.
+- Freight stats on the company shipping panel: lots moved, cost per lot, who carried them
+  (your own carriers, other companies or outside carriers when lanes are full), and your own
+  carriers' capacity used and idle, week by week.
+- A rivals board: every company side by side (revenue, profit, cash, debt, share price,
+  divisions and best market share), sorted by any column. Pick one to chart it against you by
+  quarter and see the goods you both sell, head to head.
+- Economy history in the economy panel: the corridor share index, the bank rate and inflation,
+  the price level, companies operating and gone, raids and household spending, with date ranges.
+- The financials, the new charts and these systems displays are on iPhone and iPad too, in the same
+  8-bit style.
+- Five years of weekly history behind these displays. Saves from earlier versions load and start
+  the history from the next week.
+- Deeper company financials: every company page and the Stats page have tabs for an overview,
+  the income statement, the balance sheet, the cash flow statement, divisions and ratios. Pick
+  weekly, quarterly or yearly periods and compare the last several side by side. Ratios cover
+  gross and net margin, return on equity and on assets, debt to equity, the current ratio,
+  interest cover and revenue growth.
+- A cash flow statement for every period: opening cash, operating, investing, financing and tax,
+  and closing cash, worked out from the company's own books so it always adds up.
+- Division results by quarter: revenue, costs, profit, plants and market share for each division.
+- New charts across the app (company pages, Stats, share and goods details, the economy panel): line,
+  bar or area, date ranges from four weeks to everything kept, weekly, quarterly or yearly points,
+  several series at once with a legend (your revenue against the two largest rivals in your sector
+  whose figures you can see, a share against the corridor index, a good against its reference
+  price), the value under the pointer or finger, and dates such as 2001 Q3 along the bottom. A
+  quarter or year still under way is marked "to date".
+- Longer history: ten years of weekly share and goods prices, a year of weekly statements and
+  quarterly statements for the whole career. Saves from earlier versions still load and start
+  their longer history from the year of prices they already hold.
+- Every company on the stock board shows its statements, floated or not, and area charts draw the
+  largest series at the back with every line on top, so a balance sheet shows assets, liabilities
+  and equity together.
 - Seven more map modes: your share, competition, demand, workforce skill, infrastructure (roads,
   power and broadband), land price and population, each with a legend showing what its colours
   mean.
@@ -52,29 +124,9 @@ heading.
   short faint contrail overhead. Each faces the way it is moving, even on a turned map. Busier
   lanes carry more of them, and lanes where you ship or hold capacity run in your gold livery.
   Zoomed out the traffic stays as dots. `tools/voxel_vehicles.py` bakes the sprites.
-
 - Turn the map: twist with two fingers, or drag with the right mouse button on desktop. Buildings
   and labels stay upright, and an N button turns it back to north. Dragging now reaches almost to
   the poles.
-
-### Fixed
-
-- No more pulsing: the rings round buildings, the weekly ripple, the breathing selection outline
-  and the menu's pulsing scenario glow are gone; rooftop lights are steady.
-- Traffic, planes, clouds and the sun stop when the game is paused and run faster at higher
-  speeds, instead of moving on regardless.
-- Freight and cars keep a steady pace when you pan or zoom the map; they no longer jump or speed
-  up as the camera moves.
-- Cars and freight run under buildings, and buildings and labels stand above the clouds, instead
-  of traffic being drawn over everything.
-- On iPhone and iPad the pause banner no longer jumps or resizes, answering a decision card no
-  longer tears its sheet down mid-close, and Continue resumes time at the speed it was running.
-- On iPhone and iPad the app no longer stalls at the top speed: the game runs off the interface
-  thread and the screen refreshes at most a few times a second at high speed. Every tab now has
-  the pause and speed buttons, not only the map, and so does every tab on Android phones.
-
-### Added
-
 - Android adaptive launcher icon with a themed (monochrome) layer, so Android 8 and later no longer
   shows the icon in a white circle.
 - Google Play listing assets: the 512 pixel icon, a 1024 by 500 feature graphic built from the
@@ -84,7 +136,6 @@ heading.
   draft now covers the desktop and direct-download update check and where each platform keeps the
   analytics switch.
 - App Store screenshots at the sizes Connect accepts, rendered from a real career: iPhone 6.9-inch (1320 x 2868) and 13-inch iPad (2064 x 2752), flattened to RGB because a screenshot with an alpha channel is rejected. The Apple smoke workflow collects them as the `store-screenshots` artifact and the test asserts the PNG carries no alpha.
-
 - The map is now 3D. As you zoom in it tilts away into the distance, and the scenario's regions
   stand up as lit tiles whose height shows the layer you are looking at, rising and falling as you
   switch layers. The globe is lit by the sun, with an atmosphere, a glint on the ocean, land
@@ -119,18 +170,145 @@ heading.
 - Google Play can take a release: the release workflow builds a signed Android App Bundle, verifies its signature, manifest and arm64 library, and attaches it to the release. The APK stays for direct downloads.
 - Notes for Review for the first App Store submission: the offline game, the anonymous market snapshot and its switch, and the absence of purchases.
 
+### Changed
+
+- Faster weeks in long careers. The weekly statements archive and the systems history now read
+  each market once per week instead of once per company and division, cutting their cost by about
+  two thirds: a week ten years into a career runs roughly a tenth faster. Results are identical.
+- Smoother top speed on desktop. The autosave every four weeks no longer holds up the clock while
+  the file is written to disk, and the time a week takes now counts toward its slot, so 4 weeks a
+  second really is 4 weeks a second instead of slipping on busy weeks.
+- Faster market clearing. The weekly spot markets no longer recheck the strategic reserve's price
+  history once per region for every good, so clearing the markets takes about a third less time
+  (roughly 1.4 ms less per week ten years in) and rival planning reads each import price once per
+  week instead of once per idea. Results are identical.
+- Fewer hitches on iPhone and iPad at top speed. The autosave every four weeks now writes its
+  file in the background instead of on the screen's thread, and the save list is no longer reread
+  from disk on every refresh. In the 4x test the longest freeze fell from a little over a second
+  to about 0.8 seconds; switching tabs now catches for at most about 0.3 seconds.
+- Export ports grow with use. When a state's exports of a good fill its port for a week, the
+  port gains one percent more room, so surpluses no longer pile up at a port sized for the
+  plants that ran at the start. Grain, for example, now leaves the corridor instead of sitting
+  in silos at a discount.
+- Markets respond to real supply and demand. A good stops creeping above its normal price just
+  because sellers sold out: prices now rise only when the factories that buy it are actually short,
+  and fall when unsold stock piles up beyond a few weeks of sales, by at most 2 percent a week.
+  Most industrial goods now trade close to their normal price instead of 8 to 12 percent over it.
+- Services such as care, telecom, software and advertising price on spare capacity: a provider
+  with idle capacity cuts its price (up to 20 percent) to win work from rivals, and one that is
+  sold out charges up to 9 percent more.
+- Goods the corridor mostly imports, such as fuel and petrochemical feedstock, now sell at home for
+  just under the import price, and rival companies are more willing to build plants that replace
+  those imports. Building one yourself is now a clearer opportunity.
+- Freight carriers trim their running rate when they run under 85 percent full, measured by how
+  far loads actually travel, but never while their own routes are turning much freight away to
+  outside carriers. Less carrying capacity goes to waste and slightly less freight has to go
+  outside.
+- Rival companies launch at most one market raid a year. Raids used to snowball as each one left
+  grudges that invited the next, and over a long career more and more healthy companies slipped
+  into losses from raid write-offs and failed campaigns. Raiding still happens, and you can raid
+  as often as before.
+- Refineries and gas plants shift their output toward the products that sell. A refinery can move
+  up to a quarter of a product's share of its run to the others, for example from gasoline that can
+  only be exported toward fuel the corridor imports. Its total output never grows.
+- A refinery's or mill's by-products can always leave through the region's export market, even
+  when the plant was built after the game started. Gasoline no longer piles up unsold for years.
+- When you set production by hand, service and freight divisions no longer keep running at full
+  cost for customers they do not have. They follow what they sell plus a margin, up to the rate you
+  set, as rival companies' do. Lock the rate to hold them at it anyway. The CFO now says plainly
+  when a division runs far above what it sells and offers to match output to demand.
+- Goods that shoppers buy, such as food and retail goods, now rise in price when shoppers find
+  shelves empty, and stay put when they find what they want. Goods nobody at home buys, that only
+  leave as exports, no longer creep up in price because the seller's shelf is empty.
+- Buildings, city blocks, the countryside and every vehicle are true 3D voxel models, drawn from the
+  camera's angle each frame: turn the map and you see their sides, vehicles turn as they follow the
+  road, and the sun lights a fixed side of each building as you go round it.
+- The Freight mode is redrawn: each route is a clean arc between its two hubs over a darkened map,
+  with one coloured stripe per company that carries goods on it (yours in gold), wider where more
+  freight moves and dashed for water, and a legend naming the companies. Clouds step aside while it
+  is open.
+- Freight routes no longer show outside the Freight mode. Elsewhere trucks drive on the real
+  interstates and trains on the real railways, which are now drawn when zoomed in; a route with no
+  road or track simply shows no vehicles.
+- The requirement ledger and release evidence now record every uploaded TestFlight build from 5 to 15 in `evidence/releases/testflight-builds-5-15.md`.
+
 ### Fixed
 
+- Only one copy of the game opens on Windows and Linux. Starting it again brings the open game to
+  the front instead of opening a second copy, so two copies can no longer write the same saves. If
+  the open copy has stopped responding, the new one says so and does not open.
+- Updates and version changes on Windows now wait for every copy of the game to close before
+  installing. A copy still open after a minute is asked to close, and after 15 more seconds it is
+  ended, so the installer never runs while the game's files are in use. If a copy cannot be closed,
+  nothing is installed and the game says so.
+- Installing or uninstalling on Windows while the game is open no longer gets stuck. The installer
+  now closes the running game first, and ends it if it does not close within 15 seconds.
+- Freight space no longer sits empty after companies began moving their own goods between
+  states. A rival used to size a new pipeline on everything it made in a state rather than what
+  it actually shipped, and point it at the busiest truck route rather than the one its goods
+  took, so a pipeline built for a few dozen loads a week ran one percent full. Pipelines are now
+  sized on the company's own loads on the route and pointed where its goods go. Carrier space is
+  about 72 percent used again, up from 54.
+- Freight and service prices keep up with inflation. Their normal price was fixed at the opening
+  level while wages rose about three percent a year, so carriers and other service firms earned
+  less every year. Freight rates and the normal price of every service now rise with the
+  economy's price level, for players and rivals alike.
+- Carving out a division no longer leaves the parent paying for supplies delivered to a state
+  where it has nothing left to use them. Those purchase contracts end at the carve-out with no
+  penalty for either side; supplies the new company uses go with it, as before.
+- Pig iron pays again. The one integrated steel company that makes pig iron used to sell all of
+  it abroad at the cheap export price while its own steel mill in the next state bought the same
+  amount from abroad at the dear import price, and it lost money every quarter. A company now
+  ships its own stock to its own factories in other states, paying only the freight. Its pig iron
+  imports fell from about 80 loads a week to none, and it now earns a 2 to 5 percent margin.
+- A carved-out division takes its contracts with it. When a company split a steel works into a
+  subsidiary, the old company kept that works' steel sales contracts and paid a late-delivery
+  penalty on them every week. Sales and purchase contracts for what the division makes and uses
+  now move to the new company, and any contract whose seller no longer makes the good where the
+  contract says now ships from where it does.
+- Careers saved in 1.8 preview 1 and preview 2 load in this version and keep playing. The save
+  format records its layout version, and an older save is converted on load, with the new market
+  figures starting empty and filling in from the first week played. Saves written by this version
+  do not open in older versions, which refuse them with a clear version message.
+- Charts of levels, such as wages, land prices, the workforce, weeks of cover, stock, prices,
+  share prices, cash and the balance sheet, now fit their scale to the figures shown, so real
+  movement no longer reads as a flat line. Flows per week and bar charts still start at zero.
+- A division's utilisation is measured against what it could make this week at the season's
+  harvest, so a farm in a good season reads up to 100 percent instead of 130.
+- The rivals board shows each company's net margin over 13 weeks in place of its best market
+  share, which read 100 percent for nearly everyone. Market shares stay in the head to head.
+- Banks count the interest they earn as revenue on the rivals board, in their statements and in
+  their charts, alongside the premiums insurers already counted.
+- Market depth lays its charts out in even rows of two on wide screens, without the large gap
+  under the first chart.
+- Dashed road markings stay painted on the road as the camera moves: the interstates' gold centre
+  line and the railway sleepers no longer slide along the track when you pan, tilt, zoom or turn the
+  map, and the dashes on sea routes stay in place along their arc.
+- The Freight mode is clearer: it shows the 30 busiest routes plus every route you use, with
+  rivals and outside carriers drawn fainter so your gold reads first, and no cars or planes move
+  over the routes while it is open.
+- On iPhone and iPad the roads, borders and buildings no longer slide against the satellite ground
+  as you pan, tilt or turn the map: the photo is now laid on in true perspective, raised regions
+  carry their own roads, and buildings are placed along the ground rather than across the screen.
+- No more pulsing: the rings round buildings, the weekly ripple, the breathing selection outline
+  and the menu's pulsing scenario glow are gone; rooftop lights are steady.
+- Traffic, planes, clouds and the sun stop when the game is paused and run faster at higher
+  speeds, instead of moving on regardless.
+- Freight and cars keep a steady pace when you pan or zoom the map; they no longer jump or speed
+  up as the camera moves.
+- Cars and freight run under buildings, and buildings and labels stand above the clouds, instead
+  of traffic being drawn over everything.
+- On iPhone and iPad the pause banner no longer jumps or resizes, answering a decision card no
+  longer tears its sheet down mid-close, and Continue resumes time at the speed it was running.
+- On iPhone and iPad the app no longer stalls at the top speed: the game runs off the interface
+  thread and the screen refreshes at most a few times a second at high speed. Every tab now has
+  the pause and speed buttons, not only the map, and so does every tab on Android phones.
 - Android back now returns one level at a time, closing settings, overlays, the new-game steps,
   the load and scenario editor screens, and stepping back through companies opened from a company
   page, instead of leaving the app. From another tab it returns to the map first.
 - On Android 15 and later, the menu, settings, new-game, load, scenario editor and tablet screens
   keep clear of the status and navigation bars.
 - A build installed from Google Play no longer offers the GitHub self-updater, because Play requires updates to come through Play. The direct-download APK still updates itself.
-
-### Changed
-
-- The requirement ledger and release evidence now record every uploaded TestFlight build from 5 to 15 in `evidence/releases/testflight-builds-5-15.md`.
 
 ## [1.7.1] - 2026-10-28
 

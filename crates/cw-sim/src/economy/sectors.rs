@@ -200,6 +200,10 @@ pub fn share_bps(
     added_value: i64,
 ) -> i64 {
     let (firms, headroom) = cell(world, dataset, region, industry);
+    share_of(&firms, headroom, firm, added_value)
+}
+
+fn share_of(firms: &[(Handle, i64)], headroom: i64, firm: Handle, added_value: i64) -> i64 {
     let own = firms
         .iter()
         .find(|(handle, _)| *handle == firm)
@@ -211,6 +215,34 @@ pub fn share_bps(
         return 0;
     }
     (own as i128 * 10_000 / total as i128) as i64
+}
+
+/// Shares for many firms against one unchanged world: each cell is read once, however many
+/// divisions in it ask. Only valid while the world it read is not changed.
+#[derive(Default)]
+pub struct ShareCache {
+    cells: std::collections::BTreeMap<(u8, u8), Cell>,
+}
+
+/// Each firm's capacity value in a cell, and the cell's import headroom.
+type Cell = (Vec<(Handle, i64)>, i64);
+
+impl ShareCache {
+    /// `share_bps` with no added capacity.
+    pub fn share_bps(
+        &mut self,
+        world: &World,
+        dataset: &Dataset,
+        firm: Handle,
+        region: u8,
+        industry: u8,
+    ) -> i64 {
+        let (firms, headroom) = self
+            .cells
+            .entry((region, industry))
+            .or_insert_with(|| cell(world, dataset, region, industry));
+        share_of(firms, *headroom, firm, 0)
+    }
 }
 
 /// Build-cost multiplier in basis points for new capacity in a cell. Up to the threshold share

@@ -438,6 +438,142 @@ pub fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
     let _ = dataset;
 }
 
+/// Why a company may not wind itself down, or `None` when it may. A voluntary wind-down is for a
+/// solvent company with nothing left to run: no plant operating, building or retooling, no
+/// stake in another company, no bills it cannot hand to a named creditor (trade payables,
+/// accruals, prepayments, insurance claims, provisions) and an estate, its cash plus the forced
+/// sale value of everything else (40 percent of carrying value, as in liquidation), that pays
+/// every loan, bond, deposit, arrear and tax in full. The career's primary company cannot wind
+/// itself down. The player and rival companies are held to the same test.
+pub fn wind_down_blocker(world: &World, firm: Handle) -> Option<&'static str> {
+    let entity = world.firm(firm)?;
+    if !matches!(entity.status, FirmStatus::Operating) {
+        return Some("not trading normally");
+    }
+    if world.investor.primary_group == Some(firm) {
+        return Some("primary company");
+    }
+    let running = entity.facilities.iter().any(|handle| {
+        world
+            .facilities
+            .get(*handle)
+            .is_some_and(|plant| plant.status != crate::state::FacilityStatus::Mothballed)
+    });
+    if running {
+        return Some("has a working plant");
+    }
+    let holds_stake = world.firms.iter().any(|(other, company)| {
+        other != firm
+            && company.operative()
+            && company
+                .shares
+                .holders
+                .get(&HolderId::Firm(firm))
+                .is_some_and(|lot| lot.qty > 0)
+    });
+    if holds_stake || entity.book.balance(Account::Investments) != 0 {
+        return Some("holds stakes in other companies");
+    }
+    let book = &entity.book;
+    let unnamed = [
+        Account::Payables,
+        Account::AccruedLiabilities,
+        Account::UnearnedRevenue,
+        Account::ClaimLiabilities,
+        Account::Provisions,
+    ];
+    if unnamed.iter().any(|account| book.balance(*account) != 0) {
+        return Some("has unsettled bills");
+    }
+    if wind_down_estate(book) < wind_down_claims(world, firm) {
+        return Some("cannot pay its creditors in full");
+    }
+    None
+}
+
+/// Cash plus the forced-sale value of every other asset liquidation sells.
+fn wind_down_estate(book: &Ledger) -> i64 {
+    let carrying: i64 = [
+        Account::FixedAssets,
+        Account::AccumulatedDepreciation,
+        Account::Inventory,
+        Account::Receivables,
+        Account::OtherAssets,
+        Account::WorkInProgress,
+    ]
+    .iter()
+    .map(|account| book.balance(*account))
+    .sum();
+    book.cash()
+        .saturating_add(book.balance(Account::RestrictedCash).max(0))
+        .saturating_add(carrying.max(0) * 40 / 100)
+}
+
+/// Everything the wind-down must pay before shareholders: loans outstanding, the firm's bonds,
+/// deposits, past-due bills and tax accrued.
+fn wind_down_claims(world: &World, firm: Handle) -> i64 {
+    let Some(entity) = world.firm(firm) else {
+        return 0;
+    };
+    let loans: i64 = entity
+        .loans
+        .iter()
+        .filter_map(|handle| world.loans.get(*handle))
+        .map(|loan| loan.principal_remaining_cents.max(0))
+        .sum();
+    let bonds: i64 = world
+        .bonds
+        .iter()
+        .filter(|(_, bond)| bond.issuer == firm)
+        .map(|(_, bond)| bond.principal_cents.max(0))
+        .sum();
+    let book = &entity.book;
+    loans
+        .saturating_add(bonds)
+        .saturating_add((-book.balance(Account::Deposits)).max(0))
+        .saturating_add((-book.balance(Account::OverduePayables)).max(0))
+        .saturating_add((-book.balance(Account::TaxesPayable)).max(0))
+}
+
+/// Voluntary wind-down of a company `wind_down_blocker` clears: the tax it has accrued is paid
+/// to the state now, then the ordinary liquidation sells the remaining assets to outside buyers
+/// at 40 percent of carrying value, pays creditors by seniority and returns the rest to the
+/// shareholders pro rata, and the company is dissolved. Nothing is minted: every cent leaves
+/// through a named counterparty.
+pub fn wind_down(world: &mut World, firm: Handle, dataset: &Dataset) {
+    let due = world
+        .firm(firm)
+        .map(|entity| (-entity.book.balance(Account::TaxesPayable)).max(0))
+        .unwrap_or(0);
+    let cash = world.firm(firm).map(|f| f.book.cash().max(0)).unwrap_or(0);
+    let paid = due.min(cash);
+    if paid > 0 {
+        if let Some(entity) = world.firms.get_mut(firm) {
+            let _ = entity.book.commit(
+                world.tick,
+                Txn::new().credit(Account::Cash, paid, "tax payment").debit(
+                    Account::TaxesPayable,
+                    paid,
+                    "tax payment",
+                ),
+            );
+        }
+        let receipt = crate::economy::fx::firm_to_numeraire(world, dataset, firm, paid);
+        let _ = world.government.book.commit(
+            world.tick,
+            Txn::new()
+                .debit(Account::Cash, receipt, "tax receipt")
+                .credit(Account::Revenue, receipt, "tax receipt"),
+        );
+        crate::economy::fiscal::record(world, receipt);
+    }
+    if paid < due {
+        // Unreachable when the blocker cleared, but an unpaid remainder must never vanish.
+        record_missed_tax(world, firm, due - paid);
+    }
+    liquidate(world, firm, dataset);
+}
+
 /// Pay the estate's cash to its creditors by seniority: secured loans, administrative arrears,
 /// then unsecured loans, bonds and deposits pro rata. Safe to run again after guarantee cash.
 fn pay_creditors(world: &mut World, firm: Handle) {

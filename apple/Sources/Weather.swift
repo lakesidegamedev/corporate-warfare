@@ -319,7 +319,8 @@ private struct CloudVertex {
     var wind: Float = 0
     var alpha: Float = 0
     var light: Float = 0
-    var pad: Float = 0
+    /// One over the tilt's perspective scale, so the texture is interpolated in perspective.
+    var w: Float = 1
 }
 
 /// One draw's view size, offset and texture slide. Matches CloudUniforms in the shader.
@@ -393,7 +394,8 @@ private final class CloudGrid {
                 // Clouds on the night side are lit only faintly; their shadows only fall by day.
                 let light = 0.18 + 0.82 * smoothstep(-0.15, 0.1, key.sun.facing(lon: lon, lat: lat))
                 mesh[k] = CloudVertex(x: Float(Double(at.x) + key.shift.width), y: Float(Double(at.y) + key.shift.height),
-                                      lon: Float(lonDeg), lat: Float(latDeg), wind: w, alpha: Float(a), light: Float(light))
+                                      lon: Float(lonDeg), lat: Float(latDeg), wind: w, alpha: Float(a), light: Float(light),
+                                      w: Float(1 / p.scale(atFlatY: g.y)))
                 visible[k] = true
             }
         }
@@ -647,7 +649,7 @@ final class CloudRenderer {
     #include <metal_stdlib>
     using namespace metal;
 
-    struct CloudVertex { float x, y, lon, lat, wind, alpha, light, pad; };
+    struct CloudVertex { float x, y, lon, lat, wind, alpha, light, w; };
     struct CloudUniforms { float width, height, ox, oy, uOffset, uScale, vOffset, vScale, slide, strength, shadow, pad; };
     struct Shaded { float4 position [[position]]; float2 uv; float4 color; };
 
@@ -655,7 +657,7 @@ final class CloudRenderer {
                               constant CloudUniforms &u [[buffer(1)]]) {
         CloudVertex v = vertices[id];
         Shaded out;
-        out.position = float4((v.x + u.ox) / u.width * 2 - 1, 1 - (v.y + u.oy) / u.height * 2, 0, 1);
+        out.position = float4(((v.x + u.ox) / u.width * 2 - 1) * v.w, (1 - (v.y + u.oy) / u.height * 2) * v.w, 0, v.w);
         out.uv = float2((v.lon - v.wind * u.slide + u.uOffset) * u.uScale, (u.vOffset - v.lat) * u.vScale);
         float a = u.strength * v.alpha;
         out.color = u.shadow > 0.5 ? float4(0, 0, 0, clamp(0.14 * a * v.light, 0.0, 1.0))

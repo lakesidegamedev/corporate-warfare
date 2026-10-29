@@ -41,7 +41,11 @@ A command batch runs at the next opening boundary, not at arbitrary UI wall-cloc
 9. AI observes permitted closing data and queues next-week commands.
 
 Fixed contract delivery failure first tries documented supplier stock, then records
-shortfall and contractual penalty. Never silently buy an unlimited replacement off-map.
+shortfall and contractual penalty. A contract ships from where the seller makes the good: when
+the seller holds none of it in the contract's origin state and runs no plant making it there
+(the plant was sold, closed or carved out), the origin moves to the state of its largest
+operating plant for the good, or failing that the state where it holds the most beyond its own
+input cover, and the buyer pays freight from there. Never silently buy an unlimited replacement off-map.
 Contract precedence is a deliberate priority paid for by commitment, not free extra supply.
 
 ## Labour clearing
@@ -124,7 +128,11 @@ A gateway quotes finite buy and sell offers at the outside world's price +/-15 p
 freight. The outside price is the reference index scaled by the product's world price level
 (see World commodity prices below) and by inflation. Each state's weekly gateway capacity per product = the larger of the corridor's
 weekly input demand and weekly output for that product at seed, floor 100 lots, so a
-shortage can be filled and a producing region's surplus has a buyer. Gateways record the
+shortage can be filled and a producing region's surplus has a buyer. Export room grows with
+use the way infrastructure does: after a week whose exports filled a gateway's capacity, the
+capacity rises by one percent (at least one lot) for every later week, player and rival sellers
+alike. A week that leaves room unused adds nothing, and the outside account's paced cash still
+limits what the room pays for. Gateways record the
 lots they import and export each week and keep a smoothed import average; that average is
 the "room to build" shown on a state's board and used by rival expansion. No local
 back-to-back transaction can profit from the bid/ask spread.
@@ -155,35 +163,65 @@ product metadata allows it. No double counting of household demand.
 Retail, leases and electricity clear in each of the 31 economic regions. Goods sold between
 firms clear on one corridor commodity exchange per product: every buyer's need in any region
 meets every seller's stock in any region beyond that seller's own input cover, plus the import
-offer of the buyer's region. Each pairing is priced as delivered, the seller's asking price plus
+offer of the buyer's region. A firm never buys from itself, but its own stock beyond input cover
+in another state feeds its own plants first: the goods move at their carrying cost and the firm
+pays only the freight, so an integrated steelworks takes its furnace's pig iron instead of
+exporting it at the gateway bid and importing it at the ask. Speculative buying into held stock
+never moves own stock. Each pairing is priced as delivered, the seller's asking price plus
 freight over the lane. Pairings fill cheapest delivered first; buyers tied on one source at one
 price share it in proportion to what each still wants and can pay for; imports are the last
 resort at equal price. The seller receives its asking price and the buyer pays the freight.
 
-Prices and production follow sell-through, for every firm, every week (1.7.1). A firm reads the
-weeks of cover it holds of a good (free stock over its average weekly sales, over the weeks it has
-on the books up to 13) against the cover it wants, two weeks (one for a perishable), and works out
-the price it would ask: 6 percent of reference for every week of difference, so a good with five
-weeks too much stock wants a price 18 to 30 percent lower, and one with a week too little wants 6
-percent more. The price then moves a sixth of the way there, at most 2 percent in a week, within
+Prices and production follow sell-through, for every firm, every week (1.7.1, revised in 1.8
+preview 3). A firm reads the weeks of cover it holds of a good (free stock over its average weekly
+sales, over the weeks it has on the books up to 13) against the cover it wants, two weeks (one for
+a perishable). Where plants buy the good, the stock that matters is the whole corridor's: buyers
+keep weeks of input cover in their own yards and top it up every week, so a seller's shelf is
+nearly empty after trade even when every buyer is full. So only buyers left short lift the price,
+6 percent of reference for every week of their weekly use they lack after this week's trade
+(each firm and state counted once against the sum of its plants' cover targets), and only unsold
+stock beyond the seller's target cuts it, 6 percent for every week over. A seller that sells what
+it makes to full buyers asks reference. Households count as buyers too: they keep no stock, so the
+lots they asked for in a week that no seller had on the shelf (unmet household demand; demand
+their budget could not pay for is not unmet) count as being short the seller's whole target cover
+against their weekly asks. A good that no plant or household at home buys, that the corridor
+exported last week, is never read as scarce: its shelf is empty because the surplus left at the
+export bid. Any other good no plant or household buys reads the seller's own cover against its
+target both ways: a week too little wants 6 percent more. The gap is held to five weeks either
+way (30 percent). The price then moves a sixth of the way there, at most 2 percent in a week, within
 half to twice reference and never above 95 percent of the cheapest import, so local goods beat
-imports once normal freight is added. Nothing sold with stock on the shelf wants 30 percent under;
-nothing sold and nothing held gives no signal and the price eases a 26th of the way back to
-reference a week. There is no dead band and no fixed step, so a price moves continuously with
-supply and demand and settles instead of swinging. A service has no stock: it reads how much of
-what its plants are set to make sold, asks reference when it has slack and up to 15 percent over
-reference (no import quote) when sold out, and is never discounted. Stock a firm keeps as input
-cover for its own plants does not count as unsold. Rivals price this way in the weekly tick, not
-through their slower strategic review.
+imports once normal freight is added. Where the corridor's gateways import at least a quarter more
+than its plants made (smoothed imports at least 125 percent of last week's home output), the seller
+wants that 95 percent import ceiling whatever its own shelf says: buyers pay the import price for
+the rest anyway. Nothing sold with stock on the shelf wants 30 percent under; nothing sold and
+nothing held gives no signal and the price eases a 26th of the way back to reference a week. There
+is no dead band and no fixed step, so a price moves continuously with supply and demand and settles
+instead of swinging. A service cannot be stored, so spare capacity is its unsold stock: it reads
+the share of its installed capacity (operating plants at full run) that sold, asks reference at 85
+percent, 0.6 percent of reference more or less for every point above or below, up to 15 percent
+over reference (no import quote) and down to 20 percent under. A service's reference is its
+catalogue price carried to today's price index (the index background wages follow), so its band,
+floor and ceiling rise with its payroll; goods keep their catalogue reference and follow the price
+level through import and export prices. Household demand and public works read services against
+the same indexed reference. Unsold service output expires each
+week. Stock a firm keeps as input cover for its own plants does not count as unsold. Rivals price
+this way in the weekly tick, not through their slower strategic review.
 
 Production is planned plant by plant: each plant's target moves 15 points a week toward what its
 good sold, floor 30 percent, so one product's glut never idles a firm's other plants. A goods
 plant with more than four weeks of unsold stock cuts, one under a week and a half raises; a
 service plant moves toward what the firm sold of it plus a tenth, between 10 percent and full, so
-it neither wastes a third of its output nor stays throttled below demand; a plant whose good has not sold yet
+it neither wastes a third of its output nor stays throttled below demand; a carrier cuts when its
+capacity ran under 85 percent full by lot-km, unless its own lanes sent 40 percent or more of their
+lots to outside carriers, and raises from 90 percent (see Carrier planning); a plant whose good has not sold yet
 holds. A plant run down to its floor keeps at least one worker of every tier its recipe uses.
 Rivals always plan this way; the player's companies do too until the player sets a price or target
-by hand, and either can be handed back to automatic. Contract deliveries, power dispatched to the
+by hand, and either can be handed back to automatic. A hand-set target holds goods plants at that
+rate, but service and carrier plants, whose unsold output expires, keep following this plan under
+it as a ceiling, unless the player locks the target (`SetProductionTarget` with `lock`, absent and
+false in older commands). The CFO names any service or carrier division of a hand-planned company
+that made at least one and a half times what it sold last week, with the weekly cost of the excess
+and a button that hands production back to the plan. Contract deliveries, power dispatched to the
 grid and construction services all count as sales.
 
 The corridor price on the Markets board is the average asking price of the firms that make a good,
@@ -277,10 +315,21 @@ cents, avoiding independent rounded postings whose debits/credits disagree.
 A recipe has one primary output and may list `by_products`, each a fixed number of lots per
 block per week at full capacity. Every product of a plant scales together with the plant's run
 rate, the farm season and supply events, so a refinery never makes gasoline without its diesel.
+A refinery or gas plant (industry `chemical_industries`) can shift its cut each week: each output
+scores its owner's ask against reference (the region's export bid, if lower, for a good no plant
+or household at home buys and the corridor exports), less 4 basis points per hundredth of a week
+of unsold stock beyond its glut cover (at most 20 percent). An output scoring under the
+yield-weighted average gives up 2 basis points of its recipe yield per point under, at most a
+quarter; the lots given go to the outputs scoring above the average in proportion to their lots
+times how far above, each at most half again its recipe yield (all shifts scale down together
+to keep that bound). Total lots never exceed the recipe. Fixed-proportion by-products (scrap,
+livestock, natural gas from wells, building materials from furnaces) do not shift.
 Output, price, valuation and planning all read the whole list: pricing and the weekly plan treat
 every by-product as a priced good of the firm, the exchange sells it from stock like any other
 good, gateways carry it (a good with no local buyer still has the outside buyer at reference
-less 15 percent), and AI build and retool value a plant by all its products, counting a plant as
+less 15 percent, and a region's gateway always has export room for at least what its operating
+plants make of the good as a by-product, so a co-product of a plant built after the gateway was
+sized never piles up unsold), and AI build and retool value a plant by all its products, counting a plant as
 having room when imports cover its primary output (a by-product nobody imports is still sold, so it
 never hides the room: a refinery is built when the corridor imports fuel). Nothing a
 plant makes is left without a price or a buyer.
@@ -385,6 +434,13 @@ of four weeks of revenue (and $2,000), or when four weeks of spoilage reaches 2 
 (and $2,000). Market snapshots (schema 2) carry corridor and player storage lines: use, capacity,
 owned capacity, outside lots, fees, holding cost, spoilage and held goods.
 
+**Who is losing money.** The snapshot's corridor line splits operating companies into three
+kinds and counts how many of each lost money over their last thirteen weeks: established (an
+operating plant and founded more than 52 weeks ago), entrants (an operating plant, younger) and
+shells (no operating plant: still building, mothballed or with every plant sold or raided away).
+The all-company losing share mixes young plants still ramping and idle shells with the trading
+companies; the established share is the one that should stay flat over a career.
+
 ## Owned logistics, lanes and routing (1.7)
 
 The generic `freight` product is lane capacity. Data lives in `content/logistics.json` and the
@@ -413,7 +469,9 @@ the outside price (125 percent) as the lane fills, along a smooth square curve, 
 meets the outside price with no cliff. A group ships on its own carriers at operating cost
 (65 percent) and first. Lots beyond capacity go to outside carriers at 125 percent, so goods
 never stop; pipelines have none, so a shipment either fits or takes another mode. Truck prices
-also move with road condition.
+also move with road condition. Every rate (owners', own operating cost, outside, lane contracts)
+is the base rate carried to the price index at the start of the week, so freight rises with the
+wages and costs carriers pay.
 
 **Charging.** A shipment is charged once. The shipper's cash pays exactly what carriers and the
 outside sector receive; a shipper short of cash pays what it has and every receipt shrinks
@@ -445,8 +503,14 @@ nets a saving at last week's volume. A reservation quote is the fee `reserve_lan
 **Alerts** are sent only for lanes the player ships on: a lane full for four weeks, a carrier rate
 hike of a fifth over four weeks, a rival reserving the lane.
 
-**Carrier planning.** A carrier follows how full its lanes ran: under 40 percent of capacity cuts
-its run rate, over 85 percent raises it.
+**Carrier planning.** A carrier reads last week's fill by lot-km (lot-km moved over capacity times
+the 400 km reference haul) and the lanes it had capacity on. Under 85 percent full it cuts its run
+rate 15 points, from 90 percent it raises 15 points, and between them it holds. When its lanes sent
+40 percent or more of their lots (own, contract and outside) to outside carriers it does not cut,
+since that freight is wanted, but it still raises from 90 percent. Overflow alone does not raise:
+in a 16-seed, five-year trial that spread capacity onto lanes the overflow was not on, carrier fill
+fell from 69 to 49 percent and the outside share rose. With this rule fill was 74 percent against
+69 and the outside share 47 percent against 49 (final year, 16 seeds).
 
 **Rivals** set policies (own carriers first when they own any), build a carrier on the lane with
 the most outside overflow when they earn and have cash (a terminal first where the lane has none),

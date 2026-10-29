@@ -2138,7 +2138,14 @@ mod tests {
         // here, as this fixture runs without world prices), and again in 1.7 preview 4 when the
         // world gained government laws, the reserve and systemic incidents, and again in 1.7
         // preview 5 when rivals chose moves by temperament and the world gained grudges and
-        // alliances. The Swift constant
+        // alliances. In 1.8 preview 3 it moved from f85add77... when sellers stopped reading
+        // their own empty post-trade shelf as scarcity (prices now rise on buyers' unmet input
+        // cover and fall on unsold stock), services priced on spare installed capacity and
+        // carriers cut below 60 percent lane fill, so week-two asking prices differ. It moved
+        // again from 1b265292... in the same preview when facilities gained a cut record,
+        // households gained wanted and unmet demand and policies a production lock (new
+        // encoded fields), and refineries began shifting their cut. The Swift
+        // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
         // equality again.
@@ -2163,7 +2170,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "f85add779385728690ab8b13db937753d8abacc1cc921991eb5cd8aed42d6b43"
+            "fddf778e8fe5e78f4379bf5c7688e45bf4dffa3c1449a89aa6c4e73cf8834a56"
         );
     }
 
@@ -2298,6 +2305,7 @@ mod tests {
             intent: CommandIntent::SetProductionTarget {
                 firm: primary,
                 target_bps: 9_000,
+                lock: false,
             },
         };
         session.submit(envelope.clone()).unwrap();

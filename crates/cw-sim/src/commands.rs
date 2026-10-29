@@ -118,9 +118,14 @@ pub enum CommandIntent {
         firm: Handle,
         enabled: bool,
     },
+    /// A firm-wide run rate set by hand. Goods plants run at it; service and carrier plants
+    /// treat it as a ceiling and still follow what sells unless `lock` holds them at it too.
     SetProductionTarget {
         firm: Handle,
         target_bps: i32,
+        /// Hold service and carrier plants at the rate as well. Absent in older commands.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        lock: bool,
     },
     SetMarketingBudget {
         firm: Handle,
@@ -483,6 +488,12 @@ pub enum CommandIntent {
         campaign: u32,
         stance: u8,
     },
+    /// Wind down a solvent company with nothing left to run: sell what remains, pay creditors
+    /// in full, return the rest to shareholders and dissolve. Last in the list so older saves
+    /// and command logs keep their variant numbers.
+    WindDown {
+        firm: Handle,
+    },
 }
 
 fn yes() -> bool {
@@ -577,6 +588,7 @@ impl CommandIntent {
             CommandIntent::ExitVenture { .. } => "exit_venture",
             CommandIntent::SellBond { .. } => "sell_bond",
             CommandIntent::RespondActivist { .. } => "respond_activist",
+            CommandIntent::WindDown { .. } => "wind_down",
         }
     }
 }
@@ -1350,7 +1362,11 @@ fn apply_intent(
             entity.policies.wage_offer[index] = *wage_cents;
             Ok(())
         }
-        CommandIntent::SetProductionTarget { firm, target_bps } => {
+        CommandIntent::SetProductionTarget {
+            firm,
+            target_bps,
+            lock,
+        } => {
             require_control(world, actor, *firm)?;
             if !(0..=10_000).contains(target_bps) {
                 return Err(DomainError::Arithmetic {
@@ -1359,12 +1375,9 @@ fn apply_intent(
             }
             crate::economy::pricing::set_target(world, *firm, *target_bps);
             if actor == INVESTOR_ACTOR {
-                world
-                    .firms
-                    .get_mut(*firm)
-                    .unwrap()
-                    .policies
-                    .manual_production = true;
+                let policies = &mut world.firms.get_mut(*firm).unwrap().policies;
+                policies.manual_production = true;
+                policies.production_locked = *lock;
             }
             Ok(())
         }
@@ -1376,6 +1389,14 @@ fn apply_intent(
                 .unwrap()
                 .policies
                 .manual_production = !*enabled;
+            if *enabled {
+                world
+                    .firms
+                    .get_mut(*firm)
+                    .unwrap()
+                    .policies
+                    .production_locked = false;
+            }
             Ok(())
         }
         CommandIntent::SetMarketingBudget { firm, amount_cents } => {
@@ -2855,6 +2876,17 @@ fn apply_intent(
             }
             structure::respond_campaign(world, dataset, *campaign, *stance)
         }
+        CommandIntent::WindDown { firm } => {
+            require_control(world, actor, *firm)?;
+            if let Some(reason) = crate::economy::insolvency::wind_down_blocker(world, *firm) {
+                return Err(DomainError::WrongPhase {
+                    expected: "a solvent company with no working plant",
+                    actual: reason,
+                });
+            }
+            crate::economy::insolvency::wind_down(world, *firm, dataset);
+            Ok(())
+        }
         CommandIntent::BuyOutVenture { venture, firm } => {
             require_control(world, actor, *firm)?;
             structure::buyout_jv(world, *venture, *firm)
@@ -3155,6 +3187,7 @@ fn start_facility(
         stock_plan: Default::default(),
         ship: Default::default(),
         serves: Vec::new(),
+        cut_bps: Vec::new(),
     }
 }
 

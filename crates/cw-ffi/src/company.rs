@@ -207,7 +207,7 @@ pub(crate) fn page(session: &Session, firm: u64) -> Option<CompanyPageDto> {
     let handle = Handle(firm);
     let entity = world.firms.get(handle)?;
     let yours = cw_sim::economy::events_engine::player_side(world, handle);
-    let listed = entity.shares.issued > 0 && entity.operative();
+    let listed = entity.on_board();
     let kind = if yours {
         "yours"
     } else if listed {

@@ -211,6 +211,7 @@ fn forced_invalid(rng: &mut SplitMix64, session: &Session, turn: usize) -> Force
             intent: CommandIntent::SetProductionTarget {
                 firm: primary,
                 target_bps: 20_000,
+                lock: false,
             },
             key: "error.arithmetic",
         },
@@ -281,6 +282,7 @@ fn random_intent(rng: &mut SplitMix64, session: &Session) -> CommandIntent {
         1 => CommandIntent::SetProductionTarget {
             firm: primary,
             target_bps: rng.between(0, 10_000) as i32,
+            lock: false,
         },
         2 => CommandIntent::SetMarketingBudget {
             firm: primary,
@@ -623,6 +625,7 @@ fn duplicate_command_ids_return_the_first_outcome_and_change_nothing() {
         CommandIntent::SetProductionTarget {
             firm: primary,
             target_bps: 9_000,
+            lock: false,
         },
     );
 
@@ -687,6 +690,7 @@ fn a_stale_revision_is_rejected_without_mutation() {
     let intent = CommandIntent::SetProductionTarget {
         firm: primary,
         target_bps: 5_000,
+        lock: false,
     };
 
     let hash = session.canonical_hash();
@@ -918,8 +922,9 @@ fn an_unreleased_schema_is_rejected_rather_than_guessed() {
     // build has no migration for it. The documented rule is to accept only schemas the engine
     // can read and to migrate older released ones explicitly; with the first release at schema
     // 1, anything below 1 is an unknown format and is rejected instead of being parsed as v1.
+    // Schema 2 (1.8 preview 3) migrates schema 1 saves; see tests/save_compat.rs.
     assert_eq!(MIN_SCHEMA_VERSION, 1);
-    assert_eq!(SCHEMA_VERSION, 1);
+    assert_eq!(SCHEMA_VERSION, 2);
 
     let mut session = session(0x5C4E_0001, ScenarioKind::Founder);
     session.advance(2);
@@ -1130,14 +1135,33 @@ fn long_careers_keep_history_bounded_and_lifetime_figures_consistent() {
     // Compaction must not break the save: the round trip reproduces the hash, and the envelope
     // stays small because old postings are folded into the chained hash.
     let bytes = session.export_save().expect("export after compaction");
+    // The history archive rides in its own trailer with fixed caps (ten years of closes, a year
+    // of weekly and forty years of quarterly statements), so it is bounded on its own and left
+    // out of the compaction envelope.
+    let archive = postcard::to_allocvec(&session.world.archive)
+        .expect("archive encodes")
+        .len();
+    assert!(
+        archive < 1024 * 1024,
+        "the history archive grew to {archive} bytes in 110 weeks"
+    );
+    // The systems history is capped at five years of weeks; at 110 weeks it must stay small
+    // enough that 260 weeks fits in about two megabytes.
+    let systems = postcard::to_allocvec(&session.world.systems)
+        .expect("systems history encodes")
+        .len();
+    assert!(
+        systems * 260 / 110 < 2 * 1024 * 1024,
+        "the systems history grew to {systems} bytes in 110 weeks"
+    );
+    let envelope = bytes.len() - archive - systems;
     assert!(
         // The corridor keeps forty-plus renewable supply contracts and thirteen weeks of sales
         // history per firm, so the observed envelope is larger than the original empty-world
         // fixture. The real bound is that it stays far below the 64 MB import cap and does not
         // grow with career length.
-        bytes.len() < 2 * 1024 * 1024,
-        "compacted save grew to {} bytes",
-        bytes.len()
+        envelope < 2 * 1024 * 1024,
+        "compacted save grew to {envelope} bytes"
     );
     let restored = Session::import_save(&bytes).expect("import after compaction");
     assert_eq!(restored.canonical_hash(), session.canonical_hash());

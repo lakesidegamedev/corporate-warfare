@@ -15,6 +15,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +54,8 @@ class AppSettings(private val file: File) {
     val mapDetail: MapDetail get() = graphics.detail
     val animations: Boolean get() = graphics.animations
     var autoUpdate by mutableStateOf(props.getProperty("autoUpdate")?.toBoolean() ?: true); private set
+    /** Full releases or previews; a new install follows the channel its build came from. */
+    var updateChannel by mutableStateOf(props.getProperty("updateChannel")?.let(UpdateChannel::of) ?: UpdateChannel.build); private set
     var tutorialDone: Set<String> = props.getProperty("tutorial.done")?.split(',')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet(); private set
     var tutorialHidden: Boolean = props.getProperty("tutorial.hidden")?.toBoolean() ?: false; private set
     /** Currency id the investor's figures are shown in; empty until the player picks one. */
@@ -74,6 +77,7 @@ class AppSettings(private val file: File) {
     fun chooseGraphics(value: GraphicsConfig) { graphics = value; store() }
     fun choosePreset(preset: GraphicsPreset) = chooseGraphics(preset.config(graphics.animations, graphics.showFps))
     fun chooseAutoUpdate(value: Boolean) { autoUpdate = value; store() }
+    fun chooseUpdateChannel(value: UpdateChannel) { updateChannel = value; store() }
     fun chooseAnalytics(value: Boolean) { analytics = value; store() }
     fun chooseTutorial(done: Set<String>, hidden: Boolean) { tutorialDone = done; tutorialHidden = hidden; store() }
     fun chooseReportingCurrency(value: String) { reportingCurrency = value; store() }
@@ -105,6 +109,7 @@ class AppSettings(private val file: File) {
             props.setProperty("labels", g.labels.toString())
         }
         props.setProperty("autoUpdate", autoUpdate.toString())
+        props.setProperty("updateChannel", updateChannel.id)
         props.setProperty("analytics", analytics.toString())
         props.setProperty("tutorial.done", tutorialDone.joinToString(","))
         props.setProperty("tutorial.hidden", tutorialHidden.toString())
@@ -253,23 +258,7 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
             }
         }
         if (updater != null) {
-            item {
-                Panel {
-                    Eyebrow("Updates")
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Check for updates at launch", color = Palette.primaryText)
-                            Text("Reads the public release list on GitHub. Nothing about you or your game is sent.", color = Palette.secondary, fontSize = 12.sp)
-                        }
-                        Switch(
-                            checked = settings.autoUpdate,
-                            onCheckedChange = { settings.chooseAutoUpdate(it) },
-                            colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
-                        )
-                    }
-                    UpdatePanel(updater, compact = true)
-                }
-            }
+            item { UpdatesSection(settings, updater) }
         }
         item {
             Panel {
@@ -322,6 +311,105 @@ private fun <T> Choices(options: List<T>, selected: T, label: (T) -> String, onP
     }
 }
 
+/**
+ * The Updates section: check at launch, which channel to follow, the update status and the list
+ * of versions the player can move to. [showVersions] opens the list straight away (for tests).
+ */
+@Composable
+fun UpdatesSection(settings: AppSettings, updater: Updater, showVersions: Boolean = false) {
+    var open by remember { mutableStateOf(showVersions) }
+    Panel {
+        Eyebrow("Updates")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Check for updates at launch", color = Palette.primaryText)
+                Text("Reads the public release list on GitHub. Nothing about you or your game is sent.", color = Palette.secondary, fontSize = 12.sp)
+            }
+            Switch(
+                checked = settings.autoUpdate,
+                onCheckedChange = { settings.chooseAutoUpdate(it) },
+                colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
+            )
+        }
+        Text("Get", color = Palette.primaryText)
+        Choices(UpdateChannel.entries, settings.updateChannel, { it.title }) {
+            settings.chooseUpdateChannel(it)
+            updater.channelChanged()
+        }
+        Text(settings.updateChannel.note, color = Palette.secondary, fontSize = 12.sp)
+        if (settings.updateChannel == UpdateChannel.Stable && Versions.isPreview(updater.current)) {
+            Text(
+                "You are on a preview. You will be offered the newest full release from ${Versions.MINIMUM} on, even if its number " +
+                    "is lower than this preview, and your saves are backed up before going back." +
+                    if (updater.status is UpdateStatus.Available) "" else " There is none yet, so you stay on this preview until one comes out.",
+                color = Palette.warning, fontSize = 12.sp,
+            )
+        }
+        UpdatePanel(updater, compact = true)
+        if (open) {
+            VersionPicker(updater)
+        } else {
+            TextButton(onClick = { open = true; updater.loadVersions() }) { Text("Choose a version", color = Palette.gold) }
+        }
+    }
+}
+
+/** Every version the player can move to, newest first, the installed one marked. */
+@Composable
+private fun VersionPicker(updater: Updater) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Versions", color = Palette.primaryText, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Versions before ${Versions.MINIMUM} are not listed: they cannot open newer saves or come back here by themselves.",
+            color = Palette.secondary, fontSize = 11.sp,
+        )
+        if (updater.downgrade == Downgrade.UninstallFirst) {
+            Text(
+                "Android will not put an older version over a newer one. Going back means uninstalling first, which deletes the careers saved on this device.",
+                color = Palette.secondary, fontSize = 11.sp,
+            )
+        }
+        when (val list = updater.versions) {
+            VersionList.Idle, VersionList.Loading -> Text("Loading the release list...", color = Palette.secondary, fontSize = 12.sp)
+            is VersionList.Failed -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(list.reason, color = Palette.warning, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { updater.loadVersions() }) { Text("Retry", color = Palette.gold) }
+            }
+            is VersionList.Loaded -> {
+                if (list.releases.isEmpty()) Text("No versions on this channel yet.", color = Palette.secondary, fontSize = 12.sp)
+                list.releases.forEach { release -> VersionRow(updater, release) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VersionRow(updater: Updater, release: Release) {
+    val installed = release.version == updater.current
+    val older = Versions.isDowngrade(release.version, updater.current)
+    Row(
+        Modifier.fillMaxWidth().clip(Pixel.small).background(if (installed) Palette.panelRaised else Palette.panel).padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                release.version + (if (release.prerelease) " · preview" else "") + (if (release.date.isNotEmpty()) " · ${release.date}" else ""),
+                color = if (installed) Palette.gold else Palette.primaryText, fontSize = 13.sp,
+            )
+            val note = Versions.shortNote(release.notes)
+            if (note.isNotEmpty()) Text(note, color = Palette.secondary, fontSize = 11.sp, maxLines = 2)
+        }
+        when {
+            installed -> Text("Installed", color = Palette.positive, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
+            older && updater.downgrade == Downgrade.UninstallFirst ->
+                TextButton(onClick = { updater.choose(release) }) { Text("How to go back", color = Palette.secondary) }
+            else -> TextButton(onClick = { updater.choose(release) }) {
+                Text(if (older) "Go back" else "Install", color = if (older) Palette.secondary else Palette.gold)
+            }
+        }
+    }
+}
+
 /** Version, update status and the one action that applies to it. */
 @Composable
 fun UpdatePanel(updater: Updater, compact: Boolean = false) {
@@ -341,14 +429,60 @@ fun UpdatePanel(updater: Updater, compact: Boolean = false) {
                 TextButton(onClick = { updater.check() }) { Text("Retry", color = Palette.gold) }
             }
             is UpdateStatus.Available -> {
-                Text("Version ${status.release.version} is out (you have ${updater.current})", color = Palette.gold, fontWeight = FontWeight.SemiBold)
+                if (Versions.isDowngrade(status.release.version, updater.current)) {
+                    Text("${status.release.version} is the newest full release (you have preview ${updater.current})", color = Palette.gold, fontWeight = FontWeight.SemiBold)
+                    Text("Its number is lower than your preview, so this goes back to it.", color = Palette.secondary, fontSize = 12.sp)
+                } else {
+                    Text("Version ${status.release.version} is out (you have ${updater.current})", color = Palette.gold, fontWeight = FontWeight.SemiBold)
+                }
                 if (!compact) {
                     val notes = status.release.notes.lines().filter { it.startsWith("- ") }.take(4)
                     notes.forEach { Text(it.removePrefix("- ").take(120), color = Palette.secondary, fontSize = 12.sp, maxLines = 2) }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GoldButton(if (status.release.installer != null) "Update now" else "Get the update") { updater.update(status.release) }
+                    val label = when {
+                        Versions.isDowngrade(status.release.version, updater.current) -> "Go back to ${status.release.version}"
+                        status.release.installer != null -> "Update now"
+                        else -> "Get the update"
+                    }
+                    GoldButton(label) { updater.choose(status.release) }
                     TextButton(onClick = { updater.openPage(status.release) }) { Text("What's new", color = Palette.secondary) }
+                }
+            }
+            is UpdateStatus.ConfirmDowngrade -> {
+                Text("Go back to ${status.release.version}?", color = Palette.warning, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Careers saved by this version (${updater.current}) may not open in ${status.release.version}. " +
+                        "Before installing, your saves are copied to:",
+                    color = Palette.primaryText, fontSize = 12.sp,
+                )
+                status.backup?.let { Text(it.path, color = Palette.gold, fontSize = 12.sp) }
+                Text("To play those careers again, update back to ${updater.current} or later.", color = Palette.secondary, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GoldButton("Back up and install ${status.release.version}") { updater.confirmDowngrade(status) }
+                    TextButton(onClick = { updater.cancel() }) { Text("Cancel", color = Palette.secondary) }
+                }
+            }
+            is UpdateStatus.BackedUp -> {
+                Text("Your saves are copied to:", color = Palette.primaryText, fontSize = 12.sp)
+                Text(status.backup.path, color = Palette.gold, fontSize = 12.sp)
+                Text(
+                    "The page for ${status.release.version} is open. Install its package from there; on Linux: " +
+                        "sudo apt install --allow-downgrades ./<the .deb file>",
+                    color = Palette.secondary, fontSize = 12.sp,
+                )
+                TextButton(onClick = { updater.cancel() }) { Text("Done", color = Palette.gold) }
+            }
+            is UpdateStatus.NeedsUninstall -> {
+                Text("Going back to ${status.release.version} needs an uninstall", color = Palette.warning, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Android will not install an older version over a newer one. Uninstalling Corporate Warfare deletes every career " +
+                        "saved on this device, and this version has no way to copy them off it. Only do this if you are happy to start again.",
+                    color = Palette.primaryText, fontSize = 12.sp,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { updater.openPage(status.release) }) { Text("Open its page", color = Palette.secondary) }
+                    TextButton(onClick = { updater.cancel() }) { Text("Cancel", color = Palette.gold) }
                 }
             }
             is UpdateStatus.Downloading -> {

@@ -368,6 +368,10 @@ pub struct LogisticsState {
     pub last: FreightTotals,
     pub reservations: Vec<Reservation>,
     /// Route candidates and rate estimates: pure functions of the saved state above.
+    /// The economy's price index when the week began, in basis points: freight rates follow it
+    /// as wages and gateway prices do. Copied from the macro state each week, so not saved.
+    #[serde(skip)]
+    pub price_level_bps: i64,
     #[serde(skip)]
     cache: BTreeMap<(u8, u8, u8), std::sync::Arc<Vec<Structure>>>,
     #[serde(skip)]
@@ -451,6 +455,20 @@ pub fn spot_mult_bps(ds: &Dataset, fill_bps: i32) -> i64 {
     l.empty_lane_bps + (l.outside_premium_bps - l.empty_lane_bps) * f * f / 100_000_000
 }
 
+impl LogisticsState {
+    /// A rate multiplier in basis points of the base rate, carried to today's price level. The
+    /// base rates are at the opening price index; carriers' wages and costs inflate with it, so
+    /// their rates do too, for owners, other shippers and outside carriers alike.
+    pub fn at_price_level(&self, mult_bps: i64) -> i64 {
+        let level = if self.price_level_bps > 0 {
+            self.price_level_bps
+        } else {
+            10_000
+        };
+        (mult_bps as i128 * level as i128 / 10_000) as i64
+    }
+}
+
 /// The most a common carrier may charge, in basis points of the base rate.
 pub fn regulated_cap_bps(ds: &Dataset) -> i64 {
     let l = &ds.logistics;
@@ -511,7 +529,15 @@ pub fn lane_mult_bps(ds: &Dataset, st: &LogisticsState, key: LaneKey) -> i64 {
 
 /// The spot price of one lot over a lane now, in cents.
 pub fn lane_rate_cents_per_lot(ds: &Dataset, st: &LogisticsState, key: LaneKey) -> i64 {
-    leg_cents(ds, key.a, key.b, key.mode, 1, lane_mult_bps(ds, st, key)).max(1)
+    leg_cents(
+        ds,
+        key.a,
+        key.b,
+        key.mode,
+        1,
+        st.at_price_level(lane_mult_bps(ds, st, key)),
+    )
+    .max(1)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -615,6 +641,7 @@ pub fn begin_week(world: &mut World, ds: &Dataset) {
     world.logistics.last = std::mem::take(&mut world.logistics.totals);
     world.logistics.dest_last = std::mem::take(&mut world.logistics.dest_week);
     world.logistics.common_carrier = world.politics.laws.common_carrier;
+    world.logistics.price_level_bps = world.macro_state.price_index_bps.max(1);
     let now = world.tick.0;
     world.logistics.closures.retain(|c| c.until > now);
 
@@ -1066,7 +1093,14 @@ fn quote_leg(
                 parts.push(Part {
                     kind: PartKind::Own(alloc.carrier),
                     lots: take,
-                    cents: leg_cents(ds, from, to, mode, take, ds.logistics.own_cost_bps),
+                    cents: leg_cents(
+                        ds,
+                        from,
+                        to,
+                        mode,
+                        take,
+                        st.at_price_level(ds.logistics.own_cost_bps),
+                    ),
                 });
                 left -= take;
             }
@@ -1091,7 +1125,7 @@ fn quote_leg(
                 if st.common_carrier {
                     mult = mult.min(regulated_cap_bps(ds));
                 }
-                let total = leg_cents(ds, from, to, mode, take, mult);
+                let total = leg_cents(ds, from, to, mode, take, st.at_price_level(mult));
                 let weights: Vec<(u64, i64)> =
                     others.iter().map(|(c, f)| (*c as u64, *f as i64)).collect();
                 let lot_split = allocate_cents(Cents(take), &weights);
@@ -1121,7 +1155,14 @@ fn quote_leg(
         parts.push(Part {
             kind: PartKind::Outside,
             lots: left,
-            cents: leg_cents(ds, from, to, mode, left, ds.logistics.outside_premium_bps),
+            cents: leg_cents(
+                ds,
+                from,
+                to,
+                mode,
+                left,
+                st.at_price_level(ds.logistics.outside_premium_bps),
+            ),
         });
         max_fill = 10_000;
     }
@@ -1886,7 +1927,9 @@ pub fn contract_fee_cents(world: &World, ds: &Dataset, key: LaneKey, lots: i32) 
     if world.logistics.common_carrier {
         spot = spot.min(regulated_cap_bps(ds));
     }
-    let mult = spot * ds.logistics.contract_discount_bps / 10_000;
+    let mult = world
+        .logistics
+        .at_price_level(spot * ds.logistics.contract_discount_bps / 10_000);
     leg_cents(ds, key.a, key.b, key.mode, 1, mult).max(1)
 }
 
@@ -2057,6 +2100,24 @@ pub fn carrier_utilisation_bps(world: &World, facility: Handle) -> Option<i32> {
         .find(|c| c.facility == facility)
         .filter(|c| c.cap > 0)
         .map(|c| (c.used_lot_km * 10_000 / (c.cap as i64 * REF_KM)).clamp(0, 10_000) as i32)
+}
+
+/// Lots that overflowed to outside carriers last week on the lanes a carrier plant had capacity
+/// on, and the lots those lanes moved in all. None for a plant that is not a running carrier.
+pub fn carrier_overflow(world: &World, facility: Handle) -> Option<(i32, i32)> {
+    let index = world
+        .logistics
+        .carriers
+        .iter()
+        .position(|c| c.facility == facility)?;
+    let (mut outside, mut moved) = (0i32, 0i32);
+    for lane in world.logistics.lanes.values() {
+        if lane.allocs.iter().any(|a| a.carrier as usize == index) {
+            outside = outside.saturating_add(lane.outside);
+            moved = moved.saturating_add(lane.moved());
+        }
+    }
+    Some((outside, moved))
 }
 
 /// A lane that is short of capacity: much of its freight went to outside carriers or it has run

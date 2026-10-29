@@ -695,14 +695,10 @@ private fun DesktopStats(store: GameStore) {
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Panel {
-                    Eyebrow("Revenue and profit")
-                    ResultsChart(buckets)
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Legend(Palette.gold.copy(alpha = 0.55f), "Revenue"); Legend(Palette.positive, "Net income"); Legend(Palette.negative, "Loss")
-                    }
+                if (firm != null) Panel {
+                    Eyebrow("Financial statements")
+                    rememberFinancials(store, firm.handle, firm.name, firm.industry)?.let { CompanyFinancials(it, columns = 5) }
                 }
-                Statement(buckets)
             }
             Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (period != StatsPeriod.Week && buckets.any { it.cash != null }) {
@@ -727,9 +723,7 @@ private fun DesktopStats(store: GameStore) {
                             Stat("Earnings a year", Format.compact(annual)),
                         ),
                     )
-                    if (stock.historyCents.size > 1) {
-                        Panel { Eyebrow("Share price, last ${stock.historyCents.size} weeks"); LineChart(listOf(Palette.gold to stock.historyCents)) }
-                    }
+                    Panel { StockHistoryChart(store, stock.firm, height = 180.dp) }
                 }
                 val ownership = store.ownership
                 if (ownership != null && ownership.firm == firm?.handle) {

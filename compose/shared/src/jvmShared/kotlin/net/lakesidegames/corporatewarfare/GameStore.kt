@@ -67,6 +67,8 @@ data class MarketRow(val product: ProductDto, val market: MarketDto?)
  */
 class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     private val engine = Executors.newSingleThreadExecutor { Thread(it, "cw-engine") }.asCoroutineDispatcher()
+    /** Save files are written here, in order, so the engine thread never waits on the disk. */
+    private val saver = Executors.newSingleThreadExecutor { Thread(it, "cw-saves") }.asCoroutineDispatcher()
     private var session: SessionHandle? = null
     private var runJob: Job? = null
 
@@ -230,7 +232,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         runJob?.cancel()
         runJob = null
         running = false
-        save()
+        save(wait = true)
         session = null
         ready = false
         overview = null
@@ -257,9 +259,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         running = true
         runJob = scope.launch {
             while (isActive) {
+                // The week's own work counts toward its slot, so the clock runs at the speed shown.
+                val started = System.nanoTime()
                 step()
                 if (overview?.pause != null) break
-                delay(1_000L / speed)
+                val spentMs = (System.nanoTime() - started) / 1_000_000
+                delay((1_000L / speed - spentMs).coerceAtLeast(1L))
             }
             running = false
             runJob = null
@@ -405,6 +410,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         scope.launch { onResult(withContext(engine) { handle.dossier(firm) }) }
     }
 
+    /** Read anything from the engine off the main thread; null without a session. */
+    suspend fun <T> read(block: (SessionHandle) -> T): T? {
+        val handle = session ?: return null
+        return withContext(engine) { block(handle) }
+    }
+
     /** A company's full page, with what the investor may see of it. */
     fun companyPage(firm: ULong, onResult: (uniffi.cw_ffi.CompanyPageDto?) -> Unit) {
         val handle = session ?: return
@@ -535,21 +546,27 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         status = "Saved."
     }
 
-    private suspend fun save(manual: Boolean = false) {
+    /**
+     * Export on the engine thread, then write on the save thread. An autosave does not wait for
+     * the disk, so time keeps running; a manual save and leaving the career wait for it.
+     */
+    private suspend fun save(manual: Boolean = false, wait: Boolean = manual) {
         val handle = session ?: return
         val now = overview
-        withContext(engine) {
-            val bytes = handle.exportSave()
-            val info = SaveInfo(
-                company = now?.primaryName.orEmpty(),
-                week = now?.weekLabel.orEmpty(),
-                tick = now?.tick?.toInt() ?: 0,
-                savedAt = System.currentTimeMillis(),
-                autosave = !manual,
-            )
+        val bytes = withContext(engine) { handle.exportSave() }
+        val info = SaveInfo(
+            company = now?.primaryName.orEmpty(),
+            week = now?.weekLabel.orEmpty(),
+            tick = now?.tick?.toInt() ?: 0,
+            savedAt = System.currentTimeMillis(),
+            autosave = !manual,
+        )
+        val write = {
             Saves.write(saveDir, if (manual) "save-${System.currentTimeMillis()}" else "autosave", bytes, info)
             if (manual) Saves.prune(saveDir)
         }
+        if (wait) withContext(saver) { write() }
+        else scope.launch(saver) { runCatching { write() } }
     }
 
     private suspend fun reload() {

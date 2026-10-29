@@ -22,7 +22,13 @@ pub struct GoodLine {
     pub imported_lots: i64,
     pub exported_lots: i64,
     pub stock_lots: i64,
+    /// Middle asking price over every operating firm that prices the good, idle makers included.
+    /// Kept unchanged for older servers and app versions.
     pub median_ask_cents: i64,
+    /// Average asking price weighted by the lots each seller sold in its last closed week, so it
+    /// reads what buyers actually paid sellers. The reference price when nothing sold. Added in
+    /// 1.8 preview 3 alongside, not instead of, `median_ask_cents`.
+    pub sold_ask_cents: i64,
     pub reference_cents: i64,
     pub household_spend_cents: i64,
 }
@@ -33,6 +39,33 @@ pub struct CorridorLine {
     pub firms_dissolved: u32,
     pub raids: u32,
     pub outside_cash_cents: i64,
+    /// Operating companies by kind, and of each how many lost money over their last thirteen
+    /// weeks: established (an operating plant, founded over a year ago), entrants (an operating
+    /// plant, younger) and shells (no operating plant: still building, mothballed or sold off).
+    /// Added in 1.8 preview 3; older readers ignore them.
+    pub firms_established: u32,
+    pub losing_established: u32,
+    pub firms_entrants: u32,
+    pub losing_entrants: u32,
+    pub firms_shells: u32,
+    pub losing_shells: u32,
+}
+
+/// Which of the three kinds in `CorridorLine` a company is: 0 established, 1 entrant, 2 shell.
+pub fn firm_kind(world: &cw_sim::state::World, firm: &cw_sim::state::Firm) -> usize {
+    let operating = firm.facilities.iter().any(|handle| {
+        world
+            .facilities
+            .get(*handle)
+            .is_some_and(|plant| plant.status == cw_sim::state::FacilityStatus::Operating)
+    });
+    if !operating {
+        2
+    } else if world.tick.0.saturating_sub(firm.founding_week.0) > 52 {
+        0
+    } else {
+        1
+    }
 }
 
 /// Storage over the last thirteen weeks for the whole corridor, or for the player's company:
@@ -385,6 +418,35 @@ fn structure_line(world: &cw_sim::state::World) -> StructureLine {
 }
 
 /// True on the weeks a snapshot is due.
+/// Asking price of a good weighted by the lots each operating seller sold of it in its last
+/// closed week, or `reference` when no seller sold any.
+pub fn sold_ask_cents(world: &cw_sim::state::World, code: u16, reference: i64) -> i64 {
+    let (mut value, mut lots) = (0i128, 0i128);
+    for (_, firm) in world.firms.iter().filter(|(_, f)| f.operative()) {
+        let Some(price) = firm.policies.prices.get(&code).copied() else {
+            continue;
+        };
+        let sold: i64 = firm
+            .last_closed_sales()
+            .map(|week| {
+                week.iter()
+                    .filter(|((_, p), _)| *p == code)
+                    .map(|(_, q)| *q)
+                    .sum()
+            })
+            .unwrap_or(0);
+        if sold > 0 {
+            value += price as i128 * sold as i128;
+            lots += sold as i128;
+        }
+    }
+    if lots > 0 {
+        (value / lots) as i64
+    } else {
+        reference
+    }
+}
+
 pub fn due(week: u32) -> bool {
     week > 0 && week.is_multiple_of(SNAPSHOT_EVERY_WEEKS)
 }
@@ -435,6 +497,7 @@ impl Session {
                 .collect();
             asks.sort_unstable();
             let reference = dataset.reference_price(code);
+            let sold_ask = sold_ask_cents(world, code, reference);
             let spend: i64 = world
                 .regions
                 .iter()
@@ -448,16 +511,30 @@ impl Session {
                 exported_lots: exported,
                 stock_lots: stock,
                 median_ask_cents: asks.get(asks.len() / 2).copied().unwrap_or(reference),
+                sold_ask_cents: sold_ask,
                 reference_cents: reference,
                 household_spend_cents: spend,
             });
         }
         let operating = world.firms.iter().filter(|(_, f)| f.operative()).count() as u32;
+        let mut kinds = [(0u32, 0u32); 3];
+        for (_, firm) in world.firms.iter().filter(|(_, f)| f.operative()) {
+            let net: i64 = firm.book.recent_weeks().iter().map(|w| w.net_income).sum();
+            let kind = &mut kinds[firm_kind(world, firm)];
+            kind.0 += 1;
+            kind.1 += (net < 0) as u32;
+        }
         let corridor = CorridorLine {
             firms_operating: operating,
             firms_dissolved: world.firms.iter().count() as u32 - operating,
             raids: world.raids.len() as u32,
             outside_cash_cents: world.outside.gateway_book.cash(),
+            firms_established: kinds[0].0,
+            losing_established: kinds[0].1,
+            firms_entrants: kinds[1].0,
+            losing_entrants: kinds[1].1,
+            firms_shells: kinds[2].0,
+            losing_shells: kinds[2].1,
         };
         let player = world.investor.primary_group.and_then(|handle| {
             let firm = world.firms.get(handle)?;
@@ -589,6 +666,116 @@ fn rivalry_line(world: &cw_sim::state::World, dataset: &cw_data::Dataset) -> Riv
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn companies_split_into_established_entrants_and_shells_by_plant_and_age() {
+        let mut session = Session::create(crate::ScenarioConfig {
+            seed: 9,
+            scenario: cw_sim::state::ScenarioKind::Guided,
+            mode: cw_sim::state::ScenarioMode::Sandbox,
+            dataset_hash: String::new(),
+            difficulty: cw_data::Difficulty::Standard,
+            economy_start: Default::default(),
+            starting_capital_cents: None,
+            prices: Default::default(),
+        })
+        .unwrap();
+        session.world.tick = cw_core::calendar::Tick(100);
+        let firms: Vec<cw_core::ids::Handle> = session
+            .world
+            .firms
+            .iter()
+            .filter(|(_, f)| f.operative() && !f.facilities.is_empty())
+            .map(|(h, _)| h)
+            .take(3)
+            .collect();
+        // Founded at the opening: 100 weeks old. Founded in week 60: 40 weeks, an entrant. The
+        // third has every plant mothballed: a shell whatever its age.
+        session.world.firms.get_mut(firms[1]).unwrap().founding_week = cw_core::calendar::Tick(60);
+        let plants = session
+            .world
+            .firms
+            .get(firms[2])
+            .unwrap()
+            .facilities
+            .clone();
+        for plant in plants {
+            session.world.facilities.get_mut(plant).unwrap().status =
+                cw_sim::state::FacilityStatus::Mothballed;
+        }
+        let world = &session.world;
+        let kind = |h| firm_kind(world, world.firms.get(h).unwrap());
+        assert_eq!((kind(firms[0]), kind(firms[1]), kind(firms[2])), (0, 1, 2));
+        // Exactly 52 weeks old is still an entrant; 53 is established.
+        let mut aged = world.firms.get(firms[1]).unwrap().clone();
+        aged.founding_week = cw_core::calendar::Tick(48);
+        assert_eq!(firm_kind(world, &aged), 1);
+        aged.founding_week = cw_core::calendar::Tick(47);
+        assert_eq!(firm_kind(world, &aged), 0);
+        let line = session.market_snapshot().corridor;
+        assert_eq!(
+            line.firms_established + line.firms_entrants + line.firms_shells,
+            line.firms_operating
+        );
+        assert!(line.firms_entrants >= 1 && line.firms_shells >= 1);
+    }
+
+    #[test]
+    fn the_sold_ask_weights_each_seller_by_the_lots_it_sold() {
+        let mut session = Session::create(crate::ScenarioConfig {
+            seed: 9,
+            scenario: cw_sim::state::ScenarioKind::Guided,
+            mode: cw_sim::state::ScenarioMode::Sandbox,
+            dataset_hash: String::new(),
+            difficulty: cw_data::Difficulty::Standard,
+            economy_start: Default::default(),
+            starting_capital_cents: None,
+            prices: Default::default(),
+        })
+        .unwrap();
+        let steel = session.dataset.product_index["steel"];
+        let handles: Vec<cw_core::ids::Handle> = session
+            .world
+            .firms
+            .iter()
+            .filter(|(_, f)| f.operative())
+            .map(|(h, _)| h)
+            .collect();
+        // Clear every firm's steel, then two sellers: 30 lots at 100,000 and 10 at 140,000.
+        for handle in &handles {
+            let firm = session.world.firms.get_mut(*handle).unwrap();
+            firm.policies.prices.remove(&steel);
+            firm.sales_history = vec![Default::default()];
+        }
+        for (handle, price, lots) in [(handles[0], 100_000, 30), (handles[1], 140_000, 10)] {
+            let firm = session.world.firms.get_mut(handle).unwrap();
+            firm.policies.prices.insert(steel, price);
+            firm.sales_history = vec![[((0u8, steel), lots)].into_iter().collect()];
+        }
+        // A third firm asks far more but sold nothing, so it does not count.
+        session
+            .world
+            .firms
+            .get_mut(handles[2])
+            .unwrap()
+            .policies
+            .prices
+            .insert(steel, 500_000);
+        // (30 x 100,000 + 10 x 140,000) / 40 = 110,000.
+        assert_eq!(sold_ask_cents(&session.world, steel, 1), 110_000);
+        let line = session
+            .market_snapshot()
+            .goods
+            .into_iter()
+            .find(|g| g.id == "steel")
+            .unwrap();
+        assert_eq!(line.sold_ask_cents, 110_000);
+        // Nothing sold: the reference.
+        for handle in &handles {
+            session.world.firms.get_mut(*handle).unwrap().sales_history = vec![Default::default()];
+        }
+        assert_eq!(sold_ask_cents(&session.world, steel, 7), 7);
+    }
 
     #[test]
     fn a_snapshot_names_no_one_and_covers_every_priced_good() {

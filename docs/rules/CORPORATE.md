@@ -124,6 +124,18 @@ Otherwise liquidate assets at 40 percent carrying value through finite outside b
 funds. Insufficient buyers delay sale, never mint cash. Parent guarantee shortfalls become
 claims against guarantor up to the contracted cap. No implied guarantee for siblings.
 
+Voluntary wind-down (`WindDown`) lets a solvent company with nothing left to run close itself.
+It is allowed only when the company is trading normally, is not the career's primary company,
+has no plant operating, building or retooling, holds no stake in another company, has no
+trade payables, accruals, prepayments, insurance claims or provisions outstanding, and its
+cash plus 40 percent of the carrying value of everything else covers every loan, bond, deposit,
+arrear and accrued tax in full. Accrued tax is paid to the state, then the liquidation above
+runs: assets sold at 40 percent to finite outside buyers, creditors paid by seniority (in
+full, by the test), the residual to shareholders pro rata, and the company is dissolved. The
+player and rivals meet the same test. A rival proposes it after thirteen closed weeks without
+a sale when every plant has been mothballed for 26 weeks, or when it has had no plant at all
+past its first year.
+
 Corporate tax is 25 percent positive taxable quarterly profit; region modifier initially
 0 until evidenced calibration, not fabricated state law. Carry losses forward for four
 years in game accounting. Quarterly tax reserve accrues weekly; payment at week multiple
@@ -260,6 +272,15 @@ guaranteed plant; instead the success chance is the attack-over-total chance tim
 started. That covers a new game's starting divisions and any division opened later; a raid
 against a division inside the window is refused, and rival AI does not attempt one.
 
+**Rival raid pacing (1.8 preview 3).** A rival launches at most one raid a year: one that
+campaigned in the last 52 weeks does not choose another. This is a rival's choice, not a rule;
+the validator still accepts a raid from any company, the player's included, at any time. Without
+it raids grew fourfold over five years, since each raid leaves grudges that invite the next, and
+the write-offs and spent campaigns pushed the share of established companies losing money from 13
+to 18 percent between years 2 and 5. With it raids level off (about 110 to 160 a year across 16
+five-year careers, against 85 to 335) and that share goes from 12 to 16 percent; seed noise is
+about 2 points.
+
 **Construction capacity.** A firm builds at normal cost and speed while the blocks under
 construction, including a new order, stay within 40 plus a tenth of the blocks it already runs
 (at most 400). Each capacity's worth of excess adds fifty percent to capex (at most 2.5 times) and
@@ -282,7 +303,12 @@ coupon.
 
 **Carve-out, listing, spin-off.** A carve-out moves a completed division into a new subsidiary
 the parent wholly owns, with working capital of 5 percent of book (at least $100,000); the parent
-keeps at least one other division. A listing sells 5 to 49 percent of a subsidiary's votes to
+keeps at least one other division. The division takes its trade with it: the parent's supply
+contracts shipped from the division's state for a good its plants make, and its purchase
+contracts delivered to that state for an input its plants use that no plant the parent keeps
+there uses, pass to the new company (contracts holding escrow stay with the parent). A purchase
+contract delivered to that state for an input that neither the new company's plants nor any plant
+the parent keeps there uses ends at the carve-out, with no penalty on either side. A listing sells 5 to 49 percent of a subsidiary's votes to
 outside investors at 95 percent of its mark, after 13 weeks of results, never giving up control;
 the fee is 2 percent (at least $100,000). A spin-off hands the parent's whole stake to its
 shareholders in proportion to their shares, with no cash.

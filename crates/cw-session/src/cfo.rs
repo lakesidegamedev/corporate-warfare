@@ -24,7 +24,7 @@ const MIN_WEEKLY_CENTS: i64 = 50_000;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CfoAdvice {
     /// Stable id of the kind of problem: research, marketing, training, quality, below_cost,
-    /// overproduction.
+    /// overproduction, idle_capacity.
     pub key: String,
     pub headline: String,
     pub detail: String,
@@ -37,6 +37,68 @@ pub struct CfoAdvice {
 
 fn json(intent: CommandIntent) -> String {
     serde_json::to_string(&intent).unwrap_or_default()
+}
+
+/// A division makes this many times what it sells or more before the CFO calls it far above.
+const IDLE_RATIO_PCT: i64 = 150;
+
+/// Service and carrier divisions run by hand far above what they sell: their output cannot be
+/// stored, so everything over what sold is paid for and thrown away each week. Named with the
+/// weekly cost of the excess and a button that hands production back to the weekly plan, which
+/// runs them at what sells plus a margin. None when production is planned automatically, when
+/// no such division stands out, or when the waste is too small to matter against sales.
+pub fn idle_capacity(
+    world: &World,
+    dataset: &Dataset,
+    firm: u64,
+    revenue: i64,
+) -> Option<CfoAdvice> {
+    let handle = Handle(firm);
+    let policies = &world.firms.get(handle)?.policies;
+    if !policies.manual_production {
+        return None;
+    }
+    let mut names = Vec::new();
+    let mut waste = 0i64;
+    for line in crate::dto::product_lines(world, dataset, firm) {
+        let expires = dataset
+            .products
+            .get(line.product as usize)
+            .is_some_and(|p| p.kind.is_service());
+        if expires
+            && line.made_last_week_lots > 0
+            && line.made_last_week_lots * 100 >= line.sold_last_week_lots.max(0) * IDLE_RATIO_PCT
+        {
+            let excess = line.made_last_week_lots - line.sold_last_week_lots.max(0);
+            waste = waste.saturating_add(excess.saturating_mul(line.unit_cost_cents.max(0)));
+            names.push(format!(
+                "{} (made {}, sold {})",
+                line.name, line.made_last_week_lots, line.sold_last_week_lots
+            ));
+        }
+    }
+    if names.is_empty()
+        || waste < MIN_WEEKLY_CENTS
+        || waste.saturating_mul(10_000) < revenue.max(0).saturating_mul(MIN_SHARE_BPS)
+    {
+        return None;
+    }
+    Some(CfoAdvice {
+        key: "idle_capacity".to_owned(),
+        headline: "Some divisions run far above what they sell".to_owned(),
+        detail: format!(
+            "{} last week. A service or freight capacity that is not sold is lost, but you \
+             still pay its wages and inputs. Match output to demand: production follows what \
+             sells plus a margin, and you can set it by hand again any time.",
+            names.join(", ")
+        ),
+        weekly_cents: waste,
+        action_label: "Match output to demand".to_owned(),
+        commands: vec![json(CommandIntent::SetAutoProduction {
+            firm: handle,
+            enabled: true,
+        })],
+    })
 }
 
 /// The CFO's top reasons profit is down, biggest first. Empty when the company is not losing
@@ -52,12 +114,15 @@ pub fn advice(world: &World, dataset: &Dataset, firm: u64) -> Vec<CfoAdvice> {
     }
     let recent = &weeks[weeks.len().saturating_sub(WINDOW)..];
     let net: i64 = recent.iter().map(|w| w.net_income).sum();
-    if net >= 0 {
-        return Vec::new();
-    }
     let revenue = recent.iter().map(|w| w.revenue).sum::<i64>() / recent.len() as i64;
     let policies = &entity.policies;
-    let mut items: Vec<CfoAdvice> = Vec::new();
+    // Idle service or carrier capacity is raised even while the company makes money: it is
+    // paid for every week and expires unsold.
+    let idle = idle_capacity(world, dataset, firm, revenue);
+    if net >= 0 {
+        return idle.into_iter().collect();
+    }
+    let mut items: Vec<CfoAdvice> = idle.into_iter().collect();
 
     if policies.research_budget_cents > 0 {
         let level = entity.tech_level;

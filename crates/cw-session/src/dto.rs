@@ -1024,7 +1024,7 @@ pub fn stock_board(world: &World) -> Vec<StockLine> {
     world
         .firms
         .iter()
-        .filter(|(_, firm)| firm.operative() && firm.shares.issued > 0)
+        .filter(|(_, firm)| firm.on_board())
         .map(|(handle, firm)| {
             let price = firm.shares.mark_cents.max(1);
             let history: Vec<i64> = world

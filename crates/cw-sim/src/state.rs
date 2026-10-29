@@ -300,7 +300,9 @@ impl StockLot {
     }
 }
 
+/// Part of the save layout: a field change bumps `legacy::LAYOUT` (see `crate::legacy`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(remote = "Self")]
 pub struct Facility {
     pub firm: Handle,
     pub region: u8,
@@ -338,6 +340,11 @@ pub struct Facility {
     /// A carrier's pinned lanes, as the other region of each. Empty means automatic.
     #[serde(default)]
     pub serves: Vec<u8>,
+    /// Last week's yield of each output in the recipe's order (primary first), in basis points
+    /// of the recipe's split, for a plant that shifted its cut between co-products (see
+    /// `production::cut_yields`). Empty means the recipe's fixed split; older JSON saves load empty.
+    #[serde(default)]
+    pub cut_bps: Vec<i32>,
 }
 
 impl Facility {
@@ -361,7 +368,8 @@ impl Facility {
     }
 
     /// Last week's physical output of one product: the primary output as recorded, or a
-    /// by-product in its fixed yield to the primary. Zero when the plant does not make it.
+    /// by-product in its yield to the primary, after any shift of the plant's cut. Zero when the
+    /// plant does not make it.
     pub fn last_made(&self, dataset: &Dataset, product: &str) -> MilliLots {
         let recipe = &dataset.recipes[self.recipe as usize];
         if recipe.output == product {
@@ -371,11 +379,24 @@ impl Facility {
         if by <= 0 || recipe.weekly_output_lots <= 0 {
             return MilliLots::ZERO;
         }
-        MilliLots(self.last_output.0 * by / recipe.weekly_output_lots)
+        let index = recipe.outputs().position(|(id, _)| id == product);
+        match (
+            self.cut_bps.first(),
+            index.and_then(|i| self.cut_bps.get(i)),
+        ) {
+            (Some(primary), Some(own)) if *primary > 0 => MilliLots(
+                (self.last_output.0 as i128 * by as i128 * *own as i128
+                    / (recipe.weekly_output_lots as i128 * *primary as i128))
+                    as i64,
+            ),
+            _ => MilliLots(self.last_output.0 * by / recipe.weekly_output_lots),
+        }
     }
 }
 
+/// Part of the save layout: a field change bumps `legacy::LAYOUT` (see `crate::legacy`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(remote = "Self")]
 pub struct Policies {
     /// Per-product asking price; falls back to the regional reference price.
     pub prices: BTreeMap<u16, i64>,
@@ -410,6 +431,10 @@ pub struct Policies {
     /// the player turns it back on.
     #[serde(default)]
     pub manual_production: bool,
+    /// True when the hand-set rate also holds service and carrier plants. Without it those
+    /// plants keep following what sells, under the hand-set rate. Older saves load false.
+    #[serde(default)]
+    pub production_locked: bool,
 }
 
 impl Default for Policies {
@@ -427,6 +452,7 @@ impl Default for Policies {
             manual_prices: Default::default(),
             price_postures: Default::default(),
             manual_production: false,
+            production_locked: false,
         }
     }
 }
@@ -627,6 +653,12 @@ impl Firm {
         self.status.operative()
     }
 
+    /// On the corridor stock board: operating with shares in issue, floated or not. The board,
+    /// company pages and statements all use this, so a firm on the board always has its figures.
+    pub fn on_board(&self) -> bool {
+        self.operative() && self.shares.issued > 0
+    }
+
     pub fn stock(&self, product: u16, region: u8) -> MilliLots {
         self.inventory
             .get(&(product, region))
@@ -753,7 +785,9 @@ pub struct LabourTier {
     pub search_carry: i64,
 }
 
+/// Part of the save layout: a field change bumps `legacy::LAYOUT` (see `crate::legacy`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(remote = "Self")]
 pub struct Household {
     pub savings_cents: i64,
     pub last_income_cents: i64,
@@ -765,6 +799,13 @@ pub struct Household {
     pub baseline_lots: BTreeMap<u16, i64>,
     pub last_sale_price_cents: BTreeMap<u16, i64>,
     pub spend_cents: BTreeMap<u16, i64>,
+    /// Milli-lots of each good households asked for last week, and of those the milli-lots no
+    /// seller had on the shelf (unmet household demand). Demand a household's budget could not
+    /// pay for is not unmet: it is the price doing its work. Older saves load empty.
+    #[serde(default)]
+    pub wanted_milli: BTreeMap<u16, i64>,
+    #[serde(default)]
+    pub unmet_milli: BTreeMap<u16, i64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -1538,6 +1579,17 @@ pub struct World {
     /// and `canonical_hash` folds it in. See `economy::fx`.
     #[serde(skip)]
     pub fx: crate::economy::fx::FxState,
+    /// Long presentation history: ten years of weekly closes and each firm's weekly and
+    /// quarterly statements with cash flow and divisions. Outside the postcard encoding and the
+    /// hash; saved in its own trailer, so an older save loads with it empty. No rule reads it.
+    /// See `economy::history`.
+    #[serde(skip)]
+    pub archive: crate::economy::history::Archive,
+    /// Weekly systems history for the market, region, division, freight and economy displays.
+    /// Outside the encoding and the hash like the archive, in its own save trailer. See
+    /// `economy::systems`.
+    #[serde(skip)]
+    pub systems: crate::economy::systems::SystemsHistory,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.

@@ -107,7 +107,8 @@ fn operating_and_market_families_are_reachable() {
         driver
             .submit(CommandIntent::SetProductionTarget {
                 firm,
-                target_bps: 9_000
+                target_bps: 9_000,
+                lock: false,
             })
             .0
     );

@@ -532,7 +532,8 @@ internal class OverlayGeometry(
     /** Zoomed in past the framing: freight, cars and planes are drawn as voxel vehicles. */
     val closeUp: Boolean = false,
     /** The vehicles' pixel scale, a step under the player's buildings. */
-    val vehicleScale: Int = 1,
+    /** Pixels a voxel for the vehicles. */
+    val vehicleScale: Float = 1f,
 )
 
 internal class LaneTrack(
@@ -574,7 +575,7 @@ internal class LaneTrack(
 /** Which moving things to draw: traffic (under the buildings), effects (over them), or both. */
 internal enum class OverlayPart { Traffic, Effects, All }
 /** A road on screen; [cum] is the distance along it on the ground, in degrees, so traffic keeps its pace whatever the camera does. */
-internal class Polyline(val xs: FloatArray, val ys: FloatArray, val cum: FloatArray) { val length get() = cum.last() }
+internal class Polyline(val xs: FloatArray, val ys: FloatArray, val cum: FloatArray, val gxs: FloatArray = xs, val gys: FloatArray = ys) { val length get() = cum.last() }
 internal class BuildingSpot(val base: Offset, val top: Offset, val color: Color, val smoke: Boolean, val seed: Float)
 
 internal fun buildPolylines(p: MapProjection, rings: List<GeoRing>, lift: Double, viewSize: Size): List<Polyline> {
@@ -583,6 +584,7 @@ internal fun buildPolylines(p: MapProjection, rings: List<GeoRing>, lift: Double
     for (ring in rings) {
         if (ring.size < 2) continue
         val xs = FloatArray(ring.size); val ys = FloatArray(ring.size); val cum = FloatArray(ring.size)
+        val gxs = FloatArray(ring.size); val gys = FloatArray(ring.size)
         var n = 0
         var onScreen = false
         var screen = 0f
@@ -594,6 +596,7 @@ internal fun buildPolylines(p: MapProjection, rings: List<GeoRing>, lift: Double
             if (n > 0 && abs(pt.x - xs[n - 1]) + abs(pt.y - ys[n - 1]) > jump) continue
             if (pt.x in -50f..viewSize.width + 50 && pt.y in -50f..viewSize.height + 50) onScreen = true
             xs[n] = pt.x; ys[n] = pt.y
+            p.ground(ring.lon[i], ring.lat[i]).let { gxs[n] = it.x; gys[n] = it.y }
             if (n == 0) cum[n] = 0f else {
                 val dLon = (ring.lon[i] - lastLon) * cos(ring.lat[i])
                 val dLat = ring.lat[i] - lastLat
@@ -603,9 +606,22 @@ internal fun buildPolylines(p: MapProjection, rings: List<GeoRing>, lift: Double
             lastLon = ring.lon[i]; lastLat = ring.lat[i]
             n++
         }
-        if (n >= 2 && onScreen && screen > 20f) out += Polyline(xs.copyOf(n), ys.copyOf(n), cum.copyOf(n))
+        if (n >= 2 && onScreen && screen > 20f) out += Polyline(xs.copyOf(n), ys.copyOf(n), cum.copyOf(n), gxs.copyOf(n), gys.copyOf(n))
     }
     return out
+}
+
+/** The ground offset [d] degrees along the road. */
+private fun Polyline.groundAt(d: Float): Offset {
+    var lo = 0
+    var hi = cum.size - 1
+    while (hi - lo > 1) {
+        val mid = (lo + hi) / 2
+        if (cum[mid] <= d) lo = mid else hi = mid
+    }
+    val span = (cum[hi] - cum[lo]).coerceAtLeast(1e-6f)
+    val f = ((d - cum[lo]) / span).coerceIn(0f, 1f)
+    return Offset(gxs[lo] + (gxs[hi] - gxs[lo]) * f, gys[lo] + (gys[hi] - gys[lo]) * f)
 }
 
 private fun Polyline.pointAt(d: Float): Offset {
@@ -635,12 +651,15 @@ internal fun DrawScope.drawMapOverlay(
     // Up close the freight, cars and planes are little voxel vehicles; further out, dots.
     val vehicles = if (o.closeUp && traffic) ArrayList<VehicleSpot>() else null
     // Freight along the lanes, both ways.
-    if (traffic && (g.traffic > 0 || freightLayer)) {
+    // In the Freight mode the arcs tell it; moving freight would only clutter them.
+    if (traffic && g.traffic > 0 && !freightLayer) {
         val per = if (g.traffic >= 2) 9 else 4
         val boost = if (freightLayer) 2f else 1f
         var drawn = 0
-        if (vehicles != null) o.lanes.forEach { lane -> if (lane.mode == "rail") drawRailTrack(lane, p, o.plinth) }
         o.lanes.forEach { lane ->
+            // Outside the Freight mode, trucks and trains run only where a real road or railway
+            // carries them; a lane with no route shows nothing rather than a line across country.
+            if (!freightLayer && lane.mode != "sea" && !lane.routed) return@forEach
             val count = 1 + (lane.weight * per).toInt()
             val color = ModeColors[lane.mode] ?: Color(0xFFE8E8E8)
             // Kilometres a second of game time, so freight keeps its pace at any zoom.
@@ -652,7 +671,7 @@ internal fun DrawScope.drawMapOverlay(
                     if (dir == 1) f = 1f - f
                     if (vehicles != null) {
                         if (vehicles.size >= MaxFreightVehicles) return@forEach
-                        laneVehicles(lane, f, dir == 0, p, o.plinth, o.vehicleScale, vehicles)
+                        laneVehicles(lane, f, dir == 0, o.vehicleScale, vehicles)
                         drawn++
                         continue
                     }
@@ -665,8 +684,8 @@ internal fun DrawScope.drawMapOverlay(
             }
         }
     }
-    // Cars on the highways once close.
-    if (traffic && g.traffic > 0 && g.detail == MapDetail.High && zoom > 9 && o.roads.isNotEmpty()) {
+    // Cars on the highways once close. The Freight mode hides them with the freight.
+    if (traffic && g.traffic > 0 && g.detail == MapDetail.High && zoom > 9 && o.roads.isNotEmpty() && !freightLayer) {
         // Spacing and speed are on the ground, in degrees, so cars hold their pace and places
         // while the camera moves; closer in they simply look further apart and faster.
         val spacing = if (vehicles != null) (if (g.traffic >= 2) 0.12f else 0.24f) else if (g.traffic >= 2) 0.035f else 0.07f
@@ -691,7 +710,13 @@ internal fun DrawScope.drawMapOverlay(
                 // Keep the two directions in their own lanes.
                 val side = Offset(-dy / len * 1.6f, dx / len * 1.6f) * (if (forward) 1f else -1f)
                 if (vehicles != null) {
-                    if (len > 0.01f && fade > 0.5f) vehicles += VehicleSpot("car", false, at + side * 1.5f, Offset(dx, dy))
+                    if (len > 0.01f && fade > 0.5f) {
+                        val gAt = road.groundAt(d)
+                        val gAhead = road.groundAt((d + if (forward) step else -step).coerceIn(0f, road.length))
+                        val gd = gAhead - gAt
+                        val gl = gd.getDistance().coerceAtLeast(1e-3f)
+                        vehicles += VehicleSpot("car", false, gAt + Offset(-gd.y / gl, gd.x / gl) * (2.4f * if (forward) 1f else -1f), gd)
+                    }
                 } else {
                     drawCircle(head, 1.2f, ahead + side)
                     drawCircle(tail, 1.1f, at + side)
@@ -700,9 +725,10 @@ internal fun DrawScope.drawMapOverlay(
             }
         }
     }
-    // Nearer vehicles over farther ones.
-    vehicles?.sortBy { it.at.y }
-    vehicles?.forEach { v -> with(Vehicles) { drawVehicle(v.type, v.mine, v.at, v.dir, o.vehicleScale) } }
+    // Nearer vehicles over farther ones, each a 3D model turned along its road.
+    vehicles?.forEach { it.depth = p.lift(it.g.x.toDouble(), it.g.y.toDouble(), 0.0).y }
+    vehicles?.sortBy { it.depth }
+    vehicles?.forEach { v -> drawVehicle3d(v, o) }
     if (!effects) return
     // Rooftop lights and smoke. No rings or pulses: they read as cheap.
     if (g.buildings > 0) {
@@ -719,7 +745,8 @@ internal fun DrawScope.drawMapOverlay(
         }
     }
     // Planes between the big cities, high over the map, trailing contrails with shadows below.
-    if (g.traffic > 0 && o.airports.size >= 2) {
+    // Hidden in the Freight mode with the rest of the moving traffic.
+    if (g.traffic > 0 && o.airports.size >= 2 && !freightLayer) {
         val planes = if (g.traffic >= 2) 10 else 5
         val n = o.airports.size
         for (k in 0 until planes) {
@@ -793,53 +820,57 @@ private fun DrawScope.drawRailTrack(lane: LaneTrack, p: MapProjection, plinth: D
 }
 
 /** The vehicles for one load on a lane at fraction [f]: a truck, a ship, or a train of a locomotive and two wagons. */
-private fun laneVehicles(lane: LaneTrack, f: Float, forward: Boolean, p: MapProjection, plinth: Double, scale: Int, out: MutableList<VehicleSpot>) {
-    fun ground(t: Float) = lane.at(t).let { p.lift(it.x.toDouble(), it.y.toDouble(), plinth) }
+private fun laneVehicles(lane: LaneTrack, f: Float, forward: Boolean, unit: Float, out: MutableList<VehicleSpot>) {
     val sign = if (forward) 1f else -1f
     val step = 2f / lane.length.coerceAtLeast(1f)
-    val at = ground(f)
-    val dir = ground((f + sign * step).coerceIn(0f, 1f)) - ground((f - sign * step).coerceIn(0f, 1f))
+    val at = lane.at(f)
+    val dir = (lane.at((f + sign * step).coerceIn(0f, 1f)) - lane.at((f - sign * step).coerceIn(0f, 1f)))
     if (dir.getDistance() < 1e-3f) return
     val u = dir / dir.getDistance()
+    val right = Offset(-u.y, u.x) * sign
     // Trucks and trains keep to land: a straight lane between two hubs can cross a lake.
     val wet = !lane.routed && lane.water?.get((f * (WaterSamples - 1)).roundToInt()) == true
     when (lane.mode) {
         "rail" -> if (!wet) {
             // Wagons trail the locomotive along the track, spaced by a vehicle's length on the ground.
-            val gap = 14f * scale / lane.length.coerceAtLeast(1f)
+            val gap = 7f * unit / lane.length.coerceAtLeast(1f)
             out += VehicleSpot("loco", lane.mine, at, dir)
             for (w in 1..2) {
                 val t = f - sign * gap * w
-                if (t in 0f..1f) out += VehicleSpot("wagon", lane.mine, ground(t), dir)
+                if (t in 0f..1f) out += VehicleSpot("wagon", lane.mine, lane.at(t), dir)
             }
         }
         // Ships keep to their own side of the channel.
         "sea" -> if (lane.water?.get((f * (WaterSamples - 1)).roundToInt()) != false) {
-            out += VehicleSpot("ship", lane.mine, at + Offset(-u.y, u.x) * 5f * sign, dir)
+            out += VehicleSpot("ship", lane.mine, at + right * (4f * unit), dir)
         }
-        else -> if (!wet) out += VehicleSpot("truck", lane.mine, at + Offset(-u.y, u.x) * 2.5f * sign, dir)
+        else -> if (!wet) out += VehicleSpot("truck", lane.mine, at + right * (2.2f * unit), dir)
     }
+}
+
+/** A vehicle as a 3D voxel model turned along its direction of travel. */
+private fun DrawScope.drawVehicle3d(v: VehicleSpot, o: OverlayGeometry) {
+    val p = o.p
+    val e = p.east
+    val n = p.north
+    // The ground direction in world east and north, so the model heads along the road whatever the camera.
+    val heading = atan2((v.dir.x * n.x + v.dir.y * n.y).toDouble(), (v.dir.x * e.x + v.dir.y * e.y).toDouble())
+    with(VoxelModels) { drawModel("${v.type}/${if (v.mine) "player" else "neutral"}", p, v.g.x, v.g.y, o.plinth + v.height, o.vehicleScale, heading) }
 }
 
 /** A cargo plane up close: the voxel plane high over the map, its shadow on the ground and a short faint contrail. */
 private fun DrawScope.drawCargoPlane(a: Offset, b: Offset, f: Float, fade: Float, o: OverlayGeometry) {
     val p = o.p
-    fun air(t: Float): Offset {
-        val gx = (a.x + (b.x - a.x) * t).toDouble()
-        val gy = (a.y + (b.y - a.y) * t).toDouble()
-        return p.lift(gx, gy, (40 + 50 * sin(PI * t)) * o.scale)
-    }
-    val at = air(f)
-    val dir = air((f + 0.01f).coerceAtMost(1f)) - air((f - 0.01f).coerceAtLeast(0f))
+    fun ground(t: Float) = Offset(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+    fun height(t: Float) = (40 + 50 * sin(PI * t)) * o.scale
+    fun air(t: Float): Offset = ground(t).let { p.lift(it.x.toDouble(), it.y.toDouble(), o.plinth + height(t)) }
     for (trail in 6 downTo 1) {
         drawCircle(Color.White.copy(alpha = 0.12f * fade * (1 - trail / 7f)), 1f, air((f - trail * 0.005f).coerceAtLeast(0f)))
     }
-    val gx = (a.x + (b.x - a.x) * f).toDouble()
-    val gy = (a.y + (b.y - a.y) * f).toDouble()
-    with(Vehicles) {
-        drawVehicle("plane", false, p.lift(gx, gy, o.plinth), dir, o.vehicleScale, 0.22f * fade, PlaneShadow)
-        if (!drawVehicle("plane", false, at, dir, o.vehicleScale, fade)) drawCircle(Color.White.copy(alpha = fade), 1.7f, at)
-    }
+    val g0 = ground(f)
+    val shadow = p.lift(g0.x.toDouble(), g0.y.toDouble(), o.plinth)
+    drawOval(Color.Black.copy(alpha = 0.22f * fade), shadow - Offset(4f * o.vehicleScale, 1.5f * o.vehicleScale), Size(8f * o.vehicleScale, 3f * o.vehicleScale))
+    drawVehicle3d(VehicleSpot("plane", false, g0, b - a, height(f)), o)
 }
 
 private val PlaneShadow = ColorFilter.tint(Color.Black, BlendMode.SrcIn)

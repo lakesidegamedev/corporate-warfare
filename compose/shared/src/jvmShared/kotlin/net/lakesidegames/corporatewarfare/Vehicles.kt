@@ -60,4 +60,11 @@ internal object Vehicles {
 }
 
 /** One vehicle to draw this frame; gathered first so they can be drawn back to front. */
-internal class VehicleSpot(val type: String, val mine: Boolean, val at: Offset, val dir: Offset)
+internal class VehicleSpot(
+    val type: String, val mine: Boolean,
+    /** Where it stands as a ground offset from the view centre, and its direction of travel on the ground. */
+    val g: Offset, val dir: Offset, val height: Double = 0.0,
+) {
+    /** For drawing back to front. */
+    var depth = 0f
+}

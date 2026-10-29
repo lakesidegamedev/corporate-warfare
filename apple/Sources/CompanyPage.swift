@@ -99,12 +99,14 @@ struct CompanyPageBody: View {
                              note: Format.moneyCompact(s.yourShares * s.priceCents)),
                     ]
                 )
-                if s.historyCents.count > 1 {
-                    PriceChart(values: s.historyCents, tint: Change.tint(s.changeQuarterBps))
-                }
+                StockHistorySection(firm: page.firm)
                 if let onTrade {
                     Button("Buy or sell shares", action: onTrade).buttonStyle(PixelButtonStyle())
                 }
+            }
+            if page.finance != nil || page.kind == "listed" {
+                Eyebrow(text: "Financials")
+                CompanyFinancialsSection(firm: page.firm, name: page.name, industry: page.industry)
             }
             if let f = page.finance {
                 Eyebrow(text: "Financial summary (trailing year)")

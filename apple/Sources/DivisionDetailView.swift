@@ -28,6 +28,7 @@ struct DivisionDetailSheet: View {
                 VStack(alignment: .leading, spacing: 14) {
                     if let d = detail {
                         financials(d)
+                        DivisionOpsSection(division: live)
                         strategy(d)
                         inputs(d)
                         outputs(d)

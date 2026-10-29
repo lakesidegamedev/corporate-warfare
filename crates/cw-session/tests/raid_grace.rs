@@ -56,3 +56,46 @@ fn texas_player_is_not_raided_in_the_opening() {
         );
     }
 }
+
+#[test]
+fn a_rival_raider_launches_at_most_one_campaign_a_year() {
+    // The player issues no commands, so every raid is a rival's. Over three years each raider's
+    // campaigns are at least 52 weeks apart, and raiding still happens.
+    let mut session = Session::create(ScenarioConfig {
+        seed: 3,
+        scenario: ScenarioKind::Guided,
+        mode: ScenarioMode::Sandbox,
+        dataset_hash: String::new(),
+        difficulty: Difficulty::Standard,
+        economy_start: Default::default(),
+        starting_capital_cents: None,
+        prices: Default::default(),
+    })
+    .unwrap();
+    for _ in 0..156 {
+        if session.advance(1).pause.is_some() {
+            for event in session.world.events.pending.iter_mut() {
+                event.resolved = true;
+            }
+            session.dismiss_pause();
+        }
+    }
+    let mut by_raider: std::collections::BTreeMap<u64, Vec<u32>> = Default::default();
+    for raid in &session.world.raids {
+        by_raider
+            .entry(raid.attacker.0)
+            .or_default()
+            .push(raid.tick);
+    }
+    assert!(!by_raider.is_empty(), "rivals still raid");
+    for (raider, ticks) in &by_raider {
+        for pair in ticks.windows(2) {
+            assert!(
+                pair[1] >= pair[0] + 52,
+                "raider {raider:x} raided in weeks {} and {}",
+                pair[0],
+                pair[1]
+            );
+        }
+    }
+}

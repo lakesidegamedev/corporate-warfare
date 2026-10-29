@@ -116,6 +116,14 @@ struct StatsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                if let firm {
+                    Panel(padding: 12) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Eyebrow(text: "Financial statements")
+                            CompanyFinancialsSection(firm: firm.handle, name: firm.name, industry: firm.industry, wideColumns: 5)
+                        }
+                    }
+                }
                 PixelChoices(options: StatsPeriod.allCases.map { ($0, $0.rawValue) }, selection: $period, label: "Period")
 
                 if buckets.isEmpty {
@@ -291,11 +299,7 @@ struct StatsView: View {
                     Stat(label: "Earnings a year", value: Format.moneyCompact(annualEarnings)),
                 ]
             )
-            if stock.historyCents.count > 1 {
-                SectionCard(title: "Share price, last \(stock.historyCents.count) weeks") {
-                    PriceChart(values: stock.historyCents, tint: Change.tint(stock.changeQuarterBps))
-                }
-            }
+            StockHistorySection(firm: stock.firm, height: 160)
         }
     }
 

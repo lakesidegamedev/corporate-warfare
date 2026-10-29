@@ -12,10 +12,14 @@ use cw_core::hash::{DOMAIN_SAVE, digest};
 use cw_sim::state::World;
 
 pub const MAGIC: &[u8; 4] = b"CWSV";
-pub const SCHEMA_VERSION: u32 = 1;
+/// The schema is the layout of the postcard world payload (`cw_sim::legacy`). Postcard is not
+/// self-describing, so any field added to saved state bumps it, with a frozen copy of the older
+/// structs in `cw_sim::legacy`. Schema 1 is every release up to 1.8 preview 2. Trailers are
+/// outside the payload and keep their own rule: a reader skips what it does not know.
+pub const SCHEMA_VERSION: u32 = cw_sim::legacy::LAYOUT;
 /// Oldest schema this engine can read. Schema 0 was never released, so there is no migration
 /// path: a payload claiming it is rejected instead of being parsed as if it were schema 1.
-pub const MIN_SCHEMA_VERSION: u32 = 1;
+pub const MIN_SCHEMA_VERSION: u32 = cw_sim::legacy::MIN_LAYOUT;
 pub const MAX_BYTES: usize = 64 * 1024 * 1024;
 
 /// Marks the optional custom scenario trailer after the world payload.
@@ -27,6 +31,13 @@ const FX_MAGIC: &[u8; 4] = b"FXST";
 /// and the week in progress. Outside the hashed world, so a save without it loads with empty
 /// figures and no hash moves.
 const FREIGHT_MAGIC: &[u8; 4] = b"FRTS";
+/// Marks the history archive trailer, after the freight trailer: long price closes and the
+/// weekly and quarterly statements. Outside the hashed world, so a save without it loads with
+/// an empty archive and no hash moves.
+const ARCHIVE_MAGIC: &[u8; 4] = b"HIST";
+/// Marks the systems history trailer, last: the weekly market, region, division, freight and
+/// economy figures. Outside the hashed world; a save without it loads with empty history.
+const SYSTEMS_MAGIC: &[u8; 4] = b"SYST";
 
 pub fn encode(world: &World, career_id: u64) -> Result<Vec<u8>, DomainError> {
     encode_with(world, career_id, None)
@@ -88,6 +99,36 @@ pub fn encode_with(
         out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
         out.extend_from_slice(&bytes);
     }
+    if !world.archive.is_empty() {
+        let bytes =
+            postcard::to_allocvec(&world.archive).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(ARCHIVE_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.systems.is_empty() {
+        let bytes =
+            postcard::to_allocvec(&world.systems).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(SYSTEMS_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
     Ok(out)
 }
 
@@ -111,7 +152,7 @@ pub fn decode_with(
     }
     cursor += 4;
     let schema = read_u32(bytes, &mut cursor)?;
-    if schema > SCHEMA_VERSION || schema < MIN_SCHEMA_VERSION {
+    if !(MIN_SCHEMA_VERSION..=SCHEMA_VERSION).contains(&schema) {
         return Err(DomainError::UnsupportedVersion {
             found: schema,
             supported: SCHEMA_VERSION,
@@ -148,9 +189,13 @@ pub fn decode_with(
             detail: SaveFault::Checksum,
         });
     }
-    let mut world: World = postcard::from_bytes(payload).map_err(|_| DomainError::InvalidSave {
-        detail: SaveFault::MalformedPayload,
-    })?;
+    let mut world: World = cw_sim::legacy::read_layout(schema, || postcard::from_bytes(payload))
+        .map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+    // Not saved: freight rates follow the price index, refreshed each week; until the first week
+    // after a load, quotes must already read the saved economy's level, not the base rate.
+    world.logistics.price_level_bps = world.macro_state.price_index_bps.max(1);
     let mut rest = &bytes[cursor + declared..];
     let mut custom_end = 0usize;
     let custom = if rest.len() >= 40 && &rest[..4] == CUSTOM_MAGIC {
@@ -213,8 +258,43 @@ pub fn decode_with(
             .map_err(|_| DomainError::InvalidSave {
                 detail: SaveFault::MalformedPayload,
             })?;
+        rest = &rest[40 + length..];
+    }
+    if rest.len() >= 4 && &rest[..4] == ARCHIVE_MAGIC {
+        let body = trailer_body(rest)?;
+        world.archive = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+        rest = &rest[40 + body.len()..];
+    }
+    if rest.len() >= 4 && &rest[..4] == SYSTEMS_MAGIC {
+        let body = trailer_body(rest)?;
+        world.systems = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
     }
     Ok((world, career_id, custom))
+}
+
+/// The checked body of a trailer: magic, length, BLAKE3 sum, body.
+fn trailer_body(rest: &[u8]) -> Result<&[u8], DomainError> {
+    if rest.len() < 40 {
+        return Err(DomainError::InvalidSave {
+            detail: SaveFault::Truncated,
+        });
+    }
+    let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
+    let mut sum = [0u8; 32];
+    sum.copy_from_slice(&rest[8..40]);
+    let body = rest.get(40..40 + length).ok_or(DomainError::InvalidSave {
+        detail: SaveFault::Truncated,
+    })?;
+    if digest(DOMAIN_SAVE, body) != sum {
+        return Err(DomainError::InvalidSave {
+            detail: SaveFault::Checksum,
+        });
+    }
+    Ok(body)
 }
 
 fn write_string(out: &mut Vec<u8>, value: &str) {
@@ -315,6 +395,66 @@ mod tests {
         }
         let plain = encode(&self::world(), 9).unwrap();
         assert!(decode(&plain).unwrap().0.logistics.dest_last.is_empty());
+    }
+
+    #[test]
+    fn the_history_archive_survives_a_save_without_moving_the_hash() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = world();
+        for _ in 0..20 {
+            world.pending_pause = None;
+            cw_sim::tick::advance(&mut world, &dataset);
+        }
+        assert!(!world.archive.is_empty());
+        let hash = cw_sim::state::canonical_hash(&world);
+        let mut bare = world.clone();
+        bare.archive = Default::default();
+        assert_eq!(
+            cw_sim::state::canonical_hash(&bare),
+            hash,
+            "the archive is not hashed"
+        );
+        let bytes = encode(&world, 4).unwrap();
+        let (restored, _) = decode(&bytes).unwrap();
+        assert_eq!(restored.archive, world.archive);
+        assert_eq!(cw_sim::state::canonical_hash(&restored), hash);
+        for cut in 1..=8 {
+            assert!(decode(&bytes[..bytes.len() - cut]).is_err(), "cut {cut}");
+        }
+        // A save written before the archive existed loads with it empty.
+        let old = encode(&bare, 4).unwrap();
+        assert!(decode(&old).unwrap().0.archive.is_empty());
+    }
+
+    #[test]
+    fn the_systems_history_survives_a_save_without_moving_the_hash() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = world();
+        for _ in 0..6 {
+            world.pending_pause = None;
+            cw_sim::tick::advance(&mut world, &dataset);
+        }
+        assert_eq!(world.systems.weeks.len(), 6);
+        let hash = cw_sim::state::canonical_hash(&world);
+        let mut bare = world.clone();
+        bare.systems = Default::default();
+        assert_eq!(cw_sim::state::canonical_hash(&bare), hash, "not hashed");
+        let bytes = encode(&world, 4).unwrap();
+        let (restored, _) = decode(&bytes).unwrap();
+        assert_eq!(restored.systems, world.systems);
+        assert_eq!(restored.archive, world.archive);
+        assert_eq!(cw_sim::state::canonical_hash(&restored), hash);
+        for cut in 1..=8 {
+            assert!(decode(&bytes[..bytes.len() - cut]).is_err(), "cut {cut}");
+        }
+        // Without the archive the systems trailer still follows straight after the freight one.
+        let mut no_archive = world.clone();
+        no_archive.archive = Default::default();
+        let (restored, _) = decode(&encode(&no_archive, 4).unwrap()).unwrap();
+        assert_eq!(restored.systems, world.systems);
+        // A save from before the systems history loads with it empty.
+        let old = encode(&bare, 4).unwrap();
+        assert!(decode(&old).unwrap().0.systems.is_empty());
     }
 
     #[test]

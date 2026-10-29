@@ -571,11 +571,32 @@ func smokes(_ sector: String) -> Bool {
 struct MapPolyline {
     let points: [CGPoint]
     let lengths: [Double]
+    /// The same points on the untilted ground, for vehicles standing on the road in 3D.
+    let grounds: [CGPoint]
     var total: Double { lengths.last ?? 0 }
 
-    init(_ points: [CGPoint], lengths: [Double]) {
+    init(_ points: [CGPoint], lengths: [Double], grounds: [CGPoint]? = nil) {
         self.points = points
         self.lengths = lengths
+        self.grounds = grounds ?? points
+    }
+
+    /// The untilted ground point a distance along the line.
+    func ground(at distance: Double) -> CGPoint {
+        Self.interpolate(grounds, lengths, distance)
+    }
+
+    private static func interpolate(_ points: [CGPoint], _ lengths: [Double], _ distance: Double) -> CGPoint {
+        var low = 0
+        var high = lengths.count - 1
+        while high - low > 1 {
+            let mid = (low + high) / 2
+            if lengths[mid] <= distance { low = mid } else { high = mid }
+        }
+        let a = points[low]
+        let b = points[high]
+        let f = min(max((distance - lengths[low]) / max(lengths[high] - lengths[low], 1e-9), 0), 1)
+        return CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
     }
 
     /// The point a distance along the line.
@@ -600,12 +621,14 @@ struct MapPolyline {
         let bounds = CGRect(origin: .zero, size: size).insetBy(dx: -50, dy: -50)
         for ring in rings where ring.points.count >= 2 && p.mayShow(ring) {
             var points: [CGPoint] = []
+            var grounds: [CGPoint] = []
             var lengths: [Double] = []
             var screen = 0.0
             var lastGeo: GeoPoint?
             var onScreen = false
             for point in ring.points {
-                guard let at = p.at(lon: point.lon, lat: point.lat, height: lift) else { continue }
+                guard let flat = p.ground(lon: point.lon, lat: point.lat) else { continue }
+                let at = p.lift(flat, lift)
                 if let last = points.last, abs(at.x - last.x) + abs(at.y - last.y) > jump { continue }
                 if bounds.contains(at) { onScreen = true }
                 if let last = points.last, let geo = lastGeo {
@@ -618,8 +641,9 @@ struct MapPolyline {
                 }
                 lastGeo = point
                 points.append(at)
+                grounds.append(flat)
             }
-            if points.count >= 2 && onScreen && screen > 20 { out.append(MapPolyline(points, lengths: lengths)) }
+            if points.count >= 2 && onScreen && screen > 20 { out.append(MapPolyline(points, lengths: lengths, grounds: grounds)) }
         }
         return out
     }

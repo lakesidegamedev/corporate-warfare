@@ -61,6 +61,43 @@ struct LaneTrack {
     /// Whether each of `LaneWater.samples` points from a to b is over water, so ships never sail
     /// over land and trucks never drive on a lake.
     var water: [Bool]?
+    /// The route on the untilted ground when the lane follows a real road or railway, and the
+    /// distance along it at each point as a fraction of its length; nil for a straight line.
+    var route: [CGPoint]?
+    var along: [Double]?
+
+    /// True when the lane runs on a real network rather than a straight line.
+    var routed: Bool { along != nil }
+
+    /// The lane following `points` on the ground.
+    func following(_ points: [CGPoint]) -> LaneTrack {
+        guard points.count >= 2 else { return self }
+        var cum = [Double](repeating: 0, count: points.count)
+        for i in 1..<points.count {
+            cum[i] = cum[i - 1] + Double(hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y))
+        }
+        let total = max(cum[cum.count - 1], 1e-3)
+        var next = self
+        next.route = points
+        next.along = cum.map { $0 / total }
+        return next
+    }
+
+    /// The untilted ground point `f` of the way along the lane.
+    func at(_ f: Double) -> CGPoint {
+        guard let along, let route else {
+            return CGPoint(x: Double(a.x) + Double(b.x - a.x) * f, y: Double(a.y) + Double(b.y - a.y) * f)
+        }
+        var low = 0
+        var high = along.count - 1
+        while high - low > 1 {
+            let mid = (low + high) / 2
+            if along[mid] <= f { low = mid } else { high = mid }
+        }
+        let t = min(max((f - along[low]) / max(along[high] - along[low], 1e-6), 0), 1)
+        return CGPoint(x: Double(route[low].x) + Double(route[high].x - route[low].x) * t,
+                       y: Double(route[low].y) + Double(route[high].y - route[low].y) * t)
+    }
 }
 
 /// Where a building's rooftop light and smoke sit on screen.
@@ -84,8 +121,8 @@ struct OverlayGeometry {
     let airports: [CGPoint]
     /// Zoomed in past the framing: freight, cars and planes are drawn as voxel vehicles.
     var closeUp = false
-    /// The vehicles' pixel scale, a step under the player's buildings.
-    var vehicleScale = 1
+    /// Points a voxel for the vehicles, a step under the player's buildings.
+    var vehicleUnit = 1.0
 }
 
 /// The map projected for one camera, view size and tilt. Each path is built the first time it is
@@ -139,6 +176,28 @@ final class MapGeometry {
     lazy var lakes: Path = projection.path(map.lakes)
     lazy var rivers: Path = projection.lines(map.rivers)
     lazy var interstates: Path = projection.lines(map.interstates)
+    /// The interstates' gold centre line: dashes cut on the ground, projected like the roads and
+    /// stroked solid, so they stay painted on the road as the camera moves.
+    lazy var centreLines: Path = projection.lines(map.centreDashLines)
+    var railroadLines: [GeoRing] { map.railroads }
+    private var railsHeld: (lift: Double, path: Path)?
+    private var sleepersHeld: (lift: Double, path: Path)?
+
+    /// The real railways `lift` points up, kept for the last height.
+    func railroads(lift: Double) -> Path {
+        if let railsHeld, railsHeld.lift == lift { return railsHeld.path }
+        let path = projection.lines(map.railroads, height: lift)
+        railsHeld = (lift, path)
+        return path
+    }
+
+    /// The railways' sleepers `lift` points up, cut on the ground, kept for the last height.
+    func sleepers(lift: Double) -> Path {
+        if let sleepersHeld, sleepersHeld.lift == lift { return sleepersHeld.path }
+        let path = projection.lines(map.sleeperDashes, height: lift)
+        sleepersHeld = (lift, path)
+        return path
+    }
     lazy var playStates: [Path] = map.playStates.map { projection.path($0.rings) }
     /// The small soft-light layers for this camera.
     let backLight = LightLayer()
@@ -207,6 +266,44 @@ final class MapGeometry {
         return raisedHeld
     }
 
+    private var tileRoadsKey: [String: Double]?
+    private var tileRoadsHeld: [String: Path] = [:]
+
+    /// The interstates on each raised tile, projected at that tile's own height so they lie on its
+    /// top whatever the camera does. A single screen offset for every tile would leave them hanging
+    /// between the tiles' tops, and sliding as the perspective changes across the screen.
+    func tileRoads(_ heights: [String: Double]) -> [String: Path] {
+        if tileRoadsKey == heights { return tileRoadsHeld }
+        let index = map.regionIndex
+        var out: [String: Path] = [:]
+        for (i, region) in map.regions.enumerated() where i < index.regionInterstates.count {
+            let lines = index.regionInterstates[i].map { map.interstates[$0] }
+            if lines.isEmpty { continue }
+            out[region.code] = projection.lines(lines, height: height(heights[region.code] ?? 0))
+        }
+        tileRoadsHeld = out
+        tileRoadsKey = heights
+        return out
+    }
+
+    private var tileDashesKey: [String: Double]?
+    private var tileDashesHeld: [String: Path] = [:]
+
+    /// The centre-line dashes on each raised tile, at that tile's own height like its roads.
+    func tileDashes(_ heights: [String: Double]) -> [String: Path] {
+        if tileDashesKey == heights { return tileDashesHeld }
+        let index = map.regionIndex
+        var out: [String: Path] = [:]
+        for (i, region) in map.regions.enumerated() where i < index.regionInterstates.count {
+            let dashes = index.regionInterstates[i].flatMap { map.centreDashes[$0] }
+            if dashes.isEmpty { continue }
+            out[region.code] = projection.lines(dashes, height: height(heights[region.code] ?? 0))
+        }
+        tileDashesHeld = out
+        tileDashesKey = heights
+        return out
+    }
+
     private var shadowKey: [String: Double]?
     private var shadowHeld = Path()
 
@@ -240,8 +337,11 @@ final class MapGeometry {
                   let ground = p.ground(lon: anchor.lon, lat: anchor.lat) else { continue }
             let i = perRegion[division.region, default: 0]
             perRegion[division.region] = i + 1
-            let gx = Double(ground.x) + Double(i % 3 - 1) * 34 * scale
-            let gy = Double(ground.y) + (18 + Double(i / 3) * 30) * scale
+            // Set out on the ground, east and south of the hub, so they keep their places as the map turns.
+            let along = Double(i % 3 - 1) * 34 * scale
+            let south = (18 + Double(i / 3) * 30) * scale
+            let gx = Double(ground.x) + p.east.dx * along - p.north.dx * south
+            let gy = Double(ground.y) + p.east.dy * along - p.north.dy * south
             let floor = regionLift(division.region, heights)
             let tall = (12 + 7 * Double(max(division.plants, 0)).squareRoot()) * scale
             placed.append(Building(sector: division.sector, plants: division.plants, gx: gx, gy: gy, half: 7.5 * scale,
@@ -272,8 +372,10 @@ final class MapGeometry {
             let floor = regionLift(region, heights)
             let biggest = firms.sorted { $0.value.blocks != $1.value.blocks ? $0.value.blocks > $1.value.blocks : $0.key < $1.key }
             for (i, firm) in biggest.prefix(4).enumerated() {
-                let gx = Double(ground.x) + (Double(i) - 1.5) * 26 * scale
-                let gy = Double(ground.y) - (14 + Double(i % 2) * 10) * scale
+                let along = (Double(i) - 1.5) * 26 * scale
+                let north = (14 + Double(i % 2) * 10) * scale
+                let gx = Double(ground.x) + p.east.dx * along + p.north.dx * north
+                let gy = Double(ground.y) + p.east.dy * along + p.north.dy * north
                 placed.append(Building(sector: firm.value.industry, plants: firm.value.blocks, gx: gx, gy: gy, half: 6 * scale,
                                        floor: floor, top: floor + 10 * scale, geo: anchor, key: firm.key))
             }
@@ -348,10 +450,11 @@ final class MapGeometry {
         let spots: [BuildingSpot] = look.buildings > 0 && closeUp && p.t > 0.5
             ? buildings(divisions, ground).map { b in
                 let base = p.lift(CGPoint(x: b.gx, y: b.gy), b.floor)
-                // The rooftop light and smoke sit on the sprite's top when there is one.
-                let voxel = Voxels.scale(scale, displayScale: displayScale)
-                let top = Voxels.top(b.sector, plants: b.plants, ground: base, scale: voxel, displayScale: displayScale)
-                    .map { CGPoint(x: base.x, y: $0 + 2) } ?? p.lift(CGPoint(x: b.gx, y: b.gy), b.top)
+                // The rooftop light and smoke sit on the model's top.
+                let name = VoxelModels.sized(b.sector, plants: b.plants)
+                let unit = VoxelModels.unit(scale, displayScale: displayScale)
+                let top = p.lift(CGPoint(x: b.gx, y: b.gy),
+                                 VoxelModels.has(name) ? b.floor + VoxelModels.lift(name, unit: unit) : b.top)
                 return BuildingSpot(base: base, top: top, color: Sector.color(b.sector), smoke: smokes(b.sector),
                                     seed: Double(stableHash(b.key) % 1000) / 1000)
             } : []
@@ -366,7 +469,7 @@ final class MapGeometry {
             } : []
         let held = OverlayGeometry(lanes: tracks, roads: roadLines, buildings: spots, selectedTop: top, scale: scale,
                                    plinth: raised ? plinth : 0, airports: airports, closeUp: closeUp && p.t > 0.5,
-                                   vehicleScale: max(Voxels.scale(scale, displayScale: displayScale) - 1, 1))
+                                   vehicleUnit: VoxelModels.unit(scale, displayScale: displayScale) * 0.6)
         overlayHeld = held
         overlayKey = key
         return held
@@ -381,10 +484,20 @@ final class MapGeometry {
         return busiest.compactMap { lane -> LaneTrack? in
             guard let a = map.anchor(of: lane.a).flatMap({ p.ground(lon: $0.lon, lat: $0.lat) }),
                   let b = map.anchor(of: lane.b).flatMap({ p.ground(lon: $0.lon, lat: $0.lat) }) else { return nil }
-            let length = max(Double(hypot(b.x - a.x, b.y - a.y)), 8)
-            return LaneTrack(a: a, b: b, mode: lane.modeId, weight: Double(lane.capacityLots + lane.outsideLots) / top,
-                             length: length, seed: Double(stableHash(lane.a + lane.b) % 1000) / 1000, km: max(Double(lane.km), 20),
-                             mine: laneIsMine(lane), water: LaneWater.along(map, lane.a, lane.b))
+            // Trucks and trains follow the real interstates and railways where there is a route.
+            var points: [CGPoint]?
+            if let route = Routes.of(map, mode: lane.modeId, lane.a, lane.b) {
+                let projected = route.compactMap { p.ground(lon: $0.lon, lat: $0.lat) }
+                if projected.count == route.count { points = projected }
+            }
+            var length = Double(hypot(b.x - a.x, b.y - a.y))
+            if let points {
+                length = zip(points, points.dropFirst()).reduce(0) { $0 + Double(hypot($1.1.x - $1.0.x, $1.1.y - $1.0.y)) }
+            }
+            let track = LaneTrack(a: a, b: b, mode: lane.modeId, weight: Double(lane.capacityLots + lane.outsideLots) / top,
+                                  length: max(length, 8), seed: Double(stableHash(lane.a + lane.b) % 1000) / 1000,
+                                  km: max(Double(lane.km), 20), mine: laneIsMine(lane), water: LaneWater.along(map, lane.a, lane.b))
+            return points.map { track.following($0) } ?? track
         }
     }
 }
@@ -756,76 +869,78 @@ struct MapScene {
             // Each big city on screen is a voxel city block sized by its population, a step smaller
             // than the player's buildings so those stay the stars; then the divisions, nearest last.
             var cityTops: [Int: CGFloat] = [:]
+            // Voxels in true 3D: points a voxel for the player's buildings, a step down for the rest.
+            let unit = VoxelModels.unit(g.scale, displayScale: displayScale)
+            let e = p.east
             // The diorama up close: trees, fields, barns, rocks and the houses round each city.
             if look.countryside && look.buildings >= 2 && look.earth && g.closeUp && t > 0.5 {
-                let voxel = max(Voxels.scale(g.scale, displayScale: displayScale) - 1, 1)
-                Countryside.draw(in: &context, projection: p, map: map, week: week, scale: voxel, displayScale: displayScale,
+                Countryside.draw(in: &context, projection: p, map: map, week: week, unit: unit * 0.6,
                                  lift: plinth, economyPhase: economyPhase, size: size)
             }
             if look.buildings >= 2 && g.closeUp && t > 0.5 {
-                let voxel = max(Voxels.scale(g.scale, displayScale: displayScale) - 1, 1)
-                let px = Double(voxel) / max(displayScale, 1)
                 // The economy shows in the cities: cranes rise in a boom, lights go out in a recession.
-                let tone: Voxels.Tone = economyPhase == "recession" || economyPhase == "slowdown" ? .dark : .plain
+                let tone: VoxelModels.Tone = economyPhase == "recession" || economyPhase == "slowdown" ? .dark : .plain
+                let cityUnit = unit * 0.75
+                let ink = VoxelModels.inked(cityUnit, displayScale: displayScale)
                 for (i, block) in g.cityBlocks(ground).enumerated() {
-                    let base = p.lift(CGPoint(x: block.gx, y: block.gy), block.floor)
-                    if let top = Voxels.draw("city", plants: block.plants, ground: base, scale: voxel,
-                                             displayScale: displayScale, tone: tone, in: &context) {
+                    let at = CGPoint(x: block.gx, y: block.gy)
+                    if let top = VoxelModels.draw(VoxelModels.sized("city", plants: block.plants), projection: p, ground: at,
+                                                  floor: block.floor, unit: cityUnit, tone: tone, ink: ink, in: &context) {
                         cityTops[block.index] = top
                     }
                     if (economyPhase == "boom" || economyPhase == "expansion" && i % 3 == 0) && i < 12 {
-                        Voxels.draw("crane", plants: economyPhase == "boom" ? 8 : 2,
-                                    ground: CGPoint(x: base.x + 10 * px, y: base.y + 2 / max(displayScale, 1)),
-                                    scale: voxel, displayScale: displayScale, in: &context)
+                        let k = 9 * cityUnit
+                        VoxelModels.draw(VoxelModels.sized("crane", plants: economyPhase == "boom" ? 8 : 2), projection: p,
+                                         ground: CGPoint(x: block.gx + e.dx * k, y: block.gy + e.dy * k), floor: block.floor,
+                                         unit: cityUnit, ink: ink, in: &context)
                     }
                 }
             }
             if look.buildings > 0 && g.closeUp && t > 0.5 {
-                // Rivals' plants first, a size smaller and muted, so the player's own stand over them.
-                let rivalScale = max(Voxels.scale(g.scale, displayScale: displayScale) - 1, 1)
+                // Rivals' plants first, smaller and greyed, so the player's own stand over them.
+                let rivalUnit = unit * 0.75
+                let rivalInk = VoxelModels.inked(rivalUnit, displayScale: displayScale)
                 let rivalStates = PlantState.of(plants.filter { !$0.player }, byFirm: true)
                 for b in look.rivals ? g.rivalBuildings(plants, ground) : [] {
-                    let base = p.lift(CGPoint(x: b.gx, y: b.gy), b.floor)
-                    switch rivalStates[b.key] {
-                    case .site:
-                        Voxels.draw("site", plants: b.plants, ground: base, scale: rivalScale, displayScale: displayScale,
-                                    tone: .muted, in: &context)
-                    case .mothballed:
-                        Voxels.draw(b.sector, plants: b.plants, ground: base, scale: rivalScale, displayScale: displayScale,
-                                    tone: .dark, in: &context)
-                    default:
-                        Voxels.draw(b.sector, plants: b.plants, ground: base, scale: rivalScale, displayScale: displayScale,
-                                    tone: .muted, in: &context)
+                    let at = CGPoint(x: b.gx, y: b.gy)
+                    let (name, tone): (String, VoxelModels.Tone) = switch rivalStates[b.key] {
+                    case .site: (VoxelModels.sized("site", plants: b.plants), .muted)
+                    case .mothballed: (VoxelModels.sized(b.sector, plants: b.plants), .dark)
+                    default: (VoxelModels.sized(b.sector, plants: b.plants), .muted)
                     }
+                    VoxelModels.draw(name, projection: p, ground: at, floor: b.floor, unit: rivalUnit, tone: tone, ink: rivalInk,
+                                     in: &context)
                 }
-                let voxel = Voxels.scale(g.scale, displayScale: displayScale)
-                let px = Double(voxel) / max(displayScale, 1)
+                let ink = VoxelModels.inked(unit, displayScale: displayScale)
                 let states = PlantState.of(plants.filter(\.player))
                 for b in g.buildings(divisions, ground) {
                     // Each division is a voxel building for its industry, shown as it stands: a
                     // building site while its plants go up, a crane beside it while one is added or
                     // retooled, dark when mothballed, a gold flag when just taken over. A plain box
-                    // if the sprite is missing.
-                    let base = p.lift(CGPoint(x: b.gx, y: b.gy), b.floor)
+                    // if the model is missing.
+                    let at = CGPoint(x: b.gx, y: b.gy)
+                    let base = p.lift(at, b.floor)
                     let state = states[b.key] ?? .running
                     let spriteTop: CGFloat?
                     switch state {
                     case .site:
-                        spriteTop = Voxels.draw("site", plants: b.plants, ground: base, scale: voxel, displayScale: displayScale,
-                                                in: &context)
+                        spriteTop = VoxelModels.draw(VoxelModels.sized("site", plants: b.plants), projection: p, ground: at,
+                                                     floor: b.floor, unit: unit, ink: ink, in: &context)
                     case .mothballed:
-                        spriteTop = Voxels.draw(b.sector, plants: b.plants, ground: base, scale: voxel, displayScale: displayScale,
-                                                tone: .dark, in: &context)
+                        spriteTop = VoxelModels.draw(VoxelModels.sized(b.sector, plants: b.plants), projection: p, ground: at,
+                                                     floor: b.floor, unit: unit, tone: .dark, ink: ink, in: &context)
                     default:
-                        spriteTop = Voxels.draw(b.sector, plants: b.plants, ground: base, scale: voxel, displayScale: displayScale,
-                                                in: &context)
+                        spriteTop = VoxelModels.draw(VoxelModels.sized(b.sector, plants: b.plants), projection: p, ground: at,
+                                                     floor: b.floor, unit: unit, ink: ink, in: &context)
                     }
                     if state == .growing {
-                        Voxels.draw("crane", plants: 2, ground: CGPoint(x: base.x + 12 * px, y: base.y + 3 / max(displayScale, 1)),
-                                    scale: voxel, displayScale: displayScale, in: &context)
+                        let k = 9 * unit
+                        VoxelModels.draw("crane/0", projection: p, ground: CGPoint(x: b.gx + e.dx * k, y: b.gy + e.dy * k),
+                                         floor: b.floor, unit: unit, ink: ink, in: &context)
                     }
                     if acquired.contains(b.key), let spriteTop {
-                        MapScene.drawFlag(in: &context, at: CGPoint(x: base.x + 6 * px, y: spriteTop - 2 / max(displayScale, 1)), unit: px)
+                        MapScene.drawFlag(in: &context, at: CGPoint(x: base.x + 4 * unit, y: spriteTop - 2 / max(displayScale, 1)),
+                                          unit: unit)
                     }
                     let topAt: CGPoint
                     if let spriteTop {
@@ -932,7 +1047,21 @@ struct MapScene {
 
         let water = Theme.water
         let even = FillStyle(eoFill: true)
+        let highways = look.detail == 0 || !look.interstates || t <= 0.5 ? 0 : smoothstep(0.85, 1.2, g.zoomRatio)
+        let roadWidth = 1.6 + 1.2 * min(g.scale, 2.5)
+        // The centre line's dashes are cut on the ground and stroked solid: a screen dash pattern
+        // would crawl along the road as the camera moves.
+        func strokeRoads(_ path: Path, dashes: Path?, in layer: inout GraphicsContext) {
+            layer.stroke(path, with: .color(RGB(hex: 0x1C2228).color(0.9 * highways)),
+                         style: StrokeStyle(lineWidth: roadWidth + 2, lineCap: .square))
+            layer.stroke(path, with: .color(RGB(hex: 0x6E757D).color(highways)), style: StrokeStyle(lineWidth: roadWidth, lineCap: .square))
+            if g.closeUp, let dashes {
+                layer.stroke(dashes, with: .color(Theme.gold.opacity(0.85 * highways)), style: StrokeStyle(lineWidth: 1, lineCap: .butt))
+            }
+        }
         if raised {
+            let tileRoads = highways > 0 ? g.tileRoads(heights) : [:]
+            let tileDashes = highways > 0 && g.closeUp ? g.tileDashes(heights) : [:]
             context.fill(g.lakes, with: .color(water), style: even)
             let solids = g.raised(heights)
             // Shadows first, so no tile's shadow falls across a tile drawn before it.
@@ -955,6 +1084,12 @@ struct MapScene {
                 }
                 if solid.code == selected { context.fill(solid.top, with: .color(Theme.gold.opacity(0.35)), style: even) }
                 context.stroke(solid.top, with: .color(lit ? RGB(hex: 0x9FB4C8).color(0.55) : Theme.stroke), lineWidth: 1)
+                // The tile's own interstates on its top, before any nearer tile is drawn over them.
+                if let roads = tileRoads[solid.code] {
+                    var onTile = context
+                    onTile.clip(to: solid.top, style: even)
+                    strokeRoads(roads, dashes: tileDashes[solid.code], in: &onTile)
+                }
             }
             if detail > 0 {
                 var onTop = context
@@ -987,18 +1122,17 @@ struct MapScene {
             lifted.stroke(state, with: .color(RGB(hex: 0xD2DEEA).color(0.85)), lineWidth: zoom > 3 ? 2 : 1)
         }
         // Interstates over the regions and their shading, under the traffic and the buildings: an
-        // 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line.
-        let highways = look.detail == 0 ? 0 : smoothstep(0.85, 1.2, g.zoomRatio)
-        if look.interstates && highways > 0 && t > 0.5 {
-            let wide = 1.6 + 1.2 * min(g.scale, 2.5)
-            lifted.stroke(g.interstates, with: .color(RGB(hex: 0x1C2228).color(0.9 * highways)),
-                          style: StrokeStyle(lineWidth: wide + 2, lineCap: .square))
-            lifted.stroke(g.interstates, with: .color(RGB(hex: 0x6E757D).color(highways)),
-                          style: StrokeStyle(lineWidth: wide, lineCap: .square))
-            if g.closeUp {
-                lifted.stroke(g.interstates, with: .color(Theme.gold.opacity(0.85 * highways)),
-                              style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-            }
+        // 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line. On
+        // raised tiles each tile lays its own above; flat, they are projected on the ground itself.
+        // The real railways once close, so trains have track to run on: a thin grey rail over dark
+        // sleepers cut on the ground, on the ground or the scenario's base.
+        if g.closeUp && t > 0.5 && look.traffic > 0 && !g.railroadLines.isEmpty {
+            let lift = raised ? g.plinth : 0
+            context.stroke(g.sleepers(lift: lift), with: .color(RGB(hex: 0x3A3028).color(0.9)), style: StrokeStyle(lineWidth: 3, lineCap: .butt))
+            context.stroke(g.railroads(lift: lift), with: .color(RGB(hex: 0x9AA1A8).color(0.85)), lineWidth: 1)
+        }
+        if highways > 0 && !raised {
+            strokeRoads(g.interstates, dashes: g.closeUp ? g.centreLines : nil, in: &context)
         }
         // Night falls on the globe whenever it is lit, and on the flat map with day and night on.
         // With the globe's shading, the haze and the vignette it is soft, so it all goes in one
@@ -1020,12 +1154,10 @@ struct MapScene {
             context.stroke(disc(c, p.r), with: .color(water.opacity(0.9 * (1 - t))), lineWidth: 1.5)
             context.stroke(disc(c, p.r + 4), with: .color(water.opacity(0.3 * (1 - t))), lineWidth: 6)
         }
-        var lanesLayer = context
-        lanesLayer.translateBy(x: 0, y: up)
+        // Freight routes show only in the Freight mode, over a darkened map so they read clearly.
         if freightLayer && !lanes.isEmpty {
-            drawLanes(in: &lanesLayer, projection: p)
-        } else if look.traffic > 0 && !lanes.isEmpty && t > 0.5 {
-            drawFaintLanes(in: &lanesLayer, projection: p)
+            context.fill(whole, with: .color(.black.opacity(0.35)))
+            drawLanes(in: &context, projection: p, plinth: raised ? g.plinth : 0)
         }
     }
 
@@ -1070,76 +1202,15 @@ struct MapScene {
         return RGB(Double(red), Double(green), Double(blue))
     }
 
-    private var busiestLanes: [LaneDto] {
-        Array(lanes.sorted { ($0.capacityLots + $0.outsideLots) > ($1.capacityLots + $1.outsideLots) }.prefix(90))
-    }
-
-    private func laneEnds(_ lane: LaneDto, _ p: MapProjection) -> (CGPoint, CGPoint)? {
-        guard let a = map.anchor(of: lane.a), let b = map.anchor(of: lane.b) else { return nil }
-        let endA = p.project(a)
-        let endB = p.project(b)
-        guard endA.1, endB.1 else { return nil }
-        return (endA.0, endB.0)
+    /// The busiest lanes as arcs between their hubs, each with a stripe per company.
+    private func drawLanes(in context: inout GraphicsContext, projection p: MapProjection, plinth: Double) {
+        FreightArcs.draw(lanes, map: map, projection: p, plinth: plinth, focus: selected, picked: pickedLane, in: &context)
     }
 
     /// The lane drawn nearest a tap, within a finger's width.
     func laneAt(_ tap: CGPoint, geometry g: MapGeometry) -> LaneDto? {
-        let up: CGFloat = look.raised(g.projection.t)
-            ? g.projection.lift(g.center, g.plinth).y - g.projection.lift(g.center, 0).y : 0
-        var best: LaneDto?
-        var bestDistance: CGFloat = 22
-        for lane in busiestLanes {
-            guard let ends = laneEnds(lane, g.projection) else { continue }
-            let (a, b) = ends
-            let dx = b.x - a.x
-            let dy = b.y - a.y
-            let len2 = dx * dx + dy * dy
-            let y = tap.y - up
-            let f = len2 <= 0 ? 0 : min(max(((tap.x - a.x) * dx + (y - a.y) * dy) / len2, 0), 1)
-            let d = hypot(tap.x - (a.x + f * dx), y - (a.y + f * dy))
-            if d < bestDistance {
-                bestDistance = d
-                best = lane
-            }
-        }
-        return best
-    }
-
-    /// The busiest lanes between region anchors: thicker with more freight, coloured by how full
-    /// they are, dashed for sea. Lanes the player owns or ships on get a gold edge; the lane
-    /// picked for the panel gets a white one.
-    private func drawLanes(in context: inout GraphicsContext, projection p: MapProjection) {
-        let busiest = busiestLanes
-        let top = CGFloat(max(busiest.map { Int($0.capacityLots + $0.outsideLots) }.max() ?? 1, 1))
-        for lane in busiest {
-            guard let ends = laneEnds(lane, p) else { continue }
-            let (a, b) = ends
-            var path = Path()
-            path.move(to: a)
-            path.addLine(to: b)
-            let weight = CGFloat(lane.capacityLots + lane.outsideLots) / top
-            let dim = (selected != nil && lane.a != selected && lane.b != selected && pickedLane == nil) ? 0.35 : 0.9
-            let width = 1.5 + 5 * weight
-            let dash: [CGFloat] = lane.modeId == "sea" ? [12, 9] : []
-            if lane.id == pickedLane {
-                context.stroke(path, with: .color(.white.opacity(0.9)), style: StrokeStyle(lineWidth: width + 7, dash: dash))
-            } else if laneIsMine(lane) {
-                context.stroke(path, with: .color(Theme.gold.opacity(0.75)), style: StrokeStyle(lineWidth: width + 4, dash: dash))
-            }
-            context.stroke(path, with: .color(laneColor(lane).opacity(dim)), style: StrokeStyle(lineWidth: width, dash: dash))
-        }
-    }
-
-    /// Off the Freight layer, the lanes freight moves along show faintly.
-    private func drawFaintLanes(in context: inout GraphicsContext, projection p: MapProjection) {
-        for lane in busiestLanes.prefix(60) {
-            guard let ends = laneEnds(lane, p) else { continue }
-            let (a, b) = ends
-            var path = Path()
-            path.move(to: a)
-            path.addLine(to: b)
-            context.stroke(path, with: .color(laneColor(lane).opacity(0.10)), lineWidth: 1)
-        }
+        FreightArcs.at(tap, lanes: lanes, map: map, projection: g.projection,
+                       plinth: look.raised(g.projection.t) ? g.plinth : 0)
     }
 
     /// The player's divisions as flat badges: one per owned sector type in each region, in a row
@@ -1190,19 +1261,17 @@ struct MapScene {
         let effects = part != .traffic
         // Up close the freight, cars and planes are little voxel vehicles; further out, dots.
         var vehicles: [VehicleSpot]? = o.closeUp && traffic ? [] : nil
-        // Freight along the lanes, both ways, at kilometres a second of game time.
-        if traffic && (look.traffic > 0 || freightLayer) {
+        // Freight along the lanes, both ways, at kilometres a second of game time. In the Freight
+        // mode the arcs tell it; moving freight would only clutter them.
+        if traffic && look.traffic > 0 && !freightLayer {
             let per = look.traffic >= 2 ? 9.0 : 4.0
-            let boost = freightLayer ? 2.0 : 1.0
             var glow = context
             glow.blendMode = .plusLighter
             var drawn = 0
-            if vehicles != nil {
-                for lane in o.lanes where lane.mode == "rail" {
-                    MapScene.drawRailTrack(in: &context, lane: lane, projection: p, plinth: o.plinth, size: g.size)
-                }
-            }
             laneLoop: for lane in o.lanes {
+                // Trucks and trains run only where a real road or railway carries them; a lane
+                // with no route shows nothing rather than a line across country.
+                if lane.mode != "sea" && !lane.routed { continue }
                 let count = 1 + Int(lane.weight * per)
                 let color = MapScene.modeColors[lane.mode] ?? RGB(hex: 0xE8E8E8)
                 let speed = MapScene.modeSpeed[lane.mode] ?? 40
@@ -1214,16 +1283,16 @@ struct MapScene {
                         if dir == 1 { f = 1 - f }
                         if vehicles != nil {
                             if vehicles!.count >= MapScene.maxFreightVehicles { break laneLoop }
-                            MapScene.laneVehicles(lane, f: f, forward: dir == 0, projection: p, plinth: o.plinth,
-                                                  scale: o.vehicleScale, displayScale: displayScale, into: &vehicles!)
+                            MapScene.laneVehicles(lane, f: f, forward: dir == 0, unit: o.vehicleUnit, into: &vehicles!)
                             drawn += 1
                             continue
                         }
-                        let gx = Double(lane.a.x) + Double(lane.b.x - lane.a.x) * f
-                        let gy = Double(lane.a.y) + Double(lane.b.y - lane.a.y) * f
-                        let at = p.lift(CGPoint(x: gx, y: gy), o.plinth + 2)
-                        stamp(&glow, .glow, at: at, radius: 4 * boost, color: color, alpha: 0.35 * min(boost, 1.5))
-                        cores.addPath(disc(at, 1.6 * boost))
+                        if lane.mode == "sea", let water = lane.water, !water[Int((f * Double(LaneWater.samples - 1)).rounded())] {
+                            continue
+                        }
+                        let at = p.lift(lane.at(f), o.plinth + 2)
+                        stamp(&glow, .glow, at: at, radius: 4, color: color, alpha: 0.35)
+                        cores.addPath(disc(at, 1.6))
                         drawn += 1
                     }
                 }
@@ -1232,8 +1301,8 @@ struct MapScene {
         }
         // Cars on the highways once close, each direction in its own lane. Spacing and speed are on
         // the ground, in degrees, so cars hold their pace and places while the camera moves; closer
-        // in they simply look further apart and faster.
-        if traffic && look.traffic > 0 && look.detail >= 2 && zoom > 9 && !o.roads.isEmpty {
+        // in they simply look further apart and faster. The Freight mode hides them with the freight.
+        if traffic && look.traffic > 0 && look.detail >= 2 && zoom > 9 && !o.roads.isEmpty && !freightLayer {
             let spacing = vehicles != nil ? (look.traffic >= 2 ? 0.12 : 0.24) : look.traffic >= 2 ? 0.035 : 0.07
             let pace = 0.012
             let step = 3 / max(p.r * .pi / 180, 1e-3)
@@ -1249,20 +1318,28 @@ struct MapScene {
                     let forward = k % 2 == 0
                     var d = (Double(k) * spacing + (forward ? 1 : -1) * seconds * pace).truncatingRemainder(dividingBy: road.total)
                     if d < 0 { d += road.total }
-                    let at = road.point(at: d)
-                    let ahead = road.point(at: min(max(d + (forward ? step : -step), 0), road.total))
-                    let dx = ahead.x - at.x
-                    let dy = ahead.y - at.y
-                    let len = max(hypot(dx, dy), 1e-3)
                     let sign: CGFloat = forward ? 1 : -1
-                    let sx = -dy / len * 1.6 * sign
-                    let sy = dx / len * 1.6 * sign
                     if vehicles != nil {
+                        // On the ground, so the car heads along the road whatever the camera does.
+                        let at = road.ground(at: d)
+                        let ahead = road.ground(at: min(max(d + (forward ? step : -step), 0), road.total))
+                        let dx = ahead.x - at.x
+                        let dy = ahead.y - at.y
+                        let len = max(hypot(dx, dy), 1e-3)
                         if len > 0.01 && fade > 0.5 {
-                            vehicles!.append(VehicleSpot(type: "car", mine: false, at: CGPoint(x: at.x + sx * 1.5, y: at.y + sy * 1.5),
+                            let side = CGFloat(2.4 * o.vehicleUnit) * sign
+                            vehicles!.append(VehicleSpot(type: "car", mine: false,
+                                                         ground: CGPoint(x: at.x - dy / len * side, y: at.y + dx / len * side),
                                                          dir: CGVector(dx: dx, dy: dy)))
                         }
                     } else {
+                        let at = road.point(at: d)
+                        let ahead = road.point(at: min(max(d + (forward ? step : -step), 0), road.total))
+                        let dx = ahead.x - at.x
+                        let dy = ahead.y - at.y
+                        let len = max(hypot(dx, dy), 1e-3)
+                        let sx = -dy / len * 1.6 * sign
+                        let sy = dx / len * 1.6 * sign
                         heads.addPath(disc(CGPoint(x: ahead.x + sx, y: ahead.y + sy), 1.2))
                         tails.addPath(disc(CGPoint(x: at.x + sx, y: at.y + sy), 1.1))
                     }
@@ -1273,11 +1350,9 @@ struct MapScene {
             context.fill(tails, with: .color(RGB(hex: 0xFF4A3A).color(0.85 * fade)))
         }
         if let vehicles {
-            // Nearer vehicles over farther ones.
-            for v in vehicles.sorted(by: { $0.at.y < $1.at.y }) {
-                Vehicles.draw(v.type, mine: v.mine, ground: v.at, dir: v.dir, scale: o.vehicleScale, displayScale: displayScale,
-                              in: &context)
-            }
+            // Nearer vehicles over farther ones, each a 3D model turned along its road.
+            let ordered = vehicles.map { (depth: p.lift($0.ground, 0).y, spot: $0) }.sorted { $0.depth < $1.depth }
+            for v in ordered { drawVehicle(v.spot, overlay: o, projection: p, in: &context) }
         }
         if !effects { return }
         // Rooftop lights and smoke. No rings or pulses: they read as cheap.
@@ -1295,7 +1370,8 @@ struct MapScene {
             }
         }
         // Planes between the big cities, high over the map, trailing contrails with shadows below.
-        if look.traffic > 0 && o.airports.count >= 2 {
+        // Hidden in the Freight mode with the rest of the moving traffic.
+        if look.traffic > 0 && o.airports.count >= 2 && !freightLayer {
             let planes = look.traffic >= 2 ? 10 : 5
             let n = o.airports.count
             let life = 14.0
@@ -1337,80 +1413,53 @@ struct MapScene {
     static let maxVehicles = 250
     static let maxFreightVehicles = 190
 
-    /// A rail lane up close: sleepers across and two thin rails, under the trains.
-    static func drawRailTrack(in context: inout GraphicsContext, lane: LaneTrack, projection p: MapProjection, plinth: Double,
-                              size: CGSize) {
-        let a = p.lift(lane.a, plinth)
-        let b = p.lift(lane.b, plinth)
-        let dx = Double(b.x - a.x)
-        let dy = Double(b.y - a.y)
-        let len = hypot(dx, dy)
-        guard len >= 4 else { return }
-        let ux = dx / len
-        let uy = dy / len
-        let nx = -uy
-        let ny = ux
-        // The ground is seen at a slant, so the gauge narrows as the track turns away from the viewer.
-        let gauge = 1.5 * (0.5 + 0.5 * abs(ux))
-        let screen = CGRect(origin: .zero, size: size).insetBy(dx: -8, dy: -8)
-        var sleepers = Path()
-        var t = 0.0
-        while t < len {
-            let x = Double(a.x) + ux * t
-            let y = Double(a.y) + uy * t
-            if screen.contains(CGPoint(x: x, y: y)) {
-                sleepers.move(to: CGPoint(x: x - nx * (gauge + 1.2), y: y - ny * (gauge + 1.2)))
-                sleepers.addLine(to: CGPoint(x: x + nx * (gauge + 1.2), y: y + ny * (gauge + 1.2)))
-            }
-            t += 5
-        }
-        context.stroke(sleepers, with: .color(RGB(hex: 0x5A4636).color()), lineWidth: 1)
-        var rails = Path()
-        for side in [-1.0, 1.0] {
-            rails.move(to: CGPoint(x: Double(a.x) + side * nx * gauge, y: Double(a.y) + side * ny * gauge))
-            rails.addLine(to: CGPoint(x: Double(b.x) + side * nx * gauge, y: Double(b.y) + side * ny * gauge))
-        }
-        context.stroke(rails, with: .color(RGB(hex: 0x8A939C).color()), lineWidth: 1)
-    }
-
     /// The vehicles for one load on a lane at fraction `f`: a truck, a ship, or a train of a
-    /// locomotive and two wagons. Trucks and trains keep to land, ships to water.
-    static func laneVehicles(_ lane: LaneTrack, f: Double, forward: Bool, projection p: MapProjection, plinth: Double,
-                             scale: Int, displayScale: Double, into out: inout [VehicleSpot]) {
-        func ground(_ t: Double) -> CGPoint {
-            p.lift(CGPoint(x: Double(lane.a.x) + Double(lane.b.x - lane.a.x) * t, y: Double(lane.a.y) + Double(lane.b.y - lane.a.y) * t), plinth)
-        }
+    /// locomotive and two wagons, on the untilted ground. Ships keep to water.
+    static func laneVehicles(_ lane: LaneTrack, f: Double, forward: Bool, unit: Double, into out: inout [VehicleSpot]) {
         let sign = forward ? 1.0 : -1.0
         let step = 2 / max(lane.length, 1)
-        let at = ground(f)
-        let ahead = ground(min(max(f + sign * step, 0), 1))
-        let behind = ground(min(max(f - sign * step, 0), 1))
+        let at = lane.at(f)
+        let ahead = lane.at(min(max(f + sign * step, 0), 1))
+        let behind = lane.at(min(max(f - sign * step, 0), 1))
         let dir = CGVector(dx: ahead.x - behind.x, dy: ahead.y - behind.y)
         let dl = hypot(Double(dir.dx), Double(dir.dy))
         guard dl >= 1e-3 else { return }
         let ux = Double(dir.dx) / dl
         let uy = Double(dir.dy) / dl
-        let wet = lane.water.map { $0[Int((f * Double(LaneWater.samples - 1)).rounded())] }
+        // To the right of the direction of travel.
+        let rx = -uy * sign
+        let ry = ux * sign
+        // A straight lane between two hubs can cross a lake; a routed one keeps to its road.
+        let wet: Bool? = lane.routed ? false : lane.water.map { $0[Int((f * Double(LaneWater.samples - 1)).rounded())] }
         switch lane.mode {
         case "rail":
             guard wet != true else { return }
             // Wagons trail the locomotive along the track, spaced by a vehicle's length on the ground.
-            let gap = 14 * Double(scale) / max(displayScale, 1) / max(lane.length, 1)
-            out.append(VehicleSpot(type: "loco", mine: lane.mine, at: at, dir: dir))
+            let gap = 7 * unit / max(lane.length, 1)
+            out.append(VehicleSpot(type: "loco", mine: lane.mine, ground: at, dir: dir))
             for w in 1...2 {
                 let t = f - sign * gap * Double(w)
-                if t >= 0 && t <= 1 { out.append(VehicleSpot(type: "wagon", mine: lane.mine, at: ground(t), dir: dir)) }
+                if t >= 0 && t <= 1 { out.append(VehicleSpot(type: "wagon", mine: lane.mine, ground: lane.at(t), dir: dir)) }
             }
         case "sea":
             // Ships keep to their own side of the channel.
             guard wet != false else { return }
-            out.append(VehicleSpot(type: "ship", mine: lane.mine, at: CGPoint(x: Double(at.x) - uy * 5 * sign, y: Double(at.y) + ux * 5 * sign),
-                                   dir: dir))
+            out.append(VehicleSpot(type: "ship", mine: lane.mine,
+                                   ground: CGPoint(x: Double(at.x) + rx * 4 * unit, y: Double(at.y) + ry * 4 * unit), dir: dir))
         default:
             guard wet != true else { return }
             out.append(VehicleSpot(type: "truck", mine: lane.mine,
-                                   at: CGPoint(x: Double(at.x) - uy * 2.5 * sign, y: Double(at.y) + ux * 2.5 * sign), dir: dir))
+                                   ground: CGPoint(x: Double(at.x) + rx * 2.2 * unit, y: Double(at.y) + ry * 2.2 * unit), dir: dir))
         }
+    }
+
+    /// A vehicle as a 3D voxel model turned along its direction of travel on the ground.
+    private func drawVehicle(_ v: VehicleSpot, overlay o: OverlayGeometry, projection p: MapProjection, alpha: Double = 1,
+                             in context: inout GraphicsContext) {
+        let name = "\(v.type)/\(v.mine ? "player" : "neutral")"
+        VoxelModels.draw(name, projection: p, ground: v.ground, floor: o.plinth + v.height, unit: o.vehicleUnit,
+                         heading: VoxelModels.heading(v.dir, projection: p), ink: VoxelModels.inked(o.vehicleUnit, displayScale: displayScale),
+                         alpha: alpha, in: &context)
     }
 
     /// A cargo plane up close: the voxel plane high over the map, its shadow on the ground and a
@@ -1418,21 +1467,18 @@ struct MapScene {
     private func drawCargoPlane(in context: inout GraphicsContext, from a: CGPoint, to b: CGPoint, f: Double, fade: Double,
                                 overlay o: OverlayGeometry, projection p: MapProjection) {
         func flat(_ t: Double) -> CGPoint { CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t) }
-        func air(_ t: Double) -> CGPoint { p.lift(flat(t), (40 + 50 * sin(.pi * t)) * o.scale) }
-        let at = air(f)
-        let ahead = air(min(f + 0.01, 1))
-        let behind = air(max(f - 0.01, 0))
-        let dir = CGVector(dx: ahead.x - behind.x, dy: ahead.y - behind.y)
+        func height(_ t: Double) -> Double { (40 + 50 * sin(.pi * t)) * o.scale }
+        func air(_ t: Double) -> CGPoint { p.lift(flat(t), o.plinth + height(t)) }
         for trail in stride(from: 6, through: 1, by: -1) {
             context.fill(disc(air(max(f - Double(trail) * 0.005, 0)), 1),
                          with: .color(.white.opacity(0.12 * fade * (1 - Double(trail) / 7))))
         }
-        Vehicles.draw("plane", mine: false, ground: p.lift(flat(f), o.plinth), dir: dir, scale: o.vehicleScale,
-                      displayScale: displayScale, alpha: 0.22 * fade, shadow: true, in: &context)
-        if !Vehicles.draw("plane", mine: false, ground: at, dir: dir, scale: o.vehicleScale, displayScale: displayScale,
-                          alpha: fade, in: &context) {
-            context.fill(disc(at, 1.7), with: .color(.white.opacity(fade)))
-        }
+        let shadow = p.lift(flat(f), o.plinth)
+        let k = o.vehicleUnit
+        context.fill(Path(ellipseIn: CGRect(x: shadow.x - 4 * k, y: shadow.y - 1.5 * k, width: 8 * k, height: 3 * k)),
+                     with: .color(.black.opacity(0.22 * fade)))
+        drawVehicle(VehicleSpot(type: "plane", mine: false, ground: flat(f), dir: CGVector(dx: b.x - a.x, dy: b.y - a.y),
+                                height: height(f)), overlay: o, projection: p, alpha: fade, in: &context)
     }
 
     /// With nothing moving, only the selected region's outline.
@@ -1546,7 +1592,7 @@ struct WorldMapView: View {
                         Canvas { context, canvasSize in
                             let now = MapClock.seconds(timeline.date)
                             let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
-                            scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .sky)
+                            MainStalls.time("map.sky") { scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .sky) }
                         }
                         .drawingGroup()
                     }
@@ -1558,7 +1604,7 @@ struct WorldMapView: View {
                     Canvas { context, canvasSize in
                         let now = MapClock.seconds(timeline.date)
                         let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
-                        scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .ground)
+                        MainStalls.time("map.ground") { scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .ground) }
                     }
                     .drawingGroup()
                 }
@@ -1567,17 +1613,20 @@ struct WorldMapView: View {
                         Canvas { context, canvasSize in
                             let now = MapClock.seconds(timeline.date)
                             let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
-                            scene(camera: current, look: look, now: now)
-                                .drawOverlay(in: &context, geometry: g, seconds: gameSeconds(now),
-                                             part: .traffic)
+                            MainStalls.time("map.traffic") {
+                                scene(camera: current, look: look, now: now)
+                                    .drawOverlay(in: &context, geometry: g, seconds: gameSeconds(now),
+                                                 part: .traffic)
+                            }
                         }
                         .drawingGroup()
                     }
                     .allowsHitTesting(false)
                 }
                 // Clouds drift a fraction of a degree a second, so their layer is redrawn eight
-                // times a second rather than every frame; the camera still moves them at once.
-                if look.clouds > 0 {
+                // times a second rather than every frame; the camera still moves them at once. They
+                // step aside while the Freight mode is open.
+                if look.clouds > 0 && layer != .freight {
                     TimelineView(.animation(minimumInterval: 1.0 / 8, paused: !running || gameSpeed <= 0)) { timeline in
                         let game = floor(gameSeconds(MapClock.seconds(timeline.date)) * 8) / 8
                         let g = geometry.of(map: map, camera: current, size: size, tilt: look.tilt, detail: look.detail)
@@ -1598,7 +1647,7 @@ struct WorldMapView: View {
                         _ = ready
                         let now = MapClock.seconds(timeline.date)
                         let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
-                        scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .structures)
+                        MainStalls.time("map.structures") { scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .structures) }
                     }
                     .drawingGroup()
                 }
@@ -1694,7 +1743,16 @@ struct WorldMapView: View {
             }
             .overlay(alignment: .bottomLeading) {
                 // What the colours mean for the active mode.
-                if layer != .freight {
+                if layer == .freight {
+                    FreightLegend(lanes: lanes)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .frame(width: 190, alignment: .leading)
+                        .pixelFrame(Theme.panel.opacity(0.94))
+                        .padding(.leading, 12)
+                        .padding(.bottom, controlsAtTop ? 24 : 40)
+                        .allowsHitTesting(false)
+                } else {
                     MapLegend(layer: layer)
                         .padding(.leading, 12)
                         .padding(.bottom, controlsAtTop ? 24 : 40)

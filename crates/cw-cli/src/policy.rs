@@ -360,6 +360,7 @@ impl PolicyRunner {
                 CommandIntent::SetProductionTarget {
                     firm: Handle(firm),
                     target_bps,
+                    lock: false,
                 },
             );
             self.last_target.insert(firm, target_bps);

@@ -90,6 +90,7 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
             Key(Palette.warning, "Inflation")
             Key(Palette.gold, "Central bank rate")
         }
+        EconomyDashboardSection(store)
         val credit = when {
             e.creditBps >= 800 -> "Credit is badly stretched: a bust could come at any time." to Palette.negative
             e.creditBps >= 450 -> "Borrowing is running high: the risk of a bust is rising." to Palette.warning
@@ -341,27 +342,21 @@ private fun MarketRules(e: EconomyDto) {
     }
 }
 
-/** Output gap, inflation and the central bank rate over the kept history, on one scale. */
+/** Output gap, inflation and the central bank rate over the kept history (five years), on one scale. */
 @Composable
 private fun History(e: EconomyDto) {
     val points = e.history
     if (points.size < 2) return
-    Canvas(Modifier.fillMaxWidth().height(130.dp)) {
-        val series = listOf(
-            Color(0xFF42A5F5) to points.map { it.outputGapBps },
-            Palette.warning to points.map { it.inflationBps },
-            Palette.gold to points.map { it.policyRateBps },
-        )
-        val top = series.maxOf { s -> s.second.max() }.coerceAtLeast(100)
-        val bottom = series.minOf { s -> s.second.min() }.coerceAtMost(0)
-        val span = (top - bottom).toFloat()
-        fun y(v: Int) = size.height * (top - v) / span
-        drawLine(Palette.stroke, Offset(0f, y(0)), Offset(size.width, y(0)), 1f)
-        series.forEach { (color, values) ->
-            val step = size.width / (values.size - 1)
-            val path = Path()
-            values.forEachIndexed { i, v -> if (i == 0) path.moveTo(0f, y(v)) else path.lineTo(i * step, y(v)) }
-            drawPath(path, color, style = Stroke(2f))
-        }
-    }
+    var period by remember { mutableStateOf(ChartPeriod.Weekly) }
+    fun series(name: String, color: Color, value: (uniffi.cw_ffi.MacroPointDto) -> Int) =
+        ChartSeries(name, color, GameDates.lastClose(points.map { ChartPoint(it.week.toInt(), value(it).toLong()) }, period))
+    Chart(
+        listOf(
+            series("Output gap", Color(0xFF42A5F5)) { it.outputGapBps },
+            series("Inflation", Palette.warning) { it.inflationBps },
+            series("Bank rate", Palette.gold) { it.policyRateBps },
+        ),
+        kinds = listOf(ChartKind.Line, ChartKind.Bar), initialRange = ChartRange.Y1, period = period,
+        periods = ChartPeriod.entries, onPeriod = { period = it }, height = 130.dp, format = { "%.1f%%".format(it / 100.0) },
+    )
 }

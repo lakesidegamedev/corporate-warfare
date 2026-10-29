@@ -90,6 +90,89 @@ final class SnapshotTests: XCTestCase {
         render("settings-phone", phone, compact: true,
                ScrollView { GraphicsSettingsPanel().padding(16) }.background(Theme.ink))
         if let home { renderSplitView(store, region: home.code) }
+        await renderDeeperViews(store)
+    }
+
+    /// The financials, the shared chart and the systems displays on a phone and an iPad, after
+    /// thirty weeks so quarters close and every history has points. Each view is fed the engine's
+    /// own figures so the capture does not race a background load.
+    private func renderDeeperViews(_ store: AppStore) async {
+        for _ in 0..<20 {
+            await store.advance(weeks: 1)
+            await store.continueCareer()
+        }
+        guard let firm = store.selectedFirm ?? store.overview?.primaryFirm,
+              let you = store.firms.first(where: { $0.handle == firm }) else {
+            return XCTFail("the player has a company")
+        }
+        let phone = CGSize(width: 393, height: 1800)
+        let pad = CGSize(width: 1180, height: 1400)
+        func both<V: View>(_ name: String, _ view: V) {
+            let page = ScrollView { view.padding(16) }.background(Theme.ink).environmentObject(store)
+            render("\(name)-phone", phone, compact: true, page)
+            render("\(name)-pad", pad, compact: false, page)
+        }
+
+        guard let data = await store.read({ FinancialData.load($0, firm: firm, name: you.name, industry: you.industry) }) else {
+            return XCTFail("financials load")
+        }
+        XCTAssertGreaterThanOrEqual(data.quarters.count, 2, "thirty weeks close at least two quarters")
+        XCTAssertFalse(data.weeks.isEmpty, "weekly statements are kept")
+        for tab in FinanceTab.allCases {
+            let key = tab.rawValue.lowercased().replacingOccurrences(of: " ", with: "-")
+            both("finance-\(key)", CompanyFinancials(data: data, columns: 3, tab: tab))
+        }
+        both("finance-weekly", CompanyFinancials(data: data, columns: 3, tab: .income, period: .weekly))
+        both("chart", Panel(padding: 12) {
+            PixelChart([
+                PlotSeries(name: "Revenue", color: Theme.gold, points: Figures.points(data.weeks) { $0.revenueCents }),
+                PlotSeries(name: "Net income", color: Theme.positive, points: Figures.points(data.weeks) { $0.netIncomeCents }),
+            ], title: "Revenue and profit", initialKind: .area)
+        })
+        if let stock = store.stocks.first(where: { $0.controlledByYou }) {
+            render("stock-history-phone", phone, compact: true, StockSheet(stock: stock).environmentObject(store))
+        }
+
+        let product = store.productLines.first?.product ?? store.commodities.first?.product ?? 0
+        if let depth = await store.read({ $0.goodDepth(product: product) }) ?? nil {
+            XCTAssertFalse(depth.drivers.isEmpty, "the price has a reason to move or a note")
+            both("good-depth", GoodDepthView(d: depth))
+        } else {
+            XCTFail("market depth loads")
+        }
+        if let line = store.commodities.first(where: { $0.product == product }) {
+            let price = await store.read { Figures.points($0.goodPriceHistory(product: product)) } ?? []
+            XCTAssertGreaterThanOrEqual(price.count, 30, "thirty weeks of goods prices")
+            both("good-history", Panel(padding: 12) { GoodHistoryChart(price: price, referenceCents: line.referenceCents) })
+        }
+        if let division = store.divisions.first,
+           let board = store.boards.first(where: { $0.code == division.region }) {
+            if let dossier = await store.read({ $0.regionDossier(region: board.index, firm: firm) }) ?? nil {
+                both("region-dossier", RegionDossierView(d: dossier))
+            } else {
+                XCTFail("the region dossier loads")
+            }
+            if let ops = await store.read({ $0.divisionOps(firm: firm, region: division.region, industry: division.industry) }) ?? nil {
+                both("division-ops", DivisionOpsView(d: ops))
+            } else {
+                XCTFail("division operations load")
+            }
+        }
+        if let freight = await store.read({ $0.logisticsStats(firm: firm) }) ?? nil {
+            both("logistics", LogisticsStatsView(d: freight))
+        }
+        let rows = await store.read { $0.rivalsBoard() } ?? []
+        XCTAssertGreaterThan(rows.count, 1, "the rivals board lists companies")
+        if let rival = rows.first(where: { !$0.yours }) {
+            let compare = await store.read {
+                RivalCompare(you: $0.statements(firm: firm, period: "quarter"), them: $0.statements(firm: rival.firm, period: "quarter"),
+                             goods: $0.headToHead(you: firm, rival: rival.firm))
+            }
+            both("rivals", RivalsBoardView(rows: rows, picked: rival.firm, onPick: { _ in }, compare: compare))
+        }
+        if let economy = await store.read({ EconomyHistory(series: $0.economySeries(), index: $0.corridorIndexHistory()) }) {
+            both("economy-history", EconomyHistoryView(d: economy))
+        }
     }
 
     /// The app in iPad Split View and Slide Over on a 13-inch iPad (1032 by 1376 points): a third,
@@ -143,15 +226,24 @@ final class SnapshotTests: XCTestCase {
         }
         Countryside.prepare(map)
         let now = Earth.week(of: store.overview?.weekLabel)
-        let shots: [(String, MapCamera, Int, Bool)] = [
-            ("map-close-pad", framed, now, true), ("map-turned-pad", framed.rotated(by: 35), now, true),
-            ("map-vehicles-pad", framed.zoomed(by: 1.6), now, true), ("map-winter-pad", framed, 2, true),
-            ("map-close-plain-pad", framed, now, false),
+        // The bearings show the buildings' sides turning; the pan pair shows the roads staying on
+        // the ground as the camera moves; the Freight mode shows its arcs and nothing else moving.
+        let panned = framed.panned(by: CGSize(width: 140, height: 90), in: size, pitch: 0.4)
+        let shots: [(String, MapCamera, Int, Bool, Bool)] = [
+            ("map-close-pad", framed, now, true, false), ("map-turned-pad", framed.rotated(by: 35), now, true, false),
+            ("map-bearing-90-pad", framed.rotated(by: 90), now, true, false),
+            ("map-bearing-180-pad", framed.rotated(by: 180), now, true, false),
+            ("map-bearing-270-pad", framed.rotated(by: 270), now, true, false),
+            ("map-pan-a-pad", framed.zoomed(by: 1.6), now, true, false),
+            ("map-pan-b-pad", panned.zoomed(by: 1.6), now, true, false),
+            ("map-vehicles-pad", framed.zoomed(by: 1.6), now, true, false), ("map-winter-pad", framed, 2, true, false),
+            ("map-close-plain-pad", framed, now, false, false), ("map-freight-pad", framed, now, true, true),
         ]
-        for (name, camera, week, earth) in shots {
+        for (name, camera, week, earth, freight) in shots {
             look.earth = earth
             let scene = MapScene(map: map, camera: camera, look: look, tint: MapLayer.presence.tintRGB, shading: [:], heights: [:],
-                                 selected: nil, divisions: divisions, lanes: store.lanes, sun: nil, plants: store.mapPlants,
+                                 selected: nil, divisions: divisions, lanes: store.lanes, freightLayer: freight, sun: nil,
+                                 plants: store.mapPlants,
                                  economyPhase: store.economy?.phase, week: week, displayScale: UIScreen.main.scale)
             let geometry = MapGeometry(map: map, camera: camera, size: size, tilt: look.tilt, detail: look.detail)
             XCTAssertTrue(geometry.closeUp, "\(name) is close enough for models")

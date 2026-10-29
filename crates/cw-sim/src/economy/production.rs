@@ -22,11 +22,172 @@ const SEASONAL_YIELD_BPS: [i32; 4] = [8_000, 11_000, 13_000, 8_000];
 /// in the low-yield quarters they keep only the share of hands the yield needs, so wages follow
 /// the harvest instead of staying fixed while output falls. Every other plant needs its full crew.
 pub fn crew_need_bps(world: &World, recipe: &cw_data::Recipe) -> i64 {
+    season_yield_bps(world, recipe).min(10_000) as i64
+}
+
+/// This week's seasonal yield on a recipe's output, in basis points: farms follow the quarter's
+/// harvest, every other plant runs at 10,000.
+pub fn season_yield_bps(world: &World, recipe: &cw_data::Recipe) -> i32 {
     if recipe.industry == "agriculture" {
-        let season = SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize];
-        season.min(10_000) as i64
+        SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize]
     } else {
         10_000
+    }
+}
+
+/// Industries whose plants can shift their cut between co-products. A refinery or gas plant can
+/// run its distillation toward the fractions that sell; a steel mill's scrap or a farm's
+/// livestock comes in a fixed proportion.
+pub const FLEXIBLE_CUT_INDUSTRIES: [&str; 1] = ["chemical_industries"];
+/// Most an output of a flexible plant can fall below its recipe yield, in basis points (a
+/// quarter), and most an output can rise above it (a half). What one output gives up goes to
+/// the others, so the plant never makes more lots in total than its recipe.
+pub const MAX_CUT_GIVE_BPS: i64 = 2_500;
+pub const MAX_CUT_TAKE_BPS: i64 = 5_000;
+/// Basis points of yield an output gives up for each basis point its score sits under the
+/// plant's yield-weighted average score.
+const CUT_GIVE_PER_SCORE_BPS: i64 = 2;
+/// Most a glut takes off an output's score, and the basis points it takes per hundredth of a week
+/// of unsold stock beyond the glut cover (twenty percent at five weeks over).
+const CUT_GLUT_PENALTY_MAX_BPS: i64 = 2_000;
+const CUT_GLUT_PENALTY_PER_HUNDREDTH: i64 = 4;
+
+/// The yield of each output against the recipe split, in basis points, from each output's
+/// recipe lots (`bases`) and score (`scores`, basis points of reference: what the output fetches
+/// less any glut penalty). An output scoring under the yield-weighted average gives up two
+/// basis points of yield per point under, at most `MAX_CUT_GIVE_BPS`; the lots given go to the
+/// outputs scoring above the average in proportion to their lots times how far above they
+/// score, each at most `MAX_CUT_TAKE_BPS` over its recipe yield. When a taker would pass that
+/// bound every shift is scaled down together, so the lots given always equal the lots taken
+/// (up to integer rounding, which only ever loses a fraction of a lot). Equal scores shift
+/// nothing.
+pub fn shift_cut(bases: &[i64], scores: &[i64]) -> Vec<i32> {
+    let n = bases.len().min(scores.len());
+    let total: i128 = bases[..n].iter().map(|b| (*b).max(0) as i128).sum();
+    if n < 2 || total <= 0 {
+        return vec![10_000; n];
+    }
+    let mean = (0..n)
+        .map(|i| bases[i].max(0) as i128 * scores[i] as i128)
+        .sum::<i128>()
+        / total;
+    // Lot-basis-points each output gives, and each taker's weight.
+    let give: Vec<i128> = (0..n)
+        .map(|i| {
+            let under = (mean - scores[i] as i128).max(0);
+            let bps = (under * CUT_GIVE_PER_SCORE_BPS as i128).min(MAX_CUT_GIVE_BPS as i128);
+            bases[i].max(0) as i128 * bps
+        })
+        .collect();
+    let weight: Vec<i128> = (0..n)
+        .map(|i| bases[i].max(0) as i128 * (scores[i] as i128 - mean).max(0))
+        .collect();
+    let pool: i128 = give.iter().sum();
+    let weights: i128 = weight.iter().sum();
+    if pool <= 0 || weights <= 0 {
+        return vec![10_000; n];
+    }
+    // Scale everything down so no taker passes its bound (10,000 is no scaling).
+    let mut scale: i128 = 10_000;
+    for i in 0..n {
+        if weight[i] > 0 && bases[i] > 0 {
+            let take_bps = pool * weight[i] / weights / bases[i] as i128;
+            if take_bps > MAX_CUT_TAKE_BPS as i128 {
+                scale = scale.min(MAX_CUT_TAKE_BPS as i128 * 10_000 / take_bps);
+            }
+        }
+    }
+    (0..n)
+        .map(|i| {
+            if bases[i] <= 0 {
+                return 10_000;
+            }
+            let base = bases[i] as i128;
+            let given = give[i] * scale / 10_000 / base;
+            let taken = pool * scale / 10_000 * weight[i] / weights / base;
+            (10_000 - given + taken) as i32
+        })
+        .collect()
+}
+
+/// This week's cut for a plant, in recipe output order: empty for a plant whose industry runs a
+/// fixed split, otherwise `shift_cut` over each output's score. An output's score is the owner's
+/// asking price for it against reference (the export bid, if lower, for a fraction no plant or
+/// household at home buys), less a glut penalty when the owner holds more unsold stock of it
+/// than its glut cover. Same rule for every owner, player or rival.
+pub fn cut_yields(world: &World, dataset: &Dataset, handle: Handle) -> Vec<i32> {
+    let Some(plant) = world.facilities.get(handle) else {
+        return Vec::new();
+    };
+    let recipe = &dataset.recipes[plant.recipe as usize];
+    if recipe.by_products.is_empty() || !FLEXIBLE_CUT_INDUSTRIES.contains(&recipe.industry.as_str())
+    {
+        return Vec::new();
+    }
+    let Some(firm) = world.firms.get(plant.firm) else {
+        return Vec::new();
+    };
+    let mut bases = Vec::new();
+    let mut scores = Vec::new();
+    for (id, lots) in recipe.outputs() {
+        let Some(code) = dataset.product_index.get(id).copied() else {
+            return Vec::new();
+        };
+        let reference = dataset.reference_price(code).max(1);
+        let mut ask = firm
+            .policies
+            .prices
+            .get(&code)
+            .copied()
+            .unwrap_or(reference);
+        // A fraction nobody at home buys leaves at the export bid, whatever its ask.
+        if crate::economy::pricing::exported(world, code)
+            && !crate::economy::pricing::home_buyers(world, dataset, code)
+        {
+            let bid = world
+                .gateways
+                .iter()
+                .filter(|g| g.product == code && g.region == plant.region && g.buy_price_cents > 0)
+                .map(|g| g.buy_price_cents)
+                .max()
+                .unwrap_or(reference);
+            ask = ask.min(bid);
+        }
+        let sold = crate::economy::pricing::weekly_sold(world, plant.firm, code).max(1);
+        let free = crate::economy::pricing::free_stock(world, dataset, plant.firm, code);
+        let over = free.saturating_mul(100) / sold
+            - crate::economy::pricing::glut_weeks(dataset, code) * 100;
+        let penalty = (over.max(0).saturating_mul(CUT_GLUT_PENALTY_PER_HUNDREDTH))
+            .min(CUT_GLUT_PENALTY_MAX_BPS);
+        bases.push(lots);
+        scores.push(ask.saturating_mul(10_000) / reference - penalty);
+    }
+    let cut = shift_cut(&bases, &scores);
+    if cut.iter().all(|bps| *bps == 10_000) {
+        Vec::new()
+    } else {
+        cut
+    }
+}
+
+/// A plant's real full-run output of its primary product this week: its full weekly output at
+/// this season's yield and at the share of its cut the primary takes (a refinery leaning toward
+/// its primary fraction can make more of it than the recipe's split), the most it can make
+/// running flat out with every input and hand it needs.
+pub fn season_full_output(
+    world: &World,
+    dataset: &Dataset,
+    plant: &crate::state::Facility,
+) -> cw_core::quantity::MilliLots {
+    let full = plant
+        .full_weekly_output(dataset)
+        .scale_bps(season_yield_bps(
+            world,
+            &dataset.recipes[plant.recipe as usize],
+        ));
+    match plant.cut_bps.first() {
+        Some(cut) if *cut > 0 => full.scale_bps(*cut),
+        _ => full,
     }
 }
 
@@ -524,27 +685,29 @@ fn run_facility(
         output = output.min(cap);
     }
     // Seasonal yield applies to farm output only, before input planning in a full model.
-    let season = if recipe.industry == "agriculture" {
-        SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize]
-    } else {
-        10_000
-    };
+    let season = season_yield_bps(world, recipe);
     output = output.scale_bps(season);
     // Supply-side events (crop loss, outages) reduce physical output, not household demand.
     if let Some(code) = dataset.product_index.get(&recipe.output) {
         output = output.scale_bps(world.supply_ratio_bps(facility.region, *code) as i32);
     }
-    // Every product the plant makes, in its fixed yield split: the primary output first, then
-    // each by-product at the same run rate, season and supply conditions.
+    // A refinery or gas plant shifts its cut toward the fractions that sell (see `cut_yields`).
+    let cut = cut_yields(world, dataset, handle);
+    if let Some(primary) = cut.first() {
+        output = output.scale_bps(*primary);
+    }
+    // Every product the plant makes, in its yield split: the primary output first, then each
+    // by-product at the same run rate, season and supply conditions.
     let mut made: Vec<(u16, MilliLots)> = Vec::new();
     if output.0 > 0 {
         made.push((dataset.product_index[&recipe.output], output));
     }
-    for by in &recipe.by_products {
+    for (index, by) in recipe.by_products.iter().enumerate() {
         let Some(code) = dataset.product_index.get(&by.product).copied() else {
             continue;
         };
         let qty = MilliLots::from_lots(by.weekly_lots * facility.blocks as i64)
+            .scale_bps(cut.get(index + 1).copied().unwrap_or(10_000))
             .scale_bps(ratio)
             .scale_bps(season)
             .scale_bps(world.supply_ratio_bps(facility.region, code) as i32);
@@ -591,6 +754,7 @@ fn run_facility(
         // starts at zero and must stay at zero; subtracting output unconditionally drove the
         // field negative on ordinary plants and made the conservation check meaningless.
         let facility = world.facilities.get_mut(handle).unwrap();
+        facility.cut_bps = cut;
         if !facility.deposit_remaining.is_zero() {
             facility.deposit_remaining =
                 facility.deposit_remaining.max_zero().saturating_sub(output);

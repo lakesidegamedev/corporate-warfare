@@ -86,6 +86,7 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
         .map(|(handle, _)| handle)
         .collect();
     for handle in due {
+        resource_contract(world, dataset, handle);
         let Some(contract) = world.contracts.get(handle).cloned() else {
             continue;
         };
@@ -312,6 +313,66 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
                 }
             }
         }
+    }
+}
+
+/// A seller ships a contract from where it makes the good. When the seller has none of the good
+/// in the contract's origin state and no operating plant there that makes it (the plant was sold,
+/// closed or carved out), the origin moves to the state of its largest operating plant for the
+/// good, or failing that the state where it holds the most beyond its own plants' input cover.
+/// A firm whose mill is in one state then does not default on a contract written from another
+/// and pay the penalty while its output leaves at the export bid. The buyer pays freight from the
+/// new origin. Nothing moves while the origin holds stock or makes the good.
+pub fn resource_contract(world: &mut World, dataset: &Dataset, handle: Handle) {
+    let Some(contract) = world.contracts.get(handle) else {
+        return;
+    };
+    let (seller, product, origin) = (contract.seller, contract.product, contract.from_region);
+    let Some(firm) = world.firms.get(seller) else {
+        return;
+    };
+    if firm.stock(product, origin).0 > 0 {
+        return;
+    }
+    let id = &dataset.products[product as usize].id;
+    // (lots a week at full run, region) of each operating plant making the good.
+    let plants: Vec<(i64, u8)> = firm
+        .facilities
+        .iter()
+        .filter_map(|plant| world.facilities.get(*plant))
+        .filter(|plant| plant.status == crate::state::FacilityStatus::Operating)
+        .map(|plant| {
+            let lots = dataset.recipes[plant.recipe as usize]
+                .lots_of(id)
+                .saturating_mul(plant.blocks as i64);
+            (lots, plant.region)
+        })
+        .filter(|(lots, _)| *lots > 0)
+        .collect();
+    if plants.iter().any(|(_, region)| *region == origin) {
+        return;
+    }
+    // Largest first; ties go to the lower region index.
+    let largest = |list: &[(i64, u8)]| {
+        list.iter()
+            .max_by_key(|(lots, region)| (*lots, std::cmp::Reverse(*region)))
+            .map(|(_, region)| *region)
+    };
+    let stocked: Vec<(i64, u8)> = firm
+        .inventory
+        .iter()
+        .filter(|((code, region), _)| *code == product && *region != origin)
+        .map(|((_, region), lot)| {
+            let cover =
+                crate::economy::storage::reserved_milli(world, dataset, firm, *region, product);
+            (lot.qty.0 - cover, *region)
+        })
+        .filter(|(spare, _)| *spare > 0)
+        .collect();
+    if let Some(region) = largest(&plants).or_else(|| largest(&stocked))
+        && let Some(stored) = world.contracts.get_mut(handle)
+    {
+        stored.from_region = region;
     }
 }
 
