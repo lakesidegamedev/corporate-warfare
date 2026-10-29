@@ -1,0 +1,24 @@
+# Added only to the CI emulator check (-Pcw.smoke=true). The instrumented test is compiled
+# against the unshrunk classes, so the few it calls directly keep their names. Everything the
+# game itself reaches is still shrunk, renamed and optimized as in the shipped build.
+-keep class net.lakesidegames.corporatewarfare.GameStore { public *; }
+-keepnames class kotlinx.coroutines.CoroutineScope
+-keep class kotlinx.coroutines.CoroutineScopeKt { public *; }
+-keep class kotlinx.coroutines.Dispatchers { public *; }
+-keep class kotlinx.coroutines.CoroutineDispatcher
+-keep class kotlin.coroutines.CoroutineContext
+# The test runner's Kotlin code calls the compiler's null-check helpers, which R8 otherwise trims.
+-keep,allowobfuscation class kotlin.jvm.internal.** { *; }
+# Libraries the androidx.test runner loads from the app's classes at start; R8 trims them from the
+# shrunk app because the game never calls them. Kept for the smoke build only.
+-keep class androidx.tracing.** { *; }
+-keep class androidx.concurrent.futures.** { *; }
+-keep class com.google.common.util.concurrent.ListenableFuture { *; }
+-keep class androidx.lifecycle.** { *; }
+-keep class androidx.core.app.** { *; }
+-keep class androidx.activity.** { *; }
+# The test APK is compiled against the full Kotlin standard library and loads it from the app.
+-keep class kotlin.** { *; }
+-keep class kotlinx.coroutines.** { *; }
+-dontwarn androidx.tracing.**
+-dontwarn androidx.concurrent.futures.**

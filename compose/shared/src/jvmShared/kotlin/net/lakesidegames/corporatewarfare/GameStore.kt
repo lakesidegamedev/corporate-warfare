@@ -655,7 +655,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 handle.rivalFeed(12u),
                 handle.mapPlants(),
                 firm?.let { handle.cfoAdvice(it) } ?: emptyList<uniffi.cw_ffi.CfoAdviceDto>(),
-                handle.letters((overviewNow.tick - 8u).coerceAtLeast(1u)),
+                handle.letters(if (overviewNow.tick > 8u) overviewNow.tick - 8u else 1u),
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
