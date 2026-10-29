@@ -192,7 +192,7 @@ private fun game() = application {
         val updater = remember {
             Updater(DesktopUpdates, scope, File(saveDirectory(), "updates"), saveDirectory(), channel = { settings.updateChannel })
         }
-        CorporateWarfareApp(store, settings, updater, onQuit = ::exitApplication)
+        CorporateWarfareApp(store, settings, updater, onQuit = ::exitApplication, saveFolder = saveDirectory().path)
     }
 }
 
