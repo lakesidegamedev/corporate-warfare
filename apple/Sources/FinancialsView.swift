@@ -111,7 +111,7 @@ struct CompanyFinancialsSection: View {
                 Text("Loading").font(.caption).foregroundStyle(Theme.secondary)
             }
         }
-        .task(id: "\(firm)-\(store.overview?.revision ?? 0)") {
+        .task(id: "\(firm)-\(store.historyRefreshKey)") {
             let firm = self.firm, name = self.name, industry = self.industry
             data = await store.read { FinancialData.load($0, firm: firm, name: name, industry: industry) }
         }

@@ -180,7 +180,7 @@ struct EngineSection<T, Content: View>: View {
         Group {
             if let value { content(value) }
         }
-        .task(id: "\(key)-\(store.overview?.revision ?? 0)") {
+        .task(id: "\(key)-\(store.historyRefreshKey)") {
             let load = self.load
             value = await store.read { load($0) } ?? nil
         }
@@ -663,8 +663,8 @@ struct RivalsBoardSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
         }
-        .task(id: store.overview?.revision ?? 0) { rows = await store.read { $0.rivalsBoard() } }
-        .task(id: "\(picked ?? 0)-\(you ?? 0)-\(store.overview?.revision ?? 0)") {
+        .task(id: store.historyRefreshKey) { rows = await store.read { $0.rivalsBoard() } }
+        .task(id: "\(picked ?? 0)-\(you ?? 0)-\(store.historyRefreshKey)") {
             guard let p = picked, let me = you else { compare = nil; return }
             compare = await store.read {
                 RivalCompare(you: $0.statements(firm: me, period: "quarter"), them: $0.statements(firm: p, period: "quarter"),

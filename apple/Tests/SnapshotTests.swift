@@ -141,8 +141,9 @@ final class SnapshotTests: XCTestCase {
             XCTFail("market depth loads")
         }
         if let line = store.commodities.first(where: { $0.product == product }) {
-            render("commodity-sheet-phone", phone, compact: true, GoodDepthSection(product: line.product, referenceCents: line.referenceCents)
-                .padding(16).background(Theme.ink).environmentObject(store))
+            let price = await store.read { Figures.points($0.goodPriceHistory(product: product)) } ?? []
+            XCTAssertGreaterThanOrEqual(price.count, 30, "thirty weeks of goods prices")
+            both("good-history", Panel(padding: 12) { GoodHistoryChart(price: price, referenceCents: line.referenceCents) })
         }
         if let division = store.divisions.first,
            let board = store.boards.first(where: { $0.code == division.region }) {
