@@ -13,7 +13,7 @@
 
 use cw_core::calendar::Tick;
 use cw_core::ids::Handle;
-use cw_data::Dataset;
+use cw_data::{Dataset, Mood};
 use cw_sim::economy::events_engine::player_side;
 use cw_sim::state::{DealKind, DealState, FirmStatus, World};
 
@@ -95,6 +95,14 @@ pub struct Story {
     pub week: u32,
     /// The player is party to it.
     pub yours: bool,
+    /// The scenario's journalist who wrote it: a cast id for the portrait, empty when the
+    /// scenario has none.
+    pub author: String,
+    /// The journalist's name, empty with no author.
+    pub author_name: String,
+    /// How the journalist looks beside the story: displeased for a raid, a failure or a bill
+    /// past due, pleased for a deal, neutral otherwise.
+    pub mood: Mood,
 }
 
 /// One share on the markets column.
@@ -405,6 +413,9 @@ fn candidate(
             link,
             week,
             yours,
+            author: String::new(),
+            author_name: String::new(),
+            mood: Mood::Neutral,
         },
         base,
         size,
@@ -429,7 +440,35 @@ fn collect(world: &World, dataset: &Dataset, week: u32) -> Vec<Candidate> {
     distress(world, week, &mut found);
     results(world, dataset, week, &mut found);
     executives(world, dataset, week, &mut found);
+    sign(dataset, &mut found);
     found
+}
+
+/// Put the scenario's journalist on every story and pick the mood of their portrait from what
+/// the story is about. Custom scenarios without a journalist keep the desk byline alone.
+fn sign(dataset: &Dataset, found: &mut [Candidate]) {
+    let writer = cw_data::cast::scenario_person(
+        &dataset.cast,
+        dataset.scenario_id.as_str(),
+        cw_data::Role::Journalist,
+    );
+    for c in found {
+        let story = &mut c.story;
+        if let Some(p) = writer {
+            story.author = p.id.clone();
+            story.author_name = p.name.clone();
+        }
+        story.mood = story_mood(&story.id);
+    }
+}
+
+/// The journalist's look for a story, from the kind of fact in its id.
+pub(crate) fn story_mood(id: &str) -> Mood {
+    match id.split(':').next().unwrap_or("") {
+        "raid" | "incident" | "pastdue" => Mood::Displeased,
+        "deal" => Mood::Pleased,
+        _ => Mood::Neutral,
+    }
 }
 
 /// The stories of the four weeks up to `week`, for the letters to reuse.
@@ -1472,6 +1511,9 @@ mod tests {
         assert_eq!(lead.link.kind, "event");
         assert_eq!(lead.link.key, "test-bank-failure");
         assert_eq!(lead.byline, "Markets desk");
+        // The scenario's own journalist signs it.
+        assert_eq!(lead.author, "evelyn_hollis");
+        assert_eq!(lead.author_name, "Evelyn Hollis");
         // Once it fires it reports as a plain event, not a hint.
         s.world.systemic.timeline.events[0].fired_at = 64;
         s.world.tick = Tick(64);
@@ -1720,5 +1762,15 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_stories_mood_follows_what_it_is_about() {
+        assert_eq!(story_mood("raid:30:1:2"), Mood::Displeased);
+        assert_eq!(story_mood("incident:4:0"), Mood::Displeased);
+        assert_eq!(story_mood("pastdue:9:3"), Mood::Displeased);
+        assert_eq!(story_mood("deal:3:Closed"), Mood::Pleased);
+        assert_eq!(story_mood("rate:12"), Mood::Neutral);
+        assert_eq!(story_mood("results:40"), Mood::Neutral);
     }
 }

@@ -16,6 +16,8 @@ pub struct LetterSenderDto {
     pub organisation: String,
     /// integrator, raider, financier, speculator, builder or cautious; empty for an office.
     pub temperament: String,
+    /// neutral, pleased or displeased: which face of the portrait to draw.
+    pub mood: String,
 }
 
 #[derive(Clone, uniffi::Record)]
@@ -54,6 +56,7 @@ fn sender_dto(s: Sender) -> LetterSenderDto {
         role: s.role,
         organisation: s.organisation,
         temperament: s.temperament,
+        mood: s.mood.key().to_owned(),
     }
 }
 

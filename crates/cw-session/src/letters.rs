@@ -13,7 +13,7 @@
 use cw_core::calendar::Tick;
 use cw_core::ids::Handle;
 use cw_data::cast::extras;
-use cw_data::{Dataset, Person, Temperament};
+use cw_data::{Dataset, Mood, Person, Role, Temperament};
 use cw_sim::economy::events_engine::player_side;
 use cw_sim::economy::rivalry::Cause;
 use cw_sim::state::{DealKind, DealState, HolderId, World};
@@ -46,6 +46,17 @@ pub struct Sender {
     pub organisation: String,
     /// The sender's temperament key, or empty.
     pub temperament: String,
+    /// How the sender looks when the letter is read: pleased after a deal or a beat, displeased
+    /// after a raid on them or a miss, neutral otherwise.
+    pub mood: Mood,
+}
+
+impl Sender {
+    /// The same sender looking the way the news makes them feel.
+    fn felt(mut self, mood: Mood) -> Self {
+        self.mood = mood;
+        self
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -402,6 +413,7 @@ fn person_sender(p: &Person, role: &str, organisation: &str) -> Sender {
         role: role.to_owned(),
         organisation: organisation.to_owned(),
         temperament: p.temperament.key().to_owned(),
+        mood: Mood::Neutral,
     }
 }
 
@@ -412,7 +424,37 @@ fn office_sender(name: &str, role: &str, organisation: &str) -> Sender {
         role: role.to_owned(),
         organisation: organisation.to_owned(),
         temperament: String::new(),
+        mood: Mood::Neutral,
     }
+}
+
+/// The scenario's own person for a role as a sender, or an office when the scenario has none
+/// (a custom scenario). The one place bylines, union letters and analyst notes get their person.
+pub(crate) fn scenario_sender(
+    dataset: &Dataset,
+    role: Role,
+    title: &str,
+    organisation: &str,
+    fallback: &str,
+) -> Sender {
+    match cw_data::cast::scenario_person(&dataset.cast, &dataset.scenario_id, role) {
+        Some(p) => person_sender(p, title, organisation),
+        None => office_sender(fallback, title, organisation),
+    }
+}
+
+/// The scenario's analyst writing an analyst note or an earnings letter: pleased on a beat,
+/// displeased on a miss, neutral for a forecast. Earnings letters call this with their mood.
+#[allow(dead_code)]
+pub(crate) fn analyst_sender(dataset: &Dataset, organisation: &str, mood: Mood) -> Sender {
+    scenario_sender(
+        dataset,
+        Role::Analyst,
+        "Analyst",
+        organisation,
+        "Markets analyst",
+    )
+    .felt(mood)
 }
 
 /// The sender of a rival firm's letter: its chief, or "Chief executive" when it has none then.
@@ -576,7 +618,14 @@ fn raid_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Lett
                 id: format!("raid:{}:{}:{}", raid.tick, raid.attacker.0, raid.defender.0),
                 kind: "rival",
                 week: raid.tick,
-                sender: rival_sender(world, dataset, writer, raid.tick),
+                // The firm that lost plants is displeased; one that beat off a raid, or won one, is not.
+                sender: rival_sender(world, dataset, writer, raid.tick).felt(
+                    if you_attack && raid.success {
+                        Mood::Displeased
+                    } else {
+                        Mood::Pleased
+                    },
+                ),
                 tone: Tone::Grudge,
                 addressee: yours.clone(),
                 facts: vec![fact],
@@ -612,7 +661,7 @@ fn ally_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Lett
                 id: format!("ally:{}:{}:{}", other.0, memory.cause.key(), memory.last),
                 kind: "ally",
                 week: memory.last,
-                sender: rival_sender(world, dataset, other, memory.last),
+                sender: rival_sender(world, dataset, other, memory.last).felt(Mood::Pleased),
                 tone: Tone::Ally,
                 addressee: yours,
                 facts: vec![fact],
@@ -825,7 +874,7 @@ fn government_letters(
     }
 }
 
-fn union_letters(world: &World, since: u32, out: &mut Vec<Letter>) {
+fn union_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
     for (i, item) in world.news.iter().enumerate() {
         if item.key != "news.strike" || item.week.0 < since {
             continue;
@@ -843,11 +892,14 @@ fn union_letters(world: &World, since: u32, out: &mut Vec<Letter>) {
                 id: format!("news:{}:{}", item.week.0, i),
                 kind: "union",
                 week: item.week.0,
-                sender: office_sender(
-                    "Union representative",
-                    "Union representative",
+                sender: scenario_sender(
+                    dataset,
+                    Role::UnionLeader,
+                    "Union leader",
                     &format!("Workers at {s}"),
-                ),
+                    "Union representative",
+                )
+                .felt(Mood::Displeased),
                 tone: Tone::Formal,
                 addressee: s.clone(),
                 facts: vec![format!(
@@ -887,7 +939,7 @@ fn analyst_letters(
                 id: story.id.clone(),
                 kind: "analyst",
                 week: story.week,
-                sender: office_sender("Markets analyst", "Analyst", masthead),
+                sender: scenario_sender(dataset, Role::Analyst, "Analyst", masthead, "Markets analyst"),
                 tone: Tone::Formal,
                 addressee: player_home(world),
                 facts: vec![format!(
@@ -976,7 +1028,7 @@ fn executive_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec
             event.kind
         );
         let candidate = world.executives.person(event.person);
-        let person = candidate.and_then(ex::extra_of).map(|e| e.person());
+        let person = candidate.and_then(ex::person_of);
         let pay = paper::money(world, dataset, event.firm, event.cents);
         match event.kind {
             EventKind::Hired if yours => {
@@ -989,7 +1041,7 @@ fn executive_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec
                         id: id.clone(),
                         kind: "executive",
                         week: event.week.max(1),
-                        sender: person_sender(p, event.post.title(), &org),
+                        sender: person_sender(p, event.post.title(), &org).felt(Mood::Pleased),
                         tone: Tone::Ally,
                         addressee: org.clone(),
                         facts: vec![
@@ -1097,7 +1149,7 @@ fn executive_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec
                     id: format!("{id}:oldboss"),
                     kind: "rival",
                     week: event.week.max(1),
-                    sender: rival_sender(world, dataset, from, event.week),
+                    sender: rival_sender(world, dataset, from, event.week).felt(Mood::Displeased),
                     tone: Tone::Grudge,
                     addressee: org.clone(),
                     facts: vec![format!(
@@ -1334,7 +1386,7 @@ pub fn letters(world: &World, dataset: &Dataset, since_week: u32) -> Vec<Letter>
     bid_letters(world, dataset, since, &mut out);
     rate_letters(world, dataset, since, &mut out);
     government_letters(world, dataset, &stories, since, &mut out);
-    union_letters(world, since, &mut out);
+    union_letters(world, dataset, since, &mut out);
     analyst_letters(world, dataset, &stories, since, &mut out);
     cfo_letters(world, dataset, since, &mut out);
     board_letters(world, since, &mut out);
@@ -1577,6 +1629,8 @@ mod tests {
         let l = letters(&s.world, &s.dataset, 25).remove(0);
         check(&l);
         assert_eq!(l.sender.organisation, s.world.firms.get(r).unwrap().name);
+        // The defender beat the raid off and looks it.
+        assert_eq!(l.sender.mood, Mood::Pleased);
         let body = text(&l);
         assert!(
             body.contains("gained nothing") && body.contains("$5.0 million"),
@@ -1588,6 +1642,36 @@ mod tests {
         t.world.raids.push(raid(a, you(&t), false));
         t.world.raids.push(raid(a, b, true));
         assert!(letters(&t.world, &t.dataset, 25).is_empty());
+    }
+
+    #[test]
+    fn a_raid_that_took_plants_leaves_the_defender_displeased() {
+        let mut s = quiet("great-lakes-2000", 30);
+        let (r, y) = (rival(&s, 1), you(&s));
+        s.world.raids.push(raid(y, r, true));
+        let l = letters(&s.world, &s.dataset, 25).remove(0);
+        assert_eq!(l.sender.mood, Mood::Displeased);
+        // Quiet worlds with no news and no deal leave a person neutral.
+        let t = quiet("great-lakes-2000", 30);
+        let chief = chief(&t.world, &t.dataset, rival(&t, 0)).expect("a chief");
+        assert_eq!(person_sender(&chief, "Chief executive", "x").mood, Mood::Neutral);
+    }
+
+    #[test]
+    fn a_scenario_without_its_own_people_falls_back_to_offices() {
+        let mut s = quiet("great-lakes-2000", 30);
+        s.dataset.scenario_id = "a-custom-scenario".to_owned();
+        let sender = scenario_sender(&s.dataset, Role::UnionLeader, "Union leader", "x", "Rep");
+        assert!(sender.person.is_empty());
+        assert_eq!(sender.name, "Rep");
+        // Every shipped scenario has a union leader, a journalist and an analyst.
+        for id in ["texas-1981", "ruhr-rhine-1991", "silicon-valley-1995", "great-lakes-2000"] {
+            s.dataset.scenario_id = id.to_owned();
+            for role in [Role::UnionLeader, Role::Journalist, Role::Analyst] {
+                assert!(!scenario_sender(&s.dataset, role, "t", "x", "f").person.is_empty(), "{id}");
+            }
+        }
+        assert_eq!(analyst_sender(&s.dataset, "x", Mood::Pleased).mood, Mood::Pleased);
     }
 
     #[test]
@@ -1608,6 +1692,7 @@ mod tests {
         assert_voice(&l, Tone::Ally);
         assert!(text(&l).contains("joint venture"));
         assert_eq!(l.sender.organisation, s.world.firms.get(r).unwrap().name);
+        assert_eq!(l.sender.mood, Mood::Pleased);
     }
 
     #[test]
@@ -1727,6 +1812,10 @@ mod tests {
         check(&l);
         assert_eq!(l.kind, "union");
         assert_eq!(l.sender.organisation, format!("Workers at {name}"));
+        // The scenario's own union leader writes, and looks displeased about the walkout.
+        assert_eq!(l.sender.person, "darnell_pierce");
+        assert_eq!(l.sender.role, "Union leader");
+        assert_eq!(l.sender.mood, Mood::Displeased);
         assert!(text(&l).contains("walked out"));
         // A strike at a rival is the paper's, not a letter.
         let mut t = quiet("great-lakes-2000", 30);
@@ -1766,6 +1855,9 @@ mod tests {
         );
         assert!(body.contains("A large lender to the oil patch fails."));
         assert_eq!(l.sender.organisation, "The Gulf Ledger");
+        // The scenario's own analyst signs it.
+        assert_eq!(l.sender.person, "anil_deshpande");
+        assert_eq!(l.sender.role, "Analyst");
         assert_eq!(l.link.key, "test-bank-failure");
     }
 

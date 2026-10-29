@@ -27,7 +27,7 @@ use cw_core::hash::{CanonicalHasher, DOMAIN_STATE};
 use serde::{Deserialize, Serialize};
 
 pub use balance::{Balance, BalanceOverlay, Product, ProductKind, Recipe, StorageClass};
-pub use cast::{Person, Role, Temperament};
+pub use cast::{Mood, Person, Role, Temperament};
 pub use currency::{CountryDef, CurrencyDef, CurrencySet, PegDef};
 pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetting};
 pub use events::EventCard;
