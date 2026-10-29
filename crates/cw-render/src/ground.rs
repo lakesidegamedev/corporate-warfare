@@ -61,9 +61,7 @@ fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
     for y in 0..h {
         let row = &src[y * w..(y + 1) * w];
         let mut acc = 0.0;
-        for i in 0..=r.min(w - 1) {
-            acc += row[i];
-        }
+        acc += row[..=r.min(w - 1)].iter().sum::<f32>();
         acc += row[0] * r as f32; // clamp left
         for x in 0..w {
             tmp[y * w + x] = acc * norm;

@@ -458,9 +458,9 @@ pub fn rasterise_mask(map_json: &str, bounds: Bounds, ppd: f32) -> Result<Mask, 
         }
         let seed = (lon * 131.0 + lat * 71.0).sin() * 43758.5;
         let ph = [
-            seed.fract() * 6.28,
-            (seed * 1.7).fract() * 6.28,
-            (seed * 2.3).fract() * 6.28,
+            seed.fract() * std::f32::consts::TAU,
+            (seed * 1.7).fract() * std::f32::consts::TAU,
+            (seed * 2.3).fract() * std::f32::consts::TAU,
         ];
         let (cx, cy) = ((lon - bounds.west) * ppd, (bounds.north - lat) * ppd);
         let reach = r_km * 1.5;
