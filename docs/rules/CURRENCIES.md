@@ -40,7 +40,12 @@ buybacks, IPOs, liquidation payouts and founding capital.
 Contracts, intercompany loans, guarantees, deposits, bank loans, insurance, mergers and market
 raids need both firms in one currency. A firm builds only in regions of its own currency (to
 operate in another country, found a firm there). Only numeraire firms hold stakes in other
-firms and issue bonds. The state rescues, buys reserves and procures only from numeraire firms.
+firms and issue bonds. The state rescues only numeraire firms. It buys defence and strategic reserves from firms in
+every currency of the scenario, the same rule in every scenario: a defence contract is written
+in the supplier's own money and the treasury, which keeps its books in the numeraire, pays each
+delivery converted at that week's rate. A supplier outside the numeraire gets no advance (an
+advance held for a year would carry the exchange rate with it) and is paid on delivery. One
+treasury funds every country's purchases; separate treasuries per country are not modelled.
 
 ## Reporting currency
 

@@ -112,21 +112,30 @@ fn scenario_flags(arguments: &[String]) -> (bool, bool) {
 
 /// `--prices off|default|historical|historical_variance|random`. Off is the pre-1.7 behaviour
 /// (no world commodity prices); the others use the scenario named by `--scenario`, Great Lakes
-/// 2000 unless given. Default takes the scenario's own mode.
+/// 2000 unless given. Default takes the scenario's own mode. `--timeline historical|off|shuffled`
+/// sets whether the scenario's dated history plays (historical when not given).
 fn prices_flag(arguments: &[String]) -> cw_session::PriceSetup {
     let name = flag(arguments, "--prices").unwrap_or_else(|| "default".to_owned());
     let scenario_id =
         flag(arguments, "--scenario-id").unwrap_or_else(|| "great-lakes-2000".to_owned());
+    let timeline = flag(arguments, "--timeline").map(|key| {
+        cw_sim::economy::timeline::TimelineMode::from_key(&key).unwrap_or_else(|| {
+            eprintln!("unknown timeline {key}; use historical, off or shuffled");
+            std::process::exit(2);
+        })
+    });
     match name.as_str() {
         "off" => cw_session::PriceSetup::default(),
         "default" => cw_session::PriceSetup {
             scenario_id,
             path: None,
+            timeline,
         },
         other => match cw_data::PricePath::from_key(other) {
             Some(path) => cw_session::PriceSetup {
                 scenario_id,
                 path: Some(path),
+                timeline,
             },
             None => {
                 eprintln!(

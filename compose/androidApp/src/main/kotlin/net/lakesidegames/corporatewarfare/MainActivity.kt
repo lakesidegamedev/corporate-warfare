@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
                 paint.asFrameworkPaint(),
             )
         }
+        // androidCloudFlow (Android 13 and up) is ready but not installed: it needs checking on a device first.
         Images.decode = { bytes ->
             android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
         }

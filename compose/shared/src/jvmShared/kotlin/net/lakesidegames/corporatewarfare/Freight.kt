@@ -543,10 +543,10 @@ private fun LaneDetail(store: GameStore, lane: LaneDto) {
 
 /** Reserve loads on the lane for a term at a locked price, quoted by the engine before you commit. */
 @Composable
-private fun ReserveLane(store: GameStore, lane: LaneDto) {
+internal fun ReserveLane(store: GameStore, lane: LaneDto, initialLots: Int? = null, initialWeeks: Int? = null) {
     val most = minOf(lane.reservableLots, (lane.capacityLots * 8L) / 10).coerceAtLeast(10).toDouble()
-    var lots by remember(laneKey(lane)) { mutableStateOf(minOf(100.0, most)) }
-    var weeks by remember(laneKey(lane)) { mutableStateOf(13.0) }
+    var lots by remember(laneKey(lane)) { mutableStateOf(initialLots?.toDouble()?.coerceIn(10.0, most) ?: minOf(100.0, most)) }
+    var weeks by remember(laneKey(lane)) { mutableStateOf(initialWeeks?.toDouble()?.coerceIn(4.0, 52.0) ?: 13.0) }
     var quote by remember(laneKey(lane)) { mutableStateOf<ReserveQuoteDto?>(null) }
     val revision = store.overview?.revision
     LaunchedEffect(laneKey(lane), lots.toInt(), weeks.toInt(), revision) {

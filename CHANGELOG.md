@@ -11,9 +11,243 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- Executives. Every company can hire a chief financial officer, a chief operating officer and a
+  logistics chief, and your rivals do too. Each is a named person with a portrait, a level from 1 to
+  5 and a temperament, and each changes one real number. A chief financial officer takes up to
+  0.75 points off the interest on loans and bonds and adds a little interest on idle cash. A chief
+  operating officer cuts the time to build by up to a fifth and lets a full plant run a few percent
+  above its rating. A logistics chief takes up to a quarter off what outside carriers charge above
+  the owners' rate, and a little off lane reservations. Pay grows with level and company size, a
+  contract runs two years, and a dismissal costs severance. In the CEO Office, the new Executives
+  section shows each post, the person, what they change in plain words with the number, their pay
+  and the time left, with Hire (a candidate list showing what each would do at your company, the cost
+  and how soon it pays back) and Dismiss (with the severance quoted first). A rival's page lists its
+  executives and what it would take to tempt one away. You can offer a rival's executive more pay;
+  a speculator takes a small raise, a cautious person wants a lot. Rivals hire only when the saving
+  pays for the pay, and some will try to poach yours. New hires introduce themselves by letter in
+  their own voice, a poached executive's old boss writes, and hires and departures make the paper.
+  The weekly brief suggests a hire when it would pay for itself inside two years. After two missed
+  board goals in a row the board now names a new chief executive for your company, with a letter from
+  the chair, and the count of misses starts again. Saves written before this load as they were and
+  draw the pool of people on the next week.
+
+- The weekly brief. At the top of the CEO Office, one panel says what changed this week (up to
+  three facts, biggest first: profit and cash, a price move on a good you sell, a rival raid on
+  you, a world event, a met board goal), what is due (decisions, the board's goal offer, loan
+  payments, takeover bids, with weeks left) and up to three suggested moves. Each move comes with
+  the game's own figures: build more where imports are filling demand you do not meet, with its
+  cost and payback; reserve a freight lane where outside carriers take a lot of your money; cut
+  or raise a price where stock piles up or sells out; match output to demand; pick a board goal;
+  raid a rival when the odds are good and you can afford it from what you earned. Review opens
+  the usual dialog already filled in, and nothing is sent until you confirm there. The panel
+  folds away and remembers it. On desktop, a new setting, Show the brief each week, opens it
+  when a week starts while time is paused or at normal speed. It is never read at faster speeds
+  more than once a week.
+- The weekly brief never goes quiet when the company is losing money. If the last four weeks
+  add up to a loss, the CFO's reasons lead the moves, biggest weekly cost first, each with its
+  one-button fix and how much it saves a week. With no single reason, the brief says where the
+  money goes ("Wages are 62 percent of revenue") and opens the weakest division. "Hold your
+  course" now comes only with a reason, such as how profit moved. Builds are judged on the
+  division's margin at today's prices up to ten years, shown in years, and rank last unless they
+  pay back inside three years. On Apple, Review opens the game's own build, raid, lane, pricing,
+  board offer and division sheets, and the brief has a snapshot test.
+- Letters from the people in your world. The Inbox is now correspondence. A rival chief writes
+  after a raid on you or by you, and after a joint venture or a friendly deal. A bidder writes
+  when they bid for your company. The central bank chair writes after a rate decision and gives
+  the bank's reason. Your governor or the leader of the government writes about new laws and
+  election results. The union writes when your workers strike. Your chief financial officer
+  sends a memo when the company is losing money, with the biggest reasons, and a short one on a
+  strong quarter. An analyst writes when the game sees a big event coming, such as a bank
+  failure. Each decision that used to be a card now arrives as a letter from the office that
+  brings it, a bank, an insurer, a regulator or the union, with the same answer buttons and the
+  same due week. Every letter has a portrait, the writer's name, role and company, and is
+  written in their voice: a raider is blunt, a cautious chief is careful, a financier talks in
+  figures. Letters only state facts the game recorded and stay short. Decisions are pinned on
+  top, unread letters have a dot and the Inbox badge counts them, opening a letter marks it
+  read, and letters older than eight weeks move to an Older letters list. Rival moves that
+  involve nobody writing to you stay in a small list below the letters. Which letters you have
+  read is saved with the game, and older saves simply show every letter as unread.
+- The weekly paper. Every week the game prints a newspaper for your scenario (The Corridor
+  Times, The Gulf Ledger, The Valley Wire or Rhein-Ruhr Kurier) with a lead story, up to three
+  briefs, a markets column and a classified strip. Stories are only things that really happened
+  in the last four weeks: raids, takeover bids, strikes, rate decisions, elections and new laws,
+  incidents, scenario events, early warnings of what is coming, and your own quarterly results.
+  Anything you are involved in comes first. Tap a story to open the company, market, region or
+  deal it is about, and use the back issues buttons to read earlier weeks. A one line news
+  ticker under the top bar on every screen shows the top headline and cycles through the top
+  three while time runs (it holds still when time is paused or animations are off). On desktop
+  the paper is in the sidebar under World (F8); on phones, open it from the ticker or the Inbox.
+  Several bids for one company read as one story, dates read like "week 21, 1982", and the
+  ticker stays quiet at 2x and 4x speed.
+- Chapters and board mandates. Each year of a career is now a chapter with a name (for example
+  "Chapter 3: The Squeeze" when a historical event plays that year). At the start of each chapter the
+  board of every company offers three goals, such as holding a bigger share of a market, lifting
+  profit, making an input yourself, keeping cash in reserve, cutting debt, winning a raid or listing a
+  subsidiary. You take one in the first four weeks. Meet it and the company pays you a management
+  bonus and its standing improves. Miss it and the board loses confidence, and two misses in a row can
+  draw an activist investor. Rival companies pick goals the same way. These replace the old quarterly
+  board goals, so there is one set of goals now. On screen, the offer sits at the top of the CEO
+  Office as three cards. Each says what the goal is, how it is measured, what meeting it pays (a
+  management bonus and standing) and what missing it costs, with a Choose button and how many weeks you
+  have to decide. It never stops the clock, and an offer you leave alone lapses with no penalty. The chair
+  of the board also writes you a letter in the Inbox when the offer opens. Once you choose, the card
+  becomes a goal strip with a progress bar, a number and a plain sentence on where you stand, plus the
+  weeks left in the chapter. When a chapter closes, a short panel tells you once whether the goal was met
+  and what it paid or cost.
+- Twenty career achievements, such as your first raid won, a subsidiary listed, ten companies in your
+  group, surviving a hostile bid, seeing a bank rescued, living through every event of a scenario and a
+  thirty year career. Each is earned once and remembered with its week. The new Hall of Careers page
+  (from the CEO Office, the desktop sidebar under You, or F9) lists this career's chapters in order
+  with the goal you took and whether you met it, shows the achievements as 8-bit badges (locked ones
+  are dim, with their name), and shows the five-year score when the career is scored. Every career
+  you leave is kept as a short line (title, scenario, chapters, goals met and missed, achievements) in
+  the Hall of Careers on the main menu.
+- Scenario history. Each scenario now has dated events from its own period that play out in your
+  career: a regional bank failure and the 1986 oil collapse in Texas, the technology bust and the
+  2001 recession in the Great Lakes, a browser listing boom and the dot-com bust in Silicon
+  Valley, the reunification boom and the 1992 currency crisis on the Ruhr and Rhine. Every event
+  is announced a few weeks ahead, then changes prices, demand, lending costs, central bank
+  mood or the law for a while. New games choose Historical (the default), Off or Shuffled, which
+  keeps the same events but moves their dates by up to half a year. The new game screen has a
+  Scenario history choice with a plain line on what each does, and the economy panel on the
+  Markets screen has a History card listing announced events ("in about 4 weeks") and the ones
+  that already happened, newest first. Tap a past event to read that week's paper.
+- First-run setup on every platform. The first time you open the game it walks you through a few short
+  steps: a welcome, a one-second graphics test that suggests Low, Medium or High for your device and shows
+  a preview of each, which version track to follow (Windows, Linux and directly downloaded Android only),
+  whether to share anonymous market data with the plain explanation, and whether to use the tutorial, with
+  the folder your saves are kept in on a computer. Skip takes the defaults, and nothing is saved until you
+  press Play or Skip. On Windows and Linux the test also tells you how the game is drawing and warns in plain
+  words if it is in slow software mode. You can run it again from Settings with Set up again. If you are
+  upgrading from 1.8, you see one What's new screen instead, with a button to run setup, and none of your
+  settings change.
+- The frame counter (Settings, Graphics, Show frame rate) now also shows how the game is drawing
+  (Direct3D, OpenGL, Metal or Software) and the size of the map in pixels. Software drawing shows in
+  amber, because it is far slower than a graphics card.
+- Developer tooling: a new `cw-render` crate holds the first prototype of the 1.9 GPU map
+  renderer. It draws the Great Lakes 2000 scenario offscreen with wgpu, in one fixed 48 colour
+  palette, clean land cover patches (dither only across the border between two ground types),
+  gently stepped terrace terrain from public elevation data that keeps the Midwest nearly flat
+  and shows the Appalachian plateau, greedy meshed into a few thousand quads, flat water with
+  a lighter shoreline and static wave dashes, gold player holdings over visible ground with one
+  pixel borders, outlined voxel buildings at each region's anchor city on grey city footprints,
+  region borders, a sun with hard shadows for
+  terraces and voxel buildings, floating clouds with an outline, a ground shadow and less coverage as the camera zooms in, and a night
+  palette with lit windows. Run `cargo run --release -p cw-render --example render_scene -- <out_dir>`
+  to write the scenario, close and turned views and print frame times and draw counts; on a
+  machine without a GPU it uses the Mesa software driver. `tools/render_bake.py` fetches the
+  elevation and bakes the small heightmap. The crate is not linked into the game or the apps
+  yet and changes nothing players see, no saves and no hashes.
+- A proper Windows setup program, in the look of the game, replaces the plain installer screens.
+  It has a welcome page with the game's art, the licence, a choice of folder, Start menu and
+  desktop shortcuts, a progress page and a finish page with Play Corporate Warfare now. It
+  installs just for you by default, with no administrator prompt, into your local programs
+  folder, and offers all users instead. The same setup program installs any version over any
+  other, newer or older, so changing version never needs an uninstall first, and it never touches
+  your saved careers and settings. If the game is open, setup tells you to close it first.
+- Uninstalling asks whether to keep your saved careers and settings. Keeping them is the default,
+  the folder is shown with a button to open it so you can copy your saves, and they are only
+  deleted if you choose that and confirm. A silent uninstall always keeps them.
+- Setup removes a 1.8 Windows installer (MSI) copy of the game first and keeps your saves. Windows
+  asks for permission once, because the old copy was installed for all users. A release can ship
+  both files: the in-game updater and version list use the setup program when a release has one
+  and the MSI when it does not.
+
 ### Changed
 
+- Tooling: every change to the Android app now starts the trimmed release build on an emulator in
+  CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
+  so a trimming mistake fails the check and not a phone.
+- A smaller Windows and Linux download. The desktop game now ships without a large icon library
+  it never used and with the unused parts of the screen toolkit trimmed away, so the Linux
+  package drops from about 109 MB to about 63 MB. The Windows setup program also squeezes its
+  files harder. The game looks and plays the same, and it reaches the main menu in the same
+  time as before.
+- Smaller downloads and a quicker start. The Android download is much smaller because the app
+  is now trimmed of code it never uses and the direct download carries only the phone version
+  of the game engine (the Play Store bundle already delivered just the right one). The game
+  engine files are about a third smaller on every platform, and the Windows and Linux apps
+  carry a leaner Java runtime and remember what they loaded last time, so they open sooner
+  after the first run. Nothing about the game changes: saves, results and the pictures are the
+  same. Setting CW_STARTUP_TIMELINE prints how long each step of starting takes.
+- The map is easier to read when you zoom in close. Rival companies' plants now show in their
+  industry's colour with a dark roof and are about 60 percent of the size of yours, while your
+  own are full size with a gold roof and the plant count on top. Cities no longer look like
+  identical grey blocks: ports have cranes and stacked containers, steel towns have tall stacks,
+  car towns have a long assembly shed, and the rest stay as towers. Town and city names are in
+  plain sentence case in one weight, and only region names keep the spaced capital letters. Names
+  no longer overlap each other or sit on top of a building: when two compete, the region name
+  gives way to the city name, and the city name to your own plant badge, and a name that is
+  showing stays put instead of blinking while you pan. Trucks, trains and ships keep at least two
+  vehicle lengths apart, so a busy road looks busy without becoming one unbroken line, and they
+  carry their owner's colour: gold for yours, the industry colour for a rival's, grey for outside
+  carriers. On the desktop app the buildings and names are now drawn in the background like the
+  ground, so panning and zooming close in stays smooth.
+- Saves from the earlier 1.9 previews carry on without chapter goals until the next chapter starts, and
+  the goal list and achievements are saved with the career. The save format number does not change.
+- Saves written by this version cannot be opened by older versions of the game. Careers saved in
+  1.8.0 and the earlier 1.9 previews open as normal, carry on without scenario history (their
+  dates are not invented backwards) and are saved in the new format from then on.
+- The map is much smoother on Windows and Linux, most of all on big screens. The ground, the day and
+  night shading, the clouds and the menu globe are now painted ahead of time in the background, and
+  while you drag or zoom the game slides the last finished picture into place instead of redrawing it,
+  so moving the map no longer waits on drawing. A fresh picture replaces it a moment later.
+- A new install with no graphics choice saved starts on Medium when the window is large or the
+  computer is drawing in software, so the first look is smooth. Your own choice is never changed.
 - Tooling: a 1.9 cast proposal, not wired into the game. `content/cast-1.9.json` lists 40 fictional people (ten per scenario, with voice notes), `tools/cast_portraits_v2.py` draws 32 by 32 busts with neutral, pleased and displeased expressions, a derived 16 by 16 version, 64 by 64 office portraits for chief executives and a larger extras kit, written to `apple/Resources/cast-portraits-v2.json`. Awaiting owner approval of the roster and portraits. Second pass: clearer pleased and displeased faces, seven head shapes with varied noses, eye spacing, ears and necks, softer women's faces with jewellery, repainted 64 by 64 office portraits with a trade object on the wall, era clothing, lifted deep skin tones and unique names in the extras sample.
+
+### Fixed
+
+- New careers on Windows, Linux and Android no longer stop with an engine error around week 5. The inbox asked for letters from a week before the career began, which the engine could not count back to. Found by the new Android emulator check.
+- Each scenario now opens in the money conditions of its own time. Texas 1981 starts with
+  inflation near 10 percent and interest rates near 16 percent, and both fall over the next
+  years as the central bank holds firm. Ruhr and Rhine 1991 starts with the Bundesbank rate near
+  7 percent and rising. Silicon Valley 1995 and Great Lakes 2000 open at their own rates too.
+  Before, every scenario began at 3 percent inflation and a 6 percent rate. Wages, bond yields,
+  loan quotes and the opening loans follow the new numbers, and the central bank can now go as
+  high as 20 percent.
+- Farms in Silicon Valley and Texas keep their margins. Their grain and fertilizer prices used
+  to slide to about half their starting level while wages rose with inflation, so farm profits
+  of 10 to 14 percent were gone by year five. The price paths for those goods now ease only a
+  little against everything else. Farm margins stay around 10 percent through year five in both,
+  and fewer firms lose money (Texas 23 to 20 percent, Silicon Valley 27 to 23 percent in year
+  five).
+- The Belgian defence firms in Ruhr and Rhine can sell. The state now buys defence goods and
+  strategic reserves from firms in every currency of the scenario, paying in their own money at
+  the day's exchange rate, not only from the main currency's firms.
+- Amounts from one thousand to under ten thousand in the brief, letters and papers now show a
+  comma ("$5,399", not "$5399").
+- Big cities keep their names on the close map. A city of a million people or more now always shows its
+  name while its buildings are on screen, even when your own plants crowd the usual spots: the name
+  moves further out and a thin line ties it back to the city. Region names and smaller towns give way
+  first, never a big city.
+- Traffic on the close map is cheaper to draw. Cars, trucks, trains and ships are prepared once as
+  small pictures for each direction they can face and then simply placed, so busy roads cost less at
+  large window sizes. While the picture for a new camera angle is still being prepared, vehicles are
+  drawn the old way, so nothing flickers.
+- Ruhr and Rhine firms can make money. The scenario sells far more coal, steel, chemicals and cars
+  than its own households and plants use, and the outside world that buys the rest only had the
+  same fixed purse as every other scenario, so by year 3 it could no longer pay and exports fell
+  by four fifths. Four in ten firms were losing money by year 5, and the same firms kept going
+  bust and restructuring. The outside world's purse now scales with how much the scenario has
+  to sell abroad (Great Lakes keeps its old purse), and about two in ten Ruhr and Rhine firms
+  lose money in year 5, level with Great Lakes. Texas improves as well.
+- Losses no longer creep up as a career goes on. Rival companies paid for raids out of cash they
+  held, whatever the raid cost against what they earned, so a raid quarter turned a profitable
+  company into a loss maker. A raid campaign now costs at most half of what the company earned in
+  the last thirteen weeks. Rivals also stop all building for the same imports at once: a plant
+  that is still being built, or opened in the last two months, counts against the room other
+  rivals see.
+- On iPhone and iPad at the fastest speed, the screen no longer freezes for up to a second when you
+  switch tabs or open a division. The division sheet now draws only what is on screen and does not
+  rebuild when nothing in it changed, and the map's building models are read in the background
+  from launch, with the drawing set-up warmed behind the main menu, so the map's first view opens
+  much faster. The division sheet now opens as a light page first and fills in its sections a
+  moment later, and the pixel font, buttons and sliders are warmed behind the main menu, so the
+  first time you open a division no longer catches.
+- Roads on raised tiles now sit on the tile they cross instead of floating at one shared height.
 
 ## [1.8.0] - 2026-10-29
 

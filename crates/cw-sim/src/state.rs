@@ -1278,11 +1278,18 @@ pub struct RateDecision {
 }
 
 impl Cycle {
-    /// The opening cycle for a chosen starting economy.
-    pub fn for_start(start: EconomyStart, policy_rate_bps: i32) -> (Cycle, i32, i32) {
+    /// The opening cycle for a chosen starting economy. A historic start opens at the inflation,
+    /// expectations, policy rate and neutral rate of the scenario's own period; the other
+    /// starts are the same generic economy in every scenario.
+    pub fn for_start(start: EconomyStart, period: &cw_data::OpeningMacro) -> (Cycle, i32, i32) {
         let mut c = Cycle::default();
         let (rate, inflation) = match start {
-            EconomyStart::Historic => (policy_rate_bps, 300),
+            EconomyStart::Historic => {
+                c.expected_inflation_bps = period.expected_inflation_bps;
+                c.target_inflation_bps = period.target_inflation_bps;
+                c.neutral_real_bps = period.neutral_real_bps;
+                (period.policy_rate_bps, period.inflation_bps)
+            }
             EconomyStart::Calm => {
                 c.output_gap_bps = 0;
                 c.credit_bps = 150;
@@ -1590,6 +1597,22 @@ pub struct World {
     /// `economy::systems`.
     #[serde(skip)]
     pub systems: crate::economy::systems::SystemsHistory,
+    /// Chapters, board mandates and achievements (1.9). Outside the postcard encoding so no
+    /// schema moves; it is future-affecting, so `canonical_hash` folds it in, and it is saved in
+    /// its own `CHAP` trailer. A save without the trailer loads with it empty. See
+    /// `economy::chapters`.
+    #[serde(skip)]
+    pub chapters: crate::economy::chapters::ChapterState,
+    /// Executives and the pool of people who can be hired (1.9). Outside the postcard encoding
+    /// like the chapter state, folded into the hash while not empty, saved in its own `EXEC`
+    /// trailer. A save without the trailer loads with it empty and the pool is drawn on the
+    /// next week. See `economy::executives`.
+    #[serde(skip)]
+    pub executives: crate::economy::executives::ExecState,
+    /// Which letters the player has read. Outside the encoding and the hash, in its own save
+    /// trailer; no rule reads it. See `economy::mail`.
+    #[serde(skip)]
+    pub mail: crate::economy::mail::MailState,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.
@@ -1976,6 +1999,18 @@ pub fn canonical_hash(world: &World) -> String {
             if world.fx.active {
                 match postcard::to_allocvec(&world.fx) {
                     Ok(fx) => bytes.extend_from_slice(&fx),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.chapters.is_empty() {
+                match postcard::to_allocvec(&world.chapters) {
+                    Ok(chapters) => bytes.extend_from_slice(&chapters),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.executives.is_empty() {
+                match postcard::to_allocvec(&world.executives) {
+                    Ok(executives) => bytes.extend_from_slice(&executives),
                     Err(_) => return String::from("unhashable"),
                 }
             }

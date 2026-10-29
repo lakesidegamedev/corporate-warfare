@@ -57,6 +57,14 @@ actor Engine {
         session?.research(firm: firm)
     }
 
+    func weeklyBrief(firm: UInt64) -> BriefDto? {
+        session?.weeklyBrief(firm: firm)
+    }
+
+    func executives(firm: UInt64) -> ExecutivesDto? {
+        session?.executives(firm: firm)
+    }
+
     func cfoAdvice(firm: UInt64) -> [CfoAdviceDto] {
         session?.cfoAdvice(firm: firm) ?? []
     }
@@ -202,6 +210,10 @@ actor Engine {
         session?.objective()
     }
 
+    func hallOfCareers() -> HallDto? {
+        session?.hallOfCareers()
+    }
+
     func objectiveHistory() -> [ObjectiveResultDto] {
         session?.objectiveHistory() ?? []
     }
@@ -268,6 +280,14 @@ actor Engine {
 
     func events() -> [EventDto] {
         session?.events() ?? []
+    }
+
+    func letters(since: UInt32) -> [LetterDto] {
+        session?.letters(sinceWeek: since) ?? []
+    }
+
+    func markLettersRead(_ ids: [String]) {
+        session?.markLettersRead(ids: ids)
     }
 
     func groupTree() -> [GroupNodeDto] {

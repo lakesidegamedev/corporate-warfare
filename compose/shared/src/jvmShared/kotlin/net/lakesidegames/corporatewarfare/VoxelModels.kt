@@ -45,6 +45,9 @@ internal object VoxelModels {
     /** How tall a model stands on screen above its base at [unit] pixels a voxel, before perspective. */
     fun lift(name: String, unit: Float): Double = (models[name]?.h ?: 0f) * unit * VERTICAL
 
+    /** A radius in pixels that holds the whole model drawn at [unit], from its ground anchor, in any heading and tilt. */
+    fun reach(name: String, unit: Float): Float = models[name]?.let { (it.w + it.d + it.h * VERTICAL.toFloat()) * unit } ?: 0f
+
     /** The model name for an industry or city at a plant count: small, medium or large. */
     fun sized(kind: String, plants: Int) = "$kind/${Voxels.size(plants)}"
 
@@ -55,9 +58,24 @@ internal object VoxelModels {
     private const val LX = -0.55f
     private const val LY = 0.62f
 
-    private val path = Path()
-    private val xs = FloatArray(8)
-    private val ys = FloatArray(8)
+    /** Scratch for one draw. Per thread: the structures are baked off the UI thread while vehicles draw on it. */
+    private class Scratch { val path = Path(); val xs = FloatArray(8); val ys = FloatArray(8) }
+    private val scratch = ThreadLocal.withInitial { Scratch() }
+
+    /** The screen rectangle a model covered, filled by [drawModel] when asked. */
+    class Bounds {
+        var l = Float.MAX_VALUE; var t = Float.MAX_VALUE; var r = -Float.MAX_VALUE; var b = -Float.MAX_VALUE
+        val valid: Boolean get() = l <= r && t <= b
+        fun reset() { l = Float.MAX_VALUE; t = Float.MAX_VALUE; r = -Float.MAX_VALUE; b = -Float.MAX_VALUE }
+    }
+
+    /** The boxes that form a model's main roof: the highest broad tops. Chimneys and cranes are left alone. */
+    private val roofs = java.util.concurrent.ConcurrentHashMap<String, Set<Box>>()
+    private fun roofBoxes(name: String, model: Model): Set<Box> = roofs.getOrPut(name) {
+        val broad = model.boxes.filter { (it.x1 - it.x0) * (it.y1 - it.y0) >= 6f }
+        val top = broad.maxOfOrNull { it.z1 } ?: return@getOrPut emptySet()
+        broad.filter { it.z1 >= top - 0.01f }.toSet()
+    }
 
     /**
      * Draws model [name] standing at ground offset ([gx], [gy]) from the view centre, [floor]
@@ -67,9 +85,12 @@ internal object VoxelModels {
      */
     fun DrawScope.drawModel(
         name: String, p: MapProjection, gx: Float, gy: Float, floor: Double, unit: Float, heading: Double = 0.0,
-        tone: ((Color) -> Color)? = null, ink: Boolean = unit >= 1.4f,
+        tone: ((Color) -> Color)? = null, ink: Boolean = unit >= 1.4f, roof: Color? = null, bounds: Bounds? = null,
     ): Float? {
         val model = models[name] ?: return null
+        val sc = scratch.get()
+        val xs = sc.xs; val ys = sc.ys
+        val roofSet = if (roof != null) roofBoxes(name, model) else emptySet()
         val e = p.east
         val n = p.north
         val ch = cos(heading).toFloat()
@@ -95,12 +116,16 @@ internal object VoxelModels {
             corner(0, b.x0, b.y0, b.z0); corner(1, b.x1, b.y0, b.z0); corner(2, b.x1, b.y1, b.z0); corner(3, b.x0, b.y1, b.z0)
             corner(4, b.x0, b.y0, b.z1); corner(5, b.x1, b.y0, b.z1); corner(6, b.x1, b.y1, b.z1); corner(7, b.x0, b.y1, b.z1)
             val base = tone?.invoke(b.color) ?: b.color
+            if (bounds != null) for (i in 0 until 8) {
+                if (xs[i] < bounds.l) bounds.l = xs[i]; if (xs[i] > bounds.r) bounds.r = xs[i]
+                if (ys[i] < bounds.t) bounds.t = ys[i]; if (ys[i] > bounds.b) bounds.b = ys[i]
+            }
             // South, east, north, west sides, then the top: corners listed anticlockwise seen from outside.
-            face(0, 1, 5, 4, side(0f, -1f, sunX, sunY, sunLen), base, ink)
-            face(1, 2, 6, 5, side(1f, 0f, sunX, sunY, sunLen), base, ink)
-            face(2, 3, 7, 6, side(0f, 1f, sunX, sunY, sunLen), base, ink)
-            face(3, 0, 4, 7, side(-1f, 0f, sunX, sunY, sunLen), base, ink)
-            if (face(4, 5, 6, 7, 1f, base, ink)) top = min(top, min(min(ys[4], ys[5]), min(ys[6], ys[7])))
+            face(sc, 0, 1, 5, 4, side(0f, -1f, sunX, sunY, sunLen), base, ink)
+            face(sc, 1, 2, 6, 5, side(1f, 0f, sunX, sunY, sunLen), base, ink)
+            face(sc, 2, 3, 7, 6, side(0f, 1f, sunX, sunY, sunLen), base, ink)
+            face(sc, 3, 0, 4, 7, side(-1f, 0f, sunX, sunY, sunLen), base, ink)
+            if (face(sc, 4, 5, 6, 7, 1f, if (b in roofSet) roof!! else base, ink)) top = min(top, min(min(ys[4], ys[5]), min(ys[6], ys[7])))
         }
         return if (top == Float.MAX_VALUE) null else top
     }
@@ -112,7 +137,8 @@ internal object VoxelModels {
     }
 
     /** Fills one face if it faces the camera; true when drawn. */
-    private fun DrawScope.face(a: Int, b: Int, c: Int, d: Int, light: Float, base: Color, ink: Boolean): Boolean {
+    private fun DrawScope.face(sc: Scratch, a: Int, b: Int, c: Int, d: Int, light: Float, base: Color, ink: Boolean): Boolean {
+        val xs = sc.xs; val ys = sc.ys; val path = sc.path
         // Anticlockwise from outside in the world stays anticlockwise on screen: a negative area faces us.
         val area = (xs[a] * ys[b] - xs[b] * ys[a]) + (xs[b] * ys[c] - xs[c] * ys[b]) + (xs[c] * ys[d] - xs[d] * ys[c]) + (xs[d] * ys[a] - xs[a] * ys[d])
         if (area >= -0.5f) return false

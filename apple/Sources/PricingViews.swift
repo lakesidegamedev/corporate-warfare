@@ -96,6 +96,8 @@ struct PostureSheet: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     let line: ProductLineDto
+    /// The brief opens the slider on the posture it suggests, in basis points against the market.
+    var presetBps: Int32?
     @State private var rejection: CommandRejection?
     @State private var exact = false
     @State private var marketPercent: Double = 0
@@ -189,6 +191,7 @@ struct PostureSheet: View {
             .onAppear {
                 if line.mode == "market" { marketPercent = Double(line.postureBps) / 100 }
                 if line.mode == "cost_plus" { costPercent = Double(line.postureBps) / 100 }
+                if let presetBps { marketPercent = Double(presetBps) / 100 }
             }
             .sheet(isPresented: $exact) {
                 PriceSheet(initialProduct: line.product).environmentObject(store)

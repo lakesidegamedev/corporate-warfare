@@ -60,7 +60,7 @@ class UiRenderTest {
         )
         val deadline = System.currentTimeMillis() + 30_000
         while (!store.ready && System.currentTimeMillis() < deadline) Thread.sleep(100)
-        val desktop = if (store.ready) (0 until 8).associate { page ->
+        val desktop = if (store.ready) (0 until 9).associate { page ->
             "ui-desktop-$page" to @androidx.compose.runtime.Composable { DesktopShell(store, onSettings = {}, startPage = page) }
         } else emptyMap()
         // Play two quarters on the engine thread, then render the financial tabs and charts.

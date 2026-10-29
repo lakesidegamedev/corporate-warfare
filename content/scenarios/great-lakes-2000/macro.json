@@ -1,0 +1,11 @@
+{
+  "classification": "calibrated game estimates drawn from the period; NOT measured series. US 2000: inflation near 3.4 percent, federal funds 6.5 percent, the ten-year Treasury near 6 percent.",
+  "inflation_bps": 340,
+  "expected_inflation_bps": 300,
+  "policy_rate_bps": 650,
+  "ten_year_bps": 600,
+  "neutral_real_bps": 200,
+  "target_inflation_bps": 200,
+  "credit_spread_bps": 50,
+  "wage_growth_bps": 400
+}

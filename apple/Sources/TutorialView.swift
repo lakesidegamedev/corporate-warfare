@@ -3,7 +3,7 @@ import SwiftUI
 /// Every screen the app can open, shared by the phone tabs, the desktop sidebar and the tutorial's
 /// Show me button.
 enum GamePage: String, CaseIterable, Identifiable {
-    case map, office, research, stats, markets, actions, inbox, portfolio
+    case map, office, research, stats, markets, actions, inbox, portfolio, paper
 
     var id: String { rawValue }
 
@@ -17,6 +17,7 @@ enum GamePage: String, CaseIterable, Identifiable {
         case .actions: return "Actions"
         case .inbox: return "Inbox"
         case .portfolio: return "Portfolio"
+        case .paper: return "Paper"
         }
     }
 
@@ -30,6 +31,7 @@ enum GamePage: String, CaseIterable, Identifiable {
         case .actions: return "command"
         case .inbox: return "inbox"
         case .portfolio: return "portfolio"
+        case .paper: return "doc"
         }
     }
 
@@ -37,7 +39,7 @@ enum GamePage: String, CaseIterable, Identifiable {
         switch self {
         case .map: return "Play"
         case .office, .research, .stats: return "Company"
-        case .markets, .actions, .inbox: return "World"
+        case .markets, .actions, .inbox, .paper: return "World"
         case .portfolio: return "You"
         }
     }
@@ -165,6 +167,11 @@ final class TutorialModel: ObservableObject {
     /// A new career counts its weeks from its own first tick.
     func beginCareer() {
         startTick = nil
+    }
+
+    func setHidden(_ value: Bool) {
+        hidden = value
+        persist()
     }
 
     func hide() {

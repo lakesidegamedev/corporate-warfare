@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "note": "Board mandates (1.9). Every chapter the board of a company offers three mandates; the numbers below are the whole balance of the system. Targets scale with the size of the company at the start of the chapter (total plant blocks) and with the difficulty. Rewards are small on purpose and sit in the range of the 1.2 quarterly board goals they replace. See docs/rules/CORPORATE.md, Chapters and mandates (1.9).",
+  "offer_window_weeks": 4,
+  "min_weeks_of_history": 4,
+  "rewards": {
+    "bonus_bps": 200,
+    "bonus_min_cents": 5000000,
+    "reputation_success_bps": 150,
+    "reputation_failure_bps": -100,
+    "reputation_floor_bps": -2000,
+    "reputation_ceiling_bps": 5000
+  },
+  "difficulty_bps": {
+    "easy": 8000,
+    "standard": 10000,
+    "hard": 12500
+  },
+  "size_bands": [
+    {
+      "name": "small",
+      "max_blocks": 4,
+      "share_step_bps": 800,
+      "profit_growth_bps": 1500,
+      "profit_min_step_cents": 500000,
+      "cash_cover_weeks": 6,
+      "debt_equity_cut_bps": 2500
+    },
+    {
+      "name": "medium",
+      "max_blocks": 12,
+      "share_step_bps": 600,
+      "profit_growth_bps": 1000,
+      "profit_min_step_cents": 1500000,
+      "cash_cover_weeks": 8,
+      "debt_equity_cut_bps": 2000
+    },
+    {
+      "name": "large",
+      "max_blocks": 4294967295,
+      "share_step_bps": 400,
+      "profit_growth_bps": 700,
+      "profit_min_step_cents": 5000000,
+      "cash_cover_weeks": 10,
+      "debt_equity_cut_bps": 1500
+    }
+  ],
+  "debt_equity_floor_bps": 2000,
+  "share_ceiling_bps": 9500,
+  "share_unreachable_bps": 9000
+}

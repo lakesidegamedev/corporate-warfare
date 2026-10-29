@@ -23,7 +23,6 @@ pub const CORRIDOR_WORKERS: i64 = 60_000;
 const TIER_SPLIT_BPS: [i64; 3] = [5_800, 3_200, 1_000];
 const PARTICIPATION_BPS: i64 = 9_500;
 const HOUSEHOLD_SAVINGS_WEEKS: i64 = 13;
-const BASE_POLICY_RATE_BPS: i32 = 600;
 
 const OUTSIDE_INVESTORS: [(&str, i64, i32); 8] = [
     ("Cedar Ridge Holdings", 250_000_000, 10_000),
@@ -74,7 +73,7 @@ pub fn build_with(
 ) -> World {
     let capital = options.capital();
     let (cycle, opening_rate, opening_inflation) =
-        crate::state::Cycle::for_start(options.economy, BASE_POLICY_RATE_BPS);
+        crate::state::Cycle::for_start(options.economy, &dataset.opening_macro);
     let mut world = World {
         tick: Tick::OPENING,
         revision: 0,
@@ -185,7 +184,10 @@ pub fn build_with(
         price_history: Vec::new(),
         firm_history: BTreeMap::new(),
         archive: Default::default(),
+        chapters: Default::default(),
+        executives: Default::default(),
         systems: Default::default(),
+        mail: Default::default(),
         politics: crate::state::Politics::default(),
         logistics: Default::default(),
         systemic: Default::default(),
@@ -194,23 +196,6 @@ pub fn build_with(
         fx: crate::economy::fx::init(dataset, seed),
     };
 
-    // Outside gateway capital is finite but real: exports are paid from it, imports add to it.
-    // The outside economy is large next to the corridor; weekly pacing in `clear_week` keeps
-    // a sustained surplus from emptying it at once.
-    let _ = world.outside.gateway_book.commit(
-        Tick::OPENING,
-        Txn::new()
-            .debit(
-                cw_core::ledger::Account::Cash,
-                50_000_000_000,
-                "gateway capital",
-            )
-            .credit(
-                cw_core::ledger::Account::ShareCapital,
-                50_000_000_000,
-                "gateway capital",
-            ),
-    );
     build_regions(&mut world, dataset);
     build_government(&mut world, dataset);
     seed_named_firms(&mut world, dataset);
@@ -223,6 +208,7 @@ pub fn build_with(
     seed_supply_contracts(&mut world, dataset);
     crate::economy::procurement::ensure_contracts(&mut world, dataset);
     compute_household_baselines(&mut world, dataset);
+    open_gateway_capital(&mut world, dataset);
     seed_share_marks(&mut world, dataset);
 
     world.investor.starting_net_worth_cents = investor_net_worth(&world, dataset);
@@ -236,6 +222,14 @@ pub fn build_with(
         }
     }
     world
+}
+
+/// The rate an opening loan carries: the period's policy rate, its opening credit spread and
+/// the grade B spread the opening firms are rated at.
+fn opening_loan_rate_bps(world: &World, dataset: &Dataset) -> i32 {
+    world.macro_state.policy_rate_bps
+        + dataset.opening_macro.credit_spread_bps
+        + Grade::B.spread_bps()
 }
 
 fn build_regions(world: &mut World, dataset: &Dataset) {
@@ -515,7 +509,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
                     borrower: handle,
                     lender: Lender::Outside(0),
                     principal_remaining_cents: loan,
-                    rate_bps: BASE_POLICY_RATE_BPS + Grade::B.spread_bps(),
+                    rate_bps: opening_loan_rate_bps(world, dataset),
                     weekly_principal_cents: loan / 104,
                     remaining_weeks: 104,
                     collateral: None,
@@ -847,7 +841,7 @@ fn seed_player_firm(world: &mut World, dataset: &Dataset, seed: u64) {
         borrower: handle,
         lender: Lender::Outside(1),
         principal_remaining_cents: loan,
-        rate_bps: BASE_POLICY_RATE_BPS + Grade::B.spread_bps(),
+        rate_bps: opening_loan_rate_bps(world, dataset),
         weekly_principal_cents: loan / 104,
         remaining_weeks: 104,
         collateral: None,
@@ -968,6 +962,69 @@ fn compute_household_baselines(world: &mut World, dataset: &Dataset) {
         region.households.weights = weights;
         region.households.baseline_lots = baseline;
     }
+}
+
+/// The outside account's opening cash floor: five hundred million dollars.
+pub const OUTSIDE_CAPITAL_FLOOR_CENTS: i64 = 50_000_000_000;
+
+/// Weeks of the opening trade surplus the outside account can fund.
+pub const OUTSIDE_SURPLUS_WEEKS: i64 = 450;
+
+/// What the corridor's plants make beyond what its plants and households use, per week, valued
+/// at the gateway bid: the surplus the outside world has to buy. Goods only (and electricity),
+/// the things a gateway trades.
+pub fn opening_export_surplus_cents(world: &World, dataset: &Dataset) -> i64 {
+    let mut output: BTreeMap<u16, i64> = BTreeMap::new();
+    let mut used: BTreeMap<u16, i64> = BTreeMap::new();
+    for (_, facility) in world.facilities.iter() {
+        let recipe = &dataset.recipes[facility.recipe as usize];
+        for (id, qty) in &recipe.weekly_inputs_lots {
+            let code = dataset.product_index[id.as_str()];
+            *used.entry(code).or_default() += qty * facility.blocks as i64;
+        }
+        for (id, lots) in recipe.outputs() {
+            if let Some(code) = dataset.product_index.get(id) {
+                *output.entry(*code).or_default() += lots * facility.blocks as i64;
+            }
+        }
+    }
+    for region in &world.regions {
+        for (code, lots) in &region.households.baseline_lots {
+            *used.entry(*code).or_default() += lots;
+        }
+    }
+    let electricity = dataset.product_code("electricity");
+    output
+        .iter()
+        .filter(|(code, _)| {
+            Some(**code) == electricity
+                || dataset.products[**code as usize].kind == cw_data::ProductKind::Goods
+        })
+        .map(|(code, lots)| {
+            let surplus = (lots - used.get(code).copied().unwrap_or(0)).max(0);
+            surplus * dataset.reference_price(*code) * 85 / 100
+        })
+        .sum()
+}
+
+/// Outside gateway capital is finite but real: exports are paid from it, imports add to it.
+/// The outside economy is large next to the corridor, and weekly pacing in `clear_week` keeps a
+/// sustained surplus from emptying it at once. It opens with the larger of the five hundred
+/// million dollar floor and [`OUTSIDE_SURPLUS_WEEKS`] weeks of the opening trade surplus, so a
+/// scenario built on exporting heavy industry has an outside world that can pay for it.
+fn open_gateway_capital(world: &mut World, dataset: &Dataset) {
+    let surplus = opening_export_surplus_cents(world, dataset);
+    let capital = OUTSIDE_CAPITAL_FLOOR_CENTS.max(surplus.saturating_mul(OUTSIDE_SURPLUS_WEEKS));
+    let _ = world.outside.gateway_book.commit(
+        Tick::OPENING,
+        Txn::new()
+            .debit(cw_core::ledger::Account::Cash, capital, "gateway capital")
+            .credit(
+                cw_core::ledger::Account::ShareCapital,
+                capital,
+                "gateway capital",
+            ),
+    );
 }
 
 fn build_gateways(world: &mut World, dataset: &Dataset) {
@@ -1295,6 +1352,48 @@ pub fn bps_of(value: i64, bps: i32) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Independent oracle: the weekly surplus is rebuilt here by hand from the opening plants and
+    /// household baselines for the one good that matters, coal, and checked against the sum's
+    /// coal term; the account is then the floor or 450 weeks of the whole sum, whichever is more.
+    #[test]
+    fn the_outside_account_opens_with_450_weeks_of_the_opening_trade_surplus_at_least_the_floor() {
+        for (scenario, heavy) in [("ruhr-rhine-1991", true), ("great-lakes-2000", false)] {
+            let dataset = Dataset::load_scenario(scenario).unwrap();
+            let world = build(&dataset, 3, ScenarioKind::Guided, ScenarioMode::Sandbox);
+            let coal = dataset.product_code("coal").unwrap();
+            let (mut made, mut used) = (0i64, 0i64);
+            for (_, facility) in world.facilities.iter() {
+                let recipe = &dataset.recipes[facility.recipe as usize];
+                for (id, lots) in recipe.outputs() {
+                    if id == "coal" {
+                        made += lots * facility.blocks as i64;
+                    }
+                }
+                if let Some(qty) = recipe.weekly_inputs_lots.get("coal") {
+                    used += qty * facility.blocks as i64;
+                }
+            }
+            used += world
+                .regions
+                .iter()
+                .filter_map(|r| r.households.baseline_lots.get(&coal))
+                .sum::<i64>();
+            let coal_term = (made - used).max(0) * dataset.reference_price(coal) * 85 / 100;
+            let surplus = opening_export_surplus_cents(&world, &dataset);
+            assert!(coal_term > 0 && surplus >= coal_term, "{scenario}");
+            let expected = OUTSIDE_CAPITAL_FLOOR_CENTS.max(surplus * 450);
+            assert_eq!(world.outside.gateway_book.cash(), expected, "{scenario}");
+            assert!(world.outside.gateway_book.is_balanced());
+            if heavy {
+                // An exporting heavy-industry scenario gets an outside world several times the floor.
+                assert!(expected > OUTSIDE_CAPITAL_FLOOR_CENTS * 3, "{scenario}");
+            } else {
+                // The tuned reference keeps exactly the old five hundred million dollars.
+                assert_eq!(expected, OUTSIDE_CAPITAL_FLOOR_CENTS, "{scenario}");
+            }
+        }
+    }
 
     #[test]
     fn founder_and_guided_worlds_open_balanced() {

@@ -1,12 +1,15 @@
 //! Economic rules, split by concern. Each module implements one section of `docs/rules`.
 
+pub mod achievements;
 pub mod banking;
 pub mod cast;
+pub mod chapters;
 pub mod credit;
 pub mod deals;
 pub mod division_report;
 pub mod equity;
 pub mod events_engine;
+pub mod executives;
 pub mod fiscal;
 pub mod freight;
 pub mod fx;
@@ -17,6 +20,7 @@ pub mod insurance;
 pub mod labour;
 pub mod logistics;
 pub mod macro_cycle;
+pub mod mail;
 pub mod markets;
 pub mod objectives;
 pub mod operations;
@@ -38,6 +42,7 @@ pub mod storage;
 pub mod structure;
 pub mod systemic;
 pub mod systems;
+pub mod timeline;
 pub mod unions;
 pub mod valuation;
 pub mod world_prices;

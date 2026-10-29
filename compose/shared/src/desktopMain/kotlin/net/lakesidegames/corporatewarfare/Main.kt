@@ -55,19 +55,20 @@ private val windows = System.getProperty("os.name").lowercase().contains("win")
 
 /**
  * Windows installs a downloaded version itself: a short script waits until no copy of the game
- * runs (closing any that stay open), runs the installer with a progress bar and no questions, then
- * starts the game again. An older version
- * goes into the same folder, with an uninstall and second try if that fails
- * ([WindowsInstall.plan]). Linux and Mac open the release page, where the package or app is one
+ * runs (closing any that stay open), runs the setup program with a progress bar and no questions,
+ * and the setup program starts the game again. The same setup program upgrades and downgrades
+ * ([WindowsInstall.setupPlan]). A release that only has an MSI goes through the 1.8 route: the
+ * MSI, with an uninstall and second try for an older version ([WindowsInstall.plan]). Linux and Mac open the release page, where the package or app is one
  * click.
  */
 private object DesktopUpdates : UpdatePlatform {
-    override val installerSuffix: String? = if (windows) ".msi" else null
+    override val installerSuffix: String? = if (windows) WindowsInstall.SETUP_SUFFIX else null
+    override val installerSuffixes: List<String> = if (windows) WindowsInstall.SUFFIXES else emptyList()
 
     override fun install(file: File, version: String) {
         val app = System.getProperty("jpackage.app-path")
         val script = File(file.parentFile, "install-update.cmd")
-        script.writeText(WindowsInstall.plan(file.absolutePath, version, BuildInfo.VERSION, app).joinToString("\r\n", postfix = "\r\n"))
+        script.writeText(WindowsInstall.planFor(file.absolutePath, version, BuildInfo.VERSION, app).joinToString("\r\n", postfix = "\r\n"))
         ProcessBuilder("cmd", "/c", "start", "\"\"", "/min", script.absolutePath).start()
         exitProcess(0)
     }
@@ -95,6 +96,10 @@ private fun bringToFront() = java.awt.EventQueue.invokeLater {
 }
 
 fun main() {
+    if (System.getenv("CW_STARTUP_TIMELINE") != null) {
+        StartupTimeline.origin = java.lang.management.ManagementFactory.getRuntimeMXBean().startTime
+    }
+    StartupTimeline.mark("main() entered")
     // One copy at a time: a second launch brings the open game forward and exits (SingleInstance).
     when (SingleInstance.start(saveDirectory(), onActivate = ::bringToFront)) {
         is SingleInstance.Start.First -> Unit
@@ -116,6 +121,9 @@ fun main() {
 private fun game() = application {
     Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
     MeshCanvas.draw = desktopMeshDraw
+    MapBake.enabled = true
+    // The one-pass cloud shader is measured slower than the meshes while the layers are baked on the CPU, so it is opt-in.
+    if (System.getenv("CW_CLOUD_SHADER") != null) MeshCanvas.cloudFlow = desktopCloudFlow
     Pixel.font = desktopPixelFont()
     MeshCanvas.shader = desktopLinearShader
     val settings = remember { AppSettings(File(saveDirectory(), "settings.properties")) }
@@ -135,16 +143,20 @@ private fun game() = application {
             frontWindow = window
             Splash(progress, stage)
             LaunchedEffect(Unit) {
+                StartupTimeline.mark("launcher window shown")
                 withContext(Dispatchers.Default) {
                     stage = "Starting the engine"
                     runCatching { uniffi.cw_ffi.engineInfo() }
+                    StartupTimeline.mark("engine loaded")
                     progress = 0.35f
                     stage = "Loading the world map"
                     WorldMap.shared
+                    StartupTimeline.mark("world map loaded")
                     progress = 0.85f
                     stage = "Drawing the icons"
                     SectorIcons.all
                     PixelLogo.file
+                    StartupTimeline.mark("icons loaded")
                     progress = 1f
                 }
                 loaded = true
@@ -171,12 +183,26 @@ private fun game() = application {
         state = state,
     ) {
         frontWindow = window
+        StartupTimeline.mark("game window composing")
+        // The frame counter shows which Skia backend draws this window.
+        androidx.compose.runtime.DisposableEffect(window) {
+            RenderInfo.backend = window.renderApi.name
+            window.onRenderApiChanged { RenderInfo.backend = window.renderApi.name }
+            onDispose { }
+        }
+        // With no saved graphics choice, a big window or software drawing starts at Medium.
+        LaunchedEffect(window) {
+            kotlinx.coroutines.delay(1500)
+            val scale = window.graphicsConfiguration?.defaultTransform
+            val pixels = window.width * (scale?.scaleX ?: 1.0) * window.height * (scale?.scaleY ?: 1.0)
+            settings.suggestGraphics(pixels.toLong(), RenderInfo.software)
+        }
         val scope = rememberCoroutineScope()
         val store = remember { GameStore(saveDirectory(), scope) }
         val updater = remember {
             Updater(DesktopUpdates, scope, File(saveDirectory(), "updates"), saveDirectory(), channel = { settings.updateChannel })
         }
-        CorporateWarfareApp(store, settings, updater, onQuit = ::exitApplication)
+        CorporateWarfareApp(store, settings, updater, onQuit = ::exitApplication, saveFolder = saveDirectory().path)
     }
 }
 

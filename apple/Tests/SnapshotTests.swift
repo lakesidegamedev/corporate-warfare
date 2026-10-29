@@ -19,6 +19,62 @@ final class SnapshotTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
+    /// The board's offer, the goal in force and the Hall of Careers, from a career in its first year.
+    func testRenderChapterScreens() async throws {
+        let store = AppStore(saveManager: SaveManager(directory: directory))
+        await store.newCareer(guided: true, fiveYear: true, seed: 7)
+        XCTAssertTrue(store.sessionReady)
+        if let primary = store.overview?.primaryFirm { await store.selectFirm(primary) }
+        await store.advance(weeks: 2)
+        await store.continueCareer()
+        await store.refreshHall()
+        guard let offer = store.boardOffer else { return XCTFail("the board offers goals in the first weeks") }
+        XCTAssertEqual(offer.offered.count, 3)
+        let phone = CGSize(width: 393, height: 1100)
+        let pad = CGSize(width: 1180, height: 600)
+        func both<V: View>(_ name: String, _ view: V, phoneHeight: CGFloat = 1100) {
+            let page = ScrollView { view.padding(16) }.background(Theme.ink).environmentObject(store)
+            render("\(name)-phone", CGSize(width: phone.width, height: phoneHeight), compact: true, page)
+            render("\(name)-pad", pad, compact: false, page)
+        }
+        both("board-offer", BoardOfferCard(chapter: offer))
+        let rejection = await store.chooseMandate(firm: offer.firm, pick: 0)
+        XCTAssertNil(rejection, "the offer can be taken")
+        await store.refreshHall()
+        guard let active = store.activeMandate else { return XCTFail("the chosen goal is in force") }
+        XCTAssertNil(store.boardOffer, "a taken offer is off the table")
+        both("board-goal", MandateStrip(chapter: active.chapter, mandate: active.mandate), phoneHeight: 300)
+        for _ in 0..<54 {
+            await store.advance(weeks: 1)
+            await store.continueCareer()
+        }
+        await store.refreshHall()
+        XCTAssertGreaterThanOrEqual(store.hall?.chapters.count ?? 0, 2, "chapter 2 opened")
+        both("hall", HallView(), phoneHeight: 1800)
+    }
+
+    /// The weekly brief on the CEO Office, from a young career: always something to read, and a
+    /// company that has not lost money says why it holds.
+    func testRenderWeeklyBrief() async throws {
+        let store = AppStore(saveManager: SaveManager(directory: directory))
+        await store.newCareer(guided: true, fiveYear: false, seed: 7)
+        XCTAssertTrue(store.sessionReady)
+        if let primary = store.overview?.primaryFirm { await store.selectFirm(primary) }
+        await store.advance(weeks: 12)
+        await store.continueCareer()
+        guard let firm = store.selectedFirm.flatMap({ handle in store.firms.first { $0.handle == handle } }) else {
+            return XCTFail("the player has a company")
+        }
+        await store.refreshBrief()
+        guard let brief = store.brief else { return XCTFail("the brief reads") }
+        XCTAssertTrue(!brief.moves.isEmpty || !brief.hold.isEmpty, "the brief says what to do or why to hold")
+        XCTAssertLessThanOrEqual(brief.moves.count, 3)
+        let page = ScrollView { BriefPanel(currency: firm.currency, firmName: firm.name).padding(16) }
+            .background(Theme.ink).environmentObject(store)
+        render("brief-phone", CGSize(width: 393, height: 1100), compact: true, page)
+        render("brief-pad", CGSize(width: 760, height: 900), compact: false, page)
+    }
+
     func testRenderMainScreens() async throws {
         let store = AppStore(saveManager: SaveManager(directory: directory))
         await store.newCareer(guided: true, fiveYear: false, seed: 7)
@@ -78,6 +134,10 @@ final class SnapshotTests: XCTestCase {
         }
         render("markets-pad", pad, compact: false, MarketsView().environmentObject(store))
         render("inbox-phone", phone, compact: true, InboxView().environmentObject(store))
+        if let letter = store.letters.first {
+            render("letter-phone", phone, compact: true,
+                   ScrollView { LetterPaperView(letter: letter).padding(14) }.background(Theme.ink).environmentObject(store))
+        }
         render("root-phone", phone, compact: true, RootView().environmentObject(store))
         // Each tab inside the real tab bar, so content against the bar is reviewed as shipped.
         render("tab-office-phone", phone, compact: true, RootView(initialTab: .office).environmentObject(store))
@@ -224,6 +284,7 @@ final class SnapshotTests: XCTestCase {
             framed.lon = home.lon * 180 / .pi
             framed.lat = home.lat * 180 / .pi
         }
+        VoxelModels.loadNow()
         Countryside.prepare(map)
         let now = Earth.week(of: store.overview?.weekLabel)
         // The bearings show the buildings' sides turning; the pan pair shows the roads staying on

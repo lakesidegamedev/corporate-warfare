@@ -71,7 +71,9 @@ private enum class Page(val id: String, val title: String, val icon: String, val
     Markets("markets", "Markets", "markets", "World", "F5"),
     Actions("actions", "Actions", "command", "World", "Ctrl K"),
     Inbox("inbox", "Inbox", "inbox", "World", "F6"),
+    Paper("paper", "Paper", "doc", "World", "F8"),
     Portfolio("portfolio", "Portfolio", "portfolio", "You", "F7"),
+    Hall("hall", "Hall of Careers", "star", "You", "F9"),
 }
 
 /**
@@ -113,6 +115,8 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                     event.key == Key.F5 -> { open(Page.Markets); true }
                     event.key == Key.F6 -> { open(Page.Inbox); true }
                     event.key == Key.F7 -> { open(Page.Portfolio); true }
+                    event.key == Key.F8 -> { open(Page.Paper); true }
+                    event.key == Key.F9 -> { open(Page.Hall); true }
                     else -> false
                 }
             },
@@ -127,6 +131,8 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                     open(Page.Actions)
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
+                TickerBar(store) { open(Page.Paper) }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
                 PauseBanner(store, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp))
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (page) {
@@ -138,6 +144,8 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                         Page.Stats -> DesktopStats(store)
                         Page.Inbox -> DesktopInbox(store)
                         Page.Portfolio -> DesktopPortfolio(store)
+                        Page.Paper -> PaperScreen(store)
+                        Page.Hall -> HallScreen(store)
                     }
                 }
             }
@@ -160,7 +168,7 @@ private fun Sidebar(store: GameStore, page: Page, onPage: (Page) -> Unit, onSett
                     letterSpacing = 1.sp, modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp),
                 )
             }
-            val due = if (item == Page.Inbox) store.events.count { it.mandatory } else 0
+            val due = if (item == Page.Inbox) store.inboxBadge else 0
             SidebarItem(item.icon, item.title, item.key, page == item, badge = due) { onPage(item) }
         }
         Spacer(Modifier.weight(1f))
@@ -550,14 +558,23 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
             Spacer(Modifier.weight(1f))
             OutlinedButton(onClick = { onOpen(Page.Research) }) { Text("Research", color = Palette.primaryText) }
             OutlinedButton(onClick = { onOpen(Page.Stats) }) { Text("Stats", color = Palette.primaryText) }
+            OutlinedButton(onClick = { onOpen(Page.Hall) }) { Text("Hall", color = Palette.primaryText) }
             GoldButton("Actions") { onOpen(Page.Actions) }
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(0.9f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                BriefPanel(store, firm.currency)
+                Spacer(Modifier.height(10.dp))
+                if (store.boardOffer != null || store.activeMandate != null || store.chapterResult != null) {
+                    ChapterBlock(store)
+                    Spacer(Modifier.height(10.dp))
+                }
                 if (store.cfoAdvice.isNotEmpty()) {
                     CfoPanel(store, firm.currency)
                     Spacer(Modifier.height(10.dp))
                 }
+                ExecutivesPanel(store, firm.currency)
+                Spacer(Modifier.height(10.dp))
                 RivalsCard(store)
                 Spacer(Modifier.height(10.dp))
                 store.finance?.takeIf { it.firm == firm.handle && it.recentWeeks.isNotEmpty() }?.let { ProfitDrivers(it.recentWeeks) }
@@ -747,33 +764,26 @@ private fun DesktopStats(store: GameStore) {
 
 // MARK: Inbox
 
-/** Decisions listed on the left, the open one on the right. */
+/** The letter stack on the left, the open letter on paper on the right. */
 @Composable
-private fun DesktopInbox(store: GameStore) {
-    var open by remember { mutableStateOf<ULong?>(null) }
-    val events = store.events
-    val current: EventDto? = events.firstOrNull { it.id == open } ?: events.firstOrNull()
+internal fun DesktopInbox(store: GameStore, initial: String? = null) {
+    var open by remember { mutableStateOf(initial) }
+    var picked by remember { mutableStateOf<uniffi.cw_ffi.LetterDto?>(null) }
+    val current = store.letters.firstOrNull { it.id == open } ?: picked?.takeIf { it.id == open && it.event == null }
+        ?: store.letters.firstOrNull()
     Row(Modifier.fillMaxSize().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        val ec = listOf(Col("Decision", 2f), Col("Due", 0.6f, true))
-        Pane("Inbox · ${events.size}", Modifier.width(420.dp).fillMaxHeight()) {
-            TableHeader(ec)
-            if (events.isEmpty()) Text("Quiet week. Decisions show up here when they happen.", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
-            events.forEachIndexed { i, e ->
-                TableRow(i, selected = e.id == current?.id, onClick = { open = e.id }) {
-                    Cell(e.title, ec[0], bold = e.mandatory)
-                    Cell(if (e.mandatory) "W${e.deadline}" else "", ec[1], Palette.warning)
-                }
-            }
+        Pane("Inbox · ${store.unreadLetters} unread", Modifier.width(440.dp).fillMaxHeight()) {
+            Column(Modifier.padding(8.dp)) { LetterStack(store, current?.id) { open = it.id; picked = it } }
         }
         Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (current != null) LetterPaper(store, current)
+            else Callout("When something happens a letter arrives here. Decisions are pinned on top and stop time when they are due.", Palette.secondary)
             if (store.rivalFeed.isNotEmpty()) {
                 Panel {
                     Eyebrow("Rival moves")
                     store.rivalFeed.take(8).forEach { RivalMoveRow(it) }
                 }
             }
-            if (current != null) DecisionCard(store, current)
-            else Callout("When a decision arrives it opens here with its choices. Time stops for any decision that is due.", Palette.secondary)
         }
     }
 }

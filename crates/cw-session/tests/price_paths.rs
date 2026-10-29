@@ -18,6 +18,7 @@ fn config(path: Option<PricePath>, scenario: &str) -> ScenarioConfig {
         prices: PriceSetup {
             scenario_id: scenario.to_owned(),
             path,
+            ..Default::default()
         },
     }
 }

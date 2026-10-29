@@ -15,6 +15,7 @@ struct CEOOfficeView: View {
         TabScreen(title: "CEO Office", subtitle: store.overview?.weekLabel) {
             if let firm {
                 masthead(firm)
+                ChapterBlock()
                 figures(firm)
                 RivalsCard()
                 NavigationLink {
@@ -56,6 +57,8 @@ struct CEOOfficeView: View {
                     .background(Theme.panel, in: Pixel.shape)
                 }
                 .tint(Theme.gold)
+                BriefPanel(currency: firm.currency, firmName: firm.name)
+                ExecutivesPanel(currency: firm.currency)
                 if !store.cfoAdvice.isEmpty {
                     CfoPanel(currency: firm.currency, rejection: $rejection)
                 }
@@ -231,40 +234,21 @@ struct CEOOfficeView: View {
         }
     }
 
-    /// The board's quarterly goal and how the last ones went.
+    /// The way into the Hall of Careers (the offer and the goal in force sit at the top).
     @ViewBuilder private var boardPanel: some View {
-        if store.objective != nil || !store.objectiveHistory.isEmpty {
-            Panel {
-                VStack(alignment: .leading, spacing: 10) {
-                    Eyebrow(text: "Board objective")
-                    if let objective = store.objective {
-                        Text(objective.title).font(.headline).foregroundStyle(Theme.primaryText)
-                        Text(objective.detail).font(.caption).foregroundStyle(Theme.secondary)
-                        HStack(spacing: 10) {
-                            ProgressView(value: Double(objective.progressBps) / 10_000)
-                                .tint(objective.progressBps >= 10_000 ? Theme.positive : Theme.gold)
-                            Text(objective.progressBps >= 10_000 ? "Met" : objective.progressBps == 0 ? "Not started" : "\(objective.progressBps / 100)%")
-                                .font(.caption.weight(.semibold).monospacedDigit())
-                                .foregroundStyle(objective.progressBps >= 10_000 ? Theme.positive : Theme.primaryText)
-                        }
-                        Text("\(objective.weeksLeft) weeks left (week \(objective.dueWeek)) · pays you a management bonus")
-                            .font(.caption2).foregroundStyle(Theme.secondary)
-                    }
-                    ForEach(Array(store.objectiveHistory.prefix(3).enumerated()), id: \.offset) { _, result in
-                        HStack {
-                            PixelIcon(result.met ? "check_circle" : "close")
-                                .foregroundStyle(result.met ? Theme.positive : Theme.secondary)
-                            Text(result.title).font(.caption).foregroundStyle(Theme.primaryText).lineLimit(1)
-                            Spacer()
-                            Text(result.met ? Format.moneyCompact(result.bonusCents) : "Missed")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(result.met ? Theme.gold : Theme.secondary)
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-                }
+        NavigationLink {
+            HallView().environmentObject(store)
+        } label: {
+            HStack {
+                PixelLabel("Hall of Careers: chapters and achievements", icon: "star")
+                    .font(.callout.weight(.semibold))
+                Spacer()
+                PixelIcon("chevron_right", size: 12)
             }
+            .padding(12)
+            .background(Theme.panel, in: Pixel.shape)
         }
+        .tint(Theme.gold)
     }
 
     private var plantsPanel: some View {

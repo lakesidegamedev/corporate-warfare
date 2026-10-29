@@ -64,6 +64,8 @@ internal class VehicleSpot(
     val type: String, val mine: Boolean,
     /** Where it stands as a ground offset from the view centre, and its direction of travel on the ground. */
     val g: Offset, val dir: Offset, val height: Double = 0.0,
+    /** Recolours the livery by owner; null keeps the model as baked. */
+    val tone: ((androidx.compose.ui.graphics.Color) -> androidx.compose.ui.graphics.Color)? = null,
 ) {
     /** For drawing back to front. */
     var depth = 0f

@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "note": "Chapter names for this scenario. Eras name a chapter in which the timeline event with that id plays; the others are used in order when no era applies. Fictional and plain.",
+  "eras": {
+    "sv-browser-listing": "The Listing Rush",
+    "sv-desktop-os-launch": "New Desktops",
+    "sv-asia-currency-crisis": "Trouble Abroad",
+    "sv-y2k-services-boom": "The Repair Rush",
+    "sv-y2k-hangover": "The Hangover",
+    "sv-dotcom-bust": "The Bust",
+    "sv-recession": "The Slowdown",
+    "sv-fab-glut": "Too Many Fabs",
+    "sv-recovery": "The Rebuild"
+  },
+  "names": [
+    "Garage Years",
+    "Early Money",
+    "The Prototype",
+    "Silicon and Sand",
+    "Sand Hill",
+    "Release Candidate",
+    "The Long Build",
+    "Ship It",
+    "Second Round",
+    "Next Version"
+  ]
+}

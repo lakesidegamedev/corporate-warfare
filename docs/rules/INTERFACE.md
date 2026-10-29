@@ -132,8 +132,12 @@ each changed struct as it was, converted on load with neutral defaults for the n
 (empty, zero or false, never invented history). The engine reads every released schema from
 `MIN_SCHEMA_VERSION` up and refuses newer ones with a version error. Schema 1 covers releases
 through 1.8 preview 2; schema 2 adds plant cut yields, the production lock and household
-wanted/unmet demand. Data kept outside the payload (custom scenario, currencies, freight read-out,
-history archives) travels in tagged trailers that older readers skip, independent of the schema.
+wanted/unmet demand; schema 3 (1.9) adds the scenario timeline cursor (`SystemicState.timeline`:
+mode, the events with their play dates and which have been announced and fired, and the price
+shocks and credit squeezes in force). A schema 2 save loads with the timeline off and empty: dates
+are never invented for weeks already played. A save written by 3 is refused by a build that reads
+only up to 2 with the usual unsupported version message. Data kept outside the payload (custom scenario, currencies, freight read-out,
+history archives, and in 1.9 the chapter state) travels in tagged trailers that older readers skip, independent of the schema. The `CHAP` trailer (last, after `SYST`) holds the chapters and board mandates on offer and in force, the player's chapter log and the achievements earned (`World.chapters`, see CORPORATE.md, Chapters and mandates). Unlike `HIST` and `SYST` it affects play, so `canonical_hash` folds its bytes in whenever it is not empty; being outside the payload it needs no schema bump or frozen layout. A save without it (every earlier save) loads with it empty. The command `ChooseMandate` is a new last variant of the command enum, so older logs keep their variant numbers. The `EXEC` trailer (after `CHAP`, any order with `MAIL`) holds the executives, the pool of people who can be hired, the event log and the board's record (`World.executives`, see CORPORATE.md, Executives). It affects play, so `canonical_hash` folds its bytes in whenever it is not empty; it needs no schema bump because it is outside the payload, like `CHAP`: a save without it (every earlier save) loads with it empty and the pool is drawn in the next week, which is not invented history. The reason for a trailer rather than a schema bump is that the state is a new, self-contained list that no existing struct reads. `HireExecutive`, `DismissExecutive` and `PoachExecutive` are the last three variants of the command enum.
 Each schema change adds a save written by the last released build as a test fixture.
 
 ## Bounded financial history

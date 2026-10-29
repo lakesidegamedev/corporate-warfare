@@ -61,3 +61,77 @@ so conservation of freight money holds: shippers pay exactly what carriers and t
 sector receive. A fire or spill never creates or destroys cash except the booked loss and the
 clean-up payment to the outside services sector. Incidents name the firms they touch;
 the overview alerts only for incidents touching the player's companies, within four weeks.
+
+## Scenario timelines (1.9)
+
+Each scenario has dated events from its own period in `content/scenarios/<id>/timeline.json`.
+They are not cards: nothing to answer. They are announced, then they happen, are recorded as an
+incident (kind `timeline`) and a news line, and change the game only through mechanics that
+already exist. A scenario plays 8 to 12 events. An event has an id, a date (calendar year and
+week of that year, 1 to 52, within 15 years of the scenario's first year, never in week 1), a
+title of at most 60 characters, a one or two sentence summary of at most 260 characters in
+fictional framing with no real company or person names, `foreshadow_weeks`, and one or more
+effects. An effect that would need a new mechanic is left out of the file.
+
+| Effect | Fields | What it does | Cap |
+|---|---|---|---|
+| `price_shock` | good, percent, weeks | The good's world price family index moves by `percent` at once and the move fades evenly to nothing over `weeks`. It is a layer over the path, never written into it, and feeds the business cycle and the cycle's tilt like the path does. Stacked shocks on one family are limited to 60 percent. | 40 percent, 52 weeks |
+| `demand_regime` | sector or `all`, percent, weeks | A regional demand modifier on every region (the same kind recessions and booms use) for the goods the sector makes, or all goods. It composes with other causes under the existing demand clamp. | 10 percent, 52 weeks |
+| `central_bank_stance` | shift | Moves the chair's stance (dovish -100 to hawkish +100) once. A new chair at the end of a term replaces it. | 40 points |
+| `credit_tightening` | spread_bps, weeks | Adds to the lending premium every lender charges for `weeks`. | 300 bps, 78 weeks |
+| `law_change` | law, value | Sets one of the existing laws: `corporate_tax_bps`, `wage_floor_cents`, `merger_review_bps`, `unions` (0 weak, 1 standard, 2 strong), `common_carrier`, `vertical_review_bps`, `reserve`, `privatise` (0 or 1), `quota_bps`. The next election can change it back like any law. | The law's own range |
+| `systemic_event` | event | Strikes one of `spill`, `port_strike`, `refinery_fire`, `lane_outage`, `harvest_failure` at the first place it can (lowest lane, port, plant or region key) with the middle of its usual duration, recorded as that kind's own incident as well. Nothing happens where nothing can be struck. | One event |
+| `import_ceiling` | good, percent | Scales the capacity of every gateway for the good, for good. | 50 percent |
+
+The loader rejects an unknown good, law, sector or kind, a good with no world price in the
+scenario, a date outside the span, and magnitudes above the caps, which follow the recession and
+boom sizes in CONTENT-PACING.
+
+**Notice.** `foreshadow_weeks` before the date (at least week 1, none when zero) a news line
+"Coming in about N weeks: title" goes out and the event joins the upcoming list. An event with
+no notice is never listed before it happens. The upcoming list the interface gets shows only
+announced events, never unannounced ones; the past list shows what happened and when.
+
+**Modes.** Historical plays the dates as authored. Off plays nothing. Shuffled moves each date by
+a draw of up to 26 weeks either way from the game seed and the event's id (so adding an event to
+the file moves no other), never earlier than week 2. A career copies its events, with the dates it
+will play them on, into the save when it starts, so editing the file never changes a career in
+progress. New games default to Historical; a save from before schema 3 plays none. Everything is
+decided when the game starts or read from the saved cursor, so the timeline draws no random
+numbers during play and a saved and reloaded career plays what an unbroken one does.
+
+**Order.** Each week the timeline runs just before the world prices and the business cycle, so a
+shock, squeeze or demand regime fired this week is in force for them this week.
+
+## The weekly paper
+
+The paper (`cw_session::paper::weekly_paper`) is a presentation of facts the world already
+records. It adds no saved state, uses no random draws and invents nothing: a back issue is
+recomputed from the histories the world keeps, so it reads the same every time. An issue reads
+the facts of its own week and the three before it.
+
+- Sources: market raids, rival wind-downs and ventures, deals (dated by their start, or by their
+  offer deadline once finished), strikes, activist campaigns and other news items, central bank
+  decisions with the bank's stated reason, elections and new laws, systemic incidents, timeline
+  events that fired, timeline foreshadow notices (written as a hint attributed to the paper's
+  analysts desk), companies missing a payment, and the player's quarterly results on a quarter
+  close.
+- Ranking: stories the player is party to first, then the size of the kind of fact (a won raid, a
+  finished takeover and the player's results rank highest), then freshness, then the money
+  involved. The top story leads and the next three are briefs. A week with no facts prints no
+  stories, only the markets column and the classifieds.
+- One event, one story: open bids on the same target become one story ("Three bidders chase X",
+  naming the bidders and the best price), repeated strikes at one company become one, and a
+  rival's own bid log entry is dropped because the deal reports it. Dates in stories and
+  classifieds use the paper's date form ("week 21, 1982"), never a raw game week. Bid and win
+  headlines rotate their verb with the issue's week.
+- Ticker: the apps read it only while time is paused or at 1x; at 2x and 4x the last headlines
+  stay up until time slows.
+- Markets column: the index move (market cap weighted over listed shares), the three biggest
+  share moves and the two biggest good moves on the week. A good's reason is the strongest
+  driver the market screen shows; only today's issue carries it.
+- Classifieds: open bids, and companies restructuring or being wound up (today's issue only).
+- Mastheads by scenario: The Corridor Times (Great Lakes 2000), The Gulf Ledger (Texas 1981), The
+  Valley Wire (Silicon Valley 1995), Rhein-Ruhr Kurier (Ruhr and Rhine 1991). A custom scenario
+  uses its base scenario's.
+- Back issues cover the last 52 weeks, the span of weekly prices the world keeps.

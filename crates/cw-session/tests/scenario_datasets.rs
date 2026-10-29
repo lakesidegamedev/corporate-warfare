@@ -17,6 +17,7 @@ fn config(seed: u64, kind: ScenarioKind, scenario: &str) -> ScenarioConfig {
         prices: PriceSetup {
             scenario_id: scenario.to_owned(),
             path: Some(PricePath::HistoricalVariance),
+            ..Default::default()
         },
     }
 }
@@ -58,7 +59,18 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// states, carved-out divisions began taking their contracts, and contracts began shipping from
 /// where the seller makes the good, and again when freight rates and service references began
 /// following the price index, rivals began sizing pipelines on their own lane shipments, and
-/// carve-outs began ending purchases nothing in the state uses.
+/// carve-outs began ending purchases nothing in the state uses, and in 1.9 when save schema 3
+/// added the scenario timeline cursor (four empty bytes in every world) and Great Lakes began
+/// playing its dated history by default (inside the first 52 weeks: the technology bust in week 15
+/// and the notice of the 2001 recession), and in 1.9 when rival raid campaigns began to be paid
+/// out of earnings and rivals stopped building for imports that a plant under construction
+/// already covers (the fixture path pinned below does not move: neither rule bites in 26 weeks),
+/// and in 1.9 when scenarios began opening with the rates and inflation of their own period (Great
+/// Lakes 2000: inflation 3.4 percent not 3, policy rate 6.5 percent not 6, expected inflation and
+/// opening loan rates to match; this moves the fixture path too, from the first week), and in 1.9
+/// when companies gained executives (rivals hire a chief financial, operating or logistics officer
+/// when it pays, which changes their loans, builds and freight inside the first year, and the pool
+/// of people to hire is drawn in week one and hashed).
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -70,15 +82,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "96caa3b55f5c31dea62d8be95f59c459bfe344e54ba14a9bad65e57cd73b58a8",
+            "cb718237ee70a13e06a006e224441641ab4b4eb5d39deacd81fd70c949a25437",
         ),
         (
             2,
-            "303114467d7ee303b6bc9a9dd22f5d526f1221b978cabd7384a870f36cd06b19",
+            "9c7f926a6c7af03dc297c5d88436ef5d43834589fc2c93b7bed799e1543a7034",
         ),
         (
             3,
-            "c61a032134fe759337168523a48638fc017a6163a6c18f44e5332304d60a8ebb",
+            "e9b69051d47faf74de1664b8bc13d4fa16866e26a310d2e9184f907f5b20212c",
         ),
     ];
     for (seed, hash) in pins {
@@ -90,12 +102,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "92a86ddc2aba951647022fb15ddb73aa4f56531f0c8bd97b06f881c8be63c637"
+        "344019a5b28f0d444a8ac97f194f5791586daf538d406b33bbc4dd2cee3927d3"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "b581d47a341d75a104f32a5fef47e6a518b693d0d2d1ba0f811ef4863c9ed1a0"
+        "543df043c64284eb4a09bc1b829c3e0cfa6c936a9c03af968f8c341344bf7e7d"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();

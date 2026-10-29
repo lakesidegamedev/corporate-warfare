@@ -33,6 +33,9 @@ enum class MapDetail(val title: String, val note: String) {
     High("High", "Adds highways, counties and rivers"),
 }
 
+/** Where first-run setup stands, from the `setupDone` settings key. */
+enum class SetupState { Fresh, Upgrade, Done }
+
 /** How the desktop window sits on screen. */
 enum class WindowMode(val title: String) { Windowed("Windowed"), Maximized("Maximized"), Fullscreen("Full screen") }
 
@@ -43,7 +46,12 @@ val Resolutions = listOf(1280 to 720, 1366 to 768, 1600 to 900, 1920 to 1080, 25
  * Player settings that live outside any career, saved to a small file beside the saves. Desktop
  * builds also read the window settings here.
  */
+/** Window pixels above which a first start suggests Medium: 2.5 million, a little over 1920 by 1200. */
+internal const val SUGGEST_MEDIUM_ABOVE = 2_500_000L
+
 class AppSettings(private val file: File) {
+    /** Whether a settings file was already there: a player upgrading from 1.8 has one, a first launch does not. */
+    private val existedAtLaunch = file.exists()
     private val props = Properties().apply { if (file.exists()) file.inputStream().use { load(it) } }
 
     /**
@@ -51,6 +59,9 @@ class AppSettings(private val file: File) {
      * animations and takes High for the rest.
      */
     var graphics by mutableStateOf(loadGraphics()); private set
+
+    /** True once the player (or an older version of the game) has saved a graphics choice; a suggested preset is never saved. */
+    private var graphicsChosen = props.getProperty("preset") != null || props.getProperty("mapDetail") != null
     val mapDetail: MapDetail get() = graphics.detail
     val animations: Boolean get() = graphics.animations
     var autoUpdate by mutableStateOf(props.getProperty("autoUpdate")?.toBoolean() ?: true); private set
@@ -64,17 +75,59 @@ class AppSettings(private val file: File) {
     var analytics by mutableStateOf(props.getProperty("analytics")?.toBoolean() ?: true); private set
     /** Also stop the clock for warnings, not only for decisions that need an answer. */
     var pauseOnWarnings by mutableStateOf(props.getProperty("pauseOnWarnings")?.toBoolean() ?: false); private set
+    /** Open the weekly brief by itself when a new week starts with time paused or at 1x. Desktop only. */
+    var showBriefEachWeek by mutableStateOf(props.getProperty("showBriefEachWeek")?.toBoolean() ?: false); private set
+    /** The brief panel at the top of the CEO Office is folded away. */
+    var briefCollapsed by mutableStateOf(props.getProperty("briefCollapsed")?.toBoolean() ?: false); private set
     var uiScale by mutableStateOf(props.getProperty("uiScale")?.toFloatOrNull() ?: 1f); private set
     var windowMode by mutableStateOf(enumOr(props.getProperty("windowMode"), WindowMode.Windowed)); private set
     var resolution by mutableStateOf(
         props.getProperty("resolution")?.split("x")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
             ?: (1600 to 900),
     ); private set
+    /** The `setupDone` key: "true" once setup is finished, "false" while a first launch has not finished it, absent in a 1.8 file. */
+    private var setupFlag: String? = props.getProperty("setupDone") ?: if (existedAtLaunch) null else "false".also { props.setProperty("setupDone", it) }
+
+    /** Where the first-run setup stands: not yet seen, a 1.8 player who has not seen What's new, or finished. */
+    var setupState by mutableStateOf(
+        when {
+            setupFlag == "true" -> SetupState.Done
+            setupFlag == null -> SetupState.Upgrade
+            else -> SetupState.Fresh
+        },
+    ); private set
+
+    /** Finished or left careers, newest first: a few lines each, for the main menu's Hall of Careers. */
+    var careers by mutableStateOf(loadCareers()); private set
+
+    /** Keep a career's summary. A career left again replaces its earlier line instead of adding one. */
+    fun recordCareer(summary: CareerSummary) {
+        careers = (listOf(summary) + careers.filterNot { it.title == summary.title && it.scenario == summary.scenario }).take(MAX_CAREERS)
+        store()
+    }
+
+    private fun loadCareers(): List<CareerSummary> =
+        props.getProperty("careers")?.let { runCatching { CareerSummary.decode(it) }.getOrNull() } ?: emptyList()
+
     /** A random id for this install, not tied to any account or device identifier. */
     val installId: String = props.getProperty("installId")?.takeIf { it.length == 36 }
         ?: java.util.UUID.randomUUID().toString().also { props.setProperty("installId", it); store() }
 
-    fun chooseGraphics(value: GraphicsConfig) { graphics = value; store() }
+    /** Mark setup finished (or What's new dismissed); never touches any other choice. */
+    fun finishSetup() { setupFlag = "true"; setupState = SetupState.Done; store() }
+
+    fun chooseGraphics(value: GraphicsConfig) { graphics = value; graphicsChosen = true; store() }
+
+    /**
+     * On a first start with no graphics choice saved, a big window or software drawing starts at Medium instead of High,
+     * so the first look is smooth. Judged from the window's pixels, not a benchmark. Never replaces a saved choice and is
+     * not saved itself, so it is judged again at the next start until the player picks a preset. Returns whether it applied.
+     */
+    fun suggestGraphics(windowPixels: Long, software: Boolean): Boolean {
+        if (graphicsChosen || !(software || windowPixels > SUGGEST_MEDIUM_ABOVE)) return false
+        graphics = GraphicsPreset.Medium.config(graphics.animations, graphics.showFps)
+        return true
+    }
     fun choosePreset(preset: GraphicsPreset) = chooseGraphics(preset.config(graphics.animations, graphics.showFps))
     fun chooseAutoUpdate(value: Boolean) { autoUpdate = value; store() }
     fun chooseUpdateChannel(value: UpdateChannel) { updateChannel = value; store() }
@@ -82,12 +135,14 @@ class AppSettings(private val file: File) {
     fun chooseTutorial(done: Set<String>, hidden: Boolean) { tutorialDone = done; tutorialHidden = hidden; store() }
     fun chooseReportingCurrency(value: String) { reportingCurrency = value; store() }
     fun choosePauseOnWarnings(value: Boolean) { pauseOnWarnings = value; store() }
+    fun chooseShowBriefEachWeek(value: Boolean) { showBriefEachWeek = value; store() }
+    fun chooseBriefCollapsed(value: Boolean) { briefCollapsed = value; store() }
     fun chooseUiScale(value: Float) { uiScale = value; store() }
     fun chooseWindowMode(value: WindowMode) { windowMode = value; store() }
     fun chooseResolution(value: Pair<Int, Int>) { resolution = value; store() }
 
     private fun store() {
-        graphics.let { g ->
+        if (graphicsChosen) graphics.let { g ->
             props.setProperty("mapDetail", g.detail.name)
             props.setProperty("animations", g.animations.toString())
             props.setProperty("preset", g.preset?.name?.lowercase() ?: "custom")
@@ -108,6 +163,8 @@ class AppSettings(private val file: File) {
             props.setProperty("seasons", g.seasons.toString())
             props.setProperty("labels", g.labels.toString())
         }
+        setupFlag?.let { props.setProperty("setupDone", it) }
+        props.setProperty("careers", CareerSummary.encode(careers))
         props.setProperty("autoUpdate", autoUpdate.toString())
         props.setProperty("updateChannel", updateChannel.id)
         props.setProperty("analytics", analytics.toString())
@@ -115,6 +172,8 @@ class AppSettings(private val file: File) {
         props.setProperty("tutorial.hidden", tutorialHidden.toString())
         props.setProperty("reportingCurrency", reportingCurrency)
         props.setProperty("pauseOnWarnings", pauseOnWarnings.toString())
+        props.setProperty("showBriefEachWeek", showBriefEachWeek.toString())
+        props.setProperty("briefCollapsed", briefCollapsed.toString())
         props.setProperty("uiScale", uiScale.toString())
         props.setProperty("windowMode", windowMode.name)
         props.setProperty("resolution", "${resolution.first}x${resolution.second}")
@@ -161,7 +220,7 @@ class AppSettings(private val file: File) {
  * desktop, the window.
  */
 @Composable
-fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, updater: Updater? = null, onClose: () -> Unit) {
+fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, updater: Updater? = null, onSetupAgain: (() -> Unit)? = null, onClose: () -> Unit) {
     TabList {
         item { ScreenHeader("Settings", null) { TextButton(onClick = onClose) { Text("Done", color = Palette.gold) } } }
         if (store.ready) {
@@ -186,6 +245,19 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                             onCheckedChange = { settings.choosePauseOnWarnings(it) },
                             colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
                         )
+                    }
+                    if (desktop) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Show the brief each week", color = Palette.primaryText)
+                                Text("Opens the weekly brief when a new week starts while time is paused or at normal speed. It never opens at faster speeds.", color = Palette.secondary, fontSize = 12.sp)
+                            }
+                            Switch(
+                                checked = settings.showBriefEachWeek,
+                                onCheckedChange = { settings.chooseShowBriefEachWeek(it) },
+                                colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
+                            )
+                        }
                     }
                 }
             }
@@ -224,6 +296,20 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                 }
             }
         }
+        if (onSetupAgain != null) {
+            item {
+                Panel {
+                    Eyebrow("Setup")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("First-run setup", color = Palette.primaryText)
+                            Text("Test your graphics again and review updates, privacy and the tutorial.", color = Palette.secondary, fontSize = 12.sp)
+                        }
+                        TextButton(onClick = onSetupAgain) { Text("Set up again", color = Palette.gold) }
+                    }
+                }
+            }
+        }
         item {
             Panel {
                 Eyebrow("Tutorial")
@@ -244,7 +330,7 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                     Column(Modifier.weight(1f)) {
                         Text("Share anonymous market data", color = Palette.primaryText)
                         Text(
-                            "Every five weeks, the goods made, sold and priced, and how your company is doing, are sent with a random id. No names or account details.",
+                            Privacy.explanation,
                             color = Palette.secondary,
                             fontSize = 12.sp,
                         )
@@ -293,7 +379,7 @@ private fun GraphicsChoices(settings: AppSettings) {
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun <T> Choices(options: List<T>, selected: T, label: (T) -> String, onPick: (T) -> Unit) {
+internal fun <T> Choices(options: List<T>, selected: T, label: (T) -> String, onPick: (T) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         options.forEach { option ->
             val on = option == selected

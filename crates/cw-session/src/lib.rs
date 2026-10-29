@@ -4,8 +4,11 @@
 //! weekly advances. It exposes immutable read models, a versioned save envelope and a replay log.
 //! Swift keeps file I/O and lifecycle; it never computes a financial identity.
 
+pub mod brief;
 pub mod cfo;
 pub mod dto;
+pub mod letters;
+pub mod paper;
 pub mod save;
 pub mod telemetry;
 
@@ -57,6 +60,9 @@ pub struct PriceSetup {
     pub scenario_id: String,
     /// None takes the scenario's default mode.
     pub path: Option<cw_data::PricePath>,
+    /// Whether the scenario's dated history plays. None takes the default, Historical.
+    #[serde(default)]
+    pub timeline: Option<cw_sim::economy::timeline::TimelineMode>,
 }
 
 #[derive(Clone, Debug)]
@@ -184,6 +190,7 @@ impl Session {
         config.prices = PriceSetup {
             scenario_id: custom.base_scenario_id.clone(),
             path: Some(custom.price_path),
+            timeline: config.prices.timeline,
         };
         Self::create_with(config, Some(custom)).map_err(|e| format!("{e:?}"))
     }
@@ -239,6 +246,18 @@ impl Session {
                 &cw_data::price_paths::PricePathFile::load(),
                 id,
                 path,
+                config.seed,
+            );
+        }
+        if !config.prices.scenario_id.is_empty() {
+            cw_sim::economy::timeline::init(
+                &mut world,
+                &dataset,
+                &config.prices.scenario_id,
+                config
+                    .prices
+                    .timeline
+                    .unwrap_or(cw_sim::economy::timeline::TimelineMode::Historical),
                 config.seed,
             );
         }
@@ -2144,7 +2163,13 @@ mod tests {
         // carriers cut below 60 percent lane fill, so week-two asking prices differ. It moved
         // again from 1b265292... in the same preview when facilities gained a cut record,
         // households gained wanted and unmet demand and policies a production lock (new
-        // encoded fields), and refineries began shifting their cut. The Swift
+        // encoded fields), and refineries began shifting their cut. In 1.9 it moved from
+        // dd84b0b3... when scenarios began opening with the inflation, policy rate and expected
+        // inflation of their own period (Great Lakes 2000: 3.4 percent and 6.5 percent, not 3 and 6),
+        // which changes the opening loans, wages and rates from the first week. In 1.9 it moved
+        // from 1bf6e771... when the world gained its executive state (the pool of people who can
+        // be hired is drawn in the first week and is hashed, like the chapter state), with no
+        // change to any rule this fixture exercises. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2170,7 +2195,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "fddf778e8fe5e78f4379bf5c7688e45bf4dffa3c1449a89aa6c4e73cf8834a56"
+            "141f3b980f12a30ae75bb9fa9b5d30017fa8345ba0fe38211d0ff0a118b648d9"
         );
     }
 

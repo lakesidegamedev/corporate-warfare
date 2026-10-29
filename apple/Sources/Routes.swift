@@ -134,11 +134,29 @@ final class RoadNetwork {
     }
 }
 
-/// Each lane's route on the real network for its mode, kept per scenario and pair of hubs.
+/// Each lane's route on the real network for its mode, kept per scenario and pair of hubs. Worked
+/// out on a background queue (building a network and searching it takes a few hundred
+/// milliseconds on a slow device); the map draws no freight on a lane until its route is in, and
+/// redraws when `ready` is posted.
 enum Routes {
-    private static var networks: [String: RoadNetwork] = [:]
+    static let ready = Notification.Name("Routes.ready")
+
+    struct Request: Hashable {
+        let mode: String
+        let a: String
+        let b: String
+    }
+
     private static var routes: [String: [GeoPoint]?] = [:]
+    private static var finished = 0
+    private static var pending: Set<String> = []
+    /// Guards `routes` and `pending`, and only ever for an instant.
     private static let lock = NSLock()
+    private static let queue = DispatchQueue(label: "cw.routes", qos: .userInitiated)
+    /// Touched only on `queue`.
+    private static var networks: [String: RoadNetwork] = [:]
+
+    private static func key(_ map: WorldMap, _ r: Request) -> String { "\(map.scenarioId ?? "")/\(r.mode)/\(r.a)>\(r.b)" }
 
     private static func network(_ map: WorldMap, _ mode: String) -> RoadNetwork? {
         let key = "\(map.scenarioId ?? "")/\(mode)"
@@ -155,17 +173,51 @@ enum Routes {
         return built
     }
 
-    /// The route for a lane between two regions by its mode, or nil when there is none.
-    static func of(_ map: WorldMap, mode: String, _ a: String, _ b: String) -> [GeoPoint]? {
-        let key = "\(map.scenarioId ?? "")/\(mode)/\(a)>\(b)"
+    /// Counts the lanes worked out so far, so a cached drawing knows when to be redone.
+    static var generation: Int {
         lock.lock()
         defer { lock.unlock() }
-        if let held = routes[key] { return held }
-        var found: [GeoPoint]?
-        if let from = map.anchor(of: a), let to = map.anchor(of: b) {
-            found = network(map, mode)?.route(from: from, to: to)
+        return finished
+    }
+
+    /// The route for a lane if it has been worked out: nil when not yet, `.some(nil)` when the
+    /// network has none.
+    static func cached(_ map: WorldMap, _ r: Request) -> [GeoPoint]?? {
+        lock.lock()
+        defer { lock.unlock() }
+        return routes[key(map, r)]
+    }
+
+    /// Works out the routes and the water crossings for these lanes in the background, then posts
+    /// `ready`. Lanes already known or already queued are skipped.
+    static func prewarm(_ map: WorldMap, _ requests: [Request]) {
+        lock.lock()
+        let fresh = requests.filter { routes[key(map, $0)] == nil && !pending.contains(key(map, $0)) }
+        for r in fresh { pending.insert(key(map, r)) }
+        lock.unlock()
+        guard !fresh.isEmpty else { return }
+        queue.async {
+            for r in fresh {
+                var found: [GeoPoint]?
+                if let from = map.anchor(of: r.a), let to = map.anchor(of: r.b) {
+                    found = network(map, r.mode)?.route(from: from, to: to)
+                }
+                _ = LaneWater.along(map, r.a, r.b)
+                lock.lock()
+                routes[key(map, r)] = .some(found)
+                pending.remove(key(map, r))
+                finished += 1
+                lock.unlock()
+            }
+            DispatchQueue.main.async { NotificationCenter.default.post(name: ready, object: nil) }
         }
-        routes[key] = .some(found)
-        return found
+    }
+
+    /// The route now, on the calling thread, for tests.
+    static func of(_ map: WorldMap, mode: String, _ a: String, _ b: String) -> [GeoPoint]? {
+        let r = Request(mode: mode, a: a, b: b)
+        prewarm(map, [r])
+        queue.sync {}
+        return cached(map, r) ?? nil
     }
 }

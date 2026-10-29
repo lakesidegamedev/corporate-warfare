@@ -114,6 +114,41 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var rivals by mutableStateOf<List<RivalSummaryDto>>(emptyList()); private set
     /** The latest rival moves anywhere, newest first, naming the chief behind each. */
     var rivalFeed by mutableStateOf<List<RivalMoveFeedDto>>(emptyList()); private set
+    /** The Inbox's letters: the last eight weeks, decisions pinned on top. Read with the rest of the week. */
+    var letters by mutableStateOf<List<uniffi.cw_ffi.LetterDto>>(emptyList()); private set
+    /** Unread letters in the Inbox window, for the badge. */
+    val unreadLetters: Int get() = letters.count { !it.read }
+    /** The Inbox badge: unread letters plus decisions already read but still due. */
+    val inboxBadge: Int get() = letters.count { !it.read || it.mandatory }
+    /** This career's chapters, board goals and achievements. Read only when it can be seen (see [loadHall]). */
+    var hall by mutableStateOf<uniffi.cw_ffi.HallDto?>(null); private set
+    /**
+     * The weekly brief for the selected company. Read only while the CEO Office (or the weekly
+     * pop-up) is showing it, and at 2x or 4x no more than once a week (see [loadBrief]).
+     */
+    var brief by mutableStateOf<uniffi.cw_ffi.BriefDto?>(null); private set
+    /** The brief is on screen, so it is kept current. */
+    var briefOpen: Boolean = false
+    /** The panel is folded away; kept in the settings file. */
+    var briefCollapsed by mutableStateOf(false)
+    var onBriefCollapsed: (Boolean) -> Unit = {}
+    private var briefWeek = -1
+    private var briefRevision = 0uL
+    private var briefFirm: ULong? = null
+    /** The selected company's executives and the people it could hire. Read only while the section is on screen. */
+    var executives by mutableStateOf<uniffi.cw_ffi.ExecutivesDto?>(null); private set
+    var executivesOpen: Boolean = false
+    private var executivesRevision = -1L
+    /** The five-year score, when the career is scored. */
+    var score by mutableStateOf<uniffi.cw_ffi.ScoreDto?>(null); private set
+    /** The Hall of Careers page is open, so the chapter data is kept current even at speed. */
+    var hallOpen: Boolean = false
+    private var hallStale = false
+    /** The last chapter whose result the player has already been shown. */
+    private var resultSeen = 0
+    private var resultSeenFor: SessionHandle? = null
+    /** Called when a career is left, with its summary, so the main menu can list it. */
+    var onCareerEnded: (CareerSummary) -> Unit = {}
     /** Every plant in the world, so a rival's markets can be listed with a Raid button. */
     var mapPlants by mutableStateOf<List<MapPlantDto>>(emptyList()); private set
     var commodities by mutableStateOf<List<CommodityDto>>(emptyList()); private set
@@ -133,6 +168,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     val actions: List<uniffi.cw_ffi.ActionDto> by lazy { uniffi.cw_ffi.actionCatalogue() }
     var productCatalogue by mutableStateOf<List<ProductDto>>(emptyList()); private set
     private var catalogueOf: SessionHandle? = null
+    /** A back issue of the paper to open on the next visit, set by the History card. */
+    var paperWeek by mutableStateOf<Int?>(null)
+
     /** The economy, central bank and government. */
     var economy by mutableStateOf<uniffi.cw_ffi.EconomyDto?>(null); private set
     /** The selected company's research position. */
@@ -227,13 +265,24 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     fun advance() = perform { step() }
 
+    /** Read everything again from the engine, for tests that drive the engine handle directly. */
+    fun refresh() = perform { reload() }
+
     /** Save, stop time and close the career; the main menu offers it again under Continue. */
     fun exitToMenu() = perform {
         runJob?.cancel()
         runJob = null
         running = false
         save(wait = true)
+        loadHall(force = true)
+        val scenario = session?.let { h -> withContext(engine) { h.scenarioId() } }.orEmpty()
+        hall?.let { h -> overview?.let { o -> if (h.weeks > 0u) onCareerEnded(CareerSummary.of(o.primaryName, scenarioName(scenario), h)) } }
         session = null
+        hall = null
+        brief = null
+        briefWeek = -1
+        score = null
+        resultSeenFor = null
         ready = false
         overview = null
         selectedFirm = null
@@ -252,6 +301,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
             runJob?.cancel()
             runJob = null
             running = false
+            scope.launch { loadHall(force = true) }
             return
         }
         speed = weeksPerSecond
@@ -298,6 +348,14 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     fun selectRegion(code: String) = perform {
         marketRegion = code
         loadMarkets()
+    }
+
+    /** Opening a letter marks it read; the engine keeps the flag, the list updates in place. */
+    fun markRead(ids: List<String>) {
+        val handle = session ?: return
+        if (ids.isEmpty()) return
+        letters = letters.map { if (it.id in ids) it.copy(read = true) else it }
+        scope.launch { withContext(engine) { handle.markLettersRead(ids) } }
     }
 
     fun respond(event: ULong, choice: String) =
@@ -601,6 +659,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 handle.rivalFeed(12u),
                 handle.mapPlants(),
                 firm?.let { handle.cfoAdvice(it) } ?: emptyList<uniffi.cw_ffi.CfoAdviceDto>(),
+                handle.letters(if (overviewNow.tick > 8u) overviewNow.tick - 8u else 1u),
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
@@ -635,9 +694,115 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 rivalFeed = parts[23] as List<RivalMoveFeedDto>
                 mapPlants = parts[24] as List<MapPlantDto>
                 cfoAdvice = parts[25] as List<uniffi.cw_ffi.CfoAdviceDto>
+                letters = parts[26] as List<uniffi.cw_ffi.LetterDto>
             }
         }
         loadMarkets()
+        loadHall()
+        loadBrief()
+        loadExecutives()
+    }
+
+    /**
+     * The brief is read only when it can be seen. It is read again after a command changes the
+     * world, but at 2x and 4x never more than once a week; closed or folded away it costs nothing.
+     */
+    private suspend fun loadBrief(force: Boolean = false) {
+        val handle = session ?: return
+        val firm = selectedFirm
+        val now = overview ?: return
+        if (firm == null) { brief = null; return }
+        val tick = now.tick.toInt()
+        val fast = running && speed > 1
+        val due = force || (briefOpen && !briefCollapsed &&
+            (briefWeek != tick || briefFirm != firm || (briefRevision != now.revision && !fast)))
+        if (!due) return
+        briefWeek = tick
+        briefRevision = now.revision
+        briefFirm = firm
+        val dto = withContext(engine) { handle.weeklyBrief(firm) }
+        if (session === handle) brief = dto
+    }
+
+    private suspend fun loadExecutives(force: Boolean = false) {
+        val handle = session ?: return
+        val firm = selectedFirm
+        val now = overview ?: return
+        if (firm == null) { executives = null; return }
+        val stamp = now.revision.toLong() * 7 + now.tick.toLong()
+        if (!force && (!executivesOpen || stamp == executivesRevision)) return
+        executivesRevision = stamp
+        val dto = withContext(engine) { handle.executives(firm) }
+        if (session === handle) executives = dto
+    }
+
+    fun refreshExecutives() { scope.launch { loadExecutives(force = true) } }
+
+    fun hireExecutive(firm: ULong, post: Int, person: Int) =
+        submit(CommandJson.command("HireExecutive", "firm" to firm, "post" to post, "person" to person))
+
+    fun dismissExecutive(firm: ULong, post: Int) =
+        submit(CommandJson.command("DismissExecutive", "firm" to firm, "post" to post))
+
+    fun poachExecutive(firm: ULong, from: ULong, post: Int, offerCents: Long) =
+        submit(CommandJson.command("PoachExecutive", "firm" to firm, "from" to from, "post" to post, "offer_cents" to offerCents))
+
+    /** Read the brief now, for the panel when it opens or the weekly pop-up. */
+    fun refreshBrief() { scope.launch { loadBrief(force = true) } }
+
+    fun foldBrief(value: Boolean) {
+        briefCollapsed = value
+        onBriefCollapsed(value)
+        if (!value) refreshBrief()
+    }
+
+    /**
+     * The chapter data is read when the Hall page is open, right after a choice, and when the week
+     * changes with time paused or at 1x. At 2x and 4x the week is too short to spend a call on it;
+     * pausing reads it once.
+     */
+    private suspend fun loadHall(force: Boolean = false) {
+        val handle = session ?: return
+        if (!force && !hallOpen && !hallStale && running && speed > 1) return
+        hallStale = false
+        val (dto, scoreNow) = withContext(engine) { handle.hallOfCareers() to runCatching { handle.score() }.getOrNull() }
+        if (session !== handle) return
+        if (resultSeenFor !== handle) {
+            // A result that was already waiting when the career opened is not news.
+            resultSeen = dto.chapters.lastOrNull { it.outcome == "met" || it.outcome == "missed" }?.number?.toInt() ?: 0
+            resultSeenFor = handle
+        }
+        hall = dto
+        score = scoreNow
+    }
+
+    /** Read the chapter data now, for the Hall page when it opens or the week moves. */
+    fun refreshHall() { scope.launch { loadHall(force = true) } }
+
+    /** The board's offer for the player's current chapter, if one can still be taken. */
+    val boardOffer: uniffi.cw_ffi.ChapterDto?
+        get() = hall?.chapters?.lastOrNull { it.status == "current" && it.chosen == null && it.offerWeeksLeft > 0u && it.offered.isNotEmpty() }
+
+    /** The goal in force for the current chapter. */
+    val activeMandate: Pair<uniffi.cw_ffi.ChapterDto, uniffi.cw_ffi.MandateDto>?
+        get() = hall?.chapters?.lastOrNull { it.status == "current" }?.let { chapter ->
+            val picked = chapter.chosen?.let { chapter.offered.getOrNull(it.toInt()) }
+            if (picked != null && chapter.outcome == "open") chapter to picked else null
+        }
+
+    /** A chapter that closed met or missed and has not been shown yet. */
+    val chapterResult: uniffi.cw_ffi.ChapterDto?
+        get() = hall?.chapters?.lastOrNull { (it.outcome == "met" || it.outcome == "missed") && it.number.toInt() > resultSeen }
+
+    fun dismissChapterResult() {
+        resultSeen = hall?.chapters?.maxOfOrNull { it.number.toInt() } ?: resultSeen
+        hall = hall
+    }
+
+    /** Take the board's goal in position [pick] (0 to 2) for [firm]. */
+    fun chooseMandate(firm: ULong, pick: Int) {
+        hallStale = true
+        submit(CommandJson.command("ChooseMandate", "firm" to firm, "pick" to pick))
     }
 
     private suspend fun loadMarkets() {

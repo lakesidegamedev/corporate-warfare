@@ -1,5 +1,6 @@
 package net.lakesidegames.corporatewarfare
 
+import uniffi.cw_ffi.LetterDto
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -72,14 +73,19 @@ val LocalAppSettings = androidx.compose.runtime.staticCompositionLocalOf<AppSett
  * desktop, where the menu offers Quit and the settings page offers the window options.
  */
 @Composable
-fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Updater? = null, onQuit: (() -> Unit)? = null) {
+fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Updater? = null, onQuit: (() -> Unit)? = null, saveFolder: String? = null) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     var showSettings by remember { mutableStateOf(false) }
+    // Set up again, or the wizard a 1.8 player chose from What's new.
+    var rerunSetup by remember { mutableStateOf(false) }
     val analytics = settings.analytics
     androidx.compose.runtime.SideEffect {
         store.preferredCurrency = settings.reportingCurrency
         store.pauseOnWarnings = settings.pauseOnWarnings
+        store.briefCollapsed = settings.briefCollapsed
+        store.onBriefCollapsed = { settings.chooseBriefCollapsed(it) }
         store.onCurrencyChosen = { settings.chooseReportingCurrency(it) }
+        store.onCareerEnded = { settings.recordCareer(it) }
         val installId = settings.installId
         store.snapshotSink = if (analytics) {
             { json -> Telemetry.post(Telemetry.envelope(installId, BuildInfo.VERSION, BuildInfo.CHANNEL, json)) }
@@ -101,15 +107,22 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
         CorporateWarfareTheme {
             Box(Modifier.fillMaxSize().background(Palette.ink)) {
                 when {
+                    rerunSetup || settings.setupState == SetupState.Fresh ->
+                        SetupWizard(settings, updater, saveFolder, firstRun = settings.setupState == SetupState.Fresh && !rerunSetup, onDone = { rerunSetup = false })
+                    settings.setupState == SetupState.Upgrade ->
+                        WhatsNewScreen(onRunSetup = { rerunSetup = true }, onContinue = { settings.finishSetup() })
                     showSettings -> Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), contentAlignment = Alignment.TopCenter) {
                         BackAction { showSettings = false }
                         Box(Modifier.widthIn(max = 820.dp)) {
-                            SettingsScreen(store, settings, desktop = onQuit != null, updater = updater) { showSettings = false }
+                            SettingsScreen(store, settings, desktop = onQuit != null, updater = updater, onSetupAgain = { showSettings = false; rerunSetup = true }) { showSettings = false }
                         }
                     }
                     store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         if (maxWidth >= DesktopBreakpoint) {
-                            Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) { DesktopShell(store, onSettings = { showSettings = true }) }
+                            Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                                DesktopShell(store, onSettings = { showSettings = true })
+                                if (settings.showBriefEachWeek) BriefWeeklyHost(store)
+                            }
                         }
                         else MainScreen(store, onSettings = { showSettings = true })
                     }
@@ -181,10 +194,13 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
             Row(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { overlay = null }) { BackLabel("Back", Palette.gold) }
             }
+            if (page != "paper") TickerBar(store) { overlay = "paper" }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (page) {
                     "actions" -> CommandCenterScreen(store)
                     "research" -> ResearchScreen(store)
+                    "paper" -> PaperScreen(store)
+                    "hall" -> HallScreen(store)
                     else -> StatsScreen(store) { overlay = null }
                 }
             }
@@ -200,7 +216,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
                         selected = tab == item,
                         onClick = { open(item.name.lowercase()) },
                         icon = {
-                            val due = store.events.count { it.mandatory }
+                            val due = store.inboxBadge
                             if (item == Tab.Inbox && due > 0) {
                                 BadgedBox(badge = { Badge { Text("$due") } }) { PixelIcon(item.icon, size = 24.dp) }
                             } else {
@@ -233,13 +249,14 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
             // The map has its own time controls; every other tab gets the strip, so time can be
             // paused or slowed from anywhere.
             if (tab != Tab.Map) TimeStrip(store)
+            TickerBar(store) { open("paper") }
             TutorialPanel(compact = true, modifier = Modifier.fillMaxWidth(), researchHint = store.research?.let { r -> store.selectedFirmDto?.let { Tutorial.researchHint(it.cashCents, r) } })
             Box(Modifier.weight(1f)) {
             when (tab) {
                 Tab.Map -> MapScreen(store)
                 Tab.Office -> OfficeScreen(store, ::open)
                 Tab.Markets -> MarketsScreen(store)
-                Tab.Inbox -> InboxScreen(store)
+                Tab.Inbox -> InboxScreen(store, ::open)
                 Tab.Portfolio -> PortfolioScreen(store, onSettings)
             }
             }
@@ -292,6 +309,7 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedButton(onClick = { onOpen("research") }) { Text("Research", color = Palette.primaryText, fontSize = 12.sp) }
                         OutlinedButton(onClick = { onOpen("stats") }) { Text("Stats", color = Palette.primaryText, fontSize = 12.sp) }
+                        OutlinedButton(onClick = { onOpen("hall") }) { Text("Hall", color = Palette.primaryText, fontSize = 12.sp) }
                         GoldButton("Actions") { onOpen("actions") }
                     }
                 }
@@ -301,6 +319,9 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
             item { FoundCompanyPanel(store, scroll = false) }
             return@TabList
         }
+        item { BriefPanel(store, firm.currency) }
+        chapterItems(store)
+        item { ExecutivesPanel(store, firm.currency) }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectorBadge(firm.industry, 40)
@@ -473,7 +494,7 @@ internal fun PricingRow(line: ProductLineDto, onClick: () -> Unit) {
 
 /** Automatic pricing, a step against the market, or a markup over the company's own cost. */
 @Composable
-internal fun PostureDialog(store: GameStore, line: ProductLineDto, onDismiss: () -> Unit) {
+internal fun PostureDialog(store: GameStore, line: ProductLineDto, presetBps: Int? = null, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Palette.panel,
@@ -487,6 +508,12 @@ internal fun PostureDialog(store: GameStore, line: ProductLineDto, onDismiss: ()
                     fontSize = 13.sp,
                 )
                 Text("Buyers take the cheapest offer first. Undercut to sell out; price above the market for margin and risk unsold stock.", color = Palette.secondary, fontSize = 12.sp)
+                presetBps?.let { bps ->
+                    GoldButton("Apply the suggested price: %+.0f%% against the market".format(bps / 100.0)) {
+                        store.setPosture(line.product, 1, bps)
+                        onDismiss()
+                    }
+                }
                 OutlinedButton(onClick = { store.setPosture(line.product, 0, 0); onDismiss() }) {
                     Text(if (line.mode == "auto") "Automatic (on)" else "Automatic", color = Palette.primaryText)
                 }
@@ -581,14 +608,31 @@ fun PauseBanner(store: GameStore, modifier: Modifier = Modifier) {
 
 // MARK: Inbox
 
+/**
+ * The Inbox is correspondence: a stack of letters, decisions pinned on top, one open at a time.
+ * Rival moves stay below as a compact feed: most of them (a plant, a wind-down) involve no one
+ * writing to you, so a letter for each would be invented.
+ */
 @Composable
-private fun InboxScreen(store: GameStore) {
+private fun InboxScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
+    var openId by remember { mutableStateOf<String?>(null) }
+    var picked by remember { mutableStateOf<LetterDto?>(null) }
+    // A letter stays open after it leaves the Inbox window (the archive); a answered card is gone.
+    val letter = store.letters.firstOrNull { it.id == openId } ?: picked?.takeIf { it.id == openId && it.event == null }
     TabList {
-        item { ScreenHeader("Inbox", listOfNotNull(store.selectedFirmDto?.name, store.overview?.weekLabel).joinToString(" · ")) }
+        item {
+            ScreenHeader("Inbox", listOfNotNull(store.selectedFirmDto?.name, store.overview?.weekLabel).joinToString(" · ")) {
+                OutlinedButton(onClick = { onOpen("paper") }) { Text("The paper", color = Palette.primaryText, fontSize = 12.sp) }
+            }
+        }
+        if (letter != null) {
+            item { TextButton(onClick = { openId = null; picked = null }) { Text("Back to letters", color = Palette.gold) } }
+            item { LetterPaper(store, store.letters.firstOrNull { it.id == letter.id } ?: letter) }
+            return@TabList
+        }
         val due = store.events.count { it.mandatory }
         if (due > 0) item { Callout("$due decision${if (due == 1) "" else "s"} needed before time can advance.", Palette.warning) }
-        if (store.events.isEmpty() && store.rivalFeed.isEmpty()) item { Callout("Quiet week. Decisions show up here when they happen.", Palette.secondary) }
-        items(store.events.size) { index -> DecisionCard(store, store.events[index]) }
+        item { LetterStack(store, openId) { openId = it.id; picked = it } }
         if (store.rivalFeed.isNotEmpty()) {
             item {
                 Panel {

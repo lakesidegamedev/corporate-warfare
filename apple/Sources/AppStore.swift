@@ -31,6 +31,25 @@ final class AppStore: ObservableObject {
     /// The board's quarterly goal for the primary company and its recent results.
     @Published var objective: ObjectiveDto?
     @Published var objectiveHistory: [ObjectiveResultDto] = []
+    /// This career's chapters, board goals and achievements. Read when the Hall page is open, right
+    /// after a choice, and when the week changes with time paused or at 1x; never at 2x or 4x.
+    @Published var hall: HallDto?
+    /// The weekly brief for the selected company. Read only while the CEO Office shows it, and at
+    /// 2x or 4x no more than once a week.
+    @Published var brief: BriefDto?
+    var briefOpen = false
+    /// The selected company's executives and the people it could hire. Read only while the CEO
+    /// Office shows them.
+    @Published var executives: ExecutivesDto?
+    var executivesOpen = false
+    private var briefWeek: UInt32?
+    private var briefRevision: UInt64?
+    private var briefFirm: UInt64?
+    var hallPageOpen = false
+    private var hallStale = false
+    /// The last chapter whose result the player has been shown.
+    private var resultSeen: UInt32 = 0
+    private var resultSeenReady = false
     @Published var strategyCatalogue: [StrategyDto] = []
     /// Products with the reference prices of the career's own scenario.
     @Published var productCatalogue: [ProductDto] = []
@@ -50,8 +69,14 @@ final class AppStore: ObservableObject {
     @Published var insurance: [InsuranceDto] = []
     @Published var deals: [DealDto] = []
     @Published var events: [EventDto] = []
+    /// The Inbox's letters: the last eight weeks, decisions pinned on top. Read with the rest of the week.
+    @Published var letters: [LetterDto] = []
+    /// The Inbox badge: unread letters plus decisions already read but still due.
+    var inboxBadge: Int { letters.filter { !$0.read || $0.mandatory }.count }
     /// The economy, central bank and government, for the Markets economy card and the status bar.
     @Published var economy: EconomyDto?
+    /// A back issue of the paper to open on the next visit, set by the History card.
+    @Published var paperWeek: UInt32?
     /// The selected company's technology position.
     @Published var research: ResearchDto?
     /// What the CFO says is costing the selected company money. Empty when it is not losing money.
@@ -75,6 +100,8 @@ final class AppStore: ObservableObject {
     @Published var marketRows: [MarketRow] = []
     @Published var score: ScoreDto?
     @Published var showOnboarding = false
+    /// Set from Settings (Set up again): shows the first-run setup over the app.
+    @Published var showSetup = false
     /// Set when a slot failed to import. Drives the recovery screen.
     @Published var recoveryIssue: SaveRecoveryIssue?
     /// Set after a last-good save was accepted, so the next screen can say so once.
@@ -121,6 +148,13 @@ final class AppStore: ObservableObject {
     /// Stop time, save, and return to the main menu. The menu's Continue resumes this save.
     func exitToMenu() async {
         stopRunLoop()
+        if sessionReady, let career = await engine.hallOfCareers(), career.weeks > 0 {
+            let id = await engine.scenarioId()
+            let scenario = scenarios().first { $0.id == id }?.name ?? id
+            CareerSummary.record(CareerSummary(title: overview?.primaryName ?? "", scenario: scenario, hall: career))
+        }
+        resultSeenReady = false
+        hall = nil
         if let overview, sessionReady {
             await save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
         }
@@ -128,6 +162,79 @@ final class AppStore: ObservableObject {
         saves = saveManager.list()
         sessionReady = false
         statusLine = ""
+    }
+
+    /// A result that was already waiting when the career opened is not news.
+    private func noteResultsSeen(_ hall: HallDto?) {
+        guard !resultSeenReady, let hall else { return }
+        resultSeen = hall.chapters.last { $0.outcome == "met" || $0.outcome == "missed" }?.number ?? 0
+        resultSeenReady = true
+    }
+
+    /// Read the brief now, for the panel when it opens or is unfolded.
+    func refreshBrief() async {
+        guard let firm = selectedFirm else { return }
+        let fresh = await engine.weeklyBrief(firm: firm)
+        briefWeek = overview?.tick
+        briefRevision = overview?.revision
+        briefFirm = firm
+        if fresh != brief { brief = fresh }
+    }
+
+    /// Read the executives now, for the section when it opens or a command changed them.
+    func refreshExecutives() async {
+        guard let firm = selectedFirm else { return }
+        let fresh = await engine.executives(firm: firm)
+        if fresh != executives { executives = fresh }
+    }
+
+    func hireExecutive(firm: UInt64, post: Int, person: Int) async -> CommandRejection? {
+        let result = await submit(CommandJSON.command("HireExecutive", ["firm": firm, "post": post, "person": person]))
+        await refreshExecutives()
+        return result
+    }
+
+    func dismissExecutive(firm: UInt64, post: Int) async -> CommandRejection? {
+        let result = await submit(CommandJSON.command("DismissExecutive", ["firm": firm, "post": post]))
+        await refreshExecutives()
+        return result
+    }
+
+    /// Read the chapter data now, for the Hall page when it opens or the week moves.
+    func refreshHall() async {
+        let fresh = await engine.hallOfCareers()
+        noteResultsSeen(fresh)
+        if fresh != hall { hall = fresh }
+        score = await engine.score()
+    }
+
+    /// The board's offer for the current chapter, if one can still be taken.
+    var boardOffer: ChapterDto? {
+        hall?.chapters.last { $0.status == "current" && $0.chosen == nil && $0.offerWeeksLeft > 0 && !$0.offered.isEmpty }
+    }
+
+    /// The goal in force for the current chapter.
+    var activeMandate: (chapter: ChapterDto, mandate: MandateDto)? {
+        guard let chapter = hall?.chapters.last(where: { $0.status == "current" }),
+              let picked = chapter.chosen, chapter.outcome == "open",
+              chapter.offered.indices.contains(Int(picked)) else { return nil }
+        return (chapter, chapter.offered[Int(picked)])
+    }
+
+    /// A chapter that closed met or missed and has not been shown yet.
+    var chapterResult: ChapterDto? {
+        hall?.chapters.last { ($0.outcome == "met" || $0.outcome == "missed") && $0.number > resultSeen }
+    }
+
+    func dismissChapterResult() {
+        resultSeen = hall?.chapters.map(\.number).max() ?? resultSeen
+        objectWillChange.send()
+    }
+
+    /// Take the board's goal in position `pick` (0 to 2) for `firm`.
+    func chooseMandate(firm: UInt64, pick: Int) async -> CommandRejection? {
+        hallStale = true
+        return await submit(CommandJSON.command("ChooseMandate", ["firm": firm, "pick": pick]))
     }
 
     func restoreLatestIfAvailable() async {
@@ -387,12 +494,28 @@ final class AppStore: ObservableObject {
         let rivalFeed = await engine.rivalFeed(limit: 12)
         let objective = await engine.objective()
         let objectiveHistory = await engine.objectiveHistory()
+        let hallDue = hallPageOpen || hallStale || runSpeed <= 1
+        let hall = hallDue ? await engine.hallOfCareers() : self.hall
+        if hallDue { hallStale = false }
+        let briefFirmNow = selectedFirm
+        let briefDue = briefOpen && briefFirmNow != nil
+            && (overview?.tick != briefWeek || briefFirmNow != briefFirm
+                || (overview?.revision != briefRevision && runSpeed <= 1))
+        var brief = self.brief
+        if briefDue, let firm = briefFirmNow {
+            brief = await engine.weeklyBrief(firm: firm)
+            briefWeek = overview?.tick
+            briefRevision = overview?.revision
+            briefFirm = firm
+        }
         let scenario = await engine.scenarioId()
         var catalogues: (strategies: [StrategyDto], recipes: [RecipeDto], products: [ProductDto])?
         if strategyCatalogue.isEmpty || productCatalogue.isEmpty || scenario != catalogueScenario {
             catalogues = (await engine.strategies(), await engine.recipes(), await engine.products())
         }
         let events = await engine.events()
+        let now = overview?.tick ?? 0
+        let letters = await engine.letters(since: now > inboxWeeks ? now - inboxWeeks : 1)
         let economy = await engine.economy()
         let commodities = await engine.commodityBoard()
         let stocks = await engine.stockBoard()
@@ -423,6 +546,9 @@ final class AppStore: ObservableObject {
             put(\.rivalFeed, rivalFeed)
             put(\.objective, objective)
             put(\.objectiveHistory, objectiveHistory)
+            noteResultsSeen(hall)
+            put(\.hall, hall)
+            put(\.brief, brief)
             if let catalogues {
                 put(\.strategyCatalogue, catalogues.strategies)
                 put(\.recipeOptions, catalogues.recipes)
@@ -430,6 +556,7 @@ final class AppStore: ObservableObject {
                 catalogueScenario = scenario
             }
             put(\.events, events)
+            put(\.letters, letters)
             put(\.economy, economy)
             put(\.commodities, commodities)
             put(\.stocks, stocks)
@@ -925,6 +1052,18 @@ final class AppStore: ObservableObject {
             self.handle(receipt)
             await self.reload()
         }
+    }
+
+    /// Opening a letter marks it read; the engine keeps the flag and the list updates in place.
+    func markLettersRead(_ ids: [String]) async {
+        guard !ids.isEmpty else { return }
+        letters = letters.map { letter in
+            guard ids.contains(letter.id), !letter.read else { return letter }
+            var read = letter
+            read.read = true
+            return read
+        }
+        await engine.markLettersRead(ids)
     }
 
     func respond(event: UInt64, choice: String) async {

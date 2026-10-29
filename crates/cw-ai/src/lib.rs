@@ -61,6 +61,42 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         if player_controlled(world, handle) || !firm.operative() {
             continue;
         }
+        // The board's chapter mandate, taken through the same command a player uses.
+        if let Some(pick) = cw_sim::economy::chapters::rival_pick(world, dataset, handle) {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::ChooseMandate { firm: handle, pick },
+            });
+        }
+        // Executives for hire, taken through the same commands a player uses: only when the
+        // effect pays and the firm can carry the pay.
+        if let Some((post, person)) =
+            cw_sim::economy::executives::rival_pick(world, dataset, handle)
+        {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::HireExecutive {
+                    firm: handle,
+                    post: post.code(),
+                    person,
+                },
+            });
+        } else if let Some((from, post, offer_cents)) = cw_sim::economy::executives::rival_poach(
+            world,
+            dataset,
+            handle,
+            cw_sim::economy::cast::temperament(world, dataset, handle),
+        ) {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::PoachExecutive {
+                    firm: handle,
+                    from,
+                    post: post.code(),
+                    offer_cents,
+                },
+            });
+        }
         cw_sim::ph!("ai::urgent", urgent(world, dataset, handle, &mut proposals));
         // Production follows sell-through plant by plant in the weekly tick, the same planner
         // as the player's automatic production (cw_sim::economy::pricing::plan).
@@ -1786,18 +1822,44 @@ fn room(world: &World, dataset: &Dataset, product: u16, region: u8) -> i64 {
     Memo::read(
         |m| &mut m.room,
         key,
-        || room_now(world, product, region, corridor),
+        || room_now(world, dataset, product, region, corridor),
     )
 }
 
-fn room_now(world: &World, product: u16, region: u8, corridor: bool) -> i64 {
-    world
+fn room_now(world: &World, dataset: &Dataset, product: u16, region: u8, corridor: bool) -> i64 {
+    let imports: i64 = world
         .gateways
         .iter()
         .filter(|g| g.product == product && (corridor || g.region == region))
         .map(|g| g.smoothed_import_lots)
-        .sum()
+        .sum();
+    // Imports lag: a plant under construction, or opened in the last eight weeks, has not yet
+    // shown up in the smoothed average. Room it will fill is not room for the next builder,
+    // or every rival that sees the same imports builds for them in the same quarter.
+    let coming: i64 = world
+        .facilities
+        .iter()
+        .filter(|(_, plant)| {
+            (corridor || plant.region == region)
+                && match plant.status {
+                    FacilityStatus::Building => true,
+                    FacilityStatus::Operating => plant.completes.0 + ROOM_LAG_WEEKS > world.tick.0,
+                    _ => false,
+                }
+        })
+        .map(|(_, plant)| plant)
+        .filter(|plant| {
+            dataset.recipes[plant.recipe as usize].output == dataset.products[product as usize].id
+        })
+        .map(|plant| {
+            dataset.recipes[plant.recipe as usize].weekly_output_lots * plant.blocks as i64
+        })
+        .sum();
+    (imports - coming).max(0)
 }
+
+/// Weeks after a plant opens that the smoothed import signal still understates what it supplies.
+const ROOM_LAG_WEEKS: u32 = 8;
 
 /// Whether imports leave room for a block of a strategy: imports of what it makes cover at least
 /// `fifths` fifths of its primary output. By-products do not enter the test: a by-product with no
@@ -2021,6 +2083,23 @@ fn best_expansion(
     best.map(|(npv, recipe, region)| (recipe, region, npv))
 }
 
+/// What a firm made over its last thirteen weeks, net of everything.
+fn earned_last_quarter(world: &World, firm: Handle) -> i64 {
+    world
+        .firms
+        .get(firm)
+        .map(|f| f.book.recent_weeks().iter().map(|w| w.net_income).sum())
+        .unwrap_or(0)
+}
+
+/// A campaign is paid for out of earnings: its budget and surcharge may not exceed half of what
+/// the firm made over its last thirteen weeks. The spend is booked as a cost in the week it is
+/// paid, so a campaign sized to the rival's defence and not to the raider's profit turned a
+/// profitable quarter into a loss quarter for about one raider in four.
+fn campaign_paid_from_earnings(earned: i64, budget: i64, surcharge: i64) -> bool {
+    earned > 0 && (budget + surcharge) * 2 <= earned
+}
+
 /// The best market raid for a firm: a rival division in a cell it shares, aiming for a
 /// two-to-one campaign, with a positive expected value after the campaign and purchase price.
 fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, u8, u8, i64, i64)> {
@@ -2035,6 +2114,8 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
         return None;
     }
     let reserve = reserve_target(world, dataset, firm);
+    // A campaign is paid out of earnings: what the firm made over its last thirteen weeks.
+    let earned = earned_last_quarter(world, firm);
     let mut best: Option<(i64, Handle, u8, u8, i64)> = None;
     for division in sectors::divisions_of(world, dataset, firm) {
         let firms = cell_holders(world, dataset, division.region, division.industry);
@@ -2081,6 +2162,7 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
             );
             if quote.blocks_at_stake == 0
                 || entity.book.cash() < reserve + budget + quote.price_cents + quote.surcharge_cents
+                || !campaign_paid_from_earnings(earned, budget, quote.surcharge_cents)
             {
                 continue;
             }
@@ -3058,6 +3140,111 @@ mod tests {
         }
         assert!(room_covers(&world, &dataset, template, region, 4));
         assert!(room_covers(&world, &dataset, template, region, 5));
+    }
+
+    #[test]
+    fn a_campaign_is_paid_for_out_of_earnings_never_more_than_half_a_quarters_profit() {
+        // The campaign and its legal surcharge together, against thirteen weeks of net income.
+        assert!(campaign_paid_from_earnings(400_000, 150_000, 50_000));
+        assert!(!campaign_paid_from_earnings(399_999, 150_000, 50_000));
+        // A firm that lost money, or has no history, never raids, however much cash it holds.
+        assert!(!campaign_paid_from_earnings(0, 1, 0));
+        assert!(!campaign_paid_from_earnings(-5_000_000, 1, 0));
+        // The same sum is read off a firm's own closed weeks: thirteen weeks of 100,000 profit.
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 9, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world
+            .firms
+            .handles_sorted()
+            .into_iter()
+            .find(|h| !player_controlled(&world, *h))
+            .unwrap();
+        assert_eq!(earned_last_quarter(&world, firm), 0);
+        for week in 1..=13u32 {
+            use cw_core::ledger::{Account, Txn};
+            let tick = cw_core::calendar::Tick(week);
+            world.tick = tick;
+            let book = &mut world.firms.get_mut(firm).unwrap().book;
+            let _ = book.commit(
+                tick,
+                Txn::new().debit(Account::Cash, 100_000, "test").credit(
+                    Account::Revenue,
+                    100_000,
+                    "test",
+                ),
+            );
+            book.close_week(tick);
+        }
+        assert_eq!(earned_last_quarter(&world, firm), 1_300_000);
+    }
+
+    #[test]
+    fn room_to_build_is_net_of_plants_coming_or_just_opened() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 12, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        world.tick = cw_core::calendar::Tick(100);
+        let handle = world
+            .facilities
+            .iter()
+            .find(|(_, p)| {
+                p.status == FacilityStatus::Operating
+                    && dataset
+                        .product_index
+                        .contains_key(&dataset.recipes[p.recipe as usize].output)
+                    && dataset.products
+                        [dataset.product_index[&dataset.recipes[p.recipe as usize].output] as usize]
+                        .kind
+                        == cw_data::ProductKind::Goods
+            })
+            .map(|(h, _)| h)
+            .unwrap();
+        let (recipe, region, blocks) = {
+            let p = world.facilities.get(handle).unwrap();
+            (p.recipe, p.region, p.blocks as i64)
+        };
+        let template = &dataset.recipes[recipe as usize];
+        let product = dataset.product_index[&template.output];
+        for gateway in &mut world.gateways {
+            gateway.smoothed_import_lots = 0;
+        }
+        // Every plant of this good in the world, for the oracle.
+        let all_blocks: i64 = world
+            .facilities
+            .iter()
+            .filter(|(_, p)| dataset.recipes[p.recipe as usize].output == template.output)
+            .map(|(_, p)| dataset.recipes[p.recipe as usize].weekly_output_lots * p.blocks as i64)
+            .sum();
+        let one = template.weekly_output_lots * blocks;
+        let big = all_blocks * 10;
+        world
+            .gateways
+            .iter_mut()
+            .find(|g| g.product == product)
+            .unwrap()
+            .smoothed_import_lots = big;
+        // Long-running plants take nothing off the room.
+        for (_, p) in world.facilities.iter_mut() {
+            p.completes = cw_core::calendar::Tick(0);
+        }
+        assert_eq!(room_now(&world, &dataset, product, region, true), big);
+        // A plant still being built does.
+        world.facilities.get_mut(handle).unwrap().status = FacilityStatus::Building;
+        assert_eq!(room_now(&world, &dataset, product, region, true), big - one);
+        // So does one that opened three weeks ago, but not one that opened twenty weeks ago.
+        {
+            let p = world.facilities.get_mut(handle).unwrap();
+            p.status = FacilityStatus::Operating;
+            p.completes = cw_core::calendar::Tick(97);
+        }
+        assert_eq!(room_now(&world, &dataset, product, region, true), big - one);
+        world.facilities.get_mut(handle).unwrap().completes = cw_core::calendar::Tick(80);
+        assert_eq!(room_now(&world, &dataset, product, region, true), big);
+        // Room never goes below zero.
+        world.facilities.get_mut(handle).unwrap().status = FacilityStatus::Building;
+        for gateway in &mut world.gateways {
+            gateway.smoothed_import_lots = 0;
+        }
+        assert_eq!(room_now(&world, &dataset, product, region, true), 0);
     }
 
     #[test]

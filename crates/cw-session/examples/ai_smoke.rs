@@ -26,6 +26,7 @@ fn run(scenario: &str, seed: u64, weeks: u32, difficulty: cw_data::Difficulty) -
         prices: cw_session::PriceSetup {
             scenario_id: scenario.to_owned(),
             path: None,
+            ..Default::default()
         },
     };
     let mut session = cw_session::Session::create(config).unwrap();

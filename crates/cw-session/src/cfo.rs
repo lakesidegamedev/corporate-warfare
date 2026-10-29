@@ -224,9 +224,15 @@ pub fn advice(world: &World, dataset: &Dataset, firm: u64) -> Vec<CfoAdvice> {
             key: "below_cost".to_owned(),
             headline: "You are selling below what it costs to make".to_owned(),
             detail: format!(
-                "{} sells for less than a lot costs to produce, so every sale loses money. \
-                 Price it at your cost plus 5 percent, then adjust from there.",
-                below_names.join(", ")
+                "{} {} for less than a lot costs to produce, so every sale loses money. \
+                 Price {} at your cost plus 5 percent, then adjust from there.",
+                name_list(&below_names),
+                if below_names.len() == 1 {
+                    "sells"
+                } else {
+                    "sell"
+                },
+                if below_names.len() == 1 { "it" } else { "them" }
             ),
             weekly_cents: below_cost,
             action_label: "Price above cost".to_owned(),
@@ -266,4 +272,48 @@ pub fn advice(world: &World, dataset: &Dataset, firm: u64) -> Vec<CfoAdvice> {
     items.sort_by(|a, b| b.weekly_cents.cmp(&a.weekly_cents).then(a.key.cmp(&b.key)));
     items.truncate(MAX_ADVICE);
     items
+}
+
+/// "Crude oil", "Crude oil and natural gas", "Crude oil, natural gas and steel": names after
+/// the first start lower case, as they sit inside a sentence.
+fn name_list(names: &[String]) -> String {
+    let lower = |n: &String| {
+        let mut c = n.chars();
+        match c.next() {
+            Some(f) => f.to_lowercase().collect::<String>() + c.as_str(),
+            None => String::new(),
+        }
+    };
+    match names.len() {
+        0 => String::new(),
+        1 => names[0].clone(),
+        n => {
+            let rest: Vec<String> = names[1..n - 1].iter().map(lower).collect();
+            let mut head = names[0].clone();
+            for r in rest {
+                head.push_str(", ");
+                head.push_str(&r);
+            }
+            format!("{head} and {}", lower(&names[n - 1]))
+        }
+    }
+}
+
+#[cfg(test)]
+mod name_list_tests {
+    use super::name_list;
+
+    #[test]
+    fn lists_read_as_a_sentence() {
+        let v = |xs: &[&str]| xs.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(name_list(&v(&["Crude oil"])), "Crude oil");
+        assert_eq!(
+            name_list(&v(&["Crude oil", "Natural gas"])),
+            "Crude oil and natural gas"
+        );
+        assert_eq!(
+            name_list(&v(&["Crude oil", "Natural gas", "Steel"])),
+            "Crude oil, natural gas and steel"
+        );
+    }
 }

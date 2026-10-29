@@ -30,6 +30,7 @@ struct RootView: View {
             }
             PauseBanner()
             TutorialPanel(compact: true)
+            NewsTicker { presented = .paper }
             TabView(selection: $tab) {
                 MapHomeView()
                     .tabItem {
@@ -57,7 +58,7 @@ struct RootView: View {
                         PixelIcons.tabImage("inbox")
                         Text("INBOX")
                     }
-                    .badge(store.events.filter { $0.mandatory }.count)
+                    .badge(store.inboxBadge)
                     .tag(AppTab.inbox)
                 OverviewView()
                     .safeAreaInset(edge: .top, spacing: 0) { TimeStrip() }
@@ -85,6 +86,7 @@ struct RootView: View {
                     switch page {
                     case .research: ResearchView()
                     case .stats: StatsView()
+                    case .paper: PaperView()
                     default: CommandCenterView(onClose: { presented = nil })
                     }
                 }
@@ -106,7 +108,7 @@ struct RootView: View {
         case .markets: tab = .markets
         case .inbox: tab = .inbox
         case .portfolio: tab = .portfolio
-        case .research, .stats, .actions: presented = page
+        case .research, .stats, .actions, .paper: presented = page
         }
     }
 }

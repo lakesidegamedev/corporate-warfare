@@ -27,6 +27,7 @@ fn main() {
                 prices: cw_session::PriceSetup {
                     scenario_id: scenario.to_owned(),
                     path: None,
+                    ..Default::default()
                 },
             };
             let mut session = match cw_session::Session::create(config) {

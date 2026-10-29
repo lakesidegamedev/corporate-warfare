@@ -10,9 +10,13 @@
 //! the outside share is the leg lots that overflowed to outside carriers. Established firms that
 //! run a plant making pig iron, freight, components, plastics, timber or fuel are also reported by
 //! year: losing share and net margin over their last thirteen weeks (a firm counts in each group
-//! it runs a plant in).
+//! it runs a plant in). The last line is the investor's net worth over a career with no moves of
+//! the player's own, start and end, as a whole-economy health check.
 //!
-//! cargo run --release -p cw-session --example market_dynamics -- [seeds] [weeks]
+//! cargo run --release -p cw-session --example market_dynamics -- [seeds] [weeks] [scenario-id] [timeline]
+//!
+//! With a scenario id the career gets that scenario's world prices and, by `timeline` (historical,
+//! off or shuffled; historical when not given), its dated history.
 use std::collections::BTreeMap;
 
 #[derive(Default)]
@@ -32,6 +36,10 @@ fn main() {
     let mut args = std::env::args().skip(1);
     let seeds: u64 = args.next().and_then(|v| v.parse().ok()).unwrap_or(4);
     let weeks: u32 = args.next().and_then(|v| v.parse().ok()).unwrap_or(260);
+    let scenario_id = args.next().unwrap_or_default();
+    let timeline = args
+        .next()
+        .and_then(|key| cw_sim::economy::timeline::TimelineMode::from_key(&key));
     let mut rows: BTreeMap<String, Row> = BTreeMap::new();
     let (mut losing, mut reporting) = (0i64, 0i64);
     let mut by_year: BTreeMap<u32, (i64, i64, i64, i64)> = BTreeMap::new();
@@ -42,15 +50,23 @@ fn main() {
     // year -> export value (numeraire cents), export lots, raids, successful raids, firm exits.
     let mut trade: BTreeMap<u32, [i64; 5]> = BTreeMap::new();
     // (good, year) -> established firms counted, losing, revenue and net income over 13 weeks.
-    const GROUPS: [&str; 6] = [
+    const GROUPS: [&str; 8] = [
         "pig_iron",
         "freight",
         "components",
         "plastics",
         "timber",
         "fuel",
+        "grain",
+        "food_raw",
     ];
     let mut groups: BTreeMap<(usize, u32), [i64; 4]> = BTreeMap::new();
+    // Player-less career: the investor's net worth at the end and at the start, summed over seeds.
+    let mut worth = [0i64; 2];
+    // year -> policy rate, inflation, ten-year yield, price index, background wage index (tier 0,
+    // first region), summed over seeds at the last week of the year.
+    let mut macros: BTreeMap<u32, [i64; 5]> = BTreeMap::new();
+    let mut wage0 = 0i64;
     for seed in 1..=seeds {
         let config = cw_session::ScenarioConfig {
             seed,
@@ -60,7 +76,11 @@ fn main() {
             difficulty: cw_data::Difficulty::Standard,
             economy_start: Default::default(),
             starting_capital_cents: None,
-            prices: Default::default(),
+            prices: cw_session::PriceSetup {
+                scenario_id: scenario_id.clone(),
+                path: None,
+                timeline,
+            },
         };
         let mut session = cw_session::Session::create(config).unwrap();
         let mut alive: Vec<u64> = Vec::new();
@@ -74,6 +94,17 @@ fn main() {
             }
             let world = &session.world;
             let dataset = &session.dataset;
+            if week == 1 {
+                wage0 = world.regions[0].background_wage_cents[0];
+            }
+            if week % 52 == 0 {
+                let row = macros.entry(week / 52).or_default();
+                row[0] += world.macro_state.policy_rate_bps as i64;
+                row[1] += world.macro_state.inflation_bps as i64;
+                row[2] += cw_sim::economy::macro_cycle::ten_year_yield_bps(world) as i64;
+                row[3] += world.macro_state.price_index_bps;
+                row[4] += world.regions[0].background_wage_cents[0] * 10_000 / wage0.max(1);
+            }
             {
                 let year = (week - 1) / 52 + 1;
                 let row = trade.entry(year).or_default();
@@ -137,6 +168,8 @@ fn main() {
                 }
             }
             if week == weeks {
+                worth[0] += cw_sim::economy::seed::investor_net_worth(world, dataset);
+                worth[1] += world.investor.starting_net_worth_cents;
                 for raid in &world.raids {
                     let year = (raid.tick.max(1) - 1) / 52 + 1;
                     let row = trade.entry(year).or_default();
@@ -278,4 +311,24 @@ fn main() {
             row[4]
         );
     }
+    println!(
+        "by year end: policy rate, inflation, ten-year yield (percent), price index and background wage index (start 100), mean over seeds"
+    );
+    for (year, row) in &macros {
+        let n = seeds as i64;
+        println!(
+            "  year {year}: rate {:.2}  inflation {:.2}  ten-year {:.2}  prices {:.1}  wages {:.1}",
+            row[0] as f64 / n as f64 / 100.0,
+            row[1] as f64 / n as f64 / 100.0,
+            row[2] as f64 / n as f64 / 100.0,
+            row[3] as f64 / n as f64 / 100.0,
+            row[4] as f64 / n as f64 / 100.0
+        );
+    }
+    println!(
+        "player-less career net worth, mean over seeds: start ${}k, end ${}k ({:+}%)",
+        worth[1] / seeds as i64 / 100_000,
+        worth[0] / seeds as i64 / 100_000,
+        (worth[0] - worth[1]) * 100 / worth[1].max(1)
+    );
 }

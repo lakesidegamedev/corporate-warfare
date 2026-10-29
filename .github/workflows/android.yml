@@ -1,10 +1,10 @@
 name: Android and desktop
 on:
   pull_request:
-    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
+    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "tools/installer_art.py", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
   push:
     branches: [main]
-    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
+    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "tools/installer_art.py", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,6 +37,69 @@ jobs:
           name: corporate-warfare-android-debug
           path: compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk
           retention-days: 14
+      # The shrunk release build must still start the engine, so it is built (unsigned) on every run.
+      # One APK per ABI: arm64-v8a is the direct download, x86_64 is for emulators.
+      - name: Release APKs and bundle (unsigned, shrunk)
+        working-directory: compose
+        # AGP cannot build per-ABI APKs and a bundle in one run, so they are two runs.
+        run: |
+          ./gradlew --no-daemon :androidApp:bundleRelease
+          ./gradlew --no-daemon :androidApp:assembleRelease -Pcw.splitAbi=true
+      - name: Shrinking kept the engine bindings
+        working-directory: compose
+        run: |
+          # JNA finds the engine's classes by name, so R8 must not rename or remove them.
+          grep -q "^uniffi.cw_ffi.UniffiLib -> uniffi.cw_ffi.UniffiLib:" androidApp/build/outputs/mapping/release/mapping.txt
+          grep -q "^com.sun.jna.Native -> com.sun.jna.Native:" androidApp/build/outputs/mapping/release/mapping.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corporate-warfare-android-release-unsigned
+          path: |
+            compose/androidApp/build/outputs/apk/release/*.apk
+            compose/androidApp/build/outputs/bundle/release/*.aab
+          retention-days: 14
+
+  # The shrunk release build, started for real: an x86_64 emulator launches it and an instrumented
+  # test plays a career on it, so a keep rule R8 got wrong fails here and not on a phone.
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: rustup show
+      - name: Engine for Android (arm64-v8a, x86_64)
+        run: bash compose/scripts/build-engine.sh android
+      - name: Shrunk release build (debug key, smoke keep rules; never shipped)
+        working-directory: compose
+        run: ./gradlew --no-daemon :androidApp:assembleRelease :androidApp:assembleReleaseAndroidTest -Pcw.smoke=true
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Launch and play on an emulator
+        timeout-minutes: 30
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash compose/scripts/android-smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: corporate-warfare-android-smoke-logcat
+          path: |
+            compose/build/smoke/
+            compose/androidApp/build/reports/androidTests/
+          retention-days: 14
 
   desktop:
     strategy:
@@ -44,13 +107,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            package: packageDeb
+            package: packageReleaseDeb
             artifact: corporate-warfare-linux-deb
-            path: compose/shared/build/compose/binaries/main/deb/*.deb
+            path: compose/shared/build/compose/binaries/main-release/deb/*.deb
           - os: windows-latest
-            package: packageMsi
+            package: packageReleaseMsi
             artifact: corporate-warfare-windows-msi
-            path: compose/shared/build/compose/binaries/main/msi/*.msi
+            path: compose/shared/build/compose/binaries/main-release/msi/*.msi
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -72,4 +135,56 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.path }}
+          retention-days: 14
+      - name: Setup program (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        working-directory: compose
+        run: ./gradlew --no-daemon :shared:packageWindowsSetup
+        shell: bash
+      - name: Setup program install, downgrade and uninstall check (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem compose/shared/build/compose/binaries/main-release/setup -Filter '*-setup.exe').FullName
+          ./compose/shared/packaging/windows/test-setup.ps1 -Setup $setup `
+            -AppImage "$PWD/compose/shared/build/compose/binaries/main-release/app/Corporate Warfare" `
+            -Work "$env:RUNNER_TEMP/cw-setup-test"
+      # Starts the release app image and waits for the main menu (CW_STARTUP_TIMELINE=exit quits there).
+      # The setup wizard is skipped with a settings file that says it is done. Software drawing, so
+      # the time is a relative number, not a player's. Reported, not gating: a runner without a
+      # display must not block a build, but a menu that never shows is visible in the log.
+      - name: Launch to the main menu (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:RUNNER_TEMP 'cw-launch'
+          New-Item -ItemType Directory -Force (Join-Path $data 'Corporate Warfare') | Out-Null
+          "setupDone=true`nanalytics=false`nautoUpdate=false" | Set-Content (Join-Path $data 'Corporate Warfare\settings.properties')
+          $env:APPDATA = $data
+          $env:CW_STARTUP_TIMELINE = 'exit'
+          $env:SKIKO_RENDER_API = 'SOFTWARE_FAST'
+          $err = Join-Path $data 'timeline.txt'
+          $exe = "$PWD\compose\shared\build\compose\binaries\main-release\app\Corporate Warfare\Corporate Warfare.exe"
+          $p = Start-Process $exe -PassThru -RedirectStandardError $err
+          if (-not $p.WaitForExit(120000)) { $p.Kill() }
+          if (Test-Path $err) { Get-Content $err }
+          if (-not ((Test-Path $err) -and (Select-String -Path $err -Pattern 'main menu shown' -Quiet))) { throw 'The main menu did not show within 120 seconds' }
+      - name: Launch to the main menu (Linux)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        continue-on-error: true
+        working-directory: compose
+        run: |
+          ./gradlew --no-daemon :shared:createReleaseDistributable
+          export XDG_DATA_HOME="$RUNNER_TEMP/cw-launch"
+          mkdir -p "$XDG_DATA_HOME/corporate-warfare"
+          printf 'setupDone=true\nanalytics=false\nautoUpdate=false\n' > "$XDG_DATA_HOME/corporate-warfare/settings.properties"
+          export CW_STARTUP_TIMELINE=exit SKIKO_RENDER_API=SOFTWARE_FAST
+          timeout 120 xvfb-run -a "shared/build/compose/binaries/main-release/app/Corporate Warfare/bin/Corporate Warfare" 2>&1 | tee "$RUNNER_TEMP/timeline.txt"
+          grep -q "main menu shown" "$RUNNER_TEMP/timeline.txt"
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.os == 'windows-latest' }}
+        with:
+          name: corporate-warfare-windows-setup
+          path: compose/shared/build/compose/binaries/main-release/setup/*-setup.exe
           retention-days: 14

@@ -5,7 +5,20 @@ Use common ledger, permissions and versioned deterministic RNG. No special AI ca
 
 ## Credit
 
-Base annual policy rate starts at 600 basis points. Commercial spread by credit grade:
+The policy rate, inflation, expected inflation, neutral real rate, target inflation, opening
+credit spread and opening wage growth come from the scenario's `macro.json` (1.9): calibrated
+game estimates of its period, so Texas 1981 opens near 10 percent inflation with the policy rate
+at 16.5 percent, Ruhr and Rhine 1991 at 3.8 percent and 7 percent, Silicon Valley 1995 at 2.8
+and 5.75, Great Lakes 2000 at 3.4 and 6.5. The mechanics are the same in every scenario. The
+central bank meets every six weeks and moves a quarter point (half a point when far off) toward
+a Taylor rule around that neutral rate and target; the rate ceiling is 20 percent. The ten-year
+yield is derived: a quarter of the policy rate plus three quarters of (neutral real rate +
+expected inflation), a 75 point term premium and an eighth of inflation above target; a test
+holds each opening yield to the period's figure. Lenders add a tenth of inflation above target
+to every loan quote. Opening wage growth runs above or below inflation by the scenario's gap and
+fades into inflation evenly over 104 weeks; after that wages follow the price index. Opening
+loans carry the opening policy rate plus the opening credit spread plus the grade B spread.
+Commercial spread by credit grade:
 A 200, B 400, C 700, D 1200. Each week, grade uses trailing 13-week interest coverage
 and debt/tangible assets: A requires coverage >=4 and leverage <=30%; B >=2 and <=50%;
 C >=1 and <=70%; otherwise D. Missing positive earnings assigns C unless cash covers
@@ -141,7 +154,7 @@ each of its last six four-week periods since the appointment lost money, there i
 chance the board replaces the chief executive with a free person, preferring a different
 temperament. The old chief is benched for 104 weeks. Merged and liquidating firms release their
 chief. Each change is news with the new person's portrait, a dossier move and a telemetry count.
-An activist demand for a new chief executive replaces the named person the same way. A firm's
+An activist demand for a new chief executive replaces the named person the same way. In the player's primary company the board takes the same step after two missed mandates in a row (CORPORATE.md, Executives). Rivals also hire a chief financial officer, chief operating officer and logistics chief through the same commands as the player, only when the effect pays for the pay. A firm's
 structure weights (borrowing, transfer pricing, listing, partnering, resistance) are its
 archetype's habits pulled three parts in four toward the chief executive's temperament.
 Telemetry carries counts only, never names. Portraits are `apple/Resources/cast-portraits.json`,
@@ -170,7 +183,9 @@ integrator, consolidator financier, vulture raider). The style does five things.
    bypass the selector. Every move still passes the common command validator.
 3. Sharpness: Easy misjudges a move's value by up to 40 percent either way, Standard 15,
    Hard not at all, again by stable draw.
-4. Money habits: the cautious hold a reserve target half again as large; raiders spend 70
+4. Money habits: a raid campaign (budget plus surcharge) may cost at most half of what the firm
+   earned over its last thirteen weeks, and a firm with no profit does not raid, on top of the cash
+   and reserve tests; the cautious hold a reserve target half again as large; raiders spend 70
    percent more on marketing; a raider accepts a raid short of paying for itself by up to
    `(weight - 100) / 4` percent of its budget; a speculator buys into store on a 5 percent dip
    in any phase but a boom.
@@ -223,6 +238,9 @@ the best importing gateway after freight from the site, so a distant site wins o
 lower costs outweigh the freight. Growth-minded archetypes (growth weight 3)
 build when imports cover four fifths of a plant; cautious ones (weight 2) only when imports cover
 a full plant; vultures do not build. A rival stops building new plants at thirty plants.
+Imports lag a new plant: the room a rival sees is the smoothed imports less the weekly output of
+plants of that good still being built or opened in the last eight weeks, never below zero, so
+rivals that see the same imports do not all build for them in one quarter.
 Acquisition candidate uses public fair estimate with 20 percent uncertainty haircut unless
 diligence reveals data. Require post-deal debt/assets <=60 percent and positive combined
 operating contribution. NPC public holders tender using CORPORATE reservation factors.
