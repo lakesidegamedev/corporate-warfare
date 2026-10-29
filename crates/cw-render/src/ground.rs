@@ -11,7 +11,12 @@ pub const G_SOIL: u8 = 2;
 pub const G_ROCK: u8 = 3;
 pub const G_SNOW: u8 = 4;
 pub const G_URBAN: u8 = 5;
+/// Downtown of the bigger cities: the densest block grid.
+pub const G_CORE: u8 = 6;
 const CLASSES: usize = 6;
+/// Field patches are this many texels across (about 17 km); each gets its own crop row
+/// direction. Every other row of patches is shifted half a patch so the quilt has no grid.
+const PATCH_TEXELS: usize = 14;
 
 /// Texels per degree of the class raster (about a kilometre).
 pub const GROUND_PPD: f32 = 80.0;
@@ -27,6 +32,8 @@ pub struct Ground {
     pub bounds: Bounds,
     pub ppd: f32,
     pub classes: Vec<u8>,
+    /// Per texel patch variant 0 to 3 (crop row direction), read beside the class.
+    pub variant: Vec<u8>,
 }
 
 /// One class per satellite colour. The image is dark summer imagery, so it is stretched first.
@@ -156,11 +163,41 @@ pub fn build(scene: &Scene) -> Ground {
             classes[i] = G_URBAN;
         }
     }
+    // Downtown cores of the bigger cities, from the map's own city list.
+    let kx = crate::data::KM_PER_DEG_LON_EQ * scene.projection.lat0.to_radians().cos();
+    for c in scene.cities.iter().filter(|c| c.population >= 250_000) {
+        let r_km = 2.0 + 3.2 * (c.population as f32 / 1.0e6).sqrt();
+        let (cx, cy) = ((c.lon - b.west) * ppd, (b.north - c.lat) * ppd);
+        let (rx, ry) = (r_km / kx * ppd, r_km / crate::data::KM_PER_DEG_LAT * ppd);
+        for y in (cy - ry).max(0.0) as usize..((cy + ry) as usize + 1).min(h) {
+            for x in (cx - rx).max(0.0) as usize..((cx + rx) as usize + 1).min(w) {
+                let (dx, dy) = ((x as f32 - cx) / rx, (y as f32 - cy) / ry);
+                if dx * dx + dy * dy <= 1.0 && classes[y * w + x] == G_URBAN {
+                    classes[y * w + x] = G_CORE;
+                }
+            }
+        }
+    }
+    let mut variant = vec![0u8; w * h];
+    for y in 0..h {
+        let by = y / PATCH_TEXELS;
+        let shift = (by % 2) * PATCH_TEXELS / 2;
+        for x in 0..w {
+            let bx = (x + shift) / PATCH_TEXELS;
+            let hsh = (bx as u32)
+                .wrapping_mul(0x9E37_79B1)
+                .wrapping_add((by as u32).wrapping_mul(0x85EB_CA6B))
+                .rotate_left(13)
+                .wrapping_mul(0xC2B2_AE35);
+            variant[y * w + x] = ((hsh >> 24) & 3) as u8;
+        }
+    }
     Ground {
         w,
         h,
         bounds: b,
         ppd,
         classes,
+        variant,
     }
 }

@@ -173,6 +173,28 @@ pub struct Placement {
     pub lon: f32,
     pub lat: f32,
     pub yaw: f32,
+    /// Multiplier of the scene's voxel size: 1 for the sector hubs, smaller for downtown blocks.
+    pub scale: f32,
+}
+
+/// Road classes of [`Line`]: the 1.8 map's interstates, its main roads and its railways.
+pub const LINE_INTERSTATE: u8 = 0;
+pub const LINE_MAIN: u8 = 1;
+pub const LINE_RAIL: u8 = 2;
+
+/// A polyline of the map's own road and railway data, in degrees.
+#[derive(Clone, Debug)]
+pub struct Line {
+    pub class: u8,
+    pub points: Vec<(f32, f32)>,
+}
+
+/// A city of the map's own data, for the dense downtown ground and the downtown blocks.
+#[derive(Clone, Debug)]
+pub struct City {
+    pub lon: f32,
+    pub lat: f32,
+    pub population: u64,
 }
 
 pub struct Scene {
@@ -183,6 +205,9 @@ pub struct Scene {
     pub clouds: GeoImage,
     pub models: HashMap<String, VoxelModel>,
     pub buildings: Vec<Placement>,
+    /// Interstates, main roads and railways from the map data the apps draw.
+    pub lines: Vec<Line>,
+    pub cities: Vec<City>,
     /// Kilometres per voxel of the buildings.
     pub voxel_km: f32,
     /// Vertical exaggeration of terrain, and the terrace step in metres.
@@ -240,6 +265,22 @@ struct RawMap {
     lakes: Vec<RawRings>,
     cities: Vec<RawCity>,
     hubs: HashMap<String, [i32; 2]>,
+    #[serde(default)]
+    roads: Vec<Vec<i32>>,
+    #[serde(default)]
+    interstates: Vec<RawLines>,
+    #[serde(default)]
+    railroads: Vec<RawLines>,
+}
+#[derive(Deserialize)]
+struct RawLines {
+    lines: Vec<Vec<i32>>,
+    #[serde(default)]
+    scenario: Option<String>,
+}
+#[derive(Deserialize)]
+struct RawUrban {
+    areas: Vec<RawRings>,
 }
 
 /// The eight states of the Great Lakes 2000 scenario.
@@ -375,7 +416,12 @@ fn ring_touches(rings: &[Vec<i32>], b: &Bounds) -> bool {
 }
 
 /// Rasterise the world map JSON into the mask for `bounds` at `ppd` pixels a degree.
-pub fn rasterise_mask(map_json: &str, bounds: Bounds, ppd: f32) -> Result<Mask, String> {
+pub fn rasterise_mask(
+    map_json: &str,
+    urban_json: Option<&str>,
+    bounds: Bounds,
+    ppd: f32,
+) -> Result<Mask, String> {
     let map: RawMap = serde_json::from_str(map_json).map_err(|e| e.to_string())?;
     let w = ((bounds.east - bounds.west) * ppd) as usize;
     let h = ((bounds.north - bounds.south) * ppd) as usize;
@@ -430,7 +476,22 @@ pub fn rasterise_mask(map_json: &str, bounds: Bounds, ppd: f32) -> Result<Mask, 
             }
         });
     }
-    // Cities and region hubs: a blobby patch of urban ground sized from population, on land
+    // Real built-up areas (Natural Earth urban areas), land only.
+    if let Some(u) = urban_json {
+        let urban: RawUrban = serde_json::from_str(u).map_err(|e| e.to_string())?;
+        for a in urban
+            .areas
+            .iter()
+            .filter(|a| ring_touches(&a.rings, &bounds))
+        {
+            fill_rings(&rings_to_px(&a.rings, &bounds, ppd), w, h, |x, y| {
+                if px[idx(x, y) + 2] == WATER_NONE {
+                    px[idx(x, y) + 2] = WATER_URBAN;
+                }
+            });
+        }
+    }
+    // Cities and region hubs: a blobby fringe of urban ground sized from population, on land
     // only. The outline wobbles with the angle so footprints read as places, not discs.
     let (kx, ky) = (
         (KM_PER_DEG_LON_EQ * 41.5f32.to_radians().cos()),
@@ -443,13 +504,13 @@ pub fn rasterise_mask(map_json: &str, bounds: Bounds, ppd: f32) -> Result<Mask, 
             (
                 c.x as f32 / 1e4,
                 c.y as f32 / 1e4,
-                5.0 + 11.0 * (c.population as f32 / 1.0e6).sqrt(),
+                3.0 + 8.0 * (c.population as f32 / 1.0e6).sqrt(),
             )
         })
         .collect();
     for (code, p) in &map.hubs {
         if GREAT_LAKES_STATES.contains(&&code[..2]) {
-            sites.push((p[0] as f32 / 1e4, p[1] as f32 / 1e4, 7.0));
+            sites.push((p[0] as f32 / 1e4, p[1] as f32 / 1e4, 4.0));
         }
     }
     for (lon, lat, r_km) in sites {
@@ -525,6 +586,82 @@ fn load_geo_image(path: &Path, bounds: Bounds) -> Result<GeoImage, String> {
     })
 }
 
+/// The map's roads and railways that touch `bounds`, tagged with their class. Interstates and
+/// railways carry a scenario tag in the map file; untagged ones belong to the default scenario.
+fn collect_lines(map: &RawMap, scenario: &str, b: &Bounds) -> Vec<Line> {
+    let mut out = Vec::new();
+    let mut push = |class: u8, flat: &[i32]| {
+        let pts: Vec<(f32, f32)> = flat
+            .chunks_exact(2)
+            .map(|p| (p[0] as f32 / 1e4, p[1] as f32 / 1e4))
+            .collect();
+        let inside = pts
+            .iter()
+            .any(|p| p.0 >= b.west && p.0 <= b.east && p.1 >= b.south && p.1 <= b.north);
+        if pts.len() >= 2 && inside {
+            out.push(Line { class, points: pts });
+        }
+    };
+    for r in &map.roads {
+        push(LINE_MAIN, r);
+    }
+    for (class, set) in [
+        (LINE_INTERSTATE, &map.interstates),
+        (LINE_RAIL, &map.railroads),
+    ] {
+        for g in set {
+            if g.scenario.as_deref().is_none_or(|s| s == scenario) {
+                for l in &g.lines {
+                    push(class, l);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// A few small voxel blocks round the centre of every big city: more blocks for bigger cities,
+/// each picked and turned from the city's own position so the same map always builds the same
+/// skyline.
+fn downtown_blocks(cities: &[City], models: &HashMap<String, VoxelModel>) -> Vec<Placement> {
+    const KINDS: [&str; 6] = [
+        "financial/1",
+        "city/1",
+        "real_estate/2",
+        "technology/1",
+        "city/2",
+        "telecommunications/1",
+    ];
+    let kx = KM_PER_DEG_LON_EQ * 41.5f32.to_radians().cos();
+    let mut out = Vec::new();
+    for c in cities.iter().filter(|c| c.population >= 600_000) {
+        let n = (2.0 + (c.population as f32 / 1.0e6).sqrt()).min(7.0) as usize;
+        let seed = ((c.lon * 977.0 + c.lat * 313.0).sin() * 43758.5)
+            .fract()
+            .abs();
+        for i in 0..n {
+            let a = (seed + i as f32 / n as f32) * std::f32::consts::TAU;
+            let ring = if i == 0 {
+                0.0
+            } else {
+                3.0 + 1.2 * ((i * 7) % 5) as f32
+            };
+            let kind = KINDS[((seed * 97.0) as usize + i * 5) % KINDS.len()];
+            if !models.contains_key(kind) {
+                continue;
+            }
+            out.push(Placement {
+                model: kind.into(),
+                lon: c.lon + a.cos() * ring / kx,
+                lat: c.lat + a.sin() * ring / KM_PER_DEG_LAT,
+                yaw: (((seed * 31.0) as usize + i) % 4) as f32 * 90.0,
+                scale: 0.42,
+            });
+        }
+    }
+    out
+}
+
 fn empty_ground(bounds: Bounds) -> Ground {
     Ground {
         w: 0,
@@ -532,6 +669,7 @@ fn empty_ground(bounds: Bounds) -> Ground {
         bounds,
         ppd: 1.0,
         classes: Vec::new(),
+        variant: Vec::new(),
     }
 }
 
@@ -546,7 +684,11 @@ impl Scene {
         )?)?;
         let map_json =
             String::from_utf8(read(&res.join("world-map.json"))?).map_err(|e| e.to_string())?;
-        let mask = rasterise_mask(&map_json, heightmap.bounds, 120.0)?;
+        let urban_json = String::from_utf8(read(
+            &repo.join("crates/cw-render/assets/urban-great-lakes-2000.json"),
+        )?)
+        .map_err(|e| e.to_string())?;
+        let mask = rasterise_mask(&map_json, Some(&urban_json), heightmap.bounds, 120.0)?;
         let region = Bounds {
             west: -122.0,
             south: 18.0,
@@ -581,10 +723,34 @@ impl Scene {
                     lon: p[0] as f32 / 1e4,
                     lat: p[1] as f32 / 1e4,
                     yaw: 0.0,
+                    scale: 1.0,
                 }
             })
             .collect();
+        let mut buildings: Vec<Placement> = buildings;
         let heightmap_bounds = heightmap.bounds;
+        let heightmap_bounds_in = heightmap_bounds;
+        let cities: Vec<City> = map
+            .cities
+            .iter()
+            .map(|c| City {
+                lon: c.x as f32 / 1e4,
+                lat: c.y as f32 / 1e4,
+                population: c.population,
+            })
+            .filter(|c| {
+                c.lon >= heightmap_bounds_in.west
+                    && c.lon <= heightmap_bounds_in.east
+                    && c.lat >= heightmap_bounds_in.south
+                    && c.lat <= heightmap_bounds_in.north
+            })
+            .collect();
+        buildings.extend(downtown_blocks(&cities, &models).into_iter().filter(|b| {
+            let kind = mask.at(b.lon, b.lat)[2];
+            kind == WATER_NONE || kind == WATER_URBAN
+        }));
+        let lines = collect_lines(&map, "great-lakes-2000", &heightmap_bounds);
+
         Ok(Scene {
             projection: Projection {
                 lon0: -82.0,
@@ -596,6 +762,8 @@ impl Scene {
             clouds,
             models,
             buildings,
+            lines,
+            cities,
             voxel_km: 2.4,
             exaggeration: 28.0,
             terrace_m: 200.0,
@@ -680,6 +848,32 @@ impl Scene {
                 lon: -83.2,
                 lat: 41.0,
                 yaw: 0.0,
+                scale: 1.0,
+            }],
+            lines: vec![
+                // An interstate across the ridge and its terrace walls, a main road and a railway.
+                Line {
+                    class: LINE_INTERSTATE,
+                    points: vec![
+                        (-83.95, 41.3),
+                        (-83.4, 41.32),
+                        (-82.9, 41.28),
+                        (-82.1, 41.3),
+                    ],
+                },
+                Line {
+                    class: LINE_MAIN,
+                    points: vec![(-83.9, 40.6), (-83.0, 40.62), (-82.2, 40.7)],
+                },
+                Line {
+                    class: LINE_RAIL,
+                    points: vec![(-83.9, 41.7), (-83.0, 41.66), (-82.2, 41.7)],
+                },
+            ],
+            cities: vec![City {
+                lon: -83.3,
+                lat: 41.0,
+                population: 1_500_000,
             }],
             voxel_km: 3.0,
             exaggeration: 10.0,

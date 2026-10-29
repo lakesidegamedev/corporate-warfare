@@ -10,6 +10,7 @@ pub const KIND_WALL: u8 = 1;
 pub const KIND_BUILDING: u8 = 2;
 pub const KIND_PLAIN: u8 = 3;
 pub const KIND_CLOUD: u8 = 4;
+pub const KIND_ROAD: u8 = 5;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -476,17 +477,32 @@ fn box_faces(
 }
 
 /// Voxel buildings standing on the terrain, each on a plinth down to the lowest ground under it.
-pub fn buildings(scene: &Scene) -> Mesh {
+pub fn buildings(scene: &Scene, tier: f32) -> Mesh {
     let mut m = Mesh::default();
     for p in &scene.buildings {
         let Some(model) = scene.models.get(&p.model) else {
             continue;
         };
         let (cx, cy) = scene.projection.to_km(p.lon, p.lat);
-        let (hi, lo) = ground_range(scene, model, cx, cy);
+        let (hi, lo) = ground_range(
+            scene,
+            model,
+            if p.scale < 1.0 {
+                p.scale * tier.sqrt()
+            } else {
+                tier
+            },
+            cx,
+            cy,
+        );
         let (z_top, z_low) = (level_z_km(scene, hi), level_z_km(scene, lo));
         let (s, c) = p.yaw.to_radians().sin_cos();
-        let v = scene.voxel_km;
+        let v = scene.voxel_km
+            * if p.scale < 1.0 {
+                p.scale * tier.sqrt()
+            } else {
+                tier
+            };
         let rot = move |n: [f32; 3]| [n[0] * c - n[1] * s, n[0] * s + n[1] * c, n[2]];
         let tf = move |q: [f32; 3]| {
             [
@@ -526,9 +542,9 @@ pub fn buildings(scene: &Scene) -> Mesh {
 }
 
 /// Highest and lowest terrace level under a building's footprint.
-fn ground_range(scene: &Scene, model: &VoxelModel, cx: f32, cy: f32) -> (i32, i32) {
+fn ground_range(scene: &Scene, model: &VoxelModel, scale: f32, cx: f32, cy: f32) -> (i32, i32) {
     let hm = &scene.heightmap;
-    let r = model.footprint[0].max(model.footprint[1]) * scene.voxel_km / 2.0;
+    let r = model.footprint[0].max(model.footprint[1]) * scene.voxel_km * scale / 2.0;
     let (mut hi, mut lo) = (i32::MIN, i32::MAX);
     for (ox, oy) in [(-r, -r), (r, -r), (r, r), (-r, r), (0.0, 0.0)] {
         let (lon, lat) = scene.projection.to_lonlat(cx + ox, cy + oy);
@@ -554,5 +570,184 @@ pub fn cloud_sheet(scene: &Scene, altitude_km: f32) -> Mesh {
         c,
         [[0.0; 3]; 4],
     );
+    m
+}
+
+/// Height of the terrain mesh at a point, in kilometres: the terrace level of the cell, or, on
+/// the low side of a terrace wall, the wall's ramp. This mirrors `terrain` exactly, so anything
+/// laid along it sits on the ground the mesh draws.
+pub fn ground_z(scene: &Scene, x: f32, y: f32) -> f32 {
+    let hm = &scene.heightmap;
+    let (lon, lat) = scene.projection.to_lonlat(x, y);
+    let (dx, dy) = hm.cell_degrees();
+    let (fc, fr) = ((lon - hm.bounds.west) / dx, (hm.bounds.north - lat) / dy);
+    let c = (fc.floor().max(0.0) as usize).min(hm.w - 1);
+    let r = (fr.floor().max(0.0) as usize).min(hm.h - 1);
+    let own = scene.level_at(c, r);
+    let za = level_z_km(scene, own);
+    let (cell_w, cell_h) = (
+        dx * scene.projection.km_per_deg_lon(),
+        dy * crate::data::KM_PER_DEG_LAT,
+    );
+    let (fx, fy) = (
+        (fc - c as f32).clamp(0.0, 1.0),
+        (fr - r as f32).clamp(0.0, 1.0),
+    );
+    let mut z = za;
+    let near = [
+        (c.checked_sub(1).map(|k| (k, r)), fx * cell_w),
+        ((c + 1 < hm.w).then_some((c + 1, r)), (1.0 - fx) * cell_w),
+        (r.checked_sub(1).map(|k| (c, k)), fy * cell_h),
+        ((r + 1 < hm.h).then_some((c, r + 1)), (1.0 - fy) * cell_h),
+    ];
+    for (n, d) in near {
+        let Some((nc, nr)) = n else { continue };
+        let lvl = scene.level_at(nc, nr);
+        if lvl > own {
+            let zb = level_z_km(scene, lvl);
+            let run = slope_run(scene, zb - za);
+            if d < run {
+                z = z.max(zb - (zb - za) * d / run);
+            }
+        }
+    }
+    z
+}
+
+/// One end of a road segment ribbon: the vertex shader widens it in screen pixels.
+pub struct RoadPoint {
+    pub xyz: [f32; 3],
+    /// Kilometres along the line, for dashes and sleepers cut on the ground.
+    pub along: f32,
+}
+
+/// Height the roads sit above the terrain, in kilometres. The depth test does the rest.
+const ROAD_LIFT_KM: f32 = 0.03;
+
+/// Split a segment until a straight line between the points follows the ground to within
+/// `tol` kilometres, so a road crosses a terrace wall as a short ramp and never cuts through it.
+fn follow_ground(
+    scene: &Scene,
+    a: (f32, f32),
+    b: (f32, f32),
+    out: &mut Vec<(f32, f32)>,
+    depth: u32,
+) {
+    let (za, zb) = (ground_z(scene, a.0, a.1), ground_z(scene, b.0, b.1));
+    let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+    let mut bad = false;
+    for t in [0.25f32, 0.5, 0.75] {
+        let p = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+        if (ground_z(scene, p.0, p.1) - (za + (zb - za) * t)).abs() > 0.03 {
+            bad = true;
+        }
+    }
+    if bad && len > 0.02 && depth < 14 {
+        let m = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+        follow_ground(scene, a, m, out, depth + 1);
+        follow_ground(scene, m, b, out, depth + 1);
+    } else {
+        out.push(b);
+    }
+}
+
+/// Roads and railways as chains of points on the ground (kilometres, ground height). Each
+/// map segment is cut at every terrace cell edge it crosses and then refined along walls.
+pub fn road_chains(scene: &Scene) -> Vec<(u8, Vec<RoadPoint>)> {
+    let hm = &scene.heightmap;
+    let (dx, dy) = hm.cell_degrees();
+    let mut out = Vec::new();
+    for line in &scene.lines {
+        let km: Vec<(f32, f32)> = line
+            .points
+            .iter()
+            .map(|p| scene.projection.to_km(p.0, p.1))
+            .collect();
+        let mut flat: Vec<(f32, f32)> = vec![km[0]];
+        for w in km.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            // Parameters where the segment crosses a grid line of the heightmap.
+            let (la, lb) = (line_lonlat(scene, a), line_lonlat(scene, b));
+            let mut ts = vec![0.0f32, 1.0];
+            let cross = |ua: f32, ub: f32, ts: &mut Vec<f32>| {
+                let (lo, hi) = (ua.min(ub).floor() as i32, ua.max(ub).floor() as i32);
+                for k in lo + 1..=hi {
+                    let t = (k as f32 - ua) / (ub - ua);
+                    if t > 0.0 && t < 1.0 {
+                        ts.push(t);
+                    }
+                }
+            };
+            cross(
+                (la.0 - hm.bounds.west) / dx,
+                (lb.0 - hm.bounds.west) / dx,
+                &mut ts,
+            );
+            cross(
+                (hm.bounds.north - la.1) / dy,
+                (hm.bounds.north - lb.1) / dy,
+                &mut ts,
+            );
+            ts.sort_by(|p, q| p.total_cmp(q));
+            for pair in ts.windows(2) {
+                let at = |t: f32| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+                if pair[1] - pair[0] > 1e-6 {
+                    follow_ground(scene, at(pair[0]), at(pair[1]), &mut flat, 0);
+                }
+            }
+        }
+        let mut pts = Vec::with_capacity(flat.len());
+        let mut along = 0.0f32;
+        for (i, p) in flat.iter().enumerate() {
+            if i > 0 {
+                let q = flat[i - 1];
+                along += ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt();
+            }
+            pts.push(RoadPoint {
+                xyz: [p.0, p.1, ground_z(scene, p.0, p.1) + ROAD_LIFT_KM],
+                along,
+            });
+        }
+        out.push((line.class, pts));
+    }
+    out
+}
+
+fn line_lonlat(scene: &Scene, p: (f32, f32)) -> (f32, f32) {
+    scene.projection.to_lonlat(p.0, p.1)
+}
+
+/// Roads and railways as one ribbon quad per segment. Each vertex carries its own end, the far
+/// end and a side; the shader extrudes by a width in screen pixels, so lines stay crisp at any
+/// zoom. Classes are drawn by priority through the depth the shader writes.
+pub fn roads(scene: &Scene) -> Mesh {
+    let mut m = Mesh::default();
+    for (class, pts) in road_chains(scene) {
+        for w in pts.windows(2) {
+            let (a, b) = (&w[0], &w[1]);
+            if (a.xyz[0] - b.xyz[0]).abs() + (a.xyz[1] - b.xyz[1]).abs() < 1e-5 {
+                continue;
+            }
+            let base = m.vertices.len() as u32;
+            let colour = [class, 0, 0, KIND_ROAD];
+            // Corners: (this end, other end, side, along at this end).
+            for (this, other, side, end) in [
+                (a, b, -1.0f32, 0.0f32),
+                (a, b, 1.0, 0.0),
+                (b, a, 1.0, 1.0),
+                (b, a, -1.0, 1.0),
+            ] {
+                m.vertices.push(Vertex {
+                    pos: this.xyz,
+                    normal: other.xyz,
+                    colour,
+                    local: [side, end, this.along],
+                    uv: [other.along, 0.0],
+                });
+            }
+            m.indices
+                .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+        }
+    }
     m
 }

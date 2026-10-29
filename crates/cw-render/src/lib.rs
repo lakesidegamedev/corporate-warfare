@@ -14,8 +14,10 @@ mod renderer;
 
 pub use camera::Camera;
 pub use data::{
-    Bounds, GREAT_LAKES_STATES, GeoImage, Heightmap, Mask, PLAYER_REGIONS, Placement, Projection,
-    Scene, VoxelBox, VoxelModel,
+    Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, LINE_INTERSTATE, LINE_MAIN, LINE_RAIL,
+    Line, Mask, PLAYER_REGIONS, Placement, Projection, Scene, VoxelBox, VoxelModel,
 };
 pub use palette::{COLOURS as PALETTE_COLOURS, Palette};
-pub use renderer::{AdapterSummary, Frame, FrameStats, NoAdapter, Renderer, Style};
+pub use renderer::{AdapterSummary, CloudLevel, Frame, FrameStats, NoAdapter, Renderer, Style};
+
+pub use mesh::{RoadPoint, ground_z, road_chains};

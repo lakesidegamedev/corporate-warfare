@@ -13,6 +13,7 @@ heading.
 
 ### Added
 
+- Developer: the stylized map renderer (`cw-render`, not yet in the apps) now draws the real interstates, main roads and railways from the 1.8 map data (8-bit roads with a dark edge, asphalt and a gold dashed centre line up close, thin rails with sleepers up close, widths in whole screen pixels, laid on the terrace heights with short ramps at walls), hand-drawn pixel texture tiles per ground type that fade out as the camera pulls back, real city footprints from Natural Earth urban areas with street grids and small downtown blocks, world-space wave dashes, a highlight on terrace wall tops, and the 1.8 cloud levels (off, thin, light, heavy; default light). Six draw calls. New bake tool `tools/render_bake_urban.py`.
 - Executives. Every company can hire a chief financial officer, a chief operating officer and a
   logistics chief, and your rivals do too. Each is a named person with a portrait, a level from 1 to
   5 and a temperament, and each changes one real number. A chief financial officer takes up to
