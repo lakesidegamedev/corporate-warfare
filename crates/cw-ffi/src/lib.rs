@@ -16,6 +16,7 @@ use cw_session::{Query, Session};
 
 uniffi::setup_scaffolding!();
 
+mod brief;
 mod cast;
 mod catalogue;
 mod chapters;

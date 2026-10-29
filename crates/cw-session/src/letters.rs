@@ -903,7 +903,7 @@ fn analyst_letters(
 }
 
 /// What a mandate kind asks, in a few plain words for the chair's letter.
-fn mandate_label(key: &str) -> &'static str {
+pub(crate) fn mandate_label(key: &str) -> &'static str {
     match key {
         "market_share" => "win more of a market",
         "profit_growth" => "grow operating profit",
@@ -1158,13 +1158,17 @@ fn decision_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<
 /// age.
 pub fn letters(world: &World, dataset: &Dataset, since_week: u32) -> Vec<Letter> {
     let now = world.tick.0;
-    let since = since_week.max(now.saturating_sub(ARCHIVE_WEEKS)).max(1);
+    // A start past this week (an app that wrapped an unsigned subtraction) means "this week".
+    let since = since_week
+        .min(now.max(1))
+        .max(now.saturating_sub(ARCHIVE_WEEKS))
+        .max(1);
     // Facts the paper reads, over every four-week window back to `since`.
     let mut stories: Vec<paper::Story> = Vec::new();
     let mut at = now.max(1);
     loop {
         stories.extend(paper::stories(world, dataset, at));
-        if at <= since + 3 {
+        if at <= since.saturating_add(3) {
             break;
         }
         at -= 4;
@@ -1229,6 +1233,30 @@ pub fn mark_read(world: &mut World, dataset: &Dataset, ids: &[String]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_start_week_past_now_reads_as_now_and_never_overflows() {
+        // Week 5 of a new career with a start week an app wrapped below zero (5 - 8 as u32).
+        let dataset = cw_data::Dataset::load().unwrap();
+        let mut world = cw_sim::economy::seed::build(
+            &dataset,
+            11,
+            cw_sim::state::ScenarioKind::Guided,
+            cw_sim::state::ScenarioMode::Sandbox,
+        );
+        for _ in 0..5 {
+            world.pending_pause = None;
+            cw_sim::tick::advance(&mut world, &dataset);
+        }
+        for since in [u32::MAX, u32::MAX - 2, 5u32.wrapping_sub(8), 0, 1] {
+            let _ = letters(&world, &dataset, since);
+        }
+        assert_eq!(
+            letters(&world, &dataset, u32::MAX).len(),
+            letters(&world, &dataset, world.tick.0).len()
+        );
+    }
+
     use crate::{PriceSetup, ScenarioConfig, Session};
     use cw_core::ledger::{Account, Txn};
     use cw_sim::economy::timeline::{LiveEvent, TimelineMode};

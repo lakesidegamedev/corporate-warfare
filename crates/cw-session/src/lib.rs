@@ -4,6 +4,7 @@
 //! weekly advances. It exposes immutable read models, a versioned save envelope and a replay log.
 //! Swift keeps file I/O and lifecycle; it never computes a financial identity.
 
+pub mod brief;
 pub mod cfo;
 pub mod dto;
 pub mod letters;
@@ -2162,7 +2163,10 @@ mod tests {
         // carriers cut below 60 percent lane fill, so week-two asking prices differ. It moved
         // again from 1b265292... in the same preview when facilities gained a cut record,
         // households gained wanted and unmet demand and policies a production lock (new
-        // encoded fields), and refineries began shifting their cut. The Swift
+        // encoded fields), and refineries began shifting their cut. In 1.9 it moved from
+        // dd84b0b3... when scenarios began opening with the inflation, policy rate and expected
+        // inflation of their own period (Great Lakes 2000: 3.4 percent and 6.5 percent, not 3 and 6),
+        // which changes the opening loans, wages and rates from the first week. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2188,7 +2192,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "dd84b0b3f46a6b6eef355dc1f819a95ecefdebb905d7777687792e0fbcb3a81c"
+            "1bf6e771d88fb63c498ad929846d96d2cd2505713935dda654f79b32d96d2a70"
         );
     }
 

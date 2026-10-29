@@ -15,7 +15,7 @@ use cw_data::Dataset;
 /// Weeks between central bank meetings.
 pub const MEETING_WEEKS: u32 = 6;
 const RATE_FLOOR_BPS: i32 = 25;
-const RATE_CEILING_BPS: i32 = 1_500;
+const RATE_CEILING_BPS: i32 = 2_000;
 
 /// Advance the economy one week and apply its effects.
 pub fn weekly(world: &mut World, dataset: &Dataset) {
@@ -150,7 +150,7 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
     rotate_chair(world, dataset);
     world.macro_state.policy_rate_bps = new_rate;
     world.macro_state.real_growth_bps = growth;
-    apply_nominal_drift(world, new_inflation);
+    apply_nominal_drift(world, dataset, new_inflation);
     apply_demand(world, gap);
 
     // Tell the player when the economy turns: the same cards the old regime draw used.
@@ -255,7 +255,7 @@ pub fn ten_year_yield_bps(world: &World) -> i32 {
     let now = world.macro_state.policy_rate_bps;
     (now + 3 * long_run) / 4
         + 75
-        + (world.macro_state.inflation_bps - c.target_inflation_bps).max(0) / 4
+        + (world.macro_state.inflation_bps - c.target_inflation_bps).max(0) / 8
 }
 
 /// Real growth over the last 52 weeks, or annualised over what history there is.
@@ -279,30 +279,46 @@ pub fn year_on_year_growth(history: &[MacroPoint]) -> i32 {
 /// borrower's grade.
 pub fn lending_premium_bps(world: &World) -> i32 {
     (-world.macro_state.cycle.output_gap_bps).max(0) / 4
+        + (world.macro_state.inflation_bps - world.macro_state.cycle.target_inflation_bps).max(0)
+            / 10
         + crate::economy::timeline::credit_spread_bps(world)
 }
 
 /// Nominal prices outside the firms' control drift with inflation: the price index, background
 /// wages (so prevailing wages follow) and the gateway import and export prices. Firms' own
 /// prices follow through the market.
-fn apply_nominal_drift(world: &mut World, inflation: i32) {
+fn apply_nominal_drift(world: &mut World, dataset: &Dataset, inflation: i32) {
     let before = world.macro_state.price_index_bps.max(1);
     let after = (before + before * inflation as i64 / (52 * 10_000)).max(1);
     world.macro_state.price_index_bps = after;
-    if after == before {
-        return;
-    }
+    // Wages open at the period's own growth and fade into inflation over two years.
+    let wage_rate = inflation + opening_wage_gap_bps(dataset, world.tick.0);
+    let wage_after = (before + before * wage_rate as i64 / (52 * 10_000)).max(1);
     let scale =
         |value: i64| -> i64 { (value as i128 * after as i128 / before as i128).max(1) as i64 };
+    let wage_scale =
+        |value: i64| -> i64 { (value as i128 * wage_after as i128 / before as i128).max(1) as i64 };
     for region in &mut world.regions {
         for wage in region.background_wage_cents.iter_mut() {
-            *wage = scale(*wage);
+            *wage = wage_scale(*wage);
         }
+    }
+    if after == before {
+        return;
     }
     for gateway in &mut world.gateways {
         gateway.sell_price_cents = scale(gateway.sell_price_cents);
         gateway.buy_price_cents = scale(gateway.buy_price_cents);
     }
+}
+
+/// How far wage growth runs above inflation in week `week`: the gap the scenario opened with,
+/// fading evenly to nothing over `WAGE_FADE_WEEKS`.
+pub fn opening_wage_gap_bps(dataset: &Dataset, week: u32) -> i32 {
+    let m = &dataset.opening_macro;
+    let gap = (m.wage_growth_bps - m.inflation_bps) as i64;
+    let left = cw_data::opening_macro::WAGE_FADE_WEEKS.saturating_sub(week) as i64;
+    (gap * left / cw_data::opening_macro::WAGE_FADE_WEEKS as i64) as i32
 }
 
 /// Household demand everywhere rises and falls with the output gap: a 1 percent gap moves
@@ -372,5 +388,150 @@ mod tests {
             world.macro_state.cycle.history.clone()
         };
         assert_eq!(run(), run());
+    }
+
+    fn scenario_world(id: &str, seed_value: u64) -> (World, Dataset) {
+        let dataset = Dataset::load_scenario(id).unwrap();
+        let world = seed::build(
+            &dataset,
+            seed_value,
+            ScenarioKind::Guided,
+            ScenarioMode::Sandbox,
+        );
+        (world, dataset)
+    }
+
+    fn run_macro(world: &mut World, dataset: &Dataset, weeks: u32) {
+        for _ in 0..weeks {
+            weekly(world, dataset);
+            world.tick = Tick(world.tick.0 + 1);
+        }
+    }
+
+    #[test]
+    fn every_scenario_opens_with_the_rates_of_its_period() {
+        // Ranges are the real period, read off the brief, not off the content files:
+        // (scenario, inflation, policy rate, ten-year yield), all in basis points.
+        let periods = [
+            ("texas-1981", (900, 1_100), (1_500, 1_900), (1_300, 1_500)),
+            ("silicon-valley-1995", (250, 320), (550, 600), (600, 700)),
+            ("ruhr-rhine-1991", (350, 400), (650, 800), (800, 900)),
+            ("great-lakes-2000", (320, 360), (600, 700), (550, 650)),
+        ];
+        for (id, inflation, rate, ten_year) in periods {
+            let (world, _) = scenario_world(id, 1);
+            let m = &world.macro_state;
+            assert!(
+                (inflation.0..=inflation.1).contains(&m.inflation_bps),
+                "{id} inflation {}",
+                m.inflation_bps
+            );
+            assert!(
+                (rate.0..=rate.1).contains(&m.policy_rate_bps),
+                "{id} policy rate {}",
+                m.policy_rate_bps
+            );
+            let yield_bps = ten_year_yield_bps(&world);
+            assert!(
+                (ten_year.0..=ten_year.1).contains(&yield_bps),
+                "{id} ten-year yield {yield_bps}"
+            );
+            assert!(m.cycle.expected_inflation_bps > 0);
+        }
+    }
+
+    #[test]
+    fn opening_loans_are_priced_off_the_periods_policy_rate() {
+        for id in ["texas-1981", "great-lakes-2000", "ruhr-rhine-1991"] {
+            let (world, dataset) = scenario_world(id, 1);
+            let want = world.macro_state.policy_rate_bps
+                + dataset.opening_macro.credit_spread_bps
+                + crate::state::Grade::B.spread_bps();
+            assert!(world.loans.iter().count() > 0);
+            for (_, loan) in world.loans.iter() {
+                assert_eq!(loan.rate_bps, want, "{id}");
+            }
+        }
+    }
+
+    #[test]
+    fn texas_1981_opens_with_dear_money_that_eases_as_inflation_falls() {
+        for seed_value in 1..=4u64 {
+            let (mut world, dataset) = scenario_world("texas-1981", seed_value);
+            let opening_rate = world.macro_state.policy_rate_bps;
+            let opening_inflation = world.macro_state.inflation_bps;
+            run_macro(&mut world, &dataset, 26);
+            assert!(
+                world.macro_state.policy_rate_bps >= 1_200,
+                "seed {seed_value}: still dear money after half a year: {}",
+                world.macro_state.policy_rate_bps
+            );
+            run_macro(&mut world, &dataset, 130);
+            assert!(
+                world.macro_state.inflation_bps * 2 < opening_inflation,
+                "seed {seed_value}: inflation fell by half in three years: {}",
+                world.macro_state.inflation_bps
+            );
+            assert!(
+                world.macro_state.policy_rate_bps + 400 <= opening_rate,
+                "seed {seed_value}: rates eased with it: {}",
+                world.macro_state.policy_rate_bps
+            );
+        }
+    }
+
+    #[test]
+    fn the_bundesbank_tightens_after_reunification() {
+        for seed_value in 1..=4u64 {
+            let (mut world, dataset) = scenario_world("ruhr-rhine-1991", seed_value);
+            let opening_rate = world.macro_state.policy_rate_bps;
+            let mut peak = opening_rate;
+            for _ in 0..52 {
+                run_macro(&mut world, &dataset, 1);
+                peak = peak.max(world.macro_state.policy_rate_bps);
+            }
+            assert!(
+                peak >= opening_rate + 50,
+                "seed {seed_value}: the rate rose from {opening_rate} to {peak}"
+            );
+        }
+    }
+
+    #[test]
+    fn opening_wage_growth_fades_into_inflation_over_two_years() {
+        let (_, texas) = scenario_world("texas-1981", 1);
+        // Texas opens with wages growing 900 against inflation 1000: a gap of minus 100.
+        assert_eq!(opening_wage_gap_bps(&texas, 0), -100);
+        assert_eq!(opening_wage_gap_bps(&texas, 52), -50);
+        assert_eq!(opening_wage_gap_bps(&texas, 104), 0);
+        assert_eq!(opening_wage_gap_bps(&texas, 400), 0);
+        let (_, ruhr) = scenario_world("ruhr-rhine-1991", 1);
+        // Ruhr: wages 600 against inflation 380, a gap of 220.
+        assert_eq!(opening_wage_gap_bps(&ruhr, 0), 220);
+        assert_eq!(opening_wage_gap_bps(&ruhr, 52), 110);
+    }
+
+    #[test]
+    fn prices_and_wages_both_inflate_so_real_wages_stay_put() {
+        // Over five years wages track the price index apart from the fading opening gap, in
+        // every period, including the 10 percent start.
+        for id in [
+            "texas-1981",
+            "silicon-valley-1995",
+            "ruhr-rhine-1991",
+            "great-lakes-2000",
+        ] {
+            let (mut world, dataset) = scenario_world(id, 2);
+            let start_wage = world.regions[0].background_wage_cents[0];
+            run_macro(&mut world, &dataset, 260);
+            let prices = world.macro_state.price_index_bps as f64 / 10_000.0;
+            let wages = world.regions[0].background_wage_cents[0] as f64 / start_wage as f64;
+            let ratio = wages / prices;
+            assert!(
+                (0.97..=1.04).contains(&ratio),
+                "{id}: wages {wages:.3} against prices {prices:.3}"
+            );
+            assert!(prices > 1.1, "{id}: prices rose {prices:.3}");
+        }
     }
 }

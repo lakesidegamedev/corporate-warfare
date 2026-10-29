@@ -19,6 +19,11 @@ val gameVersionCode = baseVersion.split('.').map(String::toInt).let { (major, mi
     if (previewNumber > 0) major * 10_000 + (minor - 1) * 100 + 90 + previewNumber else major * 10_000 + minor * 100 + patch
 }
 
+// -Pcw.smoke=true builds the shrunk release for the CI emulator check only: signed with the debug
+// key so it installs, with extra keep rules for the classes the instrumented test calls, and the
+// test runs against the release build type. It is never shipped.
+val smoke = findProperty("cw.smoke") == "true"
+
 android {
     namespace = "net.lakesidegames.corporatewarfare"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -29,6 +34,8 @@ android {
         targetSdk = libs.versions.compileSdk.get().toInt()
         versionCode = gameVersionCode
         versionName = gameVersion
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testProguardFiles("proguard-smoke-test.pro")
         // The engine is built for these two ABIs only (scripts/build-engine.sh).
         // (With per-ABI APKs the splits block below chooses them instead; AGP rejects both.)
         if (findProperty("cw.splitAbi") != "true") {
@@ -69,9 +76,15 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfigs.findByName("upload")?.let { signingConfig = it }
+            if (smoke) {
+                proguardFiles("proguard-smoke.pro")
+                signingConfig = signingConfigs.getByName("debug")
+            } else {
+                signingConfigs.findByName("upload")?.let { signingConfig = it }
+            }
         }
     }
+    if (smoke) testBuildType = "release"
     buildFeatures {
         compose = true
     }
@@ -90,4 +103,6 @@ kotlin {
 dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

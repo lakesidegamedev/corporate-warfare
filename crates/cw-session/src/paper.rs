@@ -245,6 +245,8 @@ pub(crate) fn money(world: &World, dataset: &Dataset, firm: Handle, cents: i64) 
         )
     } else if whole >= 10_000 {
         format!("{} thousand", whole / 1_000)
+    } else if whole >= 1_000 {
+        format!("{},{:03}", whole / 1_000, whole % 1_000)
     } else {
         whole.to_string()
     };
@@ -1214,6 +1216,17 @@ mod tests {
     use crate::{PriceSetup, ScenarioConfig, Session};
     use cw_sim::economy::timeline::{LiveEvent, TimelineMode};
     use cw_sim::state::{RaidRecord, ScenarioKind, ScenarioMode};
+
+    #[test]
+    fn money_groups_thousands_under_ten_thousand() {
+        let s = session("great_lakes_2000");
+        let firm = s.world.investor.primary_group.unwrap();
+        let m = |cents| money(&s.world, &s.dataset, firm, cents);
+        assert_eq!(m(539_900), "$5,399");
+        assert_eq!(m(100_000), "$1,000");
+        assert_eq!(m(99_900), "$999");
+        assert_eq!(m(1_000_000), "$10 thousand");
+    }
 
     fn session(scenario: &str) -> Session {
         Session::create(ScenarioConfig {

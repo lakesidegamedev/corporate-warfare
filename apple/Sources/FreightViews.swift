@@ -302,13 +302,20 @@ extension AppStore {
     func freightCompact(_ cents: Int64) -> String { Format.moneyCompact(cents, currency: selectedFirmDto?.currency ?? "") }
 }
 
-private struct LaneDetail: View {
+struct LaneDetail: View {
     @EnvironmentObject private var store: AppStore
     let lane: LaneDto
-    @State private var lots: Double = 100
-    @State private var weeks: Double = 13
+    @State private var lots: Double
+    @State private var weeks: Double
     @State private var quote: ReserveQuoteDto?
     @State private var rejection: CommandRejection?
+
+    /// The brief opens a lane with the reservation it suggests already set.
+    init(lane: LaneDto, initialLots: Double = 100, initialWeeks: Double = 13) {
+        self.lane = lane
+        _lots = State(initialValue: initialLots)
+        _weeks = State(initialValue: initialWeeks)
+    }
 
     private var mine: [LaneContractDto] {
         store.laneContracts.filter { $0.mine && $0.a == lane.a && $0.b == lane.b && $0.mode == lane.mode }

@@ -13,6 +13,26 @@ heading.
 
 ### Added
 
+- The weekly brief. At the top of the CEO Office, one panel says what changed this week (up to
+  three facts, biggest first: profit and cash, a price move on a good you sell, a rival raid on
+  you, a world event, a met board goal), what is due (decisions, the board's goal offer, loan
+  payments, takeover bids, with weeks left) and up to three suggested moves. Each move comes with
+  the game's own figures: build more where imports are filling demand you do not meet, with its
+  cost and payback; reserve a freight lane where outside carriers take a lot of your money; cut
+  or raise a price where stock piles up or sells out; match output to demand; pick a board goal;
+  raid a rival when the odds are good and you can afford it from what you earned. Review opens
+  the usual dialog already filled in, and nothing is sent until you confirm there. The panel
+  folds away and remembers it. On desktop, a new setting, Show the brief each week, opens it
+  when a week starts while time is paused or at normal speed. It is never read at faster speeds
+  more than once a week.
+- The weekly brief never goes quiet when the company is losing money. If the last four weeks
+  add up to a loss, the CFO's reasons lead the moves, biggest weekly cost first, each with its
+  one-button fix and how much it saves a week. With no single reason, the brief says where the
+  money goes ("Wages are 62 percent of revenue") and opens the weakest division. "Hold your
+  course" now comes only with a reason, such as how profit moved. Builds are judged on the
+  division's margin at today's prices up to ten years, shown in years, and rank last unless they
+  pay back inside three years. On Apple, Review opens the game's own build, raid, lane, pricing,
+  board offer and division sheets, and the brief has a snapshot test.
 - Letters from the people in your world. The Inbox is now correspondence. A rival chief writes
   after a raid on you or by you, and after a joint venture or a friendly deal. A bidder writes
   when they bid for your company. The central bank chair writes after a rate decision and gives
@@ -117,6 +137,9 @@ heading.
 
 ### Changed
 
+- Tooling: every change to the Android app now starts the trimmed release build on an emulator in
+  CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
+  so a trimming mistake fails the check and not a phone.
 - A smaller Windows and Linux download. The desktop game now ships without a large icon library
   it never used and with the unused parts of the screen toolkit trimmed away, so the Linux
   package drops from about 109 MB to about 63 MB. The Windows setup program also squeezes its
@@ -156,6 +179,25 @@ heading.
 
 ### Fixed
 
+- New careers on Windows, Linux and Android no longer stop with an engine error around week 5. The inbox asked for letters from a week before the career began, which the engine could not count back to. Found by the new Android emulator check.
+- Each scenario now opens in the money conditions of its own time. Texas 1981 starts with
+  inflation near 10 percent and interest rates near 16 percent, and both fall over the next
+  years as the central bank holds firm. Ruhr and Rhine 1991 starts with the Bundesbank rate near
+  7 percent and rising. Silicon Valley 1995 and Great Lakes 2000 open at their own rates too.
+  Before, every scenario began at 3 percent inflation and a 6 percent rate. Wages, bond yields,
+  loan quotes and the opening loans follow the new numbers, and the central bank can now go as
+  high as 20 percent.
+- Farms in Silicon Valley and Texas keep their margins. Their grain and fertilizer prices used
+  to slide to about half their starting level while wages rose with inflation, so farm profits
+  of 10 to 14 percent were gone by year five. The price paths for those goods now ease only a
+  little against everything else. Farm margins stay around 10 percent through year five in both,
+  and fewer firms lose money (Texas 23 to 20 percent, Silicon Valley 27 to 23 percent in year
+  five).
+- The Belgian defence firms in Ruhr and Rhine can sell. The state now buys defence goods and
+  strategic reserves from firms in every currency of the scenario, paying in their own money at
+  the day's exchange rate, not only from the main currency's firms.
+- Amounts from one thousand to under ten thousand in the brief, letters and papers now show a
+  comma ("$5,399", not "$5399").
 - Big cities keep their names on the close map. A city of a million people or more now always shows its
   name while its buildings are on screen, even when your own plants crowd the usual spots: the name
   moves further out and a thin line ties it back to the city. Region names and smaller towns give way

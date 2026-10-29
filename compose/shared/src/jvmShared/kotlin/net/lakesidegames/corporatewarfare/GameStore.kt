@@ -122,6 +122,19 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     val inboxBadge: Int get() = letters.count { !it.read || it.mandatory }
     /** This career's chapters, board goals and achievements. Read only when it can be seen (see [loadHall]). */
     var hall by mutableStateOf<uniffi.cw_ffi.HallDto?>(null); private set
+    /**
+     * The weekly brief for the selected company. Read only while the CEO Office (or the weekly
+     * pop-up) is showing it, and at 2x or 4x no more than once a week (see [loadBrief]).
+     */
+    var brief by mutableStateOf<uniffi.cw_ffi.BriefDto?>(null); private set
+    /** The brief is on screen, so it is kept current. */
+    var briefOpen: Boolean = false
+    /** The panel is folded away; kept in the settings file. */
+    var briefCollapsed by mutableStateOf(false)
+    var onBriefCollapsed: (Boolean) -> Unit = {}
+    private var briefWeek = -1
+    private var briefRevision = 0uL
+    private var briefFirm: ULong? = null
     /** The five-year score, when the career is scored. */
     var score by mutableStateOf<uniffi.cw_ffi.ScoreDto?>(null); private set
     /** The Hall of Careers page is open, so the chapter data is kept current even at speed. */
@@ -262,6 +275,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         hall?.let { h -> overview?.let { o -> if (h.weeks > 0u) onCareerEnded(CareerSummary.of(o.primaryName, scenarioName(scenario), h)) } }
         session = null
         hall = null
+        brief = null
+        briefWeek = -1
         score = null
         resultSeenFor = null
         ready = false
@@ -640,7 +655,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 handle.rivalFeed(12u),
                 handle.mapPlants(),
                 firm?.let { handle.cfoAdvice(it) } ?: emptyList<uniffi.cw_ffi.CfoAdviceDto>(),
-                handle.letters((overviewNow.tick - 8u).coerceAtLeast(1u)),
+                handle.letters(if (overviewNow.tick > 8u) overviewNow.tick - 8u else 1u),
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
@@ -680,6 +695,37 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         }
         loadMarkets()
         loadHall()
+        loadBrief()
+    }
+
+    /**
+     * The brief is read only when it can be seen. It is read again after a command changes the
+     * world, but at 2x and 4x never more than once a week; closed or folded away it costs nothing.
+     */
+    private suspend fun loadBrief(force: Boolean = false) {
+        val handle = session ?: return
+        val firm = selectedFirm
+        val now = overview ?: return
+        if (firm == null) { brief = null; return }
+        val tick = now.tick.toInt()
+        val fast = running && speed > 1
+        val due = force || (briefOpen && !briefCollapsed &&
+            (briefWeek != tick || briefFirm != firm || (briefRevision != now.revision && !fast)))
+        if (!due) return
+        briefWeek = tick
+        briefRevision = now.revision
+        briefFirm = firm
+        val dto = withContext(engine) { handle.weeklyBrief(firm) }
+        if (session === handle) brief = dto
+    }
+
+    /** Read the brief now, for the panel when it opens or the weekly pop-up. */
+    fun refreshBrief() { scope.launch { loadBrief(force = true) } }
+
+    fun foldBrief(value: Boolean) {
+        briefCollapsed = value
+        onBriefCollapsed(value)
+        if (!value) refreshBrief()
     }
 
     /**

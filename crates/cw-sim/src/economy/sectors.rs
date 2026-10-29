@@ -134,7 +134,7 @@ pub fn divisions_of(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Divis
 
 /// Weekly output value at reference price of a plant's rated capacity, counting plants under
 /// construction: they are the capacity the cell will have.
-fn capacity_value(dataset: &Dataset, recipe: u16, blocks: u8) -> i64 {
+pub fn capacity_value(dataset: &Dataset, recipe: u16, blocks: u8) -> i64 {
     let template = &dataset.recipes[recipe as usize];
     template.output_value(|id| {
         dataset

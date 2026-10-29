@@ -53,6 +53,28 @@ final class SnapshotTests: XCTestCase {
         both("hall", HallView(), phoneHeight: 1800)
     }
 
+    /// The weekly brief on the CEO Office, from a young career: always something to read, and a
+    /// company that has not lost money says why it holds.
+    func testRenderWeeklyBrief() async throws {
+        let store = AppStore(saveManager: SaveManager(directory: directory))
+        await store.newCareer(guided: true, fiveYear: false, seed: 7)
+        XCTAssertTrue(store.sessionReady)
+        if let primary = store.overview?.primaryFirm { await store.selectFirm(primary) }
+        await store.advance(weeks: 12)
+        await store.continueCareer()
+        guard let firm = store.selectedFirm.flatMap({ handle in store.firms.first { $0.handle == handle } }) else {
+            return XCTFail("the player has a company")
+        }
+        await store.refreshBrief()
+        guard let brief = store.brief else { return XCTFail("the brief reads") }
+        XCTAssertTrue(!brief.moves.isEmpty || !brief.hold.isEmpty, "the brief says what to do or why to hold")
+        XCTAssertLessThanOrEqual(brief.moves.count, 3)
+        let page = ScrollView { BriefPanel(currency: firm.currency, firmName: firm.name).padding(16) }
+            .background(Theme.ink).environmentObject(store)
+        render("brief-phone", CGSize(width: 393, height: 1100), compact: true, page)
+        render("brief-pad", CGSize(width: 760, height: 900), compact: false, page)
+    }
+
     func testRenderMainScreens() async throws {
         let store = AppStore(saveManager: SaveManager(directory: directory))
         await store.newCareer(guided: true, fiveYear: false, seed: 7)
