@@ -215,6 +215,7 @@ heading.
   so moving the map no longer waits on drawing. A fresh picture replaces it a moment later.
 - A new install with no graphics choice saved starts on Medium when the window is large or the
   computer is drawing in software, so the first look is smooth. Your own choice is never changed.
+- Tooling: a 1.9 cast proposal, not wired into the game. `content/cast-1.9.json` lists 40 fictional people (ten per scenario, with voice notes), `tools/cast_portraits_v2.py` draws 32 by 32 busts with neutral, pleased and displeased expressions, a derived 16 by 16 version, 64 by 64 office portraits for chief executives and a larger extras kit, written to `apple/Resources/cast-portraits-v2.json`. Awaiting owner approval of the roster and portraits. Second pass: clearer pleased and displeased faces, seven head shapes with varied noses, eye spacing, ears and necks, softer women's faces with jewellery, repainted 64 by 64 office portraits with a trade object on the wall, era clothing, lifted deep skin tones and unique names in the extras sample.
 
 ### Fixed
 
@@ -232,6 +233,7 @@ heading.
   again, over and over (94 percent of firms leaving the market in a five year Ruhr run were these).
   Now a restructuring lasts its full year, plants that lose money are closed down, and a company
   with nothing worth keeping is wound up instead. The same applies to you.
+- The Windows setup program's licence page now says that the game sends an anonymous market summary you can switch off, instead of saying it sends nothing.
 - New careers on Windows, Linux and Android no longer stop with an engine error around week 5. The inbox asked for letters from a week before the career began, which the engine could not count back to. Found by the new Android emulator check.
 - Each scenario now opens in the money conditions of its own time. Texas 1981 starts with
   inflation near 10 percent and interest rates near 16 percent, and both fall over the next
