@@ -276,8 +276,11 @@ and each level moves one real number for that company only:
 | Logistics chief | What outside carriers charge over the owners' empty-lane rate, for the shipper's own shipments | 5 percent of that premium | 25 percent of that premium |
 | | Fee for reserving lane capacity | 100 basis points off | 5 percent off |
 
-**Candidates.** A pool is drawn in a world's first week from the generated people in
-`content/cast.json` (the extras, with their temperaments and portraits): eight for each post, levels
+**Candidates.** A pool is drawn in a world's first week. The scenario's own named people for hire
+(roles `cfo`, `coo`, `logistics` in `content/cast.json`, two per scenario) come first, then eight
+generated people for each post from the extras with their temperaments and portraits. A candidate
+holds a hire index: below 1000 it is an extra, from 1000 up it is the nth named person for hire, so
+saves keep working as people are added. A world with no scenario id draws generated people only. Levels
 weighted 30, 28, 22, 14 and 6 percent for levels 1 to 5, nobody twice. A post with fewer than three
 people available gets two more every thirteen weeks. A person who leaves a post is away for 26 weeks.
 

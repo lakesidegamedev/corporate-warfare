@@ -71,7 +71,7 @@ struct CompanyPageBody: View {
             }
             if let ceo = page.ceo {
                 HStack(alignment: .top, spacing: 10) {
-                    PixelPortrait(person: ceo.id, size: 64)
+                    PixelPortrait(person: ceo.id, size: 72, mood: ceo.mood, office: ceo.officePortrait)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ceo.name).font(.callout.weight(.bold)).foregroundStyle(Theme.primaryText)
                         Text("\(ceo.age) · \(ceo.home)").font(.caption).foregroundStyle(Theme.secondary)

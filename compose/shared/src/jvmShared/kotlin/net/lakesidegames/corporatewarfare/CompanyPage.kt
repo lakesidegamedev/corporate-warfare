@@ -78,7 +78,7 @@ fun CompanyPageBody(store: GameStore, p: CompanyPageDto, onOpenFirm: (ULong) -> 
         val ceo = p.ceo
         if (ceo != null) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PixelPortrait(ceo.id, size = 64.dp)
+                PixelPortrait(ceo.id, size = 72.dp, mood = ceo.mood, office = ceo.officePortrait)
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(ceo.name, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Text("${ceo.age} · ${ceo.home}", color = Palette.secondary, fontSize = 12.sp)
