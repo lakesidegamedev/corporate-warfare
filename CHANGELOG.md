@@ -151,6 +151,22 @@ heading.
 
 ### Fixed
 
+- Each scenario now opens in the money conditions of its own time. Texas 1981 starts with
+  inflation near 10 percent and interest rates near 16 percent, and both fall over the next
+  years as the central bank holds firm. Ruhr and Rhine 1991 starts with the Bundesbank rate near
+  7 percent and rising. Silicon Valley 1995 and Great Lakes 2000 open at their own rates too.
+  Before, every scenario began at 3 percent inflation and a 6 percent rate. Wages, bond yields,
+  loan quotes and the opening loans follow the new numbers, and the central bank can now go as
+  high as 20 percent.
+- Farms in Silicon Valley and Texas keep their margins. Their grain and fertilizer prices used
+  to slide to about half their starting level while wages rose with inflation, so farm profits
+  of 10 to 14 percent were gone by year five. The price paths for those goods now ease only a
+  little against everything else. Farm margins stay around 10 percent through year five in both,
+  and fewer firms lose money (Texas 23 to 20 percent, Silicon Valley 27 to 23 percent in year
+  five).
+- The Belgian defence firms in Ruhr and Rhine can sell. The state now buys defence goods and
+  strategic reserves from firms in every currency of the scenario, paying in their own money at
+  the day's exchange rate, not only from the main currency's firms.
 - Big cities keep their names on the close map. A city of a million people or more now always shows its
   name while its buildings are on screen, even when your own plants crowd the usual spots: the name
   moves further out and a thin line ties it back to the city. Region names and smaller towns give way

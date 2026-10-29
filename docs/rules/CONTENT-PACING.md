@@ -65,12 +65,13 @@ workforce; later named firms can provide them using declared service templates.
 
 ## Macro and long run
 
-Game starts week 1 of 2000. Use 52-week years consistently. Baseline annual inflation
-200 BPS, real household demand growth 200 BPS, technology frontier +1 level/year, policy
-rate 600 BPS. Compound via rational weekly accumulators, never floating-point state.
+Game starts week 1 of its scenario's start year. Use 52-week years consistently. Great Lakes
+2000 opens at inflation 340 BPS and policy rate 650 BPS; every other scenario opens at the
+rates of its own period (`content/scenarios/<id>/macro.json`, see FINANCE-LABOUR-AI). Real
+household demand growth 200 BPS, technology frontier +1 level/year. Compound via rational weekly accumulators, never floating-point state.
 At quarter boundary draw one macro impulse from [-100,-50,0,0,0,50,100] BPS with a
 separate macro RNG stream, persist before reports. Policy rate = clamp(previous + impulse,
-100,1500). Nominal reference price index grows at annual inflation /52 with remainder.
+100,2000). Nominal reference price index grows at annual inflation /52 with remainder.
 Real growth changes demand slowly, constrained by actual incomes/budgets.
 
 Recessions are explicit events reducing real demand 10 percent for 26 weeks with two

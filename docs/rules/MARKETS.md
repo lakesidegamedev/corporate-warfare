@@ -268,6 +268,16 @@ maps a product id to its family, and ids missing from the current content are ig
 new product joins a family with one line. Products with no family keep their opening gateway
 prices apart from inflation.
 
+A family index is relative to the general price level, not a nominal price: the engine inflates
+every gateway price with the period's inflation on top of it, so 10,000 holds a good's real
+price and 8,000 is a fall of a fifth against everything else (wages included). Authoring a path
+therefore needs no allowance for the period's inflation. Farm goods carry the lesson: wages
+follow inflation, and 77 to 86 percent of Silicon Valley and Texas farm output sells at the
+gateway bid, so a path that sank to 55 to 75 percent of day one took farm margins from about 12
+percent to nothing in five years. The grain and fertilizer paths of those two scenarios now fall
+no lower than 88 percent, and a test holds the real grain bid within 15 percent of day one over
+five years in both.
+
 Each family has an index, 10,000 basis points on day one, recomputed every week before the
 business cycle runs. Both of a gateway's prices are scaled by the ratio of this week's index to
 last week's, the same way inflation scales them, so the +/-15 percent spread and the finite
