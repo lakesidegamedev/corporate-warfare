@@ -133,6 +133,11 @@ class MapPerfBench {
                         drawMapOverlay(o, g, i / 60.0, false, sun, map.playBounds, cam.zoom, 0.3, 1f)
                     }
                 }
+                if (name == "close") for ((label, gv) in linkedMapOf("structures" to g, "no countryside" to g.copy(countryside = false), "no buildings" to g.copy(buildings = 0), "no rivals" to g.copy(rivals = false), "no labels" to g.copy(labels = 0), "no citylights" to g.copy(cityLights = false), "no lighting" to g.copy(lighting = 0))) {
+                    val sc = MapGeometryCache()
+                    val t = time(runs(10)) { i -> frame { drawWorldMap(map, cam.copy(lon = cam.lon + i * 0.001), Palette.gold, shading, "MI-DET", divisions, measurer, geometry = sc, graphics = gv, sun = sun, phase = MapPhase.Structures) } }
+                    report.append("STRUCT $tag ${preset.name.padEnd(6)} close ${label.padEnd(15)} %6.1f\n".format(t))
+                }
                 report.append("UIPART $tag ${preset.name.padEnd(6)} ${name.padEnd(8)} ground blit %6.1f  cloud blit %6.1f  structures %6.1f  overlay %6.1f\n".format(tGround, tSky, tStructures, tOverlay))
                 report.append("BAKED $tag ${preset.name.padEnd(6)} ${name.padEnd(8)} ui-frame %6.1f (legacy %6.1f)  bake ground %6.1f  bake clouds %6.1f  bake clouds (shader) %6.1f  clouds frame mesh %6.1f shader %6.1f\n".format(ui, pan + overlay + clouds, bakeGround, bakeSky, bakeShader, clouds, cloudsShader))
             }
