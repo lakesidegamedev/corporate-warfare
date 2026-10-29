@@ -266,14 +266,7 @@ struct StockSheet: View {
                                  note: Format.moneyCompact(stock.yourShares * stock.priceCents)),
                         ]
                     )
-                    if stock.historyCents.count > 1 {
-                        Panel(padding: 12) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Eyebrow(text: "Last \(stock.historyCents.count) weeks")
-                                PriceChart(values: stock.historyCents, tint: Change.tint(stock.changeQuarterBps))
-                            }
-                        }
-                    }
+                    StockHistorySection(firm: stock.firm)
                     DossierSection(firm: stock.firm)
                     if showPage {
                         Button("Open company page") { showCompany = true }.buttonStyle(PixelButtonStyle())
@@ -456,14 +449,7 @@ private struct CommoditySheet: View {
                             Stat(label: "In stock", value: line.stockLots.formatted()),
                         ]
                     )
-                    if line.historyCents.count > 1 {
-                        Panel(padding: 12) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Eyebrow(text: "Last \(line.historyCents.count) weeks")
-                                PriceChart(values: line.historyCents, tint: Change.tint(line.changeQuarterBps))
-                            }
-                        }
-                    }
+                    GoodDepthSection(product: line.product, referenceCents: line.referenceCents)
                     StoreGoodPanel(line: line)
                     if let mine = store.productLines.first(where: { $0.product == line.product }) {
                         Button {

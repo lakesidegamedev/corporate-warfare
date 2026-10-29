@@ -355,6 +355,13 @@ actor Engine {
     func canonicalHash() -> String {
         session?.canonicalHash() ?? ""
     }
+
+    /// A read-only engine call for the statements, charts and systems displays, which ask for
+    /// different things per screen. Nil when no career is running.
+    func read<T>(_ block: (SessionHandle) -> T) -> T? {
+        guard let session else { return nil }
+        return block(session)
+    }
 }
 
 enum SaveError: LocalizedError {

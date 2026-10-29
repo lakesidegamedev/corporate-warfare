@@ -13,6 +13,20 @@ heading.
 
 ### Added
 
+- Choose your updates. Settings, Updates now asks whether you want full releases or previews.
+  It starts on the kind of build you installed, and the game follows your choice when it checks
+  for updates. If you are on a preview and switch to full releases, you are offered the newest
+  full release even when its number is lower than your preview, and the game says so.
+- Install any version from 1.8 preview 3 on. Choose a version in Settings, Updates lists every
+  release on your channel, newest first, with its date and a line about what changed, and marks
+  the one you have. Going back to an older version first warns that careers saved by this version
+  may not open in the older one, and copies your saves, settings and custom scenarios to a dated
+  backup folder whose location is shown. On Windows the game removes the newer install and puts
+  the older one in the same folder; on Linux it opens the release page (install the package with
+  `sudo apt install --allow-downgrades`); on Android, which will not install an older version
+  over a newer one, it explains that going back needs an uninstall, which deletes the careers on
+  the device. Versions before 1.8 preview 3 are not offered, because they cannot open newer saves
+  or come back by themselves.
 - Wind a company down. A company with nothing left to run (no working site, no stake in another
   company, no open bills) that can pay everyone it owes can now close itself: its remaining sites
   and stock are sold at salvage value, lenders and unpaid bills are paid in full, and the rest goes
@@ -67,6 +81,18 @@ heading.
   interstates and trains on the real railways, which are now drawn when zoomed in; a route with no
   road or track simply shows no vehicles.
 
+### Fixed
+
+- Only one copy of the game opens on Windows and Linux. Starting it again brings the open game to
+  the front instead of opening a second copy, so two copies can no longer write the same saves. If
+  the open copy has stopped responding, the new one says so and does not open.
+- Updates and version changes on Windows now wait for every copy of the game to close before
+  installing. A copy still open after a minute is asked to close, and after 15 more seconds it is
+  ended, so the installer never runs while the game's files are in use. If a copy cannot be closed,
+  nothing is installed and the game says so.
+- Installing or uninstalling on Windows while the game is open no longer gets stuck. The installer
+  now closes the running game first, and ends it if it does not close within 15 seconds.
+
 ### Added
 
 - Market analytics split the companies losing money into established companies, new entrants and
@@ -93,6 +119,8 @@ heading.
   quarter and see the goods you both sell, head to head.
 - Economy history in the economy panel: the corridor share index, the bank rate and inflation,
   the price level, companies operating and gone, raids and household spending, with date ranges.
+- The financials, the new charts and these systems displays are on iPhone and iPad too, in the same
+  8-bit style.
 - Five years of weekly history behind these displays. Saves from earlier versions load and start
   the history from the next week.
 - Deeper company financials: every company page and the Stats page have tabs for an overview,

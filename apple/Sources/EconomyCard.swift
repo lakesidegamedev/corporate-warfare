@@ -52,6 +52,7 @@ struct EconomyCard: View {
                     if open {
                         figures(e)
                         history(e)
+                        EconomyHistorySection()
                         credit(e)
                         if let fx = e.fx { FxSection(fx: fx) }
                         if !e.worldPrices.isEmpty { worldPrices(e) }

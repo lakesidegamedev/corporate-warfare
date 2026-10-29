@@ -140,3 +140,38 @@ compose.desktop {
         }
     }
 }
+
+// The Windows installer uses our copy of jpackage's WiX template (packaging/windows/main.wxs), which
+// closes a running game on install and uninstall. Compose gives jpackage its own resource folder,
+// empties it at the start of the task and passes it last, so neither a template placed beforehand
+// nor an extra --resource-dir reaches jpackage. Instead, once Compose has built the MSI, this puts
+// the template in that folder and runs jpackage again with Compose's own saved arguments, so every
+// other installer setting stays exactly as Compose made it. That rerun reads Compose's working
+// folder, which compose.preserve.working.dir in gradle.properties keeps.
+tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>().configureEach {
+    if (targetFormat != org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi) return@configureEach
+    val template = project.file("packaging/windows")
+    val composeResources = project.layout.buildDirectory.dir("compose/tmp/resources")
+    val argsFile = project.layout.buildDirectory.file("compose/tmp/$name.args.txt")
+    val jdk = javaHome
+    val wixDir = wixToolsetDir
+    val output = destinationDir
+    inputs.dir(template)
+    doLast {
+        val args = argsFile.get().asFile
+        check(args.isFile) { "jpackage arguments not found at $args; the Compose plugin changed, see shared/build.gradle.kts" }
+        template.copyRecursively(composeResources.get().asFile, overwrite = true)
+        output.get().asFile.listFiles { file -> file.extension == "msi" }?.forEach { it.delete() }
+        val process = ProcessBuilder(File(jdk.get(), "bin/jpackage.exe").path, "@${args.path}", "--verbose").redirectErrorStream(true)
+        wixDir.orNull?.asFile?.let { wix ->
+            val env = process.environment()
+            val key = env.keys.firstOrNull { it.equals("PATH", ignoreCase = true) } ?: "PATH"
+            env[key] = wix.path + File.pathSeparator + env[key].orEmpty()
+        }
+        val run = process.start()
+        val log = run.inputStream.bufferedReader().readText()
+        val code = run.waitFor()
+        logger.lifecycle(log)
+        check(code == 0) { "jpackage with packaging/windows/main.wxs failed with exit code $code; arguments:\n${args.readText()}" }
+    }
+}
