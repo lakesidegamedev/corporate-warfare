@@ -120,6 +120,20 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg,
             )
             packageName = "Corporate Warfare"
+            // Only the Java modules the game uses go into the bundled runtime (find them with
+            // :shared:suggestRuntimeModules): drawing and windows, the management beans the startup
+            // timeline reads, logging, the HTTPS the updater and telemetry use (certificate name checks
+            // need java.naming, elliptic curves need jdk.crypto.ec), and the unsafe access Skiko needs.
+            modules("java.desktop", "java.logging", "java.management", "java.naming", "jdk.crypto.ec", "jdk.unsupported")
+            // Class data sharing: from Java 19 the first run saves a class archive next to the app and
+            // later runs map it instead of loading classes again. A folder that cannot be written (a
+            // system-wide Linux install) just runs without it, and the first option lets older Javas
+            // ignore the rest.
+            jvmArgs(
+                "-XX:+IgnoreUnrecognizedVMOptions",
+                "-XX:+AutoCreateSharedArchive",
+                "-XX:SharedArchiveFile=\$APPDIR/corporate-warfare.jsa",
+            )
             packageVersion = installerVersion
             vendor = "Lakeside Games"
             description = "Corporate Warfare: an economic strategy game"

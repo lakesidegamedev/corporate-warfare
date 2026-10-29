@@ -33,7 +33,11 @@ uniffi = "=0.32.0"
 
 [profile.release]
 overflow-checks = true
-lto = "thin"
+# Smaller libraries for the apps: whole-program link-time optimisation in one code generation unit,
+# and no symbol tables. Panics still unwind, because the FFI layer turns them into errors.
+lto = "fat"
+codegen-units = 1
+strip = true
 
 # The market health test plays 4 scenarios x 8 seeds x 104 weeks; unoptimised that is minutes.
 # Optimising the engine crates keeps every simulation test fast without touching release builds.

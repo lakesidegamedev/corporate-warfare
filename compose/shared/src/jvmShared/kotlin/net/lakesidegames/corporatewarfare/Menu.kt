@@ -90,6 +90,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
         NewGameScreen(store, onBack = { setup = false })
         return
     }
+    LaunchedEffect(Unit) { StartupTimeline.menuShown() }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF05090E))) {
         val wide = maxWidth >= 900.dp
         GlobeBackdrop(Modifier.fillMaxSize(), offsetX = if (wide) 0.22f else 0f)
