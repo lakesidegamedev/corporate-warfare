@@ -41,6 +41,18 @@ heading.
   the paper is in the sidebar under World (F8); on phones, open it from the ticker or the Inbox.
   Several bids for one company read as one story, dates read like "week 21, 1982", and the
   ticker stays quiet at 2x and 4x speed.
+- Chapters and board mandates. Each year of a career is now a chapter with a name (for example
+  "Chapter 3: The Squeeze" when a historical event plays that year). At the start of each chapter the
+  board of every company offers three goals, such as holding a bigger share of a market, lifting
+  profit, making an input yourself, keeping cash in reserve, cutting debt, winning a raid or listing a
+  subsidiary. You take one in the first four weeks. Meet it and the company pays you a management
+  bonus and its standing improves. Miss it and the board loses confidence, and two misses in a row can
+  draw an activist investor. Rival companies pick goals the same way. These replace the old quarterly
+  board goals, so there is one set of goals now. The screens for this come in a later update.
+- Twenty career achievements, such as your first raid won, a subsidiary listed, ten companies in your
+  group, surviving a hostile bid, seeing a bank rescued, living through every event of a scenario and a
+  thirty year career. Each is earned once and remembered with its week. The Hall of Careers screen
+  comes in a later update.
 - Scenario history. Each scenario now has dated events from its own period that play out in your
   career: a regional bank failure and the 1986 oil collapse in Texas, the technology bust and the
   2001 recession in the Great Lakes, a browser listing boom and the dot-com bust in Silicon
@@ -49,6 +61,15 @@ heading.
   mood or the law for a while. New games choose Historical (the default), Off or Shuffled, which
   keeps the same events but moves their dates by up to half a year. The app screens for this come
   in a later update.
+- First-run setup on every platform. The first time you open the game it walks you through a few short
+  steps: a welcome, a one-second graphics test that suggests Low, Medium or High for your device and shows
+  a preview of each, which version track to follow (Windows, Linux and directly downloaded Android only),
+  whether to share anonymous market data with the plain explanation, and whether to use the tutorial, with
+  the folder your saves are kept in on a computer. Skip takes the defaults, and nothing is saved until you
+  press Play or Skip. On Windows and Linux the test also tells you how the game is drawing and warns in plain
+  words if it is in slow software mode. You can run it again from Settings with Set up again. If you are
+  upgrading from 1.8, you see one What's new screen instead, with a button to run setup, and none of your
+  settings change.
 - The frame counter (Settings, Graphics, Show frame rate) now also shows how the game is drawing
   (Direct3D, OpenGL, Metal or Software) and the size of the map in pixels. Software drawing shows in
   amber, because it is far slower than a graphics card.
@@ -66,6 +87,20 @@ heading.
   machine without a GPU it uses the Mesa software driver. `tools/render_bake.py` fetches the
   elevation and bakes the small heightmap. The crate is not linked into the game or the apps
   yet and changes nothing players see, no saves and no hashes.
+- A proper Windows setup program, in the look of the game, replaces the plain installer screens.
+  It has a welcome page with the game's art, the licence, a choice of folder, Start menu and
+  desktop shortcuts, a progress page and a finish page with Play Corporate Warfare now. It
+  installs just for you by default, with no administrator prompt, into your local programs
+  folder, and offers all users instead. The same setup program installs any version over any
+  other, newer or older, so changing version never needs an uninstall first, and it never touches
+  your saved careers and settings. If the game is open, setup tells you to close it first.
+- Uninstalling asks whether to keep your saved careers and settings. Keeping them is the default,
+  the folder is shown with a button to open it so you can copy your saves, and they are only
+  deleted if you choose that and confirm. A silent uninstall always keeps them.
+- Setup removes a 1.8 Windows installer (MSI) copy of the game first and keeps your saves. Windows
+  asks for permission once, because the old copy was installed for all users. A release can ship
+  both files: the in-game updater and version list use the setup program when a release has one
+  and the MSI when it does not.
 
 ### Changed
 
@@ -82,7 +117,8 @@ heading.
   carry their owner's colour: gold for yours, the industry colour for a rival's, grey for outside
   carriers. On the desktop app the buildings and names are now drawn in the background like the
   ground, so panning and zooming close in stays smooth.
-
+- Saves from the earlier 1.9 previews carry on without chapter goals until the next chapter starts, and
+  the goal list and achievements are saved with the career. The save format number does not change.
 - Saves written by this version cannot be opened by older versions of the game. Careers saved in
   1.8.0 and the earlier 1.9 previews open as normal, carry on without scenario history (their
   dates are not invented backwards) and are saved in the new format from then on.

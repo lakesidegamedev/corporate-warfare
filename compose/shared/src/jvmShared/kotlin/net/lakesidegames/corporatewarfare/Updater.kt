@@ -20,6 +20,12 @@ interface UpdatePlatform {
     /** The release file this platform installs itself, for example ".msi"; null opens the page. */
     val installerSuffix: String?
 
+    /**
+     * Every release file ending this platform can install, best first. A release with several
+     * gives the first that matches. Defaults to [installerSuffix] alone.
+     */
+    val installerSuffixes: List<String> get() = listOfNotNull(installerSuffix)
+
     /** How this platform goes back to an older version. */
     val downgrade: Downgrade get() = Downgrade.Direct
 
@@ -215,7 +221,7 @@ class Updater(
         try {
             if (connection.responseCode != 200) return null
             val text = connection.inputStream.bufferedReader().readText()
-            return parse(text, platform.installerSuffix)
+            return parse(text, platform.installerSuffixes)
         } finally {
             connection.disconnect()
         }
@@ -270,11 +276,18 @@ class Updater(
         private val json = Json { ignoreUnknownKeys = true }
 
         /** The releases feed as releases, drafts left out, each with this platform's installer if it has one. */
-        fun parse(text: String, installerSuffix: String?): List<Release> =
+        fun parse(text: String, installerSuffix: String?): List<Release> = parse(text, listOfNotNull(installerSuffix))
+
+        /** The first asset ending with the earliest suffix in [suffixes] that any asset matches; null if none. */
+        internal fun <T> pick(assets: List<T>, suffixes: List<String>, name: (T) -> String): T? =
+            suffixes.firstNotNullOfOrNull { s -> assets.firstOrNull { name(it).endsWith(s, ignoreCase = true) } }
+
+        /** As above, for suffixes in order of preference (the setup program before the MSI). */
+        fun parse(text: String, installerSuffixes: List<String>): List<Release> =
             json.decodeFromString(ListSerializer(GitHubRelease.serializer()), text)
                 .filter { !it.draft }
                 .map { release ->
-                    val asset = installerSuffix?.let { s -> release.assets.firstOrNull { it.name.endsWith(s, ignoreCase = true) } }
+                    val asset = pick(release.assets, installerSuffixes) { it.name }
                     Release(
                         version = release.tag.removePrefix("v"),
                         notes = release.body.orEmpty(),

@@ -2376,14 +2376,24 @@ fn grievance(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Reason, 
             );
         }
     }
-    // Two missed board goals in a row, for the player's primary company.
+    // Two missed board mandates in a row, for the player's primary company. A chapter the player
+    // never took a mandate in does not count either way.
     if world.investor.primary_group == Some(firm) {
         let missed = world
-            .objective_history
+            .chapters
+            .results()
+            .filter(|o| {
+                !matches!(
+                    o,
+                    crate::economy::chapters::Outcome::Lapsed
+                        | crate::economy::chapters::Outcome::Cancelled
+                )
+            })
+            .collect::<Vec<_>>()
             .iter()
             .rev()
             .take(2)
-            .filter(|r| !r.met)
+            .filter(|o| **o == crate::economy::chapters::Outcome::Missed)
             .count();
         if missed >= 2 {
             consider(Reason::MissedGoals, 6_500, 0);

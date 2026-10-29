@@ -137,7 +137,7 @@ mode, the events with their play dates and which have been announced and fired, 
 shocks and credit squeezes in force). A schema 2 save loads with the timeline off and empty: dates
 are never invented for weeks already played. A save written by 3 is refused by a build that reads
 only up to 2 with the usual unsupported version message. Data kept outside the payload (custom scenario, currencies, freight read-out,
-history archives) travels in tagged trailers that older readers skip, independent of the schema.
+history archives, and in 1.9 the chapter state) travels in tagged trailers that older readers skip, independent of the schema. The `CHAP` trailer (last, after `SYST`) holds the chapters and board mandates on offer and in force, the player's chapter log and the achievements earned (`World.chapters`, see CORPORATE.md, Chapters and mandates). Unlike `HIST` and `SYST` it affects play, so `canonical_hash` folds its bytes in whenever it is not empty; being outside the payload it needs no schema bump or frozen layout. A save without it (every earlier save) loads with it empty. The command `ChooseMandate` is a new last variant of the command enum, so older logs keep their variant numbers.
 Each schema change adds a save written by the last released build as a test fixture.
 
 ## Bounded financial history

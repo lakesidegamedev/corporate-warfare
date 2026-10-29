@@ -9,6 +9,7 @@
 
 pub mod balance;
 pub mod cast;
+pub mod chapters;
 pub mod currency;
 pub mod custom;
 pub mod events;

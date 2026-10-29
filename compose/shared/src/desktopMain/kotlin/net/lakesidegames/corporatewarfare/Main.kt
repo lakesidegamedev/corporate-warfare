@@ -55,19 +55,20 @@ private val windows = System.getProperty("os.name").lowercase().contains("win")
 
 /**
  * Windows installs a downloaded version itself: a short script waits until no copy of the game
- * runs (closing any that stay open), runs the installer with a progress bar and no questions, then
- * starts the game again. An older version
- * goes into the same folder, with an uninstall and second try if that fails
- * ([WindowsInstall.plan]). Linux and Mac open the release page, where the package or app is one
+ * runs (closing any that stay open), runs the setup program with a progress bar and no questions,
+ * and the setup program starts the game again. The same setup program upgrades and downgrades
+ * ([WindowsInstall.setupPlan]). A release that only has an MSI goes through the 1.8 route: the
+ * MSI, with an uninstall and second try for an older version ([WindowsInstall.plan]). Linux and Mac open the release page, where the package or app is one
  * click.
  */
 private object DesktopUpdates : UpdatePlatform {
-    override val installerSuffix: String? = if (windows) ".msi" else null
+    override val installerSuffix: String? = if (windows) WindowsInstall.SETUP_SUFFIX else null
+    override val installerSuffixes: List<String> = if (windows) WindowsInstall.SUFFIXES else emptyList()
 
     override fun install(file: File, version: String) {
         val app = System.getProperty("jpackage.app-path")
         val script = File(file.parentFile, "install-update.cmd")
-        script.writeText(WindowsInstall.plan(file.absolutePath, version, BuildInfo.VERSION, app).joinToString("\r\n", postfix = "\r\n"))
+        script.writeText(WindowsInstall.planFor(file.absolutePath, version, BuildInfo.VERSION, app).joinToString("\r\n", postfix = "\r\n"))
         ProcessBuilder("cmd", "/c", "start", "\"\"", "/min", script.absolutePath).start()
         exitProcess(0)
     }
@@ -192,7 +193,7 @@ private fun game() = application {
         val updater = remember {
             Updater(DesktopUpdates, scope, File(saveDirectory(), "updates"), saveDirectory(), channel = { settings.updateChannel })
         }
-        CorporateWarfareApp(store, settings, updater, onQuit = ::exitApplication)
+        CorporateWarfareApp(store, settings, updater, onQuit = ::exitApplication, saveFolder = saveDirectory().path)
     }
 }
 

@@ -33,6 +33,9 @@ enum class MapDetail(val title: String, val note: String) {
     High("High", "Adds highways, counties and rivers"),
 }
 
+/** Where first-run setup stands, from the `setupDone` settings key. */
+enum class SetupState { Fresh, Upgrade, Done }
+
 /** How the desktop window sits on screen. */
 enum class WindowMode(val title: String) { Windowed("Windowed"), Maximized("Maximized"), Fullscreen("Full screen") }
 
@@ -47,6 +50,8 @@ val Resolutions = listOf(1280 to 720, 1366 to 768, 1600 to 900, 1920 to 1080, 25
 internal const val SUGGEST_MEDIUM_ABOVE = 2_500_000L
 
 class AppSettings(private val file: File) {
+    /** Whether a settings file was already there: a player upgrading from 1.8 has one, a first launch does not. */
+    private val existedAtLaunch = file.exists()
     private val props = Properties().apply { if (file.exists()) file.inputStream().use { load(it) } }
 
     /**
@@ -76,9 +81,24 @@ class AppSettings(private val file: File) {
         props.getProperty("resolution")?.split("x")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
             ?: (1600 to 900),
     ); private set
+    /** The `setupDone` key: "true" once setup is finished, "false" while a first launch has not finished it, absent in a 1.8 file. */
+    private var setupFlag: String? = props.getProperty("setupDone") ?: if (existedAtLaunch) null else "false".also { props.setProperty("setupDone", it) }
+
+    /** Where the first-run setup stands: not yet seen, a 1.8 player who has not seen What's new, or finished. */
+    var setupState by mutableStateOf(
+        when {
+            setupFlag == "true" -> SetupState.Done
+            setupFlag == null -> SetupState.Upgrade
+            else -> SetupState.Fresh
+        },
+    ); private set
+
     /** A random id for this install, not tied to any account or device identifier. */
     val installId: String = props.getProperty("installId")?.takeIf { it.length == 36 }
         ?: java.util.UUID.randomUUID().toString().also { props.setProperty("installId", it); store() }
+
+    /** Mark setup finished (or What's new dismissed); never touches any other choice. */
+    fun finishSetup() { setupFlag = "true"; setupState = SetupState.Done; store() }
 
     fun chooseGraphics(value: GraphicsConfig) { graphics = value; graphicsChosen = true; store() }
 
@@ -125,6 +145,7 @@ class AppSettings(private val file: File) {
             props.setProperty("seasons", g.seasons.toString())
             props.setProperty("labels", g.labels.toString())
         }
+        setupFlag?.let { props.setProperty("setupDone", it) }
         props.setProperty("autoUpdate", autoUpdate.toString())
         props.setProperty("updateChannel", updateChannel.id)
         props.setProperty("analytics", analytics.toString())
@@ -178,7 +199,7 @@ class AppSettings(private val file: File) {
  * desktop, the window.
  */
 @Composable
-fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, updater: Updater? = null, onClose: () -> Unit) {
+fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, updater: Updater? = null, onSetupAgain: (() -> Unit)? = null, onClose: () -> Unit) {
     TabList {
         item { ScreenHeader("Settings", null) { TextButton(onClick = onClose) { Text("Done", color = Palette.gold) } } }
         if (store.ready) {
@@ -241,6 +262,20 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                 }
             }
         }
+        if (onSetupAgain != null) {
+            item {
+                Panel {
+                    Eyebrow("Setup")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("First-run setup", color = Palette.primaryText)
+                            Text("Test your graphics again and review updates, privacy and the tutorial.", color = Palette.secondary, fontSize = 12.sp)
+                        }
+                        TextButton(onClick = onSetupAgain) { Text("Set up again", color = Palette.gold) }
+                    }
+                }
+            }
+        }
         item {
             Panel {
                 Eyebrow("Tutorial")
@@ -261,7 +296,7 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                     Column(Modifier.weight(1f)) {
                         Text("Share anonymous market data", color = Palette.primaryText)
                         Text(
-                            "Every five weeks, the goods made, sold and priced, and how your company is doing, are sent with a random id. No names or account details.",
+                            Privacy.explanation,
                             color = Palette.secondary,
                             fontSize = 12.sp,
                         )
@@ -310,7 +345,7 @@ private fun GraphicsChoices(settings: AppSettings) {
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun <T> Choices(options: List<T>, selected: T, label: (T) -> String, onPick: (T) -> Unit) {
+internal fun <T> Choices(options: List<T>, selected: T, label: (T) -> String, onPick: (T) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         options.forEach { option ->
             val on = option == selected

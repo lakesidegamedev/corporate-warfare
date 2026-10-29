@@ -79,6 +79,8 @@ final class AppStore: ObservableObject {
     @Published var marketRows: [MarketRow] = []
     @Published var score: ScoreDto?
     @Published var showOnboarding = false
+    /// Set from Settings (Set up again): shows the first-run setup over the app.
+    @Published var showSetup = false
     /// Set when a slot failed to import. Drives the recovery screen.
     @Published var recoveryIssue: SaveRecoveryIssue?
     /// Set after a last-good save was accepted, so the next screen can say so once.

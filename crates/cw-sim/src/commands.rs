@@ -494,6 +494,12 @@ pub enum CommandIntent {
     WindDown {
         firm: Handle,
     },
+    /// Take one of the three mandates the board offered at the start of the chapter, by its
+    /// position in the offer. Also last in the list, for the same reason.
+    ChooseMandate {
+        firm: Handle,
+        pick: u8,
+    },
 }
 
 fn yes() -> bool {
@@ -579,6 +585,7 @@ impl CommandIntent {
             CommandIntent::RaidMarket { .. } => "raid_market",
             CommandIntent::FileLobbyRequest { .. } => "file_lobby_request",
             CommandIntent::RespondEvent { .. } => "respond_event",
+            CommandIntent::ChooseMandate { .. } => "choose_mandate",
             CommandIntent::SetTransferPrice { .. } => "set_transfer_price",
             CommandIntent::CarveOutDivision { .. } => "carve_out_division",
             CommandIntent::ListSubsidiary { .. } => "list_subsidiary",
@@ -2886,6 +2893,10 @@ fn apply_intent(
             }
             crate::economy::insolvency::wind_down(world, *firm, dataset);
             Ok(())
+        }
+        CommandIntent::ChooseMandate { firm, pick } => {
+            require_control(world, actor, *firm)?;
+            crate::economy::chapters::choose(world, *firm, *pick)
         }
         CommandIntent::BuyOutVenture { venture, firm } => {
             require_control(world, actor, *firm)?;

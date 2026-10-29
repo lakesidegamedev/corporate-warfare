@@ -177,16 +177,82 @@ pays the defender half their book value. A group cannot raid itself. The 1.7 rai
 rules below replace the one-plant floor and the cooldown. Rival AI raids when the
 chance-weighted three-year contribution of the captured plants exceeds the campaign and price.
 
-## Board objectives (1.2.0)
+## Board objectives (1.2.0), replaced in 1.9
 
-Implemented in `crates/cw-sim/src/economy/objectives.rs`. In the first week of each quarter the
-board of the player's primary company sets one goal, rotating: enter a new region; lift average
-weekly operating profit over four weeks to a quarter above the current level (at least $5,000
-more); take ten points more of the home division's market (at most 95 percent); expand into
-another state. A goal met before its thirteen weeks run out pays a management bonus moved from
-the company to the investor: two percent of the company's quarter of operating profit, at
-least $25,000, never more than its cash.
+The 1.2.0 quarterly objectives (`crates/cw-sim/src/economy/objectives.rs`) are retired. Their
+goals live on as mandate kinds below, so there is one goal system, not two. The old types remain
+in the file only because `World.objective` and `World.objective_history` are part of the save
+layout; nothing writes them, and a goal an older save still carries is cleared, unpaid and
+unpenalised, on the first week played. The FFI calls `objective()` and `objective_history()` keep
+their shape and now report the mandate in force and the closed mandates.
 
+## Chapters and mandates (1.9)
+
+Implemented in `crates/cw-sim/src/economy/chapters.rs` and `achievements.rs`; numbers in
+`content/mandates.json`; names in `content/scenarios/<id>/chapters.json`.
+
+**Chapters.** Every 52 weeks of a career is a chapter: chapter `n` runs from week `52(n-1)+1` to
+week `52n`. Its name is "Chapter n: " plus the era name of the first timeline event that plays in
+it (the event's date, as moved by Shuffled mode), else the next generic name from the scenario's
+list. Eras and generic names are fictional and plain; a scenario with no file uses a neutral list.
+
+**Offers.** In the first week of a chapter the board of every operating company that runs plants
+and is not a state firm offers three mandates. The player's board is the primary company's; a
+company the player controls but did not make primary gets none. The offer is a pure function of the
+world: kinds are tried in a fixed rotation (offset by chapter and company handle) and the first
+three that the company can be asked for are offered. A kind the company cannot be asked for is
+skipped (a market it already holds nine tenths of, debt it does not have, a record too short to
+measure). A young company with no profit record is asked to turn a profit from zero.
+
+| Kind | Asked when | Target (small, medium, large band) | Met when |
+|---|---|---|---|
+| Market share | the largest division holds under 90% | share now plus 8, 6 or 4 points, at most 95% | at chapter end the share is at or above the target |
+| Profit growth | always | average weekly operating profit over the last 13 weeks, raised by 15, 10 or 7% (at least $5,000, $15,000 or $50,000 a week) | at chapter end the last-13-week average is at or above the target |
+| Integrate | an input is bought that no plant of the company makes and some recipe makes it | the input bought in the largest volume | an operating plant of the company makes it |
+| Cash cover | cash is already 10% above the line | 6, 8 or 10 weeks of weekly costs | cash is at or above the line in every week; one miss loses it |
+| Debt to equity | debt to equity is over 0.25 | the ratio cut by 25, 20 or 15%, at least 0.20 | at chapter end the ratio is at or below the target |
+| Win a raid | the company has a division | none | a raid it launched succeeds in the chapter |
+| List a subsidiary | a group member is unlisted | none | more group members are listed than at the start |
+
+The band is the company's total plant blocks at chapter start (4 or fewer, 12 or fewer, more).
+Difficulty multiplies the stretch (the share step, profit rise, cover weeks and debt cut): Easy 80%,
+Standard 100%, Hard 125%. Event kinds latch (once true they stay true); share, profit and debt are
+tested only at chapter end; cash cover is tested every week.
+
+**Choosing.** `ChooseMandate { firm, pick }` takes the offer in position `pick` (0 to 2). It goes
+through the ordinary command path: the actor must run the company (`NoAuthority` otherwise), the
+company must have an open offer inside its four-week window (`WrongPhase`), and `pick` must be one
+of the offered (`Arithmetic`, out of range). An offer not taken inside the window lapses with no
+penalty. Rivals' boards pick through the same command, proposed by `cw-ai`: the offer already
+furthest along, the first on a tie.
+
+**Results.** At chapter end a met mandate pays the same management bonus as the old objectives,
+now on a year: 2% of the company's operating profit over a year (the last 13 weeks, four times),
+at least $50,000, never more than the company's free cash, moved from the company to the
+investor, never minted. Player side only: a rival has no personal purse. Reputation moves for any
+company: +150 basis points for a met mandate, -100 for a missed one, kept between -2,000 and
++5,000 (or where it already stood, if outside). "Board confidence" has no separate counter in the
+engine: a miss costs reputation, and **two missed mandates in a row** in the player's primary
+company is the `MissedGoals` trigger for an activist campaign (`structure.rs`), the same
+governance path the two missed quarterly goals used. A chapter with no pick, or whose company
+stopped operating, does not count as a miss.
+
+**State and saves.** Chapter state is `World.chapters` (`#[serde(skip)]`), written in the `CHAP`
+trailer after `SYST` and folded into `canonical_hash` when not empty, so a game reloaded
+mid-chapter plays on identically. It is outside the postcard payload, so the save schema stays 3
+(see INTERFACE.md). A save without the trailer loads with no chapter state and opens the current
+chapter at once if it is inside its first four weeks, otherwise at the next one.
+
+**Achievements.** Twenty fixed milestones (`achievements::LIST`), checked once a week from facts
+the engine keeps, each earned once and dated by its first week: a chapter closed, a first mandate
+met, five met, three in a row, a raid won, the main company listed, a subsidiary listed, a merger
+completed, ten companies controlled, three states, five divisions, the largest capacity in a
+market (checked every fourth week), a thousand workers, net worth doubled and tenfold, no debt
+after the first year, a hostile bid survived, a bank rescued by the state, every event of the
+scenario's timeline played, and a thirty year career (week 1,560). They are the player's: a career
+with no primary company earns none.
+
+**Size of the reward.** One bonus a year at most, at the old 2% rate on a year of profit, where the old objectives could pay four a year on a quarter each. The reputation steps are the size of the lobbying penalties already in the rules (100 to 250 basis points).
 
 ## State rescue, nationalisation and privatisation (1.7)
 

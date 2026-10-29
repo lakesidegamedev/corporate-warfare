@@ -38,8 +38,14 @@ const ARCHIVE_MAGIC: &[u8; 4] = b"HIST";
 /// Marks the systems history trailer, last: the weekly market, region, division, freight and
 /// economy figures. Outside the hashed world; a save without it loads with empty history.
 const SYSTEMS_MAGIC: &[u8; 4] = b"SYST";
-/// Marks the read-letters trailer, after the systems history: which letters are opened. Outside
-/// the hashed world; a save without it loads with every letter unread.
+/// Marks the chapters trailer, last: the board mandates on offer and in force, the player's
+/// chapter log and the achievements earned (1.9). Unlike HIST and SYST it is future-affecting, so
+/// `canonical_hash` folds it in; it stays outside the postcard payload so the save schema does not
+/// move. A save without it loads with no chapter state and opens the current chapter fresh.
+const CHAPTERS_MAGIC: &[u8; 4] = b"CHAP";
+/// Marks the read-letters trailer, after the chapters trailer: which letters are opened. Outside
+/// the hashed world; a save without it loads with every letter unread. The reader accepts the
+/// chapters and letters trailers in either order.
 const MAIL_MAGIC: &[u8; 4] = b"MAIL";
 
 pub fn encode(world: &World, career_id: u64) -> Result<Vec<u8>, DomainError> {
@@ -128,6 +134,21 @@ pub fn encode_with(
             });
         }
         out.extend_from_slice(SYSTEMS_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.chapters.is_empty() {
+        let bytes =
+            postcard::to_allocvec(&world.chapters).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(CHAPTERS_MAGIC);
         out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
         out.extend_from_slice(&bytes);
@@ -291,11 +312,24 @@ pub fn decode_with(
         })?;
         rest = &rest[40 + body.len()..];
     }
-    if rest.len() >= 4 && &rest[..4] == MAIL_MAGIC {
-        let body = trailer_body(rest)?;
-        world.mail = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
-            detail: SaveFault::MalformedPayload,
-        })?;
+    // Chapters and letters trailers, in either order (1.9 previews wrote them in both orders).
+    while rest.len() >= 4 {
+        let magic = &rest[..4];
+        if magic == CHAPTERS_MAGIC {
+            let body = trailer_body(rest)?;
+            world.chapters = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+            rest = &rest[40 + body.len()..];
+        } else if magic == MAIL_MAGIC {
+            let body = trailer_body(rest)?;
+            world.mail = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+            rest = &rest[40 + body.len()..];
+        } else {
+            break;
+        }
     }
     Ok((world, career_id, custom))
 }
@@ -381,6 +415,38 @@ mod tests {
     fn world() -> World {
         let dataset = Dataset::load().unwrap();
         seed::build(&dataset, 161, ScenarioKind::Guided, ScenarioMode::Sandbox)
+    }
+
+    #[test]
+    fn chapters_and_letters_trailers_load_together_in_either_order() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = world();
+        for _ in 0..10 {
+            world.pending_pause = None;
+            cw_sim::tick::advance(&mut world, &dataset);
+        }
+        assert!(
+            !world.chapters.is_empty(),
+            "a running career has chapter state"
+        );
+        world.mail.mark("letter-a", 5, 10);
+        let hash = cw_sim::state::canonical_hash(&world);
+        let bytes = encode(&world, 9).unwrap();
+        let (restored, _) = decode(&bytes).unwrap();
+        assert_eq!(restored.chapters, world.chapters);
+        assert!(restored.mail.is_read("letter-a"));
+        assert_eq!(cw_sim::state::canonical_hash(&restored), hash);
+        // Swap the two trailers: CHAP then MAIL becomes MAIL then CHAP.
+        let chap = bytes.windows(4).rposition(|w| w == CHAPTERS_MAGIC).unwrap();
+        let mail = bytes.windows(4).rposition(|w| w == MAIL_MAGIC).unwrap();
+        assert!(chap < mail);
+        let mut swapped = bytes[..chap].to_vec();
+        swapped.extend_from_slice(&bytes[mail..]);
+        swapped.extend_from_slice(&bytes[chap..mail]);
+        let (again, _) = decode(&swapped).unwrap();
+        assert_eq!(again.chapters, world.chapters);
+        assert!(again.mail.is_read("letter-a"));
+        assert_eq!(cw_sim::state::canonical_hash(&again), hash);
     }
 
     #[test]

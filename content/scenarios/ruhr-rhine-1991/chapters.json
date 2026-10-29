@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "note": "Chapter names for this scenario. Eras name a chapter in which the timeline event with that id plays; the others are used in order when no era applies. Fictional and plain.",
+  "eras": {
+    "rr-reunification-boom": "The Boom",
+    "rr-rate-hikes": "Dearer Money",
+    "rr-privatisation-sales": "The Sell-Off",
+    "rr-currency-crisis": "The Strain",
+    "rr-steel-slump": "The Slump",
+    "rr-recession": "The Contraction",
+    "rr-coal-subsidy-cut": "The Last Seam",
+    "rr-recovery": "A Firmer Footing",
+    "rr-currency-union-prep": "One Currency"
+  },
+  "names": [
+    "Coal and Steel",
+    "The Works",
+    "Rhine Traffic",
+    "Foundry Years",
+    "Shift Change",
+    "The Canal Towns",
+    "Old Industry",
+    "New Markets",
+    "River and Rail",
+    "The Long Reach"
+  ]
+}

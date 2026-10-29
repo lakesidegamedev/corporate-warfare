@@ -1590,6 +1590,12 @@ pub struct World {
     /// `economy::systems`.
     #[serde(skip)]
     pub systems: crate::economy::systems::SystemsHistory,
+    /// Chapters, board mandates and achievements (1.9). Outside the postcard encoding so no
+    /// schema moves; it is future-affecting, so `canonical_hash` folds it in, and it is saved in
+    /// its own `CHAP` trailer. A save without the trailer loads with it empty. See
+    /// `economy::chapters`.
+    #[serde(skip)]
+    pub chapters: crate::economy::chapters::ChapterState,
     /// Which letters the player has read. Outside the encoding and the hash, in its own save
     /// trailer; no rule reads it. See `economy::mail`.
     #[serde(skip)]
@@ -1980,6 +1986,12 @@ pub fn canonical_hash(world: &World) -> String {
             if world.fx.active {
                 match postcard::to_allocvec(&world.fx) {
                     Ok(fx) => bytes.extend_from_slice(&fx),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.chapters.is_empty() {
+                match postcard::to_allocvec(&world.chapters) {
+                    Ok(chapters) => bytes.extend_from_slice(&chapters),
                     Err(_) => return String::from("unhashable"),
                 }
             }

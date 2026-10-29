@@ -73,9 +73,11 @@ val LocalAppSettings = androidx.compose.runtime.staticCompositionLocalOf<AppSett
  * desktop, where the menu offers Quit and the settings page offers the window options.
  */
 @Composable
-fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Updater? = null, onQuit: (() -> Unit)? = null) {
+fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Updater? = null, onQuit: (() -> Unit)? = null, saveFolder: String? = null) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     var showSettings by remember { mutableStateOf(false) }
+    // Set up again, or the wizard a 1.8 player chose from What's new.
+    var rerunSetup by remember { mutableStateOf(false) }
     val analytics = settings.analytics
     androidx.compose.runtime.SideEffect {
         store.preferredCurrency = settings.reportingCurrency
@@ -102,10 +104,14 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
         CorporateWarfareTheme {
             Box(Modifier.fillMaxSize().background(Palette.ink)) {
                 when {
+                    rerunSetup || settings.setupState == SetupState.Fresh ->
+                        SetupWizard(settings, updater, saveFolder, firstRun = settings.setupState == SetupState.Fresh && !rerunSetup, onDone = { rerunSetup = false })
+                    settings.setupState == SetupState.Upgrade ->
+                        WhatsNewScreen(onRunSetup = { rerunSetup = true }, onContinue = { settings.finishSetup() })
                     showSettings -> Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), contentAlignment = Alignment.TopCenter) {
                         BackAction { showSettings = false }
                         Box(Modifier.widthIn(max = 820.dp)) {
-                            SettingsScreen(store, settings, desktop = onQuit != null, updater = updater) { showSettings = false }
+                            SettingsScreen(store, settings, desktop = onQuit != null, updater = updater, onSetupAgain = { showSettings = false; rerunSetup = true }) { showSettings = false }
                         }
                     }
                     store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
