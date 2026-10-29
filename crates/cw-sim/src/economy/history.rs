@@ -324,6 +324,7 @@ pub fn archive_week(world: &mut World, dataset: &Dataset) {
     world.archive.prices.drain(..excess);
 
     let mut rows = Vec::new();
+    let mut shares = crate::economy::sectors::ShareCache::default();
     for (handle, firm) in world.firms.iter() {
         let Some(close) = firm.book.recent_weeks().last().copied() else {
             continue;
@@ -339,7 +340,7 @@ pub fn archive_week(world: &mut World, dataset: &Dataset) {
         let divisions = crate::economy::sectors::divisions_of(world, dataset, handle)
             .into_iter()
             .map(|d| {
-                let report = crate::economy::division_report::report(
+                let report = crate::economy::division_report::figures(
                     world, dataset, handle, d.region, d.industry,
                 );
                 let (revenue, profit) = report
@@ -354,9 +355,7 @@ pub fn archive_week(world: &mut World, dataset: &Dataset) {
                     profit,
                     plants: d.plants.len() as u32,
                     blocks: d.blocks,
-                    share_bps: crate::economy::sectors::share_bps(
-                        world, dataset, handle, d.region, d.industry, 0,
-                    ),
+                    share_bps: shares.share_bps(world, dataset, handle, d.region, d.industry),
                 }
             })
             .collect::<Vec<_>>();
