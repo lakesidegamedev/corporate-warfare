@@ -41,7 +41,10 @@ jobs:
       # One APK per ABI: arm64-v8a is the direct download, x86_64 is for emulators.
       - name: Release APKs and bundle (unsigned, shrunk)
         working-directory: compose
-        run: ./gradlew --no-daemon :androidApp:assembleRelease :androidApp:bundleRelease -Pcw.splitAbi=true
+        # AGP cannot build per-ABI APKs and a bundle in one run, so they are two runs.
+        run: |
+          ./gradlew --no-daemon :androidApp:bundleRelease
+          ./gradlew --no-daemon :androidApp:assembleRelease -Pcw.splitAbi=true
       - uses: actions/upload-artifact@v4
         with:
           name: corporate-warfare-android-release-unsigned
