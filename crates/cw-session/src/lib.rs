@@ -2162,7 +2162,10 @@ mod tests {
         // carriers cut below 60 percent lane fill, so week-two asking prices differ. It moved
         // again from 1b265292... in the same preview when facilities gained a cut record,
         // households gained wanted and unmet demand and policies a production lock (new
-        // encoded fields), and refineries began shifting their cut. The Swift
+        // encoded fields), and refineries began shifting their cut. In 1.9 it moved from
+        // dd84b0b3... when scenarios began opening with the inflation, policy rate and expected
+        // inflation of their own period (Great Lakes 2000: 3.4 percent and 6.5 percent, not 3 and 6),
+        // which changes the opening loans, wages and rates from the first week. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2188,7 +2191,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "dd84b0b3f46a6b6eef355dc1f819a95ecefdebb905d7777687792e0fbcb3a81c"
+            "b69f42094cb3e0b63ea1d6fd36cca2c4b8efe6be6a63b0b32134b2a1821e1522"
         );
     }
 

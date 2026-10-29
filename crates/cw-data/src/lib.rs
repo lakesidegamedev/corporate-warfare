@@ -1043,17 +1043,9 @@ impl Dataset {
                 hasher.u8(*region);
             }
         }
-        let m = &self.opening_macro;
-        hasher
-            .string("cw-macro-v1")
-            .i32(m.inflation_bps)
-            .i32(m.expected_inflation_bps)
-            .i32(m.policy_rate_bps)
-            .i32(m.ten_year_bps)
-            .i32(m.neutral_real_bps)
-            .i32(m.target_inflation_bps)
-            .i32(m.credit_spread_bps)
-            .i32(m.wage_growth_bps);
+        // The opening macro data is deliberately outside the hash: it only sets where the cycle
+        // starts and how opening wages fade, never a row a save indexes into, so saves written
+        // before it keep loading.
         hasher.finish_hex()
     }
 }
