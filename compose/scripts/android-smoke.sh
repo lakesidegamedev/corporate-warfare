@@ -3,10 +3,13 @@
 # fails on a dead process or a crash signature in logcat; then runs the instrumented test that
 # plays a career against the same shrunk build. Logcat lands in $OUT for the artifact.
 set -uo pipefail
+# Every step is bounded: a hung emulator must fail the job with logs, not run to the job timeout.
+stamp() { echo "[$(date +%H:%M:%S)] $*"; }
 cd "$(dirname "$0")/.."
 PKG=net.lakesidegames.corporatewarfare
 OUT="${SMOKE_OUT:-$PWD/../build/smoke}"
 mkdir -p "$OUT"
+exec > >(tee "$OUT/run.txt") 2>&1
 BAD='FATAL EXCEPTION|UnsatisfiedLinkError|ClassNotFoundException|NoSuchMethodError|NoClassDefFoundError'
 BINDINGS='(jna|uniffi)'
 fail=0
@@ -27,24 +30,24 @@ check_log() { # $1 logcat file, $2 pid or empty
 
 APK=$(ls androidApp/build/outputs/apk/release/*.apk | head -1)
 echo "installing $APK"
-adb logcat -c
-adb install -r "$APK" || exit 1
-adb shell am start -W -n "$PKG/.MainActivity" || fail=1
+timeout 30 adb logcat -c
+stamp install; timeout 180 adb install -r "$APK" || exit 1
+stamp launch; timeout 90 adb shell am start -W -n "$PKG/.MainActivity" || { echo "::error::launch did not complete"; fail=1; }
 sleep 3
-PID=$(adb shell pidof "$PKG" | tr -d '\r' | awk '{print $1}')
+stamp launched; PID=$(timeout 20 adb shell pidof "$PKG" | tr -d '\r' | awk '{print $1}')
 [ -n "$PID" ] || { echo "::error::app is not running after launch"; fail=1; }
 for i in $(seq 1 30); do
   sleep 2
-  NOW=$(adb shell pidof "$PKG" | tr -d '\r' | awk '{print $1}')
+  NOW=$(timeout 20 adb shell pidof "$PKG" | tr -d '\r' | awk '{print $1}')
   if [ "$NOW" != "$PID" ]; then echo "::error::app process died or restarted (was '$PID', now '$NOW') after $((i * 2 + 3)) s"; fail=1; break; fi
 done
-adb logcat -d -v threadtime > "$OUT/logcat-launch.txt"
-adb exec-out screencap -p > "$OUT/launch.png" || true
+timeout 60 adb logcat -d -v threadtime > "$OUT/logcat-launch.txt"
+timeout 30 adb exec-out screencap -p > "$OUT/launch.png" || true
 check_log "$OUT/logcat-launch.txt" "$PID"
 
 echo "instrumented test against the shrunk build"
 adb logcat -c
-./gradlew --no-daemon :androidApp:connectedReleaseAndroidTest -Pcw.smoke=true || { echo "::error::instrumented test failed"; fail=1; }
-adb logcat -d -v threadtime > "$OUT/logcat-test.txt"
+stamp "instrumented run"; timeout 1200 ./gradlew --no-daemon :androidApp:connectedReleaseAndroidTest -Pcw.smoke=true || { echo "::error::instrumented test failed"; fail=1; }
+timeout 60 adb logcat -d -v threadtime > "$OUT/logcat-test.txt"
 check_log "$OUT/logcat-test.txt" ""
 exit $fail
