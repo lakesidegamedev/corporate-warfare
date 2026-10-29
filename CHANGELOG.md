@@ -154,6 +154,7 @@ heading.
 
 ### Fixed
 
+- New careers on Windows, Linux and Android no longer stop with an engine error around week 5. The inbox asked for letters from a week before the career began, which the engine could not count back to. Found by the new Android emulator check.
 - Big cities keep their names on the close map. A city of a million people or more now always shows its
   name while its buildings are on screen, even when your own plants crowd the usual spots: the name
   moves further out and a thin line ties it back to the city. Region names and smaller towns give way
