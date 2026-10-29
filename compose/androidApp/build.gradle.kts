@@ -30,8 +30,11 @@ android {
         versionCode = gameVersionCode
         versionName = gameVersion
         // The engine is built for these two ABIs only (scripts/build-engine.sh).
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+        // (With per-ABI APKs the splits block below chooses them instead; AGP rejects both.)
+        if (findProperty("cw.splitAbi") != "true") {
+            ndk {
+                abiFilters += listOf("arm64-v8a", "x86_64")
+            }
         }
     }
 
