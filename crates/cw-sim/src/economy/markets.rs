@@ -1880,7 +1880,10 @@ mod tests {
         ] {
             let mut g = gateway(capacity, exported);
             grow_export_room(&mut g);
-            assert_eq!(g.capacity_lots, expected, "{capacity} lots, {exported} exported");
+            assert_eq!(
+                g.capacity_lots, expected,
+                "{capacity} lots, {exported} exported"
+            );
         }
         // Twelve full weeks compound: 100 -> 101 -> 102 -> ... one lot each while under 200.
         let mut g = gateway(100, 0);

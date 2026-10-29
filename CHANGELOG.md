@@ -11,6 +11,15 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- Wind a company down. A company with nothing left to run (no working site, no stake in another
+  company, no open bills) that can pay everyone it owes can now close itself: its remaining sites
+  and stock are sold at salvage value, lenders and unpaid bills are paid in full, and the rest goes
+  to the shareholders. Rival companies do the same after half a year with nothing running, so
+  about three idle, money-losing shells per game close instead of bleeding cash. Your main company
+  cannot be wound down.
+
 ### Changed
 
 - Export ports grow with use. When a state's exports of a good fill its port for a week, the

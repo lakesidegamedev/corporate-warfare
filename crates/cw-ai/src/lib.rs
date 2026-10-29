@@ -62,6 +62,9 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         // Production follows sell-through plant by plant in the weekly tick, the same planner
         // as the player's automatic production (cw_sim::economy::pricing::plan).
         reopen(world, dataset, handle, &mut proposals);
+        if wind_down(world, handle, &mut proposals) {
+            continue;
+        }
         // A state firm has one aim, covering its costs, which the pricing rules apply. It does
         // not expand, raid, speculate or lock lanes.
         if firm.state_owned_since.is_some() {
@@ -998,6 +1001,52 @@ fn reopen(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Pr
             return;
         }
     }
+}
+
+/// Weeks a rival company sits with nothing running before it winds itself down.
+const IDLE_WIND_DOWN_WEEKS: u32 = 26;
+
+/// A rival with nothing left to run winds itself down rather than bleed overheads: no plant
+/// operating, building or retooling, no sales in its last thirteen closed weeks, and either every
+/// plant mothballed for half a year or no plant at all after its first year. The sim's own
+/// `wind_down_blocker` decides whether it may (solvent, no stakes, no unsettled bills), the same
+/// test the player's command meets. Proposed outside the strategic slot, like reopening.
+fn wind_down(world: &World, firm: Handle, proposals: &mut Vec<Proposal>) -> bool {
+    let Some(entity) = world.firms.get(firm) else {
+        return false;
+    };
+    let now = world.tick.0;
+    let plants: Vec<&cw_sim::state::Facility> = entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .collect();
+    let idle_long = if plants.is_empty() {
+        now.saturating_sub(entity.founding_week.0) > 52
+    } else {
+        plants.iter().all(|plant| {
+            plant.status == FacilityStatus::Mothballed
+                && plant
+                    .mothballed_since
+                    .is_some_and(|since| now.saturating_sub(since.0) >= IDLE_WIND_DOWN_WEEKS)
+        })
+    };
+    let weeks = entity.book.recent_weeks();
+    let no_sales = weeks.len() >= 13 && weeks.iter().all(|week| week.revenue == 0);
+    if !idle_long
+        || !no_sales
+        || proposals
+            .iter()
+            .any(|p| p.actor == firm.0 && matches!(p.intent, CommandIntent::ReopenFacility { .. }))
+        || cw_sim::economy::insolvency::wind_down_blocker(world, firm).is_some()
+    {
+        return false;
+    }
+    proposals.push(Proposal {
+        actor: firm.0,
+        intent: CommandIntent::WindDown { firm },
+    });
+    true
 }
 
 /// A rival stops building new plants at this many plants in total. Six full-size plants before
@@ -2262,6 +2311,9 @@ pub fn note(world: &World, dataset: &Dataset, proposal: &Proposal) -> Option<Mov
             })
         }
         CommandIntent::IssueBond { .. } => Some("Issued bonds.".to_owned()),
+        CommandIntent::WindDown { .. } => {
+            Some("Wound itself down and returned its cash to shareholders.".to_owned())
+        }
         CommandIntent::FormJointVenture {
             partner, region: r, ..
         } => Some(format!(
