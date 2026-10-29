@@ -6,8 +6,8 @@ use wgpu::util::DeviceExt;
 
 use crate::camera::Camera;
 use crate::data::Scene;
-use crate::mesh::{self, Mesh, Vertex, VERTEX_BYTES};
-use crate::palette::{ramp, Palette, COLOURS, STEPS};
+use crate::mesh::{self, Mesh, VERTEX_BYTES, Vertex};
+use crate::palette::{COLOURS, Palette, STEPS, ramp};
 
 const SHADER: &str = include_str!("shaders/scene.wgsl");
 const COLOUR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -53,10 +53,18 @@ impl Default for Style {
 
 impl Style {
     pub fn night() -> Style {
-        Style { night: true, sun_azimuth_deg: 40.0, sun_elevation_deg: 38.0, ..Style::default() }
+        Style {
+            night: true,
+            sun_azimuth_deg: 40.0,
+            sun_elevation_deg: 38.0,
+            ..Style::default()
+        }
     }
     fn light_dir(&self) -> Vec3 {
-        let (az, el) = (self.sun_azimuth_deg.to_radians(), self.sun_elevation_deg.to_radians());
+        let (az, el) = (
+            self.sun_azimuth_deg.to_radians(),
+            self.sun_elevation_deg.to_radians(),
+        );
         Vec3::new(az.sin() * el.cos(), az.cos() * el.cos(), el.sin())
     }
 }
@@ -156,8 +164,18 @@ fn wgsl_prelude() -> String {
          const RAMP_FIELD: u32 = {}u;\nconst RAMP_SOIL: u32 = {}u;\nconst RAMP_ROCK: u32 = {}u;\n\
          const RAMP_SNOW: u32 = {}u;\nconst RAMP_URBAN: u32 = {}u;\nconst RAMP_GOLD: u32 = {}u;\n\
          const RAMP_CLOUD: u32 = {}u;\nconst RAMP_BRICK: u32 = {}u;\nconst RAMP_SIGNAL: u32 = {}u;\n",
-        ramp::INK, ramp::WATER, ramp::FOREST, ramp::FIELD, ramp::SOIL, ramp::ROCK, ramp::SNOW,
-        ramp::URBAN, ramp::GOLD, ramp::CLOUD, ramp::BRICK, ramp::SIGNAL
+        ramp::INK,
+        ramp::WATER,
+        ramp::FOREST,
+        ramp::FIELD,
+        ramp::SOIL,
+        ramp::ROCK,
+        ramp::SNOW,
+        ramp::URBAN,
+        ramp::GOLD,
+        ramp::CLOUD,
+        ramp::BRICK,
+        ramp::SIGNAL
     )
 }
 
@@ -178,7 +196,9 @@ impl Renderer {
             name: ai.name.clone(),
             backend: format!("{:?}", ai.backend),
             device_type: format!("{:?}", ai.device_type),
-            driver: format!("{} {}", ai.driver, ai.driver_info).trim().to_string(),
+            driver: format!("{} {}", ai.driver, ai.driver_info)
+                .trim()
+                .to_string(),
         };
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("cw-render"),
@@ -215,12 +235,27 @@ impl Renderer {
                         min_binding_size: None,
                     },
                 ),
-                tex_entry(1, tex2d(wgpu::TextureSampleType::Float { filterable: true })),
-                tex_entry(2, tex2d(wgpu::TextureSampleType::Float { filterable: true })),
-                tex_entry(3, tex2d(wgpu::TextureSampleType::Float { filterable: false })),
+                tex_entry(
+                    1,
+                    tex2d(wgpu::TextureSampleType::Float { filterable: true }),
+                ),
+                tex_entry(
+                    2,
+                    tex2d(wgpu::TextureSampleType::Float { filterable: true }),
+                ),
+                tex_entry(
+                    3,
+                    tex2d(wgpu::TextureSampleType::Float { filterable: false }),
+                ),
                 tex_entry(4, tex2d(wgpu::TextureSampleType::Depth)),
-                tex_entry(5, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
-                tex_entry(6, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison)),
+                tex_entry(
+                    5,
+                    wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                ),
+                tex_entry(
+                    6,
+                    wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                ),
             ],
         });
         let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -228,7 +263,8 @@ impl Renderer {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
-        let attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x3];
+        let attrs =
+            wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x3];
         let vbl = wgpu::VertexBufferLayout {
             array_stride: VERTEX_BYTES as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -256,7 +292,11 @@ impl Renderer {
                 buffers: &[Some(vbl.clone())],
             },
             primitive,
-            depth_stencil: Some(depth(wgpu::DepthBiasState { constant: 2, slope_scale: 2.0, clamp: 0.0 })),
+            depth_stencil: Some(depth(wgpu::DepthBiasState {
+                constant: 2,
+                slope_scale: 2.0,
+                clamp: 0.0,
+            })),
             multisample: wgpu::MultisampleState::default(),
             fragment: None,
             multiview_mask: None,
@@ -299,7 +339,8 @@ impl Renderer {
             compare: Some(wgpu::CompareFunction::LessEqual),
             ..Default::default()
         });
-        let dummy_shadow = depth_texture(&device, 1, "dummy shadow").create_view(&Default::default());
+        let dummy_shadow =
+            depth_texture(&device, 1, "dummy shadow").create_view(&Default::default());
         let uniforms = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals"),
             size: std::mem::size_of::<Globals>() as u64,
@@ -327,19 +368,31 @@ impl Renderer {
 
     fn upload_mesh(&self, m: &Mesh, label: &str) -> GpuMesh {
         // Empty meshes still get a one-vertex buffer so buffers are never zero sized.
-        let vertices = if m.vertices.is_empty() { vec![Vertex::zeroed()] } else { m.vertices.clone() };
-        let indices = if m.indices.is_empty() { vec![0u32] } else { m.indices.clone() };
+        let vertices = if m.vertices.is_empty() {
+            vec![Vertex::zeroed()]
+        } else {
+            m.vertices.clone()
+        };
+        let indices = if m.indices.is_empty() {
+            vec![0u32]
+        } else {
+            m.indices.clone()
+        };
         GpuMesh {
-            vb: self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(label),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            }),
-            ib: self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(label),
-                contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsages::INDEX,
-            }),
+            vb: self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(label),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                }),
+            ib: self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(label),
+                    contents: bytemuck::cast_slice(&indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                }),
             indices: m.indices.len() as u32,
             vertices: m.vertices.len(),
             triangles: m.triangles(),
@@ -351,7 +404,11 @@ impl Renderer {
             &self.queue,
             &wgpu::TextureDescriptor {
                 label: Some(label),
-                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
@@ -379,8 +436,18 @@ impl Renderer {
             clouds: self.upload_mesh(&mesh::cloud_sheet(scene, style.cloud_altitude_km), "clouds"),
             cloud_altitude: style.cloud_altitude_km,
             earth: self.rgba_texture(scene.earth.w, scene.earth.h, &scene.earth.rgba, "earth"),
-            cloud_tex: self.rgba_texture(scene.clouds.w, scene.clouds.h, &scene.clouds.rgba, "clouds"),
-            mask: self.rgba_texture(scene.mask.w as u32, scene.mask.h as u32, &scene.mask.rgba, "mask"),
+            cloud_tex: self.rgba_texture(
+                scene.clouds.w,
+                scene.clouds.h,
+                &scene.clouds.rgba,
+                "clouds",
+            ),
+            mask: self.rgba_texture(
+                scene.mask.w as u32,
+                scene.mask.h as u32,
+                &scene.mask.rgba,
+                "mask",
+            ),
         };
         self.cache = Some(gpu);
     }
@@ -404,7 +471,11 @@ impl Renderer {
         let view = camera.view((tx, ty), 0.0, aspect);
         let light = style.light_dir();
         let (light_vp, texel_km) = light_matrix(scene, &view, light, style.shadow_size);
-        let palette = if style.night { Palette::night() } else { Palette::day() };
+        let palette = if style.night {
+            Palette::night()
+        } else {
+            Palette::day()
+        };
         let km_lon = scene.projection.km_per_deg_lon();
         let em = scene.earth.bounds;
         let mb = scene.mask.bounds;
@@ -414,17 +485,38 @@ impl Renderer {
         let globals = Globals {
             view_proj: view.view_proj.to_cols_array_2d(),
             light_vp: light_vp.to_cols_array_2d(),
-            sun: [light.x, light.y, light.z, if style.night { 1.0 } else { 0.0 }],
-            proj: [scene.projection.lon0, scene.projection.lat0, km_lon, crate::data::KM_PER_DEG_LAT],
+            sun: [
+                light.x,
+                light.y,
+                light.z,
+                if style.night { 1.0 } else { 0.0 },
+            ],
+            proj: [
+                scene.projection.lon0,
+                scene.projection.lat0,
+                km_lon,
+                crate::data::KM_PER_DEG_LAT,
+            ],
             earth: [em.west, em.south, em.east, em.north],
             mask_b: [mb.west, mb.south, mb.east, mb.north],
-            mask_dim: [scene.mask.w as f32, scene.mask.h as f32, scene.mask.px_per_degree(), style.dither],
-            cloud: [style.cloud_threshold, style.cloud_core, style.cloud_altitude_km, if style.clouds { 1.0 } else { 0.0 }],
+            mask_dim: [
+                scene.mask.w as f32,
+                scene.mask.h as f32,
+                scene.mask.px_per_degree(),
+                style.dither,
+            ],
+            cloud: [
+                style.cloud_threshold,
+                style.cloud_core,
+                style.cloud_altitude_km,
+                if style.clouds { 1.0 } else { 0.0 },
+            ],
             cloud2: [sx / km_lon, sy / crate::data::KM_PER_DEG_LAT, texel_km, 0.0],
             palette: palette.flat(),
             day: Palette::day().flat(),
         };
-        self.queue.write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&globals));
+        self.queue
+            .write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&globals));
 
         let gpu = self.cache.as_ref().expect("prepared");
         let shadow_tex = depth_texture(&self.device, style.shadow_size, "shadow");
@@ -434,13 +526,34 @@ impl Renderer {
                 label: Some("scene"),
                 layout: &self.layout,
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.uniforms.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&gpu.earth) },
-                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&gpu.cloud_tex) },
-                    wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&gpu.mask) },
-                    wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(shadow) },
-                    wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(&self.nearest) },
-                    wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::Sampler(&self.compare) },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.uniforms.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&gpu.earth),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&gpu.cloud_tex),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&gpu.mask),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(shadow),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::Sampler(&self.nearest),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: wgpu::BindingResource::Sampler(&self.compare),
+                    },
                 ],
             })
         };
@@ -449,7 +562,11 @@ impl Renderer {
 
         let colour = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("colour"),
-            size: wgpu::Extent3d { width: rw, height: rh, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width: rw,
+                height: rh,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -458,7 +575,8 @@ impl Renderer {
             view_formats: &[],
         });
         let colour_view = colour.create_view(&Default::default());
-        let depth_view = depth_texture_sized(&self.device, rw, rh, "depth").create_view(&Default::default());
+        let depth_view =
+            depth_texture_sized(&self.device, rw, rh, "depth").create_view(&Default::default());
         let padded = (rw * 4).div_ceil(256) * 256;
         let readback = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("readback"),
@@ -467,7 +585,11 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
-        let mut stats = FrameStats { width: rw * ps, height: rh * ps, ..Default::default() };
+        let mut stats = FrameStats {
+            width: rw * ps,
+            height: rh * ps,
+            ..Default::default()
+        };
         let mut enc = self.device.create_command_encoder(&Default::default());
         {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -475,7 +597,10 @@ impl Renderer {
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &shadow_view,
-                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
                     stencil_ops: None,
                 }),
                 timestamp_writes: None,
@@ -494,7 +619,11 @@ impl Renderer {
         }
         {
             let ink = Palette::day().ramps[ramp::INK][0];
-            let ink = if style.night { Palette::night().ramps[ramp::INK][0] } else { ink };
+            let ink = if style.night {
+                Palette::night().ramps[ramp::INK][0]
+            } else {
+                ink
+            };
             let clear = wgpu::Color {
                 r: ink[0] as f64 / 255.0,
                 g: ink[1] as f64 / 255.0,
@@ -507,11 +636,17 @@ impl Renderer {
                     view: &colour_view,
                     depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(clear), store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(clear),
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &depth_view,
-                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Discard }),
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Discard,
+                    }),
                     stencil_ops: None,
                 }),
                 timestamp_writes: None,
@@ -532,18 +667,33 @@ impl Renderer {
             }
         }
         enc.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo { texture: &colour, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            wgpu::TexelCopyTextureInfo {
+                texture: &colour,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
             wgpu::TexelCopyBufferInfo {
                 buffer: &readback,
-                layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded), rows_per_image: Some(rh) },
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(rh),
+                },
             },
-            wgpu::Extent3d { width: rw, height: rh, depth_or_array_layers: 1 },
+            wgpu::Extent3d {
+                width: rw,
+                height: rh,
+                depth_or_array_layers: 1,
+            },
         );
         let t0 = Instant::now();
         self.queue.submit([enc.finish()]);
         let slice = readback.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map readback"));
-        self.device.poll(wgpu::PollType::wait_indefinitely()).expect("poll");
+        self.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
         stats.gpu_wait = t0.elapsed();
         let t1 = Instant::now();
         let data = slice.get_mapped_range().expect("mapped");
@@ -562,7 +712,12 @@ impl Renderer {
         stats.readback = t1.elapsed();
         stats.width = ow;
         stats.height = oh;
-        Frame { width: ow, height: oh, rgba, stats }
+        Frame {
+            width: ow,
+            height: oh,
+            rgba,
+            stats,
+        }
     }
 }
 
@@ -580,7 +735,11 @@ fn draw(pass: &mut wgpu::RenderPass<'_>, m: &GpuMesh, stats: &mut FrameStats, co
 fn depth_texture(device: &wgpu::Device, size: u32, label: &str) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
-        size: wgpu::Extent3d { width: size, height: size, depth_or_array_layers: 1 },
+        size: wgpu::Extent3d {
+            width: size,
+            height: size,
+            depth_or_array_layers: 1,
+        },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -593,7 +752,11 @@ fn depth_texture(device: &wgpu::Device, size: u32, label: &str) -> wgpu::Texture
 fn depth_texture_sized(device: &wgpu::Device, w: u32, h: u32, label: &str) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
-        size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        size: wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -612,7 +775,11 @@ fn light_matrix(scene: &Scene, view: &crate::camera::View, light: Vec3, size: u3
         let far = view.inv_view_proj * Vec4::new(x, y, 1.0, 1.0);
         let (a, b) = (near.truncate() / near.w, far.truncate() / far.w);
         let dir = (b - a).normalize();
-        let t = if dir.z < -0.05 { (-a.z / dir.z).min(view.far * 0.6) } else { view.far * 0.6 };
+        let t = if dir.z < -0.05 {
+            (-a.z / dir.z).min(view.far * 0.6)
+        } else {
+            view.far * 0.6
+        };
         pts.push(a + dir * t);
     }
     let zmax = mesh::level_z_km(scene, 40) + 60.0;
@@ -632,6 +799,13 @@ fn light_matrix(scene: &Scene, view: &crate::camera::View, light: Vec3, size: u3
     // Square the xy extent so texels are square, and pad for the edge.
     let half = ((hi.x - lo.x).max(hi.y - lo.y) / 2.0) * 1.04 + 5.0;
     let (cx, cy) = ((hi.x + lo.x) / 2.0, (hi.y + lo.y) / 2.0);
-    let proj = Mat4::orthographic_rh(cx - half, cx + half, cy - half, cy + half, -hi.z - 30.0, -lo.z + 30.0);
+    let proj = Mat4::orthographic_rh(
+        cx - half,
+        cx + half,
+        cy - half,
+        cy + half,
+        -hi.z - 30.0,
+        -lo.z + 30.0,
+    );
     (proj * lv, 2.0 * half / size as f32)
 }

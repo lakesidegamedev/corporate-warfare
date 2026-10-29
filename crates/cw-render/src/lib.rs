@@ -13,8 +13,8 @@ mod renderer;
 
 pub use camera::Camera;
 pub use data::{
-    Bounds, GeoImage, Heightmap, Mask, Placement, Projection, Scene, VoxelBox, VoxelModel,
-    GREAT_LAKES_STATES, PLAYER_REGIONS,
+    Bounds, GREAT_LAKES_STATES, GeoImage, Heightmap, Mask, PLAYER_REGIONS, Placement, Projection,
+    Scene, VoxelBox, VoxelModel,
 };
-pub use palette::{Palette, COLOURS as PALETTE_COLOURS};
+pub use palette::{COLOURS as PALETTE_COLOURS, Palette};
 pub use renderer::{AdapterSummary, Frame, FrameStats, NoAdapter, Renderer, Style};

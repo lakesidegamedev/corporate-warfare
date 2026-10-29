@@ -17,13 +17,34 @@ pub struct Camera {
 
 impl Camera {
     pub fn scenario() -> Camera {
-        Camera { lon: -82.0, lat: 41.9, width_km: 2250.0, tilt_deg: 24.0, heading_deg: 0.0, fov_deg: 28.0 }
+        Camera {
+            lon: -82.0,
+            lat: 41.9,
+            width_km: 2250.0,
+            tilt_deg: 24.0,
+            heading_deg: 0.0,
+            fov_deg: 28.0,
+        }
     }
     pub fn close() -> Camera {
-        Camera { lon: -81.4, lat: 41.2, width_km: 780.0, tilt_deg: 40.0, heading_deg: 0.0, fov_deg: 28.0 }
+        Camera {
+            lon: -81.4,
+            lat: 41.2,
+            width_km: 780.0,
+            tilt_deg: 40.0,
+            heading_deg: 0.0,
+            fov_deg: 28.0,
+        }
     }
     pub fn turned() -> Camera {
-        Camera { lon: -82.3, lat: 41.1, width_km: 900.0, tilt_deg: 52.0, heading_deg: 38.0, fov_deg: 28.0 }
+        Camera {
+            lon: -82.3,
+            lat: 41.1,
+            width_km: 900.0,
+            tilt_deg: 52.0,
+            heading_deg: 38.0,
+            fov_deg: 28.0,
+        }
     }
 }
 
@@ -51,6 +72,13 @@ impl Camera {
         let view = Mat4::look_at_rh(eye, target, Vec3::Z);
         let proj = Mat4::perspective_rh(fov, aspect, near, far);
         let view_proj = proj * view;
-        View { eye, target, view_proj, inv_view_proj: view_proj.inverse(), near, far }
+        View {
+            eye,
+            target,
+            view_proj,
+            inv_view_proj: view_proj.inverse(),
+            near,
+            far,
+        }
     }
 }
