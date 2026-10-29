@@ -1592,7 +1592,7 @@ struct WorldMapView: View {
                         Canvas { context, canvasSize in
                             let now = MapClock.seconds(timeline.date)
                             let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
-                            scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .sky)
+                            MainStalls.time("map.sky") { scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .sky) }
                         }
                         .drawingGroup()
                     }
@@ -1604,7 +1604,7 @@ struct WorldMapView: View {
                     Canvas { context, canvasSize in
                         let now = MapClock.seconds(timeline.date)
                         let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
-                        scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .ground)
+                        MainStalls.time("map.ground") { scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .ground) }
                     }
                     .drawingGroup()
                 }
@@ -1613,9 +1613,11 @@ struct WorldMapView: View {
                         Canvas { context, canvasSize in
                             let now = MapClock.seconds(timeline.date)
                             let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
-                            scene(camera: current, look: look, now: now)
-                                .drawOverlay(in: &context, geometry: g, seconds: gameSeconds(now),
-                                             part: .traffic)
+                            MainStalls.time("map.traffic") {
+                                scene(camera: current, look: look, now: now)
+                                    .drawOverlay(in: &context, geometry: g, seconds: gameSeconds(now),
+                                                 part: .traffic)
+                            }
                         }
                         .drawingGroup()
                     }
@@ -1645,7 +1647,7 @@ struct WorldMapView: View {
                         _ = ready
                         let now = MapClock.seconds(timeline.date)
                         let g = geometry.of(map: map, camera: current, size: canvasSize, tilt: look.tilt, detail: look.detail)
-                        scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .structures)
+                        MainStalls.time("map.structures") { scene(camera: current, look: look, now: now).drawStatic(in: &context, geometry: g, phase: .structures) }
                     }
                     .drawingGroup()
                 }

@@ -256,7 +256,10 @@ pub fn classify_cash(book: &Ledger, seen: Option<u64>, week: u32) -> ([i64; 4], 
             flows[slot] = flows[slot].saturating_add(cash);
         }
     };
-    for posting in book.journal() {
+    // Transaction ids rise in journal order, so everything up to the marker is a prefix.
+    let journal = book.journal();
+    let start = seen.map_or(0, |marker| journal.partition_point(|p| p.txn <= marker));
+    for posting in &journal[start..] {
         if !take(posting.txn, posting.week.0) {
             continue;
         }
@@ -324,6 +327,8 @@ pub fn archive_week(world: &mut World, dataset: &Dataset) {
     world.archive.prices.drain(..excess);
 
     let mut rows = Vec::new();
+    let mut shares = crate::economy::sectors::ShareCache::default();
+    let mut corridors = crate::economy::division_report::Corridors::default();
     for (handle, firm) in world.firms.iter() {
         let Some(close) = firm.book.recent_weeks().last().copied() else {
             continue;
@@ -339,8 +344,13 @@ pub fn archive_week(world: &mut World, dataset: &Dataset) {
         let divisions = crate::economy::sectors::divisions_of(world, dataset, handle)
             .into_iter()
             .map(|d| {
-                let report = crate::economy::division_report::report(
-                    world, dataset, handle, d.region, d.industry,
+                let report = crate::economy::division_report::figures(
+                    world,
+                    dataset,
+                    handle,
+                    d.region,
+                    d.industry,
+                    &mut corridors,
                 );
                 let (revenue, profit) = report
                     .as_ref()
@@ -354,9 +364,7 @@ pub fn archive_week(world: &mut World, dataset: &Dataset) {
                     profit,
                     plants: d.plants.len() as u32,
                     blocks: d.blocks,
-                    share_bps: crate::economy::sectors::share_bps(
-                        world, dataset, handle, d.region, d.industry, 0,
-                    ),
+                    share_bps: shares.share_bps(world, dataset, handle, d.region, d.industry),
                 }
             })
             .collect::<Vec<_>>();

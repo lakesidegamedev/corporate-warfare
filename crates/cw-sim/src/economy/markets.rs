@@ -165,10 +165,10 @@ pub fn clear_week(world: &mut World, dataset: &Dataset) {
     }
     let opening = world.outside.gateway_book.cash().max(0);
     world.outside.gateway_floor_cents = opening - opening / 100;
-    clear_intermediate(world, dataset);
-    clear_households(world, dataset);
-    clear_government(world, dataset);
-    clear_public_works(world, dataset);
+    crate::ph!("markets::intermediate", clear_intermediate(world, dataset));
+    crate::ph!("markets::households", clear_households(world, dataset));
+    crate::ph!("markets::government", clear_government(world, dataset));
+    crate::ph!("markets::public_works", clear_public_works(world, dataset));
 }
 
 /// Room a gateway adds after a week its exports filled it, in basis points of its capacity.
@@ -347,7 +347,10 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
         false
     });
     for (product, buyers) in exchange {
-        clear_goods_exchange(world, dataset, product, buyers, &BTreeMap::new());
+        crate::ph!(
+            "markets::goods_exchange",
+            clear_goods_exchange(world, dataset, product, buyers, &BTreeMap::new())
+        );
     }
     // Speculators come last: they buy what the plants left, into held stock.
     for (product, (buyers, caps)) in crate::economy::storage::order_buyers(world, dataset) {
@@ -365,7 +368,10 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
                 )
             })
             .collect();
-        clear_goods_exchange(world, dataset, product, buyers, &caps);
+        crate::ph!(
+            "markets::speculator_exchange",
+            clear_goods_exchange(world, dataset, product, buyers, &caps)
+        );
         for (firm, region, was) in before {
             let now = world
                 .firms
@@ -502,12 +508,7 @@ fn clear_goods_exchange(
         }
     }
     // The reserve's release in a spike, by region: (asking price, milli-lots).
-    let reserve_offers: BTreeMap<u8, (i64, i64)> = (0..world.regions.len() as u8)
-        .filter_map(|region| {
-            crate::economy::reserve::release_offer(world, dataset, product, region)
-                .map(|offer| (region, offer))
-        })
-        .collect();
+    let reserve_offers = crate::economy::reserve::release_offers(world, dataset, product);
     let mut reserve_left: BTreeMap<u8, i64> =
         reserve_offers.iter().map(|(r, (_, q))| (*r, *q)).collect();
     let class = dataset.products[product as usize].storage_class;
