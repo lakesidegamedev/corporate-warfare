@@ -313,16 +313,17 @@ fun WorldMapView(
                 val lanes = store.lanes
                 val freight = layer == MapLayer.Freight
                 val week = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28
+                val economy = store.economy?.phase
                 val paintGround: DrawScope.(MapGeometryCache) -> Unit = { geo ->
                     drawWorldMap(
                         map, cam, tint, shaded, selected, store.mapDivisions, measurer, lanes = lanes, freightLayer = freight, pickedLane = pickedLane,
-                        geometry = geo, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Ground, week = week,
+                        geometry = geo, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Ground, week = week, economyPhase = economy,
                     )
                 }
                 // The ground is baked off the UI thread; the sun and the week change it slowly, so those wait out a gap.
                 if (MapBake.enabled) {
                     groundLayer.draw(
-                        this, cam, pitch, listOf(tint, shaded, selected, lanes, freight, pickedLane, graphics.copy(showFps = false), sun, heights, week),
+                        this, cam, pitch, listOf(tint, shaded, selected, lanes, freight, pickedLane, graphics.copy(showFps = false), sun, heights, week, economy),
                         minGapMs = 400, fill = Color(0xFF05090E), bake = paintGround, direct = { paintGround(geometry) },
                     )
                 } else paintGround(geometry)
@@ -681,6 +682,12 @@ internal fun DrawScope.drawWorldMap(
                 drawLanes(map, p, lanes, selected, pickedLane)
             }
         }
+        // The diorama up close: trees, fields, barns, rocks and the houses round each city. It lies on the ground, so it is
+        // painted with the ground, which is baked, and not with the buildings that stand on it.
+        if (cam.zoom > 3 && graphics.countryside && graphics.buildings >= 2 && graphics.earth && g.closeUp && t > 0.5) {
+            val unit = (1.2f * g.scale * density).coerceIn(1.4f, 7f)
+            with(Countryside) { drawCountryside(p, map, week, unit * 0.6f, { plinth }, economyPhase) }
+        }
     }
     MapProfiler.mark("lanes")
     // The structures: buildings, skylines and labels, drawn in their own layer over the traffic.
@@ -693,10 +700,6 @@ internal fun DrawScope.drawWorldMap(
         // Voxels in true 3D: pixels a voxel for the player's buildings, a step down for the rest.
         val unit = (1.2f * g.scale * density).coerceIn(1.4f, 7f)
         val e = p.east
-        // The diorama up close: trees, fields, barns, rocks and the houses round each city.
-        if (graphics.countryside && graphics.buildings >= 2 && graphics.earth && g.closeUp && t > 0.5) {
-            with(Countryside) { drawCountryside(p, map, week, unit * 0.6f, { plinth }, economyPhase) }
-        }
         if (graphics.buildings >= 2 && g.closeUp && t > 0.5) {
             // Each big city on screen is a voxel city block sized by its population, smaller than
             // the player's buildings so those stay the stars.
