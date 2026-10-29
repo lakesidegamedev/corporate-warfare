@@ -187,14 +187,14 @@ fun LetterStack(store: GameStore, selected: String?, onSelect: (LetterDto) -> Un
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (store.letters.isEmpty()) Callout("Quiet week. Letters arrive when something happens.", Palette.secondary)
-        store.letters.forEach { LetterRow(it, it.id == selected) { onSelect(it) } }
+        store.letters.forEach { letter -> LetterRow(letter, letter.id == selected) { onSelect(letter) } }
         Text(
             if (showArchive) "HIDE OLDER LETTERS" else "OLDER LETTERS", color = Palette.gold, fontFamily = Pixel.font, fontSize = 11.sp,
             modifier = Modifier.clip(Pixel.small).clickable { showArchive = !showArchive }.padding(vertical = 6.dp, horizontal = 4.dp),
         )
         if (showArchive) {
             if (archive.isEmpty()) Text("Nothing older yet.", color = Palette.secondary, fontSize = 12.sp)
-            archive.forEach { LetterRow(it, it.id == selected) { l -> onSelect(l) } }
+            archive.forEach { letter -> LetterRow(letter, letter.id == selected) { onSelect(letter) } }
         }
     }
 }
