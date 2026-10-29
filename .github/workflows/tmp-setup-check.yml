@@ -1,0 +1,24 @@
+name: tmp setup check
+on:
+  pull_request:
+    paths: ["compose/shared/packaging/windows/**", ".github/workflows/tmp-setup-check.yml"]
+jobs:
+  setup:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fake app image
+        shell: pwsh
+        run: |
+          $d = "$env:RUNNER_TEMP/image/Corporate Warfare"
+          New-Item -ItemType Directory -Force -Path "$d/app","$d/runtime" | Out-Null
+          Copy-Item C:\Windows\System32\notepad.exe "$d/Corporate Warfare.exe"
+          Set-Content "$d/app/a.jar" x; Set-Content "$d/runtime/r.txt" x
+      - name: Build and test
+        shell: pwsh
+        run: |
+          ./compose/shared/packaging/windows/build-setup.ps1 -DisplayVersion 1.9.0-preview.1 -NumericVersion 1.8.9001 `
+            -AppImage "$env:RUNNER_TEMP/image/Corporate Warfare" -OutDir "$env:RUNNER_TEMP/out"
+          $setup = (Get-ChildItem "$env:RUNNER_TEMP/out" -Filter '*-setup.exe').FullName
+          ./compose/shared/packaging/windows/test-setup.ps1 -Setup $setup -AppImage "$env:RUNNER_TEMP/image/Corporate Warfare" -Work "$env:RUNNER_TEMP/cw-setup-test"

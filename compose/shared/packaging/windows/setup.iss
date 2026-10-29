@@ -200,8 +200,8 @@ begin
     Result := False
   else if Answer = IDNO then
   begin
-    if MsgBox('This permanently deletes every saved career and your settings. They cannot be brought back.' +
-        #13#10#13#10 + 'Delete them?', mbError, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+    if MsgBox('This permanently deletes every saved career and your settings. They cannot be brought back.' + #13#10#13#10 +
+        'Delete them?', mbError, MB_YESNO or MB_DEFBUTTON2) = IDYES then
       DeleteSaves := True;
   end;
 end;
