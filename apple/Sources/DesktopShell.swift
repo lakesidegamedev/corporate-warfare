@@ -38,6 +38,8 @@ struct DesktopShell: View {
                         open(.actions)
                     }
                     Rectangle().fill(Theme.stroke).frame(height: 1)
+                    NewsTicker { open(.paper) }
+                    Rectangle().fill(Theme.stroke).frame(height: 1)
                     PauseBanner()
                     content
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -80,6 +82,7 @@ struct DesktopShell: View {
         case .actions: CommandCenterView(initialQuery: query).id(actionsSeed)
         case .inbox: InboxView()
         case .portfolio: OverviewView()
+        case .paper: PaperView()
         }
     }
 

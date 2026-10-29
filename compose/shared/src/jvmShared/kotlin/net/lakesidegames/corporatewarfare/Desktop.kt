@@ -71,6 +71,7 @@ private enum class Page(val id: String, val title: String, val icon: String, val
     Markets("markets", "Markets", "markets", "World", "F5"),
     Actions("actions", "Actions", "command", "World", "Ctrl K"),
     Inbox("inbox", "Inbox", "inbox", "World", "F6"),
+    Paper("paper", "Paper", "doc", "World", "F8"),
     Portfolio("portfolio", "Portfolio", "portfolio", "You", "F7"),
 }
 
@@ -113,6 +114,7 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                     event.key == Key.F5 -> { open(Page.Markets); true }
                     event.key == Key.F6 -> { open(Page.Inbox); true }
                     event.key == Key.F7 -> { open(Page.Portfolio); true }
+                    event.key == Key.F8 -> { open(Page.Paper); true }
                     else -> false
                 }
             },
@@ -127,6 +129,8 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                     open(Page.Actions)
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
+                TickerBar(store) { open(Page.Paper) }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
                 PauseBanner(store, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp))
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (page) {
@@ -138,6 +142,7 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                         Page.Stats -> DesktopStats(store)
                         Page.Inbox -> DesktopInbox(store)
                         Page.Portfolio -> DesktopPortfolio(store)
+                        Page.Paper -> PaperScreen(store)
                     }
                 }
             }

@@ -6,6 +6,7 @@ members = [
     "crates/cw-ai",
     "crates/cw-session",
     "crates/cw-cli",
+    "crates/cw-render",
     "crates/cw-ffi",
     "tools/cw-bindgen",
 ]
@@ -45,4 +46,7 @@ opt-level = 2
 [profile.dev.package.cw-ai]
 opt-level = 2
 [profile.dev.package.cw-session]
+opt-level = 2
+# Scene rasterising and mesh building in the render spike are slow unoptimised.
+[profile.dev.package.cw-render]
 opt-level = 2

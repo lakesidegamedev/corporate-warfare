@@ -21,12 +21,16 @@ mod catalogue;
 mod chapters;
 mod company;
 mod custom;
+mod paper;
 mod statements;
 mod systems;
 pub use cast::{
     DossierDto, MoveDto, PersonDto, PostDto, RivalMoveFeedDto, RivalSummaryDto, RivalTagDto,
 };
 pub use catalogue::{ActionDto, FieldDto, OptionDto, action_catalogue};
+pub use paper::{
+    ClassifiedDto, GoodMoveDto, MarketsDto, PaperDto, PaperLinkDto, ShareMoveDto, StoryDto,
+};
 pub use statements::{DivisionPeriodDto, PricePointDto, StatementDto};
 
 #[derive(uniffi::Record)]
@@ -4928,6 +4932,46 @@ impl SessionHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_paper_and_ticker_cross_the_boundary() {
+        let career = SessionHandle::start(NewGameDto {
+            seed: 9,
+            scenario_id: "texas-1981".to_owned(),
+            guided: true,
+            five_year: false,
+            difficulty: "standard".to_owned(),
+            economy: "historic".to_owned(),
+            starting_capital_cents: None,
+            price_path: String::new(),
+            timeline: String::new(),
+        })
+        .unwrap();
+        let mut left = 20;
+        while career.overview().tick < 20 && left > 0 {
+            career.advance(4);
+            career.dismiss_pause();
+            left -= 1;
+        }
+        let now = career.overview().tick;
+        let paper = career.paper(now);
+        assert_eq!(paper.masthead, "The Gulf Ledger");
+        assert_eq!(paper.week, now);
+        assert!(paper.markets.open);
+        let ticker = career.ticker();
+        assert!(ticker.len() <= 3);
+        assert_eq!(
+            ticker.len(),
+            paper.lead.iter().chain(&paper.briefs).take(3).count()
+        );
+        let archive = career.paper_archive();
+        assert_eq!(archive.first(), Some(&now));
+        assert_eq!(
+            career.paper(archive[archive.len() - 1]).week,
+            archive[archive.len() - 1]
+        );
+        assert_eq!(career.paper(now + 50).week, now, "a future week is today");
+    }
 
     #[test]
     fn a_real_session_round_trips_through_the_boundary() {
