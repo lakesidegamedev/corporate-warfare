@@ -178,8 +178,8 @@ begin
     'Keep your saved careers and settings?',
     'Your saves are in:' + #13#10 + SavesFolder + #13#10#13#10 +
     'Keeping them lets you pick up where you left off if you install Corporate Warfare again.',
-    mbConfirmation, MB_YESNOCANCEL,
-    ['Keep my saves and settings (recommended)', 'Delete my saves and settings too', StopLabel], 0);
+    mbConfirmation, MB_YESNOCANCEL, ['Keep my saves and settings (recommended)',
+    'Delete my saves and settings too', StopLabel], 0);
 end;
 
 function InitializeUninstall: Boolean;
