@@ -20,6 +20,7 @@ mod cast;
 mod catalogue;
 mod company;
 mod custom;
+mod letters;
 mod paper;
 mod statements;
 mod systems;

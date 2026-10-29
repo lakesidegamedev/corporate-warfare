@@ -241,9 +241,63 @@ pub(crate) const SALUTATIONS: [[&str; 2]; 3] = [
     ],
 ];
 
-/// Opening and closing lines for a sender who is an office or a role, with no temperament.
-const OFFICE_OPEN: &str = "This is an official notice for your attention.";
-const OFFICE_CLOSE: &str = "Please let us have your answer in good time.";
+/// Opening and closing lines for a sender who is an office or a role, with no temperament,
+/// by kind of letter.
+pub(crate) const OFFICE_FRAMES: [(&str, &str, &str); 9] = [
+    (
+        "decision",
+        "This is an official notice for your attention.",
+        "Please let us have your answer in good time.",
+    ),
+    (
+        "rates",
+        "This is the bank's note on the latest decision.",
+        "We will write again after the next meeting.",
+    ),
+    (
+        "government",
+        "I am writing about a change that affects your business.",
+        "My office is open to your questions.",
+    ),
+    (
+        "union",
+        "This is a notice on behalf of the workers.",
+        "We would like to talk.",
+    ),
+    (
+        "cfo",
+        "A short memo on the books.",
+        "Tell me if you want to act on this.",
+    ),
+    (
+        "analyst",
+        "A note from the desk on what we are watching.",
+        "We will keep you posted.",
+    ),
+    (
+        "rival",
+        "I am writing on behalf of our firm.",
+        "Please read this with care.",
+    ),
+    (
+        "ally",
+        "I am writing on behalf of our firm.",
+        "We value the connection.",
+    ),
+    (
+        "bid",
+        "I am writing on behalf of our firm.",
+        "Please read this with care.",
+    ),
+];
+
+fn office_frames(kind: &str) -> (&'static str, &'static str) {
+    OFFICE_FRAMES
+        .iter()
+        .find(|(k, _, _)| *k == kind)
+        .map(|(_, o, c)| (*o, *c))
+        .unwrap_or((OFFICE_FRAMES[0].1, OFFICE_FRAMES[0].2))
+}
 
 fn fnv(text: &str, salt: u64) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325 ^ salt.wrapping_mul(0x9e37_79b9_7f4a_7c15);
@@ -408,11 +462,14 @@ fn finish(world: &World, d: Draft, card: Option<Card>) -> Letter {
                 pick(&d.id, 3, &SIGN_OFFS[i]).to_owned(),
             )
         }
-        None => (
-            OFFICE_OPEN.to_owned(),
-            OFFICE_CLOSE.to_owned(),
-            "Yours faithfully".to_owned(),
-        ),
+        None => {
+            let (open, close) = office_frames(d.kind);
+            (
+                open.to_owned(),
+                close.to_owned(),
+                "Yours faithfully".to_owned(),
+            )
+        }
     };
     let salutation =
         SALUTATIONS[d.tone.index()][(fnv(&d.id, 2) % 2) as usize].replace("{}", &d.addressee);
@@ -1231,6 +1288,9 @@ mod tests {
         for t in CLOSERS.iter().flatten().chain(SIGN_OFFS.iter().flatten()) {
             assert!(!t.contains(['\u{2013}', '\u{2014}']));
         }
+        for (_, o, c) in OFFICE_FRAMES {
+            assert!(!o.contains(['\u{2013}', '\u{2014}']) && !c.contains(['\u{2013}', '\u{2014}']));
+        }
         for t in SALUTATIONS.iter().flatten() {
             assert!(!t.contains(['\u{2013}', '\u{2014}']));
         }
@@ -1505,7 +1565,7 @@ mod tests {
         check(&l);
         assert_eq!(l.sender.role, "Chief financial officer");
         assert!(l.sender.person.is_empty());
-        assert!(text(&l).starts_with(OFFICE_OPEN));
+        assert!(text(&l).starts_with(office_frames("cfo").0));
         assert!(text(&l).contains("strong quarter"));
         // Thin margins are not a strong quarter.
         let mut t = quiet("great-lakes-2000", 26);
