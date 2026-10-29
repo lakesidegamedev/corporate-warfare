@@ -60,6 +60,7 @@ struct SystemsTable: View {
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(i == sort ? Theme.gold : Theme.secondary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity, alignment: i == 0 ? .leading : .trailing)
                         .contentShape(Rectangle())
                         .onTapGesture { onSort?(i) }
@@ -119,6 +120,7 @@ struct ChartSpec {
     var kind: PlotKind = .line
     var format: (Int64) -> String = { Format.moneyCompact($0) }
     var scale: PlotScale = .zero
+    var period: PlotPeriod = .weekly
 
     var drawable: Bool { series.contains { $0.points.count >= 2 } }
 }
@@ -129,8 +131,8 @@ struct ChartPanel: View {
     var body: some View {
         if spec.drawable {
             Panel(padding: 12) {
-                PixelChart(spec.series, title: spec.title, initialKind: spec.kind, initialRange: .y1, height: 130,
-                           format: spec.format, scale: spec.scale)
+                PixelChart(spec.series, title: spec.title, initialKind: spec.kind, initialRange: .y1, period: spec.period,
+                           height: 130, format: spec.format, scale: spec.scale)
             }
         }
     }
@@ -716,20 +718,20 @@ struct RivalsBoardView: View {
             ChartPanel(spec: ChartSpec(title: "Revenue by quarter", series: [
                 PlotSeries(name: "You", color: Theme.gold, points: Figures.points(c.you) { $0.revenueCents }),
                 PlotSeries(name: rival.name, color: PlotColors.blue, points: Figures.points(c.them) { $0.revenueCents }),
-            ], kind: .bar))
+            ], kind: .bar, period: .quarterly))
             ChartPanel(spec: ChartSpec(title: "Net income by quarter", series: [
                 PlotSeries(name: "You", color: Theme.gold, points: Figures.points(c.you) { $0.netIncomeCents }),
                 PlotSeries(name: rival.name, color: PlotColors.blue, points: Figures.points(c.them) { $0.netIncomeCents }),
-            ], kind: .bar))
+            ], kind: .bar, period: .quarterly))
         } right: {
             ChartPanel(spec: ChartSpec(title: "Cash at each close", series: [
                 PlotSeries(name: "You", color: Theme.gold, points: Figures.points(c.you) { $0.cashCents }),
                 PlotSeries(name: rival.name, color: PlotColors.blue, points: Figures.points(c.them) { $0.cashCents }),
-            ], scale: .level))
+            ], scale: .level, period: .quarterly))
             ChartPanel(spec: ChartSpec(title: "Share price", series: [
                 PlotSeries(name: "You", color: Theme.gold, points: Figures.points(c.you) { $0.sharePriceCents }),
                 PlotSeries(name: rival.name, color: PlotColors.blue, points: Figures.points(c.them) { $0.sharePriceCents }),
-            ], format: { Format.price($0) }, scale: .level))
+            ], format: { Format.price($0) }, scale: .level, period: .quarterly))
         }
         Eyebrow(text: "Head to head, last week")
         if goods.isEmpty {

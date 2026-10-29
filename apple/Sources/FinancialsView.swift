@@ -133,7 +133,7 @@ struct CompanyFinancials: View {
     var body: some View {
         let rows = data.of(period)
         VStack(alignment: .leading, spacing: 8) {
-            ChipFlow(spacing: 4) {
+            PlotFlow(spacing: 4) {
                 ForEach(FinanceTab.allCases, id: \.self) { t in
                     PlotChips(options: [t.rawValue], selected: t == tab ? t.rawValue : "") { _ in tab = t }
                 }

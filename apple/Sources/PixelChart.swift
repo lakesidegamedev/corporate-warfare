@@ -116,6 +116,49 @@ enum GameDates {
     }
 }
 
+/// A wrapping row that never grows past the width it is offered: an item wider than a line is
+/// given the line's width, so a long legend or chip row cannot push a phone page sideways.
+struct PlotFlow: Layout {
+    var spacing: CGFloat = 6
+
+    private func sizes(_ subviews: Subviews, _ limit: CGFloat) -> [CGSize] {
+        subviews.map { view in
+            let natural = view.sizeThatFits(.unspecified)
+            return natural.width <= limit ? natural : view.sizeThatFits(ProposedViewSize(width: limit, height: nil))
+        }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let limit = proposal.width ?? 10_000
+        var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0, widest: CGFloat = 0
+        for size in sizes(subviews, limit) {
+            if x > 0 && x + size.width > limit {
+                x = 0
+                y += row + spacing
+                row = 0
+            }
+            x += size.width + spacing
+            row = max(row, size.height)
+            widest = max(widest, min(x - spacing, limit))
+        }
+        return CGSize(width: widest, height: y + row)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, row: CGFloat = 0
+        for (view, size) in zip(subviews, sizes(subviews, bounds.width)) {
+            if x > bounds.minX && x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += row + spacing
+                row = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            row = max(row, size.height)
+        }
+    }
+}
+
 /// Small option chips in the pixel font, the selected one gold.
 struct PlotChips: View {
     let options: [String]
@@ -203,8 +246,10 @@ struct PixelChart: View {
         let shown = self.shown
         let weeks = Array(Set(shown.flatMap { $0.points.map(\.week) })).sorted()
         VStack(alignment: .leading, spacing: 5) {
-            ChipFlow(spacing: 8) {
-                if let title { Eyebrow(text: title) }
+            if let title {
+                Eyebrow(text: title).fixedSize(horizontal: false, vertical: true)
+            }
+            PlotFlow(spacing: 8) {
                 if ranges.count > 1 {
                     PlotChips(options: ranges.map(\.rawValue), selected: range.rawValue) { t in
                         if let r = ranges.first(where: { $0.rawValue == t }) { range = r }
@@ -228,7 +273,7 @@ struct PixelChart: View {
                     .padding(.vertical, 12)
             } else {
                 let readWeek = read(weeks)
-                ChipFlow(spacing: 10) {
+                PlotFlow(spacing: 10) {
                     Text(dated(readWeek, GameDates.label(readWeek, period), weeks))
                         .font(Pixel.font(10))
                         .foregroundStyle(Theme.gold)
