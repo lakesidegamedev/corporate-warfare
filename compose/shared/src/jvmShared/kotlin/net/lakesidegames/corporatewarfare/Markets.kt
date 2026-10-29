@@ -1,5 +1,9 @@
 package net.lakesidegames.corporatewarfare
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -349,9 +353,10 @@ internal fun CommodityDialog(store: GameStore, line: CommodityDto, onClose: () -
     AlertDialog(
         onDismissRequest = onClose,
         containerColor = Palette.panel,
+        modifier = Modifier.widthIn(min = 360.dp, max = 980.dp),
         title = { Text(line.name) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.heightIn(max = 640.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatGroup(
                     Stat("Market price per lot", Format.money(line.priceCents), note = "${changeText(line.changeWeekBps)} this week"),
                     listOf(
@@ -364,6 +369,7 @@ internal fun CommodityDialog(store: GameStore, line: CommodityDto, onClose: () -
                     ),
                 )
                 GoodHistoryChart(store, line.product, line.referenceCents)
+                GoodDepthSection(store, line.product)
                 if (mine != null) Text("You make this: ${Format.money(mine.priceCents)} a lot. Change it from the CEO Office pricing panel.", color = Palette.gold, fontSize = 12.sp)
                 StoreGoodSection(store, line)
             }

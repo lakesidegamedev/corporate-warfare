@@ -61,6 +61,27 @@ heading.
 - Market analytics report a new sales-weighted asking price for each good, which shows what sellers
   that actually sold were asking. The existing median asking price is unchanged, so older servers
   and app versions keep working.
+- Market depth for every good: tap a good on the Markets screen to see how much is made, sold,
+  imported and exported each week, the stock held and how many weeks of sales it covers, your
+  share of sales over time, the top sellers and buyers with their shares, and in plain words
+  why the price is moving this week (buyers short of stock, unsold stock on the shelves,
+  reliance on imports, or spare capacity for services).
+- Region dossiers: tap a region for its workforce and how many are without a job, wages by
+  skill, land price, what households spend their money on, who competes there in each sector
+  with their shares, and your divisions there with their profit, with charts over time.
+- Division operations: each division shows how hard its plants run, what it made against what
+  it sold, and what one lot costs (inputs, labour, upkeep, land, depreciation and freight)
+  against its price, with the margin per lot and charts of output, use and cost per lot.
+- Freight stats on the company shipping panel: lots moved, cost per lot, who carried them
+  (your own carriers, other companies or outside carriers when lanes are full), and your own
+  carriers' capacity used and idle, week by week.
+- A rivals board: every company side by side (revenue, profit, cash, debt, share price,
+  divisions and best market share), sorted by any column. Pick one to chart it against you by
+  quarter and see the goods you both sell, head to head.
+- Economy history in the economy panel: the corridor share index, the bank rate and inflation,
+  the price level, companies operating and gone, raids and household spending, with date ranges.
+- Five years of weekly history behind these displays. Saves from earlier versions load and start
+  the history from the next week.
 - Deeper company financials: every company page and the Stats page have tabs for an overview,
   the income statement, the balance sheet, the cash flow statement, divisions and ratios. Pick
   weekly, quarterly or yearly periods and compare the last several side by side. Ratios cover
@@ -132,6 +153,17 @@ heading.
   format records its layout version, and an older save is converted on load, with the new market
   figures starting empty and filling in from the first week played. Saves written by this version
   do not open in older versions, which refuse them with a clear version message.
+- Charts of levels, such as wages, land prices, the workforce, weeks of cover, stock, prices,
+  share prices, cash and the balance sheet, now fit their scale to the figures shown, so real
+  movement no longer reads as a flat line. Flows per week and bar charts still start at zero.
+- A division's utilisation is measured against what it could make this week at the season's
+  harvest, so a farm in a good season reads up to 100 percent instead of 130.
+- The rivals board shows each company's net margin over 13 weeks in place of its best market
+  share, which read 100 percent for nearly everyone. Market shares stay in the head to head.
+- Banks count the interest they earn as revenue on the rivals board, in their statements and in
+  their charts, alongside the premiums insurers already counted.
+- Market depth lays its charts out in even rows of two on wide screens, without the large gap
+  under the first chart.
 - Dashed road markings stay painted on the road as the camera moves: the interstates' gold centre
   line and the railway sleepers no longer slide along the track when you pan, tilt, zoom or turn the
   map, and the dashes on sea routes stay in place along their arc.

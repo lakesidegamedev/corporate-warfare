@@ -441,7 +441,10 @@ internal fun DivisionShipping(store: GameStore, division: DivisionDto) = Shippin
 
 /** The whole company's freight, for the CEO Office. */
 @Composable
-internal fun CompanyShipping(store: GameStore) = ShippingSection(store, null)
+internal fun CompanyShipping(store: GameStore) {
+    ShippingSection(store, null)
+    LogisticsStatsSection(store)
+}
 
 /** Corridor freight at a glance, then the lanes, then a simple panel for the lane tapped. */
 @Composable

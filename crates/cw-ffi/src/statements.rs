@@ -179,18 +179,41 @@ fn statement(
     }
 }
 
+/// Whether a firm of this industry earns its living from lending and cover, so that its
+/// interest income is its revenue rather than a financing line.
+pub fn is_financial(industry: u8) -> bool {
+    cw_sim::state::INDUSTRY_NAMES.get(industry as usize) == Some(&"financial")
+}
+
+/// A financial firm's period as its statements show it: interest income moves up into revenue,
+/// so EBIT rises by the same amount and net income is unchanged. Premiums and fees are already
+/// booked as revenue.
+pub fn financial_view(record: &PeriodRecord) -> PeriodRecord {
+    let mut out = record.clone();
+    out.revenue = out.revenue.saturating_add(out.interest_income);
+    out.interest_income = 0;
+    out
+}
+
 /// Build the statements of one series, oldest first, with growth against the period before.
+/// A financial firm's interest income is shown as revenue.
 pub fn statements_of(
     records: &[PeriodRecord],
     start_year: i32,
     period: &str,
     names: &dyn Fn(u8) -> String,
+    financial: bool,
 ) -> Vec<StatementDto> {
-    records
+    let shown: Vec<PeriodRecord> = if financial {
+        records.iter().map(financial_view).collect()
+    } else {
+        records.to_vec()
+    };
+    shown
         .iter()
         .enumerate()
         .map(|(i, r)| {
-            let previous = i.checked_sub(1).and_then(|p| records.get(p));
+            let previous = i.checked_sub(1).and_then(|p| shown.get(p));
             statement(
                 r,
                 previous,
@@ -224,22 +247,23 @@ impl SessionHandle {
                 .map(|r| r.name.clone())
                 .unwrap_or_default()
         };
+        let financial = is_financial(entity.industry);
         let archive = &world.archive;
         match period.as_str() {
             "week" => archive
                 .weeks
                 .get(&handle)
-                .map(|w| statements_of(w, world.start_year, "week", &names))
+                .map(|w| statements_of(w, world.start_year, "week", &names, financial))
                 .unwrap_or_default(),
             "year" => archive
                 .quarters
                 .get(&handle)
-                .map(|q| statements_of(&years(q), world.start_year, "year", &names))
+                .map(|q| statements_of(&years(q), world.start_year, "year", &names, financial))
                 .unwrap_or_default(),
             _ => archive
                 .quarters
                 .get(&handle)
-                .map(|q| statements_of(q, world.start_year, "quarter", &names))
+                .map(|q| statements_of(q, world.start_year, "quarter", &names, financial))
                 .unwrap_or_default(),
         }
     }

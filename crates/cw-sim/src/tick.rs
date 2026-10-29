@@ -256,6 +256,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         crate::economy::history::archive_week(world, dataset)
     );
     crate::ph!(
+        "systems::record",
+        crate::economy::systems::record(world, dataset)
+    );
+    crate::ph!(
         "objectives::weekly",
         crate::economy::objectives::weekly(world, dataset)
     );

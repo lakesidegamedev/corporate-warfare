@@ -48,6 +48,14 @@ enum class ChartRange(val title: String, val weeks: Int?) {
 /** The bucket each point stands for. */
 enum class ChartPeriod(val title: String, val weeks: Int) { Weekly("Weekly", 1), Quarterly("Quarterly", 13), Yearly("Yearly", 52) }
 
+/**
+ * How a chart fits its value axis. Zero starts at zero, for flows, counts per week and bars,
+ * where the height itself is the figure. Level fits the data's lowest and highest values with a
+ * little room, for levels such as a wage, a price, a stock or a balance, where the movement is
+ * what matters and a zero floor would flatten it. Bars always start at zero.
+ */
+enum class ChartScale { Zero, Level }
+
 /** One value at a game week: the first week of the period it covers. */
 data class ChartPoint(val week: Int, val value: Long)
 
@@ -107,7 +115,8 @@ fun ChartChips(options: List<String>, selected: String, onPick: (String) -> Unit
  *
  * [period] and [onPeriod] show the period chips; [periods] limits them. Points must be in week
  * order. [format] writes a value for the axis and the read-out. [partialLast] marks the latest
- * period as still open, labelled "to date" in the read-out and on the axis.
+ * period as still open, labelled "to date" in the read-out and on the axis. [scale] picks a
+ * zero-based or a fitted value axis.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -125,6 +134,7 @@ fun Chart(
     height: Dp = 170.dp,
     format: (Long) -> String = { Format.compact(it) },
     partialLast: Boolean = false,
+    scale: ChartScale = ChartScale.Zero,
 ) {
     var kind by remember(kinds) { mutableStateOf(initialKind) }
     var range by remember { mutableStateOf(initialRange) }
@@ -173,11 +183,20 @@ fun Chart(
             val axisRoom = 14.dp.toPx()
             val plotH = size.height - axisRoom
             val values = shown.flatMap { s -> s.points.map { it.value } }
-            val top = max(values.max(), 0L)
-            val bottom = minOf(values.min(), 0L)
+            val (top, bottom) = if (scale == ChartScale.Level && kind != ChartKind.Bar) {
+                // Fitted to the data with a tenth of its spread above and below, and never below
+                // zero for figures that cannot go negative.
+                val high = values.max()
+                val low = values.min()
+                val pad = maxOf((high - low) / 10, maxOf(abs(high), abs(low)) / 50, 1L)
+                (high + pad) to (if (low >= 0) max(low - pad, 0L) else low - pad)
+            } else {
+                max(values.max(), 0L) to minOf(values.min(), 0L)
+            }
             val span = max(top - bottom, 1L).toFloat()
             fun y(v: Long) = snap(plotH * (top - v) / span)
-            val zero = y(0)
+            // Fills and bars rest on zero, or on the plot's floor when zero is below it.
+            val zero = y(0L.coerceIn(bottom, top))
             val first = weeks.first()
             val last = weeks.last()
             val slot = size.width / weeks.size
@@ -196,7 +215,7 @@ fun Chart(
                 val text = measurer.measure(format(v), labelStyle)
                 drawText(text, topLeft = Offset(0f, (y(v) - text.size.height).coerceAtLeast(0f)))
             }
-            if (bottom < 0) drawRect(Palette.stroke, Offset(0f, zero), Size(size.width, px))
+            if (bottom < 0 && top > 0) drawRect(Palette.stroke, Offset(0f, zero), Size(size.width, px))
             when (kind) {
                 ChartKind.Bar -> {
                     val bar = max(snap(slot * 0.8f / shown.size), px)
@@ -275,6 +294,7 @@ fun StockHistoryChart(store: GameStore, firm: ULong, height: Dp = 150.dp) {
         ),
         title = "Price history (100 at start)", initialRange = ChartRange.Y1, period = period, periods = ChartPeriod.entries, onPeriod = { period = it },
         height = height, format = { "%.1f".format(it / 100.0) }, partialLast = GameDates.partial(share.last().week, period),
+        scale = ChartScale.Level,
     )
 }
 
@@ -295,5 +315,6 @@ fun GoodHistoryChart(store: GameStore, product: UInt, referenceCents: Long, heig
         ),
         title = "Price per lot", initialRange = ChartRange.Y1, period = period, periods = ChartPeriod.entries, onPeriod = { period = it },
         height = height, format = { Format.money(it) }, partialLast = GameDates.partial(price.last().week, period),
+        scale = ChartScale.Level,
     )
 }

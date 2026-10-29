@@ -22,9 +22,14 @@ const SEASONAL_YIELD_BPS: [i32; 4] = [8_000, 11_000, 13_000, 8_000];
 /// in the low-yield quarters they keep only the share of hands the yield needs, so wages follow
 /// the harvest instead of staying fixed while output falls. Every other plant needs its full crew.
 pub fn crew_need_bps(world: &World, recipe: &cw_data::Recipe) -> i64 {
+    season_yield_bps(world, recipe).min(10_000) as i64
+}
+
+/// This week's seasonal yield on a recipe's output, in basis points: farms follow the quarter's
+/// harvest, every other plant runs at 10,000.
+pub fn season_yield_bps(world: &World, recipe: &cw_data::Recipe) -> i32 {
     if recipe.industry == "agriculture" {
-        let season = SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize];
-        season.min(10_000) as i64
+        SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize]
     } else {
         10_000
     }
@@ -163,6 +168,21 @@ pub fn cut_yields(world: &World, dataset: &Dataset, handle: Handle) -> Vec<i32> 
     } else {
         cut
     }
+}
+
+/// A plant's real full-run output this week: its full weekly output at this season's yield, the
+/// most it can make running flat out with every input and hand it needs.
+pub fn season_full_output(
+    world: &World,
+    dataset: &Dataset,
+    plant: &crate::state::Facility,
+) -> cw_core::quantity::MilliLots {
+    plant
+        .full_weekly_output(dataset)
+        .scale_bps(season_yield_bps(
+            world,
+            &dataset.recipes[plant.recipe as usize],
+        ))
 }
 
 /// Produce the whole week: utilities first, then goods and services.
@@ -659,11 +679,7 @@ fn run_facility(
         output = output.min(cap);
     }
     // Seasonal yield applies to farm output only, before input planning in a full model.
-    let season = if recipe.industry == "agriculture" {
-        SEASONAL_YIELD_BPS[(world.tick.quarter().saturating_sub(1) % 4) as usize]
-    } else {
-        10_000
-    };
+    let season = season_yield_bps(world, recipe);
     output = output.scale_bps(season);
     // Supply-side events (crop loss, outages) reduce physical output, not household demand.
     if let Some(code) = dataset.product_index.get(&recipe.output) {

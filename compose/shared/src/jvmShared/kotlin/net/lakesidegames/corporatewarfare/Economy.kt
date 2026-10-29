@@ -90,6 +90,7 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
             Key(Palette.warning, "Inflation")
             Key(Palette.gold, "Central bank rate")
         }
+        EconomyDashboardSection(store)
         val credit = when {
             e.creditBps >= 800 -> "Credit is badly stretched: a bust could come at any time." to Palette.negative
             e.creditBps >= 450 -> "Borrowing is running high: the risk of a bust is rising." to Palette.warning
