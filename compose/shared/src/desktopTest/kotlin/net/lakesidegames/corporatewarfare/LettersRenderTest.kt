@@ -39,7 +39,7 @@ class LettersRenderTest {
         val deadline = System.currentTimeMillis() + 30_000
         while (!store.ready && System.currentTimeMillis() < deadline) Thread.sleep(100)
         assertTrue(store.ready, "the career opened")
-        kotlinx.coroutines.runBlocking {
+        val finalTick = kotlinx.coroutines.runBlocking {
             store.read { h ->
                 var guard = 0
                 while (guard++ < 200 && h.overview().tick < week && !stopWhen(h)) {
@@ -49,11 +49,13 @@ class LettersRenderTest {
                     }
                     h.dismissPause(); h.advance(1u)
                 }
+                h.overview().tick
             }
-        }
+        }!!
         store.refresh()
         val settled = System.currentTimeMillis() + 30_000
-        while (store.busy && System.currentTimeMillis() < settled) Thread.sleep(100)
+        while (((store.overview?.tick ?: 0u) < finalTick || store.busy) && System.currentTimeMillis() < settled) Thread.sleep(100)
+        assertTrue((store.overview?.tick ?: 0u) >= finalTick, "the store caught up to week $finalTick")
         return store
     }
 
