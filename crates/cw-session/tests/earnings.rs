@@ -117,11 +117,11 @@ fn the_price_move_follows_the_surprise_and_stays_inside_the_bound() {
         // Oracle: surprise in basis points of the scale, bounded; fifteen percent of the price
         // per full surprise; no streak, no credibility, so no weighting.
         let rel = (a * 10_000 / SCALE).clamp(-10_000, 10_000);
-        let expected = (rel * 15 / 100).clamp(-1_500, 1_500);
+        let expected = (rel * 10 / 100).clamp(-1_200, 1_200);
         let r = last(&w, firm);
         assert_eq!(r.surprise_bps as i64, rel, "surprise of {firm:?}");
         assert_eq!(r.move_bps as i64, expected, "move of {firm:?}");
-        assert!(r.move_bps.abs() <= 1_500);
+        assert!(r.move_bps.abs() <= 1_200);
         // The mark moved by exactly that, from where the played week left it.
         let before = s.world.firms.get(firm).unwrap().shares.mark_cents;
         let after = w.firms.get(firm).unwrap().shares.mark_cents;
@@ -176,13 +176,13 @@ fn a_run_of_surprises_and_credibility_shape_the_move() {
     for i in 0..plain.len() {
         let p = &plain[i].1;
         assert_eq!(p.surprise_bps, -2_000);
-        assert_eq!(p.move_bps, -300, "20% surprise at 15% a full surprise");
+        assert_eq!(p.move_bps, -200, "20% surprise at 10% a full surprise");
         // Full credibility cuts a miss by 40%.
-        assert_eq!(trusted[i].1.move_bps, -180);
+        assert_eq!(trusted[i].1.move_bps, -120);
         // Three misses already: each adds 15% (to a cap of four), so 145% of the move.
-        assert_eq!(after_misses[i].1.move_bps, -435);
+        assert_eq!(after_misses[i].1.move_bps, -290);
         // Three beats and then a miss: the run does not stack on a reversal.
-        assert_eq!(after_beats[i].1.move_bps, -300);
+        assert_eq!(after_beats[i].1.move_bps, -200);
         assert_eq!(after_misses[i].1.streak, -4);
         assert_eq!(after_beats[i].1.streak, -1);
     }
@@ -195,7 +195,7 @@ fn the_move_never_exceeds_the_cap_even_at_a_maximal_run() {
         due_today(w, firm, actual(w, firm) + 100 * SCALE, 0, -8)
     });
     for firm in covered(&s.world) {
-        assert_eq!(last(&w, firm).move_bps, -1_500);
+        assert_eq!(last(&w, firm).move_bps, -1_200);
     }
 }
 

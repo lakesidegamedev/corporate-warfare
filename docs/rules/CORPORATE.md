@@ -404,18 +404,18 @@ of 0.4 percent of equity; a loss costs 0.15 percent in legal fees.
 least 1 percent of them held outside (not state owned). Each reports once a quarter, on the
 quarter's close (weeks 13, 26, 39 and so on), and the week it reports the analyst writes the
 estimate for the next. The estimate is the quarter just closed (operating profit, EBIT of the
-thirteen closed weeks) plus half the change from the quarter before (at most a quarter of the
-estimate's scale either way), plus a quarter of the average change of the listed firms in the same
+thirteen closed weeks) plus an eighth of the change from the quarter before (the sim's quarters are
+noisy, so the trend counts for little; at most a quarter of the estimate's scale either way), plus a quarter of the average change of the listed firms in the same
 industry (at most 10 percent of the scale), plus noise of up to 10 percent of the scale drawn from
 the world seed (a stream of its own per firm and week). The scale is the larger of the estimate's
-size and half a percent of the firm's market value, so a near-zero estimate cannot make a huge
-surprise out of nothing. A firm needs one full quarter of results before it has an estimate.
+size and four percent of the firm's market value (about a healthy firm's quarterly operating
+profit), so a near-zero estimate cannot make a huge surprise out of nothing. A firm needs one full quarter of results before it has an estimate.
 
 On results day the surprise is actual less estimate over the scale, bounded to plus or minus 100
-percent. The share price moves 15 percent of itself per 100 percent of surprise. A run of
+percent. The share price moves 10 percent of itself per 100 percent of surprise. A run of
 quarters surprising the same way adds 15 percent to the move per quarter in the run (up to four,
 and not on a reversal). A miss is damped by management's credibility, up to 40 percent at full
-credibility (10,000). The move is capped at 15 percent either way. It changes the share mark
+credibility (10,000). The move is capped at 12 percent either way. It changes the share mark
 only: no cash, share, account or ownership moves, so no money is created or destroyed, and the
 usual price formation then pulls the mark back toward fair value an eighth a week.
 
@@ -430,7 +430,7 @@ credibility halves, reputation falls by 150 plus a fortieth of the shortfall in 
 most 400), and for a quarter the firm has a grievance for the activists (`Reason::MissedGuidance`,
 justification 5,000 plus 1,500 per miss in a row, at most 9,000) that opens a campaign by the usual
 scan and cooldown. Rival firms guide on their own: the week after their estimate, every second
-listed firm in turn, a range of plus or minus 5 percent of the scale around the analyst's number,
+listed firm in turn, a range of plus or minus 10 percent of the scale around the analyst's number,
 unless profit fell last quarter.
 
 **Ratings and short campaigns.** The analyst rates every listed firm from valuation against price:

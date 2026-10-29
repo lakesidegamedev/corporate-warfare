@@ -40,9 +40,9 @@ use crate::state::{HolderId, World};
 /// Weeks in a reporting quarter.
 pub const QUARTER: u32 = 13;
 /// The largest price move on a results day, in basis points either way.
-pub const MOVE_CAP_BPS: i64 = 1_500;
+pub const MOVE_CAP_BPS: i64 = 1_200;
 /// Price move at a 100 percent surprise before streaks and credibility, percent of the price.
-const MOVE_PER_FULL_SURPRISE_PCT: i64 = 15;
+const MOVE_PER_FULL_SURPRISE_PCT: i64 = 10;
 /// A surprise smaller than this (basis points of the estimate's scale) counts as in line.
 const IN_LINE_BPS: i64 = 200;
 /// Extra weight per quarter in a row of the same surprise, up to `STREAK_MAX` quarters.
@@ -233,9 +233,11 @@ fn market_cap(world: &World, firm: Handle) -> i64 {
         .unwrap_or(0)
 }
 
-/// The room for error of an estimate: its size, but never under half a percent of market value.
+/// The room for error of an estimate: its size, but never under four percent of market value (a
+/// healthy firm earns about that much operating profit in a quarter), so a small estimate cannot
+/// make a huge surprise out of nothing.
 fn scale_of(world: &World, firm: Handle, base: i64) -> i64 {
-    base.abs().max(market_cap(world, firm) / 200).max(1)
+    base.abs().max(market_cap(world, firm) / 25).max(1)
 }
 
 /// Operating profit of the thirteen closed weeks ending this week, or none when the firm has
@@ -433,7 +435,7 @@ fn estimate(world: &mut World, _dataset: &Dataset, firm: Handle, sector: &BTreeM
     let scale = scale_of(world, firm, last);
     let trend = if n >= 2 {
         let prev = fe.quarters[n - 2];
-        ((last - prev) / 2).clamp(-scale / 4, scale / 4)
+        ((last - prev) / 8).clamp(-scale / 4, scale / 4)
     } else {
         0
     };
@@ -529,7 +531,7 @@ pub fn give_guidance(world: &mut World, firm: Handle, low: i64, high: i64) -> Do
 }
 
 /// A rival's guidance for this quarter, if it gives one: the week after the estimate is
-/// written, every second listed firm in turn, a tight range around the analyst's number when
+/// written, every second listed firm in turn, a range of a tenth of the scale around the analyst's number when
 /// profit is not falling. Rivals use the same command and the same checks as the player.
 pub fn rival_guidance(world: &World, firm: Handle) -> Option<(i64, i64)> {
     if !covered(world, firm) {
@@ -547,7 +549,7 @@ pub fn rival_guidance(world: &World, firm: Handle) -> Option<(i64, i64)> {
     if n >= 2 && fe.quarters[n - 1] < fe.quarters[n - 2] {
         return None;
     }
-    let room = est.scale_cents * 500 / 10_000;
+    let room = est.scale_cents * 1_000 / 10_000;
     Some((est.raw_cents - room, est.raw_cents + room))
 }
 

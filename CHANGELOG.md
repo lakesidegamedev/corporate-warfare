@@ -17,7 +17,7 @@ heading.
   analyst writes an estimate of its operating profit from its trend, its sector and a little
   luck, so estimates can miss. On results day the share price moves on the surprise: a beat lifts
   it, a miss drops it, bigger surprises and repeated surprises move it more, and no move is ever
-  more than 15 percent. Prices move and nothing else: no money is created or lost. Each listed
+  more than 12 percent. Prices move and nothing else: no money is created or lost. Each listed
   company has an analyst rating (buy, hold or sell) from its value against its price. Company
   pages show the estimate, the last results against it, the rating and when it reports, and the
   stock board marks companies reporting this week. The weekly brief lists "Results in 5 weeks:
