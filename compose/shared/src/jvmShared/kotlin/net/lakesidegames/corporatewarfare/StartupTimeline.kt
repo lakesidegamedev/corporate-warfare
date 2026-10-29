@@ -3,15 +3,17 @@ package net.lakesidegames.corporatewarfare
 /**
  * A timestamped list of the steps between launch and the main menu, printed to stderr when the
  * environment has CW_STARTUP_TIMELINE set. Off by default, so a normal launch pays one lookup.
- * Times are milliseconds since the JVM started.
+ * Times are milliseconds since [origin]: the desktop app sets it to the JVM's start, so the time
+ * before main() counts too; otherwise it is the first use.
  */
 object StartupTimeline {
     private val enabled = System.getenv("CW_STARTUP_TIMELINE") != null
     private val marks = mutableListOf<Pair<String, Long>>()
 
-    /** Milliseconds since the JVM started, so the time before main() counts too. */
-    private fun sinceJvmStart(): Long =
-        System.currentTimeMillis() - java.lang.management.ManagementFactory.getRuntimeMXBean().startTime
+    @Volatile
+    var origin: Long = System.currentTimeMillis()
+
+    private fun sinceJvmStart(): Long = System.currentTimeMillis() - origin
 
     @Synchronized
     fun mark(step: String) {

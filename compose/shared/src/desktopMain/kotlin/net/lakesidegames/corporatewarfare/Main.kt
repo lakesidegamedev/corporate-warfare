@@ -96,6 +96,9 @@ private fun bringToFront() = java.awt.EventQueue.invokeLater {
 }
 
 fun main() {
+    if (System.getenv("CW_STARTUP_TIMELINE") != null) {
+        StartupTimeline.origin = java.lang.management.ManagementFactory.getRuntimeMXBean().startTime
+    }
     StartupTimeline.mark("main() entered")
     // One copy at a time: a second launch brings the open game forward and exits (SingleInstance).
     when (SingleInstance.start(saveDirectory(), onActivate = ::bringToFront)) {
