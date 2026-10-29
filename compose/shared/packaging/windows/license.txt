@@ -7,7 +7,8 @@ apart to reuse its code or art.
 
 The game is provided as it is, with no promise that it will suit every purpose or run without
 mistakes. Your saved careers and settings stay on your computer, in your own application data
-folder, and are never sent anywhere by the game or by this installer.
+folder. The game sends an anonymous summary of its market every few weeks to help balance it;
+it holds no name or account, and you can switch it off in Settings. This installer sends nothing.
 
 Credits: the Silkscreen font is used under the SIL Open Font License 1.1. World map and
 population data come from public sources named in the game's About screen.

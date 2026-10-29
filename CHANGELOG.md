@@ -199,6 +199,7 @@ heading.
 
 ### Fixed
 
+- The Windows setup program's licence page now says that the game sends an anonymous market summary you can switch off, instead of saying it sends nothing.
 - New careers on Windows, Linux and Android no longer stop with an engine error around week 5. The inbox asked for letters from a week before the career began, which the engine could not count back to. Found by the new Android emulator check.
 - Each scenario now opens in the money conditions of its own time. Texas 1981 starts with
   inflation near 10 percent and interest rates near 16 percent, and both fall over the next
