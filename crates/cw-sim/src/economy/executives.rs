@@ -1006,3 +1006,40 @@ pub fn board_chapter(world: &World, firm: Handle) -> u32 {
         .map(|(_, n)| *n)
         .unwrap_or(0)
 }
+
+// ----- words for the screens, papers and letters -----
+
+fn points(bps: i64) -> String {
+    format!("{}.{:02}", bps / 100, bps % 100)
+}
+
+/// What a level at a post does, in plain words with the number.
+pub fn effect_text(post: Post, level: u8) -> String {
+    match post {
+        Post::Cfo => format!(
+            "Cuts the interest spread on loan and bond quotes by {} points and adds {} points a year on cash",
+            points(spread_cut_for(level) as i64),
+            points(cash_yield_for(level) as i64)
+        ),
+        Post::Coo => format!(
+            "Cuts build time by {} percent and lets a full plant run {} points above its rating",
+            lead_cut_pct_for(level),
+            points(ceiling_for(level) as i64)
+        ),
+        Post::Logistics => format!(
+            "Cuts the outside carriers' premium by {} percent and lane reservation fees by {} percent",
+            premium_cut_pct_for(level),
+            lane_fee_cut_for(level) / 100
+        ),
+    }
+}
+
+/// The generated person's name, or a placeholder if the content is missing.
+pub fn name_of(c: &Candidate) -> String {
+    extra_of(c).map(|e| e.name.clone()).unwrap_or_default()
+}
+
+/// Tests and screens: the person's id for the portrait atlas.
+pub fn portrait_id(c: &Candidate) -> String {
+    extra_of(c).map(|e| e.id.clone()).unwrap_or_default()
+}

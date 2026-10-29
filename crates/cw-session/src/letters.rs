@@ -959,6 +959,161 @@ fn board_letters(world: &World, since: u32, out: &mut Vec<Letter>) {
     }
 }
 
+/// Hires, departures, poaching, and the board naming a chief executive for the player's company.
+/// The new executive introduces themselves in their temperament's voice; a poached executive's old
+/// boss writes; the board chair writes when the board replaces the chief.
+fn executive_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
+    use cw_sim::economy::executives::{self as ex, EventKind};
+    for event in world.executives.events.iter().filter(|e| e.week >= since) {
+        let yours = player_side(world, event.firm);
+        let org = paper::firm_name(world, event.firm).unwrap_or_default();
+        let title = event.post.title().to_lowercase();
+        let id = format!(
+            "exec:{}:{}:{}:{:?}",
+            event.week,
+            event.firm.0,
+            event.post.code(),
+            event.kind
+        );
+        let candidate = world.executives.person(event.person);
+        let person = candidate
+            .and_then(ex::extra_of)
+            .map(|e| e.person());
+        let pay = paper::money(world, dataset, event.firm, event.cents);
+        match event.kind {
+            EventKind::Hired if yours => {
+                let (Some(c), Some(p)) = (candidate, person.as_ref()) else {
+                    continue;
+                };
+                out.push(finish(
+                    world,
+                    Draft {
+                        id: id.clone(),
+                        kind: "executive",
+                        week: event.week.max(1),
+                        sender: person_sender(p, event.post.title(), &org),
+                        tone: Tone::Ally,
+                        addressee: org.clone(),
+                        facts: vec![
+                            format!(
+                                "I am {}, and I start today as {title} at {org}. {}.",
+                                p.name,
+                                ex::effect_text(event.post, c.level)
+                            ),
+                            format!("My pay is {pay} a week and my contract runs two years."),
+                        ],
+                        link: PaperLink::company(event.firm),
+                    },
+                    None,
+                ));
+            }
+            // A rival took one of ours, or we took one of theirs.
+            EventKind::Hired if event.other.is_some_and(|o| player_side(world, o)) => {
+                let (Some(p), Some(new_boss)) = (
+                    person.as_ref(),
+                    paper::firm_name(world, event.firm),
+                ) else {
+                    continue;
+                };
+                out.push(finish(
+                    world,
+                    Draft {
+                        id: id.clone(),
+                        kind: "executive",
+                        week: event.week.max(1),
+                        sender: person_sender(
+                            p,
+                            event.post.title(),
+                            &paper::firm_name(world, event.other.unwrap_or(event.firm))
+                                .unwrap_or_default(),
+                        ),
+                        tone: Tone::Formal,
+                        addressee: paper::firm_name(world, event.other.unwrap_or(event.firm))
+                            .unwrap_or_default(),
+                        facts: vec![
+                            format!(
+                                "I am leaving my post as {title} to join {new_boss}, who offered me {pay} a week."
+                            ),
+                            "Thank you for the time. The post is yours to fill from the candidate list.".to_owned(),
+                        ],
+                        link: PaperLink::company(event.firm),
+                    },
+                    None,
+                ));
+            }
+            EventKind::Left if yours => {
+                let Some(p) = person.as_ref() else { continue };
+                out.push(finish(
+                    world,
+                    Draft {
+                        id: id.clone(),
+                        kind: "executive",
+                        week: event.week.max(1),
+                        sender: person_sender(p, event.post.title(), &org),
+                        tone: Tone::Formal,
+                        addressee: org.clone(),
+                        facts: vec![format!(
+                            "I am leaving my post as {title} at {org}. The post is open; the candidate list is in the CEO Office."
+                        )],
+                        link: PaperLink::company(event.firm),
+                    },
+                    None,
+                ));
+            }
+            EventKind::BoardChief if yours => {
+                let name = dataset
+                    .cast
+                    .get(event.person as usize)
+                    .map(|p| p.name.clone())
+                    .unwrap_or_default();
+                out.push(finish(
+                    world,
+                    Draft {
+                        id: id.clone(),
+                        kind: "board",
+                        week: event.week.max(1),
+                        sender: office_sender("The chair of the board", "Chair of the board", &org),
+                        tone: Tone::Formal,
+                        addressee: org.clone(),
+                        facts: vec![
+                            format!(
+                                "The board has missed its goals two years running. We have appointed {name} as chief executive of {org}."
+                            ),
+                            "The count of missed goals starts again with the next chapter. You keep your shares and your seat.".to_owned(),
+                        ],
+                        link: PaperLink::company(event.firm),
+                    },
+                    None,
+                ));
+            }
+            _ => {}
+        }
+        // The old boss of a poached executive writes to the company that took them.
+        if event.kind == EventKind::Hired
+            && yours
+            && let Some(from) = event.other
+        {
+            let name = candidate.map(ex::name_of).unwrap_or_default();
+            out.push(finish(
+                world,
+                Draft {
+                    id: format!("{id}:oldboss"),
+                    kind: "rival",
+                    week: event.week.max(1),
+                    sender: rival_sender(world, dataset, from, event.week),
+                    tone: Tone::Grudge,
+                    addressee: org.clone(),
+                    facts: vec![format!(
+                        "You have taken {name}, my {title}, with a bigger offer. I will remember it."
+                    )],
+                    link: PaperLink::company(from),
+                },
+                None,
+            ));
+        }
+    }
+}
+
 /// How much of a quarter's sales is profit before a quarter counts as strong, in percent.
 const STRONG_MARGIN_PCT: i64 = 10;
 
@@ -1186,6 +1341,7 @@ pub fn letters(world: &World, dataset: &Dataset, since_week: u32) -> Vec<Letter>
     analyst_letters(world, dataset, &stories, since, &mut out);
     cfo_letters(world, dataset, since, &mut out);
     board_letters(world, since, &mut out);
+    executive_letters(world, dataset, since, &mut out);
     decision_letters(world, dataset, 1, &mut out);
 
     out.sort_by(|a, b| {

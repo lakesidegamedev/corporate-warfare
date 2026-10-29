@@ -2380,9 +2380,14 @@ fn grievance(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Reason, 
     // Two missed board mandates in a row, for the player's primary company. A chapter the player
     // never took a mandate in does not count either way.
     if world.investor.primary_group == Some(firm) {
+        // A chief the board named ends the count: only chapters after it can draw an activist.
+        let named = crate::economy::executives::board_chapter(world, firm);
         let missed = world
             .chapters
-            .results()
+            .log
+            .iter()
+            .filter(|c| c.number > named)
+            .filter_map(|c| c.outcome)
             .filter(|o| {
                 !matches!(
                     o,

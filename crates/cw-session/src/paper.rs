@@ -428,6 +428,7 @@ fn collect(world: &World, dataset: &Dataset, week: u32) -> Vec<Candidate> {
     politics(world, week, &mut found);
     distress(world, week, &mut found);
     results(world, dataset, week, &mut found);
+    executives(world, dataset, week, &mut found);
     found
 }
 
@@ -535,6 +536,80 @@ fn raids(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) 
             yours,
             base,
             raid.budget_cents,
+        ));
+    }
+}
+
+/// Hires, departures, poaching and the board naming a chief executive.
+fn executives(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) {
+    use cw_sim::economy::executives::{self as ex, EventKind};
+    for event in world.executives.events.iter().filter(|e| in_window(e.week, week)) {
+        let Some(firm) = firm_name(world, event.firm) else {
+            continue;
+        };
+        let other = event.other.and_then(|o| firm_name(world, o));
+        let who = if event.kind == EventKind::BoardChief {
+            dataset
+                .cast
+                .get(event.person as usize)
+                .map(|p| p.name.clone())
+        } else {
+            world.executives.person(event.person).map(ex::name_of)
+        }
+        .unwrap_or_default();
+        if who.is_empty() {
+            continue;
+        }
+        let title = event.post.title().to_lowercase();
+        let pay = money(world, dataset, event.firm, event.cents);
+        let mut yours = player_side(world, event.firm)
+            || event.other.is_some_and(|o| player_side(world, o));
+        let (headline, body, base) = match event.kind {
+            EventKind::Hired => {
+                let (head, text) = match &other {
+                    Some(from) => (
+                        format!("{firm} lures {who} away from {from}"),
+                        format!("{who} joins {firm} as {title} on {pay} a week, up from their pay at {from}."),
+                    ),
+                    None => (
+                        format!("{firm} hires {who} as {title}"),
+                        format!("{who} joins {firm} as {title} on {pay} a week for two years."),
+                    ),
+                };
+                (head, text, 3)
+            }
+            // The poached side is told through the hire story of the new company.
+            EventKind::Poached => continue,
+            EventKind::Left => (
+                format!("{who} leaves {firm}"),
+                format!("{who}, the {title} of {firm}, has left the company."),
+                3,
+            ),
+            EventKind::Dismissed => (
+                format!("{firm} lets {who} go"),
+                format!("{firm} has dismissed {who}, its {title}, with {pay} in severance."),
+                3,
+            ),
+            EventKind::Renewed => continue,
+            EventKind::BoardChief => {
+                yours = player_side(world, event.firm);
+                (
+                    format!("{firm}'s board names {who} chief executive"),
+                    format!("After two missed goals in a row, the board of {firm} has brought in {who} as chief executive."),
+                    5,
+                )
+            }
+        };
+        out.push(candidate(
+            format!("exec:{}:{}:{}:{:?}", event.week, event.firm.0, event.post.code(), event.kind),
+            event.week,
+            &headline,
+            body,
+            "Business desk",
+            PaperLink::company(event.firm),
+            yours,
+            base,
+            event.cents,
         ));
     }
 }
