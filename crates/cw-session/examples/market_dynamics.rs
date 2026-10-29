@@ -107,7 +107,7 @@ fn main() {
             if week == weeks {
                 for raid in &world.raids {
                     let year = (raid.tick.max(1) - 1) / 52 + 1;
-                    let row = trade.entry(year as u32).or_default();
+                    let row = trade.entry(year).or_default();
                     row[2] += 1;
                     row[3] += raid.success as i64;
                 }

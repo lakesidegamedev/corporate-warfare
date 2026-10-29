@@ -648,4 +648,3 @@ fn opening_share_prices_stay_near_fair_value() {
         }
     }
 }
-
