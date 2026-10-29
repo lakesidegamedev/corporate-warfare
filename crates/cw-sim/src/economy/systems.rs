@@ -208,8 +208,8 @@ pub fn region_week(world: &World, index: u8) -> RegionWeek {
     }
 }
 
-/// Full-run weekly output of a division's primary product, in milli-lots, as the division
-/// report measures utilisation. A good harvest can make more than this.
+/// Full-run weekly output of a division's primary product this week, in milli-lots, at the
+/// season's yield, as the division report measures utilisation. Output cannot exceed it.
 pub fn division_capacity_milli(
     world: &World,
     dataset: &Dataset,
@@ -220,7 +220,7 @@ pub fn division_capacity_milli(
         .iter()
         .filter_map(|h| world.facilities.get(*h))
         .filter(|p| p.status == FacilityStatus::Operating)
-        .map(|p| p.full_weekly_output(dataset).0)
+        .map(|p| crate::economy::production::season_full_output(world, dataset, p).0)
         .sum()
 }
 
@@ -358,4 +358,55 @@ pub fn record(world: &mut World, dataset: &Dataset) {
     weeks.push(entry);
     let excess = weeks.len().saturating_sub(SYSTEMS_WEEKS);
     weeks.drain(..excess);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::economy::seed;
+    use crate::state::{ScenarioKind, ScenarioMode};
+
+    /// Capacity is this week's real full run, the season's yield included, so no division makes
+    /// more than it, not even a farm in its best harvest quarter.
+    #[test]
+    fn no_division_runs_past_its_seasonal_full_run() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 181, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let mut farms = 0;
+        for week in 1..=30 {
+            crate::tick::advance(&mut world, &dataset);
+            // Weeks 14 to 39 are the two harvest quarters, at 110 and 130 percent yield.
+            if week < 14 {
+                continue;
+            }
+            for (h, f) in world.firms.iter() {
+                if !f.status.operative() {
+                    continue;
+                }
+                for d in crate::economy::sectors::divisions_of(&world, &dataset, h) {
+                    let Some(r) = crate::economy::division_report::report(
+                        &world, &dataset, h, d.region, d.industry,
+                    ) else {
+                        continue;
+                    };
+                    let made: i64 = r
+                        .outputs
+                        .iter()
+                        .filter(|o| o.product == r.primary_product)
+                        .map(|o| o.made_milli)
+                        .sum();
+                    let capacity = division_capacity_milli(&world, &dataset, &d);
+                    assert!(
+                        made <= capacity,
+                        "{} week {week}: {made} > {capacity}",
+                        f.name
+                    );
+                    if d.industry == 0 && made > 0 {
+                        farms += 1;
+                    }
+                }
+            }
+        }
+        assert!(farms > 0, "no farm produced in a harvest quarter");
+    }
 }

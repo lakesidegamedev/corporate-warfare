@@ -161,7 +161,8 @@ pub struct RivalRowDto {
     pub name: String,
     pub industry: String,
     pub yours: bool,
-    /// Revenue and net income over the last closed weeks (up to thirteen).
+    /// Revenue and net income over the last closed weeks (up to thirteen). A bank's or
+    /// insurer's revenue includes its interest income alongside premiums and fees.
     pub revenue_cents: i64,
     pub profit_cents: i64,
     pub cash_cents: i64,
@@ -169,9 +170,8 @@ pub struct RivalRowDto {
     pub share_price_cents: i64,
     pub market_cap_cents: i64,
     pub divisions: u32,
-    /// Its best division's share and that division's sector type and region.
-    pub top_share_bps: i64,
-    pub top_share_label: String,
+    /// Net income over revenue across the same weeks; absent when there was no revenue.
+    pub net_margin_bps: Option<i64>,
 }
 
 /// One good both companies sold last week.
@@ -814,43 +814,25 @@ impl SessionHandle {
             let recent = f.book.recent_weeks();
             let tail = &recent[recent.len().saturating_sub(13)..];
             let divisions = cw_sim::economy::sectors::divisions_of(world, dataset, h);
-            let top = divisions
+            let financial = crate::statements::is_financial(f.industry);
+            let revenue: i64 = tail
                 .iter()
-                .map(|d| {
-                    (
-                        cw_sim::economy::sectors::share_bps(
-                            world, dataset, h, d.region, d.industry, 0,
-                        ),
-                        d,
-                    )
-                })
-                .max_by(|a, b| a.0.cmp(&b.0).then(b.1.region.cmp(&a.1.region)));
+                .map(|w| w.revenue + if financial { w.interest_income } else { 0 })
+                .sum();
+            let profit: i64 = tail.iter().map(|w| w.net_income).sum();
             out.push(RivalRowDto {
                 firm: h.0,
                 name: f.name.clone(),
                 industry: INDUSTRY_NAMES[f.industry as usize].to_owned(),
                 yours,
-                revenue_cents: tail.iter().map(|w| w.revenue).sum(),
-                profit_cents: tail.iter().map(|w| w.net_income).sum(),
+                revenue_cents: revenue,
+                profit_cents: profit,
                 cash_cents: f.book.cash() + f.book.restricted_cash(),
                 debt_cents: f.book.debt(),
                 share_price_cents: f.shares.mark_cents,
                 market_cap_cents: f.shares.mark_cents.saturating_mul(f.shares.issued),
                 divisions: divisions.len() as u32,
-                top_share_bps: top.map(|t| t.0).unwrap_or(0),
-                top_share_label: top
-                    .map(|(_, d)| {
-                        format!(
-                            "{} in {}",
-                            INDUSTRY_NAMES[d.industry as usize],
-                            world
-                                .regions
-                                .get(d.region as usize)
-                                .map(|r| r.name.as_str())
-                                .unwrap_or("")
-                        )
-                    })
-                    .unwrap_or_default(),
+                net_margin_bps: (revenue > 0).then(|| share_bps(profit, revenue)),
             });
         }
         out.sort_by(|a, b| {
@@ -1173,5 +1155,98 @@ mod tests {
         );
         let demand: i64 = region.demand.iter().map(|d| d.share_bps).sum();
         assert!(demand <= 10_000);
+    }
+
+    /// A bank's and an insurer's living is interest, premiums and fees: the board and the
+    /// statements count it as revenue, so neither reads as earning nothing, and net income is
+    /// the same figure the books close with.
+    #[test]
+    fn financial_firms_show_interest_and_premiums_as_revenue() {
+        let session = SessionHandle::new(181, true, true).unwrap();
+        session.advance(2);
+        // Give the bank a loan to earn interest on and the insurer a policy to collect on.
+        let you = session.overview().primary_firm.unwrap();
+        {
+            let mut guard = session.lock();
+            let world = &mut guard.world;
+            let of = |name: &str| {
+                world
+                    .firms
+                    .iter()
+                    .find(|(_, f)| f.industry == 9 && f.name.contains(name))
+                    .map(|(h, _)| h)
+                    .unwrap()
+            };
+            let (bank, insurer) = (of("Bank"), of("Assurance"));
+            let plant = world.firms.get(Handle(you)).unwrap().facilities[0];
+            cw_sim::economy::banking::approve_loan(world, bank, Handle(you), 5_000_000).unwrap();
+            cw_sim::economy::insurance::bind(
+                world,
+                insurer,
+                Handle(you),
+                plant,
+                10_000_000,
+                100_000,
+            )
+            .unwrap();
+        }
+        session.advance(12);
+        let board = session.rivals_board();
+        let banks: Vec<&RivalRowDto> = board.iter().filter(|r| r.industry == "financial").collect();
+        assert!(!banks.is_empty(), "no bank or insurer on the board");
+        let handle = session.lock();
+        for bank in &banks {
+            let firm = handle.world.firms.get(Handle(bank.firm)).unwrap();
+            let recent = firm.book.recent_weeks();
+            let tail = &recent[recent.len().saturating_sub(13)..];
+            // Income the books credited: sales, premiums and fees, and interest earned.
+            let earned: i64 = tail.iter().map(|w| w.revenue + w.interest_income).sum();
+            assert_eq!(bank.revenue_cents, earned, "{}", bank.name);
+            assert_eq!(
+                bank.profit_cents,
+                tail.iter().map(|w| w.net_income).sum::<i64>()
+            );
+            if bank.revenue_cents > 0 {
+                assert_eq!(
+                    bank.net_margin_bps,
+                    Some(bank.profit_cents * 10_000 / bank.revenue_cents)
+                );
+            }
+        }
+        assert!(
+            banks.iter().all(|b| b.revenue_cents > 0),
+            "a bank or insurer with business shows no revenue"
+        );
+        drop(handle);
+        let bank = banks.iter().max_by_key(|b| b.revenue_cents).unwrap();
+        let weeks = session.statements(bank.firm, "week".into());
+        assert!(!weeks.is_empty());
+        for w in &weeks {
+            // Interest income sits in revenue, and the income statement still adds up.
+            assert_eq!(w.interest_income_cents, 0);
+            assert_eq!(
+                w.revenue_cents
+                    - w.cost_of_goods_cents
+                    - w.wages_cents
+                    - w.operating_expense_cents
+                    - w.depreciation_cents
+                    + w.other_cents,
+                w.ebit_cents
+            );
+            assert_eq!(
+                w.ebit_cents - w.interest_expense_cents - w.tax_cents,
+                w.net_income_cents,
+                "{}",
+                w.label
+            );
+        }
+        assert!(weeks.iter().any(|w| w.revenue_cents > 0));
+        // A company that is not a bank keeps interest income below the line.
+        let mine = session
+            .rivals_board()
+            .into_iter()
+            .find(|r| r.firm == you)
+            .unwrap();
+        assert_ne!(mine.industry, "financial");
     }
 }
