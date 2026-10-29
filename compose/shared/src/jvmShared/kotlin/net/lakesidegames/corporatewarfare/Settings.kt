@@ -93,6 +93,18 @@ class AppSettings(private val file: File) {
         },
     ); private set
 
+    /** Finished or left careers, newest first: a few lines each, for the main menu's Hall of Careers. */
+    var careers by mutableStateOf(loadCareers()); private set
+
+    /** Keep a career's summary. A career left again replaces its earlier line instead of adding one. */
+    fun recordCareer(summary: CareerSummary) {
+        careers = (listOf(summary) + careers.filterNot { it.title == summary.title && it.scenario == summary.scenario }).take(MAX_CAREERS)
+        store()
+    }
+
+    private fun loadCareers(): List<CareerSummary> =
+        props.getProperty("careers")?.let { runCatching { CareerSummary.decode(it) }.getOrNull() } ?: emptyList()
+
     /** A random id for this install, not tied to any account or device identifier. */
     val installId: String = props.getProperty("installId")?.takeIf { it.length == 36 }
         ?: java.util.UUID.randomUUID().toString().also { props.setProperty("installId", it); store() }
@@ -146,6 +158,7 @@ class AppSettings(private val file: File) {
             props.setProperty("labels", g.labels.toString())
         }
         setupFlag?.let { props.setProperty("setupDone", it) }
+        props.setProperty("careers", CareerSummary.encode(careers))
         props.setProperty("autoUpdate", autoUpdate.toString())
         props.setProperty("updateChannel", updateChannel.id)
         props.setProperty("analytics", analytics.toString())

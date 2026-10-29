@@ -31,6 +31,14 @@ final class AppStore: ObservableObject {
     /// The board's quarterly goal for the primary company and its recent results.
     @Published var objective: ObjectiveDto?
     @Published var objectiveHistory: [ObjectiveResultDto] = []
+    /// This career's chapters, board goals and achievements. Read when the Hall page is open, right
+    /// after a choice, and when the week changes with time paused or at 1x; never at 2x or 4x.
+    @Published var hall: HallDto?
+    var hallPageOpen = false
+    private var hallStale = false
+    /// The last chapter whose result the player has been shown.
+    private var resultSeen: UInt32 = 0
+    private var resultSeenReady = false
     @Published var strategyCatalogue: [StrategyDto] = []
     /// Products with the reference prices of the career's own scenario.
     @Published var productCatalogue: [ProductDto] = []
@@ -129,6 +137,13 @@ final class AppStore: ObservableObject {
     /// Stop time, save, and return to the main menu. The menu's Continue resumes this save.
     func exitToMenu() async {
         stopRunLoop()
+        if sessionReady, let career = await engine.hallOfCareers(), career.weeks > 0 {
+            let id = await engine.scenarioId()
+            let scenario = scenarios().first { $0.id == id }?.name ?? id
+            CareerSummary.record(CareerSummary(title: overview?.primaryName ?? "", scenario: scenario, hall: career))
+        }
+        resultSeenReady = false
+        hall = nil
         if let overview, sessionReady {
             await save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
         }
@@ -136,6 +151,50 @@ final class AppStore: ObservableObject {
         saves = saveManager.list()
         sessionReady = false
         statusLine = ""
+    }
+
+    /// A result that was already waiting when the career opened is not news.
+    private func noteResultsSeen(_ hall: HallDto?) {
+        guard !resultSeenReady, let hall else { return }
+        resultSeen = hall.chapters.last { $0.outcome == "met" || $0.outcome == "missed" }?.number ?? 0
+        resultSeenReady = true
+    }
+
+    /// Read the chapter data now, for the Hall page when it opens or the week moves.
+    func refreshHall() async {
+        let fresh = await engine.hallOfCareers()
+        noteResultsSeen(fresh)
+        if fresh != hall { hall = fresh }
+        score = await engine.score()
+    }
+
+    /// The board's offer for the current chapter, if one can still be taken.
+    var boardOffer: ChapterDto? {
+        hall?.chapters.last { $0.status == "current" && $0.chosen == nil && $0.offerWeeksLeft > 0 && !$0.offered.isEmpty }
+    }
+
+    /// The goal in force for the current chapter.
+    var activeMandate: (chapter: ChapterDto, mandate: MandateDto)? {
+        guard let chapter = hall?.chapters.last(where: { $0.status == "current" }),
+              let picked = chapter.chosen, chapter.outcome == "open",
+              chapter.offered.indices.contains(Int(picked)) else { return nil }
+        return (chapter, chapter.offered[Int(picked)])
+    }
+
+    /// A chapter that closed met or missed and has not been shown yet.
+    var chapterResult: ChapterDto? {
+        hall?.chapters.last { ($0.outcome == "met" || $0.outcome == "missed") && $0.number > resultSeen }
+    }
+
+    func dismissChapterResult() {
+        resultSeen = hall?.chapters.map(\.number).max() ?? resultSeen
+        objectWillChange.send()
+    }
+
+    /// Take the board's goal in position `pick` (0 to 2) for `firm`.
+    func chooseMandate(firm: UInt64, pick: Int) async -> CommandRejection? {
+        hallStale = true
+        return await submit(CommandJSON.command("ChooseMandate", ["firm": firm, "pick": pick]))
     }
 
     func restoreLatestIfAvailable() async {
@@ -395,6 +454,9 @@ final class AppStore: ObservableObject {
         let rivalFeed = await engine.rivalFeed(limit: 12)
         let objective = await engine.objective()
         let objectiveHistory = await engine.objectiveHistory()
+        let hallDue = hallPageOpen || hallStale || runSpeed <= 1
+        let hall = hallDue ? await engine.hallOfCareers() : self.hall
+        if hallDue { hallStale = false }
         let scenario = await engine.scenarioId()
         var catalogues: (strategies: [StrategyDto], recipes: [RecipeDto], products: [ProductDto])?
         if strategyCatalogue.isEmpty || productCatalogue.isEmpty || scenario != catalogueScenario {
@@ -433,6 +495,8 @@ final class AppStore: ObservableObject {
             put(\.rivalFeed, rivalFeed)
             put(\.objective, objective)
             put(\.objectiveHistory, objectiveHistory)
+            noteResultsSeen(hall)
+            put(\.hall, hall)
             if let catalogues {
                 put(\.strategyCatalogue, catalogues.strategies)
                 put(\.recipeOptions, catalogues.recipes)

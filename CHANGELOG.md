@@ -48,11 +48,22 @@ heading.
   subsidiary. You take one in the first four weeks. Meet it and the company pays you a management
   bonus and its standing improves. Miss it and the board loses confidence, and two misses in a row can
   draw an activist investor. Rival companies pick goals the same way. These replace the old quarterly
-  board goals, so there is one set of goals now. The screens for this come in a later update.
+  board goals, so there is one set of goals now. On screen, the offer sits at the top of the CEO
+  Office as three cards. Each says what the goal is, how it is measured, what meeting it pays (a
+  management bonus and standing) and what missing it costs, with a Choose button and how many weeks you
+  have to decide. It never stops the clock, and an offer you leave alone lapses with no penalty. The chair
+  of the board also writes you a letter in the Inbox when the offer opens. Once you choose, the card
+  becomes a goal strip with a progress bar, a number and a plain sentence on where you stand, plus the
+  weeks left in the chapter. When a chapter closes, a short panel tells you once whether the goal was met
+  and what it paid or cost.
 - Twenty career achievements, such as your first raid won, a subsidiary listed, ten companies in your
   group, surviving a hostile bid, seeing a bank rescued, living through every event of a scenario and a
-  thirty year career. Each is earned once and remembered with its week. The Hall of Careers screen
-  comes in a later update.
+  thirty year career. Each is earned once and remembered with its week. The new Hall of Careers page
+  (from the CEO Office, the desktop sidebar under You, or F9) lists this career's chapters in order
+  with the goal you took and whether you met it, shows the achievements as 8-bit badges (locked ones
+  are dim, with their name), and shows the five-year score when the career is scored. Every career
+  you leave is kept as a short line (title, scenario, chapters, goals met and missed, achievements) in
+  the Hall of Careers on the main menu.
 - Scenario history. Each scenario now has dated events from its own period that play out in your
   career: a regional bank failure and the 1986 oil collapse in Texas, the technology bust and the
   2001 recession in the Great Lakes, a browser listing boom and the dot-com bust in Silicon
