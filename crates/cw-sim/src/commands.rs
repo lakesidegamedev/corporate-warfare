@@ -500,6 +500,13 @@ pub enum CommandIntent {
         firm: Handle,
         pick: u8,
     },
+    /// Tell the analysts what operating profit to expect for the quarter: a low and a high end,
+    /// in cents. Last in the list so older command logs keep their variant numbers.
+    GiveGuidance {
+        firm: Handle,
+        low_cents: i64,
+        high_cents: i64,
+    },
 }
 
 fn yes() -> bool {
@@ -586,6 +593,7 @@ impl CommandIntent {
             CommandIntent::FileLobbyRequest { .. } => "file_lobby_request",
             CommandIntent::RespondEvent { .. } => "respond_event",
             CommandIntent::ChooseMandate { .. } => "choose_mandate",
+            CommandIntent::GiveGuidance { .. } => "give_guidance",
             CommandIntent::SetTransferPrice { .. } => "set_transfer_price",
             CommandIntent::CarveOutDivision { .. } => "carve_out_division",
             CommandIntent::ListSubsidiary { .. } => "list_subsidiary",
@@ -2897,6 +2905,14 @@ fn apply_intent(
         CommandIntent::ChooseMandate { firm, pick } => {
             require_control(world, actor, *firm)?;
             crate::economy::chapters::choose(world, *firm, *pick)
+        }
+        CommandIntent::GiveGuidance {
+            firm,
+            low_cents,
+            high_cents,
+        } => {
+            require_control(world, actor, *firm)?;
+            crate::economy::earnings::give_guidance(world, *firm, *low_cents, *high_cents)
         }
         CommandIntent::BuyOutVenture { venture, firm } => {
             require_control(world, actor, *firm)?;

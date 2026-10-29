@@ -1018,6 +1018,73 @@ pub struct StockLine {
     /// Share of the stock held outside the controlling holder, in basis points.
     pub float_bps: i64,
     pub controlled_by_you: bool,
+    pub earnings: EarningsLine,
+}
+
+/// What the analysts and the company have said about the next results, for one listed firm.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EarningsLine {
+    /// Analysts cover the firm (listed with a free float).
+    pub covered: bool,
+    /// buy, hold or sell; empty when not covered.
+    pub rating: String,
+    pub has_estimate: bool,
+    pub estimate_cents: i64,
+    /// Weeks to results day; zero means this week. Meaningless without an estimate.
+    pub weeks_to_results: u32,
+    pub reports_this_week: bool,
+    pub has_guidance: bool,
+    pub guide_low_cents: i64,
+    pub guide_high_cents: i64,
+    pub credibility_bps: i32,
+    /// The player may give guidance now (controls the firm, estimate out, none given yet).
+    pub can_guide: bool,
+    pub has_last: bool,
+    pub last_week: u32,
+    pub last_actual_cents: i64,
+    pub last_estimate_cents: i64,
+    pub last_move_bps: i32,
+    pub last_guidance_met: Option<bool>,
+    /// Quarters in a row of the same surprise (negative for misses).
+    pub streak: i32,
+}
+
+pub fn earnings_line(world: &World, handle: cw_core::ids::Handle) -> EarningsLine {
+    use cw_sim::economy::earnings as e;
+    let Some(firm) = world.firms.get(handle) else {
+        return EarningsLine::default();
+    };
+    if !e::covered(world, handle) {
+        return EarningsLine::default();
+    }
+    let tick = world.tick.0;
+    let fe = world.earnings.firms.get(&handle);
+    let estimate = fe.and_then(|f| f.estimate.as_ref()).filter(|x| x.due >= tick);
+    let guidance = fe.and_then(|f| f.guidance.as_ref());
+    let last = fe.and_then(|f| f.last.as_ref());
+    let weeks = estimate.map(|x| x.due - tick).unwrap_or(0);
+    EarningsLine {
+        covered: true,
+        rating: e::rating_for(firm.shares.fair_cents, firm.shares.mark_cents).key().to_owned(),
+        has_estimate: estimate.is_some(),
+        estimate_cents: estimate.map(|x| x.cents).unwrap_or(0),
+        weeks_to_results: weeks,
+        reports_this_week: estimate.is_some() && weeks <= 1,
+        has_guidance: guidance.is_some(),
+        guide_low_cents: guidance.map(|g| g.low_cents).unwrap_or(0),
+        guide_high_cents: guidance.map(|g| g.high_cents).unwrap_or(0),
+        credibility_bps: world.earnings.credibility(handle),
+        can_guide: estimate.is_some_and(|x| x.due > tick)
+            && guidance.is_none()
+            && cw_sim::economy::events_engine::player_side(world, handle),
+        has_last: last.is_some(),
+        last_week: last.map(|r| r.week).unwrap_or(0),
+        last_actual_cents: last.map(|r| r.actual_cents).unwrap_or(0),
+        last_estimate_cents: last.map(|r| r.estimate_cents).unwrap_or(0),
+        last_move_bps: last.map(|r| r.move_bps).unwrap_or(0),
+        last_guidance_met: last.and_then(|r| r.guidance_met),
+        streak: fe.map(|f| f.streak as i32).unwrap_or(0),
+    }
 }
 
 pub fn stock_board(world: &World) -> Vec<StockLine> {
@@ -1057,6 +1124,7 @@ pub fn stock_board(world: &World) -> Vec<StockLine> {
                 your_shares: firm.shares.qty(HolderId::Investor),
                 float_bps: outside * 10_000 / firm.shares.issued.max(1),
                 controlled_by_you: cw_sim::economy::events_engine::player_side(world, handle),
+                earnings: earnings_line(world, handle),
             }
         })
         .collect()

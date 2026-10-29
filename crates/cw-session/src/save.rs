@@ -43,6 +43,11 @@ const SYSTEMS_MAGIC: &[u8; 4] = b"SYST";
 /// `canonical_hash` folds it in; it stays outside the postcard payload so the save schema does not
 /// move. A save without it loads with no chapter state and opens the current chapter fresh.
 const CHAPTERS_MAGIC: &[u8; 4] = b"CHAP";
+/// Marks the earnings trailer (1.9): analyst estimates, guidance, credibility and the results log.
+/// Future-affecting, so `canonical_hash` folds it in; outside the postcard payload, so the save
+/// schema does not move. A save without it loads with it empty and the first estimates are
+/// written at the next quarter's close. Read in any order with the chapters and letters trailers.
+const EARNINGS_MAGIC: &[u8; 4] = b"EARN";
 /// Marks the read-letters trailer, after the chapters trailer: which letters are opened. Outside
 /// the hashed world; a save without it loads with every letter unread. The reader accepts the
 /// chapters and letters trailers in either order.
@@ -149,6 +154,21 @@ pub fn encode_with(
             });
         }
         out.extend_from_slice(CHAPTERS_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.earnings.is_empty() {
+        let bytes =
+            postcard::to_allocvec(&world.earnings).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(EARNINGS_MAGIC);
         out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
         out.extend_from_slice(&bytes);
@@ -318,6 +338,12 @@ pub fn decode_with(
         if magic == CHAPTERS_MAGIC {
             let body = trailer_body(rest)?;
             world.chapters = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+            rest = &rest[40 + body.len()..];
+        } else if magic == EARNINGS_MAGIC {
+            let body = trailer_body(rest)?;
+            world.earnings = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
                 detail: SaveFault::MalformedPayload,
             })?;
             rest = &rest[40 + body.len()..];

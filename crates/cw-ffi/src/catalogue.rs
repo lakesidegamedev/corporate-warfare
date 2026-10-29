@@ -168,6 +168,20 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             ],
         ),
         a(
+            "GiveGuidance",
+            "Shares",
+            "Give guidance",
+            "Tell the analysts what operating profit to expect this quarter, a low and a high end. They move their estimate toward the middle. Meet the low end on results day and they trust you more, so a later miss hurts the share price less. Miss it and the company loses reputation and trust, and activist investors take notice.",
+            "guidance earnings results analyst estimate",
+            vec![
+                firm(),
+                money("low_cents", "Low end of operating profit")
+                    .range(-500_000_000, 5_000_000_000, 100_000, 0),
+                money("high_cents", "High end of operating profit")
+                    .range(-500_000_000, 5_000_000_000, 100_000, 0),
+            ],
+        ),
+        a(
             "SetSectorFocus",
             "Company",
             "Change sector focus",

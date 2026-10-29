@@ -1603,6 +1603,12 @@ pub struct World {
     /// `economy::chapters`.
     #[serde(skip)]
     pub chapters: crate::economy::chapters::ChapterState,
+    /// Analyst estimates, guidance, credibility and results (1.9). Outside the postcard encoding
+    /// so no schema moves; future-affecting, so `canonical_hash` folds it in while it is not
+    /// empty, and it is saved in its own `EARN` trailer. A save without it loads with it empty
+    /// and the first estimates are written at the next quarter's close. See `economy::earnings`.
+    #[serde(skip)]
+    pub earnings: crate::economy::earnings::EarningsState,
     /// Which letters the player has read. Outside the encoding and the hash, in its own save
     /// trailer; no rule reads it. See `economy::mail`.
     #[serde(skip)]
@@ -1999,6 +2005,12 @@ pub fn canonical_hash(world: &World) -> String {
             if !world.chapters.is_empty() {
                 match postcard::to_allocvec(&world.chapters) {
                     Ok(chapters) => bytes.extend_from_slice(&chapters),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.earnings.is_empty() {
+                match postcard::to_allocvec(&world.earnings) {
+                    Ok(earnings) => bytes.extend_from_slice(&earnings),
                     Err(_) => return String::from("unhashable"),
                 }
             }

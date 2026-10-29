@@ -244,6 +244,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         world.pending_pause = pause_reason(world);
     }
     crate::ph!(
+        "earnings::weekly",
+        crate::economy::earnings::weekly(world, dataset)
+    );
+    crate::ph!(
         "pricing::weekly",
         crate::economy::pricing::weekly(world, dataset)
     );

@@ -189,6 +189,37 @@ pub struct StockDto {
     pub your_shares: i64,
     pub float_bps: i64,
     pub controlled_by_you: bool,
+    pub earnings: EarningsDto,
+}
+
+/// Earnings season for one company: the analyst's estimate, the last results against it, the
+/// rating and any guidance. Empty (`covered` false) for a company no analyst covers.
+#[derive(uniffi::Record)]
+pub struct EarningsDto {
+    pub covered: bool,
+    /// buy, hold or sell.
+    pub rating: String,
+    pub has_estimate: bool,
+    pub estimate_cents: i64,
+    /// Weeks to results day.
+    pub weeks_to_results: u32,
+    /// The company reports within the coming week: the stock board marks it.
+    pub reports_this_week: bool,
+    pub has_guidance: bool,
+    pub guide_low_cents: i64,
+    pub guide_high_cents: i64,
+    /// How far the market trusts management's numbers, 0 to 10,000.
+    pub credibility_bps: i32,
+    /// The player can give guidance now (send `GiveGuidance`).
+    pub can_guide: bool,
+    pub has_last: bool,
+    pub last_week: u32,
+    pub last_actual_cents: i64,
+    pub last_estimate_cents: i64,
+    /// The share price move on the last results day, basis points.
+    pub last_move_bps: i32,
+    pub last_guidance_met: Option<bool>,
+    pub streak: i32,
 }
 
 /// One good the firm makes, for the pricing panel.
@@ -1534,6 +1565,30 @@ fn stock_dto(line: cw_session::dto::StockLine) -> StockDto {
         your_shares: line.your_shares,
         float_bps: line.float_bps,
         controlled_by_you: line.controlled_by_you,
+        earnings: earnings_dto(line.earnings),
+    }
+}
+
+fn earnings_dto(e: cw_session::dto::EarningsLine) -> EarningsDto {
+    EarningsDto {
+        covered: e.covered,
+        rating: e.rating,
+        has_estimate: e.has_estimate,
+        estimate_cents: e.estimate_cents,
+        weeks_to_results: e.weeks_to_results,
+        reports_this_week: e.reports_this_week,
+        has_guidance: e.has_guidance,
+        guide_low_cents: e.guide_low_cents,
+        guide_high_cents: e.guide_high_cents,
+        credibility_bps: e.credibility_bps,
+        can_guide: e.can_guide,
+        has_last: e.has_last,
+        last_week: e.last_week,
+        last_actual_cents: e.last_actual_cents,
+        last_estimate_cents: e.last_estimate_cents,
+        last_move_bps: e.last_move_bps,
+        last_guidance_met: e.last_guidance_met,
+        streak: e.streak,
     }
 }
 
