@@ -11,8 +11,21 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- Wind a company down. A company with nothing left to run (no working site, no stake in another
+  company, no open bills) that can pay everyone it owes can now close itself: its remaining sites
+  and stock are sold at salvage value, lenders and unpaid bills are paid in full, and the rest goes
+  to the shareholders. Rival companies do the same after half a year with nothing running, so
+  about three idle, money-losing shells per game close instead of bleeding cash. Your main company
+  cannot be wound down.
+
 ### Changed
 
+- Export ports grow with use. When a state's exports of a good fill its port for a week, the
+  port gains one percent more room, so surpluses no longer pile up at a port sized for the
+  plants that ran at the start. Grain, for example, now leaves the corridor instead of sitting
+  in silos at a discount.
 - Markets respond to real supply and demand. A good stops creeping above its normal price just
   because sellers sold out: prices now rise only when the factories that buy it are actually short,
   and fall when unsold stock piles up beyond a few weeks of sales, by at most 2 percent a week.

@@ -226,6 +226,14 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             vec![f("facility", "Site", "my_facility")],
         ),
         a(
+            "WindDown",
+            "Operations",
+            "Wind the company down",
+            "Close a company that has nothing left to run. Its remaining sites and stock are sold at salvage value, every lender, bondholder and unpaid bill is paid in full, the rest goes to the shareholders and the company is dissolved. Only a solvent company with no working, building or retooling site, no stake in another company and no open bills can do this, and never your main company.",
+            "wind down close dissolve liquidate shut shell",
+            vec![firm()],
+        ),
+        a(
             "SetProductionTarget",
             "Operations",
             "Production target",

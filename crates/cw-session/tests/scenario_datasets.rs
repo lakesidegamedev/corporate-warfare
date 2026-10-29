@@ -52,7 +52,8 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// gained export room, household unmet demand began lifting prices and facilities, households
 /// and policies gained new encoded fields, and again in the same preview when carriers began
 /// trimming toward 85 percent fill by lot-km unless their lanes overflow and rival raiders began
-/// waiting a year between campaigns.
+/// waiting a year between campaigns, and again in the same preview when gateways began adding
+/// export room after weeks their exports filled them and idle rivals began winding down.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -64,15 +65,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "9b121ea1853731c5508275e5ebb5a3024565541bbe6dd91498fb6dfc5f6bd4ed",
+            "9eefaa261157c6e2e3d64ba38f5f07ff8fe6effd481a8c0d7b5ff5394635bac3",
         ),
         (
             2,
-            "2c8ca3fb85e807ea9a851e0f6e5fe18223ecc5a3c5a70e4620ae55ba1676f26f",
+            "2671aa69eff595709185bd7c40f8c3870c40d40db05a0ac6dd8583723504895e",
         ),
         (
             3,
-            "e56a7a1fa41f3a462288d74bce160ef49ae317a9c143820f5c5b348244208caf",
+            "e53c75d93b40dc195fb1141f3729636be0868b73169e4c887e7ba84e1fa05929",
         ),
     ];
     for (seed, hash) in pins {
@@ -84,12 +85,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "1456a25707cef2b3d8b011f906fc91f6c9c5dae1a4f0023afacf5393c16bf9dc"
+        "9601ed2d38a22eea142bfb870e74f015e99fc392963c10c23c4e60148f852a96"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "2f7343a55c9a2fc8d072b291cdb2e610e0064251ace447f27777b630a1683533"
+        "dfca0d4d3b04b987a0f3670aef652605f07e50bc9a576cda1d6864368d85b5e4"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();

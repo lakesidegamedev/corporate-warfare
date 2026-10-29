@@ -488,6 +488,12 @@ pub enum CommandIntent {
         campaign: u32,
         stance: u8,
     },
+    /// Wind down a solvent company with nothing left to run: sell what remains, pay creditors
+    /// in full, return the rest to shareholders and dissolve. Last in the list so older saves
+    /// and command logs keep their variant numbers.
+    WindDown {
+        firm: Handle,
+    },
 }
 
 fn yes() -> bool {
@@ -582,6 +588,7 @@ impl CommandIntent {
             CommandIntent::ExitVenture { .. } => "exit_venture",
             CommandIntent::SellBond { .. } => "sell_bond",
             CommandIntent::RespondActivist { .. } => "respond_activist",
+            CommandIntent::WindDown { .. } => "wind_down",
         }
     }
 }
@@ -2868,6 +2875,17 @@ fn apply_intent(
                 });
             }
             structure::respond_campaign(world, dataset, *campaign, *stance)
+        }
+        CommandIntent::WindDown { firm } => {
+            require_control(world, actor, *firm)?;
+            if let Some(reason) = crate::economy::insolvency::wind_down_blocker(world, *firm) {
+                return Err(DomainError::WrongPhase {
+                    expected: "a solvent company with no working plant",
+                    actual: reason,
+                });
+            }
+            crate::economy::insolvency::wind_down(world, *firm, dataset);
+            Ok(())
         }
         CommandIntent::BuyOutVenture { venture, firm } => {
             require_control(world, actor, *firm)?;

@@ -124,7 +124,11 @@ A gateway quotes finite buy and sell offers at the outside world's price +/-15 p
 freight. The outside price is the reference index scaled by the product's world price level
 (see World commodity prices below) and by inflation. Each state's weekly gateway capacity per product = the larger of the corridor's
 weekly input demand and weekly output for that product at seed, floor 100 lots, so a
-shortage can be filled and a producing region's surplus has a buyer. Gateways record the
+shortage can be filled and a producing region's surplus has a buyer. Export room grows with
+use the way infrastructure does: after a week whose exports filled a gateway's capacity, the
+capacity rises by one percent (at least one lot) for every later week, player and rival sellers
+alike. A week that leaves room unused adds nothing, and the outside account's paced cash still
+limits what the room pays for. Gateways record the
 lots they import and export each week and keep a smoothed import average; that average is
 the "room to build" shown on a state's board and used by rival expansion. No local
 back-to-back transaction can profit from the bid/ask spread.

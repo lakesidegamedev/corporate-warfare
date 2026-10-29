@@ -124,6 +124,18 @@ Otherwise liquidate assets at 40 percent carrying value through finite outside b
 funds. Insufficient buyers delay sale, never mint cash. Parent guarantee shortfalls become
 claims against guarantor up to the contracted cap. No implied guarantee for siblings.
 
+Voluntary wind-down (`WindDown`) lets a solvent company with nothing left to run close itself.
+It is allowed only when the company is trading normally, is not the career's primary company,
+has no plant operating, building or retooling, holds no stake in another company, has no
+trade payables, accruals, prepayments, insurance claims or provisions outstanding, and its
+cash plus 40 percent of the carrying value of everything else covers every loan, bond, deposit,
+arrear and accrued tax in full. Accrued tax is paid to the state, then the liquidation above
+runs: assets sold at 40 percent to finite outside buyers, creditors paid by seniority (in
+full, by the test), the residual to shareholders pro rata, and the company is dissolved. The
+player and rivals meet the same test. A rival proposes it after thirteen closed weeks without
+a sale when every plant has been mothballed for 26 weeks, or when it has had no plant at all
+past its first year.
+
 Corporate tax is 25 percent positive taxable quarterly profit; region modifier initially
 0 until evidenced calibration, not fabricated state law. Carry losses forward for four
 years in game accounting. Quarterly tax reserve accrues weekly; payment at week multiple

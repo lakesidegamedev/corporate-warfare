@@ -157,6 +157,7 @@ fn ceil_cost(price_cents: i64, milli_lots: i64) -> i64 {
 pub fn clear_week(world: &mut World, dataset: &Dataset) {
     // Roll the gateway volume signal: last week's imports feed the smoothed average.
     for gateway in &mut world.gateways {
+        grow_export_room(gateway);
         gateway.smoothed_import_lots =
             (gateway.smoothed_import_lots * 3 + gateway.last_import_lots) / 4;
         gateway.last_import_lots = 0;
@@ -168,6 +169,21 @@ pub fn clear_week(world: &mut World, dataset: &Dataset) {
     clear_households(world, dataset);
     clear_government(world, dataset);
     clear_public_works(world, dataset);
+}
+
+/// Room a gateway adds after a week its exports filled it, in basis points of its capacity.
+pub const EXPORT_ROOM_GROWTH_BPS: i64 = 100;
+
+/// A gateway is sized at the start to the plants then running. When sellers fill its export room
+/// the port and rail behind it are used to the limit, and like any used infrastructure it is
+/// extended: a full week adds one percent of room, at least one lot. Growth stops as soon as a
+/// week leaves room unused, so it follows sustained use, never a single spike, and the outside
+/// account's paced cash still limits what the room can pay for.
+fn grow_export_room(gateway: &mut crate::state::Gateway) {
+    if gateway.last_export_lots > 0 && gateway.last_export_lots >= gateway.capacity_lots {
+        let added = (gateway.capacity_lots * EXPORT_ROOM_GROWTH_BPS / 10_000).max(1);
+        gateway.capacity_lots = gateway.capacity_lots.saturating_add(added);
+    }
 }
 
 /// Background public works buy a finite weekly volume of construction service at the reference
@@ -1839,6 +1855,43 @@ mod tests {
             .balance(Account::Revenue);
         assert!(after.0 < before.0, "surplus power leaves");
         assert!(revenue_after > revenue_before, "the gateway pays for it");
+    }
+
+    #[test]
+    fn a_gateway_its_exports_filled_gains_one_percent_of_room() {
+        let gateway = |capacity_lots: i64, last_export_lots: i64| crate::state::Gateway {
+            region: 0,
+            product: 0,
+            capacity_lots,
+            sell_price_cents: 115,
+            buy_price_cents: 85,
+            last_import_lots: 0,
+            last_export_lots,
+            smoothed_import_lots: 0,
+        };
+        // Worked by hand: 1 percent of 250 is 2.5, rounded down to 2; 1 percent of 40 is 0.4,
+        // raised to the one-lot minimum; a co-product overflow past capacity also counts as full.
+        for (capacity, exported, expected) in [
+            (250, 250, 252),
+            (40, 40, 41),
+            (1_000, 1_200, 1_010),
+            (250, 249, 250),
+            (0, 0, 0),
+        ] {
+            let mut g = gateway(capacity, exported);
+            grow_export_room(&mut g);
+            assert_eq!(
+                g.capacity_lots, expected,
+                "{capacity} lots, {exported} exported"
+            );
+        }
+        // Twelve full weeks compound: 100 -> 101 -> 102 -> ... one lot each while under 200.
+        let mut g = gateway(100, 0);
+        for _ in 0..12 {
+            g.last_export_lots = g.capacity_lots;
+            grow_export_room(&mut g);
+        }
+        assert_eq!(g.capacity_lots, 112);
     }
 
     #[test]
