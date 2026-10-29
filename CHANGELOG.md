@@ -13,6 +13,22 @@ heading.
 
 ### Added
 
+- Letters from the people in your world. The Inbox is now correspondence. A rival chief writes
+  after a raid on you or by you, and after a joint venture or a friendly deal. A bidder writes
+  when they bid for your company. The central bank chair writes after a rate decision and gives
+  the bank's reason. Your governor or the leader of the government writes about new laws and
+  election results. The union writes when your workers strike. Your chief financial officer
+  sends a memo when the company is losing money, with the biggest reasons, and a short one on a
+  strong quarter. An analyst writes when the game sees a big event coming, such as a bank
+  failure. Each decision that used to be a card now arrives as a letter from the office that
+  brings it, a bank, an insurer, a regulator or the union, with the same answer buttons and the
+  same due week. Every letter has a portrait, the writer's name, role and company, and is
+  written in their voice: a raider is blunt, a cautious chief is careful, a financier talks in
+  figures. Letters only state facts the game recorded and stay short. Decisions are pinned on
+  top, unread letters have a dot and the Inbox badge counts them, opening a letter marks it
+  read, and letters older than eight weeks move to an Older letters list. Rival moves that
+  involve nobody writing to you stay in a small list below the letters. Which letters you have
+  read is saved with the game, and older saves simply show every letter as unread.
 - The weekly paper. Every week the game prints a newspaper for your scenario (The Corridor
   Times, The Gulf Ledger, The Valley Wire or Rhein-Ruhr Kurier) with a lead story, up to three
   briefs, a markets column and a classified strip. Stories are only things that really happened
@@ -43,8 +59,10 @@ heading.
   Valley, the reunification boom and the 1992 currency crisis on the Ruhr and Rhine. Every event
   is announced a few weeks ahead, then changes prices, demand, lending costs, central bank
   mood or the law for a while. New games choose Historical (the default), Off or Shuffled, which
-  keeps the same events but moves their dates by up to half a year. The app screens for this come
-  in a later update.
+  keeps the same events but moves their dates by up to half a year. The new game screen has a
+  Scenario history choice with a plain line on what each does, and the economy panel on the
+  Markets screen has a History card listing announced events ("in about 4 weeks") and the ones
+  that already happened, newest first. Tap a past event to read that week's paper.
 - First-run setup on every platform. The first time you open the game it walks you through a few short
   steps: a welcome, a one-second graphics test that suggests Low, Medium or High for your device and shows
   a preview of each, which version track to follow (Windows, Linux and directly downloaded Android only),

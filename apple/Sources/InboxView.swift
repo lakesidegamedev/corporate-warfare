@@ -5,6 +5,7 @@ import SwiftUI
 struct InboxView: View {
     @EnvironmentObject private var store: AppStore
     @State private var showingPaper = false
+    @State private var openLetter: LetterDto?
 
     private var subtitle: String {
         [store.selectedFirmDto?.name, store.overview?.weekLabel].compactMap { $0 }.joined(separator: " · ")
@@ -30,14 +31,7 @@ struct InboxView: View {
                            text: "\(mandatory) decision\(mandatory == 1 ? "" : "s") needed before time can advance.",
                            tint: Theme.warning)
             }
-            ForEach(store.events, id: \.id) { event in
-                DecisionCard(event: event)
-            }
-            if store.events.isEmpty && store.recentRaids.isEmpty && store.rivalFeed.isEmpty && store.deals.isEmpty {
-                CalloutRow(icon: "check_circle",
-                           text: "Quiet week. Decisions, market raids and takeover bids show up here when they happen.",
-                           tint: Theme.secondary)
-            }
+            LetterStack { openLetter = $0 }
             if !store.recentRaids.isEmpty {
                 feedSection("Market raids") {
                     ForEach(Array(store.recentRaids.prefix(8).enumerated()), id: \.offset) { index, raid in
@@ -62,6 +56,25 @@ struct InboxView: View {
                     }
                 }
             }
+        }
+        .sheet(item: $openLetter) { letter in
+            NavigationStack {
+                ScrollView {
+                    // The live copy, so reading it or answering its card updates the page.
+                    if let live = store.letters.first(where: { $0.id == letter.id }) ?? (letter.event == nil ? letter : nil) {
+                        LetterPaperView(letter: live)
+                            .padding(14)
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        // An answered decision has left the Inbox; close its page.
+                        Color.clear.onAppear { openLetter = nil }
+                    }
+                }
+                .background(Theme.ink)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { openLetter = nil } } }
+            }
+            .environmentObject(store)
+            .presentationBackground(Theme.ink)
         }
         .sheet(isPresented: $showingPaper) {
             NavigationStack {

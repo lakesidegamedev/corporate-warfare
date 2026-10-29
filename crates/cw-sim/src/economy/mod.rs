@@ -19,6 +19,7 @@ pub mod insurance;
 pub mod labour;
 pub mod logistics;
 pub mod macro_cycle;
+pub mod mail;
 pub mod markets;
 pub mod objectives;
 pub mod operations;

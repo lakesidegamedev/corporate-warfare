@@ -1596,6 +1596,10 @@ pub struct World {
     /// `economy::chapters`.
     #[serde(skip)]
     pub chapters: crate::economy::chapters::ChapterState,
+    /// Which letters the player has read. Outside the encoding and the hash, in its own save
+    /// trailer; no rule reads it. See `economy::mail`.
+    #[serde(skip)]
+    pub mail: crate::economy::mail::MailState,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.

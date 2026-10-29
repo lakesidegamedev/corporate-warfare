@@ -21,6 +21,7 @@ mod catalogue;
 mod chapters;
 mod company;
 mod custom;
+mod letters;
 mod paper;
 mod statements;
 mod systems;

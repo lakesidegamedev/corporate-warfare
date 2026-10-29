@@ -146,7 +146,7 @@ private struct DesktopSidebar: View {
                                 icon: item.icon,
                                 title: item.title,
                                 selected: page == item,
-                                badge: item == .inbox ? store.events.filter { $0.mandatory }.count : 0
+                                badge: item == .inbox ? store.inboxBadge : 0
                             ) { onPage(item) }
                         }
                     }
