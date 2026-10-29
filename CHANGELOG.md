@@ -13,6 +13,22 @@ heading.
 
 ### Added
 
+- Letters from the people in your world. The Inbox is now correspondence. A rival chief writes
+  after a raid on you or by you, and after a joint venture or a friendly deal. A bidder writes
+  when they bid for your company. The central bank chair writes after a rate decision and gives
+  the bank's reason. Your governor or the leader of the government writes about new laws and
+  election results. The union writes when your workers strike. Your chief financial officer
+  sends a memo when the company is losing money, with the biggest reasons, and a short one on a
+  strong quarter. An analyst writes when the game sees a big event coming, such as a bank
+  failure. Each decision that used to be a card now arrives as a letter from the office that
+  brings it, a bank, an insurer, a regulator or the union, with the same answer buttons and the
+  same due week. Every letter has a portrait, the writer's name, role and company, and is
+  written in their voice: a raider is blunt, a cautious chief is careful, a financier talks in
+  figures. Letters only state facts the game recorded and stay short. Decisions are pinned on
+  top, unread letters have a dot and the Inbox badge counts them, opening a letter marks it
+  read, and letters older than eight weeks move to an Older letters list. Rival moves that
+  involve nobody writing to you stay in a small list below the letters. Which letters you have
+  read is saved with the game, and older saves simply show every letter as unread.
 - The weekly paper. Every week the game prints a newspaper for your scenario (The Corridor
   Times, The Gulf Ledger, The Valley Wire or Rhein-Ruhr Kurier) with a lead story, up to three
   briefs, a markets column and a classified strip. Stories are only things that really happened
@@ -25,14 +41,28 @@ heading.
   the paper is in the sidebar under World (F8); on phones, open it from the ticker or the Inbox.
   Several bids for one company read as one story, dates read like "week 21, 1982", and the
   ticker stays quiet at 2x and 4x speed.
+- Chapters and board mandates. Each year of a career is now a chapter with a name (for example
+  "Chapter 3: The Squeeze" when a historical event plays that year). At the start of each chapter the
+  board of every company offers three goals, such as holding a bigger share of a market, lifting
+  profit, making an input yourself, keeping cash in reserve, cutting debt, winning a raid or listing a
+  subsidiary. You take one in the first four weeks. Meet it and the company pays you a management
+  bonus and its standing improves. Miss it and the board loses confidence, and two misses in a row can
+  draw an activist investor. Rival companies pick goals the same way. These replace the old quarterly
+  board goals, so there is one set of goals now. The screens for this come in a later update.
+- Twenty career achievements, such as your first raid won, a subsidiary listed, ten companies in your
+  group, surviving a hostile bid, seeing a bank rescued, living through every event of a scenario and a
+  thirty year career. Each is earned once and remembered with its week. The Hall of Careers screen
+  comes in a later update.
 - Scenario history. Each scenario now has dated events from its own period that play out in your
   career: a regional bank failure and the 1986 oil collapse in Texas, the technology bust and the
   2001 recession in the Great Lakes, a browser listing boom and the dot-com bust in Silicon
   Valley, the reunification boom and the 1992 currency crisis on the Ruhr and Rhine. Every event
   is announced a few weeks ahead, then changes prices, demand, lending costs, central bank
   mood or the law for a while. New games choose Historical (the default), Off or Shuffled, which
-  keeps the same events but moves their dates by up to half a year. The app screens for this come
-  in a later update.
+  keeps the same events but moves their dates by up to half a year. The new game screen has a
+  Scenario history choice with a plain line on what each does, and the economy panel on the
+  Markets screen has a History card listing announced events ("in about 4 weeks") and the ones
+  that already happened, newest first. Tap a past event to read that week's paper.
 - First-run setup on every platform. The first time you open the game it walks you through a few short
   steps: a welcome, a one-second graphics test that suggests Low, Medium or High for your device and shows
   a preview of each, which version track to follow (Windows, Linux and directly downloaded Android only),
@@ -89,7 +119,8 @@ heading.
   carry their owner's colour: gold for yours, the industry colour for a rival's, grey for outside
   carriers. On the desktop app the buildings and names are now drawn in the background like the
   ground, so panning and zooming close in stays smooth.
-
+- Saves from the earlier 1.9 previews carry on without chapter goals until the next chapter starts, and
+  the goal list and achievements are saved with the career. The save format number does not change.
 - Saves written by this version cannot be opened by older versions of the game. Careers saved in
   1.8.0 and the earlier 1.9 previews open as normal, carry on without scenario history (their
   dates are not invented backwards) and are saved in the new format from then on.
