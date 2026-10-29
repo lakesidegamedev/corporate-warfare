@@ -20,10 +20,12 @@ The 16 by 16 busts are derived from the 32 by 32 ones by downscale16(), see its 
 
     tools/cast_portraits_v2.py                   write the atlas
     tools/cast_portraits_v2.py --sheets DIR      also write the contact sheets and roster summary
+    tools/cast_portraits_v2.py --sheets DIR --compare OLD_ATLAS.json   also the pass 1 against pass 2 sheet
 """
 import json
 import math
 import sys
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,11 +50,19 @@ SKINS = [  # light, base, shade
     ('#FBE0CC', '#F1C7A4', '#C98A6E'),
     ('#F6D4B8', '#E8BE98', '#B87A5E'),
     ('#EEC79A', '#DDAB7A', '#A8704C'),
-    ('#E0A978', '#C98C5E', '#8E5638'),
-    ('#CC9768', '#AE7548', '#6E4128'),
-    ('#B07A52', '#946038', '#5A3322'),
-    ('#9A6642', '#774A30', '#432619'),
+    ('#E6B284', '#CF9468', '#94593A'),
+    ('#D8A474', '#BA8458', '#7E4D30'),
+    ('#C89468', '#AA7A50', '#6E4129'),
+    ('#B88258', '#946444', '#5C3724'),
 ]
+GOLD_JEWEL = '#E6C25A'
+IRISES = {'dark': '#3A2A22', 'brown': '#6A4A30', 'blue': '#3F6F9F', 'green': '#4C7A4C', 'hazel': '#7A6A34'}
+
+
+def blend(a, b, t):
+    ca, cb = a.lstrip('#'), b.lstrip('#')
+    out = [round(int(ca[i:i + 2], 16) * (1 - t) + int(cb[i:i + 2], 16) * t) for i in (0, 2, 4)]
+    return '#%02X%02X%02X' % tuple(out)
 HAIRS = {  # base, highlight, shade
     'black': ('#2A2522', '#5A524C', '#120F0E'),
     'darkbrown': ('#4A2E20', '#7A5640', '#26160F'),
@@ -93,22 +103,36 @@ WALLS = {  # office wall light, wall dark, frame light, frame dark per scenario
 
 # ---- Geometry (32 unit space; pixel (x, y) has its centre at (x + .5, y + .5) / scale) --------
 
-JAW = {'round': (17.5, 1.0, 3.0), 'square': (19.5, 1.0, 4.0), 'narrow': (15.5, 0.8, 2.5)}
+# Head shapes: width change, where the jaw starts, how fast it closes, the narrowest chin half width
+# and the lowest row of the chin.
+SHAPES = {
+    'round': dict(dw=0.0, start=17.5, slope=1.0, floor=3.0, chin=22.0),
+    'long': dict(dw=-0.5, start=18.5, slope=0.9, floor=3.0, chin=23.2),
+    'square': dict(dw=0.0, start=19.5, slope=1.0, floor=4.0, chin=22.0),
+    'narrow': dict(dw=-0.5, start=15.5, slope=0.8, floor=2.5, chin=22.0),
+    'broad': dict(dw=1.0, start=18.0, slope=0.8, floor=4.2, chin=22.0),
+    'soft': dict(dw=0.0, start=16.5, slope=1.15, floor=3.2, chin=22.0),
+    'heart': dict(dw=0.0, start=14.5, slope=1.25, floor=2.0, chin=22.5),
+}
+
+
+def eff_w(spec):
+    return spec.get('W', 7) + SHAPES[spec.get('jaw', 'round')]['dw']
 
 
 def head_hw(v, W, jaw):
-    if v < 4.0 or v > 22.0:
+    sh = SHAPES[jaw]
+    if v < 4.0 or v > sh['chin']:
         return -1.0
     top = min(W, 4.0 + (v - 4.5))
-    start, slope, floor = JAW[jaw]
-    bottom = W if v <= start else max(floor, W - slope * (v - start))
+    bottom = W if v <= sh['start'] else max(sh['floor'], W - sh['slope'] * (v - sh['start']))
     return min(top, bottom)
 
 
-def body_hw(v, pad):
+def body_hw(v, pad, cap=15.0):
     if v < 23.0:
         return -1.0
-    return min(15.0, 4.2 + (4.4 if pad else 3.0) * (v - 23.0))
+    return min(cap, 4.2 + (4.4 if pad else 3.0) * (v - 23.0))
 
 
 def noise(u, v):
@@ -209,7 +233,7 @@ def skin_tone(u, v, W):
 
 def body_char(spec, u, v):
     pad = spec.get('pad', False)
-    hw = body_hw(v, pad)
+    hw = body_hw(v, pad, 13.6 if spec['body'] == 'tie_slim' else 15.0)
     du = u - 16.0
     adu = abs(du)
     if adu > hw:
@@ -219,25 +243,36 @@ def body_char(spec, u, v):
     if du > 7.4 + (27.0 - min(v, 27.0)) * 0.25 or (du > 5.0 and v > 29.0):
         ch = 'e'
     t = v - 23.0
-    if style in ('tie', 'bow'):
+    if style in ('tie', 'bow', 'tie_wide', 'tie_slim'):
+        # 1981 wide: wide collar spread and lapels, broad tie. 1991 slim: close collar, thin lapel and tie.
+        spread, lap = {'tie_wide': (6.9, 2.3), 'tie_slim': (4.5, 0.7)}.get(style, (5.2, 0.9))
         sk = 3.0 - 1.0 * t
-        sv = 5.2 - 0.85 * t
+        sv = spread - 0.85 * t
         if adu < sk:
             ch = 'd'
         elif adu < sv:
             ch = 'w'
-        elif adu < sv + 0.9 and v > 24.0:
+        elif adu < sv + lap and v > 24.0:
             ch = 'e'
-        if style == 'tie':
-            knot = 24.0 <= v < 26.0 and adu <= 1.0
-            blade = v >= 26.0 and adu <= min(2.0, 1.0 + 0.5 * (v - 26.0))
+        if style != 'bow':
+            tw = {'tie_wide': 1.7, 'tie_slim': 0.9}.get(style, 1.0)
+            knot = 24.0 <= v < 26.0 and adu <= tw
+            blade = v >= 26.0 and adu <= min(tw + 1.0, tw + 0.5 * (v - 26.0))
             if knot or blade:
-                ch = 'a' if du < 0.3 or v > 26.0 and du < 1.2 else 'a'
+                ch = 'a'
         else:
             if 24.0 <= v < 26.2 and adu <= 3.4 and adu >= 0.9:
                 ch = 'a'
             elif 24.0 <= v < 26.2 and adu < 0.9:
                 ch = 'e'
+    elif style == 'polo':
+        sk = 2.6 - 0.5 * t
+        if adu < sk:
+            ch = 'd'
+        elif 22.8 <= v < 25.4 and sk <= adu < 5.2 - 0.4 * t:
+            ch = 'e'
+        elif adu < 0.6 and 24.0 <= v < 29.0:
+            ch = 'e'
     elif style == 'open':
         sk = 4.2 - 0.85 * t
         sv = 5.8 - 0.75 * t
@@ -304,8 +339,8 @@ def body_char(spec, u, v):
     return ch
 
 
-def neck_char(u, v):
-    if 19.0 <= v < 26.0 and abs(u - 16.0) <= 3.0:
+def neck_char(u, v, nw=3.0):
+    if 19.0 <= v < 26.0 and abs(u - 16.0) <= nw:
         if v < 23.7 or u - 16.0 > 1.8:
             return 'd'
         return 's'
@@ -361,27 +396,37 @@ def hat_char(spec, u, v):
     return None
 
 
-# Eye, brow and mouth shapes per expression. Eyes are 3 wide, 2 tall for the left eye (columns
-# 11 to 13, rows 12 and 13) and mirrored for the right. 'o' outline, 'w' white, 's' leaves skin,
-# 'd' shade, '.' leaves whatever is there. Brows and mouth are lists of (x, y) pixels.
+# Eye, brow and mouth shapes per expression. Eyes are 3 wide for the left eye (columns 11 to 13 plus
+# the eye spacing offset, rows 12 and 13) and mirrored for the right. 'o' outline, 'w' white, 's'
+# leaves skin, 'l' lens. Brows and mouth are lists of (x, y) pixels; brows are listed for the left
+# brow and mirrored, mouths are listed in full. m is the mouth colour, d the skin shade.
 EYES = {
     'neutral': ['sss', 'wow'],
     'pleased': ['.o.', 'o.o'],
     'displeased': ['ooo', 'wow'],
 }
-BROWS = {  # left brow, mirrored for the right; a row above the eyes' block row so 16 by 16 keeps a gap
+BROWS = {  # left brow, outer end first; the inner end is the pixel closest to the nose
     'neutral': [(10, 9), (11, 9), (12, 9), (13, 9)],
-    'pleased': [(10, 9), (11, 8), (12, 8), (13, 9)],
-    'displeased': [(10, 8), (11, 8), (12, 9), (13, 10)],
+    'pleased': [(10, 9), (11, 8), (12, 8), (13, 8)],
+    'displeased': [(10, 8), (11, 9), (12, 9), (13, 10), (13, 11)],
 }
-MOUTH = {  # centred, mirrored automatically by listing both sides
+MOUTH = {
     'neutral': [(14, 18), (15, 18), (16, 18), (17, 18)],
-    'pleased': [(14, 18), (15, 18), (16, 18), (17, 18), (13, 17), (18, 17)],
+    # wide upturned smile: corners up, a lit teeth row, a bright lower lip
+    'pleased': [(12, 17), (19, 17), (13, 18), (14, 18), (15, 18), (16, 18), (17, 18), (18, 18)],
+    # tight flat mouth with both corners pulled down
     'displeased': [(14, 19), (15, 19), (16, 19), (17, 19), (13, 20), (18, 20)],
 }
 LENS_ROWS = {
     'round': ['.ooo.', 'o...o', 'o...o', 'o...o', '.ooo.'],
     'square': ['ooooo', 'o...o', 'o...o', 'o...o', 'ooooo'],
+}
+EYE_OFFSET = {'close': 1, 'mid': 0, 'wide': -1}
+NECK_W = {'slim': 2.4, 'mid': 3.0, 'thick': 3.7}
+NOSES = {  # shade pixels, highlight pixels
+    'button': ([(15, 15), (16, 15)], [(15, 14)]),
+    'long': ([(16, 13), (16, 14), (16, 15), (15, 15), (15, 16)], [(15, 13), (15, 14)]),
+    'broad': ([(16, 14), (14, 15), (15, 15), (16, 15), (17, 15)], [(15, 14), (15, 13)]),
 }
 
 
@@ -405,17 +450,25 @@ def mirror_x(x):
     return 31 - x
 
 
-def render(spec, expression, k=1):
-    """One portrait as rows of letters at SIZE * k pixels square."""
+def ear_col(W):
+    return math.ceil(15.5 - W - 1e-9) - 1
+
+
+EAR_ROWS = {'small': (13, 15), 'big': (11, 16), 'lobe': (12, 17), 'flat': None}
+
+
+def render(spec, expression, k=1, fine=False):
+    """One portrait as rows of letters at SIZE * k pixels square. fine skips the face details
+    (eyes, brows, nose, mouth, lines, glasses) so the office painter can draw them at full size."""
     n = SIZE * k
     g = new_grid(n)
-    W = spec.get('W', 7)
     jaw = spec.get('jaw', 'round')
+    W = eff_w(spec)
     H = HAIR[spec['hair']]
+    tr = traits(spec)
 
     def each(fn):
         for y in range(n):
-            u_row = None
             v = (y + 0.5) / k
             for x in range(n):
                 u = (x + 0.5) / k
@@ -423,28 +476,33 @@ def render(spec, expression, k=1):
                 if r:
                     g[y][x] = r
 
-    each(lambda u, v: neck_char(u, v))
+    each(lambda u, v: neck_char(u, v, NECK_W[tr['neck']]))
     each(lambda u, v: body_char(spec, u, v))
 
     def head(u, v):
         hw = head_hw(v, W, jaw)
         if hw < 0:
             return None
-        adu = abs(u - 16.0)
-        if adu <= hw:
+        if abs(u - 16.0) <= hw:
             return skin_tone(u, v, W)
-        if 12.0 <= v < 15.0 and adu <= hw + 1.0 and hw >= W - 0.01:
-            return 'd' if u > 16.0 else 's'
         return None
 
     each(head)
+    xl = ear_col(W)
+    rows = EAR_ROWS[tr['ears']]
+    if rows:
+        for y in range(rows[0], rows[1]):
+            stamp(g, k, xl, y, 's', only='.')
+            stamp(g, k, mirror_x(xl), y, 'd', only='.')
+        if tr['ears'] == 'big':
+            for y in range(rows[0] + 1, rows[1] - 1):
+                stamp(g, k, xl - 1, y, 's', only='.')
+                stamp(g, k, mirror_x(xl) + 1, y, 'd', only='.')
 
-    # chin shadow on the neck is part of neck_char; deepen skin under the hairline and hat brim
     def beard(u, v):
         if beard_mask(spec, W, jaw, u, v):
             du = u - 16.0
-            rx = W
-            l = -(0.7 * du / rx + 0.8 * (v - 17.0) / 6.0)
+            l = -(0.7 * du / W + 0.8 * (v - 17.0) / 6.0)
             if l > 0.55:
                 return 'j'
             if l < -0.35:
@@ -454,13 +512,8 @@ def render(spec, expression, k=1):
 
     each(beard)
 
-    def hair(u, v):
-        if hair_mask(H, W, u, v):
-            return hair_tone(H, W, u, v)
-        return None
-
     if H is not None:
-        each(hair)
+        each(lambda u, v: hair_tone(H, W, u, v) if hair_mask(H, W, u, v) else None)
         despeckle(g, k, W, jaw)
 
     if spec.get('hat'):
@@ -472,17 +525,34 @@ def render(spec, expression, k=1):
                 return None
             each(shade)
 
-    # facial lines for age
+    # jewellery: studs on the ear lobes, a chain at the collar
+    if tr.get('earring'):
+        by = (rows[1] if rows else 15)
+        for x in (xl, mirror_x(xl)):
+            stamp(g, k, x, by, 'n', only='.sdt')
+    if tr.get('chain') and spec['body'] in ('blouse', 'blouse_round', 'turtle'):
+        for x in range(12, 20):
+            y = int(24.6 + 0.1 * (x - 15.5) ** 2)
+            stamp(g, k, x, y, 'n', only='dwace')
+
+    if fine:
+        return outline(g)
+
+    eo = EYE_OFFSET[tr['eyes']] if not spec.get('glasses') else 0
+    # facial lines for age, kept to a few clean marks
     lines = spec.get('lines', 0)
     if lines:
-        for (x, y) in [(12, 16), (12, 17), (19, 16), (19, 17)]:
-            stamp(g, k, x, y, 'd', only='stds')
+        for (x, y) in [(12, 16), (19, 16)]:
+            stamp(g, k, x, y, 'd', only='st')
         if lines > 1:
-            for (x, y) in [(12, 14), (19, 14), (13, 8), (14, 8), (17, 8), (18, 8)]:
+            for (x, y) in [(12, 17), (19, 17), (14, 7), (17, 7)]:
                 stamp(g, k, x, y, 'd', only='st')
 
-    # nose
-    for (x, y) in [(15, 15), (16, 15), (16, 14)]:
+    # nose: shade on the right and underneath, light on the bridge
+    shade_px, light_px = NOSES[tr['nose']]
+    for (x, y) in light_px:
+        stamp(g, k, x, y, 't', only='s')
+    for (x, y) in shade_px:
         stamp(g, k, x, y, 'd', only='stds')
 
     # spectacles: silver frame, clear lens, the eyes are drawn over the lens
@@ -494,11 +564,26 @@ def render(spec, expression, k=1):
             stamp(g, k, x, 12, 'f')
         for x in (9, 22):
             stamp(g, k, x, 12, 'f', only='stds')
-    # brows (hair shade) only over skin
-    bc = 'k'
-    for (x, y) in BROWS[expression]:
+
+    # cheeks lifted and lit when pleased
+    if expression == 'pleased':
+        for x in range(11 + eo, 14 + eo):
+            stamp(g, k, x, 14, 't', only='sd')
+            stamp(g, k, mirror_x(x), 14, 't', only='sd')
+    # brows over skin only: thin ones are drawn in the lighter hair tone, heavy ones add a second row
+    brow = BROWS[expression]
+    pix = [(x + eo, y) for (x, y) in brow]
+    if tr['brow'] == 'heavy':
+        pix += [(x + eo, y + 1) for (x, y) in brow[1:3]] if expression != 'displeased' else [(12 + eo, 10)]
+    if tr['brow'] == 'thin' and expression != 'displeased':
+        pix = pix[1:]
+    bc = 'h' if tr['brow'] == 'thin' and expression != 'displeased' else 'k'
+    for (x, y) in pix:
         stamp(g, k, x, y, bc, only='stds')
         stamp(g, k, mirror_x(x), y, bc, only='stds')
+    if expression == 'displeased':  # shadow line between the brows
+        for (x, y) in [(15, 9), (16, 9), (15, 10), (16, 10), (15, 11), (16, 11)]:
+            stamp(g, k, x, y, 'd', only='st')
     # eyes (a closed smiling eye inside a lens is a flat line, arcs would read as a cross)
     eyes = EYES[expression]
     if spec.get('glasses') and expression == 'pleased':
@@ -507,22 +592,32 @@ def render(spec, expression, k=1):
         for dx, c in enumerate(row):
             if c == '.':
                 continue
-            x = 11 + dx
+            x = 11 + eo + dx
             stamp(g, k, x, 12 + dy, c)
             stamp(g, k, mirror_x(x), 12 + dy, c)
-    if spec.get('lashes') and expression != 'pleased':
-        stamp(g, k, 10, 12, 'o', only='stds')
-        stamp(g, k, 21, 12, 'o', only='stds')
+    if spec.get('lashes') and not spec.get('glasses'):  # one dark pixel at the outer corner
+        stamp(g, k, 10 + eo, 12, 'o', only='stds')
+        stamp(g, k, mirror_x(10 + eo), 12, 'o', only='stds')
     # mouth
-    lip = 'd'
-    if spec.get('beard') in ('beard', 'goatee', 'moustache'):
+    lip = 'm'
+    if spec.get('beard') in ('beard', 'goatee'):
         hc = HAIRS[spec['hc']]
-        light = lum(hc[0]) > 150
-        lip = 'o' if light else 't'
-        if spec['beard'] == 'moustache':
-            lip = 'd'
+        lip = 'o' if lum(hc[0]) > 150 else 't'
     for (x, y) in MOUTH[expression]:
         stamp(g, k, x, y, lip)
+    if expression == 'neutral' and tr.get('lips') == 'full':
+        for x in (15, 16):
+            stamp(g, k, x, 19, 'd', only='st')
+    if expression == 'pleased':
+        for x in (14, 15, 16, 17):
+            stamp(g, k, x, 19, 'w')
+        for x in (15, 16):
+            stamp(g, k, x, 20, 't', only='stds' if lip == 'm' else 'stdsbhjk')
+    if expression == 'displeased':
+        for x in (14, 15, 16, 17):
+            stamp(g, k, x, 20, 'd', only='st')
+        for x in (15, 16):
+            stamp(g, k, x, 21, 'd', only='st')
     return outline(g)
 
 
@@ -576,7 +671,7 @@ def lum(hexc):
 
 # ---- 16 by 16 derivation ----------------------------------------------------------------------
 
-WEIGHT = {'o': 3.1, 'd': 1.0}
+WEIGHT = {'o': 3.1}
 
 
 def downscale16(rows, palette):
@@ -584,11 +679,11 @@ def downscale16(rows, palette):
 
     1. A block is transparent when it holds no outline pixel and at most one filled pixel.
     2. Otherwise its colour is the highest scoring letter, where each pixel scores its weight:
-       outline 3.1 (so one outline pixel always survives and the silhouette keeps its edge), the
-       mouth and shade letter d 1.0, every other letter 1.0.
+       outline 3.1 (so one outline pixel always survives and the silhouette keeps its edge), every
+       other letter 1.0.
     3. Ties go to the darker colour, so a two pixel brow or lash line stays a line.
-    4. A single mouth pixel (the corner of a smile or frown) is kept when its three neighbours are
-       skin: a lone d pixel on a skin block beats the skin, and nothing else uses d alone.
+    4. A single mouth pixel m (the corner of a smile or frown) is kept when its three neighbours are
+       skin: a lone m pixel on a skin block beats the skin, and nothing else uses m alone.
     The rule is checked by eye on every sheet and pinned by a test (derivation is deterministic).
     """
     out = []
@@ -603,9 +698,9 @@ def downscale16(rows, palette):
             score = {}
             for p in filled:
                 score[p] = score.get(p, 0.0) + WEIGHT.get(p, 1.0)
-            # mouth corner rule: one d pixel among skin pixels wins
-            if filled.count('d') == 1 and len(set(filled) - {'d'}) == 1 and set(filled) - {'d'} <= {'s', 't'}:
-                score['d'] = score['d'] + 2.1
+            # mouth corner rule: one m pixel among skin pixels wins
+            if filled.count('m') == 1 and len(set(filled) - {'m'}) == 1 and set(filled) - {'m'} <= {'s', 't', 'd'}:
+                score['m'] = score['m'] + 2.1
             best = max(score.items(), key=lambda kv: (kv[1], -lum(palette[kv[0]])))
             line += best[0]
         out.append(line)
@@ -668,32 +763,400 @@ SPECS = {
 }
 
 
-def palette_for(spec, rows_list):
+# Head shape per named person: five or more shapes in every scenario, softer jaws for most women.
+SHAPE_OF = {
+    'walter_pruitt': 'square', 'marisol_ybarra': 'soft', 'desmond_broussard': 'broad', 'cassandra_rutledge': 'heart',
+    'raymond_delgado': 'round', 'odell_tibbs': 'broad', 'evelyn_hollis': 'long', 'anil_deshpande': 'narrow',
+    'lionel_abrams': 'round', 'teresa_villanueva': 'soft',
+    'helen_kowalczyk': 'heart', 'kenji_watanabe_moore': 'square', 'gloria_abernathy': 'round', 'dennis_halloran': 'long',
+    'carol_metzger': 'soft', 'darnell_pierce': 'broad', 'adaora_nwosu': 'heart', 'daniel_hsieh': 'narrow',
+    'frank_pietrowski': 'broad', 'meredith_lahti': 'long',
+    'priya_raman': 'soft', 'joel_rosenthal': 'round', 'linh_tran': 'heart', 'leonard_hirsch': 'narrow',
+    'elena_montoya': 'round', 'delia_quintanilla': 'soft', 'jonah_whitcomb': 'long', 'tamika_greer': 'heart',
+    'judith_aronson': 'round', 'darius_rahimi': 'square',
+    'ingrid_vossberg': 'long', 'emre_kaplan': 'square', 'tobias_wendt': 'round', 'sabine_lohmeier': 'narrow',
+    'johannes_rauhut': 'long', 'juergen_zielke': 'broad', 'elisabeth_maurer': 'heart', 'marek_dombrowski': 'square',
+    'giuseppe_ferrante': 'round', 'birgit_nordmann': 'soft',
+}
+for _pid, _shape in SHAPE_OF.items():
+    SPECS[_pid]['jaw'] = _shape
+    if _shape == 'broad':
+        SPECS[_pid]['W'] = 7
+
+
+def fill_traits(key, spec):
+    """Deterministic face traits from a key (a person id): nose, eye spacing, ears, neck, brows and
+    jewellery. Explicit values in spec['traits'] win. Returns spec with a complete 'traits' dict."""
+    h = zlib.crc32(key.encode())
+
+    def pick(shift, opts):
+        return opts[(h >> shift) % len(opts)]
+
+    female = bool(spec.get('lashes'))
+    w = eff_w(spec)
+    t = dict(
+        nose=pick(0, ['button', 'button', 'long', 'broad'] if female else ['long', 'broad', 'button', 'long', 'broad']),
+        eyes=pick(4, ['close', 'mid', 'wide', 'mid']),
+        ears=pick(8, ['small', 'flat', 'small', 'lobe'] if female else ['big', 'small', 'lobe', 'small', 'big']),
+        neck=pick(12, ['slim', 'slim', 'mid'] if female else ['mid', 'thick', 'mid', 'thick']),
+        brow=pick(16, ['thin', 'mid', 'thin'] if female else ['mid', 'heavy', 'heavy', 'mid']),
+        iris='dark' if spec['skin'] >= 4 else pick(20, ['brown', 'blue', 'green', 'hazel', 'brown', 'blue']),
+    )
+    if t['eyes'] == 'wide' and w < 7:
+        t['eyes'] = 'mid'
+    if spec.get('glasses'):
+        t['eyes'] = 'mid'
+    if not female and spec.get('jaw') in ('broad', 'square') and t['neck'] == 'mid':
+        t['neck'] = 'thick'
+    if female:
+        t['earring'] = pick(24, [True, False, True])
+        t['lips'] = 'full'
+        t['chain'] = pick(26, [True, False, False]) and not spec.get('pearls')
+    t.update(spec.get('traits', {}))
+    out = dict(spec)
+    out['traits'] = t
+    return out
+
+
+def traits(spec):
+    return spec['traits']
+
+
+for _pid in list(SPECS):
+    SPECS[_pid] = fill_traits(_pid, SPECS[_pid])
+
+# Era clothing: 1981 wide lapels and broad ties, 1991 European slim cuts, 1995 open collars in tech,
+# 2000 business casual. Applied to the plain 'tie' body of the named people.
+ERA_TIE = {'texas-1981': 'tie_wide', 'ruhr-rhine-1991': 'tie_slim', 'silicon-valley-1995': 'open', 'great-lakes-2000': 'polo'}
+
+
+def era_spec(spec, scenario):
+    if spec['body'] == 'tie' and scenario in ERA_TIE:
+        spec = dict(spec, body=ERA_TIE[scenario])
+    return spec
+
+
+def palette_all(spec):
     sk = SKINS[spec['skin']]
     hc = HAIRS[spec['hc']]
     co = COATS[spec['coat']]
     full = {
         'o': OUTLINE, 't': sk[0], 's': sk[1], 'd': sk[2],
+        'm': blend(sk[2], '#4A1824', 0.6), 'p': blend(sk[1], '#A03A4A', 0.4),
         'h': hc[0], 'j': hc[1], 'k': hc[2],
         'c': co[0], 'e': co[1], 'a': ACCENTS[spec['acc']],
-        'w': WHITE, 'l': LENS, 'f': FRAME,
+        'w': WHITE, 'l': LENS, 'f': FRAME, 'n': GOLD_JEWEL, 'i': IRISES[traits(spec)['iris']],
     }
+    return full
+
+
+def palette_for(spec, rows_list):
     used = {ch for rows in rows_list for row in rows for ch in row}
-    return {k: v for k, v in full.items() if k in used}
+    return {k: v for k, v in palette_all(spec).items() if k in used}
 
 
-def office_portrait(spec, scenario):
-    """64 by 64 framed portrait: the person at twice the resolution on a painted wall."""
-    rows = render(spec, 'neutral', k=2)
+# ---- Office portraits (64 by 64, repainted rather than upscaled) -------------------------------
+
+TRADE = {  # what hangs or stands behind each chief executive
+    'dennis_halloran': 'skyline', 'gloria_abernathy': 'skyline', 'helen_kowalczyk': 'chimneys',
+    'kenji_watanabe_moore': 'chimneys', 'cassandra_rutledge': 'derrick', 'desmond_broussard': 'skyline',
+    'marisol_ybarra': 'chimneys', 'walter_pruitt': 'derrick', 'joel_rosenthal': 'skyline',
+    'leonard_hirsch': 'circuit', 'linh_tran': 'circuit', 'priya_raman': 'circuit',
+    'emre_kaplan': 'chimneys', 'ingrid_vossberg': 'skyline', 'sabine_lohmeier': 'skyline',
+    'tobias_wendt': 'headframe',
+}
+EYE64 = [  # left eye, six wide: whites with a two pixel iris under a dark lid
+    '.oooo.',
+    'owiiwo',
+    '.wiiw.',
+    '.dddd.',
+]
+BROW64 = [(0, 2), (1, 1), (2, 1), (3, 0), (4, 0), (5, 0), (6, 1), (7, 1), (8, 2)]
+NOSE64 = {  # shade, light, tip light, base shade, nostrils: lists of (x, y)
+    'button': dict(shade=[(33, y) for y in range(28, 32)], light=[(31, y) for y in range(28, 31)],
+                   tip=[(31, 31), (32, 31)], base=[(x, 32) for x in range(30, 34)], nostril=[(30, 33), (33, 33)]),
+    'long': dict(shade=[(33, y) for y in range(24, 33)], light=[(31, y) for y in range(24, 31)],
+                 tip=[(31, 32), (32, 32)], base=[(x, 33) for x in range(30, 34)], nostril=[(30, 34), (33, 34)]),
+    'broad': dict(shade=[(33, y) for y in range(26, 32)], light=[(31, y) for y in range(26, 31)],
+                  tip=[(31, 31), (32, 31)], base=[(x, 32) for x in range(29, 35)], nostril=[(29, 33), (30, 33), (33, 33), (34, 33)]),
+}
+SKIN_L = 'st'
+SKIN_ALL = 'stds'
+
+
+def put(g, x, y, ch, only=None):
+    if 0 <= y < len(g) and 0 <= x < len(g) and (only is None or g[y][x] in only):
+        g[y][x] = ch
+
+
+def put2(g, x, y, ch, only=None):
+    """Put at x and its mirror 63 - x."""
+    put(g, x, y, ch, only)
+    put(g, 63 - x, y, ch, only)
+
+
+def paint_face64(g, spec):
+    tr = traits(spec)
+    eo = 2 * (EYE_OFFSET[tr['eyes']] if not spec.get('glasses') else 0)
+    x0 = 22 + eo
+    if spec.get('beard') == 'moustache':  # shape the block into a moustache with lighter strands and trimmed ends
+        for y in range(31, 37):
+            for x in range(24, 40):
+                if g[y][x] == 'k' and y >= 33:
+                    g[y][x] = 'h'
+                if g[y][x] in 'hjk' and y == 35 and (x <= 26 or x >= 37):
+                    g[y][x] = 's' if x < 32 else 'd'
+    # cheeks and forehead planes first so features sit on top of them
+    for y in range(28, 40):
+        for x in range(17, 33):
+            if ((x - 23) / 4.0) ** 2 + ((y - 33) / 3.0) ** 2 <= 1.0:
+                put(g, x, y, 't', 's')
+            if ((x - 41) / 4.0) ** 2 + ((y - 35) / 3.5) ** 2 <= 1.0:
+                put(g, x, y, 'd', 's')
+    for y in range(11, 17):
+        for x in range(19, 34):
+            if ((x - 26) / 6.0) ** 2 + ((y - 13) / 2.0) ** 2 <= 1.0:
+                put(g, x, y, 't', 's')
+    if tr['ears'] != 'flat':
+        pass
+    lines = spec.get('lines', 0)
+    if lines:
+        for (x, y) in [(27, 34), (26, 35), (26, 36), (26, 37), (26, 38)]:
+            put2(g, x, y, 'd', 'st')
+        if lines > 1:
+            for (x, y) in [(19, 27), (19, 28), (18, 29)]:
+                put2(g, x, y, 'd', 'stds')
+            for x in range(26, 30):
+                put2(g, x, 15, 'd', 'st')
+    # nose
+    nz = NOSE64[tr['nose']]
+    for (x, y) in nz['light']:
+        put(g, x, y, 't', 's')
+    for (x, y) in nz['shade'] + nz['base']:
+        put(g, x, y, 'd', SKIN_ALL)
+    for (x, y) in nz['tip']:
+        put(g, x, y, 't', 'sd')
+    for (x, y) in nz['nostril']:
+        put(g, x, y, 'm', SKIN_ALL)
+    # glasses
+    if spec.get('glasses'):
+        rnd = spec['glasses'] == 'round'
+        for y in range(22, 32):
+            for x in range(20, 30):
+                edge = x in (20, 29) or y in (22, 31)
+                corner = x in (20, 29) and y in (22, 31)
+                if rnd and corner:
+                    continue
+                if edge:
+                    put2(g, x, y, 'f', SKIN_ALL)
+                else:
+                    put2(g, x, y, 'l', SKIN_ALL)
+        for x in (30, 31):
+            put2(g, x, 24, 'f')
+        put2(g, 19, 24, 'f', SKIN_ALL)
+    # brows
+    brow = list(BROW64)
+    if tr['brow'] == 'thin':
+        brow = brow[1:-1]
+    colour = 'h' if tr['brow'] == 'thin' else 'k'
+    for (dx, dy) in brow:
+        put2(g, x0 - 2 + dx, 18 + dy, colour, SKIN_ALL)
+    if tr['brow'] == 'heavy':
+        for (dx, dy) in brow[2:7]:
+            put2(g, x0 - 2 + dx, 19 + dy, 'k', SKIN_ALL)
+    # eyes
+    ch_iris = 'i'
+    for dy, row in enumerate(EYE64):
+        for dx, c in enumerate(row):
+            if c == '.':
+                continue
+            if c == 'd':
+                put2(g, x0 + dx, 24 + dy, 'd', SKIN_ALL)
+            else:
+                put2(g, x0 + dx, 24 + dy, 'i' if c == 'i' else c)
+    put2(g, x0 + 1, 23, 'd', SKIN_ALL)
+    put2(g, x0 + 4, 23, 'd', SKIN_ALL)
+    if spec.get('lashes') and not spec.get('glasses'):
+        put2(g, x0 - 1, 24, 'o', SKIN_ALL)
+        put2(g, x0 - 1, 23, 'o', SKIN_ALL)
+        put2(g, x0, 23, 'o', SKIN_ALL)
+    # mouth: lips with a dark line between, a lit lower lip, a shadow under it
+    for x in range(29, 35):
+        put(g, x, 37, 'p', 'stds')
+        put(g, x, 39, 'p', 'stds')
+    for x in (31, 32):
+        put(g, x, 39, 't', 'stdsp')
+    for x in range(30, 34):
+        put(g, x, 40, 'p', 'stds')
+        put(g, x, 41, 'd', 'st')
+    for x in range(28, 36):
+        put(g, x, 38, 'm', 'stdspjhk')
+
+
+def paint_hair64(g, spec):
+    """Strands in up to three tones: radial on top of the head, vertical below."""
+    for y in range(64):
+        for x in range(64):
+            c = g[y][x]
+            if c not in 'hjk':
+                continue
+            if y < 26:
+                key = int(math.atan2(y - 34, x - 32) * 8.0)
+            else:
+                key = x
+            r = noise(x, y)
+            if r > 0.82:
+                continue
+            if c == 'h':
+                if key % 4 == 0:
+                    g[y][x] = 'j'
+                elif key % 7 == 3:
+                    g[y][x] = 'k'
+            elif c == 'j' and key % 5 == 2:
+                g[y][x] = 'h'
+            elif c == 'k' and key % 6 == 1 and r > 0:
+                g[y][x] = 'h'
+
+
+def paint_clothes64(g, spec):
+    style = spec['body']
+    if style in ('tie', 'tie_wide', 'tie_slim', 'bow', 'open'):
+        spread, lap = {'tie_wide': (6.9, 2.3), 'tie_slim': (4.5, 0.7)}.get(style, (5.2, 0.9))
+        for y in range(48, 64):
+            v = (y + 0.5) / 2.0
+            t = v - 23.0
+            edge = spread - 0.85 * t + lap + 1.1
+            if style == 'open':
+                edge = 5.8 - 0.75 * t + 0.9 + 1.2
+            for x in range(32):
+                adu = 16.0 - (x + 0.5) / 2.0
+                if abs(adu - edge) < 0.5:
+                    put2(g, x, y, 'e', 'c')
+        # notch where the lapel meets the collar
+        nx = int(2 * (16.0 - (spread - 0.85 * 1.2 + lap + 0.3)))
+        put2(g, nx, 49, 'o', 'ce')
+    if style in ('tie', 'tie_wide', 'tie_slim'):
+        for y in range(52, 64):
+            for x in range(26, 38):
+                if g[y][x] == 'a' and (x + y) % 4 == 0:
+                    g[y][x] = 'e'
+        for y in (57, 58):  # pocket square
+            for x in (41, 42, 43):
+                put(g, x, y, 'w', 'ce')
+        put(g, 42, 58, 'a', 'w')
+    if style in ('blouse', 'blouse_round', 'scarf'):
+        for y in range(48, 64):  # a seam down the front
+            put(g, 32, y, 'e', 'a')
+
+
+def paint_bg64(scenario, trade, pid):
+    wall_l, wall_d, _, _ = WALLS[scenario]
+    light = blend(wall_l, '#D0D6DC', 0.32)
+    dark = blend(wall_d, '#000000', 0.38)
+    mid = blend(wall_d, wall_l, 0.55)
+    bg = [['y' if ((x - 18) / 36.0) ** 2 + ((y - 20) / 36.0) ** 2 < 0.45 else 'Y' for x in range(64)] for y in range(64)]
+    flip = zlib.crc32(pid.encode()) & 1  # which side gets the object
+
+    def px(x, y, ch):
+        if flip:
+            x = 63 - x
+        if 4 <= x < 60 and 4 <= y < 60:
+            bg[y][x] = ch
+
+    def rect(x0, y0, x1, y1, ch):
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                px(x, y, ch)
+
+    if trade == 'skyline':
+        rect(5, 6, 24, 40, 'q')
+        rect(7, 8, 22, 38, 'u')
+        for bx, bw, bh in ((7, 4, 14), (11, 3, 22), (14, 5, 17), (19, 4, 26)):
+            rect(bx, 38 - bh, bx + bw - 1, 38, 'U')
+            for wy in range(38 - bh + 2, 37, 3):
+                for wx in range(bx + 1, bx + bw - 1, 2):
+                    px(wx, wy, 'u')
+        rect(14, 8, 15, 38, 'q')
+        rect(7, 22, 22, 22, 'q')
+    elif trade == 'derrick':
+        for y in range(8, 41):
+            half = (y - 8) * 0.42
+            px(int(14 - half), y, 'U')
+            px(int(14 + half), y, 'U')
+            if (y - 8) % 7 == 3:
+                for x in range(int(14 - half), int(14 + half) + 1):
+                    px(x, y, 'U')
+            if (y - 8) % 7 == 0 and y > 8:
+                for x in range(int(14 - half) + 1, int(14 + half)):
+                    px(x + ((y - 8) // 7) % 2 * 0, y, 'U') if (x + y) % 3 == 0 else None
+        rect(12, 5, 16, 7, 'U')
+        rect(13, 3, 15, 4, 'U')
+        rect(4, 41, 26, 43, 'U')
+        rect(5, 38, 8, 40, 'U')
+    elif trade == 'chimneys':
+        for cx, cw, ch_, band in ((6, 5, 30, 8), (13, 5, 24, 6), (20, 4, 18, 5)):
+            top = 42 - ch_
+            rect(cx, top, cx + cw - 1, 43, 'U')
+            for by in range(top, top + 8, 4):
+                rect(cx, by, cx + cw - 1, by + 1, 'u')
+        for sx, sy, sr in ((10, 8, 3), (14, 5, 3), (18, 3, 2), (24, 14, 3)):
+            for y in range(sy - sr, sy + sr + 1):
+                for x in range(sx - sr - 1, sx + sr + 2):
+                    if ((x - sx) / (sr + 1.0)) ** 2 + ((y - sy) / float(sr)) ** 2 <= 1.0:
+                        px(x, y, 'u')
+        rect(4, 42, 28, 47, 'U')
+        for sx in range(5, 28, 6):  # saw tooth roof
+            for i in range(5):
+                px(sx + i, 41 - i // 2, 'U')
+    elif trade == 'circuit':
+        rect(5, 7, 25, 41, 'q')
+        rect(7, 9, 23, 39, 'U')
+        for y, x0_, x1_ in ((12, 8, 19), (17, 12, 22), (30, 8, 16), (35, 10, 22)):
+            for x in range(x0_, x1_ + 1):
+                px(x, y, 'u')
+        for x, y0_, y1_ in ((19, 12, 17), (12, 17, 30), (22, 17, 24), (16, 30, 35)):
+            for y in range(y0_, y1_ + 1):
+                px(x, y, 'u')
+        rect(11, 21, 18, 27, 'q')
+        rect(13, 23, 16, 25, 'U')
+        for y in range(20, 29, 2):
+            px(10, y, 'u')
+            px(19, y, 'u')
+        for (x, y) in ((8, 12), (22, 17), (8, 30), (22, 35), (20, 11)):
+            rect(x, y, x + 1, y + 1, 'q')
+    elif trade == 'headframe':
+        for y in range(10, 44):
+            half = (y - 10) * 0.28
+            px(int(15 - half), y, 'U')
+            px(int(15 + half), y, 'U')
+            if (y - 10) % 8 == 5:
+                for x in range(int(15 - half), int(15 + half) + 1):
+                    px(x, y, 'U')
+        for y in range(4, 16):
+            for x in range(8, 23):
+                d = ((x - 15) ** 2 + (y - 9) ** 2) ** 0.5
+                if 5.0 <= d <= 6.2 or d <= 1.2:
+                    px(x, y, 'U')
+        for i in range(12):
+            px(15 + i, 9 + i * 2 // 1 if 9 + i * 2 < 44 else 43, 'U')
+        rect(4, 44, 26, 48, 'U')
+    pal = {'u': light, 'U': dark, 'q': mid}
+    return bg, pal
+
+
+def office_portrait(spec, scenario, pid):
+    """64 by 64 framed portrait, repainted at full size: finer eyes, nose and cheek planes, hair
+    strands in three tones, lapel and collar detail, and an object that hints at the trade."""
     n = OFFICE
-    g = [list(r) for r in rows]
-    wall_l, wall_d, frame_l, frame_d = WALLS[scenario]
-    # wall behind the sitter, lighter toward the upper left, then the frame over everything
+    g = [list(r) for r in render(spec, 'neutral', k=2, fine=True)]
+    paint_face64(g, spec)
+    paint_hair64(g, spec)
+    paint_clothes64(g, spec)
+    bg, extra_pal = paint_bg64(scenario, TRADE[pid], pid)
     for y in range(n):
         for x in range(n):
             if g[y][x] == '.':
-                glow = ((x - 18) / 36.0) ** 2 + ((y - 20) / 36.0) ** 2
-                g[y][x] = 'y' if glow < 0.45 else 'Y'
+                g[y][x] = bg[y][x]
     for y in range(n):
         for x in range(n):
             e = min(x, y, n - 1 - x, n - 1 - y)
@@ -703,24 +1166,24 @@ def office_portrait(spec, scenario):
                 g[y][x] = 'g'
             elif e == 3 and g[y][x] in 'yY':
                 g[y][x] = 'Y'
-    # keep the sitter's own outline against the wall: it is already drawn by render
-    return [''.join(r) for r in g]
+    return [''.join(r) for r in g], extra_pal
 
 
 def build_person(pid, spec, scenario, chief):
+    spec = era_spec(spec, scenario)
     shapes = {e: render(spec, e) for e in EXPRESSIONS}
     pal = palette_for(spec, list(shapes.values()))
-    small = {e: downscale16(shapes[e], palette_for(spec, [shapes[e]]) if False else {**{'o': OUTLINE}, **pal}) for e in EXPRESSIONS}
+    small = {e: downscale16(shapes[e], pal) for e in EXPRESSIONS}
     entry = {'palette': pal, 'expressions': shapes, 'small': small}
     office = None
     if chief:
-        orows = office_portrait(spec, scenario)
+        orows, extra_pal = office_portrait(spec, scenario, pid)
         wl, wd, fl, fd = WALLS[scenario]
-        opal = dict(pal)
-        used = {ch for row in orows for ch in row}
+        opal = palette_all(spec)
         opal.update({'y': wl, 'Y': wd, 'g': fl, 'G': fd})
-        opal = {k: v for k, v in opal.items() if k in used}
-        office = {'palette': opal, 'rows': orows}
+        opal.update(extra_pal)
+        used = {ch for row in orows for ch in row}
+        office = {'palette': {k: v for k, v in opal.items() if k in used}, 'rows': orows}
     return entry, office
 
 
@@ -737,17 +1200,17 @@ ERA_BY_PLACE = {
 }
 MEN_HAIR = ['crop', 'short', 'side_part', 'mop', 'slick', 'wave', 'buzz', 'curly_short', 'horseshoe', 'bald', 'afro_round', 'crop']
 WOMEN_HAIR = ['bob', 'bob_fringe', 'long', 'pixie', 'bun', 'bun_high', 'perm', 'curly_short', 'wave', 'afro_round', 'long', 'bob']
-ERA_BODY = {
-    1981: [('tie', 0.4, True), ('open', 0.3, True), ('bow', 0.1, True), ('work', 0.1, False), ('tie', 0.1, True)],
-    1991: [('tie', 0.5, True), ('knit', 0.2, False), ('open', 0.15, True), ('scarf', 0.05, False), ('tie', 0.1, True)],
-    1995: [('tie', 0.25, False), ('open', 0.3, False), ('blouse_round', 0.2, False), ('turtle', 0.15, False), ('knit', 0.1, False)],
-    2000: [('open', 0.4, False), ('tie', 0.25, False), ('knit', 0.15, False), ('blouse_round', 0.1, False), ('work', 0.1, False)],
+ERA_BODY = {  # (body, weight, shoulder pads): wide lapels 1981, slim European cuts 1991, open collars 1995, casual 2000
+    1981: [('tie_wide', 0.5, True), ('open', 0.2, True), ('bow', 0.1, True), ('work', 0.1, False), ('tie_wide', 0.1, True)],
+    1991: [('tie_slim', 0.55, False), ('knit', 0.2, False), ('open', 0.1, False), ('scarf', 0.05, False), ('tie_slim', 0.1, False)],
+    1995: [('open', 0.35, False), ('polo', 0.25, False), ('turtle', 0.15, False), ('tie_slim', 0.1, False), ('knit', 0.15, False)],
+    2000: [('open', 0.3, False), ('polo', 0.3, False), ('tie', 0.15, False), ('knit', 0.15, False), ('work', 0.1, False)],
 }
 FEMALE_BODY = {
     1981: ['blouse', 'blouse_round', 'scarf', 'blouse'],
     1991: ['blouse', 'scarf', 'blouse_round', 'turtle'],
     1995: ['blouse_round', 'turtle', 'blouse', 'knit'],
-    2000: ['blouse_round', 'blouse', 'turtle', 'knit'],
+    2000: ['blouse_round', 'polo', 'turtle', 'knit'],
 }
 
 
@@ -780,7 +1243,7 @@ class Lcg:
         return items[-1]
 
 
-def extra_spec(rng, name, home, age):
+def extra_spec(rng, key, name, home, age):
     female = name.split()[0] in FEMALE
     place = home.split(', ')[-1]
     era = ERA_BY_PLACE.get(place, 2000)
@@ -795,13 +1258,13 @@ def extra_spec(rng, name, home, age):
         hair = 'bob'
     body, _, pad = rng.weighted(ERA_BODY[era]) if not female else (rng.choice(FEMALE_BODY[era]), 0, era == 1981)
     spec = dict(
-        skin=skin, hair=hair, hc=hc, W=rng.choice([6, 7, 7, 8]), jaw=rng.choice(['round', 'square', 'narrow']),
+        skin=skin, hair=hair, hc=hc, W=rng.choice([6, 7, 7, 8]), jaw=rng.choice(['round', 'square', 'narrow', 'long', 'broad'] if not female else ['soft', 'heart', 'round', 'narrow', 'long']),
         body=body, coat=rng.choice(sorted(COATS)), acc=rng.choice(sorted(ACCENTS)), pad=pad or None,
     )
     spec = {k: v for k, v in spec.items() if v is not None}
     if female:
         spec['lashes'] = True
-        if body in ('blouse', 'blouse_round') and rng.random() < 0.4:
+        if body in ('blouse', 'blouse_round', 'polo') and rng.random() < 0.4:
             spec['pearls'] = True
     elif rng.random() < 0.38:
         spec['beard'] = rng.choice(['moustache', 'moustache', 'goatee', 'beard'])
@@ -816,16 +1279,37 @@ def extra_spec(rng, name, home, age):
         spec['hat'] = 'stetson'
     if spec['hair'] == 'horseshoe' and spec.get('hat'):
         spec['hair'] = 'crop'
-    return spec
+    if spec['jaw'] == 'broad':
+        spec['W'] = 7
+    return fill_traits(key, spec)
 
 
 def extras_sample():
-    """First EXTRAS_SAMPLE generated extras from content/cast.json's extras list: (record, spec)."""
-    extras = json.loads(OLD_CAST.read_text())['extras']
+    """First EXTRAS_SAMPLE extras from content/cast.json: (record, spec). The record carries a
+    proposed unique name: no first name or surname repeats inside the sample or matches a person
+    in the 1.9 roster, drawn from the kit's own name pools. content/cast.json is not touched here
+    because it is part of the dataset hash."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from cast_portraits import GIVEN, FAMILY
+    roster = json.loads(ROSTER.read_text())['people']
+    taken_first = {p['name'].split()[0] for p in roster}
+    taken_last = {p['name'].split()[-1] for p in roster}
+    extras = json.loads(OLD_CAST.read_text())['extras'][:EXTRAS_SAMPLE]
     rng = Lcg(0x32B17)
     out = []
-    for e in extras[:EXTRAS_SAMPLE]:
-        out.append((e, extra_spec(rng, e['name'], e['home'], e['age'])))
+    for e in extras:
+        first, last = e['name'].split()[0], e['name'].split()[-1]
+        female = first in FEMALE
+        spec = extra_spec(rng, e['id'], e['name'], e['home'], e['age'])
+        if first in taken_first:
+            pool = [g for g in GIVEN if (g in FEMALE) == female and g not in taken_first]
+            first = pool[zlib.crc32(e['id'].encode()) % len(pool)]
+        if last in taken_last:
+            pool = [f for f in FAMILY if f not in taken_last]
+            last = pool[zlib.crc32((e['id'] + 'L').encode()) % len(pool)]
+        taken_first.add(first)
+        taken_last.add(last)
+        out.append((dict(e, name=f'{first} {last}', original_name=e['name']), spec))
     return out
 
 
@@ -846,7 +1330,7 @@ def build():
     sample = {}
     for e, spec in extras_sample():
         rows = render(spec, 'neutral')
-        sample[e['id']] = {'palette': palette_for(spec, [rows]), 'rows': rows}
+        sample[e['id']] = {'name': e['name'], 'palette': palette_for(spec, [rows]), 'rows': rows}
     return {
         'size': SIZE,
         'small_size': SMALL,
@@ -991,6 +1475,32 @@ def extras_sheet(path, atlas):
     img.save(path)
 
 
+COMPARE = ['walter_pruitt', 'cassandra_rutledge', 'desmond_broussard', 'odell_tibbs', 'priya_raman', 'ingrid_vossberg']
+
+
+def compare_sheet(path, before, atlas, roster):
+    """Six people, neutral, pleased and displeased at 6x: pass 1 on the left, pass 2 on the right."""
+    from PIL import Image, ImageDraw
+    scale = 6
+    side = SIZE * scale
+    gap, pad = 8, 20
+    block = 3 * side + 2 * gap
+    names = {p['id']: p['name'] for p in roster['people']}
+    img = Image.new('RGB', (2 * block + 3 * pad, 60 + len(COMPARE) * (side + 28 + pad) + pad), BG)
+    d = ImageDraw.Draw(img)
+    d.text((pad, 12), 'Pass 1 (left) against pass 2 (right): neutral, pleased, displeased at 6x', font=font(20, True), fill=GOLD)
+    for r, pid in enumerate(COMPARE):
+        oy = 50 + r * (side + 28 + pad)
+        d.text((pad, oy), names[pid], font=font(14, True), fill=TEXT)
+        for col, src in enumerate((before, atlas)):
+            e = src['portraits'][pid]
+            x = pad + col * (block + pad)
+            for name in EXPRESSIONS:
+                draw_rows(img, e['expressions'][name], e['palette'], x, oy + 22, scale)
+                x += side + gap
+    img.save(path)
+
+
 def summary_md(path, roster):
     lines = ['# Corporate Warfare 1.9 cast proposal: roster summary', '',
              'Forty fictional people, ten per scenario. Awaiting owner approval. Nothing here is wired into the game.', '']
@@ -1012,7 +1522,7 @@ def main(argv):
     atlas = build()
     OUT.write_text(json.dumps(atlas, indent=1) + '\n')
     print(f'{len(atlas["portraits"])} people, {len(atlas["office"])} office portraits -> {OUT}')
-    if len(argv) == 3 and argv[1] == '--sheets':
+    if len(argv) >= 3 and argv[1] == '--sheets':
         out = Path(argv[2])
         out.mkdir(parents=True, exist_ok=True)
         roster = json.loads(ROSTER.read_text())
@@ -1021,6 +1531,8 @@ def main(argv):
         office_sheet(out / 'office-portraits.png', roster, atlas)
         extras_sheet(out / 'extras-sample.png', atlas)
         summary_md(out / 'roster-summary.md', roster)
+        if len(argv) == 5 and argv[3] == '--compare':
+            compare_sheet(out / 'before-after-expressions.png', json.loads(Path(argv[4]).read_text()), atlas, roster)
         print('sheets ->', out)
 
 

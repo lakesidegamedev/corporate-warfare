@@ -13,7 +13,7 @@ heading.
 
 ### Changed
 
-- Tooling: a 1.9 cast proposal, not wired into the game. `content/cast-1.9.json` lists 40 fictional people (ten per scenario, with voice notes), `tools/cast_portraits_v2.py` draws 32 by 32 busts with neutral, pleased and displeased expressions, a derived 16 by 16 version, 64 by 64 office portraits for chief executives and a larger extras kit, written to `apple/Resources/cast-portraits-v2.json`. Awaiting owner approval of the roster and portraits.
+- Tooling: a 1.9 cast proposal, not wired into the game. `content/cast-1.9.json` lists 40 fictional people (ten per scenario, with voice notes), `tools/cast_portraits_v2.py` draws 32 by 32 busts with neutral, pleased and displeased expressions, a derived 16 by 16 version, 64 by 64 office portraits for chief executives and a larger extras kit, written to `apple/Resources/cast-portraits-v2.json`. Awaiting owner approval of the roster and portraits. Second pass: clearer pleased and displeased faces, seven head shapes with varied noses, eye spacing, ears and necks, softer women's faces with jewellery, repainted 64 by 64 office portraits with a trade object on the wall, era clothing, lifted deep skin tones and unique names in the extras sample.
 
 ## [1.8.0] - 2026-10-29
 

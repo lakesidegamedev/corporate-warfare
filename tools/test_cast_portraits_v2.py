@@ -85,13 +85,13 @@ class Portraits(unittest.TestCase):
                 other = e['expressions'][name]
                 self.assertNotEqual(base, other, (pid, name))
                 for y in range(32):
-                    if y < 8 or y > 20:
+                    if y < 7 or y > 21:
                         self.assertEqual(base[y], other[y], (pid, name, y))
 
     def test_palettes_valid_and_limited(self):
         for pid, e in self.atlas['portraits'].items():
             pal = e['palette']
-            self.assertLessEqual(len(pal), 14, pid)
+            self.assertLessEqual(len(pal), 16, pid)
             for k, v in pal.items():
                 self.assertRegex(v, HEX)
             self.assertEqual(pal['o'], C.OUTLINE)
@@ -121,14 +121,52 @@ class Portraits(unittest.TestCase):
             for r in o['rows']:
                 self.assertTrue(set(r) <= set(o['palette']), pid)
 
+    def test_expressions_read_at_a_glance(self):
+        # pleased shows a lit teeth row and displeased a brow shadow, in every portrait
+        for pid, e in self.atlas['portraits'].items():
+            pleased = ''.join(e['expressions']['pleased'][19])
+            self.assertIn('www', pleased, pid)
+            displeased = e['expressions']['displeased']
+            self.assertTrue(any('d' in r[15:17] for r in displeased[9:12]) or 'm' in ''.join(displeased[19]), pid)
+
+    def test_head_variety(self):
+        shapes = {C.SPECS[p['id']]['jaw'] for p in ROSTER['people']}
+        self.assertGreaterEqual(len(shapes), 6)
+        noses = {C.SPECS[p['id']]['traits']['nose'] for p in ROSTER['people']}
+        self.assertEqual(noses, {'button', 'long', 'broad'})
+        self.assertEqual({C.SPECS[p['id']]['traits']['eyes'] for p in ROSTER['people']}, {'close', 'mid', 'wide'})
+        self.assertGreaterEqual(len({C.SPECS[p['id']]['traits']['ears'] for p in ROSTER['people']}), 3)
+        self.assertGreaterEqual(len({C.SPECS[p['id']]['traits']['neck'] for p in ROSTER['people']}), 3)
+
+    def test_office_is_a_repaint_with_a_trade_object(self):
+        for pid, o in self.atlas['office'].items():
+            self.assertTrue(set(o['palette']) & set('uUq'), pid)
+            hair = {ch for r in o['rows'] for ch in r if ch in 'hjk'}
+            self.assertGreaterEqual(len(hair), 2 if C.SPECS[pid]['hair'] != 'horseshoe' else 1, pid)
+            # no pixel pair is a plain 2 by 2 block of one letter across the whole face area
+            face = [r[22:42] for r in o['rows'][20:42]]
+            blocks = sum(1 for y in range(0, len(face) - 1, 2) for x in range(0, 19, 2)
+                         if face[y][x] == face[y][x + 1] == face[y + 1][x] == face[y + 1][x + 1] and face[y][x] in 'iwm')
+            self.assertEqual(blocks, 0, pid)
+
+    def test_extras_sample_names_unique(self):
+        sample = C.extras_sample()
+        firsts = [e['name'].split()[0] for e, _ in sample]
+        lasts = [e['name'].split()[-1] for e, _ in sample]
+        self.assertEqual(len(set(firsts)), len(firsts))
+        self.assertEqual(len(set(lasts)), len(lasts))
+        roster_first = {p['name'].split()[0] for p in ROSTER['people']}
+        roster_last = {p['name'].split()[-1] for p in ROSTER['people']}
+        self.assertFalse(set(firsts) & roster_first)
+        self.assertFalse(set(lasts) & roster_last)
+
     def test_extras_sample(self):
         sample = self.atlas['extras_sample']
         self.assertEqual(len(sample), 24)
-        names = {e['id']: e['name'] for e in OLD['extras']}
         taken = {p['name'] for p in ROSTER['people']}
         for key, a in sample.items():
             self.assertEqual((len(a['rows']), {len(r) for r in a['rows']}), (32, {32}), key)
-            self.assertNotIn(names[key], taken)
+            self.assertNotIn(a['name'], taken)
 
 
 if __name__ == '__main__':
