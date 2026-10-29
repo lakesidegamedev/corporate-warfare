@@ -29,8 +29,12 @@ pub struct Style {
     pub cloud_threshold: f32,
     pub cloud_core: f32,
     pub cloud_altitude_km: f32,
-    /// Ordered dither strength between ground classes (0 is off).
+    /// Half width in screen pixels of the dithered band between two ground classes.
     pub dither: f32,
+    /// Camera width in km below which clouds are gone, and above which they are at full
+    /// coverage. Between the two the cloud threshold rises smoothly (the 1.8 rule: clouds
+    /// clear as you zoom in, so a close look is never through haze).
+    pub cloud_clear_km: (f32, f32),
 }
 
 impl Default for Style {
@@ -43,10 +47,11 @@ impl Default for Style {
             sun_elevation_deg: 34.0,
             clouds: true,
             buildings: true,
-            cloud_threshold: 0.86,
+            cloud_threshold: 0.92,
             cloud_core: 0.97,
             cloud_altitude_km: 18.0,
-            dither: 0.12,
+            dither: 2.5,
+            cloud_clear_km: (420.0, 1500.0),
         }
     }
 }
@@ -120,6 +125,8 @@ struct Globals {
     mask_dim: [f32; 4],
     cloud: [f32; 4],
     cloud2: [f32; 4],
+    ground_b: [f32; 4],
+    ground_dim: [f32; 4],
     palette: [[f32; 4]; COLOURS],
     day: [[f32; 4]; COLOURS],
 }
@@ -141,6 +148,7 @@ struct GpuScene {
     earth: wgpu::TextureView,
     cloud_tex: wgpu::TextureView,
     mask: wgpu::TextureView,
+    ground: wgpu::TextureView,
 }
 
 pub struct Renderer {
@@ -149,6 +157,7 @@ pub struct Renderer {
     info: AdapterSummary,
     layout: wgpu::BindGroupLayout,
     nearest: wgpu::Sampler,
+    linear: wgpu::Sampler,
     compare: wgpu::Sampler,
     shadow_pipeline: wgpu::RenderPipeline,
     main_pipeline: wgpu::RenderPipeline,
@@ -253,6 +262,14 @@ impl Renderer {
                     wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 ),
                 tex_entry(
+                    7,
+                    wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                ),
+                tex_entry(
+                    8,
+                    tex2d(wgpu::TextureSampleType::Float { filterable: false }),
+                ),
+                tex_entry(
                     6,
                     wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
                 ),
@@ -263,8 +280,7 @@ impl Renderer {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
-        let attrs =
-            wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x3];
+        let attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x3, 4 => Float32x2];
         let vbl = wgpu::VertexBufferLayout {
             array_stride: VERTEX_BYTES as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -333,6 +349,12 @@ impl Renderer {
             mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
+        let linear = device.create_sampler(&wgpu::SamplerDescriptor {
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
         let compare = device.create_sampler(&wgpu::SamplerDescriptor {
             mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Nearest,
@@ -353,6 +375,7 @@ impl Renderer {
             info,
             layout,
             nearest,
+            linear,
             compare,
             shadow_pipeline,
             main_pipeline,
@@ -400,6 +423,17 @@ impl Renderer {
     }
 
     fn rgba_texture(&self, w: u32, h: u32, data: &[u8], label: &str) -> wgpu::TextureView {
+        self.texture(w, h, data, label, wgpu::TextureFormat::Rgba8Unorm)
+    }
+
+    fn texture(
+        &self,
+        w: u32,
+        h: u32,
+        data: &[u8],
+        label: &str,
+        format: wgpu::TextureFormat,
+    ) -> wgpu::TextureView {
         let tex = self.device.create_texture_with_data(
             &self.queue,
             &wgpu::TextureDescriptor {
@@ -412,7 +446,7 @@ impl Renderer {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
+                format,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             },
@@ -449,6 +483,13 @@ impl Renderer {
                 &scene.mask.rgba,
                 "mask",
             ),
+            ground: self.texture(
+                scene.ground.w as u32,
+                scene.ground.h as u32,
+                &scene.ground.classes,
+                "ground",
+                wgpu::TextureFormat::R8Unorm,
+            ),
         };
         self.cache = Some(gpu);
     }
@@ -483,6 +524,13 @@ impl Renderer {
         // The cloud shadow lands displaced from the cloud, away from the light.
         let fall = style.cloud_altitude_km / light.z.max(0.2);
         let (sx, sy) = (-light.x * fall, -light.y * fall);
+        // Clouds clear as the camera closes in: the threshold rises toward "no cloud".
+        let (near, far) = style.cloud_clear_km;
+        let t = ((camera.width_km - near) / (far - near)).clamp(0.0, 1.0);
+        let cover = t * t * (3.0 - 2.0 * t);
+        let cloud_thr = style.cloud_threshold + (1.0 - cover) * (1.01 - style.cloud_threshold);
+        let cloud_core = style.cloud_core + (1.0 - cover) * (1.02 - style.cloud_core);
+        let gb = scene.ground.bounds;
         let globals = Globals {
             view_proj: view.view_proj.to_cols_array_2d(),
             light_vp: light_vp.to_cols_array_2d(),
@@ -507,12 +555,19 @@ impl Renderer {
                 style.dither,
             ],
             cloud: [
-                style.cloud_threshold,
-                style.cloud_core,
+                cloud_thr,
+                cloud_core,
                 style.cloud_altitude_km,
                 if style.clouds { 1.0 } else { 0.0 },
             ],
             cloud2: [sx / km_lon, sy / crate::data::KM_PER_DEG_LAT, texel_km, 0.0],
+            ground_b: [gb.west, gb.south, gb.east, gb.north],
+            ground_dim: [
+                scene.ground.w as f32,
+                scene.ground.h as f32,
+                scene.ground.ppd,
+                0.0,
+            ],
             palette: palette.flat(),
             day: Palette::day().flat(),
         };
@@ -550,6 +605,14 @@ impl Renderer {
                     wgpu::BindGroupEntry {
                         binding: 5,
                         resource: wgpu::BindingResource::Sampler(&self.nearest),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 7,
+                        resource: wgpu::BindingResource::Sampler(&self.linear),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 8,
+                        resource: wgpu::BindingResource::TextureView(&gpu.ground),
                     },
                     wgpu::BindGroupEntry {
                         binding: 6,

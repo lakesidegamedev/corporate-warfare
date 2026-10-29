@@ -7,6 +7,7 @@
 
 mod camera;
 mod data;
+mod ground;
 mod mesh;
 mod palette;
 mod renderer;

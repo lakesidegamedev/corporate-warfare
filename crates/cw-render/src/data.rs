@@ -6,6 +6,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 
+use crate::ground::Ground;
 use crate::palette::Rgb;
 
 /// Kilometres per degree of latitude, and of longitude at the scenario's reference latitude.
@@ -187,6 +188,28 @@ pub struct Scene {
     /// Vertical exaggeration of terrain, and the terrace step in metres.
     pub exaggeration: f32,
     pub terrace_m: f32,
+    /// Shifts where the steps fall, so the common heights of the Midwest and the lake surfaces
+    /// share one terrace and flat country gets as few walls as possible.
+    pub terrace_offset_m: f32,
+    /// Land cover as clean patches, and the smoothed terrace level of every heightmap cell
+    /// (row major). Both are derived from the fields above by `finish`.
+    pub ground: Ground,
+    pub levels: Vec<i32>,
+}
+
+impl Scene {
+    /// Derive the ground classes and terrace levels. Call after the raw fields are filled.
+    fn finish(mut self) -> Scene {
+        self.levels = crate::mesh::build_levels(&self);
+        self.ground = crate::ground::build(&self);
+        self
+    }
+
+    /// Terrace level of a heightmap cell.
+    pub fn level_at(&self, col: usize, row: usize) -> i32 {
+        self.levels
+            [row.min(self.heightmap.h - 1) * self.heightmap.w + col.min(self.heightmap.w - 1)]
+    }
 }
 
 #[derive(Deserialize)]
@@ -216,28 +239,32 @@ struct RawMap {
     regions: Vec<RawRegion>,
     lakes: Vec<RawRings>,
     cities: Vec<RawCity>,
+    hubs: HashMap<String, [i32; 2]>,
 }
 
 /// The eight states of the Great Lakes 2000 scenario.
 pub const GREAT_LAKES_STATES: [&str; 8] = ["IL", "IN", "KY", "MI", "NY", "OH", "PA", "WV"];
 /// Regions drawn as the player's holdings in the spike.
 pub const PLAYER_REGIONS: [&str; 5] = ["MI-DET", "IL-CHI", "OH-CEN", "OH-SW", "PA-WES"];
-/// Cities that get a test building: name-free, by position in thousandths of a degree.
-const TEST_CITIES: [(f32, f32, &str, f32); 14] = [
-    (-87.635, 41.848, "financial/2", 0.0),
-    (-83.051, 42.334, "manufacturing/2", 0.0),
-    (-81.697, 41.472, "manufacturing/1", 0.0),
-    (-82.999, 39.982, "financial/1", 0.0),
-    (-80.002, 40.432, "manufacturing/2", 0.0),
-    (-84.459, 39.162, "energy/1", 0.0),
-    (-86.172, 39.771, "logistics/1", 0.0),
-    (-78.882, 42.886, "chemical_industries/1", 0.0),
-    (-79.383, 43.653, "financial/2", 0.0),
-    (-87.906, 43.042, "retail/1", 0.0),
-    (-83.74, 42.28, "technology/1", 0.0),
-    (-81.52, 41.08, "extraction/1", 0.0),
-    (-75.16, 39.95, "financial/1", 0.0),
-    (-87.0, 40.2, "agriculture/2", 0.0),
+/// Sector models for the hub buildings, picked by position in the region list. The large
+/// models go to the big anchor cities.
+const HUB_MODELS: [&str; 10] = [
+    "manufacturing/2",
+    "energy/1",
+    "logistics/1",
+    "technology/1",
+    "retail/1",
+    "chemical_industries/1",
+    "healthcare/1",
+    "media/1",
+    "extraction/1",
+    "agriculture/2",
+];
+const BIG_HUBS: [(&str, &str); 4] = [
+    ("IL-CHI", "financial/2"),
+    ("NY-NYC", "financial/2"),
+    ("MI-DET", "manufacturing/2"),
+    ("PA-PHL", "financial/1"),
 ];
 
 fn parse_models(json: &str) -> Result<HashMap<String, VoxelModel>, String> {
@@ -403,23 +430,50 @@ pub fn rasterise_mask(map_json: &str, bounds: Bounds, ppd: f32) -> Result<Mask, 
             }
         });
     }
-    // Cities: a disc of urban ground sized from population, on land only.
+    // Cities and region hubs: a blobby patch of urban ground sized from population, on land
+    // only. The outline wobbles with the angle so footprints read as places, not discs.
     let (kx, ky) = (
         (KM_PER_DEG_LON_EQ * 41.5f32.to_radians().cos()),
         KM_PER_DEG_LAT,
     );
-    for c in &map.cities {
-        let (lon, lat) = (c.x as f32 / 1e4, c.y as f32 / 1e4);
+    let mut sites: Vec<(f32, f32, f32)> = map
+        .cities
+        .iter()
+        .map(|c| {
+            (
+                c.x as f32 / 1e4,
+                c.y as f32 / 1e4,
+                5.0 + 11.0 * (c.population as f32 / 1.0e6).sqrt(),
+            )
+        })
+        .collect();
+    for (code, p) in &map.hubs {
+        if GREAT_LAKES_STATES.contains(&&code[..2]) {
+            sites.push((p[0] as f32 / 1e4, p[1] as f32 / 1e4, 7.0));
+        }
+    }
+    for (lon, lat, r_km) in sites {
         if lon < bounds.west || lon > bounds.east || lat < bounds.south || lat > bounds.north {
             continue;
         }
-        let r_km = 3.0 + 7.0 * (c.population as f32 / 1.0e6).sqrt();
+        let seed = (lon * 131.0 + lat * 71.0).sin() * 43758.5;
+        let ph = [
+            seed.fract() * 6.28,
+            (seed * 1.7).fract() * 6.28,
+            (seed * 2.3).fract() * 6.28,
+        ];
         let (cx, cy) = ((lon - bounds.west) * ppd, (bounds.north - lat) * ppd);
-        let (rx, ry) = (r_km / kx * ppd, r_km / ky * ppd);
+        let reach = r_km * 1.5;
+        let (rx, ry) = (reach / kx * ppd, reach / ky * ppd);
         for y in (cy - ry).max(0.0) as usize..((cy + ry) as usize + 1).min(h) {
             for x in (cx - rx).max(0.0) as usize..((cx + rx) as usize + 1).min(w) {
-                let (dx, dy) = ((x as f32 - cx) / rx, (y as f32 - cy) / ry);
-                if dx * dx + dy * dy <= 1.0 && px[idx(x, y) + 2] == WATER_NONE {
+                let (dx, dy) = ((x as f32 - cx) / ppd * kx, (y as f32 - cy) / ppd * ky);
+                let a = dy.atan2(dx);
+                let wob = 1.0
+                    + 0.22 * (3.0 * a + ph[0]).sin()
+                    + 0.14 * (5.0 * a + ph[1]).sin()
+                    + 0.08 * (8.0 * a + ph[2]).sin();
+                if (dx * dx + dy * dy).sqrt() <= r_km * wob && px[idx(x, y) + 2] == WATER_NONE {
                     px[idx(x, y) + 2] = WATER_URBAN;
                 }
             }
@@ -433,6 +487,32 @@ pub fn rasterise_mask(map_json: &str, bounds: Bounds, ppd: f32) -> Result<Mask, 
     })
 }
 
+/// Soften the cloud alpha so thresholding gives smooth, speckle free shapes.
+fn blur_alpha(img: &mut GeoImage, radius: usize, passes: usize) {
+    let (w, h) = (img.w as usize, img.h as usize);
+    let mut a: Vec<f32> = img.rgba.chunks_exact(4).map(|p| p[3] as f32).collect();
+    for _ in 0..passes {
+        let mut tmp = vec![0.0f32; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                let (lo, hi) = (x.saturating_sub(radius), (x + radius).min(w - 1));
+                let s: f32 = (lo..=hi).map(|i| a[y * w + i]).sum();
+                tmp[y * w + x] = s / (hi - lo + 1) as f32;
+            }
+        }
+        for y in 0..h {
+            let (lo, hi) = (y.saturating_sub(radius), (y + radius).min(h - 1));
+            for x in 0..w {
+                let s: f32 = (lo..=hi).map(|j| tmp[j * w + x]).sum();
+                a[y * w + x] = s / (hi - lo + 1) as f32;
+            }
+        }
+    }
+    for (p, v) in img.rgba.chunks_exact_mut(4).zip(a) {
+        p[3] = v.round().clamp(0.0, 255.0) as u8;
+    }
+}
+
 fn load_geo_image(path: &Path, bounds: Bounds) -> Result<GeoImage, String> {
     let img = image::open(path)
         .map_err(|e| format!("{}: {e}", path.display()))?
@@ -443,6 +523,16 @@ fn load_geo_image(path: &Path, bounds: Bounds) -> Result<GeoImage, String> {
         bounds,
         rgba: img.into_raw(),
     })
+}
+
+fn empty_ground(bounds: Bounds) -> Ground {
+    Ground {
+        w: 0,
+        h: 0,
+        bounds,
+        ppd: 1.0,
+        classes: Vec::new(),
+    }
 }
 
 impl Scene {
@@ -464,19 +554,37 @@ impl Scene {
             north: 66.0,
         };
         let earth = load_geo_image(&res.join("earth-great-lakes-2000.jpg"), region)?;
-        let clouds = load_geo_image(&res.join("clouds-great-lakes-2000.webp"), region)?;
+        let mut clouds = load_geo_image(&res.join("clouds-great-lakes-2000.webp"), region)?;
+        blur_alpha(&mut clouds, 2, 2);
         let models = parse_models(
             &String::from_utf8(read(&res.join("voxel-models.json"))?).map_err(|e| e.to_string())?,
         )?;
-        let buildings = TEST_CITIES
+        let map: RawMap = serde_json::from_str(&map_json).map_err(|e| e.to_string())?;
+        let mut codes: Vec<&String> = map
+            .hubs
+            .keys()
+            .filter(|c| GREAT_LAKES_STATES.contains(&&c[..2]))
+            .collect();
+        codes.sort();
+        let buildings = codes
             .iter()
-            .map(|&(lon, lat, m, yaw)| Placement {
-                model: m.into(),
-                lon,
-                lat,
-                yaw,
+            .enumerate()
+            .map(|(i, code)| {
+                let p = map.hubs[*code];
+                let model = BIG_HUBS
+                    .iter()
+                    .find(|(c, _)| c == code)
+                    .map(|(_, m)| *m)
+                    .unwrap_or(HUB_MODELS[i % HUB_MODELS.len()]);
+                Placement {
+                    model: model.into(),
+                    lon: p[0] as f32 / 1e4,
+                    lat: p[1] as f32 / 1e4,
+                    yaw: 0.0,
+                }
             })
             .collect();
+        let heightmap_bounds = heightmap.bounds;
         Ok(Scene {
             projection: Projection {
                 lon0: -82.0,
@@ -488,10 +596,14 @@ impl Scene {
             clouds,
             models,
             buildings,
-            voxel_km: 2.2,
-            exaggeration: 36.0,
-            terrace_m: 60.0,
-        })
+            voxel_km: 2.4,
+            exaggeration: 28.0,
+            terrace_m: 200.0,
+            terrace_offset_m: 60.0,
+            ground: empty_ground(heightmap_bounds),
+            levels: Vec::new(),
+        }
+        .finish())
     }
 
     /// A few kilobytes of synthetic data for tests: a ridge, a lake, one building.
@@ -570,8 +682,12 @@ impl Scene {
                 yaw: 0.0,
             }],
             voxel_km: 3.0,
-            exaggeration: 36.0,
+            exaggeration: 10.0,
             terrace_m: 45.0,
+            terrace_offset_m: 0.0,
+            ground: empty_ground(bounds),
+            levels: Vec::new(),
         }
+        .finish()
     }
 }

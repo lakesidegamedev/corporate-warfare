@@ -15,9 +15,13 @@ heading.
 
 - Developer tooling: a new `cw-render` crate holds the first prototype of the 1.9 GPU map
   renderer. It draws the Great Lakes 2000 scenario offscreen with wgpu, in one fixed 48 colour
-  palette with ordered dithering, stepped terrace terrain from public elevation data, flat
-  water with a hard shoreline, region tint with one pixel borders, a sun with hard shadows for
-  terraces and voxel buildings, thresholded clouds with a one step ground shadow, and a night
+  palette, clean land cover patches (dither only across the border between two ground types),
+  gently stepped terrace terrain from public elevation data that keeps the Midwest nearly flat
+  and shows the Appalachian plateau, greedy meshed into a few thousand quads, flat water with
+  a lighter shoreline and static wave dashes, gold player holdings over visible ground with one
+  pixel borders, outlined voxel buildings at each region's anchor city on grey city footprints,
+  region borders, a sun with hard shadows for
+  terraces and voxel buildings, floating clouds with an outline, a ground shadow and less coverage as the camera zooms in, and a night
   palette with lit windows. Run `cargo run --release -p cw-render --example render_scene -- <out_dir>`
   to write the scenario, close and turned views and print frame times and draw counts; on a
   machine without a GPU it uses the Mesa software driver. `tools/render_bake.py` fetches the
