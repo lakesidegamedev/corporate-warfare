@@ -911,8 +911,9 @@ fn corrupt_truncated_mis_sized_and_future_saves_are_typed_rejections() {
     }
 
     // None of the failures above damaged the live session, and the untouched bytes still import.
+    // The full export is used: the chapter trailer is part of the hash (1.9), the cut is not.
     assert_eq!(session.canonical_hash(), live_hash);
-    let restored = Session::import_save(&bytes).expect("the undamaged save still imports");
+    let restored = Session::import_save(&exported).expect("the undamaged save still imports");
     assert_eq!(restored.canonical_hash(), live_hash);
 }
 

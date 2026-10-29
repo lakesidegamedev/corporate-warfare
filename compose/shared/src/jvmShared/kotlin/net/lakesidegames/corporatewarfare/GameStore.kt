@@ -114,6 +114,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var rivals by mutableStateOf<List<RivalSummaryDto>>(emptyList()); private set
     /** The latest rival moves anywhere, newest first, naming the chief behind each. */
     var rivalFeed by mutableStateOf<List<RivalMoveFeedDto>>(emptyList()); private set
+    /** The Inbox's letters: the last eight weeks, decisions pinned on top. Read with the rest of the week. */
+    var letters by mutableStateOf<List<uniffi.cw_ffi.LetterDto>>(emptyList()); private set
+    /** Unread letters in the Inbox window, for the badge. */
+    val unreadLetters: Int get() = letters.count { !it.read }
+    /** The Inbox badge: unread letters plus decisions already read but still due. */
+    val inboxBadge: Int get() = letters.count { !it.read || it.mandatory }
     /** Every plant in the world, so a rival's markets can be listed with a Raid button. */
     var mapPlants by mutableStateOf<List<MapPlantDto>>(emptyList()); private set
     var commodities by mutableStateOf<List<CommodityDto>>(emptyList()); private set
@@ -304,6 +310,14 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     fun selectRegion(code: String) = perform {
         marketRegion = code
         loadMarkets()
+    }
+
+    /** Opening a letter marks it read; the engine keeps the flag, the list updates in place. */
+    fun markRead(ids: List<String>) {
+        val handle = session ?: return
+        if (ids.isEmpty()) return
+        letters = letters.map { if (it.id in ids) it.copy(read = true) else it }
+        scope.launch { withContext(engine) { handle.markLettersRead(ids) } }
     }
 
     fun respond(event: ULong, choice: String) =
@@ -607,6 +621,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 handle.rivalFeed(12u),
                 handle.mapPlants(),
                 firm?.let { handle.cfoAdvice(it) } ?: emptyList<uniffi.cw_ffi.CfoAdviceDto>(),
+                handle.letters((overviewNow.tick - 8u).coerceAtLeast(1u)),
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
@@ -641,6 +656,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 rivalFeed = parts[23] as List<RivalMoveFeedDto>
                 mapPlants = parts[24] as List<MapPlantDto>
                 cfoAdvice = parts[25] as List<uniffi.cw_ffi.CfoAdviceDto>
+                letters = parts[26] as List<uniffi.cw_ffi.LetterDto>
             }
         }
         loadMarkets()

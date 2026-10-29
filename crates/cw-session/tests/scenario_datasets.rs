@@ -74,15 +74,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "2f45442b818cf4d1eef8d306430172f1b56a56c5b549eb894efbb55e8b088198",
+            "c48d02e3f1c332eed25fa3ebe1b41d60e21c2a26db3b20fb9a375596b85818cd",
         ),
         (
             2,
-            "d519a1b0e81efcb2c31b10c125a01db7e19fe12b310e9c17c6ddde947383e9df",
+            "3fe2a032bc0ac084e6f9f1c32b4f4527e9321209fe734f67923c11007b3b7bfd",
         ),
         (
             3,
-            "694e20cea9cc451871a70d0398216fd3884ce75d1f4c5de6836138b16fc8a38b",
+            "0dff71c000525b690de01a6fdec519ca71e580ae4d929a87dd90fcff10e458d3",
         ),
     ];
     for (seed, hash) in pins {
@@ -94,12 +94,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "7f41146b211c0c3631decedbfe8da494b50ba0406b8ec80719087d51f2eb63dd"
+        "b98eadb613df8b90230a39da99d7565808194c9a9688e240cf029550eb2edb23"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "199220876243a5df337c7da973b6677644a18188f2174f863e25783740e811cf"
+        "b2aa4b34e7dcd499202ac984ed79cdf3f7326a6c2066242e319a87b5dbb2b4e8"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();

@@ -262,7 +262,7 @@ private fun Classifieds(items: List<ClassifiedDto>, onOpen: (PaperLinkDto) -> Un
 
 /** What a tapped story or price opens: a company page, a market, a region board, a deal's company or the event. */
 @Composable
-private fun PaperTarget(store: GameStore, link: PaperLinkDto, story: StoryDto?, onClose: () -> Unit) {
+internal fun PaperTarget(store: GameStore, link: PaperLinkDto, story: StoryDto?, onClose: () -> Unit) {
     when (link.kind) {
         "company" -> CompanyPageDialog(store, link.id, onClose)
         "deal" -> {

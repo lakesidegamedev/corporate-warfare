@@ -61,6 +61,13 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         if player_controlled(world, handle) || !firm.operative() {
             continue;
         }
+        // The board's chapter mandate, taken through the same command a player uses.
+        if let Some(pick) = cw_sim::economy::chapters::rival_pick(world, dataset, handle) {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::ChooseMandate { firm: handle, pick },
+            });
+        }
         cw_sim::ph!("ai::urgent", urgent(world, dataset, handle, &mut proposals));
         // Production follows sell-through plant by plant in the weekly tick, the same planner
         // as the player's automatic production (cw_sim::economy::pricing::plan).
