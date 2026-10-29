@@ -1009,8 +1009,9 @@ const RAID_RESPITE_WEEKS: u32 = 26;
 
 /// Weeks a raider waits after launching a campaign before the next. Without it raids grew
 /// fourfold over five years (each one leaves grudges that invite more) and the write-offs and
-/// spent campaigns pushed the share of established companies losing money from 12 to 18 percent;
-/// with it raids level off and that share stays near 13 to 14 percent (16 seeds, five years).
+/// spent campaigns pushed the share of established companies losing money from 13 to 18 percent
+/// between years 2 and 5; with it raids level off and that share goes from 12 to 16 percent
+/// (16 seeds, five years, about 2 points of seed noise).
 const RAID_COOLDOWN_WEEKS: u32 = 52;
 
 /// Cost leaders, consolidators and vultures fight for markets: they undercut, invade occupied
