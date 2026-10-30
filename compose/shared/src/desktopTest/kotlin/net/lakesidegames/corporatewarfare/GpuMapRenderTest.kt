@@ -3,6 +3,7 @@ package net.lakesidegames.corporatewarfare
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.ImageComposeScene
+import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -61,8 +62,9 @@ class GpuMapRenderTest {
                     session.request(gc, 1280, 800, true)
                     val deadline = System.currentTimeMillis() + 120_000
                     // The full-size frame follows the quick one once the view has settled.
-                    while ((session.version < before + 2 || session.frame?.width != 1280) && System.currentTimeMillis() < deadline) Thread.sleep(50)
+                    while ((session.version < before + 1 || session.frame?.width != 1280) && System.currentTimeMillis() < deadline) Thread.sleep(50)
                     val frame = assertNotNull(session.frame, "$id $view: a frame was drawn")
+                    println("DEBUG $id $view camera=$gc view=${frame.width}x${frame.height} centre=${Integer.toHexString(frame.asSkiaBitmap().getColor(frame.width / 2, frame.height / 2))} corner=${Integer.toHexString(frame.asSkiaBitmap().getColor(5, 5))} line=${gpuMapLine(true, session)}")
                     table.append("| $id | $view | ${frame.width}x${frame.height} | ${"%.1f".format(session.renderMs)} | ${"%.1f".format(session.copyMs)} |\n")
                     val scene = ImageComposeScene(1280, 800, Density(1f)) {
                         val measurer = rememberTextMeasurer()
