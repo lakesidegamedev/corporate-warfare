@@ -68,25 +68,27 @@ class GpuMapDragTest {
                 // One read: the picture and the camera it was drawn for.
                 val shown = session.shown ?: run { println("step $i: no frame yet"); null } ?: continue
                 val shownCam = shown.camera
-                val rects = session.buildingRects(shownCam, w, h)
+                // The frame is the view plus its margin: its boxes are in the frame's own pixels.
+                val fw = shown.image.width; val fh = shown.image.height
+                val rects = session.buildingRects(shownCam, fw, fh)
                 val b = session.buildings().indexOf(target)
                 val l = rects[4 * b]; val t = rects[4 * b + 1]; val r = rects[4 * b + 2]; val bt = rects[4 * b + 3]
-                if (l.isNaN() || r < 0 || l > w || bt < 0 || t > h) { println("step $i: building off screen ($l,$t,$r,$bt) camera=$shownCam"); continue }
-                val px = roofPixels(shown.image, l, t, r, bt, w, h)
+                if (l.isNaN() || r < 0 || l > fw || bt < 0 || t > fh) { println("step $i: building off screen ($l,$t,$r,$bt) camera=$shownCam"); continue }
+                val px = roofPixels(shown.image, l, t, r, bt, fw, fh)
                 // The roof is where the shown camera says the building is: it has gold there.
                 if (i % 10 == 0) println("step $i: $px gold pixels, box ($l,$t,$r,$bt), image ${shown.image.width}x${shown.image.height}")
                 if (px > 0) good++ else println("step $i: no gold in the building's box ($l,$t,$r,$bt) camera=$shownCam")
-                if (shown.image.width == w) settledFrames++
+                if (shown.factor == 1f) settledFrames++
             }
             assertTrue(good >= steps * 0.8, "the roof was at the projected place in only $good of ${steps + 1} frames")
             // Stopped: the full size frame for exactly the last camera arrives, and the roof is inside its box.
             val last = GpuCamera(target.lon + (steps - steps / 2) * 0.001, target.lat + (steps - steps / 2) * 0.0004, 30.0, 40.0, steps * 0.7)
             session.request(last, w, h, false)
             val deadline = System.currentTimeMillis() + 60_000
-            while ((session.shown?.camera != last || session.shown?.image?.width != w) && System.currentTimeMillis() < deadline) Thread.sleep(20)
+            while ((session.shown?.view != last || session.shown?.factor != 1f) && System.currentTimeMillis() < deadline) Thread.sleep(20)
             val s = session.shown!!
-            assertEquals(last, s.camera, "the settled frame is for the last camera")
-            assertEquals(w, s.image.width, "the settled frame is full size")
+            assertEquals(last, s.view, "the settled frame is for the last camera")
+            assertEquals(w + 2 * s.margin, s.image.width, "the settled frame is the view plus its margin at full size")
         } finally {
             session.close()
         }

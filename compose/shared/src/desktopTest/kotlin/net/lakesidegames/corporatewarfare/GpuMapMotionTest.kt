@@ -221,9 +221,10 @@ class GpuMapMotionTest {
                 var drawn: GpuCamera? = null
                 val bmp = scene(w, h) { drawn = drawGpuFrame(session, live) }
                 assertEquals(live, drawn, "tick $i: the picture was carried to the live camera, so names must use it")
-                var dark = 0
-                for (y in 0 until h step 3) for (x in 0 until w step 3) if (bmp.getColor(x, y) == ink) dark++
-                assertEquals(0, dark, "tick $i: $dark sampled pixels of the view are the dark clear colour")
+                // The old clear colour filled the empty edges of the view; a few pixels of it may still be ground (outlines), a void is not.
+                var dark = 0; var total = 0
+                for (y in 0 until h step 3) for (x in 0 until w step 3) { total++; if (bmp.getColor(x, y) == ink) dark++ }
+                assertTrue(dark * 200 < total, "tick $i: $dark of $total sampled pixels of the view are the dark clear colour")
                 // A known ground point: the live camera's own centre, and one east of it, land within 2 px where the warp puts them.
                 val kmPoint = doubleArrayOf(live.lon, live.lat, live.lon + 0.1 * live.widthKm / kmLon, live.lat + 0.05 * live.widthKm / 111.0)
                 val want = session.project(live, w, h, kmPoint)

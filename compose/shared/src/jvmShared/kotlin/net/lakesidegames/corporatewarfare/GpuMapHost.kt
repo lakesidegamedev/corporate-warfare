@@ -259,9 +259,10 @@ internal fun DrawScope.drawGpuFrame(session: GpuMapSession, live: GpuCamera): Gp
         return live
     }
     val matrix = androidx.compose.ui.graphics.Matrix()
-    matrix[0, 0] = hom[0].toFloat(); matrix[0, 1] = hom[1].toFloat(); matrix[0, 3] = hom[2].toFloat()
-    matrix[1, 0] = hom[3].toFloat(); matrix[1, 1] = hom[4].toFloat(); matrix[1, 3] = hom[5].toFloat()
-    matrix[3, 0] = hom[6].toFloat(); matrix[3, 1] = hom[7].toFloat()
+    // Compose stores the matrix column by column: the translation sits at [3, 0] and [3, 1], the perspective terms at [0, 3] and [1, 3].
+    matrix[0, 0] = hom[0].toFloat(); matrix[1, 0] = hom[1].toFloat(); matrix[3, 0] = hom[2].toFloat()
+    matrix[0, 1] = hom[3].toFloat(); matrix[1, 1] = hom[4].toFloat(); matrix[3, 1] = hom[5].toFloat()
+    matrix[0, 3] = hom[6].toFloat(); matrix[1, 3] = hom[7].toFloat()
     withTransform({ transform(matrix) }) {
         drawImage(image, filterQuality = FilterQuality.Medium)
     }
