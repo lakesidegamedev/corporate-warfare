@@ -1915,7 +1915,7 @@ fn apply_intent(
                     reason: AuthorityReason::NotOwner,
                 });
             }
-            equity::place_order(
+            equity::trade_float(
                 world,
                 holder,
                 *firm,
