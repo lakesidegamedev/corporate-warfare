@@ -989,7 +989,12 @@ fn best_carrier_build(
     let entity = world.firms.get(firm)?;
     let logistics = cw_sim::economy::operations::industry_index("logistics")?;
     let mut best: Option<(i64, u16, u8)> = None;
-    for hot in lg::hot_lanes(world, dataset).into_iter().take(8) {
+    let hot_lanes = Memo::read(
+        |m| &mut m.hot_lanes,
+        (),
+        || lg::hot_lanes(world, dataset).into_iter().take(8).collect(),
+    );
+    for hot in hot_lanes {
         let def = &dataset.logistics.modes[hot.key.mode as usize];
         for region in [hot.key.a, hot.key.b] {
             // A division runs one strategy; a firm with another logistics strategy here skips it.
@@ -1202,10 +1207,14 @@ fn pipeline_build(
         }
         for region in [hot.key.a, hot.key.b] {
             let own = liquid_output_lots(world, dataset, region, Some(firm));
-            let all = liquid_output_lots(world, dataset, region, None);
             if own <= 0 {
                 continue;
             }
+            let all = Memo::read(
+                |m| &mut m.liquid_all,
+                region,
+                || liquid_output_lots(world, dataset, region, None),
+            );
             // The firm must ship on the lane today: a pipeline replaces freight it pays for.
             let mine = group_shipped(world, firm, hot.key);
             if lg::shipped_last_week(world, firm, hot.key) <= 0
@@ -1990,6 +1999,10 @@ struct Memo {
     /// A block's contribution by home region, strategy and plant region; it reads the firm only
     /// through its home region.
     block_contribution: BTreeMap<(u8, u16, u8), i64>,
+    /// Lanes short of capacity, one list for the pass (the key is unit).
+    hot_lanes: BTreeMap<(), Vec<cw_sim::economy::logistics::HotLane>>,
+    /// All liquid output of a region, whoever makes it.
+    liquid_all: BTreeMap<u8, i64>,
 }
 
 thread_local! {
