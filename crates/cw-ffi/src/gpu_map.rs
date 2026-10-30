@@ -150,6 +150,9 @@ pub struct GpuMap {
     info: AdapterInfo,
     holdings: Mutex<Vec<String>>,
     heat: Mutex<HashMap<String, u8>>,
+    /// Which division each plant building stands for, in the order `layout_plants` placed them
+    /// (the buildings after the scenery).
+    sites: Mutex<Vec<Option<PlantSite>>>,
 }
 
 impl GpuMap {
@@ -198,6 +201,7 @@ impl GpuMap {
             },
             holdings: Mutex::new(Vec::new()),
             heat: Mutex::new(HashMap::new()),
+            sites: Mutex::new(Vec::new()),
         })
     }
 
@@ -229,7 +233,10 @@ impl GpuMap {
         }
         if let Some(plants) = &u.plants {
             let mut all = self.base_buildings.clone();
-            all.extend(layout_plants(&scene, &sites_of(plants)));
+            let sites = sites_of(plants);
+            let placed = layout_plants(&scene, &sites);
+            *self.sites.lock().unwrap() = identify_sites(&scene, &sites, &placed);
+            all.extend(placed);
             scene.set_buildings(all);
         }
         let mut tints_changed = false;
@@ -325,10 +332,18 @@ impl GpuMap {
     /// the order `building_rects` answers for. Fixed between updates.
     pub fn buildings_json(&self) -> String {
         let scene = self.scene.read().unwrap();
+        let sites = self.sites.lock().unwrap();
+        let base = self.base_buildings.len();
         let items: Vec<serde_json::Value> = building_boxes(&scene)
             .iter()
-            .map(|b| {
+            .enumerate()
+            .map(|(i, b)| {
+                let site = i.checked_sub(base).and_then(|k| sites.get(k)).and_then(|s| s.as_ref());
                 serde_json::json!({
+                    "region": site.map(|s| s.region.as_str()),
+                    "industry": site.map(|s| s.industry.as_str()),
+                    "firm": site.map(|s| s.firm),
+                    "plants": site.map(|s| s.plants),
                     "lon": b.lon,
                     "lat": b.lat,
                     "owner": match b.owner {
@@ -399,6 +414,47 @@ impl GpuMap {
             .find(|p| p[0] as usize == i + 1)
             .map(|p| p[3])
     }
+}
+
+/// The division behind each placed plant building. `layout_plants` places a region's sites in a
+/// fixed order (the player's first, the bigger first, then by firm and industry); the buildings
+/// come out region by region in that order, so the k-th building of a region is that region's
+/// k-th site. A building whose owner disagrees with its site (the order changed upstream) is
+/// left unidentified rather than named wrongly.
+fn identify_sites(scene: &Scene, sites: &[PlantSite], placed: &[Placement]) -> Vec<Option<PlantSite>> {
+    let mut order: HashMap<&str, Vec<&PlantSite>> = HashMap::new();
+    for s in sites {
+        order.entry(s.region.as_str()).or_default().push(s);
+    }
+    for list in order.values_mut() {
+        list.sort_by(|a, b| {
+            b.player
+                .cmp(&a.player)
+                .then(b.plants.cmp(&a.plants))
+                .then(a.firm.cmp(&b.firm))
+                .then(a.industry.cmp(&b.industry))
+        });
+    }
+    let mut used: HashMap<&str, usize> = HashMap::new();
+    placed
+        .iter()
+        .map(|p| {
+            // The home region is the site region whose centre is nearest the building.
+            let home = order.keys().copied().min_by(|a, b| {
+                let d = |code: &str| {
+                    scene.regions.iter().find(|r| r.code == code).map_or(f32::MAX, |r| {
+                        (r.lon - p.lon).powi(2) + (r.lat - p.lat).powi(2)
+                    })
+                };
+                d(a).total_cmp(&d(b))
+            })?;
+            let k = used.entry(home).or_insert(0);
+            let site = order[home].get(*k)?;
+            *k += 1;
+            let same_owner = (p.owner == Owner::Player) == site.player;
+            same_owner.then(|| (*site).clone())
+        })
+        .collect()
 }
 
 fn camera(c: [f64; 6]) -> Camera {
