@@ -639,6 +639,17 @@ mod tests {
     }
 
     #[test]
+    fn every_scenario_builds_with_its_own_terrain_and_regions() {
+        let dir = assets();
+        for spec in cw_render::SCENARIOS.iter() {
+            let scene = build_scene(&dir, spec.id).unwrap_or_else(|e| panic!("{}: {e}", spec.id));
+            assert!(scene.regions.len() >= 3, "{}: {} regions", spec.id, scene.regions.len());
+            assert!(!scene.cities.is_empty(), "{}: no cities", spec.id);
+            assert!(!scene.lines.is_empty(), "{}: no roads or rails", spec.id);
+        }
+    }
+
+    #[test]
     fn a_missing_or_unknown_scenario_opens_nothing_and_says_why() {
         let dir = CString::new(std::env::temp_dir().join("cw-gpu-no-such-folder").to_str().unwrap()).unwrap();
         let bad = CString::new("atlantis-1").unwrap();
