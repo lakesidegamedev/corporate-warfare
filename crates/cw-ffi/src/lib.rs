@@ -2734,8 +2734,8 @@ impl SessionHandle {
                     .map(|r| r.labour.iter().map(|t| t.population).sum())
                     .unwrap_or(0);
                 let migration_bps = if people > 0 {
-                    (net_migration_year as i128 * 10_000 / people as i128)
-                        .clamp(-10_000, 10_000) as i32
+                    (net_migration_year as i128 * 10_000 / people as i128).clamp(-10_000, 10_000)
+                        as i32
                 } else {
                     0
                 };
