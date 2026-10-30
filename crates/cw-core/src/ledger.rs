@@ -113,20 +113,108 @@ impl Account {
     }
 }
 
+/// A posting's memo. Nearly all are short, so they live inline and a posting costs no heap
+/// allocation to make or to free. It is written and read as a plain string, so saves and hashes
+/// are the same as with a `String`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Memo(MemoRepr);
+
+#[derive(Clone, PartialEq, Eq)]
+enum MemoRepr {
+    Inline { len: u8, bytes: [u8; Memo::INLINE] },
+    Heap(Box<str>),
+}
+
+impl Memo {
+    const INLINE: usize = 22;
+
+    pub fn as_str(&self) -> &str {
+        match &self.0 {
+            // Only whole `&str`s are copied in, so the bytes are valid UTF-8.
+            MemoRepr::Inline { len, bytes } => {
+                std::str::from_utf8(&bytes[..*len as usize]).unwrap_or_default()
+            }
+            MemoRepr::Heap(text) => text,
+        }
+    }
+}
+
+impl From<&str> for Memo {
+    fn from(text: &str) -> Self {
+        if text.len() <= Memo::INLINE {
+            let mut bytes = [0u8; Memo::INLINE];
+            bytes[..text.len()].copy_from_slice(text.as_bytes());
+            Memo(MemoRepr::Inline {
+                len: text.len() as u8,
+                bytes,
+            })
+        } else {
+            Memo(MemoRepr::Heap(text.into()))
+        }
+    }
+}
+
+impl std::ops::Deref for Memo {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl std::fmt::Debug for Memo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
+impl PartialEq<str> for Memo {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl PartialEq<&str> for Memo {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl Serialize for Memo {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for Memo {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Text;
+        impl serde::de::Visitor<'_> for Text {
+            type Value = Memo;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Memo, E> {
+                Ok(Memo::from(value))
+            }
+        }
+        deserializer.deserialize_str(Text)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Posting {
     pub week: Tick,
     pub txn: u64,
     pub account: Account,
     pub delta: i64,
-    pub memo: String,
+    pub memo: Memo,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TxnLine {
     pub account: Account,
     pub delta: i64,
-    pub memo: String,
+    pub memo: Memo,
 }
 
 /// A staged balanced transaction.
@@ -148,7 +236,7 @@ impl Txn {
             self.lines.push(TxnLine {
                 account,
                 delta: amount,
-                memo: memo.to_owned(),
+                memo: Memo::from(memo),
             });
         }
         self
@@ -160,7 +248,7 @@ impl Txn {
             self.lines.push(TxnLine {
                 account,
                 delta: -amount,
-                memo: memo.to_owned(),
+                memo: Memo::from(memo),
             });
         }
         self
@@ -176,7 +264,7 @@ impl Txn {
             self.lines.push(TxnLine {
                 account,
                 delta,
-                memo: memo.to_owned(),
+                memo: Memo::from(memo),
             });
         }
         self
