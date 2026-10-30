@@ -217,4 +217,5 @@ tasks.register<Exec>("packageWindowsSetup") {
 // Compose draws over a native panel only with interop blending on (Direct3D and Metal); the direct-map tests check it.
 tasks.withType<Test>().configureEach {
     systemProperty("compose.interop.blending", "true")
+    systemProperty("java.awt.headless", "false")
 }

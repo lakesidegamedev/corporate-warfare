@@ -93,7 +93,7 @@ internal class DirectGpuSession(
     id: Long,
     adapter: String,
     software: Boolean,
-    private val canvas: MapSurfaceCanvas,
+    private val canvas: Canvas,
     private val display: Pointer?,
 ) : FfiGpuSession(lib, id, adapter, software) {
     private class Request(val camera: GpuCamera, val width: Int, val height: Int)
@@ -133,7 +133,7 @@ internal class DirectGpuSession(
     }
 
     init {
-        canvas.onPaint = redraw::run
+        (canvas as? MapSurfaceCanvas)?.onPaint = redraw::run
         canvas.addComponentListener(resized)
         canvas.addHierarchyListener(hierarchy)
     }
@@ -163,7 +163,7 @@ internal class DirectGpuSession(
             closed = true
             wake.signalAll()
         }
-        canvas.onPaint = null
+        (canvas as? MapSurfaceCanvas)?.onPaint = null
         canvas.removeComponentListener(resized)
         canvas.removeHierarchyListener(hierarchy)
         if (Thread.currentThread() !== worker) worker.join(3000)

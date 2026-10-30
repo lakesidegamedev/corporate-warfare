@@ -608,6 +608,7 @@ pub unsafe extern "C" fn cw_gpu_open_surface(
         let (assets, scenario) = unsafe { (text(assets)?, text(scenario)?) };
         let target = match kind {
             1 => SurfaceTarget::Win32(window as isize),
+            #[cfg(unix)]
             2 => SurfaceTarget::Xlib { window, display },
             _ => return Err("this kind of window is not supported".into()),
         };

@@ -69,7 +69,7 @@ class GpuMapBlendTest {
             val session = try { openDirectGpuMap("great-lakes-2000", canvas) as DirectGpuSession } catch (e: Throwable) { println("blend: skipped, ${e.message}"); return }
             try {
                 val map = WorldMap.forScenario("great-lakes-2000")!!
-                val k = canvas.pixelScale
+                val k = (canvas as MapSurfaceCanvas).pixelScale
                 val size = Size((canvas.width * k).toFloat(), (canvas.height * k).toFloat())
                 val gc = gpuCamera(MapCamera.scenario(size, map), size.width, size.height, Math.toRadians(28.0))
                 val frames = AtomicInteger(); session.frameListener = { frames.incrementAndGet() }
