@@ -85,10 +85,17 @@ class GpuMapRenderTest {
                             },
                         )
                     }
-                    // A tap on the middle of the view picks a region of this scenario.
-                    val code = session.pick(gc, 1280, 800, 640f, 400f)
-                    assertTrue(code == null || map.regions.any { it.code == code }, "$id $view: picked $code")
-                    if (view == "flat") assertNotNull(code, "$id: the middle of the flat view is a region")
+                    // A tap on a region's own anchor (projected by the renderer) picks a region of this scenario.
+                    val anchors = map.regions.mapNotNull { r -> map.anchor(r.code)?.let { r.code to it } }
+                    val pts = DoubleArray(anchors.size * 2)
+                    anchors.forEachIndexed { k, (_, a) -> pts[2 * k] = Math.toDegrees(a.lon[0]); pts[2 * k + 1] = Math.toDegrees(a.lat[0]) }
+                    val screen = session.project(gc, 1280, 800, pts)
+                    val hits = anchors.indices.mapNotNull { k ->
+                        val x = screen[2 * k]; val y = screen[2 * k + 1]
+                        if (x.isNaN() || x < 0 || y < 0 || x > 1280 || y > 800) null else session.pick(gc, 1280, 800, x, y)
+                    }
+                    assertTrue(hits.all { code -> map.regions.any { it.code == code } }, "$id $view: picked $hits")
+                    if (view == "flat") assertTrue(hits.isNotEmpty(), "$id: a region anchor on screen picks a region")
                 }
                 val line = gpuMapLine(true, session)
                 assertTrue(line!!.startsWith("map: GPU "), line)
