@@ -1103,12 +1103,8 @@ const APRON_REACH_DEG: f32 = 90.0;
 const APRON_REACH_NS_DEG: f32 = 60.0;
 const APRON_GROWTH: f32 = 1.2;
 const APRON_MAX_CELL_DEG: f32 = 0.25;
-/// The smallest class patch, in degrees either side; patches double from here.
-const APRON_PATCH_UNIT_DEG: f32 = 0.0625;
 /// Distance in terrain cells past which far land is one flat level.
 const APRON_FLAT_AFTER_CELLS: usize = 24;
-/// The widest patch of the picture a far cell reads its land class from, in degrees either side.
-const APRON_MAX_PATCH_DEG: f32 = 12.0;
 
 /// Breakpoints along one axis, ascending: the terrain's own cell edges from `a` to `b` (`n`
 /// cells), and outside them cells that start one terrain cell wide and grow by a fifth each
@@ -1154,34 +1150,17 @@ fn land_class(scene: &Scene, lon: f32, lat: f32) -> u8 {
     }
 }
 
-/// What the world shows over a far cell of the apron: the most common land class among a grid
-/// of samples over the patch (sea samples do not vote), so a big far cell shows what most of
-/// it is. The classes are the world picture's, read only where the world has land, so a cell
-/// never takes a class from beyond the edge of a picture.
-fn far_class(scene: &Scene, lon: [f32; 2], lat: [f32; 2], samples: usize) -> u8 {
-    let far = &scene.far;
-    let mut votes = [0u32; 8];
-    for j in 0..samples {
-        for i in 0..samples {
-            let f = |k: usize| (k as f32 + 0.5) / samples as f32;
-            let (x, y) = (
-                lon[0] + (lon[1] - lon[0]) * f(i),
-                lat[0] + (lat[1] - lat[0]) * f(j),
-            );
-            if far.land(x, y) {
-                votes[far.class(x, y) as usize & 7] += 1;
-            }
-        }
-    }
-    let (cx, cy) = ((lon[0] + lon[1]) / 2.0, (lat[0] + lat[1]) / 2.0);
-    let class = (0..8u8)
-        .filter(|&c| votes[c as usize] > 0)
-        .max_by_key(|&c| (votes[c as usize], 8 - c))
-        .unwrap_or_else(|| far.class(cx, cy));
-    if crate::ground::snow_cover(scene.week, cy, cx, 0.0) > 0.2 {
+/// What the world shows over a far cell of the apron: the world picture's land class at the
+/// cell, at a grain that gets calmer with distance. The classes are the world picture's, never
+/// read from beyond the edge of the scenario's own picture. Snow is the season's, taken at a
+/// coarse step of longitude so the snow line is one clean edge, not a comb of narrow cells.
+fn far_class(scene: &Scene, lon: f32, lat: f32, away: f32) -> u8 {
+    let grain = (away / 40.0).max(1.0).log2().ceil() as usize;
+    let snow_lon = (lon / 0.5).floor() * 0.5 + 0.25;
+    if crate::ground::snow_cover(scene.week, lat, snow_lon, 0.0) > 0.2 {
         crate::ground::G_SNOW
     } else {
-        class
+        scene.far.class(lon, lat, grain)
     }
 }
 
@@ -1303,25 +1282,7 @@ fn apron_grid(scene: &Scene) -> ApronGrid {
                 cells[j * nx + i] = Cell::Flat(APRON_WATER, sea);
                 continue;
             }
-            // The picture is read over a patch about as wide as the cell is far from the
-            // terrain, so detail fades with distance and a strip beside the edge settles into
-            // blocks rather than streaks.
-            // The patch is as wide as it is tall, and a power of two wide, and sits on a lattice
-            // of its own width, so neighbouring cells read the same patch and a class settles
-            // into blocks as wide as the patch instead of one narrow cell's stripe.
-            let want = (((xs[i + 1] - xs[i]).max(ys[j + 1] - ys[j])) / 2.0)
-                .max(0.35 * (away - 1.1) * dx.max(dy))
-                .min(APRON_MAX_PATCH_DEG);
-            let half = APRON_PATCH_UNIT_DEG
-                * 2f32.powi((want / APRON_PATCH_UNIT_DEG).log2().ceil().max(0.0) as i32);
-            let snap = |v: f32| ((v / (2.0 * half)).floor() + 0.5) * 2.0 * half;
-            let (pcx, pcy) = (snap(lon), snap(lat));
-            let class = far_class(
-                scene,
-                [pcx - half, pcx + half],
-                [pcy - half, pcy + half],
-                if half > 0.15 { 7 } else { 1 },
-            );
+            let class = far_class(scene, lon, lat, away);
             // The window of terrain it averages is centred on a lattice as wide as the window's
             // reach, so neighbouring cells share one level instead of stepping column by column.
             let reach = ((away - 1.1) * 0.8).ceil() as usize;

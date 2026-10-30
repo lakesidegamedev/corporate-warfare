@@ -10,6 +10,9 @@ use crate::ground;
 /// Degrees a block of the far land cover covers.
 const CLASS_DEG: f32 = 0.25;
 
+/// How many grains of land class there are (0 is the finest).
+pub const SMOOTH_LEVELS: usize = 4;
+
 /// Unknown cell in the land cover while it is being filled in.
 const NONE: u8 = 255;
 
@@ -37,8 +40,9 @@ pub struct FarWorld {
     world: Mask8,
     /// A finer outline of the scenario's own surroundings, with the box it covers.
     region: Option<(Mask8, Bounds)>,
-    /// The land class of the world in `CLASS_DEG` blocks, the same classes the terrain uses.
-    classes: Vec<u8>,
+    /// The land class of the world in `CLASS_DEG` blocks, the same classes the terrain uses, at
+    /// `SMOOTH_LEVELS` grains: the picture's own, then each smoothed twice as far as the last.
+    classes: Vec<Vec<u8>>,
     cw: usize,
     ch: usize,
 }
@@ -118,10 +122,20 @@ impl FarWorld {
                 *c = ground::G_FIELD;
             }
         }
+        let mut grains = vec![classes];
+        for level in 1..SMOOTH_LEVELS {
+            // Each grain is the last one smoothed by as many passes again as it has had, so the
+            // far land settles into broad, rounded patches rather than speckle.
+            let mut next = grains[level - 1].clone();
+            for _ in 0..(1usize << (level - 1)) * 2 {
+                next = mode_filter(&next, cw, ch);
+            }
+            grains.push(next);
+        }
         Ok(FarWorld {
             world,
             region,
-            classes,
+            classes: grains,
             cw,
             ch,
         })
@@ -136,7 +150,7 @@ impl FarWorld {
                 a: vec![255],
             },
             region: None,
-            classes: vec![ground::G_FIELD],
+            classes: vec![vec![ground::G_FIELD]; SMOOTH_LEVELS],
             cw: 1,
             ch: 1,
         }
@@ -172,10 +186,33 @@ impl FarWorld {
         n as f32 / 9.0
     }
 
-    /// The land class of the world at a point (the picture's, ignoring where the sea is).
-    pub fn class(&self, lon: f32, lat: f32) -> u8 {
+    /// The land class of the world at a point (the picture's, ignoring where the sea is), at one
+    /// of the grains: 0 the finest, `SMOOTH_LEVELS - 1` the calmest.
+    pub fn class(&self, lon: f32, lat: f32, grain: usize) -> u8 {
         let x = (((lon + 180.0) / CLASS_DEG).floor() as i64).rem_euclid(self.cw as i64) as usize;
         let y = (((90.0 - lat) / CLASS_DEG).floor().max(0.0) as usize).min(self.ch - 1);
-        self.classes[y * self.cw + x]
+        self.classes[grain.min(SMOOTH_LEVELS - 1)][y * self.cw + x]
     }
+}
+
+/// Each cell takes the most common class among itself and its eight neighbours (longitude wraps).
+fn mode_filter(src: &[u8], w: usize, h: usize) -> Vec<u8> {
+    let mut out = src.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            let mut votes = [0u8; 8];
+            for dy in [-1i64, 0, 1] {
+                for dx in [-1i64, 0, 1] {
+                    let yy = (y as i64 + dy).clamp(0, h as i64 - 1) as usize;
+                    let xx = (x as i64 + dx).rem_euclid(w as i64) as usize;
+                    votes[src[yy * w + xx] as usize & 7] += 1;
+                }
+            }
+            // The cell keeps its own class on a tie, so the filter does not drift.
+            let own = src[y * w + x] as usize & 7;
+            let best = (0..8).max_by_key(|&c| (votes[c], c == own)).unwrap_or(own);
+            out[y * w + x] = best as u8;
+        }
+    }
+    out
 }
