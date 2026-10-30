@@ -364,6 +364,10 @@ struct RegionDossierSection: View {
     }
 }
 
+private func signedCount(_ n: Int64) -> String {
+    (n > 0 ? "+" : n < 0 ? "-" : "") + Figures.count(abs(n))
+}
+
 struct RegionDossierView: View {
     let d: RegionDossierDto
     var onDivision: (String) -> Void = { _ in }
@@ -379,6 +383,8 @@ struct RegionDossierView: View {
                 Stat(label: "Land price", value: "\(d.landIndexBps / 100)%", note: "of the corridor"),
                 Stat(label: "Demand index", value: "\(d.demandIndexBps / 100)%"),
                 Stat(label: "Spend / wk", value: Format.moneyCompact(d.spendCents), note: "households"),
+                Stat(label: "Net migration / yr", value: signedCount(d.netMigrationYear), note: "workers moving in or out",
+                     tone: d.netMigrationYear > 0 ? Theme.positive : d.netMigrationYear < 0 ? Theme.negative : Theme.primaryText),
             ])
             SystemsSplit {
                 Eyebrow(text: "Labour pool")
@@ -424,6 +430,8 @@ struct RegionDossierView: View {
             ], format: { Figures.count($0) }, scale: .level),
             ChartSpec(title: "Average wage", series: [PlotSeries(name: "Wage", color: Theme.gold, points: s.of("wage"))],
                       format: { Format.money($0) }, scale: .level),
+            ChartSpec(title: "Workers moving in or out each week", series: [PlotSeries(name: "Net movers", color: PlotColors.violet, points: s.of("migration"))],
+                      kind: .bar, format: { signedCount($0) }, scale: .level),
             ChartSpec(title: "Land price (100 is the corridor)", series: [PlotSeries(name: "Land", color: Theme.warning, points: s.of("land_index"))],
                       format: { String(format: "%.0f", Double($0) / 100) }, scale: .level),
             ChartSpec(title: "Household spending per week", series: [PlotSeries(name: "Spend", color: PlotColors.violet, points: s.of("spend"))], kind: .bar),

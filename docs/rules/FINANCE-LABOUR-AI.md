@@ -327,3 +327,39 @@ million). It now answers to its cash:
   the cycle instead of a straight climb. Only public works, defence deliveries and care purchases
   are large enough to spend into, so a state that taxes wages at 20 percent would otherwise bank the
   difference for ever.
+
+## Workforce migration (1.9)
+
+Workers move between regions through the labour market, a few percent a year, and their
+households move with them. Implemented in `crates/cw-sim/src/economy/migration.rs`, run each week
+just before the labour market clears.
+
+**The pull.** For each tier of each region: its prevailing wage against its wage at the first
+pass (so the structural differences the scenario opens with do not drive anyone), plus its open
+jobs (positions named employers want filled and have not, as a share of the workforce, at most 15
+points), minus a crowding term of half the region's population growth against its first pass
+(at most 15 points). The background sector absorbs everyone who is not in a named job, so a region
+is never short of work as such; open jobs stand in for unemployment.
+
+**The flow.** From region A to B in a tier when B's pull exceeds A's by more than 300 basis points:
+`(gap - 300) / 4` basis points a year of the people free to move in A, at most 400 (4 percent).
+Free people are the tier's workforce (95 percent of the population) less those on named payrolls,
+so nobody is pulled out of a job. The flow is cut by friction: `1 / (1 + km / 400)` for the land
+distance (half at 400 km), a half for crossing a state line and a further 17 percent when the
+destination state has right to work. Regions on different currencies exchange no workers.
+Fractions of a worker are carried week to week per pair and tier in milli-workers, so rounding never
+drifts. Nothing is created: the population of A falls by what B gains, tier by tier.
+
+**Households.** The same share of region A's household savings, baseline income and baseline
+demand (by good) that the movers are of A's population moves to B, in whole cents and whole lots
+taken from A, so totals are conserved and demand follows the workers. Weekly household spending
+then follows each region's income as it always did.
+
+**Seen.** The region dossier shows net migration over the last 52 weeks and the week, and a chart of
+net movers by week. The houses on the map follow the region's economy; migration changes the
+population behind that economy.
+
+**Saved state.** The references, carries and the weekly net movers (104 weeks) are saved with the
+rival plans in the `PLAN` trailer, folded into the hash while not empty. A save from before 1.9 preview
+4 loads with it empty and takes the references at the next week.
+
