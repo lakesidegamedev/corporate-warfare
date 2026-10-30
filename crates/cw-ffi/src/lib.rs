@@ -5029,6 +5029,9 @@ mod tests {
             starting_capital_cents: None,
             price_path: String::new(),
             timeline: String::new(),
+            chief_name: String::new(),
+            chief_portrait: String::new(),
+            chief_temperament: String::new(),
         })
         .unwrap();
         let mut left = 20;
@@ -5453,6 +5456,9 @@ mod tests {
             starting_capital_cents: None,
             price_path: String::new(),
             timeline: String::new(),
+            chief_name: String::new(),
+            chief_portrait: String::new(),
+            chief_temperament: String::new(),
         })
         .unwrap();
         assert_eq!(career.scenario_id(), "texas-1981");
@@ -5477,6 +5483,9 @@ mod tests {
                 starting_capital_cents: None,
                 price_path: String::new(),
                 timeline: timeline.to_owned(),
+                chief_name: String::new(),
+                chief_portrait: String::new(),
+                chief_temperament: String::new(),
             })
             .unwrap()
         };
@@ -5543,6 +5552,9 @@ mod tests {
                 starting_capital_cents: None,
                 price_path: String::new(),
                 timeline: String::new(),
+                chief_name: String::new(),
+                chief_portrait: String::new(),
+                chief_temperament: String::new(),
             })
             .unwrap();
             session.advance(3);
