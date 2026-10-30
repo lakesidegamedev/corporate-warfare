@@ -250,6 +250,15 @@ heading.
 
 ### Fixed
 
+- The new map (preview) looks right in more places. Buildings are now a true size, a plant one to
+  three kilometres across and a downtown block about a kilometre, so they no longer swamp the cities;
+  they stay put and stay the same size on the ground when you zoom. When a building would be only a
+  speck on screen, a small badge marks its place instead (gold for yours, the sector colour for your
+  rivals). Your own buildings have gold roofs. West Texas and northern Mexico are tan scrub and
+  desert instead of snow and grey rock: snow now follows the calendar and the place, so it falls on
+  northern winters (the Ruhr in January) and on high mountains such as the Sierra, never on hot
+  lowlands. Names keep clear of buildings. The edge of the map is no longer a hard board edge with
+  black beyond it: when you tilt the view the land and sea carry on to a clean horizon.
 - The map no longer comes apart when you drag it. The ground, clouds, buildings, labels, traffic
   and effects used to be drawn at slightly different moments, so they slid against each other and
   popped into place a moment late. They now always show the same view and move together, a quick

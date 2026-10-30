@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crate::data::{KM_PER_DEG_LAT, Placement, Scene, TINT_HEAT, TINT_PLAY, TINT_PLAYER};
+use crate::data::{KM_PER_DEG_LAT, Owner, Placement, Scene, TINT_HEAT, TINT_PLAY, TINT_PLAYER};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SiteStatus {
@@ -37,7 +37,22 @@ fn size_of(plants: u32) -> u32 {
 /// At most this many buildings stand at one region's hub: the player's first, then the biggest.
 const PER_REGION: usize = 6;
 /// Distance of the ring the buildings stand on, in km, round the hub building.
-const RING_KM: f32 = 6.5;
+const RING_KM: f32 = 5.5;
+
+/// Footprint of a plant in kilometres: a real industrial site is one to three km across. The
+/// sector sets the base (a refinery or a mill is bigger than an office tower), each further
+/// plant of the division adds to it, and a construction site is a small yard.
+pub fn plant_size_km(industry: &str, plants: u32, site: bool) -> f32 {
+    if site {
+        return 1.0;
+    }
+    let base = match industry {
+        "energy" | "chemical_industries" | "manufacturing" | "extraction" | "agriculture" => 1.4,
+        "logistics" | "construction" | "defense" => 1.2,
+        _ => 1.0,
+    };
+    (base + 0.25 * plants.saturating_sub(1).min(8) as f32).min(3.0)
+}
 
 /// The buildings for `sites`, each beside its region's hub. The same sites always give the same
 /// layout, so a rebuild each week moves only what changed.
@@ -79,12 +94,22 @@ pub fn layout_plants(scene: &Scene, sites: &[PlantSite]) -> Vec<Placement> {
                 let a = (i as f32 - 1.0) * std::f32::consts::TAU / 5.0 + 0.4;
                 (a.cos() * RING_KM, a.sin() * RING_KM)
             };
+            let size_km = plant_size_km(&s.industry, s.plants, s.status == SiteStatus::Site);
+            let scale = scene
+                .models
+                .get(&model)
+                .map_or(1.0, |m| Placement::scale_for_km(scene.voxel_km, m, size_km));
             out.push(Placement {
                 model,
                 lon: info.lon + dx / kx,
                 lat: info.lat + dy / KM_PER_DEG_LAT,
                 yaw: 0.0,
-                scale: 1.0,
+                scale,
+                owner: if s.player {
+                    Owner::Player
+                } else {
+                    Owner::Rival
+                },
             });
         }
     }

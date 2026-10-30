@@ -72,7 +72,7 @@ impl Camera {
         let fwd = Vec3::new(head.sin(), head.cos(), 0.0);
         let target = Vec3::new(target_xy.0, target_xy.1, ground_z);
         let eye = target - fwd * (dist * tilt.sin()) + Vec3::Z * (dist * tilt.cos());
-        let (near, far) = (dist * 0.04, dist * 6.0);
+        let (near, far) = (dist * 0.04, dist * 24.0);
         let view = Mat4::look_at_rh(eye, target, Vec3::Z);
         let proj = Mat4::perspective_rh(fov, aspect, near, far);
         let view_proj = proj * view;

@@ -23,8 +23,16 @@ pub const GROUND_PPD: f32 = 80.0;
 /// Radius of the majority filter in texels, and the number of passes.
 const FILTER_RADIUS: usize = 4;
 const FILTER_PASSES: usize = 3;
-/// Land above this height is bare rock.
-const ROCK_M: i16 = 1150;
+/// Land above this height is bare rock. Arid plateaus sit lower than this (west Texas and the
+/// Mexican highlands are 1000 to 1700 m and read as scrub), only real mountains pass it.
+const ROCK_M: i16 = 2300;
+/// Snow follows the classic map's seasons: the line sits at 68 degrees in midsummer and 40 in
+/// midwinter, and every 220 m above 900 m counts as one more degree of latitude, so only high
+/// mountains hold snow where the lowlands are bare.
+const SNOW_CLIMB_M: f32 = 900.0;
+const SNOW_M_PER_DEG: f32 = 220.0;
+/// Marks a texel that never takes snow (water, cities).
+const NO_SNOW: i16 = i16::MIN;
 
 pub struct Ground {
     pub w: usize,
@@ -32,23 +40,28 @@ pub struct Ground {
     pub bounds: Bounds,
     pub ppd: f32,
     pub classes: Vec<u8>,
+    /// The classes without snow, and each land texel's height (`NO_SNOW` for water and city
+    /// ground), kept so a change of season only repaints the snow.
+    pub(crate) base: Vec<u8>,
+    pub(crate) elev: Vec<i16>,
     /// Per texel patch variant 0 to 3 (crop row direction), read beside the class.
     pub variant: Vec<u8>,
 }
 
 /// One class per satellite colour. The image is dark summer imagery, so it is stretched first.
-fn classify(rgb: [u8; 3]) -> u8 {
+/// Snow never comes from the picture (bright desert and cloud would read as snow); the season
+/// paints it.
+pub(crate) fn classify(rgb: [u8; 3]) -> u8 {
     let c = [
         (rgb[0] as f32 / 255.0 - 0.03) * 2.6,
         (rgb[1] as f32 / 255.0 - 0.05) * 2.6,
         (rgb[2] as f32 / 255.0 - 0.02) * 2.6,
     ];
-    let protos: [([f32; 3], u8); 5] = [
+    let protos: [([f32; 3], u8); 4] = [
         ([0.17, 0.33, 0.12], G_FOREST),
         ([0.32, 0.46, 0.14], G_FIELD),
         ([0.52, 0.47, 0.30], G_SOIL),
         ([0.50, 0.50, 0.50], G_SOIL),
-        ([0.90, 0.92, 0.95], G_SNOW),
     ];
     let mut best = (f32::MAX, G_FOREST);
     for (p, k) in protos {
@@ -103,6 +116,7 @@ pub fn build(scene: &Scene) -> Ground {
     let mut raw = vec![G_FOREST; w * h];
     let mut votes = vec![0.0f32; w * h]; // 1 where the texel is land and counts
     let mut urban = vec![false; w * h];
+    let mut elev = vec![NO_SNOW; w * h];
     for y in 0..h {
         for x in 0..w {
             let lon = b.west + (x as f32 + 0.5) / ppd;
@@ -129,6 +143,7 @@ pub fn build(scene: &Scene) -> Ground {
             if m >= ROCK_M {
                 raw[i] = G_ROCK;
             }
+            elev[i] = m;
         }
     }
     // Majority filter: blur each class's land votes, repeat, and let the strongest win.
@@ -192,12 +207,61 @@ pub fn build(scene: &Scene) -> Ground {
             variant[y * w + x] = ((hsh >> 24) & 3) as u8;
         }
     }
+    for i in 0..w * h {
+        if classes[i] == G_URBAN || classes[i] == G_CORE {
+            elev[i] = NO_SNOW;
+        }
+    }
     Ground {
         w,
         h,
         bounds: b,
         ppd,
+        base: classes.clone(),
+        elev,
         classes,
         variant,
+    }
+}
+
+/// How deep in winter a latitude is in `week` (1 to 52): 1 at midwinter, 0 from spring to autumn.
+fn winter(week: u32, lat: f32) -> f32 {
+    let shifted = if lat >= 0.0 { week } else { (week + 26) % 52 };
+    ((std::f32::consts::TAU * (shifted as f32 - 3.0) / 52.0).cos()).max(0.0)
+}
+
+fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
+    let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Snow cover 0 to 1 at a latitude and height in `week`: the classic map's snow line, lowered
+/// for height.
+pub fn snow_cover(week: u32, lat: f32, lon: f32, elevation_m: f32) -> f32 {
+    let line = 68.0 - 28.0 * winter(week, lat);
+    let lift = (elevation_m.max(SNOW_CLIMB_M) - SNOW_CLIMB_M) / SNOW_M_PER_DEG;
+    // The line wanders by a degree or so with the weather, so it is never a ruled edge.
+    let wander = 0.7 * (lon * 1.9 + lat * 0.8).sin()
+        + 0.5 * (lon * 0.6 - lat * 2.3 + 1.3).sin()
+        + 0.3 * (lon * 4.1 + lat * 3.7).sin();
+    smoothstep(line - 3.0, line + 5.0, lat.abs() + lift + wander) * 0.6
+}
+
+impl Ground {
+    /// Repaint the snow for a week of the year. Cheap: one pass over the raster.
+    pub fn set_week(&mut self, week: u32) {
+        for y in 0..self.h {
+            let lat = self.bounds.north - (y as f32 + 0.5) / self.ppd;
+            for x in 0..self.w {
+                let i = y * self.w + x;
+                let m = self.elev[i];
+                let lon = self.bounds.west + (x as f32 + 0.5) / self.ppd;
+                self.classes[i] = if m != NO_SNOW && snow_cover(week, lat, lon, m as f32) > 0.2 {
+                    G_SNOW
+                } else {
+                    self.base[i]
+                };
+            }
+        }
     }
 }

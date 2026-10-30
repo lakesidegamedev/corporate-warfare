@@ -17,13 +17,17 @@ mod renderer;
 pub use camera::Camera;
 pub use data::{
     AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, KM_PER_DEG_LAT,
-    LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, Line, Mask, PLAYER_REGIONS, Placement, Projection,
-    RegionInfo, SCENARIOS, ScenarioSpec, Scene, SceneOptions, TINT_HEAT, TINT_PLAY, TINT_PLAYER,
-    VoxelBox, VoxelModel,
+    LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, Line, Mask, Owner, PLAYER_REGIONS, Placement,
+    Projection, RegionInfo, SCENARIOS, ScenarioSpec, Scene, SceneOptions, TINT_HEAT, TINT_PLAY,
+    TINT_PLAYER, VoxelBox, VoxelModel,
 };
-pub use game::{PlantSite, SiteStatus, layout_plants, ramp_by_name, region_tints};
+pub use game::{PlantSite, SiteStatus, layout_plants, plant_size_km, ramp_by_name, region_tints};
 pub use palette::{COLOURS as PALETTE_COLOURS, Palette};
 pub use pick::{pick_ground, project};
 pub use renderer::{AdapterSummary, CloudLevel, Frame, FrameStats, NoAdapter, Renderer, Style};
 
-pub use mesh::{ROAD_BANDS, RoadPoint, ground_z, road_band, road_chains, road_chains_for_band};
+pub use ground::snow_cover;
+pub use mesh::{
+    BuildingBox, ROAD_BANDS, RoadPoint, apron_extent_km, building_boxes, ground_z, road_band,
+    road_chains, road_chains_for_band,
+};

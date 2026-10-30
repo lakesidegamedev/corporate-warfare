@@ -71,8 +71,9 @@ fn rendering_is_deterministic_and_counts_draws() {
     let b = r.render_to_rgba(&scene, &camera(), &small(), 96, 64);
     assert_eq!(a.rgba, b.rgba);
     assert!(a.stats.vertices > 0 && a.stats.triangles > 0);
-    // Shadow pass: terrain and buildings. Main pass: terrain, buildings, roads and clouds.
-    assert_eq!(a.stats.draw_calls, 6);
+    // Shadow pass: terrain and buildings. Main pass: terrain, the horizon apron, buildings, roads
+    // and clouds.
+    assert_eq!(a.stats.draw_calls, 7);
 }
 
 #[test]
@@ -109,7 +110,7 @@ fn roads_are_drawn_and_clouds_levels_work() {
         100,
     );
     assert_ne!(on.rgba, off.rgba, "roads left no pixels");
-    assert_eq!(off.stats.draw_calls, 5);
+    assert_eq!(off.stats.draw_calls, 6);
     let none = r.render_to_rgba(
         &scene,
         &camera(),
@@ -120,5 +121,5 @@ fn roads_are_drawn_and_clouds_levels_work() {
         96,
         64,
     );
-    assert_eq!(none.stats.draw_calls, 5);
+    assert_eq!(none.stats.draw_calls, 6);
 }
