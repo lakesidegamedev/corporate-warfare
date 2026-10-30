@@ -279,6 +279,7 @@ final class AppStore {
         await perform {
             do {
                 let overview = try await self.engine.start(seed: seed, guided: guided, fiveYear: fiveYear)
+                await self.prepareMap()
                 self.apply(overview)
                 await self.reload()
                 await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
