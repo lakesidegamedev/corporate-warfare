@@ -605,3 +605,193 @@ fn a_bigger_gap_pulls_more_workers_and_distance_and_borders_hold_them_back() {
         assert!(near > far);
     }
 }
+
+// ---- Friendly rivals defend a disclosed target (white knight) ----
+
+/// The plan world with the raider's stake public, and a third firm allied with the target.
+fn knight_world() -> (World, Dataset, Handle, Handle, Handle) {
+    let (mut w, ds, raider, target) = plan_world();
+    let knight = by_name(&w, "Forgeworks Ordnance");
+    {
+        let p = &mut w.plans.plans[0];
+        p.disclosed = Some(30);
+        p.stake_bps = 800;
+    }
+    cw_sim::economy::rivalry::note_alliance(
+        &mut w,
+        knight,
+        target,
+        3_000,
+        cw_sim::economy::rivalry::Cause::Deal,
+    );
+    fund(&mut w, knight, 100_000_000_000);
+    (w, ds, raider, target, knight)
+}
+
+#[test]
+fn a_friendly_funded_firm_sends_a_friendly_offer_above_the_market() {
+    let (mut w, ds, _, target, knight) = knight_world();
+    let t = w.firms.get(target).unwrap();
+    let reference = t.shares.mark_cents.max(t.shares.fair_cents);
+    let Some(Action::Tender {
+        target: got,
+        price_cents,
+        shares,
+    }) = plans::white_knight(&w, knight)
+    else {
+        panic!("a funded friend steps in");
+    };
+    assert_eq!(got, target);
+    assert_eq!(price_cents, reference + reference * 30 / 100);
+    assert_eq!(shares, t.shares.eligible_votes() / 2 + 1);
+    // Sent through the ordinary command, it is a friendly deal, not a hostile bid.
+    send(
+        &mut w,
+        &ds,
+        knight,
+        CommandIntent::StartDiligence {
+            buyer: knight,
+            target,
+            kind: cw_sim::state::DealKind::SharePurchase,
+            price_cents,
+            max_shares: shares,
+        },
+    );
+    let deal = w
+        .deals
+        .iter()
+        .find(|(_, d)| d.buyer == knight)
+        .map(|(_, d)| d.clone())
+        .expect("deal opened");
+    assert!(!deal.hostile);
+    // While its offer is out, the knight waits.
+    assert!(plans::white_knight(&w, knight).is_none());
+}
+
+#[test]
+fn a_friend_who_cannot_fund_an_offer_builds_a_blocking_stake_within_the_float_rule() {
+    let (mut w, _ds, _, target, knight) = knight_world();
+    // Spare cash for a few shares, nowhere near the escrow of a control offer.
+    let cash = w.firms.get(knight).unwrap().book.cash();
+    let reserve = cw_sim::economy::insolvency::mandatory_weekly_outflow(&w, knight) * 8;
+    let spare = 5_000_000;
+    let drain = cash - reserve - spare;
+    assert!(drain > 0);
+    w.firms
+        .get_mut(knight)
+        .unwrap()
+        .book
+        .commit(
+            w.tick,
+            Txn::new()
+                .debit(Account::OperatingExpense, drain, "fixture")
+                .credit(Account::Cash, drain, "fixture"),
+        )
+        .unwrap();
+    let mark = w.firms.get(target).unwrap().shares.mark_cents;
+    let float = plans::weekly_float(&w, target);
+    let Some(Action::Buy {
+        target: got,
+        qty,
+        limit_cents,
+    }) = plans::white_knight(&w, knight)
+    else {
+        panic!("a thin purse buys a stake");
+    };
+    assert_eq!(got, target);
+    assert_eq!(limit_cents, mark * 102 / 100);
+    assert!(qty > 0 && qty <= float / 2, "{qty} against float {float}");
+    assert!(qty * limit_cents <= spare);
+}
+
+#[test]
+fn an_unfriendly_or_broke_firm_does_not_step_in() {
+    let (mut w, _ds, raider, target, knight) = knight_world();
+    assert!(plans::white_knight(&w, knight).is_some());
+    // A stranger with plenty of cash and no tie to the target.
+    let other = w
+        .firms
+        .iter()
+        .map(|(h, _)| h)
+        .find(|h| {
+            ![raider, target, knight].contains(h)
+                && !cw_sim::economy::ownership::same_group(&w, *h, target)
+        })
+        .unwrap();
+    fund(&mut w, other, 100_000_000_000);
+    assert!(plans::white_knight(&w, other).is_none());
+    // A live grudge against the target cancels the tie.
+    cw_sim::economy::rivalry::note_grudge(
+        &mut w,
+        knight,
+        target,
+        5_000,
+        cw_sim::economy::rivalry::Cause::HostileBid,
+    );
+    assert!(plans::white_knight(&w, knight).is_none());
+    // A knight with no cash over its reserve stays out.
+    let (mut w2, _ds2, _, _target2, knight2) = knight_world();
+    let cash = w2.firms.get(knight2).unwrap().book.cash();
+    w2.firms
+        .get_mut(knight2)
+        .unwrap()
+        .book
+        .commit(
+            w2.tick,
+            Txn::new()
+                .debit(Account::OperatingExpense, cash, "fixture")
+                .credit(Account::Cash, cash, "fixture"),
+        )
+        .unwrap();
+    assert!(plans::white_knight(&w2, knight2).is_none());
+}
+
+#[test]
+fn a_stake_under_the_line_or_a_plan_that_is_selling_out_draws_no_knight() {
+    let (mut w, _ds, _, _target, knight) = knight_world();
+    w.plans.plans[0].stake_bps = 450;
+    w.plans.plans[0].disclosed = None;
+    assert!(plans::white_knight(&w, knight).is_none());
+    w.plans.plans[0].disclosed = Some(30);
+    w.plans.plans[0].stake_bps = 800;
+    assert!(plans::white_knight(&w, knight).is_some());
+    w.plans.plans[0].stage = Stage::SellingOut;
+    assert!(plans::white_knight(&w, knight).is_none());
+}
+
+#[test]
+fn nobody_defends_the_players_company_for_the_player() {
+    let (mut w, _ds, _, target, knight) = knight_world();
+    assert!(plans::white_knight(&w, knight).is_some());
+    let eligible = w.firms.get(target).unwrap().shares.eligible_votes();
+    w.firms
+        .get_mut(target)
+        .unwrap()
+        .shares
+        .add(HolderId::Investor, eligible, 0);
+    assert!(plans::white_knight(&w, knight).is_none());
+}
+
+#[test]
+fn only_one_friend_steps_in_the_strongest_tie_first() {
+    let (mut w, _ds, raider, target, knight) = knight_world();
+    let second = w
+        .firms
+        .iter()
+        .map(|(h, _)| h)
+        .find(|h| {
+            ![raider, target, knight].contains(h)
+                && !cw_sim::economy::ownership::same_group(&w, *h, target)
+        })
+        .unwrap();
+    cw_sim::economy::rivalry::note_alliance(
+        &mut w,
+        second,
+        target,
+        6_000,
+        cw_sim::economy::rivalry::Cause::Deal,
+    );
+    fund(&mut w, second, 100_000_000_000);
+    assert!(plans::white_knight(&w, second).is_some());
+    assert!(plans::white_knight(&w, knight).is_none());
+}

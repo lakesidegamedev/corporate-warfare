@@ -879,6 +879,8 @@ struct MapScene {
     var plants: [MapPlantDto] = []
     /// The economy's phase ("boom", "recession" and so on), shown in the cities and towns.
     var economyPhase: String?
+    /// Each region's net migration over the year in basis points of its people, for the houses.
+    var settlement: [String: Int] = [:]
     /// Divisions (region/industry) the player has just taken over, which fly a flag.
     var acquired: Set<String> = []
     /// Week of the year 1..52, for the seasons.
@@ -950,7 +952,7 @@ struct MapScene {
             // The diorama up close: trees, fields, barns, rocks and the houses round each city.
             if look.countryside && look.buildings >= 2 && look.earth && g.closeUp && t > 0.5 {
                 Countryside.draw(in: &context, projection: p, map: map, week: week, unit: VoxelModels.unit(g.scale, displayScale: displayScale) * 0.6,
-                                 lift: plinth, economyPhase: economyPhase, size: size)
+                                 lift: plinth, economyPhase: economyPhase, settlement: settlement, size: size)
             }
             if look.buildings >= 2 && g.closeUp && t > 0.5 {
                 // The economy shows in the cities: cranes rise in a boom, lights go out in a recession.
@@ -1666,6 +1668,8 @@ struct WorldMapView: View {
     var plants: [MapPlantDto] = []
     /// The economy's phase, shown in the cities.
     var economyPhase: String?
+    /// Each region's net migration over the year in basis points of its people, for the houses.
+    var settlement: [String: Int] = [:]
     /// Puts the zoom controls at the top right, for the desktop shell where the tutorial card
     /// sits in the bottom corner.
     var controlsAtTop = false
@@ -2031,7 +2035,7 @@ struct WorldMapView: View {
             map: map, camera: camera, look: look, tint: layer.tintRGB, shading: shading,
             heights: layer == .freight ? [:] : ease.value(at: now, target: shading),
             selected: selected, divisions: divisions, lanes: lanes, freightLayer: layer == .freight, pickedLane: pickedLane,
-            sun: look.dayNight ? MapSun.moving(gameSeconds(now)) : nil, plants: plants, economyPhase: economyPhase,
+            sun: look.dayNight ? MapSun.moving(gameSeconds(now)) : nil, plants: plants, economyPhase: economyPhase, settlement: settlement,
             acquired: acquired, week: seasonWeek, displayScale: displayScale, labelPlanner: labelPlanner
         )
     }

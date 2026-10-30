@@ -13,6 +13,15 @@ heading.
 
 ### Added
 
+- A rival that is the target of a takeover now gets help from friends. Once a raider's stake in a
+  rival company is public (5 percent of the votes), one friendly rival with cash to spare steps in: it
+  makes the company a friendly offer above the market if it can fund one, or otherwise buys a
+  blocking stake on the exchange a little at a time. Friends are firms in the same group or allies
+  with no grudge and no closer tie to the raider. It never defends your own company for you.
+- Houses on the map now follow where people move. Zoomed in, a region that people are moving into
+  shows more houses round its cities and a region they are leaving shows fewer, on top of the boom and
+  recession look. Every house stays at the same spot on the ground at the same size; only how many of
+  the possible houses are built changes, so nothing slides or jumps as you move the map.
 - Buying and selling shares now happens at once, straight from the public float, like Capitalism Lab.
   Press Buy now and the shares are yours, bought from the investors who actually hold them. The price
   climbs as you buy (and falls as you sell), and you pay the average along the way. You can buy
