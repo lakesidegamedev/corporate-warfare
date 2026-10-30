@@ -23,6 +23,43 @@ struct RegionSolid {
     }
 }
 
+/// How big things stand on the ground, in metres. A voxel is this wide on every model, so a building covers
+/// the same ground at every zoom, tilt and turn; only the minimum keeps one from shrinking to nothing when
+/// the map is far out. Lots are fixed offsets from a region's hub, so a building never moves once built.
+enum WorldScale {
+    static let earthRadius = 6_371_000.0
+    static let playerVoxel = 2600.0
+    static let cityVoxel = 1950.0
+    static let rivalVoxel = 1560.0
+    /// The smallest a voxel is drawn, in device pixels.
+    static let minUnitPixels = 1.0
+
+    /// A division's lot beside its region's hub, east and north in metres: its industry's place in the list decides.
+    static func playerLot(_ sector: String) -> (east: Double, north: Double) {
+        let i = Sector.order.firstIndex(of: sector) ?? Sector.order.count
+        return (Double(i % 5 - 2) * 60_000, -(35_000 + Double(i / 5) * 55_000))
+    }
+
+    /// A rival's lot north of the hub: slot 0 to 7, four to a row.
+    static func rivalLot(_ slot: Int) -> (east: Double, north: Double) {
+        ((Double(slot % 4) - 1.5) * 50_000, 35_000 + Double(slot / 4) * 35_000)
+    }
+
+    /// Rival slots by stable hash of each key, a taken slot giving way to the next free one.
+    static func rivalSlots(_ keys: [String]) -> [String: Int] {
+        var taken = [Bool](repeating: false, count: 8)
+        var out: [String: Int] = [:]
+        for key in keys.sorted(by: { stableHash($0) != stableHash($1) ? stableHash($0) < stableHash($1) : $0 < $1 }) {
+            var slot = stableHash(key) % 8
+            var tries = 0
+            while taken[slot] && tries < 8 { slot = (slot + 1) % 8; tries += 1 }
+            taken[slot] = true
+            out[key] = slot
+        }
+        return out
+    }
+}
+
 /// A building standing on the map: untilted screen point, floor and top in points.
 struct Building {
     let sector: String
@@ -156,6 +193,19 @@ final class MapGeometry {
         let framed = MapCamera.scenario(in: size, map: map).zoom
         zoomRatio = camera.zoom / max(framed, 1e-6)
         scale = min(max(zoomRatio, 0.6), 2.5)
+    }
+
+    /// Points one metre of ground covers at this camera.
+    var pointsPerMetre: Double { projection.r / WorldScale.earthRadius }
+
+    /// Points a voxel of [metres] covers on the ground, never under the minimum that keeps a building visible.
+    func unit(_ metres: Double, displayScale: Double) -> Double {
+        max(metres * pointsPerMetre, WorldScale.minUnitPixels / max(displayScale, 1))
+    }
+
+    /// The untilted screen point of a spot [east] and [north] metres from a hub: the same spot at every camera.
+    func lot(_ hub: GeoPoint, east: Double, north: Double) -> CGPoint? {
+        projection.ground(lon: hub.lon + east / (WorldScale.earthRadius * cos(hub.lat)), lat: hub.lat + north / WorldScale.earthRadius)
     }
 
     /// The height of the scenario's base in points.
@@ -327,26 +377,20 @@ final class MapGeometry {
     /// The player's divisions as buildings round their region's hub, far ones first.
     func buildings(_ divisions: [DivisionMarker], _ heights: [String: Double]?) -> [Building] {
         if let key = buildingsKey, key.divisions == divisions, key.heights == heights { return buildingsHeld }
-        let p = projection
         let sorted = divisions.sorted {
             $0.region != $1.region ? $0.region < $1.region
                 : (Sector.order.firstIndex(of: $0.sector) ?? 99) < (Sector.order.firstIndex(of: $1.sector) ?? 99)
         }
-        var perRegion: [String: Int] = [:]
         var placed: [Building] = []
+        let u = unit(WorldScale.playerVoxel, displayScale: 1)
         for division in sorted {
-            guard let anchor = map.anchor(of: division.region),
-                  let ground = p.ground(lon: anchor.lon, lat: anchor.lat) else { continue }
-            let i = perRegion[division.region, default: 0]
-            perRegion[division.region] = i + 1
-            // Set out on the ground, east and south of the hub, so they keep their places as the map turns.
-            let along = Double(i % 3 - 1) * 34 * scale
-            let south = (18 + Double(i / 3) * 30) * scale
-            let gx = Double(ground.x) + p.east.dx * along - p.north.dx * south
-            let gy = Double(ground.y) + p.east.dy * along - p.north.dy * south
+            guard let anchor = map.anchor(of: division.region) else { continue }
+            // A fixed lot beside the hub, in metres, so it stands still as the map zooms, tilts and turns.
+            let lot = WorldScale.playerLot(division.sector)
+            guard let ground = self.lot(anchor, east: lot.east, north: lot.north) else { continue }
             let floor = regionLift(division.region, heights)
-            let tall = (12 + 7 * Double(max(division.plants, 0)).squareRoot()) * scale
-            placed.append(Building(sector: division.sector, plants: division.plants, gx: gx, gy: gy, half: 7.5 * scale,
+            let tall = (10 + 6 * Double(max(division.plants, 0)).squareRoot()) * u
+            placed.append(Building(sector: division.sector, plants: division.plants, gx: Double(ground.x), gy: Double(ground.y), half: 4 * u,
                                    floor: floor, top: floor + tall, geo: anchor, key: division.id))
         }
         buildingsHeld = placed.sorted { $0.gy < $1.gy }
@@ -362,24 +406,23 @@ final class MapGeometry {
     /// player's own stand to the south), far ones first.
     func rivalBuildings(_ plants: [MapPlantDto], _ heights: [String: Double]?) -> [Building] {
         if let key = rivalsKey, key.plants == plants, key.heights == heights { return rivalsHeld }
-        let p = projection
         var blocks: [String: (region: String, industry: String, firm: UInt64, blocks: Int)] = [:]
         for plant in plants where !plant.player {
             let key = "\(plant.region)/\(plant.industry)/\(plant.firm)"
             blocks[key, default: (plant.region, plant.industry, plant.firm, 0)].blocks += Int(plant.blocks)
         }
         var placed: [Building] = []
+        let u = unit(WorldScale.rivalVoxel, displayScale: 1)
         for (region, firms) in Dictionary(grouping: blocks, by: { $0.value.region }) {
-            guard let anchor = map.anchor(of: region), let ground = p.ground(lon: anchor.lon, lat: anchor.lat) else { continue }
+            guard let anchor = map.anchor(of: region) else { continue }
             let floor = regionLift(region, heights)
-            let biggest = firms.sorted { $0.value.blocks != $1.value.blocks ? $0.value.blocks > $1.value.blocks : $0.key < $1.key }
-            for (i, firm) in biggest.prefix(4).enumerated() {
-                let along = (Double(i) - 1.5) * 26 * scale
-                let north = (14 + Double(i % 2) * 10) * scale
-                let gx = Double(ground.x) + p.east.dx * along + p.north.dx * north
-                let gy = Double(ground.y) + p.east.dy * along + p.north.dy * north
-                placed.append(Building(sector: firm.value.industry, plants: firm.value.blocks, gx: gx, gy: gy, half: 6 * scale,
-                                       floor: floor, top: floor + 10 * scale, geo: anchor, key: firm.key))
+            let biggest = Array(firms.sorted { $0.value.blocks != $1.value.blocks ? $0.value.blocks > $1.value.blocks : $0.key < $1.key }.prefix(4))
+            let slots = WorldScale.rivalSlots(biggest.map(\.key))
+            for firm in biggest {
+                let lot = WorldScale.rivalLot(slots[firm.key] ?? 0)
+                guard let ground = self.lot(anchor, east: lot.east, north: lot.north) else { continue }
+                placed.append(Building(sector: firm.value.industry, plants: firm.value.blocks, gx: Double(ground.x), gy: Double(ground.y), half: 3 * u,
+                                       floor: floor, top: floor + 10 * u, geo: anchor, key: firm.key))
             }
         }
         rivalsHeld = placed.sorted { $0.gy < $1.gy }
@@ -458,7 +501,7 @@ final class MapGeometry {
                 let base = p.lift(CGPoint(x: b.gx, y: b.gy), b.floor)
                 // The rooftop light and smoke sit on the model's top.
                 let name = VoxelModels.sized(b.sector, plants: b.plants)
-                let unit = VoxelModels.unit(scale, displayScale: displayScale)
+                let unit = self.unit(WorldScale.playerVoxel, displayScale: displayScale)
                 let top = p.lift(CGPoint(x: b.gx, y: b.gy),
                                  VoxelModels.has(name) ? b.floor + VoxelModels.lift(name, unit: unit) : b.top)
                 return BuildingSpot(base: base, top: top, color: Sector.color(b.sector), smoke: smokes(b.sector),
@@ -895,7 +938,7 @@ struct MapScene {
             // player's buildings so those stay the stars, shaped by what the city is known for (a port, a steel
             // town, a car town); then rivals' plants a step smaller again, then the player's divisions.
             // Voxels in true 3D: points a voxel for the player's buildings, a step down for the rest.
-            let unit = VoxelModels.unit(g.scale, displayScale: displayScale)
+            let unit = g.unit(WorldScale.playerVoxel, displayScale: displayScale)
             let e = p.east
             let planner = labelPlanner ?? LabelPlanner()
             let box = VoxelModels.Bounds()
@@ -906,13 +949,13 @@ struct MapScene {
             func reserved() { if let r = box.rect { planner.reserve(r) } }
             // The diorama up close: trees, fields, barns, rocks and the houses round each city.
             if look.countryside && look.buildings >= 2 && look.earth && g.closeUp && t > 0.5 {
-                Countryside.draw(in: &context, projection: p, map: map, week: week, unit: unit * 0.6,
+                Countryside.draw(in: &context, projection: p, map: map, week: week, unit: VoxelModels.unit(g.scale, displayScale: displayScale) * 0.6,
                                  lift: plinth, economyPhase: economyPhase, size: size)
             }
             if look.buildings >= 2 && g.closeUp && t > 0.5 {
                 // The economy shows in the cities: cranes rise in a boom, lights go out in a recession.
                 let tone: VoxelModels.Tone = economyPhase == "recession" || economyPhase == "slowdown" ? .dark : .plain
-                let cityUnit = unit * 0.75
+                let cityUnit = g.unit(WorldScale.cityVoxel, displayScale: displayScale)
                 let ink = VoxelModels.inked(cityUnit, displayScale: displayScale)
                 for (i, block) in g.cityBlocks(ground).enumerated() {
                     let at = CGPoint(x: block.gx, y: block.gy)
@@ -936,7 +979,7 @@ struct MapScene {
             if look.buildings > 0 && g.closeUp && t > 0.5 {
                 // Rivals' plants first, in their sector's colour with a dark roof and about 60 percent of the
                 // player's size, so the player's own stand over them.
-                let rivalUnit = unit * 0.6
+                let rivalUnit = g.unit(WorldScale.rivalVoxel, displayScale: displayScale)
                 let rivalInk = VoxelModels.inked(rivalUnit, displayScale: displayScale)
                 let rivalStates = PlantState.of(plants.filter { !$0.player }, byFirm: true)
                 let rivalRoof = RGB(hex: 0x2A2F36)
