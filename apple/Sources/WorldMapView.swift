@@ -386,7 +386,7 @@ final class MapGeometry {
         for division in sorted {
             guard let anchor = map.anchor(of: division.region) else { continue }
             // A fixed lot beside the hub, in metres, so it stands still as the map zooms, tilts and turns.
-            let lot = WorldScale.playerLot(division.sector)
+            let lot = LotLand.dry(map, region: division.region, lot: WorldScale.playerLot(division.sector), radius: LotLand.playerRadius)
             guard let ground = self.lot(anchor, east: lot.east, north: lot.north) else { continue }
             let floor = regionLift(division.region, heights)
             let tall = (10 + 6 * Double(max(division.plants, 0)).squareRoot()) * u
@@ -419,7 +419,7 @@ final class MapGeometry {
             let biggest = Array(firms.sorted { $0.value.blocks != $1.value.blocks ? $0.value.blocks > $1.value.blocks : $0.key < $1.key }.prefix(4))
             let slots = WorldScale.rivalSlots(biggest.map(\.key))
             for firm in biggest {
-                let lot = WorldScale.rivalLot(slots[firm.key] ?? 0)
+                let lot = LotLand.dry(map, region: region, lot: WorldScale.rivalLot(slots[firm.key] ?? 0), radius: LotLand.rivalRadius)
                 guard let ground = self.lot(anchor, east: lot.east, north: lot.north) else { continue }
                 placed.append(Building(sector: firm.value.industry, plants: firm.value.blocks, gx: Double(ground.x), gy: Double(ground.y), half: 3 * u,
                                        floor: floor, top: floor + 10 * u, geo: anchor, key: firm.key))
@@ -637,6 +637,87 @@ enum LaneWater {
             j = i
         }
         return inside
+    }
+}
+
+/// Keeps a lot on dry land, the same walk as the Compose map: a lot is a fixed offset from its hub, and
+/// when that spot (or its footprint) is over water or outside the region it is walked toward the hub and
+/// round it, smallest move first, until it is dry and inside the region.
+enum LotLand {
+    static let playerRadius = 6_000.0
+    static let rivalRadius = 3_000.0
+    private static let lock = NSLock()
+    private static var answers: [String: (east: Double, north: Double)] = [:]
+
+    private static func inside(_ ring: GeoRing, _ lon: Double, _ lat: Double) -> Bool {
+        let points = ring.points
+        guard points.count >= 3 else { return false }
+        var inside = false
+        var j = points.count - 1
+        for i in 0..<points.count {
+            let yi = points[i].lat
+            let yj = points[j].lat
+            if (yi > lat) != (yj > lat) && lon < (points[j].lon - points[i].lon) * (lat - yi) / (yj - yi) + points[i].lon {
+                inside.toggle()
+            }
+            j = i
+        }
+        return inside
+    }
+
+    static func dry(_ map: WorldMap, region: String, lot: (east: Double, north: Double), radius: Double) -> (east: Double, north: Double) {
+        guard let hub = map.anchor(of: region) else { return lot }
+        let key = "\(region)/\(lot.east)/\(lot.north)/\(radius)"
+        lock.lock()
+        let held = answers[key]
+        lock.unlock()
+        if let held { return held }
+        // Rings whose box comes within about three degrees of the hub.
+        let margin = 0.06
+        let near = { (ring: GeoRing) -> Bool in
+            guard ring.points.count >= 3 else { return false }
+            let lons = ring.points.map(\.lon), lats = ring.points.map(\.lat)
+            return lons.min()! - margin <= hub.lon && lons.max()! + margin >= hub.lon
+                && lats.min()! - margin <= hub.lat && lats.max()! + margin >= hub.lat
+        }
+        let land = map.countries.flatMap(\.rings).filter(near)
+        let lakes = map.lakes.filter(near)
+        let rings = map.regions.first { $0.code == region }?.rings ?? []
+        func at(_ east: Double, _ north: Double) -> (Double, Double) {
+            (hub.lon + east / (WorldScale.earthRadius * cos(hub.lat)), hub.lat + north / WorldScale.earthRadius)
+        }
+        func fits(_ east: Double, _ north: Double, inRegion: Bool) -> Bool {
+            for k in 0...8 {
+                let t = Double(k - 1) * .pi / 4
+                let p = k == 0 ? at(east, north) : at(east + radius * cos(t), north + radius * sin(t))
+                if !land.contains(where: { inside($0, p.0, p.1) }) || lakes.contains(where: { inside($0, p.0, p.1) }) { return false }
+            }
+            let c = at(east, north)
+            return !inRegion || rings.contains { inside($0, c.0, c.1) }
+        }
+        var answer = lot
+        if !fits(lot.east, lot.north, inRegion: true) {
+            var tries: [(Double, Double, Double, Int)] = []
+            for scale in stride(from: 10, through: 0, by: -1) {
+                let s = Double(scale) / 10
+                for step in 0...24 {
+                    // 0, +15, -15, +30, -30 ... degrees round the hub.
+                    let turn = Double((step + 1) / 2) * (step % 2 == 1 ? 1 : -1) * 15 * .pi / 180
+                    let e = (lot.east * cos(turn) - lot.north * sin(turn)) * s
+                    let n = (lot.east * sin(turn) + lot.north * cos(turn)) * s
+                    tries.append((e, n, ((e - lot.east) * (e - lot.east) + (n - lot.north) * (n - lot.north)).squareRoot(), tries.count))
+                }
+            }
+            // Equal distances keep their order of generation, as the Compose map's stable sort does.
+            tries.sort { $0.2 != $1.2 ? $0.2 < $1.2 : $0.3 < $1.3 }
+            if let best = tries.first(where: { fits($0.0, $0.1, inRegion: true) }) ?? tries.first(where: { fits($0.0, $0.1, inRegion: false) }) {
+                answer = (best.0, best.1)
+            }
+        }
+        lock.lock()
+        answers[key] = answer
+        lock.unlock()
+        return answer
     }
 }
 
