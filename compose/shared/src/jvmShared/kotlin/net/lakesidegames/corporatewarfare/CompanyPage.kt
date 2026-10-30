@@ -56,6 +56,20 @@ fun FirmLogo(name: String, modifier: Modifier = Modifier, size: Dp = 32.dp) {
     Canvas(modifier.size(size).clip(Pixel.small)) { drawPixelIcon(art, null) }
 }
 
+/** The chief executive the player chose, in the same card a rival's chief gets. */
+@Composable
+internal fun YourChiefCard(chief: uniffi.cw_ffi.PlayerChiefDto) {
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        PixelPortrait(chief.portrait, size = 72.dp)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(chief.name, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text("Your chief executive", color = Palette.secondary, fontSize = 12.sp)
+            Text(temperamentLabel(chief.temperament), color = Palette.gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+    Text(temperamentNote(chief.temperament), color = Palette.primaryText, fontSize = 12.sp)
+}
+
 /** A company's page: who runs it, how big it is and, by what the investor may see, the rest. */
 @Composable
 fun CompanyPageBody(store: GameStore, p: CompanyPageDto, onOpenFirm: (ULong) -> Unit, onTrade: (() -> Unit)?) {
@@ -89,7 +103,8 @@ fun CompanyPageBody(store: GameStore, p: CompanyPageDto, onOpenFirm: (ULong) -> 
             Text(temperamentNote(ceo.temperament), color = Palette.primaryText, fontSize = 12.sp)
             Text(ceo.background, color = Palette.secondary, fontSize = 12.sp)
         } else if (p.ceoIsYou) {
-            Text("You run this company.", color = Palette.secondary, fontSize = 12.sp)
+            val own = store.playerChief
+            if (own != null) YourChiefCard(own) else Text("You run this company.", color = Palette.secondary, fontSize = 12.sp)
         }
         p.stock?.let { s ->
             Eyebrow("Shares")
