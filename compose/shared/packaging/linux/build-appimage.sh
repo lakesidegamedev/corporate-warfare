@@ -5,13 +5,14 @@
 #   compose/shared/packaging/linux/build-appimage.sh <app image folder> <output.AppImage>
 #
 # The app image folder is what `:shared:createReleaseDistributable` writes, for example
-# "compose/shared/build/compose/binaries/main-release/app/Corporate Warfare". CI runs this on the
+# compose/shared/build/compose/binaries/main-release/app/<name>. CI runs this on the
 # Linux runner after the .deb is built.
 set -euo pipefail
 image="${1:?usage: build-appimage.sh <app image folder> <output.AppImage>}"
 out="${2:?usage: build-appimage.sh <app image folder> <output.AppImage>}"
 here="$(cd "$(dirname "$0")" && pwd)"
 icon="$here/../../icons/corporate-warfare.png"
+echo "app image: $image"; ls -la "$image" "$image/bin" || true
 # The launcher is the one file in bin/, named after the app ("Corporate Warfare").
 launcher="$(ls "$image/bin" | head -1)"
 test -n "$launcher" && test -x "$image/bin/$launcher" || { echo "no launcher in $image/bin" >&2; exit 2; }

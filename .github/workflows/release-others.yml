@@ -93,7 +93,7 @@ jobs:
       - name: AppImage (Linux)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
-          bash compose/shared/packaging/linux/build-appimage.sh "compose/shared/build/compose/binaries/main-release/app/Corporate Warfare" "CorporateWarfare-${TAG#v}-linux.AppImage"
+          bash compose/shared/packaging/linux/build-appimage.sh "$(ls -d compose/shared/build/compose/binaries/main-release/app/*/ | head -1)" "CorporateWarfare-${TAG#v}-linux.AppImage"
           gh release upload "$TAG" "CorporateWarfare-${TAG#v}-linux.AppImage" --clobber
         shell: bash
         env:

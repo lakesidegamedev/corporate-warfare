@@ -141,7 +141,7 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           mkdir -p appimage-out
-          bash compose/shared/packaging/linux/build-appimage.sh "compose/shared/build/compose/binaries/main-release/app/Corporate Warfare" "appimage-out/CorporateWarfare-linux.AppImage"
+          bash compose/shared/packaging/linux/build-appimage.sh "$(ls -d compose/shared/build/compose/binaries/main-release/app/*/ | head -1)" "appimage-out/CorporateWarfare-linux.AppImage"
       - uses: actions/upload-artifact@v4
         if: ${{ matrix.os == 'ubuntu-latest' }}
         with:
