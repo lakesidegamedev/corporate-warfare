@@ -77,10 +77,11 @@ internal fun openDesktopGpuMap(scenario: String): GpuMapSession {
 }
 
 /**
- * One open map. A dedicated thread draws the newest requested view on the graphics card and reads
- * it back into a reusable buffer; the UI thread only blits the finished picture. While the camera
- * moves the view is drawn at half size when it is big (the pixel art look tolerates it) and at full
- * size once it has been still for a moment.
+ * One open map. A dedicated thread draws the newest requested view on the graphics card and reads it back into one of two
+ * reusable buffers; a second thread turns the previous buffer into the picture the UI draws, so that copy never holds up the next
+ * frame. Every frame is the view plus an overscan margin on each side (so a pan or a small zoom out shows real map), at the view's
+ * real pixel size when the camera is still and at three quarters of it (or full size on small views) while it moves; the full-size
+ * frame follows within [SETTLE_NANOS] of the last change. The UI warps whichever frame is newest to the live camera.
  */
 private class DesktopGpuSession(
     private val lib: CwGpu,
@@ -94,19 +95,20 @@ private class DesktopGpuSession(
     private val wake = lock.newCondition()
     private var wanted: Request? = null
     private var rendered: Request? = null
-    private var renderedScale = 0
+    private var renderedFactor = 0f
     private var lastChange = 0L
     private var dirty = false
     private var closed = false
-    private var pixels = ByteArray(0)
+    private val buffers = arrayOf(ByteArray(0), ByteArray(0))
+    private val pending = arrayOfNulls<java.util.concurrent.Future<*>>(2)
+    private val uploader = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "cw-gpu-upload").apply { isDaemon = true } }
 
     @Volatile override var renderMs = 0.0
     @Volatile override var copyMs = 0.0
-    private class Shown(val image: ImageBitmap, val camera: GpuCamera)
-    @Volatile private var latest: Shown? = null
+    @Volatile private var latest: GpuShown? = null
     override val frame: ImageBitmap? get() = latest?.image
     override val frameCamera: GpuCamera? get() = latest?.camera
-    override val shown: GpuShown? get() = latest?.let { GpuShown(it.image, it.camera) }
+    override val shown: GpuShown? get() = latest
     override var version by mutableLongStateOf(0L)
         private set
 
@@ -135,7 +137,11 @@ private class DesktopGpuSession(
             kotlinx.serialization.json.Json.parseToJsonElement(text).let { it as kotlinx.serialization.json.JsonArray }.map { e ->
                 val o = e as kotlinx.serialization.json.JsonObject
                 fun str(k: String) = (o[k] as kotlinx.serialization.json.JsonPrimitive).content
-                GpuBuilding(str("lon").toDouble(), str("lat").toDouble(), str("owner"), str("kind"), (0xFF000000L or str("colour").toLong(16)).toInt())
+                fun opt(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.content
+                GpuBuilding(
+                    str("lon").toDouble(), str("lat").toDouble(), str("owner"), str("kind"), (0xFF000000L or str("colour").toLong(16)).toInt(),
+                    region = opt("region"), industry = opt("industry"), firm = opt("firm")?.toLongOrNull(), plants = opt("plants")?.toIntOrNull() ?: 0,
+                )
             }
         }.getOrDefault(emptyList())
     }
@@ -167,59 +173,77 @@ private class DesktopGpuSession(
     override fun close() {
         lock.withLock { closed = true; wake.signalAll() }
         worker.join(2000)
+        uploader.shutdown()
         lib.cw_gpu_close(id)
     }
 
-    private fun cam(c: GpuCamera) = doubleArrayOf(c.lon, c.lat, c.widthKm, c.tiltDeg, c.headingDeg, 28.0)
+    private fun cam(c: GpuCamera) = doubleArrayOf(c.lon, c.lat, c.widthKm, c.tiltDeg, c.headingDeg, c.fovDeg)
 
-    /** The internal scale: half size while the view is changing and big, full size once it settles. */
-    private fun scaleFor(r: Request, settled: Boolean) = if (!settled && r.width.toLong() * r.height > 1_500_000L) 2 else 1
+    /** Image pixels per view pixel: full size when settled or when the view is small, three quarters while it moves. */
+    private fun factorFor(r: Request, settled: Boolean) = if (settled || r.width.toLong() * r.height <= SMALL_VIEW) 1f else MOVING_FACTOR
 
     private fun loop() {
         val timing = DoubleArray(6)
+        var next = 0
         while (true) {
             val job: Request
-            val scale: Int
+            val factor: Float
             lock.withLock {
                 while (true) {
                     if (closed) return
                     val w = wanted
                     val settled = System.nanoTime() - lastChange > SETTLE_NANOS
                     if (w != null) {
-                        val s = scaleFor(w, settled)
-                        if (dirty || rendered !== w || s < renderedScale) { job = w; scale = s; dirty = false; break }
-                        // Still showing a reduced frame: draw the full one as soon as the camera has been still.
-                        if (renderedScale > 1 && settled) { job = w; scale = 1; break }
+                        val f = factorFor(w, settled)
+                        if (dirty || rendered !== w || f > renderedFactor) { job = w; factor = f; dirty = false; break }
                     }
-                    val wait = if (renderedScale > 1) SETTLE_NANOS else 1_000_000_000L
+                    // Still showing a reduced frame: wake when the camera has been still long enough to draw the full one.
+                    val wait = if (renderedFactor in 0.01f..0.99f) (SETTLE_NANOS - (System.nanoTime() - lastChange)).coerceAtLeast(1_000_000L) else 1_000_000_000L
                     wake.awaitNanos(wait)
                 }
             }
-            val w = job.width / scale
-            val h = job.height / scale
-            val need = w * h * 4
-            if (pixels.size < need) pixels = ByteArray(need)
+            // The margin shrinks on very large views so a frame never passes what a card takes (and stays quick).
+            val margin = if (job.width.toLong() * job.height > BIG_VIEW) 0.1 else GPU_OVERSCAN
+            val mx = Math.round(job.width * margin).toInt(); val my = Math.round(job.height * margin).toInt()
+            val bigW = job.width + 2 * mx; val bigH = job.height + 2 * my
+            val rw = Math.round(bigW * factor).coerceAtLeast(1); val rh = Math.round(bigH * factor).coerceAtLeast(1)
+            val camera = overscanCamera(job.camera, job.width, job.height, mx, my)
+            // The buffer the uploader may still be reading is waited for: the one rendered into now is the one used two frames ago.
+            pending[next]?.let { runCatching { it.get() } }
+            val need = rw * rh * 4
+            if (buffers[next].size < need) buffers[next] = ByteArray(need)
+            val pixels = buffers[next]
             val code = try {
-                lib.cw_gpu_render(id, cam(job.camera), job.width, job.height, scale, pixels, need.toLong(), timing)
+                lib.cw_gpu_render(id, cam(camera), rw, rh, 1, pixels, need.toLong(), timing)
             } catch (_: Throwable) { -1 }
             if (code < 0) {
                 GpuMapHost.failure = lib.text { lib.cw_gpu_last_error(it, it.size.toLong()) }?.take(80) ?: "the graphics card stopped drawing"
                 lock.withLock { if (!closed) wake.awaitNanos(500_000_000L) }
                 continue
             }
-            val t0 = System.nanoTime()
-            val image = Image.makeRaster(ImageInfo(w, h, ColorType.RGBA_8888, ColorAlphaType.OPAQUE), pixels, w * 4).toComposeImageBitmap()
-            val skia = (System.nanoTime() - t0) / 1e6
             renderMs = timing[0]
-            copyMs = timing[1] + skia
-            latest = Shown(image, job.camera)
-            lock.withLock { rendered = job; renderedScale = scale }
-            version += 1
+            val gpuCopy = timing[1]
+            lock.withLock { rendered = job; renderedFactor = factor }
+            val view = job.camera
+            pending[next] = uploader.submit {
+                val t0 = System.nanoTime()
+                val image = Image.makeRaster(ImageInfo(rw, rh, ColorType.RGBA_8888, ColorAlphaType.OPAQUE), pixels, rw * 4).toComposeImageBitmap()
+                copyMs = gpuCopy + (System.nanoTime() - t0) / 1e6
+                latest = GpuShown(image, camera, view, job.width, job.height, mx, factor)
+                version += 1
+            }
+            next = 1 - next
         }
     }
 
     private companion object {
-        const val SETTLE_NANOS = 250_000_000L
+        /** How long the camera must be still before the full-size frame replaces the quick one. */
+        const val SETTLE_NANOS = 150_000_000L
+        /** Views up to this many pixels are drawn at full size even while moving. */
+        const val SMALL_VIEW = 1_500_000L
+        const val MOVING_FACTOR = 0.75f
+        /** Views above this many pixels (beyond 4K) get a smaller overscan margin. */
+        const val BIG_VIEW = 8_000_000L
     }
 }
 
