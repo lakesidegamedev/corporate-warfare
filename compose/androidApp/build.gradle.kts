@@ -103,6 +103,8 @@ kotlin {
 dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
+    // Applies the baseline profile (and the libraries own profiles) when the app is installed.
+    implementation(libs.androidx.profileinstaller)
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
