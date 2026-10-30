@@ -658,7 +658,10 @@ mod tests {
             assert_eq!(wire, postcard::to_allocvec(&text.to_owned()).unwrap());
             let back: Memo = postcard::from_bytes(&wire).unwrap();
             assert_eq!(back, memo);
-            assert_eq!(serde_json::to_string(&memo).unwrap(), serde_json::to_string(text).unwrap());
+            assert_eq!(
+                serde_json::to_string(&memo).unwrap(),
+                serde_json::to_string(text).unwrap()
+            );
         }
     }
 

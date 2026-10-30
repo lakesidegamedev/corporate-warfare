@@ -349,9 +349,11 @@ pub fn decode_with(
         let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
         let mut sum = [0u8; 32];
         sum.copy_from_slice(&rest[8..40]);
-        let json = rest.get(40..40usize.saturating_add(length)).ok_or(DomainError::InvalidSave {
-            detail: SaveFault::Truncated,
-        })?;
+        let json =
+            rest.get(40..40usize.saturating_add(length))
+                .ok_or(DomainError::InvalidSave {
+                    detail: SaveFault::Truncated,
+                })?;
         if digest(DOMAIN_SAVE, json) != sum {
             return Err(DomainError::InvalidSave {
                 detail: SaveFault::Checksum,
@@ -371,9 +373,11 @@ pub fn decode_with(
         let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
         let mut sum = [0u8; 32];
         sum.copy_from_slice(&rest[8..40]);
-        let body = rest.get(40..40usize.saturating_add(length)).ok_or(DomainError::InvalidSave {
-            detail: SaveFault::Truncated,
-        })?;
+        let body =
+            rest.get(40..40usize.saturating_add(length))
+                .ok_or(DomainError::InvalidSave {
+                    detail: SaveFault::Truncated,
+                })?;
         if digest(DOMAIN_SAVE, body) != sum {
             return Err(DomainError::InvalidSave {
                 detail: SaveFault::Checksum,
@@ -393,9 +397,11 @@ pub fn decode_with(
         let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
         let mut sum = [0u8; 32];
         sum.copy_from_slice(&rest[8..40]);
-        let body = rest.get(40..40usize.saturating_add(length)).ok_or(DomainError::InvalidSave {
-            detail: SaveFault::Truncated,
-        })?;
+        let body =
+            rest.get(40..40usize.saturating_add(length))
+                .ok_or(DomainError::InvalidSave {
+                    detail: SaveFault::Truncated,
+                })?;
         if digest(DOMAIN_SAVE, body) != sum {
             return Err(DomainError::InvalidSave {
                 detail: SaveFault::Checksum,
@@ -487,9 +493,11 @@ fn trailer_body(rest: &[u8]) -> Result<&[u8], DomainError> {
     let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
     let mut sum = [0u8; 32];
     sum.copy_from_slice(&rest[8..40]);
-    let body = rest.get(40..40usize.saturating_add(length)).ok_or(DomainError::InvalidSave {
-        detail: SaveFault::Truncated,
-    })?;
+    let body = rest
+        .get(40..40usize.saturating_add(length))
+        .ok_or(DomainError::InvalidSave {
+            detail: SaveFault::Truncated,
+        })?;
     if digest(DOMAIN_SAVE, body) != sum {
         return Err(DomainError::InvalidSave {
             detail: SaveFault::Checksum,

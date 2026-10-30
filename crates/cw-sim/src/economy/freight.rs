@@ -158,8 +158,7 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
             contract.to_region,
             deliverable,
         );
-        let full_cost =
-            deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0 + full_freight;
+        let full_cost = deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0 + full_freight;
         let wanted = deliverable;
         let mut deliverable = deliverable;
         let bill = |world: &mut World, lots: MilliLots| {
