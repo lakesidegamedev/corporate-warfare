@@ -291,6 +291,17 @@ internal fun RegionPicker(store: GameStore, onClose: () -> Unit) {
     )
 }
 
+/** The live quote line under the order ticket. */
+internal fun quoteText(q: uniffi.cw_ffi.ShareQuoteDto?, buy: Boolean): String {
+    if (q == null) return "Enter a number of shares to see the price."
+    if (q.qty <= 0L) return if (buy) "Nothing to buy at that limit, or the public holds none." else "Nothing would sell at that limit, or no buyer has the money."
+    return "${Format.count(q.qty)} shares at about ${Format.price(q.averageCents)} each, ${Format.money(q.totalCents)} in all; " +
+        "the price ends at ${Format.price(q.finalCents)}; you would own %.1f%%.".format(q.stakeAfterBps / 100.0)
+}
+
+internal fun doneText(name: String, q: uniffi.cw_ffi.ShareQuoteDto, buy: Boolean): String =
+    "${if (buy) "Bought" else "Sold"} ${Format.count(q.qty)} shares of $name for ${Format.money(q.totalCents)}. The price is now ${Format.price(q.finalCents)}."
+
 /** One stock: valuation, your position, and an order ticket. */
 @Composable
 internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = true, onClose: () -> Unit) {
@@ -298,6 +309,12 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
     var buy by remember { mutableStateOf(true) }
     var quantity by remember { mutableStateOf("1000") }
     var limit by remember { mutableStateOf("") }
+    var quote by remember { mutableStateOf<uniffi.cw_ffi.ShareQuoteDto?>(null) }
+    val limitCents = limit.toDoubleOrNull()?.let { (it * 100).toLong() } ?: 0L
+    LaunchedEffect(buy, quantity, limit, line.firm) {
+        val shares = quantity.toLongOrNull() ?: 0L
+        if (shares > 0) store.shareQuote(line.firm, buy, shares, limitCents) { quote = it } else quote = null
+    }
     val annual = if (line.earningsWeeks > 0u) line.earningsCents * 52 / line.earningsWeeks.toLong() else 0L
     val pe = if (annual <= 0) "Loss" else (line.marketCapCents.toDouble() / annual).let { if (it > 200) "n/m" else "%.1f".format(it) }
     AlertDialog(
@@ -332,18 +349,20 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
                 }
                 OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Shares") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.textEntry())
-                OutlinedTextField(limit, { limit = it }, label = { Text("Limit per share ($), default %.2f".format(line.priceCents / 100.0)) },
+                OutlinedTextField(limit, { limit = it }, label = { Text("Limit per share ($), optional") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.textEntry())
-                Text("Orders fill at the weekly close, best price first, up to 2% of the freely held shares a week.", color = Palette.secondary, fontSize = 11.sp)
+                TextButton(onClick = {
+                    store.shareQuote(line.firm, buy, Long.MAX_VALUE, limitCents) { it?.let { q -> quantity = q.maxQty.toString() } }
+                }) { Text(if (buy) "Max: all I can afford or the public holds" else "Max: all I hold") }
+                Text(quoteText(quote, buy), color = Palette.secondary, fontSize = 12.sp)
             }
         },
         confirmButton = {
             val shares = quantity.toLongOrNull() ?: 0
-            GoldButton(if (buy) "Place buy order" else "Place sell order", enabled = shares > 0 && !store.busy) {
-                // Default limits sit two percent through the price so the order is marketable.
-                val cents = limit.toDoubleOrNull()?.let { (it * 100).toLong() }
-                    ?: if (buy) line.priceCents * 102 / 100 else line.priceCents * 98 / 100
-                store.orderShares(line.firm, buy, shares, maxOf(cents, 1))
+            val ready = quote?.let { it.qty > 0 } == true
+            GoldButton(if (buy) "Buy now" else "Sell now", enabled = shares > 0 && ready && !store.busy) {
+                val q = quote
+                store.orderShares(line.firm, buy, shares, limitCents, q?.let { doneText(line.name, it, buy) } ?: "Accepted.")
                 onClose()
             }
         },
