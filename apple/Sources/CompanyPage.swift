@@ -162,6 +162,7 @@ struct CompanyPageBody: View {
                         .font(.caption).foregroundStyle(Theme.secondary)
                 }
             }
+            DisclosedStakes(stakes: page.stakes)
             linked("Parent", page.parent.map { [$0] } ?? [])
             linked("Subsidiaries", page.subsidiaries)
             linked("Joint ventures", page.ventures)

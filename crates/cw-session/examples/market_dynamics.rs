@@ -71,7 +71,11 @@ fn main() {
     // outside gateway account at the year end, summed over seeds.
     let mut restructurings: BTreeMap<u32, [i64; 2]> = BTreeMap::new();
     let mut outside: BTreeMap<u32, i64> = BTreeMap::new();
+    // Bids for control over all seeds: started, and of those settled (the bidder took control).
+    let (mut hostile_started, mut hostile_settled) = (0i64, 0i64);
     for seed in 1..=seeds {
+        let mut hostile_seen: std::collections::BTreeSet<u64> = Default::default();
+        let mut hostile_done: std::collections::BTreeSet<u64> = Default::default();
         let config = cw_session::ScenarioConfig {
             seed,
             scenario: cw_sim::state::ScenarioKind::Guided,
@@ -100,6 +104,19 @@ fn main() {
             }
             let world = &session.world;
             let dataset = &session.dataset;
+            // A bid is a share purchase of a company outside the bidder's own group, seen first.
+            for (h, deal) in world.deals.iter().filter(|(_, d)| {
+                d.kind == cw_sim::state::DealKind::SharePurchase
+                    && (d.hostile
+                        || !cw_sim::economy::ownership::same_group(world, d.buyer, d.target))
+            }) {
+                if hostile_seen.insert(h.0) {
+                    hostile_started += 1;
+                }
+                if deal.state == cw_sim::state::DealState::Settled && hostile_done.insert(h.0) {
+                    hostile_settled += 1;
+                }
+            }
             {
                 let year = (week - 1) / 52 + 1;
                 for (h, f) in world.firms.iter() {
@@ -271,6 +288,12 @@ fn main() {
             (r.sold_ask_bps / n - 10_000) / 100
         );
     }
+    println!(
+        "takeover bids over {seeds} runs of {weeks} weeks: {hostile_started} started, \
+         {hostile_settled} settled; per run per 5 years: {:.2} started, {:.2} settled",
+        hostile_started as f64 * 260.0 / (seeds as f64 * weeks.max(1) as f64),
+        hostile_settled as f64 * 260.0 / (seeds as f64 * weeks.max(1) as f64),
+    );
     println!(
         "firms losing money over 13 weeks (final year): {}/{} = {}%",
         losing,

@@ -137,6 +137,59 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
                 },
             });
         }
+        // A long plan against a target's shares and a target's answer to one, as ordinary orders
+        // and offers: the same commands, checks and information a player has.
+        match cw_sim::economy::plans::rival_action(world, dataset, handle) {
+            Some(cw_sim::economy::plans::Action::Buy {
+                target,
+                qty,
+                limit_cents,
+            }) => proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::PlaceShareOrder {
+                    investor: false,
+                    firm: target,
+                    buy: true,
+                    qty,
+                    limit_price_cents: limit_cents,
+                },
+            }),
+            Some(cw_sim::economy::plans::Action::Sell {
+                target,
+                qty,
+                limit_cents,
+            }) => proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::PlaceShareOrder {
+                    investor: false,
+                    firm: target,
+                    buy: false,
+                    qty,
+                    limit_price_cents: limit_cents,
+                },
+            }),
+            Some(cw_sim::economy::plans::Action::Tender {
+                target,
+                price_cents,
+                shares,
+            }) => proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::StartDiligence {
+                    buyer: handle,
+                    target,
+                    kind: cw_sim::state::DealKind::SharePurchase,
+                    price_cents,
+                    max_shares: shares,
+                },
+            }),
+            None => {}
+        }
+        if let Some(qty) = cw_sim::economy::plans::rival_defence(world, handle) {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::RepurchaseShares { firm: handle, qty },
+            });
+        }
         cw_sim::ph!("ai::urgent", urgent(world, dataset, handle, &mut proposals));
         // Production follows sell-through plant by plant in the weekly tick, the same planner
         // as the player's automatic production (cw_sim::economy::pricing::plan).
@@ -1733,6 +1786,11 @@ fn acquisition_bid(
     let price = mark + mark * 25 / 100;
     let eligible = entity.shares.eligible_votes();
     let held = entity.shares.qty(HolderId::Firm(buyer));
+    // A rival that already holds part of a company tops up only as the last step of its own
+    // long plan (which launches its bid itself); a stray second bid is not a plan.
+    if held > 0 {
+        return None;
+    }
     let wanted = (eligible / 2 + 1 - held).max(0);
     if wanted == 0 {
         return None;

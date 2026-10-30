@@ -65,6 +65,8 @@ pub struct CompanyPageDto {
     pub finance: Option<FinanceDto>,
     pub divisions: Vec<DivisionLineDto>,
     pub holders: Vec<HolderDto>,
+    /// Holdings of 5 percent or more, as filed, with their history.
+    pub stakes: Vec<crate::plans::StakeDto>,
     pub controller: Option<String>,
     pub parent: Option<LinkedFirmDto>,
     pub subsidiaries: Vec<LinkedFirmDto>,
@@ -304,6 +306,7 @@ pub(crate) fn page(session: &Session, firm: u64) -> Option<CompanyPageDto> {
             Vec::new()
         },
         holders,
+        stakes: crate::plans::stakes(world, handle),
         controller,
         parent,
         subsidiaries,

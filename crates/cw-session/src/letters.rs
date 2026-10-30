@@ -1367,6 +1367,58 @@ fn executive_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec
     }
 }
 
+/// A rival's letter when its stake in the player's company crosses the disclosure line, and again
+/// at every five points after: a plain notice of the holding, from its chief. It says nothing of
+/// intent, because the filing does not.
+fn stake_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
+    use cw_sim::economy::plans::EventKind;
+    for event in world
+        .plans
+        .events
+        .iter()
+        .filter(|e| e.week >= since && matches!(e.kind, EventKind::Disclosed | EventKind::Grew))
+    {
+        if !player_side(world, event.target) || player_side(world, event.raider) {
+            continue;
+        }
+        let (Some(raider), Some(target)) = (
+            paper::firm_name(world, event.raider),
+            paper::firm_name(world, event.target),
+        ) else {
+            continue;
+        };
+        let percent = event.stake_bps / 100;
+        let fact = if event.kind == EventKind::Disclosed {
+            format!(
+                "I write to tell you that {raider} now holds {percent} percent of {target}. That is over the line at which a holding is made public, so this letter and the notice in the press go out together."
+            )
+        } else {
+            format!("{raider} now holds {percent} percent of {target}. We have kept buying.")
+        };
+        out.push(finish(
+            world,
+            Draft {
+                id: format!(
+                    "stake:{}:{}:{}:{:?}",
+                    event.week, event.raider.0, event.target.0, event.kind
+                ),
+                kind: "rival",
+                week: event.week.max(1),
+                sender: rival_sender(world, dataset, event.raider, event.week),
+                tone: Tone::Formal,
+                addressee: target.clone(),
+                facts: vec![
+                    fact,
+                    "You can buy shares back, bring in a friendly buyer, raise your guidance or talk to your board. The holding is open to anyone to read."
+                        .to_owned(),
+                ],
+                link: PaperLink::company(event.raider),
+            },
+            None,
+        ));
+    }
+}
+
 /// How much of a quarter's sales is profit before a quarter counts as strong, in percent.
 const STRONG_MARGIN_PCT: i64 = 10;
 
@@ -1597,6 +1649,7 @@ pub fn letters(world: &World, dataset: &Dataset, since_week: u32) -> Vec<Letter>
     cfo_letters(world, dataset, since, &mut out);
     board_letters(world, since, &mut out);
     executive_letters(world, dataset, since, &mut out);
+    stake_letters(world, dataset, since, &mut out);
     decision_letters(world, dataset, 1, &mut out);
 
     out.sort_by(|a, b| {

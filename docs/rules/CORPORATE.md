@@ -532,3 +532,80 @@ before then after: Great Lakes 227 to 110, Ruhr and Rhine 196 to 103, Silicon Va
 Texas 195 to 107. Prices still follow earnings after that (year five 155 to 236), and the investor's
 holdings start higher, so percentage net worth growth over five years reads lower than before for the
 same dollars.
+
+## Rival long plans (1.9)
+
+A rival whose chief is a raider, financier or integrator can run one campaign at a time against a
+listed company, the player's or another rival's. It uses the commands and the information a
+player has; the plan only decides what to send and when. Implemented in
+`crates/cw-sim/src/economy/plans.rs`; the AI sends its moves in `cw_ai::propose`.
+
+**Opening.** From week 26, each rival looks once every 13 weeks (by its handle's slot). There is
+room for one plan for every 8 companies in the world, a rival runs one at a time, and a rival
+waits 104 weeks after a plan ends. The target must be listed, not state owned, not in the rival's
+group, free of any holder with a majority, with at least half of its votes in outside hands (twice the
+goal), and no other rival already after it. The rival
+must hold cash over eight weeks of mandatory outflow, and the campaign (the stake, then the
+escrow of the bid) may cost no more than twice that spare cash, since earnings keep arriving. The
+score is the discount of the traded mark to the fair estimate (capped), plus a quarter of the
+grudge strength the rival holds against the target. A raider needs a discount of at least 5
+percent, a financier 10 percent, an integrator a vertical link to the target (a supplier or
+customer) and gets 20 points for it. Nothing in the opening draws from a random stream.
+
+**Building.** Each week the rival bids with `PlaceShareOrder` for at most half of the week's
+executable float (2 percent of the shares outside investors hold), at no more than 2 percent over
+the mark, so price impact (10 basis points for each percent of the outside holdings a step takes)
+and the float cap every step, and the order simply does not fill if the price would be higher. It
+never buys past a quarter of the votes (the goal) or into its cash reserve.
+
+**Disclosure.** At 5 percent of the votes the stake is public: the stake and the week are filed
+(`disclosed_stakes`), a paper story runs, the target gets a letter when it is the player's company,
+and from then on the weekly stake is recorded as the stake history. Another story and letter follow
+each time the stake passes another five points. Nothing before the line is visible: not the plan, its
+stage, or its history. A stake that is an ordinary holding (a parent's, for example) is listed too
+but has no history.
+
+**Tender.** At a quarter of the votes the plan is in its tender stage and the rival starts an
+ordinary takeover bid (`StartDiligence`, share purchase, 25 percent over the mark, for the shares
+that take it past half, escrow and diligence as for any bid) once its cash covers the escrow, the
+fee and its reserve. From there the deal follows the M&A state machine above. A settled deal is a
+win. A deal that expires, is withdrawn or rejected turns the plan to selling out.
+
+**Giving up.** A plan turns to selling out when: the target's traded mark runs more than 30 percent
+(financier), 40 (integrator) or 50 percent (raider) over where it was when the plan opened, with no
+bid yet; 78 weeks pass; the rival's cash falls under half its reserve; the tender cannot start in 13
+weeks; another holder takes a majority (a white knight, whose friendly deal moves control away from
+the rival); or the target stops trading. The rival then sells with `PlaceShareOrder` sell orders, at most half the float a
+week, at no less than 2 percent under the mark, and the plan ends when the stake is gone (or after 52 weeks).
+Selling below cost is a realised loss as for any holder.
+
+**What the target can do.** Buy shares back (`RepurchaseShares`: fewer shares in the float, a higher price,
+a lower pace for the rival; a rival target does it on its own once a stake reaches 10 percent, every
+fourth week, one percent of the votes at a time, only with cash over its reserve and never if the
+buyback would push the rival's share of the remaining votes to 40 percent), take a friendly buyer
+(a deal for control moves control away and ends the plan), issue shares at 90 percent of fair or
+more to a funded buyer (which dilutes the rival's share), and raise guidance (a higher fair estimate
+raises the mark, which can push the price past the rival's limit). **There is no poison pill.** The
+board has no rule that blocks or dilutes one holder: it seats five by vote share and approves large
+issues and mergers, nothing more. Adding one is left for a later pass.
+
+**What others see.** A rival's dossier shows "Likely next move", from what is filed and public:
+an open bid, a stake on file and the way it moved over 13 weeks, or a campaign that just ended;
+never the plan's stage or the rival's reasons. The weekly brief says when a disclosed stake in your
+company grew over four weeks. The company page and the target's dossier list every stake of 5
+percent or more with the stake history as a small line.
+
+**Saved state.** `World.plans` (plans, finished campaigns, events, counts, and the migration state
+from FINANCE-LABOUR-AI.md) is saved in the `PLAN` trailer and folded into the canonical hash while
+not empty. Public history is kept for 156 weeks and 40 finished campaigns.
+
+**Exchange fixes that came with this.** The exchange used to make up shares when outside
+investors sold into it (the trade always named the first outside investor, whether or not it held the
+company) and to give an outside buyer's cash from nowhere; trades with the outside now run against
+real holders, the largest lot selling first and the investor with the most capital buying, and a
+trade is cut to what they hold or can pay. A company's unused order reserve now returns to its cash
+(it used to move into restricted cash a second time), the surplus when a buy fills under its limit
+comes back at once, and a company selling shares reads its cost basis from the company's own share
+book. The ownership cycle check now follows the shares a company holds, as its comment always said; a
+buyer that already holds some of a target is no cycle.
+
