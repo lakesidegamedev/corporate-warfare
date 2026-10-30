@@ -12,12 +12,55 @@ import kotlin.math.sqrt
  * The diorama up close: small voxel props scattered over the satellite ground by what the ground
  * is. Forest gets conifers in the north and leafy trees further south, farmland gets crop rows and
  * the odd barn, dry land a few rocks, and houses gather round each city, spreading further in a
- * boom and pulling in during a recession. Each prop has a summer, autumn and winter look, so the
+ * boom and pulling in during a recession, and thicker in a region people are moving into and
+ * thinner in one they are leaving. Every house stands at a fixed place in the world, so a region that
+ * gains people only shows more of the houses that were always there to be built. Each prop has a summer, autumn and winter look, so the
  * countryside follows the seasons with the Earth beneath it.
  */
 internal object Countryside {
     /** A prop on the ground: where (degrees), what, and a stable seed for small variations. */
-    class Prop(val lon: Double, val lat: Double, val kind: String, val seed: Int, val city: Double = 0.0)
+    class Prop(
+        val lon: Double, val lat: Double, val kind: String, val seed: Int, val city: Double = 0.0,
+        /** For a house: the region of the nearest city, and its stable rank (0..99) among the houses that could stand here. */
+        val region: String = "", val rank: Int = 0,
+    )
+
+    /** The code of the region whose outline holds the point (degrees), or empty. Even-odd, on the flat lon/lat plane. */
+    private class Area(val code: String, val rings: List<GeoRing>, val west: Double, val east: Double, val south: Double, val north: Double)
+
+    private fun regionAt(regions: List<Area>, lonDeg: Double, latDeg: Double): String {
+        val px = lonDeg * PI / 180
+        val py = latDeg * PI / 180
+        for (area in regions) {
+            if (px < area.west || px > area.east || py < area.south || py > area.north) continue
+            var inside = false
+            for (ring in area.rings) {
+                var j = ring.size - 1
+                for (i in 0 until ring.size) {
+                    if ((ring.lat[i] > py) != (ring.lat[j] > py) &&
+                        px < (ring.lon[j] - ring.lon[i]) * (py - ring.lat[i]) / (ring.lat[j] - ring.lat[i]) + ring.lon[i]
+                    ) inside = !inside
+                    j = i
+                }
+            }
+            if (inside) return area.code
+        }
+        return ""
+    }
+
+    /** Houses with a rank under this stand when the region's people are steady. */
+    private const val STEADY = 45.0
+    /** Houses that could ever stand: ranks below this are generated, so a gaining region has some to add. */
+    private const val MOST = 70
+
+    /**
+     * The rank a house needs to stand in a region whose net migration over the year is [bps] of its people:
+     * steady at [STEADY], up to 55 percent more when the region gains 2 percent or more, as many fewer when it loses.
+     */
+    fun houseLimit(bps: Int?): Double {
+        val gain = ((bps ?: 0) / 200.0).coerceIn(-1.0, 1.0)
+        return STEADY * (1.0 + 0.55 * gain)
+    }
 
     private val cache = HashMap<String, List<Prop>>()
 
@@ -43,6 +86,10 @@ internal object Countryside {
         val step = 0.14
         val out = ArrayList<Prop>()
         val cities = map.cities.map { (c, p) -> Triple(p.lon[0] * 180 / PI, p.lat[0] * 180 / PI, c.population.toDouble()) }
+        val regions = map.regions.map { f ->
+            Area(f.code, f.rings, f.rings.minOfOrNull { it.lon.min() } ?: 0.0, f.rings.maxOfOrNull { it.lon.max() } ?: 0.0,
+                f.rings.minOfOrNull { it.lat.min() } ?: 0.0, f.rings.maxOfOrNull { it.lat.max() } ?: 0.0)
+        }
         var lat = south
         var row = 0
         while (lat < north) {
@@ -62,7 +109,7 @@ internal object Countryside {
                     d / (0.06 * sqrt(pop / 1e5).coerceAtLeast(1.0))
                 } ?: 9.0
                 if (near < 1.0) {
-                    if (roll < 45) out += Prop(x, y, "house", seed, near)
+                    if (roll < MOST) out += Prop(x, y, "house", seed, near, regionAt(regions, x, y), roll.toInt())
                 } else {
                     val u = ((x - region.west) / (region.east - region.west) * image.width).toInt()
                     val v = ((region.north - y) / (region.north - region.south) * image.height).toInt()
@@ -94,15 +141,17 @@ internal object Countryside {
 
     /**
      * Draws the props on screen for the current camera, far ones first, at most [limit]. Houses
-     * further from a city than the economy supports are left out: towns grow in a boom.
+     * further from a city than the economy supports are left out: towns grow in a boom. [settlement] is each region's
+     * net migration over the year in basis points of its people; houses thin out where people leave and fill in where they arrive.
      */
     fun DrawScope.drawCountryside(
         p: MapProjection, map: WorldMap, week: Int, unit: Float, lift: (String?) -> Double, economyPhase: String?, limit: Int = 500,
+        settlement: Map<String, Int> = emptyMap(),
     ) {
         val reach = when (economyPhase) { "boom" -> 1.0; "expansion" -> 0.9; "recovery" -> 0.8; "slowdown" -> 0.7; "recession" -> 0.6; else -> 0.85 }
         val shown = ArrayList<Triple<Offset, Offset, Prop>>()
         for (prop in props(map)) {
-            if (prop.kind == "house" && prop.city > reach) continue
+            if (prop.kind == "house" && (prop.city > reach || prop.rank >= houseLimit(settlement[prop.region]))) continue
             val g = p.ground(prop.lon * PI / 180, prop.lat * PI / 180)
             if (!g.isSpecified) continue
             val at = p.lift(g.x.toDouble(), g.y.toDouble(), lift(null))
