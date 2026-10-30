@@ -1522,7 +1522,7 @@ mod tests {
             chapters::Offer {
                 chapter: 1,
                 set: 0,
-                kinds: kinds.clone(),
+                kinds: kinds,
             },
         );
         let brief = weekly_brief(&s.world, &s.dataset, me.0);
