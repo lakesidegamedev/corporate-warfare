@@ -693,6 +693,16 @@ mod tests {
         assert!(out.chunks_exact(4).any(|p| p[0] != p[1] || p[1] != p[2]), "the frame is flat grey");
         // A tap on the centre of the view lands in a Texas region.
         let hit = map.pick(cam, w as f32, h as f32, w as f32 / 2.0, h as f32 / 2.0);
+        let mut grid = 0;
+        for gy in 0..10 {
+            for gx in 0..16 {
+                if map.pick(cam, w as f32, h as f32, gx as f32 * 20.0 + 10.0, gy as f32 * 20.0 + 10.0).is_some() {
+                    grid += 1;
+                }
+            }
+        }
+        eprintln!("grid picks: {grid} of 160");
+        assert!(grid > 0, "no point of the view picks a region");
         eprintln!("centre pick: {hit:?}, render {:.1} ms copy {:.1} ms", t.render_ms, t.copy_ms);
     }
 }
