@@ -222,7 +222,7 @@ struct CompanyPageBody: View {
 
 /// The full company page for any firm, opened from the stock list, a dialog, a dossier, a region board or the news.
 struct CompanyPageSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State var firm: UInt64
     @State private var page: CompanyPageDto?
@@ -250,9 +250,9 @@ struct CompanyPageSheet: View {
             .navigationTitle(page?.name ?? "Company")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .sheet(item: $trading) { stock in StockSheet(stock: stock, showPage: false) }
-            .sheet(item: $opening) { division in DivisionDetailSheet(division: division).environmentObject(store) }
+            .sheet(item: $opening) { division in DivisionDetailSheet(division: division).environment(store) }
         }
-        .environmentObject(store)
+        .environment(store)
         .task(id: firm) { page = await store.companyPage(firm) }
     }
 }

@@ -60,7 +60,7 @@ struct RivalTagLine: View {
 
 /// The chief and tags of one company, loaded from the engine. Draws nothing for a firm without a chief.
 struct RivalIdentity: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let firm: UInt64
     var portrait: CGFloat = 28
     @State private var tag: RivalTagDto?
@@ -78,7 +78,7 @@ struct RivalIdentity: View {
 /// A Raid button for one rival market. It opens the panel with the engine's odds, or says why
 /// the raid is not open and how to open it.
 struct RaidMarketButton: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let target: UInt64
     let region: String
     let industry: String
@@ -95,7 +95,7 @@ struct RaidMarketButton: View {
         .accessibilityLabel("Raid \(Sector.name(industry)) in \(WorldMap.shared.regionName(region))")
         .sheet(isPresented: $open) {
             RaidPanel(target: target, region: region, industry: industry)
-                .environmentObject(store)
+                .environment(store)
                 .presentationBackground(Theme.panel)
         }
     }
@@ -103,7 +103,7 @@ struct RaidMarketButton: View {
 
 /// The raid campaign when the market is open, otherwise one line of why and a way to build in.
 struct RaidPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let target: UInt64
     let region: String
@@ -151,7 +151,7 @@ struct RaidPanel: View {
         .task { check = await store.raidCheck(target: target, region: region, industry: industry) }
         .sheet(isPresented: $building, onDismiss: { Task { check = await store.raidCheck(target: target, region: region, industry: industry) } }) {
             BuildFlowView(regionCode: region)
-                .environmentObject(store)
+                .environment(store)
                 .presentationBackground(Theme.panel)
         }
     }
@@ -159,7 +159,7 @@ struct RaidPanel: View {
 
 /// Every market a rival shares a plant footprint in, each with a Raid button.
 struct RaidMarketsList: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let firm: UInt64
 
     private struct Market: Hashable { let region: String; let industry: String }
@@ -193,7 +193,7 @@ struct RaidMarketsList: View {
 /// The CEO Office's compact rival board: who is out to get you, who is friendly, and who you can
 /// raid right now with the engine's quoted chance.
 struct RivalsCard: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var raiding: RaidOptionDto?
     @State private var board = false
 
@@ -244,10 +244,10 @@ struct RivalsCard: View {
                 }
             }
             .sheet(item: $raiding) { option in
-                RaidSheet(option: option, regionName: WorldMap.shared.regionName(option.region)).environmentObject(store)
+                RaidSheet(option: option, regionName: WorldMap.shared.regionName(option.region)).environment(store)
             }
             .sheet(isPresented: $board) {
-                RivalsBoardSheet().environmentObject(store).presentationBackground(Theme.panel)
+                RivalsBoardSheet().environment(store).presentationBackground(Theme.panel)
             }
         }
     }

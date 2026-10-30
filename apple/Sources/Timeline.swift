@@ -25,7 +25,7 @@ func timelineDate(year: Int32, weekOfYear: UInt32) -> String {
 /// happened, newest first. The engine is read when the card is on screen and the week changes,
 /// and once only while time runs fast.
 struct TimelineSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var view: TimelineSnapshot?
 
     private var readKey: String {

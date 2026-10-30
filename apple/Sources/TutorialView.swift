@@ -1,3 +1,4 @@
+import Observation
 import SwiftUI
 
 /// Every screen the app can open, shared by the phone tabs, the desktop sidebar and the tutorial's
@@ -62,7 +63,8 @@ struct TutorialStep: Identifiable {
 /// The guided tutorial: eight steps that tick off when the player actually does them. Screens
 /// report visits, the store reports every accepted command and every settled week.
 @MainActor
-final class TutorialModel: ObservableObject {
+@Observable
+final class TutorialModel {
     static let steps: [TutorialStep] = [
         TutorialStep(
             id: "office", title: "Meet your company",
@@ -119,10 +121,10 @@ final class TutorialModel: ObservableObject {
         static let hidden = "cw.tutorial.hidden"
     }
 
-    @Published private(set) var done: Set<String>
-    @Published var hidden: Bool
+    private(set) var done: Set<String>
+    var hidden: Bool
     /// Set by Show me; the shell opens the page and clears it.
-    @Published var requestedPage: GamePage?
+    var requestedPage: GamePage?
     private var startTick: UInt32?
 
     init() {
@@ -189,7 +191,7 @@ final class TutorialModel: ObservableObject {
 
 /// The current step: docked in a corner on iPad and Mac, a slim bar on iPhone.
 struct TutorialPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     var compact: Bool
 
     /// A weekly research budget sized to the company: about 1 in 2,000 of its cash, in steps of

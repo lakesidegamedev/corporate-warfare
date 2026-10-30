@@ -5,7 +5,7 @@ import SwiftUI
 /// change in plain words with the number, pay and contract left. Hire opens the candidate list with
 /// the effect each would have at this company and the cost; Dismiss quotes the severance first.
 struct ExecutivesPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let currency: String
     @State private var hiring: ExecutivePostDto?
     @State private var dismissing: ExecutivePostDto?
@@ -39,7 +39,7 @@ struct ExecutivesPanel: View {
         }
         .onDisappear { store.executivesOpen = false }
         .sheet(item: $hiring) { post in
-            HireSheet(post: post, currency: currency).environmentObject(store)
+            HireSheet(post: post, currency: currency).environment(store)
         }
         .confirmationDialog(
             dismissing.map { "Dismiss \($0.holder?.name ?? "")?" } ?? "",
@@ -103,7 +103,7 @@ extension ExecutivePostDto: Identifiable {
 
 /// The candidates for a post, best first, each with the effect they would have here and the cost.
 struct HireSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let post: ExecutivePostDto
     let currency: String

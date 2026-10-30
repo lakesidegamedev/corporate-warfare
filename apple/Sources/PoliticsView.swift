@@ -5,7 +5,7 @@ import SwiftUI
 /// the cap and the disclosure warning, and the public tenders with a bid form that quotes cost and
 /// profit. Lives under Government in the Economy card.
 struct PoliticsPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let currency: String
     @State private var giving: (ElectionRaceDto, PoliticalCandidateDto)?
     @State private var bidding: PublicTenderDto?
@@ -39,11 +39,11 @@ struct PoliticsPanel: View {
         .sheet(isPresented: Binding(get: { giving != nil }, set: { if !$0 { giving = nil } })) {
             if let giving {
                 GiveSheet(race: giving.0, candidate: giving.1, currency: currency, note: store.politics?.disclosureNote ?? "")
-                    .environmentObject(store)
+                    .environment(store)
             }
         }
         .sheet(item: $bidding) { tender in
-            BidSheet(tender: tender, currency: currency).environmentObject(store)
+            BidSheet(tender: tender, currency: currency).environment(store)
         }
     }
 
@@ -128,7 +128,7 @@ struct PoliticsPanel: View {
 extension PublicTenderDto: Identifiable {}
 
 private struct GiveSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let race: ElectionRaceDto
     let candidate: PoliticalCandidateDto
@@ -167,7 +167,7 @@ private struct GiveSheet: View {
 }
 
 private struct BidSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let tender: PublicTenderDto
     let currency: String

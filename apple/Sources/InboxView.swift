@@ -3,7 +3,7 @@ import SwiftUI
 /// What needs the player and what happened: decisions first, then the corridor's news. Empty
 /// categories are not shown; a quiet week is one line.
 struct InboxView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var showingPaper = false
     @State private var openLetter: LetterDto?
 
@@ -73,7 +73,7 @@ struct InboxView: View {
                 .background(Theme.ink)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { openLetter = nil } } }
             }
-            .environmentObject(store)
+            .environment(store)
             .presentationBackground(Theme.ink)
         }
         .sheet(isPresented: $showingPaper) {
@@ -81,7 +81,7 @@ struct InboxView: View {
                 PaperView()
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingPaper = false } } }
             }
-            .environmentObject(store)
+            .environment(store)
             .presentationBackground(Theme.ink)
         }
     }
@@ -106,7 +106,7 @@ struct InboxView: View {
 
 /// One decision with its choices as buttons.
 struct DecisionCard: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let event: EventDto
 
     var body: some View {

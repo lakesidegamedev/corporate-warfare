@@ -3,7 +3,7 @@ import SwiftUI
 /// Edit a built-in scenario's numbers and keep the result as a custom scenario. Everything is
 /// optional: a scenario left alone plays exactly like the built-in one.
 struct ScenarioEditorView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var sizeClass

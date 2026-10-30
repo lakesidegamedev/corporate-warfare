@@ -459,7 +459,7 @@ private struct MenuButton: View {
 struct StartView: View {
     private enum Screen { case menu, newGame }
 
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var screen = Screen.menu
     @State private var showingSettings = false
     @State private var showingSaves = false
@@ -482,16 +482,16 @@ struct StartView: View {
             }
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsView().environmentObject(store)
+            SettingsView().environment(store)
         }
         .sheet(isPresented: $showingEditor) {
-            ScenarioEditorView().environmentObject(store)
+            ScenarioEditorView().environment(store)
         }
         .sheet(isPresented: $showingCareers) {
             CareerListView()
         }
         .sheet(isPresented: $showingSaves) {
-            SavesView().environmentObject(store)
+            SavesView().environment(store)
         }
         .sheet(item: $export) { item in
             DiagnosticExportView(export: item)
@@ -541,7 +541,7 @@ struct StartView: View {
                         MenuButton(title: "Settings") { showingSettings = true }
                         if let issue = store.recoveryIssue {
                             RecoveryCard(issue: issue) { export = store.makeDiagnostics() }
-                                .environmentObject(store)
+                                .environment(store)
                         }
                         if let error = store.errorMessage {
                             Text(error).font(.footnote).foregroundStyle(Theme.negative)

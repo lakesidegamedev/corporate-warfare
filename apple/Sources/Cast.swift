@@ -158,7 +158,7 @@ struct DossierBody: View {
 
 /// The dossier of one company, loaded from the engine.
 struct DossierSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let firm: UInt64
     @State private var dossier: DossierDto?
 
@@ -179,7 +179,7 @@ struct DossierSection: View {
 
 /// A rival line that opens its dossier, with a Raid button when the line names a market.
 struct RivalLeaderRow: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let name: String
     let firm: UInt64
     let detail: String

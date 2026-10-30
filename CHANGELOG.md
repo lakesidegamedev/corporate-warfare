@@ -428,6 +428,10 @@ heading.
   are prepared behind the menu, so the first visit to the office does not freeze. With the new GPU
   map switched on, its scene is built as soon as the career opens, and the map tab keeps it between
   visits, so opening the map is immediate instead of a few seconds of waiting each time.
+- On iPhone and iPad, screens now redraw only when something they actually show has changed. Before,
+  any change anywhere in the game (a price tick, a new letter, the clock) made every open screen
+  rebuild itself, which cost frames while time ran fast. This should make scrolling and fast-forward
+  feel smoother.
 - Tooling: every change to the Android app now starts the trimmed release build on an emulator in
   CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
   so a trimming mistake fails the check and not a phone.

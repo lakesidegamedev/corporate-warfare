@@ -139,7 +139,7 @@ private enum StartHistory: String, CaseIterable, WizardOption {
 
 /// Scenario, then the career's terms, then start.
 struct NewGameView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     var onBack: () -> Void
 
     private let catalogue = ScenarioCatalogue.all
@@ -191,7 +191,7 @@ struct NewGameView: View {
             ),
             onDismiss: { customs = customScenarioList(dir: ScenarioEditorView.directory) }
         ) {
-            ScenarioEditorView(baseId: customizing, existing: editingCustom).environmentObject(store)
+            ScenarioEditorView(baseId: customizing, existing: editingCustom).environment(store)
         }
     }
 

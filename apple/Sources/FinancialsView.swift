@@ -95,7 +95,7 @@ struct WeightRow: Layout {
 
 /// Load a company's financials and show them; reloads every week the clock moves.
 struct CompanyFinancialsSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
     let firm: UInt64
     let name: String

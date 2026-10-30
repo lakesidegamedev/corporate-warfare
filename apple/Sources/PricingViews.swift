@@ -4,7 +4,7 @@ import SwiftUI
 /// set. After A House Divided's pricing posture: automatic, a step against the market, or a
 /// markup over the company's own cost.
 struct PricingPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var editing: ProductLineDto?
 
     var body: some View {
@@ -26,7 +26,7 @@ struct PricingPanel: View {
             }
             .sheet(item: $editing) { line in
                 PostureSheet(line: line)
-                    .environmentObject(store)
+                    .environment(store)
                     .presentationDetents([.medium, .large])
                     .presentationBackground(Theme.panel)
             }
@@ -93,7 +93,7 @@ private struct PricingRow: View {
 /// Choose how one good is priced. Undercut to sell out ahead of rivals; price above the market
 /// for margin and risk holding stock; or mark up your own cost.
 struct PostureSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let line: ProductLineDto
     /// The brief opens the slider on the posture it suggests, in basis points against the market.
@@ -194,7 +194,7 @@ struct PostureSheet: View {
                 if let presetBps { marketPercent = Double(presetBps) / 100 }
             }
             .sheet(isPresented: $exact) {
-                PriceSheet(initialProduct: line.product).environmentObject(store)
+                PriceSheet(initialProduct: line.product).environment(store)
             }
         }
     }
