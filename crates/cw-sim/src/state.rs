@@ -842,6 +842,53 @@ pub struct RegionState {
     pub paid_named_wages_cents: i64,
 }
 
+/// The player's own chief executive, chosen at the start of a career.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerChief {
+    pub name: String,
+    /// A portrait id from the generated kit (`cw_data::cast::extras`).
+    pub portrait: String,
+    /// The temperament key, shown as a one-line flavour; no rule reads it.
+    pub temperament: String,
+}
+
+impl PlayerChief {
+    pub const NAME_MAX: usize = 40;
+
+    /// A chief from the new-game choices. The portrait must be one of the kit's; a blank or
+    /// unknown name takes the portrait's own name, and a temperament that is not one of the six
+    /// takes the portrait's. Anything unknown falls back to the first of the kit.
+    pub fn choose(name: &str, portrait: &str, temperament: &str) -> Option<PlayerChief> {
+        let kit = cw_data::cast::extras();
+        let pick = kit
+            .iter()
+            .find(|e| e.id == portrait)
+            .or_else(|| kit.first())?;
+        let clean: String = name
+            .chars()
+            .filter(|c| !c.is_control())
+            .collect::<String>()
+            .trim()
+            .chars()
+            .take(Self::NAME_MAX)
+            .collect();
+        let temper = cw_data::Temperament::ALL
+            .iter()
+            .find(|t| t.key() == temperament)
+            .copied()
+            .unwrap_or(pick.temperament);
+        Some(PlayerChief {
+            name: if clean.is_empty() {
+                pick.name.clone()
+            } else {
+                clean
+            },
+            portrait: pick.id.clone(),
+            temperament: temper.key().to_owned(),
+        })
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Government {
     pub book: Ledger,
@@ -1625,6 +1672,12 @@ pub struct World {
     /// trailer; no rule reads it. See `economy::mail`.
     #[serde(skip)]
     pub mail: crate::economy::mail::MailState,
+    /// The chief executive the player chose at the start of the career (1.9): a name, a portrait
+    /// from the generated kit and a temperament shown as a flavour line. Presentation only, no
+    /// rule reads it. Outside the postcard encoding, folded into the hash while set, saved in its
+    /// own `CHIE` trailer; a save without it has none and the office seats a default.
+    #[serde(skip)]
+    pub player_chief: Option<PlayerChief>,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.
@@ -2035,6 +2088,12 @@ pub fn canonical_hash(world: &World) -> String {
             if !world.executives.is_empty() {
                 match postcard::to_allocvec(&world.executives) {
                     Ok(executives) => bytes.extend_from_slice(&executives),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if let Some(chief) = &world.player_chief {
+                match postcard::to_allocvec(chief) {
+                    Ok(chief) => bytes.extend_from_slice(&chief),
                     Err(_) => return String::from("unhashable"),
                 }
             }

@@ -57,6 +57,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.drawText
 import uniffi.cw_ffi.NewGameDto
+import uniffi.cw_ffi.chiefChoices
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.size
 import uniffi.cw_ffi.ScenarioDto
 import uniffi.cw_ffi.scenarios
 
@@ -298,6 +301,9 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
     var pricePathPick by remember { mutableStateOf<PricePath?>(null) }
     var history by remember { mutableStateOf(ScenarioHistory.Historical) }
     var capital by remember { mutableStateOf(capitalOf(Level.Standard)) }
+    val chiefs = remember { chiefChoices() }
+    var chiefPick by remember { mutableStateOf(0) }
+    var chiefName by remember { mutableStateOf("") }
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -405,6 +411,9 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                         Section("Scenario history") {
                             Options(ScenarioHistory.entries, history, { it.title }, { it.note }, wide) { history = it }
                         }
+                        Section("Your chief executive") {
+                            ChiefPicker(chiefs, chiefPick, chiefName, { chiefPick = it }, { chiefName = it.take(40) })
+                        }
                         Section("Starting capital") {
                             ValueSlider(
                                 capital, { capital = it }, 1_000_000.0..20_000_000.0, 250_000.0,
@@ -451,6 +460,9 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                                 startingCapitalCents = (capital * 100).toLong(),
                                 pricePath = pricePathPick?.key ?: "",
                                 timeline = history.key,
+                                chiefName = chiefName.trim(),
+                                chiefPortrait = chiefs.getOrNull(chiefPick)?.id ?: "",
+                                chiefTemperament = chiefs.getOrNull(chiefPick)?.temperament ?: "",
                             ),
                         )
                     }
@@ -568,3 +580,34 @@ private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Mod
     }
 }
 
+
+/** The new-game screen's chief executive: a few portraits from the generated kit, one for each
+ *  temperament, an optional name, and the temperament as a line of flavour. */
+@Composable
+internal fun ChiefPicker(
+    choices: List<uniffi.cw_ffi.PersonDto>,
+    picked: Int,
+    name: String,
+    onPick: (Int) -> Unit,
+    onName: (String) -> Unit,
+) {
+    if (choices.isEmpty()) return
+    val current = choices[picked.coerceIn(0, choices.lastIndex)]
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        choices.forEachIndexed { i, c ->
+            Box(
+                Modifier.clip(Pixel.small)
+                    .border(2.dp, if (i == picked) Palette.gold else Palette.panelRaised, Pixel.small)
+                    .clickable { onPick(i) }
+                    .padding(3.dp),
+            ) { PixelPortrait(c.id, size = 52.dp) }
+        }
+    }
+    Text("${temperamentLabel(current.temperament)}: ${temperamentNote(current.temperament)}", color = Palette.secondary, fontSize = 12.sp)
+    OutlinedTextField(
+        name, onName,
+        label = { Text("Name (blank keeps ${current.name})") },
+        singleLine = true,
+        modifier = Modifier.widthIn(max = 360.dp),
+    )
+}

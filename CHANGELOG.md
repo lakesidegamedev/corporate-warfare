@@ -11,8 +11,31 @@ heading.
 
 ## [Unreleased]
 
+### Fixed
+
+- Public works contracts are now a fair fight and not a money tap. Rival bids sit near the real
+  cost plus a normal margin of 8 to 11 percent (they used to add 10 to 22), every firm with a plant
+  can bid, firms that keep their books in another currency can win in Europe, and the works run over
+  the estimate by 0 to 8 percent that nobody sees until the bill, so the lowest bidder often finds
+  the job cost more than it thought. The state pays as the work progresses, not in lumps a quarter.
+  A contractor now clears about 2 to 3 percent on a job, not 12 to 15.
+- The state treasury no longer piles up money for ever. It aims to hold thirteen weeks of its
+  income. When it holds more it spends more, opens public works twice as often and takes less tax
+  from wages (down to 8 percent from 20); when it holds less it cuts back, opens no new works and
+  takes a little more (up to 22). A three-year treasury used to end at about thirteen times where
+  it began; it now wanders between one and a quarter and five times, with deficits as well as surpluses.
+- Share prices now open where they trade a quarter later. They used to open at about half of what
+  the companies' earnings supported and double in the first year in every scenario, which made
+  everything look like a bargain. The first-year rise is now near zero to ten percent.
+- Rivals only give campaign money out of what they earned that quarter, so a gift no longer tips
+  a firm into a losing quarter (the first-year losing share is back where it was before politics).
+
 ### Added
 
+- Pick your own chief executive when you start a game: one of six faces from the portrait kit, one
+  for each temperament, a name of your own if you like, and a line on how that temperament runs a
+  company. They sit behind the desk in the CEO Office, in place of a borrowed face, and are saved with
+  your career.
 - The CEO Office is now a room you can walk around. At the top of the screen is a pixel-art boardroom
   with the things that matter standing on the furniture. Your chief executive sits behind the desk,
   smiling when the quarter made money and frowning when it lost it, with a name plate. The window

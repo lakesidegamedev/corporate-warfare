@@ -156,6 +156,9 @@ struct NewGameView: View {
     @State private var pricePathPick: StartPricePath?
     @State private var history = StartHistory.historical
     @State private var capital: Double = StartLevel.standard.capital
+    @State private var chiefs: [PersonDto] = chiefChoices()
+    @State private var chiefPick = 0
+    @State private var chiefName = ""
 
     private var chosen: ScenarioDto? {
         if let chosenID, let hit = catalogue.first(where: { $0.id == chosenID }) { return hit }
@@ -360,6 +363,9 @@ struct NewGameView: View {
         section("Scenario history") {
             OptionGrid(items: StartHistory.allCases, selected: history) { history = $0 }
         }
+        section("Your chief executive") {
+            chiefPicker
+        }
         section("Starting capital") {
             ValueSlider(
                 value: $capital,
@@ -373,6 +379,29 @@ struct NewGameView: View {
             )
             .frame(maxWidth: 760)
         }
+        }
+    }
+
+    /// A few chief executives from the generated kit, one for each temperament, and an optional name.
+    @ViewBuilder private var chiefPicker: some View {
+        if !chiefs.isEmpty {
+            let current = chiefs[min(chiefPick, chiefs.count - 1)]
+            HStack(spacing: 8) {
+                ForEach(Array(chiefs.enumerated()), id: \.offset) { i, c in
+                    PixelPortrait(person: c.id, size: 52)
+                        .padding(3)
+                        .overlay(Rectangle().stroke(i == chiefPick ? Theme.gold : Theme.panelRaised, lineWidth: 2))
+                        .onTapGesture { chiefPick = i }
+                        .accessibilityLabel("\(c.name), \(temperamentLabel(c.temperament))")
+                }
+            }
+            Text("\(temperamentLabel(current.temperament)): \(temperamentNote(current.temperament))")
+                .font(.footnote)
+                .foregroundStyle(Theme.secondary)
+            TextField("Name (blank keeps \(current.name))", text: $chiefName)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 360)
+                .onChange(of: chiefName) { _, v in if v.count > 40 { chiefName = String(v.prefix(40)) } }
         }
     }
 
@@ -442,7 +471,10 @@ struct NewGameView: View {
             economy: economy.rawValue,
             startingCapitalCents: Int64((capital * 100).rounded()),
             pricePath: pricePathPick?.rawValue ?? "",
-            timeline: history.rawValue
+            timeline: history.rawValue,
+            chiefName: chiefName.trimmingCharacters(in: .whitespaces),
+            chiefPortrait: chiefs.indices.contains(chiefPick) ? chiefs[chiefPick].id : "",
+            chiefTemperament: chiefs.indices.contains(chiefPick) ? chiefs[chiefPick].temperament : ""
         )
         Task { await store.startCareer(options) }
     }

@@ -1,5 +1,6 @@
 //! The character cast for the apps: people, the posts they hold, and a rival's dossier.
 
+use crate::SessionHandle;
 use cw_core::ids::Handle;
 use cw_data::{Dataset, Mood, Person, Role};
 use cw_session::Session;
@@ -462,4 +463,56 @@ pub fn rival_feed(world: &World, ds: &Dataset, limit: usize) -> Vec<RivalMoveFee
             }
         })
         .collect()
+}
+
+/// The chief executive the player chose at the start of the career.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct PlayerChiefDto {
+    pub name: String,
+    /// A portrait id from the generated kit, drawn like any cast portrait.
+    pub portrait: String,
+    pub temperament: String,
+}
+
+pub(crate) fn player_chief_dto(world: &World) -> Option<PlayerChiefDto> {
+    world.player_chief.as_ref().map(|c| PlayerChiefDto {
+        name: c.name.clone(),
+        portrait: c.portrait.clone(),
+        temperament: c.temperament.clone(),
+    })
+}
+
+/// A few chief executives to choose from at the new-game screen, spread over the six
+/// temperaments (the first of each in the generated kit), in a fixed order.
+pub(crate) fn chief_choices() -> Vec<PersonDto> {
+    let kit = cw_data::cast::extras();
+    let mut seen: Vec<cw_data::Temperament> = Vec::new();
+    let mut out = Vec::new();
+    for e in kit {
+        if !seen.contains(&e.temperament) {
+            seen.push(e.temperament);
+            let p = e.person();
+            out.push(PersonDto {
+                id: p.id,
+                name: p.name,
+                age: p.age,
+                home: p.home,
+                background: p.background,
+                temperament: p.temperament.key().to_owned(),
+                roles: Vec::new(),
+                stance: None,
+                mood: Mood::Neutral.key().to_owned(),
+                office_portrait: false,
+            });
+        }
+    }
+    out
+}
+
+#[uniffi::export]
+impl SessionHandle {
+    /// The chief executive the player chose at the new-game screen, if they chose one.
+    pub fn player_chief(&self) -> Option<PlayerChiefDto> {
+        player_chief_dto(&self.lock().world)
+    }
 }

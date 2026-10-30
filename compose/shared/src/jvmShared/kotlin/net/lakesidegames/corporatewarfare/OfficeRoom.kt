@@ -115,6 +115,7 @@ internal data class OfficeSeat(val title: String, val short: String, val portrai
 internal data class OfficeFacts(
     val firmName: String,
     val chief: String?,
+    val chiefName: String? = null,
     val chiefMood: String,
     val profitText: String,
     val profitLabel: String,
@@ -139,7 +140,7 @@ internal data class OfficeFacts(
 ) {
     /** What a screen reader says for an object, with its figure. */
     fun describe(id: String, label: String): String = when (id) {
-        "chief" -> "Chief executive at the desk of $firmName, looking ${when (chiefMood) { "pleased" -> "pleased with the results"; "displeased" -> "unhappy with the results"; else -> "steady" }}. Opens Actions."
+        "chief" -> "${chiefName?.let { "$it, chief executive" } ?: "Chief executive"} at the desk of $firmName, looking ${when (chiefMood) { "pleased" -> "pleased with the results"; "displeased" -> "unhappy with the results"; else -> "steady" }}. Opens Actions."
         "nameplate" -> "Nameplate, $firmName. Opens Actions."
         "window" -> "Window onto the map at your headquarters in $region. Opens the map."
         "chart" -> "Wall chart: $profitLabel $profitText. Opens Financials."
@@ -205,7 +206,8 @@ internal fun officeFacts(store: GameStore): OfficeFacts? {
     // The investor's own firm has no chief of its own in the cast, so the room seats one of the named
     // office portraits no rival is using, the same one every time for this company.
     val chiefs = CastPortraits.office.keys.sorted().filter { it !in rivalChiefs }
-    val chief = chiefs.takeIf { it.isNotEmpty() }?.get((firm.handle % chiefs.size.toULong()).toInt())
+    val own = store.playerChief
+    val chief = own?.portrait ?: chiefs.takeIf { it.isNotEmpty() }?.get((firm.handle % chiefs.size.toULong()).toInt())
     val extras = CastPortraits.all.keys.filter { it.startsWith("x_") && it !in rivalChiefs }.sorted()
     val boardStart = if (extras.isEmpty()) 0 else (firm.handle * 5uL % extras.size.toULong()).toInt()
     val board = (0 until 5).mapNotNull { extras.getOrNull((boardStart + it) % extras.size.coerceAtLeast(1)) }
@@ -226,6 +228,7 @@ internal fun officeFacts(store: GameStore): OfficeFacts? {
     return OfficeFacts(
         firmName = firm.name,
         chief = chief,
+        chiefName = own?.name,
         chiefMood = chiefMood(quarter),
         profitText = quarter?.let { Format.compact(it, firm.currency) } ?: "n/a",
         profitLabel = if (weeks in 1..12) "profit, $weeks weeks" else "profit, quarter",

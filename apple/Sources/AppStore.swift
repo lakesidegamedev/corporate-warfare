@@ -43,6 +43,8 @@ final class AppStore: ObservableObject {
     /// The selected company's executives and the people it could hire. Read only while the CEO
     /// Office shows them.
     @Published var executives: ExecutivesDto?
+    /// The chief executive chosen at the new-game screen, read with the executives.
+    @Published var playerChief: PlayerChiefDto?
     var executivesOpen = false
     /// Races, polls, laws and tenders. Read only while the Politics section is on screen.
     @Published var politics: PoliticsDto?
@@ -191,6 +193,8 @@ final class AppStore: ObservableObject {
         guard let firm = selectedFirm else { return }
         let fresh = await engine.executives(firm: firm)
         if fresh != executives { executives = fresh }
+        let chief = await engine.playerChief()
+        if chief != playerChief { playerChief = chief }
     }
 
     func refreshPolitics() async {

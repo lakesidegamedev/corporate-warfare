@@ -84,6 +84,7 @@ struct OfficeFacts {
 
     let firmName: String
     let chief: String?
+    var chiefName: String? = nil
     let chiefMood: String
     let profitText: String
     let profitGood: Bool
@@ -118,7 +119,8 @@ struct OfficeFacts {
         let mandate = store.activeMandate
         let rivalChiefs = Set(store.rivals.map { $0.tag.ceoId })
         let chiefs = CastPortraits.office.keys.sorted().filter { !rivalChiefs.contains($0) }
-        let chief = chiefs.isEmpty ? nil : chiefs[Int(firm.handle % UInt64(chiefs.count))]
+        let own = store.playerChief
+        let chief = own?.portrait ?? (chiefs.isEmpty ? nil : chiefs[Int(firm.handle % UInt64(chiefs.count))])
         let extras = CastPortraits.all.keys.filter { $0.hasPrefix("x_") && !rivalChiefs.contains($0) }.sorted()
         let start = extras.isEmpty ? 0 : Int(firm.handle &* 5 % UInt64(extras.count))
         let board = extras.isEmpty ? [] : (0..<5).map { extras[(start + $0) % extras.count] }
@@ -135,7 +137,7 @@ struct OfficeFacts {
             return Seat(title: post?.title ?? titles[i].0, short: titles[i].1, portrait: post?.holder?.portraitId, name: post?.holder?.name)
         }
         return OfficeFacts(
-            firmName: firm.name, chief: chief, chiefMood: chiefMood(quarter),
+            firmName: firm.name, chief: chief, chiefName: own?.name, chiefMood: chiefMood(quarter),
             profitText: quarter.map { Format.moneyCompact($0, currency: firm.currency) } ?? "n/a",
             profitGood: (quarter ?? 0) >= 0,
             profitSeries: store.history.suffix(13).map(\.netIncomeCents),
@@ -156,7 +158,7 @@ struct OfficeFacts {
         switch id {
         case "chief":
             let look = chiefMood == "pleased" ? "pleased with the results" : chiefMood == "displeased" ? "unhappy with the results" : "steady"
-            return "Chief executive at the desk of \(firmName), looking \(look). Opens Actions."
+            return "\(chiefName.map { "\($0), chief executive" } ?? "Chief executive") at the desk of \(firmName), looking \(look). Opens Actions."
         case "nameplate": return "Nameplate, \(firmName). Opens Actions."
         case "window": return "Window onto the map at your headquarters in \(region). Opens the map."
         case "chart": return "Wall chart: profit \(profitText). Opens Financials."

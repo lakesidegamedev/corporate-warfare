@@ -190,6 +190,7 @@ pub fn build_with(
         executives: Default::default(),
         systems: Default::default(),
         mail: Default::default(),
+        player_chief: None,
         politics: crate::state::Politics::default(),
         logistics: Default::default(),
         systemic: Default::default(),
