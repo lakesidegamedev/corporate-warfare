@@ -8,9 +8,9 @@ import kotlin.math.sin
 
 /**
  * Keeps a lot on dry land. A lot is a fixed offset in metres from its region's hub, and for a hub on
- * a coast or beside a lake that offset can land in the water. The lot is then walked toward the hub
+ * a coast or beside a lake that offset can land in the water. That lot is then walked toward the hub
  * and round it, the smallest move first, until its whole footprint is on land (inside a country,
- * outside every lake) and still inside its region. The same lot always gets the same answer, so a
+ * outside every lake) and its centre is inside its region. The same lot always gets the same answer, so a
  * building never hops between frames or between players.
  */
 internal object LotLand {
@@ -78,8 +78,8 @@ internal object LotLand {
     }
 
     /**
-     * The lot at [offset] from [region]'s hub, moved onto dry land inside the region if it is not
-     * already: the nearest spot to the offset among those on the way to the hub and round it.
+     * The lot at [offset] from [region]'s hub, moved onto dry land inside the region if it is over
+     * water: the nearest spot to the offset among those on the way to the hub and round it.
      * A lot nothing fits (a hub with no dry land round it) stays where it is.
      */
     fun dry(map: WorldMap, region: String, offset: Pair<Double, Double>, radius: Double): Pair<Double, Double> {
@@ -90,7 +90,8 @@ internal object LotLand {
 
     private fun walk(hub: GeoRing, a: Around, offset: Pair<Double, Double>, radius: Double): Pair<Double, Double> {
         val (east, north) = offset
-        if (fits(hub, a, east, north, radius, true)) return offset
+        // A lot already on dry land stays where it is, even beside its region: only a wet lot moves.
+        if (fits(hub, a, east, north, radius, false)) return offset
         val tries = ArrayList<Triple<Double, Double, Double>>()
         for (scale in 10 downTo 0) {
             val s = scale / 10.0

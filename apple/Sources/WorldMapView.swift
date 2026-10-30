@@ -641,8 +641,8 @@ enum LaneWater {
 }
 
 /// Keeps a lot on dry land, the same walk as the Compose map: a lot is a fixed offset from its hub, and
-/// when that spot (or its footprint) is over water or outside the region it is walked toward the hub and
-/// round it, smallest move first, until it is dry and inside the region.
+/// when that spot (or its footprint) is over water it is walked toward the hub and
+/// round it, smallest move first, until it is dry and its centre is inside the region.
 enum LotLand {
     static let playerRadius = 6_000.0
     static let rivalRadius = 3_000.0
@@ -696,7 +696,8 @@ enum LotLand {
             return !inRegion || rings.contains { inside($0, c.0, c.1) }
         }
         var answer = lot
-        if !fits(lot.east, lot.north, inRegion: true) {
+        // A lot already on dry land stays where it is, even beside its region: only a wet lot moves.
+        if !fits(lot.east, lot.north, inRegion: false) {
             var tries: [(Double, Double, Double, Int)] = []
             for scale in stride(from: 10, through: 0, by: -1) {
                 let s = Double(scale) / 10
