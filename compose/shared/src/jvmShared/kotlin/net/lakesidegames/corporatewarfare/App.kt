@@ -1,5 +1,6 @@
 package net.lakesidegames.corporatewarfare
 
+import kotlinx.coroutines.launch
 import uniffi.cw_ffi.LetterDto
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
@@ -282,9 +283,10 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
 }
 
 @Composable
-internal fun TabList(content: LazyListScope.() -> Unit) {
+internal fun TabList(state: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(), content: LazyListScope.() -> Unit) {
     LazyColumn(
         Modifier.fillMaxSize(),
+        state = state,
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         content = content,
@@ -302,14 +304,22 @@ internal fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
         StatsScreen(store) { stats = false }
         return
     }
-    TabList {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // Where each section sits in the list below the room: the header and the room come first.
+    val sectionAt = remember { mutableMapOf<OfficeSection, Int>() }
+    fun route(r: OfficeRoute) {
+        when (r) {
+            is OfficeRoute.Screen -> onOpen(r.id)
+            is OfficeRoute.Section -> scope.launch { sectionAt[r.section]?.let { listState.animateScrollToItem(it) } }
+        }
+    }
+    TabList(listState) {
         item {
             ScreenHeader("CEO Office", store.overview?.weekLabel) {
                 if (firm != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedButton(onClick = { onOpen("research") }) { Text("Research", color = Palette.primaryText, fontSize = 12.sp) }
-                        OutlinedButton(onClick = { onOpen("stats") }) { Text("Stats", color = Palette.primaryText, fontSize = 12.sp) }
-                        OutlinedButton(onClick = { onOpen("hall") }) { Text("Hall", color = Palette.primaryText, fontSize = 12.sp) }
+                        // Research, Stats and the Hall are the door, the wall chart and the board table in the room below.
                         GoldButton("Actions") { onOpen("actions") }
                     }
                 }
@@ -319,9 +329,15 @@ internal fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
             item { FoundCompanyPanel(store, scroll = false) }
             return@TabList
         }
+        item { OfficeRoomHost(store, ::route) }
+        sectionAt[OfficeSection.Brief] = 2
         item { BriefPanel(store, firm.currency) }
+        sectionAt[OfficeSection.Goal] = 3
         chapterItems(store)
+        val inChapter = if (store.boardOffer != null || store.activeMandate != null || store.chapterResult != null) 1 else 0
+        sectionAt[OfficeSection.Executives] = 3 + inChapter
         item { ExecutivesPanel(store, firm.currency) }
+        sectionAt[OfficeSection.Figures] = 4 + inChapter
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectorBadge(firm.industry, 40)

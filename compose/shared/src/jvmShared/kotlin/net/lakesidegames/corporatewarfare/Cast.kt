@@ -79,8 +79,8 @@ private fun officeBitmap(person: String): ImageBitmap? {
  * (chiefs on company pages, dossiers and the CEO Office) that is drawn instead.
  */
 @Composable
-fun PixelPortrait(person: String, modifier: Modifier = Modifier, size: Dp = 40.dp, mood: String = "neutral", office: Boolean = false) {
-    val bitmap = (if (office) officeBitmap(person) else null) ?: bustBitmap(person, mood, size < SmallBelow)
+fun PixelPortrait(person: String, modifier: Modifier = Modifier, size: Dp = 40.dp, mood: String = "neutral", office: Boolean = false, forceSmall: Boolean = false) {
+    val bitmap = (if (office) officeBitmap(person) else null) ?: bustBitmap(person, mood, forceSmall || size < SmallBelow)
     Canvas(modifier.size(size).clip(Pixel.small).background(Palette.panelRaised)) {
         if (bitmap != null) {
             val side = minOf(this.size.width, this.size.height).roundToInt()

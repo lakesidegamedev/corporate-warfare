@@ -116,6 +116,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var rivalFeed by mutableStateOf<List<RivalMoveFeedDto>>(emptyList()); private set
     /** The Inbox's letters: the last eight weeks, decisions pinned on top. Read with the rest of the week. */
     var letters by mutableStateOf<List<uniffi.cw_ffi.LetterDto>>(emptyList()); private set
+    /** The top headline the ticker last read, for the CEO Office's newspaper. Null until the ticker has read one. */
+    var headline by mutableStateOf<String?>(null)
     /** Unread letters in the Inbox window, for the badge. */
     val unreadLetters: Int get() = letters.count { !it.read }
     /** The Inbox badge: unread letters plus decisions already read but still due. */
