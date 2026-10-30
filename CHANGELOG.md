@@ -422,6 +422,10 @@ heading.
 
 ### Changed
 
+- Weeks play faster and saves are quicker. On a large map a week now takes roughly a fifth to a
+  quarter less time, the rivals think through their moves with far fewer repeated lookups, and
+  saving and loading a five-year career takes about half as long. Results are unchanged: the same
+  start and seed still play out exactly the same.
 - Tooling: every change to the Android app now starts the trimmed release build on an emulator in
   CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
   so a trimming mistake fails the check and not a phone.
