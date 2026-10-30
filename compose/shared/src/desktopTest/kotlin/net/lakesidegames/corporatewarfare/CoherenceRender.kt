@@ -140,7 +140,7 @@ class CoherenceRender {
     private fun zoomStrip(dir: File) {
         // MI-DET energy: its lot, as worked out from the hub in metres.
         val hub = map.anchor("MI-DET")!!
-        val (east, north) = WorldScale.playerLot("energy")
+        val (east, north) = LotLand.dry(map, "MI-DET", WorldScale.playerLot("energy"), LotLand.PLAYER_RADIUS_M)
         val lon = hub.lon[0] + east / (WorldScale.EARTH_RADIUS_M * cos(hub.lat[0]))
         val lat = hub.lat[0] + north / WorldScale.EARTH_RADIUS_M
         val scenario = MapCamera.scenario(size, map)

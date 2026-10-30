@@ -1097,11 +1097,14 @@ pub fn roads(scene: &Scene, band: usize) -> RoadMesh {
 }
 
 /// How far the horizon extends past the terrain, in degrees (east and west; north and south
-/// use `APRON_REACH_NS_DEG`), how fast its cells grow with distance, and the biggest cell.
+/// use `APRON_REACH_NS_DEG`), how fast its cells grow with distance, and the biggest cell. The
+/// biggest cell is small enough that a coastline cut through it reads as a smooth curve.
 const APRON_REACH_DEG: f32 = 90.0;
 const APRON_REACH_NS_DEG: f32 = 60.0;
 const APRON_GROWTH: f32 = 1.2;
-const APRON_MAX_CELL_DEG: f32 = 5.0;
+const APRON_MAX_CELL_DEG: f32 = 0.25;
+/// Distance in terrain cells past which far land is one flat level.
+const APRON_FLAT_AFTER_CELLS: usize = 24;
 
 /// Breakpoints along one axis, ascending: the terrain's own cell edges from `a` to `b` (`n`
 /// cells), and outside them cells that start one terrain cell wide and grow by a fifth each
@@ -1127,8 +1130,8 @@ fn apron_axis(a: f32, b: f32, n: usize, reach: f32) -> Vec<f32> {
     t
 }
 
-/// The land class the satellite picture shows at a point (no water test), with the season's
-/// snow on top.
+/// The land class the scenario's satellite picture shows at a point (no water test), with the
+/// season's snow on top. Only for the ring that touches the terrain.
 fn land_class(scene: &Scene, lon: f32, lat: f32) -> u8 {
     let e = &scene.earth;
     let u = ((lon - e.bounds.west) / (e.bounds.east - e.bounds.west) * e.w as f32)
@@ -1147,31 +1150,43 @@ fn land_class(scene: &Scene, lon: f32, lat: f32) -> u8 {
     }
 }
 
-/// What the picture shows over a cell of the apron: the most common class among a grid of
-/// samples (water counts as a class), so a big far cell shows what most of it is.
-fn apron_class(scene: &Scene, lon: [f32; 2], lat: [f32; 2], samples: usize) -> u8 {
-    let mut votes = [0u32; 8];
-    for j in 0..samples {
-        for i in 0..samples {
-            let f = |k: usize| (k as f32 + 0.5) / samples as f32;
-            let class = land_class(
-                scene,
-                lon[0] + (lon[1] - lon[0]) * f(i),
-                lat[0] + (lat[1] - lat[0]) * f(j),
-            );
-            votes[class as usize & 7] += 1;
-        }
+/// What the world shows over a far cell of the apron: the world picture's land class at the
+/// cell, at a grain that gets calmer with distance. The classes are the world picture's, never
+/// read from beyond the edge of the scenario's own picture. Snow is the season's, taken at a
+/// coarse step of longitude so the snow line is one clean edge, not a comb of narrow cells.
+fn far_class(scene: &Scene, lon: f32, lat: f32, away: f32) -> u8 {
+    let grain = (away / 40.0).max(1.0).log2().ceil() as usize;
+    let snow_lon = (lon / 0.5).floor() * 0.5 + 0.25;
+    if crate::ground::snow_cover(scene.week, lat, snow_lon, 0.0) > 0.2 {
+        crate::ground::G_SNOW
+    } else {
+        scene.far.class(lon, lat, grain)
     }
-    (0..8u8)
-        .max_by_key(|&c| (votes[c as usize], c != APRON_WATER))
-        .unwrap_or(0)
 }
 
-/// Class and level of every apron cell (`None` inside the terrain), with the cell edges.
+/// One cell of the apron. A coast cell has land at the given class and level on one side of
+/// the coastline and sea on the other; where the line falls inside it comes from the corners'
+/// land cover.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Cell {
+    Inside,
+    Flat(u8, i32),
+    Coast(u8, i32),
+}
+
+/// Every apron cell, the cell edges, and the land cover at every grid point (0 to 1; at least
+/// a half is land).
 struct ApronGrid {
     xs: Vec<f32>,
     ys: Vec<f32>,
-    cells: Vec<Option<(u8, i32)>>,
+    cells: Vec<Cell>,
+    field: Vec<f32>,
+}
+
+impl ApronGrid {
+    fn f(&self, i: usize, j: usize) -> f32 {
+        self.field[j * self.xs.len() + i]
+    }
 }
 
 fn apron_grid(scene: &Scene) -> ApronGrid {
@@ -1214,7 +1229,22 @@ fn apron_grid(scene: &Scene) -> ApronGrid {
     let inside =
         |lon: f32, lat: f32| lon > hb.west && lon < hb.east && lat > hb.south && lat < hb.north;
     let (nx, ny) = (xs.len() - 1, ys.len() - 1);
-    let mut cells: Vec<Option<(u8, i32)>> = vec![None; nx * ny];
+    // Land cover at every grid point beyond the terrain, read over a patch about as wide as
+    // the cells there, so the coastline is smooth at the scale the cells are.
+    let mut field = vec![1.0f32; (nx + 1) * (ny + 1)];
+    for j in 0..=ny {
+        for i in 0..=nx {
+            let (lon, lat) = (xs[i], ys[j]);
+            if lon >= hb.west && lon <= hb.east && lat >= hb.south && lat <= hb.north {
+                continue;
+            }
+            let wx = xs[(i + 1).min(nx)] - xs[i.saturating_sub(1)];
+            let wy = ys[(j + 1).min(ny)] - ys[j.saturating_sub(1)];
+            let half = (wx.max(wy) * 0.25).clamp(0.04, 0.2);
+            field[j * (nx + 1) + i] = scene.far.cover(lon, lat, half);
+        }
+    }
+    let mut cells = vec![Cell::Inside; nx * ny];
     for j in 0..ny {
         for i in 0..nx {
             let (lon, lat) = ((xs[i] + xs[i + 1]) / 2.0, (ys[j] + ys[j + 1]) / 2.0);
@@ -1238,39 +1268,139 @@ fn apron_grid(scene: &Scene) -> ApronGrid {
                         class => class,
                     }
                 };
-                cells[j * nx + i] = Some((class, scene.levels[own]));
+                cells[j * nx + i] = Cell::Flat(class, scene.levels[own]);
                 continue;
             }
-            // The picture is read over a patch about as wide as the cell is far from the
-            // terrain, so a strip beside the edge settles into blocks rather than streaks.
-            let (hx, hy) = (
-                ((xs[i + 1] - xs[i]) / 2.0).max(0.35 * (away - 1.1) * dx),
-                ((ys[j + 1] - ys[j]) / 2.0).max(0.35 * (away - 1.1) * dy),
-            );
-            let wide = hx > dx * 1.5 || hy > dy * 1.5;
-            let class = apron_class(
-                scene,
-                [lon - hx, lon + hx],
-                [lat - hy, lat + hy],
-                if wide { 5 } else { 1 },
-            );
-            let level = if class == APRON_WATER {
-                sea
+            let k = [
+                j * (nx + 1) + i,
+                j * (nx + 1) + i + 1,
+                (j + 1) * (nx + 1) + i + 1,
+                (j + 1) * (nx + 1) + i,
+            ];
+            let land: usize = k.iter().filter(|&&p| field[p] >= 0.5).count();
+            if land == 0 {
+                cells[j * nx + i] = Cell::Flat(APRON_WATER, sea);
+                continue;
+            }
+            let class = far_class(scene, lon, lat, away);
+            // The window of terrain it averages is centred on a lattice as wide as the window's
+            // reach, so neighbouring cells share one level instead of stepping column by column.
+            let reach = ((away - 1.1) * 0.8).ceil() as usize;
+            let snap = |v: usize| (v / reach.max(1)) * reach.max(1) + reach.max(1) / 2;
+            let (cc, rr) = (snap(c).min(w - 1), snap(r).min(h - 1));
+            // Past a short way out the land is one flat level, the mean of all the terrain.
+            let level = if reach > APRON_FLAT_AFTER_CELLS {
+                window(0, w - 1, 0, h - 1)
             } else {
-                let reach = (away - 1.1) * 0.8;
-                let (rc, rr) = (reach.ceil() as usize, reach.ceil() as usize);
                 window(
-                    c.saturating_sub(rc),
-                    (c + rc).min(w - 1),
-                    r.saturating_sub(rr),
-                    (r + rr).min(h - 1),
+                    cc.saturating_sub(reach),
+                    (cc + reach).min(w - 1),
+                    rr.saturating_sub(reach),
+                    (rr + reach).min(h - 1),
                 )
-                .unwrap_or(scene.levels[own])
+            }
+            .unwrap_or(scene.levels[own]);
+            cells[j * nx + i] = if land == 4 {
+                Cell::Flat(class, level)
+            } else {
+                Cell::Coast(class, level)
             };
-            cells[j * nx + i] = Some((class, level));
         }
     }
-    ApronGrid { xs, ys, cells }
+    ApronGrid {
+        xs,
+        ys,
+        cells,
+        field,
+    }
+}
+
+/// The pieces along one cell edge, from corner `a` to corner `b` (land cover `fa` and `fb`):
+/// start and end along the edge (0 to 1), terrace level and class of each.
+fn edge_pieces(cell: Cell, fa: f32, fb: f32, sea: i32) -> Vec<(f32, f32, i32, u8)> {
+    match cell {
+        Cell::Inside => Vec::new(),
+        Cell::Flat(c, l) => vec![(0.0, 1.0, l, c)],
+        Cell::Coast(c, l) => {
+            let piece = |land: bool| if land { (l, c) } else { (sea, APRON_WATER) };
+            let (la, lb) = (fa >= 0.5, fb >= 0.5);
+            if la == lb {
+                let (l, c) = piece(la);
+                vec![(0.0, 1.0, l, c)]
+            } else {
+                let t = ((0.5 - fa) / (fb - fa)).clamp(0.0, 1.0);
+                let (l1, c1) = piece(la);
+                let (l2, c2) = piece(lb);
+                vec![(0.0, t, l1, c1), (t, 1.0, l2, c2)]
+            }
+        }
+    }
+}
+
+/// The land and sea parts of one coast cell, as convex polygons, and the coastline segments
+/// between them. Corners go round from the south west (x, y in kilometres), `f` is the land
+/// cover at each; the coastline is where it crosses a half.
+type Poly = Vec<[f32; 2]>;
+type Coast = (Vec<Poly>, Vec<Poly>, Vec<([f32; 2], [f32; 2])>);
+fn split_coast(p: [[f32; 2]; 4], f: [f32; 4]) -> Coast {
+    let on = [f[0] >= 0.5, f[1] >= 0.5, f[2] >= 0.5, f[3] >= 0.5];
+    let cross = |k: usize| {
+        let (a, b) = (k, (k + 1) % 4);
+        let t = ((0.5 - f[a]) / (f[b] - f[a])).clamp(0.0, 1.0);
+        [
+            p[a][0] + (p[b][0] - p[a][0]) * t,
+            p[a][1] + (p[b][1] - p[a][1]) * t,
+        ]
+    };
+    // The runs of consecutive corners in state `s`, each closed by the two crossings.
+    let runs = |s: bool| -> Vec<Poly> {
+        let mut out = Vec::new();
+        for k in 0..4 {
+            if on[k] == s && on[(k + 3) % 4] != s {
+                let mut poly = vec![cross((k + 3) % 4)];
+                let mut m = k;
+                loop {
+                    poly.push(p[m]);
+                    if on[(m + 1) % 4] == s {
+                        m = (m + 1) % 4;
+                    } else {
+                        break;
+                    }
+                }
+                poly.push(cross(m));
+                out.push(poly);
+            }
+        }
+        out
+    };
+    let (land, sea) = (runs(true), runs(false));
+    let joined = |s: bool| -> Poly {
+        let mut poly = Vec::new();
+        for k in 0..4 {
+            if on[k] == s {
+                poly.push(p[k]);
+            }
+            if on[k] != on[(k + 1) % 4] {
+                poly.push(cross(k));
+            }
+        }
+        poly
+    };
+    let saddle = land.len() == 2;
+    let centre_land = f.iter().sum::<f32>() / 4.0 >= 0.5;
+    let (lands, seas, apart) = if saddle && centre_land {
+        (vec![joined(true)], sea, false)
+    } else if saddle {
+        (land, vec![joined(false)], true)
+    } else {
+        (land, sea, true)
+    };
+    let sides = if apart { &lands } else { &seas };
+    let segments = sides
+        .iter()
+        .map(|r| (r[0], r[r.len() - 1]))
+        .collect::<Vec<_>>();
+    (lands, seas, segments)
 }
 
 /// The ring of land and sea beyond the terrain's edge, so a tilted view ends in a horizon of
@@ -1279,10 +1409,13 @@ fn apron_grid(scene: &Scene) -> ApronGrid {
 /// grow with distance. The first ring copies the terrain's edge cells exactly (class, water and
 /// level), so there is no wall at the seam. Further out the level is the mean of the terrain's
 /// land over a window that widens with distance, so the far land settles to one flat level and
-/// the horizon is a clean line.
+/// the horizon is a clean line. Land and sea come from the world's own coastline, cut smoothly
+/// through the cells it crosses, never from the scenario picture, which ends at its own edge.
 pub fn apron(scene: &Scene) -> Mesh {
-    let ApronGrid { xs, ys, cells } = apron_grid(scene);
+    let g = apron_grid(scene);
+    let ApronGrid { xs, ys, cells, .. } = &g;
     let (nx, ny) = (xs.len() - 1, ys.len() - 1);
+    let sea = scene.levels.iter().copied().min().unwrap_or(0);
     let mut m = Mesh::default();
     let km = |lon: f32, lat: f32| scene.projection.to_km(lon, lat);
     let top = |class: u8| [class, 0, 0, KIND_APRON_TOP];
@@ -1315,18 +1448,21 @@ pub fn apron(scene: &Scene) -> Mesh {
     let mut done = vec![false; nx * ny];
     for j in 0..ny {
         for i in 0..nx {
-            let Some(v) = cells[j * nx + i] else { continue };
+            let Cell::Flat(class, level) = cells[j * nx + i] else {
+                continue;
+            };
             if done[j * nx + i] {
                 continue;
             }
+            let v = Cell::Flat(class, level);
             let mut i1 = i + 1;
-            while i1 < nx && !done[j * nx + i1] && cells[j * nx + i1] == Some(v) {
+            while i1 < nx && !done[j * nx + i1] && cells[j * nx + i1] == v {
                 i1 += 1;
             }
             let mut j1 = j + 1;
             'grow: while j1 < ny {
                 for k in i..i1 {
-                    if done[j1 * nx + k] || cells[j1 * nx + k] != Some(v) {
+                    if done[j1 * nx + k] || cells[j1 * nx + k] != v {
                         break 'grow;
                     }
                 }
@@ -1339,49 +1475,153 @@ pub fn apron(scene: &Scene) -> Mesh {
             }
             let (x0, y0) = km(xs[i], ys[j]);
             let (x1, y1) = km(xs[i1], ys[j1]);
-            let z = level_z_km(scene, v.1);
+            let z = level_z_km(scene, level);
             m.quad(
                 [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]],
                 [0.0, 0.0, 1.0],
-                top(v.0),
+                top(class),
                 [[0.0; 3]; 4],
             );
         }
     }
-    // Walls between neighbouring cells of different levels (never at the terrain's own edge,
-    // whose first ring matches it).
+    // Coast cells: the land part and the sea part, and a wall along the coastline.
+    let fan = |m: &mut Mesh, poly: &Poly, z: f32, class: u8| {
+        for k in 1..poly.len().saturating_sub(1) {
+            let (a, b, c) = (poly[0], poly[k], poly[k + 1]);
+            m.quad(
+                [
+                    [a[0], a[1], z],
+                    [b[0], b[1], z],
+                    [c[0], c[1], z],
+                    [c[0], c[1], z],
+                ],
+                [0.0, 0.0, 1.0],
+                top(class),
+                [[0.0; 3]; 4],
+            );
+        }
+    };
     for j in 0..ny {
         for i in 0..nx {
-            let Some((class, level)) = cells[j * nx + i] else {
+            let Cell::Coast(class, level) = cells[j * nx + i] else {
                 continue;
             };
             let (x0, y0) = km(xs[i], ys[j]);
             let (x1, y1) = km(xs[i + 1], ys[j + 1]);
-            if i + 1 < nx
-                && let Some((c2, l2)) = cells[j * nx + i + 1]
-                && l2 != level
-            {
-                let (lo, hi, dir, c) = if level > l2 {
-                    (l2, level, (1.0, 0.0), class)
-                } else {
-                    (level, l2, (-1.0, 0.0), c2)
-                };
-                wall(&mut m, (x1, y0), (x1, y1), dir, lo, hi, c);
+            let p = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+            let f = [g.f(i, j), g.f(i + 1, j), g.f(i + 1, j + 1), g.f(i, j + 1)];
+            let (lands, seas, segments) = split_coast(p, f);
+            for poly in &lands {
+                fan(&mut m, poly, level_z_km(scene, level), class);
             }
-            if j + 1 < ny
-                && let Some((c2, l2)) = cells[(j + 1) * nx + i]
-                && l2 != level
-            {
-                let (lo, hi, dir, c) = if level > l2 {
-                    (l2, level, (0.0, 1.0), class)
-                } else {
-                    (level, l2, (0.0, -1.0), c2)
-                };
-                wall(&mut m, (x0, y1), (x1, y1), dir, lo, hi, c);
+            for poly in &seas {
+                fan(&mut m, poly, level_z_km(scene, sea), APRON_WATER);
+            }
+            if level > sea {
+                for (a, b) in segments {
+                    // The wall leans toward the sea: away from the land corners.
+                    let mid = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
+                    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+                    let l = (dx * dx + dy * dy).sqrt();
+                    if l < 1e-4 {
+                        continue;
+                    }
+                    let mut n = (-dy / l, dx / l);
+                    let land_corner = (0..4).find(|&k| f[k] >= 0.5).map(|k| p[k]);
+                    let sea_corner = (0..4).find(|&k| f[k] < 0.5).map(|k| p[k]);
+                    let toward_sea = match (land_corner, sea_corner) {
+                        (_, Some(s)) => (s[0] - mid[0]) * n.0 + (s[1] - mid[1]) * n.1,
+                        (Some(lc), None) => -((lc[0] - mid[0]) * n.0 + (lc[1] - mid[1]) * n.1),
+                        _ => 0.0,
+                    };
+                    if toward_sea < 0.0 {
+                        n = (-n.0, -n.1);
+                    }
+                    wall(&mut m, (a[0], a[1]), (b[0], b[1]), n, sea, level, class);
+                }
+            }
+        }
+    }
+    // Walls between neighbouring cells of different levels (never at the terrain's own edge,
+    // whose first ring matches it), piece by piece along an edge a coastline crosses.
+    let seam = |m: &mut Mesh,
+                a: (f32, f32),
+                b: (f32, f32),
+                pa: &[(f32, f32, i32, u8)],
+                pb: &[(f32, f32, i32, u8)],
+                toward_b: (f32, f32)| {
+        let mut ts: Vec<f32> = pa.iter().chain(pb).flat_map(|p| [p.0, p.1]).collect();
+        ts.sort_by(f32::total_cmp);
+        ts.dedup_by(|x, y| (*x - *y).abs() < 1e-4);
+        for w2 in ts.windows(2) {
+            let mid = (w2[0] + w2[1]) / 2.0;
+            let at = |ps: &[(f32, f32, i32, u8)]| {
+                ps.iter()
+                    .find(|p| p.0 <= mid && mid <= p.1)
+                    .map(|p| (p.2, p.3))
+            };
+            let (Some((la, ca)), Some((lb, cb))) = (at(pa), at(pb)) else {
+                continue;
+            };
+            if la == lb {
+                continue;
+            }
+            let lerp = |t: f32| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+            let (lo, hi, dir, c) = if la > lb {
+                (lb, la, toward_b, ca)
+            } else {
+                (la, lb, (-toward_b.0, -toward_b.1), cb)
+            };
+            wall(m, lerp(w2[0]), lerp(w2[1]), dir, lo, hi, c);
+        }
+    };
+    for j in 0..ny {
+        for i in 0..nx {
+            let a = cells[j * nx + i];
+            if a == Cell::Inside {
+                continue;
+            }
+            let (x0, y0) = km(xs[i], ys[j]);
+            let (x1, y1) = km(xs[i + 1], ys[j + 1]);
+            if i + 1 < nx && cells[j * nx + i + 1] != Cell::Inside {
+                let (fa, fb) = (g.f(i + 1, j), g.f(i + 1, j + 1));
+                let pa = edge_pieces(a, fa, fb, sea);
+                let pb = edge_pieces(cells[j * nx + i + 1], fa, fb, sea);
+                seam(&mut m, (x1, y0), (x1, y1), &pa, &pb, (1.0, 0.0));
+            }
+            if j + 1 < ny && cells[(j + 1) * nx + i] != Cell::Inside {
+                let (fa, fb) = (g.f(i, j + 1), g.f(i + 1, j + 1));
+                let pa = edge_pieces(a, fa, fb, sea);
+                let pb = edge_pieces(cells[(j + 1) * nx + i], fa, fb, sea);
+                seam(&mut m, (x0, y1), (x1, y1), &pa, &pb, (0.0, 1.0));
             }
         }
     }
     m
+}
+
+/// The apron's land tops as boxes in degrees (west, south, east, north), one per quad, and the
+/// centre of each. For tests that check the far land is shaped like the world and has no long
+/// thin stripes.
+pub fn apron_land_boxes(scene: &Scene) -> Vec<[f32; 4]> {
+    let m = apron(scene);
+    let mut out = Vec::new();
+    for q in m.vertices.chunks_exact(4) {
+        if q[0].colour[3] != KIND_APRON_TOP || q[0].colour[0] == APRON_WATER {
+            continue;
+        }
+        let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+        for v in q {
+            x0 = x0.min(v.pos[0]);
+            x1 = x1.max(v.pos[0]);
+            y0 = y0.min(v.pos[1]);
+            y1 = y1.max(v.pos[1]);
+        }
+        let (w, s) = scene.projection.to_lonlat(x0, y0);
+        let (e, n) = scene.projection.to_lonlat(x1, y1);
+        out.push([w, s, e, n]);
+    }
+    out
 }
 
 /// West, south, east and north extent of the horizon apron in kilometres, for tests.
@@ -1432,7 +1672,7 @@ pub fn apron_seam_steps(scene: &Scene) -> usize {
     let mut bad = 0;
     for j in 0..ny {
         for i in 0..nx {
-            let Some((_, level)) = g.cells[j * nx + i] else {
+            let Cell::Flat(_, level) = g.cells[j * nx + i] else {
                 continue;
             };
             let (lon, lat) = ((g.xs[i] + g.xs[i + 1]) / 2.0, (g.ys[j] + g.ys[j + 1]) / 2.0);
