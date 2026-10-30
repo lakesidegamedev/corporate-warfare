@@ -137,6 +137,34 @@ mod tests {
     }
 
     #[test]
+    fn batched_writes_hash_like_one_stream() {
+        // The reference feeds BLAKE3 each field on its own; sizes cross the batch boundary.
+        for long in [0usize, 1, 7, 100, 503, 504, 511, 512, 513, 1500, 4096] {
+            let text = "x".repeat(long);
+            let mut reference = Hasher::new();
+            reference.update(DOMAIN_STATE);
+            for round in 0..40u32 {
+                reference.update(&round.to_le_bytes());
+                reference.update(&(round as u64 * 31).to_le_bytes());
+                reference.update(&(text.len() as u64).to_le_bytes());
+                reference.update(text.as_bytes());
+                reference.update(&[1u8]);
+            }
+            let mut batched = CanonicalHasher::new(DOMAIN_STATE);
+            for round in 0..40u32 {
+                batched
+                    .u32(round)
+                    .u64(round as u64 * 31)
+                    .string(&text)
+                    .bool(true);
+            }
+            assert_eq!(batched.finish(), *reference.finalize().as_bytes(), "{long}");
+            // Finishing twice, and after more writes, stays consistent.
+            assert_eq!(batched.finish(), batched.finish());
+        }
+    }
+
+    #[test]
     fn hash_is_length_prefixed_for_strings() {
         let mut a = CanonicalHasher::new(DOMAIN_STATE);
         a.string("ab").string("c");

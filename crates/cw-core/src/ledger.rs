@@ -636,6 +636,26 @@ impl Ledger {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_memo_is_written_and_read_like_a_string() {
+        for text in [
+            "",
+            "wages",
+            "twenty-two chars here!",
+            "twenty-three chars here",
+            "a much longer memo that cannot sit inline in the posting",
+            "caf\u{e9} \u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}",
+        ] {
+            let memo = Memo::from(text);
+            assert_eq!(memo.as_str(), text);
+            let wire = postcard::to_allocvec(&memo).unwrap();
+            assert_eq!(wire, postcard::to_allocvec(&text.to_owned()).unwrap());
+            let back: Memo = postcard::from_bytes(&wire).unwrap();
+            assert_eq!(back, memo);
+            assert_eq!(serde_json::to_string(&memo).unwrap(), serde_json::to_string(text).unwrap());
+        }
+    }
+
     fn week(n: u32) -> Tick {
         Tick(n)
     }
