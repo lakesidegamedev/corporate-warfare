@@ -1985,6 +1985,11 @@ struct Memo {
     import_netback: BTreeMap<(u16, u8), Option<i64>>,
     /// Holders of each (region, industry) cell with their shares.
     cells: BTreeMap<(u8, u8), cw_sim::economy::sectors::Cell>,
+    /// Imports against home output per good (`pricing::import_dependence_bps`).
+    import_dependence: BTreeMap<u16, Option<i64>>,
+    /// A block's contribution by home region, strategy and plant region; it reads the firm only
+    /// through its home region.
+    block_contribution: BTreeMap<(u8, u16, u8), i64>,
 }
 
 thread_local! {
@@ -2185,6 +2190,31 @@ fn block_contribution(
     let Some(entity) = world.firms.get(firm) else {
         return 0;
     };
+    Memo::read(
+        |m| &mut m.block_contribution,
+        (entity.region, recipe, region),
+        || block_contribution_now(world, dataset, firm, recipe, region),
+    )
+}
+
+fn import_dependence(world: &World, dataset: &Dataset, product: u16) -> Option<i64> {
+    Memo::read(
+        |m| &mut m.import_dependence,
+        product,
+        || cw_sim::economy::pricing::import_dependence_bps(world, dataset, product),
+    )
+}
+
+fn block_contribution_now(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    recipe: u16,
+    region: u8,
+) -> i64 {
+    let Some(entity) = world.firms.get(firm) else {
+        return 0;
+    };
     let template = &dataset.recipes[recipe as usize];
     if !dataset.product_index.contains_key(&template.output) {
         return 0;
@@ -2331,7 +2361,7 @@ fn best_expansion(
             // win back: home sellers already ask near the import, so a plant that replaces imports
             // is worth a quarter more than the same plant in a market the corridor supplies.
             if npv > 0
-                && cw_sim::economy::pricing::import_dependence_bps(world, dataset, output)
+                && import_dependence(world, dataset, output)
                     .is_some_and(|bps| bps >= cw_sim::economy::pricing::IMPORT_DEPENDENT_BPS)
             {
                 npv += npv / 4;
