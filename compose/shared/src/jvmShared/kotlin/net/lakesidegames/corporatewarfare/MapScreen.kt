@@ -139,7 +139,8 @@ internal class WorldClock {
     private var seconds = 0.0
 
     fun advance(wall: Double, running: Boolean, speed: Int): Double {
-        if (!last.isNaN() && running) seconds += (wall - last).coerceIn(0.0, 0.5) * when (speed) { 1 -> 1.0; 2 -> 2.0; else -> 4.0 }
+        // A gap over half a second is a pause or a stalled frame, not time the world lived through.
+        if (!last.isNaN() && running && wall - last <= 0.5) seconds += (wall - last).coerceAtLeast(0.0) * when (speed) { 1 -> 1.0; 2 -> 2.0; else -> 4.0 }
         last = wall
         return seconds
     }
@@ -214,16 +215,15 @@ fun WorldMapView(
     val firmSector = remember(store.mapPlants) { firmSectors(store.mapPlants) }
     val shaded = remember(layer, store.boards, store.mapDivisions) { shading(store, layer) }
     val heights = animatedHeights(if (layer == MapLayer.Freight) emptyMap() else shaded, graphics.animations)
-    val clock = rememberFrameSeconds(graphics.moves || graphics.showFps, graphics.frameRate)
+    // Everything that moves follows the game's clock, which stands still while the game is paused, so a paused map
+    // draws nothing new and the frame clock rests too (the GPU map keeps its own pace and the frame counter needs it).
+    val clock = rememberFrameSeconds((graphics.moves && (store.running || graphics.newMap)) || graphics.showFps, graphics.frameRate)
     // The world's own clock: traffic, planes, clouds and the sun stop when the game is paused and
     // run faster at higher speeds. Only interface feedback (the selection glow) uses the wall clock.
     val world = remember { WorldClock() }
     val gameSeconds by remember { derivedStateOf { world.advance(clock.value, store.running, store.speed) } }
     val sunStep by remember(graphics.dayNight) { derivedStateOf { if (graphics.dayNight) floor(gameSeconds * 3) else 0.0 } }
     val cloudTick by remember { derivedStateOf { floor(gameSeconds * 8) / 8 } }
-    val week = store.overview?.weekLabel
-    var rippleAt by remember { mutableDoubleStateOf(-10.0) }
-    LaunchedEffect(week) { if (week != null) rippleAt = MapClock.now() }
     val fps = remember { FpsMeter() }
     // Divisions the player has just taken over carry a flag for six weeks: a plant that was a
     // rival's last week and is the player's now.
@@ -425,7 +425,7 @@ fun WorldMapView(
                     val detailFade = if (graphics.detail != MapDetail.High) 0f else ((c.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
                     drawMapOverlay(
                         o, graphics, gameSeconds, freight, sun ?: Sun.fixed(g.p), map.playBounds, c.zoom,
-                        clock.value - rippleAt, detailFade, map.scenarioId, part = OverlayPart.Traffic,
+                        0.0, detailFade, map.scenarioId, part = OverlayPart.Traffic,
                     )
                 }
                 val effects: DrawScope.(MapCamera, Double) -> Unit = { c, pt ->
@@ -435,7 +435,7 @@ fun WorldMapView(
                         val detailFade = if (graphics.detail != MapDetail.High) 0f else ((c.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
                         drawMapOverlay(
                             o, graphics, gameSeconds, freight, sun ?: Sun.fixed(g.p), map.playBounds, c.zoom,
-                            clock.value - rippleAt, detailFade, map.scenarioId, part = OverlayPart.Effects, wallSeconds = clock.value,
+                            0.0, detailFade, map.scenarioId, part = OverlayPart.Effects,
                         )
                     } else o.selectedTop?.let { drawPath(it, Palette.gold, style = Stroke(2.5f)) }
                 }

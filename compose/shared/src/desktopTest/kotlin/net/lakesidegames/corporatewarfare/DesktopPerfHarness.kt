@@ -178,6 +178,14 @@ class DesktopPerfHarness {
             val still = median(List(30) { frame() })
             if (profile) printProfile("$name still frames", stillSampler) else stillSampler.stop()
             val kotlinSide = still * (1 - nativeShare(stillSampler))
+            // Idle: a second of 60 display frames with the game paused and nothing touched. A frame is drawn only if the screen asked for one.
+            var idleDrawn = 0
+            var idleMs = 0.0
+            repeat(60) {
+                clock += 16_666_667L
+                if (scene.hasInvalidations()) { idleDrawn++; val t = System.nanoTime(); scene.render(clock); idleMs += (System.nanoTime() - t) / 1e6 }
+            }
+            line("idle %-16s %2d of 60 frames drawn in a second with the game paused, %.0f ms of UI thread".format(name, idleDrawn, idleMs))
             val landSampler = if (profile) Sampler(Thread.currentThread()).also { it.active = false } else null
             val landing = List(5) {
                 oneWeek(store)
