@@ -732,7 +732,11 @@ fn speculate(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         // The state reserve competes for the same goods: it sells into a spike, so a rival
         // releases its own store first, and it buys in a bust, which puts a floor under the
         // price that makes buying beside it safe.
-        let reserve_phase = cw_sim::economy::reserve::phase(world, dataset, product);
+        let reserve_phase = Memo::read(
+            |m| &mut m.reserve_phase,
+            product,
+            || cw_sim::economy::reserve::phase(world, dataset, product),
+        );
         if held.0 > 0
             && (level >= 10_500
                 || (trend <= -500 && level > 10_000)
@@ -2003,6 +2007,8 @@ struct Memo {
     hot_lanes: BTreeMap<(), Vec<cw_sim::economy::logistics::HotLane>>,
     /// All liquid output of a region, whoever makes it.
     liquid_all: BTreeMap<u8, i64>,
+    /// The state reserve's stance on each good, which reads the whole corridor's price.
+    reserve_phase: BTreeMap<u16, cw_sim::economy::reserve::Phase>,
 }
 
 thread_local! {
