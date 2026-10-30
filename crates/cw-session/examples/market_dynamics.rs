@@ -73,6 +73,8 @@ fn main() {
     let mut outside: BTreeMap<u32, i64> = BTreeMap::new();
     // Bids for control over all seeds: started, and of those settled (the bidder took control).
     let (mut hostile_started, mut hostile_settled) = (0i64, 0i64);
+    // Rival long plans over all seeds: opened, disclosed, tenders, won, abandoned (end of run).
+    let mut plan_totals = [0i64; 5];
     for seed in 1..=seeds {
         let mut hostile_seen: std::collections::BTreeSet<u64> = Default::default();
         let mut hostile_done: std::collections::BTreeSet<u64> = Default::default();
@@ -256,6 +258,16 @@ fn main() {
                 row.samples += 1;
             }
         }
+        let stats = &session.world.plans.stats;
+        for (total, value) in plan_totals.iter_mut().zip([
+            stats.opened,
+            stats.disclosed,
+            stats.tenders,
+            stats.won,
+            stats.abandoned,
+        ]) {
+            *total += value as i64;
+        }
     }
     println!("{seeds} seeds x {weeks} weeks, guided; averages over the final 52 weeks");
     println!(
@@ -288,6 +300,10 @@ fn main() {
             (r.sold_ask_bps / n - 10_000) / 100
         );
     }
+    println!(
+        "rival long plans over {seeds} runs: {} opened, {} disclosed, {} tenders, {} won, {} abandoned",
+        plan_totals[0], plan_totals[1], plan_totals[2], plan_totals[3], plan_totals[4]
+    );
     println!(
         "takeover bids over {seeds} runs of {weeks} weeks: {hostile_started} started, \
          {hostile_settled} settled; per run per 5 years: {:.2} started, {:.2} settled",

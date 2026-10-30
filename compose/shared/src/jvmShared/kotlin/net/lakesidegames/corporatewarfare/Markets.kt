@@ -304,10 +304,10 @@ internal fun doneText(name: String, q: uniffi.cw_ffi.ShareQuoteDto, buy: Boolean
 
 /** One stock: valuation, your position, and an order ticket. */
 @Composable
-internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = true, onClose: () -> Unit) {
+internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = true, startQuantity: String = "1000", onClose: () -> Unit) {
     var page by remember { mutableStateOf(false) }
     var buy by remember { mutableStateOf(true) }
-    var quantity by remember { mutableStateOf("1000") }
+    var quantity by remember { mutableStateOf(startQuantity) }
     var limit by remember { mutableStateOf("") }
     var quote by remember { mutableStateOf<uniffi.cw_ffi.ShareQuoteDto?>(null) }
     val limitCents = limit.toDoubleOrNull()?.let { (it * 100).toLong() } ?: 0L
