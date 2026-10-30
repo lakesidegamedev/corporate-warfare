@@ -356,8 +356,14 @@ taken from A, so totals are conserved and demand follows the workers. Weekly hou
 then follows each region's income as it always did.
 
 **Seen.** The region dossier shows net migration over the last 52 weeks and the week, and a chart of
-net movers by week. The houses on the map follow the region's economy; migration changes the
-population behind that economy.
+net movers by week. The houses on the map follow the economy's phase (how far from a city they
+stand) and, on top of that, the region's net migration over the last 52 weeks as a share of its
+people (`RegionBoardDto.migration_bps`). Each house has a fixed place and a fixed rank from 0 to 99,
+set once from the map; a house stands when its rank is under `45 * (1 + 0.55 * g)`, where `g` is the
+migration share over 2 percent, held between -1 and 1. A steady region shows the old set (rank
+under 45); a region gaining 2 percent or more shows up to 55 percent more houses, one losing as much
+shows as many fewer. No house moves or changes size: only how many of them stand changes. The
+classic map (Compose) and the Apple map use the same rule.
 
 **Saved state.** The references, carries and the weekly net movers (104 weeks) are saved with the
 rival plans in the `PLAN` trailer, folded into the hash while not empty. A save from before this version loads with it empty and takes the references at the next week.

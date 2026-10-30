@@ -30,11 +30,15 @@ class SettlementRenderTest {
 
     private val map get() = assertNotNull(WorldMap.shared)
 
-    // Net migration over a year in basis points of a region's people, as a 156 week guided career reports it
-    // for one region that gains hugely, one that loses a little, and one that loses a lot (a stress case).
-    private val gain = "KY-EAS"
-    private val loss = "KY-BLU"
-    private val settled = mapOf(gain to 2975, loss to -106, "OH-CEN" to -61)
+    // The two regions with the most houses on this map, one gaining people and one losing them, with the size of
+    // movement a 156 week guided career reports (a region gaining about 3 percent a year, one losing about 1).
+    private val byHouses: List<String> by lazy {
+        Countryside.props(map).filter { it.kind == "house" && it.region.isNotEmpty() }.groupingBy { it.region }.eachCount()
+            .entries.sortedByDescending { it.value }.map { it.key }
+    }
+    private val gain get() = byHouses[0]
+    private val loss get() = byHouses[1]
+    private val settled get() = mapOf(gain to 300, loss to -106)
 
     private fun houses(settlement: Map<String, Int>): List<Countryside.Prop> =
         Countryside.props(map).filter { it.kind == "house" && it.rank < Countryside.houseLimit(settlement[it.region]) }

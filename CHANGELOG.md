@@ -18,6 +18,10 @@ heading.
   makes the company a friendly offer above the market if it can fund one, or otherwise buys a
   blocking stake on the exchange a little at a time. Friends are firms in the same group or allies
   with no grudge and no closer tie to the raider. It never defends your own company for you.
+- Houses on the map now follow where people move. Zoomed in, a region that people are moving into
+  shows more houses round its cities and a region they are leaving shows fewer, on top of the boom and
+  recession look. Every house stays at the same spot on the ground at the same size; only how many of
+  the possible houses are built changes, so nothing slides or jumps as you move the map.
 - On the desktop the map can sit beside any page. Press Ctrl M or use "Dock map" in the sidebar and the
   page you are on gets the map on its left, with a handle between them to drag (or use the arrow keys
   on it). Each page remembers its own width and whether it is docked. Pages that need room scroll
