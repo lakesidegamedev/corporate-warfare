@@ -1,6 +1,6 @@
 name: Release Android, Windows, Linux and Mac
 # Attaches the non-iPhone builds to a GitHub release: a signed Android App Bundle and APK, the
-# Windows installer, the Linux package and the Mac app (Mac Catalyst, unsigned until a Mac
+# Windows installer, the Linux package and AppImage, and the Mac disk image (Mac Catalyst, unsigned until a Mac
 # distribution certificate is configured). The bundle is what Google Play accepts; the APK is
 # for direct downloads. The iPhone build goes through release.yml.
 on:
@@ -90,6 +90,14 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+      - name: AppImage (Linux)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          bash compose/shared/packaging/linux/build-appimage.sh "compose/shared/build/compose/binaries/main-release/app/Corporate Warfare" "CorporateWarfare-${TAG#v}-linux.AppImage"
+          gh release upload "$TAG" "CorporateWarfare-${TAG#v}-linux.AppImage" --clobber
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
       # The branded setup program, attached beside the MSI for this release cycle. Players on 1.8
       # still update through the MSI; the updater prefers the setup program when a release has both.
       - name: Setup program (Windows)
@@ -124,5 +132,6 @@ jobs:
         run: |
           app=$(find apple/build/catalyst -path '*Release-maccatalyst/*.app' -maxdepth 6 -type d | head -1)
           test -n "$app"
-          ditto -c -k --keepParent "$app" "CorporateWarfare-${TAG#v}-mac.zip"
-          gh release upload "$TAG" "CorporateWarfare-${TAG#v}-mac.zip" --clobber
+          # A disk image with the branded background and the drag-to-Applications arrow (unsigned).
+          bash apple/scripts/make-dmg.sh "$app" "CorporateWarfare-${TAG#v}-mac.dmg"
+          gh release upload "$TAG" "CorporateWarfare-${TAG#v}-mac.dmg" --clobber
