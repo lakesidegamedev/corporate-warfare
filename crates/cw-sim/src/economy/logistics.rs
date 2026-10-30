@@ -595,6 +595,14 @@ fn build_access(world: &World, ds: &Dataset) -> Vec<Vec<bool>> {
                 .collect()
         })
         .collect();
+    // Ports the state has had expanded take ships even where nobody has built a terminal.
+    if let Some(sea) = ds.logistics.mode_index("sea") {
+        for r in 0..n {
+            if crate::economy::civics::port_bps(world, r as u8) > 0 {
+                access[sea as usize][r] = true;
+            }
+        }
+    }
     for (_, plant) in world.facilities.iter() {
         if plant.status != FacilityStatus::Operating {
             continue;
@@ -710,6 +718,27 @@ pub fn begin_week(world: &mut World, ds: &Dataset) {
         if keep < 10_000 {
             for alloc in &mut lane.allocs {
                 alloc.cap = (alloc.cap as i64 * keep / 10_000) as i32;
+            }
+        }
+    }
+    // Roads and ports the state has had built carry more: a lane's capacity rises with the
+    // better of its two ends.
+    let truck = ds.logistics.mode_index("truck");
+    let sea = ds.logistics.mode_index("sea");
+    for (key, lane) in lanes.iter_mut() {
+        let bonus = if Some(key.mode) == truck {
+            crate::economy::civics::road_bps(world, key.a)
+                .max(crate::economy::civics::road_bps(world, key.b))
+        } else if Some(key.mode) == sea {
+            crate::economy::civics::port_bps(world, key.a)
+                .max(crate::economy::civics::port_bps(world, key.b))
+        } else {
+            0
+        };
+        if bonus > 0 {
+            for alloc in &mut lane.allocs {
+                alloc.cap = (alloc.cap as i64 * (10_000 + bonus as i64) / 10_000)
+                    .min(i32::MAX as i64) as i32;
             }
         }
     }

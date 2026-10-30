@@ -182,6 +182,35 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             ],
         ),
         a(
+            "GiveToCandidate",
+            "Politics",
+            "Give to a candidate",
+            "Give campaign money to a governor or leader candidate from the company's cash, up to the cap the law sets for that race. Gifts are only allowed in the six months before the vote. The gift is printed in the paper next week with the company's name, raises that candidate's poll by a bounded amount, and the other side holds it against you a little. If your candidate wins, the company earns some favour.",
+            "politics campaign contribution donation governor leader election candidate give",
+            vec![
+                firm(),
+                f("office", "Race (state number, or 255 for the national race)", "number").range(0, 255, 1, 255),
+                f("candidate", "Candidate", "choice").choices(
+                    "number",
+                    &[("0", "Business party candidate"), ("1", "Labour party candidate")],
+                ),
+                money("cents", "Amount").range(100_000, 100_000_000, 100_000, 5_000_000),
+            ],
+        ),
+        a(
+            "BidOnTender",
+            "Politics",
+            "Bid on a public tender",
+            "Bid a price and a delivery time on a road, port or power works the state has put out to tender. The best bid wins: the lowest price, with each week of delivery counted as a hundredth of the state's budget. The winner builds it, paying for contractors and materials as it goes, and is paid in four stages from the state's budget. A late finish forfeits a tenth of the price for every week late, and when it is finished the region has more road or port capacity, or a stronger power grid.",
+            "tender public works road port power line bid state contract",
+            vec![
+                firm(),
+                f("tender", "Tender number", "number").range(0, 1_000_000, 1, 0),
+                money("price_cents", "Your price").range(1_000_000, 100_000_000_000, 100_000, 100_000_000),
+                f("weeks", "Delivery in weeks", "number").range(8, 39, 1, 16),
+            ],
+        ),
+        a(
             "HireExecutive",
             "Board",
             "Hire an executive",

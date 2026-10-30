@@ -186,6 +186,7 @@ pub fn build_with(
         archive: Default::default(),
         chapters: Default::default(),
         earnings: Default::default(),
+        civics: Default::default(),
         executives: Default::default(),
         systems: Default::default(),
         mail: Default::default(),

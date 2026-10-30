@@ -37,7 +37,16 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
             .copied()
             .unwrap_or(world.regions[region as usize].organisation_bps);
         let mut organisation = entry;
-        let (rise, decay) = world.politics.laws.unions.drift_bps();
+        // A right-to-work state weakens union law by one step for the firms headquartered there.
+        let law = if crate::economy::civics::right_to_work(world, firm_region(world, handle)) {
+            match world.politics.laws.unions {
+                crate::state::UnionLaw::Strong => crate::state::UnionLaw::Standard,
+                _ => crate::state::UnionLaw::Weak,
+            }
+        } else {
+            world.politics.laws.unions
+        };
+        let (rise, decay) = law.drift_bps();
         if wage * 100 < prevailing * 90 {
             organisation += rise;
         } else {
@@ -347,4 +356,8 @@ mod tests {
             BargainState::Idle
         ));
     }
+}
+
+fn firm_region(world: &World, firm: Handle) -> u8 {
+    world.firms.get(firm).map(|f| f.region).unwrap_or(0)
 }

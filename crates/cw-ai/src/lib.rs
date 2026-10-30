@@ -81,6 +81,33 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
                 },
             });
         }
+        // Campaign money and public tenders, through the same commands and limits as the player.
+        if let Some((office, candidate, cents)) =
+            cw_sim::economy::civics::rival_gift(world, dataset, handle)
+        {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::GiveToCandidate {
+                    firm: handle,
+                    office,
+                    candidate,
+                    cents,
+                },
+            });
+        }
+        if let Some((tender, price_cents, weeks)) =
+            cw_sim::economy::civics::rival_bid(world, dataset, handle)
+        {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::BidOnTender {
+                    firm: handle,
+                    tender,
+                    price_cents,
+                    weeks,
+                },
+            });
+        }
         // Executives for hire, taken through the same commands a player uses: only when the
         // effect pays and the firm can carry the pay.
         if let Some((post, person)) =

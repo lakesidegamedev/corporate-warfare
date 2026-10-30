@@ -4,6 +4,7 @@ pub mod achievements;
 pub mod banking;
 pub mod cast;
 pub mod chapters;
+pub mod civics;
 pub mod credit;
 pub mod deals;
 pub mod division_report;

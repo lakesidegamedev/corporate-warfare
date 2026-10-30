@@ -174,6 +174,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     );
     crate::ph!("cast::weekly", crate::economy::cast::weekly(world, dataset));
     crate::ph!(
+        "civics::weekly",
+        crate::economy::civics::weekly(world, dataset)
+    );
+    crate::ph!(
         "rescue::weekly",
         crate::economy::rescue::weekly(world, dataset)
     );
@@ -555,7 +559,8 @@ fn accrue_tax(world: &mut World, dataset: &Dataset, firm: Handle) {
     } else {
         0
     };
-    let rate = (world.politics.laws.corporate_tax_bps + modifier).clamp(0, 10_000);
+    let state = crate::economy::civics::tax_delta_bps(world, entity.region);
+    let rate = (world.politics.laws.corporate_tax_bps + modifier + state).clamp(0, 10_000);
     let quarterly = round_even_div(taxable as i128 * rate as i128, 10_000) as i64;
     let weekly = quarterly / 13;
     if weekly <= 0 {
