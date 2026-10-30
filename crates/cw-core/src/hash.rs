@@ -14,17 +14,47 @@ pub const DOMAIN_SAVE: &[u8] = b"CWSAVE01";
 #[derive(Clone, Debug)]
 pub struct CanonicalHasher {
     hasher: Hasher,
+    /// Small writes gather here and reach BLAKE3 in one call; the digest is the same as feeding
+    /// each field on its own, because the hash is a stream.
+    pending: [u8; PENDING],
+    used: usize,
 }
+
+const PENDING: usize = 512;
 
 impl CanonicalHasher {
     pub fn new(domain: &'static [u8]) -> Self {
         let mut hasher = Hasher::new();
         hasher.update(domain);
-        CanonicalHasher { hasher }
+        CanonicalHasher {
+            hasher,
+            pending: [0; PENDING],
+            used: 0,
+        }
+    }
+
+    #[inline]
+    fn put(&mut self, value: &[u8]) {
+        if value.len() > PENDING - self.used {
+            self.flush();
+            if value.len() >= PENDING {
+                self.hasher.update(value);
+                return;
+            }
+        }
+        self.pending[self.used..self.used + value.len()].copy_from_slice(value);
+        self.used += value.len();
+    }
+
+    fn flush(&mut self) {
+        if self.used > 0 {
+            self.hasher.update(&self.pending[..self.used]);
+            self.used = 0;
+        }
     }
 
     pub fn u8(&mut self, value: u8) -> &mut Self {
-        self.hasher.update(&[value]);
+        self.put(&[value]);
         self
     }
 
@@ -33,33 +63,33 @@ impl CanonicalHasher {
     }
 
     pub fn u16(&mut self, value: u16) -> &mut Self {
-        self.hasher.update(&value.to_le_bytes());
+        self.put(&value.to_le_bytes());
         self
     }
 
     pub fn u32(&mut self, value: u32) -> &mut Self {
-        self.hasher.update(&value.to_le_bytes());
+        self.put(&value.to_le_bytes());
         self
     }
 
     pub fn u64(&mut self, value: u64) -> &mut Self {
-        self.hasher.update(&value.to_le_bytes());
+        self.put(&value.to_le_bytes());
         self
     }
 
     pub fn i64(&mut self, value: i64) -> &mut Self {
-        self.hasher.update(&value.to_le_bytes());
+        self.put(&value.to_le_bytes());
         self
     }
 
     pub fn i32(&mut self, value: i32) -> &mut Self {
-        self.hasher.update(&value.to_le_bytes());
+        self.put(&value.to_le_bytes());
         self
     }
 
     pub fn bytes(&mut self, value: &[u8]) -> &mut Self {
         self.u64(value.len() as u64);
-        self.hasher.update(value);
+        self.put(value);
         self
     }
 
@@ -68,7 +98,9 @@ impl CanonicalHasher {
     }
 
     pub fn finish(&self) -> [u8; 32] {
-        *self.hasher.finalize().as_bytes()
+        let mut hasher = self.hasher.clone();
+        hasher.update(&self.pending[..self.used]);
+        *hasher.finalize().as_bytes()
     }
 
     pub fn finish_hex(&self) -> String {
