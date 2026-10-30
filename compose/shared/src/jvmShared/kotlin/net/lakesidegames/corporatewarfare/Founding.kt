@@ -77,7 +77,7 @@ fun FoundCompanyPanel(store: GameStore, scroll: Boolean = true) {
             Panel {
                 Eyebrow("Name")
                 OutlinedTextField(
-                    name, { name = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    name, { name = it }, singleLine = true, modifier = Modifier.textEntry().fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Palette.primaryText, unfocusedTextColor = Palette.primaryText,
                         focusedBorderColor = Palette.gold, unfocusedBorderColor = Palette.stroke, cursorColor = Palette.gold,

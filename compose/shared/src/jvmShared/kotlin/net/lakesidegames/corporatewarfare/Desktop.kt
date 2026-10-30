@@ -3,6 +3,7 @@ package net.lakesidegames.corporatewarfare
 import androidx.compose.foundation.horizontalScroll
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -129,11 +130,6 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                 when {
                     event.isCtrlPressed && event.key == Key.K -> { open(Page.Actions); true }
                     event.isCtrlPressed && event.key == Key.M -> { toggleDock(page); true }
-                    event.key == Key.Spacebar && page != Page.Actions -> { store.playAt(if (store.running) 0 else store.speed.coerceAtLeast(1)); true }
-                    event.key == Key.N && page != Page.Actions -> { if (!store.busy && !store.running) store.advance(); true }
-                    event.key == Key.One && page != Page.Actions -> { store.playAt(1); true }
-                    event.key == Key.Two && page != Page.Actions -> { store.playAt(2); true }
-                    event.key == Key.Three && page != Page.Actions -> { store.playAt(4); true }
                     event.key == Key.F1 -> { open(Page.Map); true }
                     event.key == Key.F2 -> { open(Page.Office); true }
                     event.key == Key.F3 -> { open(Page.Research); true }
@@ -145,13 +141,23 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                     event.key == Key.F9 -> { open(Page.Hall); true }
                     else -> false
                 }
+            }
+            // Plain keys run on the way back up, so a text field or a focused button gets its keys first.
+            .plainShortcuts(enabled = page != Page.Actions) { shortcut ->
+                when (shortcut) {
+                    PlainShortcut.PlayPause -> store.playAt(if (store.running) 0 else store.speed.coerceAtLeast(1))
+                    PlainShortcut.AdvanceWeek -> if (!store.busy && !store.running) store.advance()
+                    PlainShortcut.Speed1 -> store.playAt(1)
+                    PlainShortcut.Speed2 -> store.playAt(2)
+                    PlainShortcut.Speed3 -> store.playAt(4)
+                }
             },
     ) {
         DivisionDetailHost(store)
-        Row(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxSize().focusGroup()) {
             Sidebar(store, page, ::open, onSettings, docks[page.id] != null) { toggleDock(page) }
             Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.stroke))
-            Column(Modifier.weight(1f).fillMaxHeight()) {
+            Column(Modifier.weight(1f).fillMaxHeight().focusGroup()) {
                 StatusBar(store) { text ->
                     query = text
                     open(Page.Actions)
@@ -194,7 +200,7 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
 
 @Composable
 private fun Sidebar(store: GameStore, page: Page, onPage: (Page) -> Unit, onSettings: () -> Unit, docked: Boolean, onDock: () -> Unit) {
-    Column(Modifier.width(206.dp).fillMaxHeight().background(Palette.panel).padding(vertical = 14.dp)) {
+    Column(Modifier.width(206.dp).fillMaxHeight().background(Palette.panel).padding(vertical = 14.dp).focusGroup()) {
         Box(Modifier.fillMaxWidth().padding(bottom = 10.dp), contentAlignment = Alignment.Center) { LogoArt(Modifier.width(112.dp)) }
         CompanySwitcher(store)
         var group = ""
@@ -317,7 +323,7 @@ private fun StatusBar(store: GameStore, onSearch: (String) -> Unit) {
             cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.gold),
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { onSearch(text) }),
-            modifier = Modifier.width(220.dp).onPreviewKeyEvent { e ->
+            modifier = Modifier.textEntry().width(220.dp).onPreviewKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown && e.key == Key.Enter) { onSearch(text); true } else false
             },
             decorationBox = { inner ->

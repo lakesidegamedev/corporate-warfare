@@ -69,7 +69,8 @@ fun MarketsScreen(store: GameStore) {
                         selected = section == option,
                         onClick = { section = option },
                         shape = SegmentedButtonDefaults.itemShape(index, Section.entries.size),
-                    ) { Text(option.title, fontSize = 13.sp) }
+                        icon = {},
+                    ) { Text(if (option == Section.Commodities && androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f) "Goods" else option.title, fontSize = chromeSp(12f), maxLines = 1, softWrap = false) }
                 }
             }
         }
@@ -160,7 +161,8 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(line.name + if (line.controlledByYou) " ★" else "", color = Palette.primaryText, fontWeight = FontWeight.Medium, maxLines = 1)
-                        Text("${Sectors.name(line.industry)} · cap ${Format.compact(line.marketCapCents)}", color = Palette.secondary, fontSize = 11.sp, maxLines = 1)
+                        // Non-breaking space keeps "cap" with its figure; large text wraps to a second line instead of dropping it.
+                        Text("${Sectors.name(line.industry)} · cap\u00A0${Format.compact(line.marketCapCents)}", color = Palette.secondary, fontSize = 11.sp, maxLines = 2)
                         // Companies reporting results this week are marked on the board.
                         if (line.earnings.reportsThisWeek) Text("Reports this week · analysts: ${ratingText(line.earnings.rating)}", color = Palette.gold, fontSize = 11.sp, maxLines = 1)
                     }
@@ -329,9 +331,9 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
                     SegmentedButton(selected = !buy, onClick = { buy = false }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Sell") }
                 }
                 OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Shares") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.textEntry())
                 OutlinedTextField(limit, { limit = it }, label = { Text("Limit per share ($), default %.2f".format(line.priceCents / 100.0)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.textEntry())
                 Text("Orders fill at the weekly close, best price first, up to 2% of the freely held shares a week.", color = Palette.secondary, fontSize = 11.sp)
             }
         },

@@ -789,6 +789,5 @@ fun SpeedControl(store: GameStore) {
  */
 @Composable
 private fun NavLabel(text: String) {
-    val scale = androidx.compose.ui.platform.LocalDensity.current.fontScale
-    Text(text, fontSize = (11f * minOf(scale, 1.15f) / scale).sp, maxLines = 1, softWrap = false)
+    Text(text, fontSize = chromeSp(11f), maxLines = 1, softWrap = false)
 }

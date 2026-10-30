@@ -73,11 +73,11 @@ fun StatGroup(headline: Stat?, stats: List<Stat>) {
         stats.chunked(3).forEach { row ->
             Row(Modifier.fillMaxWidth()) {
                 row.forEach { stat ->
-                    Explain(Words.about(stat.label), Modifier.weight(1f)) {
+                    Explain(Words.about(stat.label), Modifier.weight(1f).padding(end = 6.dp)) {
                         Column {
-                            Text(stat.label, color = Palette.secondary, fontSize = 11.sp, maxLines = 1)
-                            Text(stat.value, color = stat.tone, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                            stat.note?.let { Text(it, color = Palette.secondary, fontSize = 11.sp, maxLines = 1) }
+                            Text(stat.label, color = Palette.secondary, fontSize = 11.sp, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(stat.value, color = stat.tone, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            stat.note?.let { Text(it, color = Palette.secondary, fontSize = 11.sp, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
                         }
                     }
                 }

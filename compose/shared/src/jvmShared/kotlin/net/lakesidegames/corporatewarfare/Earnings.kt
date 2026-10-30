@@ -147,8 +147,8 @@ fun GuidanceBody(e: EarningsDto, low: String, onLow: (String) -> Unit, high: Str
             color = Palette.warning, fontSize = 12.sp,
         )
         OutlinedTextField(low, { onLow(it.filter { c -> c.isDigit() || c == '-' }) }, label = { Text("Low end of operating profit ($)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.textEntry())
         OutlinedTextField(high, { onHigh(it.filter { c -> c.isDigit() || c == '-' }) }, label = { Text("High end of operating profit ($)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.textEntry())
     }
 }

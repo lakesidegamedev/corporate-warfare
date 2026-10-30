@@ -181,6 +181,12 @@ pub fn place_order(
                     });
                 }
                 world.investor.cash_cents -= cost;
+                let _ = world.investor.book.commit(
+                    world.tick,
+                    Txn::new()
+                        .credit(Account::Cash, cost, "order reserve")
+                        .debit(Account::RestrictedCash, cost, "order reserve"),
+                );
                 reserved = cost;
             }
             HolderId::Firm(buyer) => {
@@ -441,23 +447,40 @@ fn clear_firm(world: &mut World, dataset: &Dataset, firm: Handle) {
     }
 }
 
-/// A company's buy order reserved cash at its limit; a fill below the limit frees the difference
-/// at once, so a limit above the price never ties cash up after the fill.
+/// A buy order reserved cash at its limit. A fill below the limit frees the difference at once, so
+/// a limit above the price never ties cash up after the fill; the player's reserve is the fill's
+/// payment, and an outside investor's order (which is charged again on settle) gets its reserve
+/// for these shares back in full, so every buyer pays the price exactly once.
 fn refund_surplus(world: &mut World, order: &ShareOrder, price: i64, qty: i64) {
-    let HolderId::Firm(buyer) = order.holder else {
-        return;
-    };
     let surplus = (order.limit_price_cents - price).max(0).saturating_mul(qty);
-    if surplus <= 0 {
-        return;
-    }
-    if let Some(firm) = world.firms.get_mut(buyer) {
-        let _ = firm.book.commit(
-            world.tick,
-            Txn::new()
-                .debit(Account::Cash, surplus, "order surplus")
-                .credit(Account::RestrictedCash, surplus, "order surplus"),
-        );
+    match order.holder {
+        HolderId::Firm(buyer) => {
+            if surplus > 0
+                && let Some(firm) = world.firms.get_mut(buyer)
+            {
+                let _ = firm.book.commit(
+                    world.tick,
+                    Txn::new()
+                        .debit(Account::Cash, surplus, "order surplus")
+                        .credit(Account::RestrictedCash, surplus, "order surplus"),
+                );
+            }
+        }
+        HolderId::Investor if surplus > 0 => {
+            world.investor.cash_cents += surplus;
+            let _ = world.investor.book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, surplus, "order surplus")
+                    .credit(Account::RestrictedCash, surplus, "order surplus"),
+            );
+        }
+        HolderId::Outside(index) => {
+            if let Some(holder) = world.outside.investors.get_mut(index as usize) {
+                holder.capital_cents += order.limit_price_cents.saturating_mul(qty);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -560,12 +583,12 @@ fn settle_one(
     // Buyer pays.
     match buyer {
         HolderId::Investor => {
-            world.investor.cash_cents =
-                world.investor.cash_cents.max(0) - cost.min(world.investor.cash_cents.max(0));
+            // The cash was taken from the player when the order was placed; the fill spends that
+            // reserve and takes nothing more.
             let _ = world.investor.book.commit(
                 world.tick,
                 Txn::new()
-                    .credit(Account::Cash, cost, "share purchase")
+                    .credit(Account::RestrictedCash, cost, "share purchase")
                     .debit(Account::Investments, cost, "share purchase"),
             );
         }
@@ -672,7 +695,7 @@ fn release_order(world: &mut World, handle: Handle) {
                     world.tick,
                     Txn::new()
                         .debit(Account::Cash, refund, "order release")
-                        .credit(Account::Investments, refund, "order release"),
+                        .credit(Account::RestrictedCash, refund, "order release"),
                 );
             }
             HolderId::Firm(entity) => {
@@ -1237,6 +1260,137 @@ mod tests {
         );
         assert!(world.investor.cash_cents > cash_before);
         assert!(world.investor.book.is_balanced());
+    }
+
+    /// Oracle: whatever the fill, the player's cash falls by exactly the cost of the shares
+    /// actually received (read from the share book), and a cancelled or partly filled order gives
+    /// the rest back. Cash is never charged twice.
+    #[test]
+    fn an_investor_buy_order_costs_exactly_what_it_fills() {
+        let dataset = Dataset::load().unwrap();
+        for ask_qty in [1_000i64, 300, 0] {
+            let mut world = seed::build(&dataset, 65, ScenarioKind::Guided, ScenarioMode::Sandbox);
+            let primary = world.investor.primary_group.unwrap();
+            refresh_valuation(&mut world, &dataset);
+            let mark = world.firm(primary).unwrap().shares.mark_cents.max(1);
+            let want = 1_000i64;
+            let limit = mark * 3;
+            world.investor.cash_cents = 10_000_000_000;
+            let cash_before = world.investor.cash_cents;
+            let held_before = world
+                .firm(primary)
+                .unwrap()
+                .shares
+                .holders
+                .get(&HolderId::Investor)
+                .copied()
+                .unwrap_or_default();
+            place_order(
+                &mut world,
+                HolderId::Investor,
+                primary,
+                OrderSide::Buy,
+                want,
+                limit,
+            )
+            .unwrap();
+            assert_eq!(
+                world.investor.cash_cents,
+                cash_before - want * limit,
+                "reserve at the limit"
+            );
+            // Limit warding: a partial fill is made by leaving only ask_qty of float to buy.
+            if ask_qty < want {
+                let shares = &mut world.firm_mut(primary).unwrap().shares;
+                let outside: Vec<HolderId> = shares
+                    .holders
+                    .keys()
+                    .copied()
+                    .filter(|h| matches!(h, HolderId::Outside(_)))
+                    .collect();
+                let mut keep = ask_qty;
+                for holder in outside {
+                    let lot = shares.holders.get_mut(&holder).unwrap();
+                    let take = lot.qty.min(keep.max(0));
+                    keep -= take;
+                    let surplus = lot.qty - take;
+                    shares.transfer(holder, HolderId::Treasury, surplus, 0);
+                }
+            }
+            // Orders live one week: clearing on the expiry tick fills what it can, then releases the rest.
+            world.tick.0 += 1;
+            clear_exchange(&mut world, &dataset);
+            let held_after = world
+                .firm(primary)
+                .unwrap()
+                .shares
+                .holders
+                .get(&HolderId::Investor)
+                .copied()
+                .unwrap_or_default();
+            let filled = held_after.qty - held_before.qty;
+            let paid = held_after.cost_cents - held_before.cost_cents;
+            eprintln!("ask {ask_qty}: filled {filled} of {want}");
+            assert!(paid <= filled * limit);
+            assert_eq!(
+                ask_qty == 0,
+                filled == 0,
+                "nothing for sale means a full cancel"
+            );
+            assert_eq!(
+                cash_before - world.investor.cash_cents,
+                paid,
+                "cash falls by exactly the fill cost, with the unused reserve returned (ask {ask_qty})"
+            );
+            assert!(
+                world.exchange.orders.iter().next().is_none(),
+                "the order is gone"
+            );
+            assert!(world.investor.book.is_balanced());
+        }
+    }
+
+    /// Oracle: a sale credits the player exactly the price paid for the shares that left, once.
+    #[test]
+    fn an_investor_sell_order_credits_exactly_once() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 65, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let primary = world.investor.primary_group.unwrap();
+        refresh_valuation(&mut world, &dataset);
+        let mark = world.firm(primary).unwrap().shares.mark_cents.max(1);
+        world.outside.investors[0].capital_cents = 1_000_000_000;
+        let outside_before = world.outside.investors[0].capital_cents;
+        let cash_before = world.investor.cash_cents;
+        let held_before = world.firm(primary).unwrap().shares.qty(HolderId::Investor);
+        place_order(
+            &mut world,
+            HolderId::Investor,
+            primary,
+            OrderSide::Sell,
+            1_000,
+            mark,
+        )
+        .unwrap();
+        place_order(
+            &mut world,
+            HolderId::Outside(0),
+            primary,
+            OrderSide::Buy,
+            1_000,
+            mark * 2,
+        )
+        .unwrap();
+        world.tick.0 += 1;
+        clear_exchange(&mut world, &dataset);
+        let sold = held_before - world.firm(primary).unwrap().shares.qty(HolderId::Investor);
+        assert_eq!(sold, 1_000);
+        let credited = world.investor.cash_cents - cash_before;
+        let paid = outside_before - world.outside.investors[0].capital_cents;
+        assert_eq!(
+            credited, paid,
+            "the player is credited what the buyer paid, once"
+        );
+        assert!(credited >= sold * mark && credited <= sold * mark * 2);
     }
 
     #[test]

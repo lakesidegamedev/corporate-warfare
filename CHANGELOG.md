@@ -49,73 +49,21 @@ heading.
 - Workers move between regions for pay and jobs, a few percent a year at most, less with distance
   and across state lines, and their households and their spending move with them, so demand follows
   the work. Region dossiers show how many workers moved in or out over the year and week by week.
-
-### Changed
-
-- Tooling: every change to the Android app now starts the trimmed release build on an emulator in
-  CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
-  so a trimming mistake fails the check and not a phone.
-- A smaller Windows and Linux download. The desktop game now ships without a large icon library
-  it never used and with the unused parts of the screen toolkit trimmed away, so the Linux
-  package drops from about 109 MB to about 63 MB. The Windows setup program also squeezes its
-  files harder. The game looks and plays the same, and it reaches the main menu in the same
-  time as before.
-- Smaller downloads and a quicker start. The Android download is much smaller because the app
-  is now trimmed of code it never uses and the direct download carries only the phone version
-  of the game engine (the Play Store bundle already delivered just the right one). The game
-  engine files are about a third smaller on every platform, and the Windows and Linux apps
-  carry a leaner Java runtime and remember what they loaded last time, so they open sooner
-  after the first run. Nothing about the game changes: saves, results and the pictures are the
-  same. Setting CW_STARTUP_TIMELINE prints how long each step of starting takes.
-- The map is easier to read when you zoom in close. Rival companies' plants now show in their
-  industry's colour with a dark roof and are about 60 percent of the size of yours, while your
-  own are full size with a gold roof and the plant count on top. Cities no longer look like
-  identical grey blocks: ports have cranes and stacked containers, steel towns have tall stacks,
-  car towns have a long assembly shed, and the rest stay as towers. Town and city names are in
-  plain sentence case in one weight, and only region names keep the spaced capital letters. Names
-  no longer overlap each other or sit on top of a building: when two compete, the region name
-  gives way to the city name, and the city name to your own plant badge, and a name that is
-  showing stays put instead of blinking while you pan. Trucks, trains and ships keep at least two
-  vehicle lengths apart, so a busy road looks busy without becoming one unbroken line, and they
-  carry their owner's colour: gold for yours, the industry colour for a rival's, grey for outside
-  carriers. On the desktop app the buildings and names are now drawn in the background like the
-  ground, so panning and zooming close in stays smooth.
-- Saves from the earlier 1.9 previews carry on without chapter goals until the next chapter starts, and
-  the goal list and achievements are saved with the career. The save format number does not change.
-- Saves written by this version cannot be opened by older versions of the game. Careers saved in
-  1.8.0 and the earlier 1.9 previews open as normal, carry on without scenario history (their
-  dates are not invented backwards) and are saved in the new format from then on.
-- The map is much smoother on Windows and Linux, most of all on big screens. The ground, the day and
-  night shading, the clouds and the menu globe are now painted ahead of time in the background, and
-  while you drag or zoom the game slides the last finished picture into place instead of redrawing it,
-  so moving the map no longer waits on drawing. A fresh picture replaces it a moment later.
-- A new install with no graphics choice saved starts on Medium when the window is large or the
-  computer is drawing in software, so the first look is smooth. Your own choice is never changed.
-- Tooling: a 1.9 cast proposal, not wired into the game. `content/cast-1.9.json` lists 40 fictional people (ten per scenario, with voice notes), `tools/cast_portraits_v2.py` draws 32 by 32 busts with neutral, pleased and displeased expressions, a derived 16 by 16 version, 64 by 64 office portraits for chief executives and a larger extras kit, written to `apple/Resources/cast-portraits-v2.json`. Awaiting owner approval of the roster and portraits. Second pass: clearer pleased and displeased faces, seven head shapes with varied noses, eye spacing, ears and necks, softer women's faces with jewellery, repainted 64 by 64 office portraits with a trade object on the wall, era clothing, lifted deep skin tones and unique names in the extras sample.
-
-### Fixed
-
-- Buying and selling shares with the outside market no longer makes shares up or loses cash. A trade
-  with outside investors now runs against investors who really hold the company or have the money, a
-  company's unused buy order returns to its cash instead of locking it a second time, a company that sells
-  shares books the right cost, and a company that already holds shares in another can buy more of it (the
-  check against ownership loops pointed the wrong way).
-- Public works contracts are now a fair fight and not a money tap. Rival bids sit near the real
-  cost plus a normal margin of 8 to 11 percent (they used to add 10 to 22), every firm with a plant
-  can bid, firms that keep their books in another currency can win in Europe, and the works run over
-  the estimate by 0 to 8 percent that nobody sees until the bill, so the lowest bidder often finds
-  the job cost more than it thought. The state pays as the work progresses, not in lumps a quarter.
-  A contractor now clears about 2 to 3 percent on a job, not 12 to 15.
-- The state treasury no longer piles up money for ever. It aims to hold thirteen weeks of its
-  income. When it holds more it spends more, opens public works twice as often and takes less tax
-  from wages (down to 8 percent from 20); when it holds less it cuts back, opens no new works and
-  takes a little more (up to 22). A three-year treasury used to end at about thirteen times where
-  it began; it now wanders between one and a quarter and five times, with deficits as well as surpluses.
-- Share prices now open where they trade a quarter later. They used to open at about half of what
-  the companies' earnings supported and double in the first year in every scenario, which made
-  everything look like a bargain. The first-year rise is now near zero to ten percent.
-- Rivals only give campaign money out of what they earned that quarter, so a gift no longer tips
-  a firm into a losing quarter (the first-year losing share is back where it was before politics).
+- Rivals can now plan a takeover over several quarters. A rival with a raider, financier or
+  integrator for a chief picks a company that trades under what it is worth, buys its shares on the
+  exchange a little each week (never more than half of what the market can fill, and never at more
+  than 2 percent over the price), and tells the world when it passes 5 percent: a story in the paper and
+  a letter to you if it is your company. If the price runs away, the campaign drags on past a year and a
+  half, the rival's cash runs short or someone else takes control, it gives up and sells. Otherwise,
+  at a quarter of the votes, it launches an ordinary takeover bid. You can answer with the tools you
+  already have: buy back shares, find a friendly buyer, issue shares, or raise guidance so the price
+  runs past the rival's limit. There is no poison pill yet. Rival dossiers say what the rival is likely
+  to do next, from its public stake and open bids only. The company page and the dossier of the target list
+  every stake of 5 percent or more with a small line of how it grew, and the weekly brief warns you when a
+  stake in your company grows.
+- Workers move between regions for pay and jobs, a few percent a year at most, less with distance
+  and across state lines, and their households and their spending move with them, so demand follows
+  the work. Region dossiers show how many workers moved in or out over the year and week by week.
 - Pick your own chief executive when you start a game: one of six faces from the portrait kit, one
   for each temperament, a name of your own if you like, and a line on how that temperament runs a
   company. They sit behind the desk in the CEO Office, in place of a borrowed face, and are saved with
@@ -453,6 +401,83 @@ heading.
   moment later, and the pixel font, buttons and sliders are warmed behind the main menu, so the
   first time you open a division no longer catches.
 - Roads on raised tiles now sit on the tile they cross instead of floating at one shared height.
+
+### Changed
+
+- Tooling: every change to the Android app now starts the trimmed release build on an emulator in
+  CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
+  so a trimming mistake fails the check and not a phone.
+- A smaller Windows and Linux download. The desktop game now ships without a large icon library
+  it never used and with the unused parts of the screen toolkit trimmed away, so the Linux
+  package drops from about 109 MB to about 63 MB. The Windows setup program also squeezes its
+  files harder. The game looks and plays the same, and it reaches the main menu in the same
+  time as before.
+- Smaller downloads and a quicker start. The Android download is much smaller because the app
+  is now trimmed of code it never uses and the direct download carries only the phone version
+  of the game engine (the Play Store bundle already delivered just the right one). The game
+  engine files are about a third smaller on every platform, and the Windows and Linux apps
+  carry a leaner Java runtime and remember what they loaded last time, so they open sooner
+  after the first run. Nothing about the game changes: saves, results and the pictures are the
+  same. Setting CW_STARTUP_TIMELINE prints how long each step of starting takes.
+- The map is easier to read when you zoom in close. Rival companies' plants now show in their
+  industry's colour with a dark roof and are about 60 percent of the size of yours, while your
+  own are full size with a gold roof and the plant count on top. Cities no longer look like
+  identical grey blocks: ports have cranes and stacked containers, steel towns have tall stacks,
+  car towns have a long assembly shed, and the rest stay as towers. Town and city names are in
+  plain sentence case in one weight, and only region names keep the spaced capital letters. Names
+  no longer overlap each other or sit on top of a building: when two compete, the region name
+  gives way to the city name, and the city name to your own plant badge, and a name that is
+  showing stays put instead of blinking while you pan. Trucks, trains and ships keep at least two
+  vehicle lengths apart, so a busy road looks busy without becoming one unbroken line, and they
+  carry their owner's colour: gold for yours, the industry colour for a rival's, grey for outside
+  carriers. On the desktop app the buildings and names are now drawn in the background like the
+  ground, so panning and zooming close in stays smooth.
+- Saves from the earlier 1.9 previews carry on without chapter goals until the next chapter starts, and
+  the goal list and achievements are saved with the career. The save format number does not change.
+- Saves written by this version cannot be opened by older versions of the game. Careers saved in
+  1.8.0 and the earlier 1.9 previews open as normal, carry on without scenario history (their
+  dates are not invented backwards) and are saved in the new format from then on.
+- The map is much smoother on Windows and Linux, most of all on big screens. The ground, the day and
+  night shading, the clouds and the menu globe are now painted ahead of time in the background, and
+  while you drag or zoom the game slides the last finished picture into place instead of redrawing it,
+  so moving the map no longer waits on drawing. A fresh picture replaces it a moment later.
+- A new install with no graphics choice saved starts on Medium when the window is large or the
+  computer is drawing in software, so the first look is smooth. Your own choice is never changed.
+- Tooling: a 1.9 cast proposal, not wired into the game. `content/cast-1.9.json` lists 40 fictional people (ten per scenario, with voice notes), `tools/cast_portraits_v2.py` draws 32 by 32 busts with neutral, pleased and displeased expressions, a derived 16 by 16 version, 64 by 64 office portraits for chief executives and a larger extras kit, written to `apple/Resources/cast-portraits-v2.json`. Awaiting owner approval of the roster and portraits. Second pass: clearer pleased and displeased faces, seven head shapes with varied noses, eye spacing, ears and necks, softer women's faces with jewellery, repainted 64 by 64 office portraits with a trade object on the wall, era clothing, lifted deep skin tones and unique names in the extras sample.
+
+### Fixed
+
+- Your own share orders now cost what they fill and no more. A buy order used to take your cash when
+  you placed it and then charge the price again when it filled, and the unused part of your limit was
+  never given back; now the cash is held once, the fill spends it, and whatever is left (a price under
+  your limit, a part fill, a cancelled order) returns to you straight away. Sales always paid once.
+- On a computer, the space bar, N and the 1, 2 and 3 keys no longer play, step or speed up the game while
+  you are typing in a text box, and Enter or Space on a focused button now presses that button instead
+  of also running the shortcut. Tab now goes through the sidebar first, then the page from top to bottom.
+- With large text on a phone (130 percent), the bottom bar no longer breaks "Portfolio" in two, the
+  Markets tabs stay on one line, the economy summary wraps inside its card, and the Research level
+  header and its "what the next level buys" numbers no longer clip or break.
+- Buying and selling shares with the outside market no longer makes shares up or loses cash. A trade
+  with outside investors now runs against investors who really hold the company or have the money, a
+  company's unused buy order returns to its cash instead of locking it a second time, a company that sells
+  shares books the right cost, and a company that already holds shares in another can buy more of it (the
+  check against ownership loops pointed the wrong way).
+- Public works contracts are now a fair fight and not a money tap. Rival bids sit near the real
+  cost plus a normal margin of 8 to 11 percent (they used to add 10 to 22), every firm with a plant
+  can bid, firms that keep their books in another currency can win in Europe, and the works run over
+  the estimate by 0 to 8 percent that nobody sees until the bill, so the lowest bidder often finds
+  the job cost more than it thought. The state pays as the work progresses, not in lumps a quarter.
+  A contractor now clears about 2 to 3 percent on a job, not 12 to 15.
+- The state treasury no longer piles up money for ever. It aims to hold thirteen weeks of its
+  income. When it holds more it spends more, opens public works twice as often and takes less tax
+  from wages (down to 8 percent from 20); when it holds less it cuts back, opens no new works and
+  takes a little more (up to 22). A three-year treasury used to end at about thirteen times where
+  it began; it now wanders between one and a quarter and five times, with deficits as well as surpluses.
+- Share prices now open where they trade a quarter later. They used to open at about half of what
+  the companies' earnings supported and double in the first year in every scenario, which made
+  everything look like a bargain. The first-year rise is now near zero to ten percent.
+- Rivals only give campaign money out of what they earned that quarter, so a gift no longer tips
+  a firm into a losing quarter (the first-year losing share is back where it was before politics).
 
 ## [1.8.0] - 2026-10-29
 

@@ -608,6 +608,6 @@ internal fun ChiefPicker(
         name, onName,
         label = { Text("Name (blank keeps ${current.name})") },
         singleLine = true,
-        modifier = Modifier.widthIn(max = 360.dp),
+        modifier = Modifier.textEntry().widthIn(max = 360.dp),
     )
 }
