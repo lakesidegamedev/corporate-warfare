@@ -320,6 +320,7 @@ fun TickerBar(store: GameStore, modifier: Modifier = Modifier, onOpen: () -> Uni
     var headlines by remember { mutableStateOf<List<String>>(emptyList()) }
     LaunchedEffect(revision, live) {
         if (live) headlines = store.read { it.ticker() } ?: headlines
+        headlines.firstOrNull()?.let { store.headline = it }
     }
     val animate = LocalAppSettings.current?.animations != false
     var shown by remember { mutableStateOf(0) }

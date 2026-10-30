@@ -35,6 +35,8 @@ cp apple/Resources/pixel-icons.json "$OUT/resources/"
 cp apple/Resources/pixel-icons.json "$OUT/desktop/"
 cp apple/Resources/cast-portraits.json "$OUT/resources/"
 cp apple/Resources/cast-portraits.json "$OUT/desktop/"
+cp apple/Resources/office-room.json "$OUT/resources/"
+cp apple/Resources/office-room.json "$OUT/desktop/"
 # The desktop GPU map reads its baked terrain and city outlines from the same folder.
 cp crates/cw-render/assets/*.cwh crates/cw-render/assets/urban-*.json "$OUT/desktop/"
 

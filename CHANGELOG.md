@@ -13,6 +13,20 @@ heading.
 
 ### Added
 
+- The CEO Office is now a room you can walk around. At the top of the screen is a pixel-art boardroom
+  with the things that matter standing on the furniture. Your chief executive sits behind the desk,
+  smiling when the quarter made money and frowning when it lost it, with a name plate. The window
+  shows the map around your headquarters. A wall chart shows this quarter's profit with a small
+  line, the phone blinks red when letters are waiting, and the newspaper on the side table shows
+  today's headline. The board sits behind its table with the goal it set you standing on a card,
+  three chairs hold your executives (or an empty chair that says Hire), the safe shows your cash,
+  the trophy shelf fills as you earn achievements, the weekly brief is a memo on the desk, and a
+  door leads to Research. Tap any of them to open the screen it belongs to. Hover over an object, or
+  press and hold it on a phone or tablet, to see what it is called. Screen readers read out every
+  object with its figure. If you have Reduce Motion on, the phone's light stays on instead of
+  blinking. Everything the CEO Office showed before is still there, below the room on a phone and
+  to the right of it on a computer.
+
 - A new map for the Windows and Linux game, as an opt-in preview. In Settings, under Graphics, turn
   on "New map (preview)" (it starts Off). The map is then drawn on your graphics card in the new
   stylized look: terrain, lakes, roads, rails, cities, and your plants and your rivals' plants as
