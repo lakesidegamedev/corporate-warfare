@@ -362,13 +362,14 @@ fun WorldMapView(
                 val freight = layer == MapLayer.Freight
                 val week = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28
                 val economy = store.economy?.phase
+                val settlement = store.boards.associate { it.code to it.migrationBps }
                 val plants = store.mapPlants
                 val seconds = cloudTick
                 val flat = graphics.copy(showFps = false)
                 val paintGround: DrawScope.(MapGeometryCache) -> Unit = { geo ->
                     drawWorldMap(
                         map, cam, tint, shaded, selected, store.mapDivisions, measurer, lanes = lanes, freightLayer = freight, pickedLane = pickedLane,
-                        geometry = geo, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Ground, week = week, economyPhase = economy,
+                        geometry = geo, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Ground, week = week, economyPhase = economy, settlement = settlement,
                     )
                 }
                 val paintClouds: DrawScope.(MapGeometryCache) -> Unit = { geo ->
@@ -408,7 +409,7 @@ fun WorldMapView(
                 }
                 // Slow clocks (the sun, the week) wait out a gap before a rebake; a change of camera never waits.
                 val frame = MapLayerSet.Frame(
-                    ground = MapLayerSet.PartSpec(listOf(tint, shaded, selected, lanes, freight, pickedLane, flat, sun, heights, week, economy), 400, paintGround),
+                    ground = MapLayerSet.PartSpec(listOf(tint, shaded, selected, lanes, freight, pickedLane, flat, sun, heights, week, economy, settlement), 400, paintGround),
                     clouds = if (graphics.clouds > 0 && !freight) MapLayerSet.PartSpec(listOf(seconds, graphics.clouds, graphics.lighting > 0, sun), 500, paintClouds) else null,
                     structures = MapLayerSet.PartSpec(listOf(layer, shaded, selected, store.mapDivisions, plants, economy, acquired, flat, sun, heights, week), 400, paintStructures),
                     traffic = traffic, effects = effects,
@@ -557,6 +558,7 @@ internal fun DrawScope.drawWorldMap(
     plants: List<uniffi.cw_ffi.MapPlantDto> = emptyList(),
     week: Int = 28,
     economyPhase: String? = null,
+    settlement: Map<String, Int> = emptyMap(),
     acquired: Set<String> = emptySet(),
     labels: LabelPlanner = LabelPlanner(),
 ) {
@@ -717,7 +719,7 @@ internal fun DrawScope.drawWorldMap(
         // painted with the ground, which is baked, and not with the buildings that stand on it.
         if (cam.zoom > 3 && graphics.countryside && graphics.buildings >= 2 && graphics.earth && g.closeUp && t > 0.5) {
             val unit = (1.2f * g.scale * density).coerceIn(1.4f, 7f)
-            with(Countryside) { drawCountryside(p, map, week, unit * 0.6f, { plinth }, economyPhase) }
+            with(Countryside) { drawCountryside(p, map, week, unit * 0.6f, { plinth }, economyPhase, settlement = settlement) }
         }
     }
     MapProfiler.mark("lanes")

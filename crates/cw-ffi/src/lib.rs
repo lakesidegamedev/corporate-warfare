@@ -915,6 +915,10 @@ pub struct RegionBoardDto {
     pub crime_bps: i32,
     pub cost_of_living_bps: i32,
     pub organisation_bps: i32,
+    /// Net people who moved into the region over the last 52 weeks (negative: moved out).
+    pub net_migration_year: i64,
+    /// That net movement as basis points of the region's people now, for the map's houses.
+    pub migration_bps: i32,
     pub room: Vec<RoomDto>,
     /// Every sector type with operators or unmet imports here.
     pub sectors: Vec<SectorCellDto>,
@@ -2723,6 +2727,18 @@ impl SessionHandle {
                 }
                 let state = dataset.state_of(index as u8);
                 let c = region.conditions;
+                let net_migration_year = world.plans.migration.net_over(index, 52);
+                let people: i64 = world
+                    .regions
+                    .get(index)
+                    .map(|r| r.labour.iter().map(|t| t.population).sum())
+                    .unwrap_or(0);
+                let migration_bps = if people > 0 {
+                    (net_migration_year as i128 * 10_000 / people as i128).clamp(-10_000, 10_000)
+                        as i32
+                } else {
+                    0
+                };
                 RegionBoardDto {
                     index: index as u32,
                     code: region.code.clone(),
@@ -2746,6 +2762,8 @@ impl SessionHandle {
                         .get(index)
                         .map(|r| r.organisation_bps)
                         .unwrap_or(region.opening_organisation_bps),
+                    net_migration_year,
+                    migration_bps,
                     room,
                     sectors: cells,
                     storage: own

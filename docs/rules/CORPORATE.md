@@ -589,6 +589,21 @@ raises the mark, which can push the price past the rival's limit). **There is no
 board has no rule that blocks or dilutes one holder: it seats five by vote share and approves large
 issues and mergers, nothing more. Adding one is left for a later pass.
 
+**White knight.** Once a rival's stake in an AI company has crossed the 5 percent line (so it is
+public) and the plan is not selling out, one friendly AI firm may step in. A friend is a firm in the
+target's group, or one with an alliance with it of at least 1,000 that is stronger than its tie to the
+raider, no live grudge against the target, not in the raider's group, with no plan of its own, and
+with cash over its reserve. Of the friends, the same group comes first, then the strongest tie, then
+the lowest handle: no random draw, and only that firm acts. It uses commands any firm has. If its spare
+cash covers escrow and the diligence fee for a majority, it opens a friendly deal (`StartDiligence`,
+a share purchase at 130 percent of the higher of mark and fair estimate, so it is not hostile) and
+waits for the answer; it tries again no sooner than 26 weeks after that offer started. Otherwise it
+buys a blocking stake on the exchange (`PlaceShareOrder`, at most half the weekly float a step, bid at
+most 2 percent over the mark) up to 5 points above the raider's stake, never above 35 percent. If a
+friendly deal settles, the knight holds a majority and the plan ends as above (another holder takes
+control). It never acts for the player's company: the player answers for it. The knight leaves no
+saved field of its own; it is read from the plans, the alliances and the books each week.
+
 **What others see.** A rival's dossier shows "Likely next move", from what is filed and public:
 an open bid, a stake on file and the way it moved over 13 weeks, or a campaign that just ended;
 never the plan's stage or the rival's reasons. The weekly brief says when a disclosed stake in your

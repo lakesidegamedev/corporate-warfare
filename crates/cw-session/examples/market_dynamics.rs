@@ -73,6 +73,9 @@ fn main() {
     let mut outside: BTreeMap<u32, i64> = BTreeMap::new();
     // Bids for control over all seeds: started, and of those settled (the bidder took control).
     let (mut hostile_started, mut hostile_settled) = (0i64, 0i64);
+    // Long plans over all seeds: opened, disclosed, tenders launched, won, abandoned, and of the
+    // ended plans those another holder (a friendly firm) took out of the raider's hands.
+    let mut plan_totals = [0i64; 6];
     for seed in 1..=seeds {
         let mut hostile_seen: std::collections::BTreeSet<u64> = Default::default();
         let mut hostile_done: std::collections::BTreeSet<u64> = Default::default();
@@ -104,6 +107,22 @@ fn main() {
             }
             let world = &session.world;
             let dataset = &session.dataset;
+            if week == weeks {
+                let st = &world.plans.stats;
+                let controlled = world
+                    .plans
+                    .ended
+                    .iter()
+                    .filter(|e| e.outcome == cw_sim::economy::plans::Outcome::Controlled)
+                    .count();
+                for (slot, v) in [st.opened, st.disclosed, st.tenders, st.won, st.abandoned]
+                    .into_iter()
+                    .enumerate()
+                {
+                    plan_totals[slot] += v as i64;
+                }
+                plan_totals[5] += controlled as i64;
+            }
             // A bid is a share purchase of a company outside the bidder's own group, seen first.
             for (h, deal) in world.deals.iter().filter(|(_, d)| {
                 d.kind == cw_sim::state::DealKind::SharePurchase
@@ -293,6 +312,16 @@ fn main() {
          {hostile_settled} settled; per run per 5 years: {:.2} started, {:.2} settled",
         hostile_started as f64 * 260.0 / (seeds as f64 * weeks.max(1) as f64),
         hostile_settled as f64 * 260.0 / (seeds as f64 * weeks.max(1) as f64),
+    );
+    println!(
+        "long plans over {seeds} runs: opened {}, disclosed {}, tenders {}, won {}, abandoned {}, \
+         ended under a friendly holder's control {}",
+        plan_totals[0],
+        plan_totals[1],
+        plan_totals[2],
+        plan_totals[3],
+        plan_totals[4],
+        plan_totals[5]
     );
     println!(
         "firms losing money over 13 weeks (final year): {}/{} = {}%",

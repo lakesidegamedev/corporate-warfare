@@ -184,6 +184,38 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
             }),
             None => {}
         }
+        // A friendly firm steps in for a target once a raider's stake in it is public.
+        match cw_sim::economy::plans::white_knight(world, handle) {
+            Some(cw_sim::economy::plans::Action::Buy {
+                target,
+                qty,
+                limit_cents,
+            }) => proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::PlaceShareOrder {
+                    investor: false,
+                    firm: target,
+                    buy: true,
+                    qty,
+                    limit_price_cents: limit_cents,
+                },
+            }),
+            Some(cw_sim::economy::plans::Action::Tender {
+                target,
+                price_cents,
+                shares,
+            }) => proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::StartDiligence {
+                    buyer: handle,
+                    target,
+                    kind: cw_sim::state::DealKind::SharePurchase,
+                    price_cents,
+                    max_shares: shares,
+                },
+            }),
+            _ => {}
+        }
         if let Some(qty) = cw_sim::economy::plans::rival_defence(world, handle) {
             proposals.push(Proposal {
                 actor: handle.0,
