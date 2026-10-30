@@ -705,4 +705,24 @@ mod tests {
         assert!(grid > 0, "no point of the view picks a region");
         eprintln!("centre pick: {hit:?}, render {:.1} ms copy {:.1} ms", t.render_ms, t.copy_ms);
     }
+
+    #[test]
+    fn the_game_camera_over_great_lakes_draws_land() {
+        let dir = assets();
+        let Ok(map) = GpuMap::open(&dir, "great-lakes-2000") else {
+            eprintln!("skipping, no usable adapter");
+            return;
+        };
+        let (w, h) = (320u32, 200u32);
+        let mut out = vec![0u8; (w * h * 4) as usize];
+        let cam = [-81.6846, 42.34405, 2330.0, 0.0, 0.0, 28.0];
+        map.render(cam, w, h, 1, &mut out);
+        let at = |x: usize, y: usize| out[(y * w as usize + x) * 4..][..3].to_vec();
+        let land = out.chunks_exact(4).filter(|p| p[..3] != [0x0b, 0x16, 0x22]).count();
+        eprintln!("centre {:?} corner {:?} non-clear {land}", at(160, 100), at(5, 5));
+        assert!(land > (w * h) as usize / 2, "most of the view is the clear colour");
+        let hits = (0..10).flat_map(|gy| (0..16).filter_map(move |gx| Some((gx, gy)))).filter(|(gx, gy)| map.pick(cam, w as f32, h as f32, *gx as f32 * 20.0 + 10.0, *gy as f32 * 20.0 + 10.0).is_some()).count();
+        eprintln!("great lakes grid picks {hits}");
+        assert!(hits > 0);
+    }
 }

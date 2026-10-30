@@ -64,7 +64,9 @@ class GpuMapRenderTest {
                     // The full-size frame follows the quick one once the view has settled.
                     while ((session.version < before + 1 || session.frame?.width != 1280) && System.currentTimeMillis() < deadline) Thread.sleep(50)
                     val frame = assertNotNull(session.frame, "$id $view: a frame was drawn")
-                    println("DEBUG $id $view camera=$gc view=${frame.width}x${frame.height} centre=${Integer.toHexString(frame.asSkiaBitmap().getColor(frame.width / 2, frame.height / 2))} corner=${Integer.toHexString(frame.asSkiaBitmap().getColor(5, 5))} line=${gpuMapLine(true, session)}")
+                    println("view $id $view camera=$gc view=${frame.width}x${frame.height} centre=${Integer.toHexString(frame.asSkiaBitmap().getColor(frame.width / 2, frame.height / 2))} corner=${Integer.toHexString(frame.asSkiaBitmap().getColor(5, 5))} line=${gpuMapLine(true, session)}")
+                    // The frame is not the clear colour: the camera really sees the map (a flat view once drew nothing).
+                    assertTrue(frame.asSkiaBitmap().getColor(frame.width / 2, frame.height / 2) != 0xFF0B1622.toInt(), "$id $view: the middle of the frame is empty")
                     table.append("| $id | $view | ${frame.width}x${frame.height} | ${"%.1f".format(session.renderMs)} | ${"%.1f".format(session.copyMs)} |\n")
                     val scene = ImageComposeScene(1280, 800, Density(1f)) {
                         val measurer = rememberTextMeasurer()

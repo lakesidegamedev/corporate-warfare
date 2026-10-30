@@ -63,7 +63,8 @@ impl Camera {
         let fov = self.fov_deg.to_radians();
         let hfov_tan = (fov / 2.0).tan() * aspect;
         let dist = (self.width_km / 2.0) / hfov_tan;
-        let (tilt, head) = (self.tilt_deg.to_radians(), self.heading_deg.to_radians());
+        // A flat top-down view (tilt 0) has no screen-up for the look-at, so it is held a degree off.
+        let (tilt, head) = (self.tilt_deg.max(1.0).to_radians(), self.heading_deg.to_radians());
         // The camera looks along `fwd` on the ground; it sits behind and above the target.
         let fwd = Vec3::new(head.sin(), head.cos(), 0.0);
         let target = Vec3::new(target_xy.0, target_xy.1, ground_z);
