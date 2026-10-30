@@ -558,16 +558,19 @@ impl Ledger {
         if cutoff == 0 {
             return;
         }
-        // Postings are appended in week order, so what falls out of the window is a prefix.
-        let split = self
+        // Postings are appended in week order, so what falls out of the window is a prefix. The
+        // slow path below gives the same journal and hash for any order; this is only the fast
+        // one, taken when the weeks never go backwards.
+        let ordered = self
             .journal
-            .partition_point(|posting| posting.week.0 < cutoff);
-        let ordered = self.journal[..split]
-            .iter()
-            .all(|posting| posting.week.0 < cutoff)
-            && self.journal[split..]
-                .iter()
-                .all(|posting| posting.week.0 >= cutoff);
+            .windows(2)
+            .all(|pair| pair[0].week.0 <= pair[1].week.0);
+        let split = if ordered {
+            self.journal
+                .partition_point(|posting| posting.week.0 < cutoff)
+        } else {
+            0
+        };
         let mut hasher = CanonicalHasher::new(DOMAIN_STATE);
         let mut pruned = 0u64;
         let fold = |posting: &Posting, hasher: &mut CanonicalHasher| {

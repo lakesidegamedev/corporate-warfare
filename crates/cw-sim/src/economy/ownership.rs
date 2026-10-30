@@ -46,11 +46,9 @@ pub fn controlled_group(world: &World, root: Handle) -> Vec<Handle> {
 /// The ultimate controller above a firm, walking immediate firm controllers to the top.
 pub fn ultimate_controller(world: &World, firm: Handle) -> Option<HolderId> {
     let mut current = firm;
-    let mut seen = BTreeSet::new();
-    loop {
-        if !seen.insert(current) {
-            return None;
-        }
+    // A chain of distinct firms is never longer than the firm count, so a longer walk is a cycle.
+    // Counting steps avoids building a set of visited firms on every call.
+    for _ in 0..=world.firms.len() {
         let controller = world.firms.get(current)?.shares.controller()?;
         match controller {
             HolderId::Firm(parent) if parent != current => current = parent,
@@ -58,6 +56,7 @@ pub fn ultimate_controller(world: &World, firm: Handle) -> Option<HolderId> {
             other => return Some(other),
         }
     }
+    None
 }
 
 /// True when two firms share the same ultimate controller. The investor's controlled firms are
