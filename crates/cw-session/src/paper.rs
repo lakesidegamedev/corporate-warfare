@@ -428,6 +428,7 @@ fn collect(world: &World, dataset: &Dataset, week: u32) -> Vec<Candidate> {
     politics(world, week, &mut found);
     distress(world, week, &mut found);
     results(world, dataset, week, &mut found);
+    earnings_season(world, dataset, week, &mut found);
     executives(world, dataset, week, &mut found);
     found
 }
@@ -1162,6 +1163,82 @@ fn results(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>
         9,
         revenue.abs(),
     ));
+}
+
+/// How many results days of a window make the paper: the biggest surprises, and your own.
+const EARNINGS_STORIES: usize = 2;
+
+/// A share price move in plain words: "6.2 percent".
+fn move_text(bps: i64) -> String {
+    let b = bps.abs();
+    format!("{}.{} percent", b / 100, b % 100 / 10)
+}
+
+/// Results days: the companies that surprised the analysts by the most, and the player's own.
+fn earnings_season(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) {
+    let mut reports: Vec<&cw_sim::economy::earnings::Report> = world
+        .earnings
+        .log
+        .iter()
+        .filter(|r| in_window(r.week, week) && r.move_bps != 0)
+        .collect();
+    reports.sort_by(|a, b| {
+        b.surprise_bps
+            .abs()
+            .cmp(&a.surprise_bps.abs())
+            .then(a.firm.cmp(&b.firm))
+    });
+    let mut kept = 0;
+    for r in reports {
+        let yours = player_side(world, r.firm);
+        if !yours {
+            if kept >= EARNINGS_STORIES {
+                continue;
+            }
+            kept += 1;
+        }
+        let Some(name) = firm_name(world, r.firm) else {
+            continue;
+        };
+        let beat = r.actual_cents >= r.estimate_cents;
+        let up = r.move_bps > 0;
+        let headline = match (beat, up) {
+            (true, true) => format!("{name} beats forecasts, shares rise"),
+            (true, false) => format!("{name} beats forecasts, shares slip"),
+            (false, false) => format!("{name} misses forecasts, shares fall"),
+            (false, true) => format!("{name} misses forecasts, shares rise"),
+        };
+        let mut body = format!(
+            "{name} made {} in operating profit for the quarter against the {} analysts expected. Its shares {} {}.",
+            money(world, dataset, r.firm, r.actual_cents),
+            money(world, dataset, r.firm, r.estimate_cents),
+            if up { "rose" } else { "fell" },
+            move_text(r.move_bps as i64),
+        );
+        match r.guidance_met {
+            Some(true) => body.push_str(" Management met its own guidance."),
+            Some(false) => body.push_str(" Management missed its own guidance."),
+            None => {}
+        }
+        if r.streak.abs() >= 2 {
+            body.push_str(&format!(
+                " It is {} quarters in a row {} the forecast.",
+                r.streak.abs(),
+                if r.streak > 0 { "above" } else { "below" }
+            ));
+        }
+        out.push(candidate(
+            format!("earnings:{}:{}", r.week, r.firm.0),
+            r.week,
+            &headline,
+            body,
+            "Markets desk",
+            PaperLink::company(r.firm),
+            yours,
+            if yours { 8 } else { 6 },
+            r.surprise_bps.abs() as i64,
+        ));
+    }
 }
 
 fn markets(world: &World, dataset: &Dataset, week: u32) -> Markets {

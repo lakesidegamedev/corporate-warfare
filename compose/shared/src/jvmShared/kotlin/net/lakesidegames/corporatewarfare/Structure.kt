@@ -31,6 +31,8 @@ private fun reasonText(key: String) = when (key) {
     "missed_goals" -> "the board missed its goals twice running"
     "squeeze" -> "pricing inside the group is taking value from minority holders"
     "dividend_cut" -> "the dividend stopped while the company can afford it"
+    "missed_guidance" -> "management missed the profit range it gave the analysts"
+    "overvalued" -> "the share price is far above what the business is worth"
     else -> key
 }
 

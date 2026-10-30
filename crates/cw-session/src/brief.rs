@@ -51,7 +51,7 @@ pub struct BriefChange {
 /// One decision or deadline.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BriefDue {
-    /// card, mandate_offer, mandate, loan or bid.
+    /// card, mandate_offer, mandate, loan, bid or results.
     pub kind: String,
     pub text: String,
     /// Whole weeks until it falls due; zero means this week.
@@ -334,6 +334,35 @@ fn due(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefDue> {
                 weeks_left: 1,
             });
         }
+    }
+
+    if let Some(fe) = world.earnings.firms.get(&firm)
+        && let Some(estimate) = fe.estimate.as_ref()
+        && estimate.due >= now
+        && cw_sim::economy::earnings::covered(world, firm)
+    {
+        let weeks = estimate.due - now;
+        let when = match weeks {
+            0 => "Results today".to_owned(),
+            1 => "Results in 1 week".to_owned(),
+            n => format!("Results in {n} weeks"),
+        };
+        let guided = match &fe.guidance {
+            Some(g) => format!(
+                ", you guided {} to {}",
+                paper::money(world, dataset, firm, g.low_cents),
+                paper::money(world, dataset, firm, g.high_cents)
+            ),
+            None => String::new(),
+        };
+        out.push(BriefDue {
+            kind: "results".to_owned(),
+            text: format!(
+                "{when}: analysts expect {}{guided}",
+                paper::money(world, dataset, firm, estimate.cents)
+            ),
+            weeks_left: weeks,
+        });
     }
 
     for (_, deal) in world.deals.iter() {

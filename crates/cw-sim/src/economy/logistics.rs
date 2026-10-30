@@ -2157,6 +2157,22 @@ pub struct HotLane {
     pub rate_cents: i64,
 }
 
+/// A carrier plant that moves less than this share of its capacity (basis points of lot-km) in a
+/// week is idle capacity: its owner cannot cover wages and upkeep from the freight it gets.
+pub const CARRIER_MIN_FILL_BPS: i64 = 2_500;
+
+/// Share of its capacity, in basis points, that a carrier plant moved in the week just closed.
+/// None for a plant that is not a carrier running now.
+pub fn carrier_fill_bps(world: &World, facility: Handle) -> Option<i64> {
+    let carrier = world
+        .logistics
+        .carriers
+        .iter()
+        .find(|c| c.facility == facility)?;
+    let capacity = carrier.cap as i64 * REF_KM;
+    (capacity > 0).then(|| carrier.used_lot_km * 10_000 / capacity)
+}
+
 /// Lanes worth adding capacity to, as closed last week, busiest outside overflow first.
 pub fn hot_lanes(world: &World, ds: &Dataset) -> Vec<HotLane> {
     let st = &world.logistics;

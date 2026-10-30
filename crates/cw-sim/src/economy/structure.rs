@@ -118,6 +118,10 @@ pub enum Reason {
     MissedGoals,
     Squeeze,
     DividendCut,
+    /// A guidance range given to the analysts was missed (1.9, `earnings.rs`).
+    MissedGuidance,
+    /// The price sits far above value: an activist short campaign (1.9, `earnings.rs`).
+    Overvalued,
 }
 
 impl Reason {
@@ -127,6 +131,8 @@ impl Reason {
             Reason::MissedGoals => "missed_goals",
             Reason::Squeeze => "squeeze",
             Reason::DividendCut => "dividend_cut",
+            Reason::MissedGuidance => "missed_guidance",
+            Reason::Overvalued => "overvalued",
         }
     }
 }
@@ -2405,6 +2411,14 @@ fn grievance(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Reason, 
             consider(Reason::MissedGoals, 6_500, 0);
         }
     }
+    // A guidance range missed on the last results day.
+    if let Some(j) = world.earnings.guidance_grievance(firm, world.tick.0) {
+        consider(Reason::MissedGuidance, j, 0);
+    }
+    // A price far above value draws a short campaign.
+    if let Some(j) = crate::economy::earnings::overvalued_case(world, firm) {
+        consider(Reason::Overvalued, j, 0);
+    }
     // Pricing inside the group at the expense of minority holders.
     let squeeze_year = world.structure.squeeze.get(&firm).copied().unwrap_or(0);
     let equity = f.valuation.equity_cents.max(1);
@@ -2450,7 +2464,11 @@ fn pick_demand(world: &World, dataset: &Dataset, firm: Handle, reason: Reason) -
         Reason::Squeeze => Demand::Restitution,
         Reason::DividendCut => Demand::Dividend,
         Reason::FallingPrice if can_divest => Demand::Divest,
-        Reason::FallingPrice | Reason::MissedGoals => {
+        Reason::Overvalued if can_divest => Demand::Divest,
+        Reason::FallingPrice
+        | Reason::MissedGoals
+        | Reason::MissedGuidance
+        | Reason::Overvalued => {
             if player_run(world, firm) {
                 Demand::Dividend
             } else {
@@ -2529,6 +2547,10 @@ fn open_campaign(
     let tick = world.tick.0;
     world.structure.last_activist.insert(firm, tick);
     world.structure.stats.activist_events += 1;
+    if reason == Reason::Overvalued {
+        // The short seller's report lands with the campaign: prices only, bounded.
+        crate::economy::earnings::short_hit(world, firm, justification_bps);
+    }
     world.structure.campaigns.push(Campaign {
         id,
         target: firm,

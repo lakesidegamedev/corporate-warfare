@@ -237,6 +237,11 @@ final class AppStore: ObservableObject {
         return await submit(CommandJSON.command("ChooseMandate", ["firm": firm, "pick": pick]))
     }
 
+    /// Tell the analysts what operating profit to expect this quarter, in cents.
+    func giveGuidance(firm: UInt64, lowCents: Int64, highCents: Int64) async -> CommandRejection? {
+        await submit(CommandJSON.command("GiveGuidance", ["firm": firm, "low_cents": lowCents, "high_cents": highCents]))
+    }
+
     func restoreLatestIfAvailable() async {
         saves = saveManager.list()
         guard let latest = saves.first else { return }

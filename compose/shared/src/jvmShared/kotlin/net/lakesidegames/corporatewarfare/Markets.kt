@@ -161,6 +161,8 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
                     Column(Modifier.weight(1f)) {
                         Text(line.name + if (line.controlledByYou) " ★" else "", color = Palette.primaryText, fontWeight = FontWeight.Medium, maxLines = 1)
                         Text("${Sectors.name(line.industry)} · cap ${Format.compact(line.marketCapCents)}", color = Palette.secondary, fontSize = 11.sp, maxLines = 1)
+                        // Companies reporting results this week are marked on the board.
+                        if (line.earnings.reportsThisWeek) Text("Reports this week · analysts: ${ratingText(line.earnings.rating)}", color = Palette.gold, fontSize = 11.sp, maxLines = 1)
                     }
                     Sparkline(line.historyCents, changeTint(line.changeQuarterBps), Modifier.width(54.dp).height(22.dp))
                     Spacer(Modifier.width(8.dp))
@@ -319,6 +321,7 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
                     ),
                 )
                 StockHistoryChart(store, line.firm)
+                EarningsSection(line.earnings, null)
                 DossierSection(store, line.firm)
                 if (showPage) TextButton(onClick = { page = true }) { Text("Open company page") }
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {

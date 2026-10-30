@@ -119,7 +119,14 @@ permits asset sale, equity raise or approved rescheduling. After grace, enter re
 secured claims paid from collateral, administrative/payroll claims next, unsecured
 including deposits/bonds proportionately next, equity residual last. No assets distributed
 before claim resolution. Restructuring offers creditors 50 percent principal repayment
-with four-quarter schedule; accept only if estimated liquidation recovery is lower.
+with four-quarter schedule; accept only if estimated liquidation recovery is lower, and only
+against a plan: every operating plant that does not pay its way at reference prices is mothballed
+(output sold less inputs, payroll at the firm's own wages, upkeep and land; a carrier plant is
+judged on whether it moves a quarter of its capacity, a terminal is not judged alone), so the firm
+returns after its year with a smaller cost base. A firm whose judged plants all lose money has no
+plan and is liquidated; the player's request to restructure is refused for the same reason. The
+firm stays in restructuring for its full 52 weeks: a bill it defers meanwhile joins its overdue
+payables and does not turn the plan back into a four-week grace and a second haircut.
 Otherwise liquidate assets at 40 percent carrying value through finite outside buyer
 funds. Insufficient buyers delay sale, never mint cash. Parent guarantee shortfalls become
 claims against guarantor up to the contracted cap. No implied guarantee for siblings.
@@ -462,6 +469,48 @@ by its temperament after four weeks. A fight is won by the activist with probabi
 the case's justification, plus up to 20 percent for its stake, a fifth of the outside float, less
 30 percent of the controller's holding (5 to 90 percent). A win means the full demand plus damages
 of 0.4 percent of equity; a loss costs 0.15 percent in legal fees.
+
+**Earnings season (1.9).** A listed firm is one that is operating, has shares in issue and has at
+least 1 percent of them held outside (not state owned). Each reports once a quarter, on the
+quarter's close (weeks 13, 26, 39 and so on), and the week it reports the analyst writes the
+estimate for the next. The estimate is the quarter just closed (operating profit, EBIT of the
+thirteen closed weeks) plus an eighth of the change from the quarter before (the sim's quarters are
+noisy, so the trend counts for little; at most a quarter of the estimate's scale either way), plus a quarter of the average change of the listed firms in the same
+industry (at most 10 percent of the scale), plus noise of up to 10 percent of the scale drawn from
+the world seed (a stream of its own per firm and week). The scale is the larger of the estimate's
+size and four percent of the firm's market value (about a healthy firm's quarterly operating
+profit), so a near-zero estimate cannot make a huge surprise out of nothing. A firm needs one full quarter of results before it has an estimate.
+
+On results day the surprise is actual less estimate over the scale, bounded to plus or minus 100
+percent. The share price moves 10 percent of itself per 100 percent of surprise. A run of
+quarters surprising the same way adds 15 percent to the move per quarter in the run (up to four,
+and not on a reversal). A miss is damped by management's credibility, up to 40 percent at full
+credibility (10,000). The move is capped at 12 percent either way. It changes the share mark
+only: no cash, share, account or ownership moves, so no money is created or destroyed, and the
+usual price formation then pulls the mark back toward fair value an eighth a week.
+
+**Guidance.** `GiveGuidance(firm, low, high)` (player and rivals, same checks) states a range for the
+quarter's operating profit, once a quarter, before results day. The range must sit within half the
+estimate's scale of the analyst's own number. The estimate moves toward the middle of the range by
+20 percent plus 60 percent of credibility (at most 80), but never by more than 15 percent of the
+scale. On results day, actual at or above the low end meets it: credibility rises by 1,500 (starting
+at 3,000, ceiling 10,000), unless the low end was more than 10 percent of the scale under the
+analyst's own number, which is sandbagging and earns nothing. Under the low end misses it:
+credibility halves, reputation falls by 150 plus a fortieth of the shortfall in basis points (at
+most 400). One small miss is forgiven; a second miss in a row, or one that falls 50 percent of the
+scale or more under the low end, gives the firm a grievance for a quarter that the activists can act on
+(`Reason::MissedGuidance`, justification 5,000 plus 1,500 per miss in a row, at most 9,000), which
+opens a campaign by the usual scan and cooldown. Rival firms guide on their own: the week after their estimate, every fourth
+listed firm in turn, a range of plus or minus 15 percent of the scale around the analyst's number,
+unless profit fell last quarter.
+
+**Ratings and short campaigns.** The analyst rates every listed firm from valuation against price:
+buy when fair value is at least 120 percent of the price, sell when it is at most 83.33 percent
+(the price 20 percent over value), otherwise hold. A firm whose fair value is half the price or
+less (the price twice its value, about one listed firm in a hundred) draws an activist short
+campaign (`Reason::Overvalued`, justification 1.5 times the gap, at most 9,000) through the ordinary
+quarterly scan, player's firm included. The campaign knocks 3 to 8 percent off the mark when it
+opens (prices only), then runs as any other activist campaign.
 
 **Temperament.** Rival decisions here read `structure::temperament`, a table of weights (tax
 shifting, leverage, listing, partnering, resistance) derived from the archetype today. The
