@@ -68,8 +68,6 @@ fn main() {
         "week   firms   market   fair   book(NTA)  EBITDA*4  EV   cash   mark/fair  mark/book"
     );
     for (w, r) in rows {
-        let k = |v: i128| v / 100_000 / 1; // cents -> $k per 1000? keep $k
-        let _ = k;
         let d = |v: i128| v / 100 / 1000;
         println!(
             "{w:>4} {:>6} {:>8} {:>8} {:>9} {:>9} {:>8} {:>8}  {:>6.2}  {:>6.2}",

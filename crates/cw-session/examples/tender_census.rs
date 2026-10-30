@@ -13,7 +13,7 @@ fn main() {
     let seeds: u64 = a.get(2).and_then(|v| v.parse().ok()).unwrap_or(3);
     let weeks: u32 = a.get(3).and_then(|v| v.parse().ok()).unwrap_or(260);
     let (mut opened, mut awarded, mut lapsed, mut done) = (0u32, 0u32, 0u32, 0u32);
-    let (mut bids, mut price, mut cost, mut paid, mut held) = (0i64, 0i64, 0i64, 0i64, 0u32);
+    let (mut bids, mut price, mut cost, mut held) = (0i64, 0i64, 0i64, 0u32);
     let (mut budget_sum, mut late) = (0i64, 0i64);
     let mut by_year: BTreeMap<u32, [i64; 3]> = BTreeMap::new();
     for seed in 1..=seeds {
@@ -60,10 +60,10 @@ fn main() {
                     e[0] += 1;
                     e[1] += t.price_cents - t.cost_cents;
                     e[2] += t.price_cents;
-                    if let Some(f) = t.winner.and_then(|h| world.firms.get(h)) {
-                        if f.shares.qty(cw_sim::state::HolderId::Investor) > 0 {
-                            held += 1;
-                        }
+                    if let Some(f) = t.winner.and_then(|h| world.firms.get(h))
+                        && f.shares.qty(cw_sim::state::HolderId::Investor) > 0
+                    {
+                        held += 1;
                     }
                 }
             }
@@ -72,7 +72,6 @@ fn main() {
                     match t.status {
                         TenderStatus::Done => {
                             done += 1;
-                            paid += t.paid_cents;
                             late += t.finished.saturating_sub(t.started + t.promised_weeks) as i64;
                         }
                         TenderStatus::Lapsed => {
