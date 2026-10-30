@@ -338,7 +338,10 @@ impl GpuMap {
             .iter()
             .enumerate()
             .map(|(i, b)| {
-                let site = i.checked_sub(base).and_then(|k| sites.get(k)).and_then(|s| s.as_ref());
+                let site = i
+                    .checked_sub(base)
+                    .and_then(|k| sites.get(k))
+                    .and_then(|s| s.as_ref());
                 serde_json::json!({
                     "region": site.map(|s| s.region.as_str()),
                     "industry": site.map(|s| s.industry.as_str()),
@@ -421,7 +424,11 @@ impl GpuMap {
 /// come out region by region in that order, so the k-th building of a region is that region's
 /// k-th site. A building whose owner disagrees with its site (the order changed upstream) is
 /// left unidentified rather than named wrongly.
-fn identify_sites(scene: &Scene, sites: &[PlantSite], placed: &[Placement]) -> Vec<Option<PlantSite>> {
+fn identify_sites(
+    scene: &Scene,
+    sites: &[PlantSite],
+    placed: &[Placement],
+) -> Vec<Option<PlantSite>> {
     let mut order: HashMap<&str, Vec<&PlantSite>> = HashMap::new();
     for s in sites {
         order.entry(s.region.as_str()).or_default().push(s);
@@ -442,9 +449,13 @@ fn identify_sites(scene: &Scene, sites: &[PlantSite], placed: &[Placement]) -> V
             // The home region is the site region whose centre is nearest the building.
             let home = order.keys().copied().min_by(|a, b| {
                 let d = |code: &str| {
-                    scene.regions.iter().find(|r| r.code == code).map_or(f32::MAX, |r| {
-                        (r.lon - p.lon).powi(2) + (r.lat - p.lat).powi(2)
-                    })
+                    scene
+                        .regions
+                        .iter()
+                        .find(|r| r.code == code)
+                        .map_or(f32::MAX, |r| {
+                            (r.lon - p.lon).powi(2) + (r.lat - p.lat).powi(2)
+                        })
                 };
                 d(a).total_cmp(&d(b))
             })?;
