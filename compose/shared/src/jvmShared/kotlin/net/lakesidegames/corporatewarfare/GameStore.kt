@@ -112,6 +112,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var recentRaids by mutableStateOf<List<RaidRecordDto>>(emptyList()); private set
     /** Every rival group with a plant, threats first, for the CEO Office card. */
     var rivals by mutableStateOf<List<RivalSummaryDto>>(emptyList()); private set
+    /** The chief executive chosen at the new-game screen, read with the executives. */
+    var playerChief by mutableStateOf<uniffi.cw_ffi.PlayerChiefDto?>(null); private set
     /** The latest rival moves anywhere, newest first, naming the chief behind each. */
     var rivalFeed by mutableStateOf<List<RivalMoveFeedDto>>(emptyList()); private set
     /** The Inbox's letters: the last eight weeks, decisions pinned on top. Read with the rest of the week. */
@@ -740,7 +742,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         if (!force && (!executivesOpen || stamp == executivesRevision)) return
         executivesRevision = stamp
         val dto = withContext(engine) { handle.executives(firm) }
-        if (session === handle) executives = dto
+        val chief = withContext(engine) { handle.playerChief() }
+        if (session === handle) { executives = dto; playerChief = chief }
     }
 
     fun refreshExecutives() { scope.launch { loadExecutives(force = true) } }

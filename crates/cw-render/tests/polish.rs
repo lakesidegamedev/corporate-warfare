@@ -5,7 +5,7 @@ use std::path::Path;
 
 use cw_render::{
     AssetDirs, PlantSite, ScenarioSpec, Scene, SceneOptions, SiteStatus, apron_extent_km,
-    building_boxes, layout_plants, plant_size_km, snow_cover,
+    apron_seam_steps, building_boxes, layout_plants, plant_size_km, snow_cover,
 };
 
 const WINTER: u32 = 3;
@@ -218,5 +218,78 @@ fn the_horizon_reaches_far_past_the_terrain_on_every_side() {
             ext[1] < s - span && ext[3] > n + span,
             "{id}: north and south reach"
         );
+    }
+}
+
+/// Steps (changes of terrace level) met walking along a line of latitude.
+fn steps_along(scene: &Scene, lat: f32, lon0: f32, lon1: f32) -> usize {
+    let hm = &scene.heightmap;
+    let (dx, _) = hm.cell_degrees();
+    let n = ((lon1 - lon0) / dx) as usize;
+    let mut last = None;
+    let mut steps = 0;
+    for k in 0..n {
+        let (c, r) = hm.cell_of(lon0 + k as f32 * dx, lat);
+        let l = scene.level_at(c, r);
+        if last.is_some_and(|p| p != l) {
+            steps += 1;
+        }
+        last = Some(l);
+    }
+    steps
+}
+
+/// The biggest difference in terrace level between two neighbouring cells (the Sierra front was 13 before the cap).
+fn steepest_step(scene: &Scene, west: f32, south: f32, east: f32, north: f32) -> i32 {
+    let hm = &scene.heightmap;
+    let (dx, dy) = hm.cell_degrees();
+    let (c0, r1) = hm.cell_of(west, south);
+    let (c1, r0) = hm.cell_of(east, north);
+    let mut worst = 0;
+    for r in r0..r1 {
+        for c in c0..c1 {
+            let l = scene.level_at(c, r);
+            worst = worst
+                .max((l - scene.level_at(c + 1, r)).abs())
+                .max((l - scene.level_at(c, r + 1)).abs());
+        }
+    }
+    let _ = (dx, dy);
+    worst
+}
+
+#[test]
+fn flat_deserts_read_flat_and_escarpments_stay_clean() {
+    let scene = scenario("texas-1981");
+    // West Texas, east of the Pecos to the Caprock: a few wide steps, not a dense run of stripes.
+    let steps = steps_along(&scene, 31.5, -104.0, -98.0);
+    println!("west Texas steps along 31.5N: {steps}");
+    assert!(steps <= 6, "west Texas is striped: {steps} steps");
+    // The Caprock is still a step you can see.
+    let rise = steepest_step(&scene, -103.0, 32.5, -100.5, 34.5);
+    println!("Caprock steepest step: {rise}");
+    assert!(rise >= 1, "the Caprock escarpment vanished");
+}
+
+#[test]
+fn steep_mountain_fronts_are_capped() {
+    let scene = scenario("silicon-valley-1995");
+    let worst = steepest_step(&scene, -122.5, 35.0, -117.0, 40.0);
+    println!("Sierra and coast ranges steepest step: {worst}");
+    assert!(
+        worst <= 6,
+        "a mountain front is a wall: {worst} levels in one cell"
+    );
+}
+
+#[test]
+fn the_horizon_meets_the_terrain_without_a_wall() {
+    for id in [
+        "great-lakes-2000",
+        "texas-1981",
+        "silicon-valley-1995",
+        "ruhr-rhine-1991",
+    ] {
+        assert_eq!(apron_seam_steps(&scenario(id)), 0, "{id}: wall at the seam");
     }
 }

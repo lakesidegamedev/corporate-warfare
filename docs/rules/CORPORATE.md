@@ -518,3 +518,17 @@ opens (prices only), then runs as any other activist campaign.
 **Temperament.** Rival decisions here read `structure::temperament`, a table of weights (tax
 shifting, leverage, listing, partnering, resistance) derived from the archetype today. The
 character AI replaces that one function.
+
+## Opening share prices (1.9 balance pass 4)
+
+A seed firm opens at the value of its plants' standard earnings at reference prices and baseline
+wages, times a share of them it is assumed to realise (`valuation::OPENING_REALISATION_BPS`). The
+share was a fifth, measured on the 1.8 seed firms. After the era, farm and restructuring passes the
+realised share is about 43 percent in every scenario (the sum of trailing EBITDA at weeks 26 to 52
+over the standard figure), so the shares opened at about half of where a quarter of real earnings
+put them and rose by 80 to 130 percent in the first year, which the index showed as a doubling in
+every scenario. The share is now 43 percent. Year-one index (equal weight, 6 seeds, 100 at start)
+before then after: Great Lakes 227 to 110, Ruhr and Rhine 196 to 103, Silicon Valley 177 to 99,
+Texas 195 to 107. Prices still follow earnings after that (year five 155 to 236), and the investor's
+holdings start higher, so percentage net worth growth over five years reads lower than before for the
+same dollars.

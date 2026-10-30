@@ -56,6 +56,10 @@ const TENDER_EVERY: u32 = 13;
 /// Open and unfinished tenders together may commit at most this many weeks of procurement budget.
 const COMMIT_WEEKS: i64 = 40;
 const MAX_ACTIVE_PER_FIRM: usize = 3;
+/// Works run over the estimate by between nothing and this many basis points.
+const OVERRUN_MAX_BPS: i64 = 800;
+/// Each bidder's own estimate of the cost is off by up to this much either way.
+const ESTIMATE_SPREAD_BPS: i64 = 300;
 const ROAD_STEP_BPS: i32 = 1_000;
 const ROAD_MAX_BPS: i32 = 4_000;
 const PORT_STEP_BPS: i32 = 1_500;
@@ -1159,6 +1163,16 @@ pub fn national_result(world: &mut World, ds: &Dataset, kept: bool) {
 // ---------------------------------------------------------------------------------------------
 // Tenders
 
+/// Weeks between new tenders: the usual quarter when the treasury is near its reserve, faster
+/// when it is flush, and none (a very long wait) when it is under half of it.
+pub fn tender_interval(stance_bps: i64) -> u32 {
+    match stance_bps {
+        ..=4_999 => u32::MAX,
+        15_000.. => TENDER_EVERY / 2,
+        _ => TENDER_EVERY,
+    }
+}
+
 fn open_tender(world: &mut World, ds: &Dataset) {
     let week = world.tick.0;
     let budget = world.government.procurement_budget_cents;
@@ -1191,6 +1205,15 @@ fn open_tender(world: &mut World, ds: &Dataset) {
                 || ds.public_ports.get(*r as usize).copied().unwrap_or(false)
         });
     }
+    // A place that drew no bid last time goes to the back of the line.
+    let lapsed_before = |r: u8| {
+        world
+            .civics
+            .tenders
+            .iter()
+            .filter(|t| t.region == r && t.kind == kind && t.status == TenderStatus::Lapsed)
+            .count()
+    };
     candidates.sort_by_key(|r| {
         let i = world
             .civics
@@ -1199,6 +1222,7 @@ fn open_tender(world: &mut World, ds: &Dataset) {
             .copied()
             .unwrap_or_default();
         (
+            lapsed_before(*r),
             match kind {
                 TenderKind::Road => i.road_bps,
                 TenderKind::Port => i.port_bps,
@@ -1212,7 +1236,11 @@ fn open_tender(world: &mut World, ds: &Dataset) {
         return;
     };
     let (min_weeks, max_weeks) = kind.weeks();
-    let price = (budget * kind.budget_weeks()).max(10_000_000);
+    // The most the state will pay follows what building costs where the works are.
+    let land = world.regions[region as usize]
+        .land_index_bps
+        .clamp(8_000, 13_000) as i64;
+    let price = (budget * kind.budget_weeks() * land / 10_000).max(10_000_000);
     let id = world.civics.next_tender;
     world.civics.next_tender += 1;
     world.civics.tenders.push(Tender {
@@ -1267,6 +1295,29 @@ pub fn delivery_cost(world: &World, t: &Tender, weeks: u32) -> i64 {
     base * (10_000 + hurry * 1_200 / span) / 10_000
 }
 
+/// How far the works run over the estimate, in basis points: one figure per tender, drawn from
+/// the world seed so every client agrees.
+pub fn overrun_bps(world: &World, tender: u32) -> i64 {
+    let mut rng = Rng::entity_stream(world.seed, TAG_CIVICS ^ 0x0E4A, Handle(tender as u64 + 1));
+    rng.uniform_inclusive(0, OVERRUN_MAX_BPS)
+}
+
+/// One bidder's error in reading the cost, in basis points either way.
+fn estimate_error_bps(world: &World, tender: u32, firm: Handle) -> i64 {
+    let mut rng = Rng::entity_stream(
+        world.seed,
+        TAG_CIVICS ^ 0x0E57 ^ ((tender as u64) << 20),
+        firm,
+    );
+    rng.uniform_inclusive(-ESTIMATE_SPREAD_BPS, ESTIMATE_SPREAD_BPS)
+}
+
+/// Cash a contractor needs on hand to start: a month of the work, since the state pays as the
+/// work goes and the contractor does not fund the whole job.
+fn working_capital(cost: i64, weeks: u32) -> i64 {
+    cost * 4 / weeks.max(4) as i64
+}
+
 fn active_for(world: &World, firm: Handle) -> usize {
     world
         .civics
@@ -1278,7 +1329,7 @@ fn active_for(world: &World, firm: Handle) -> usize {
 
 pub fn check_bid(
     world: &World,
-    ds: &Dataset,
+    _ds: &Dataset,
     firm: Handle,
     tender: u32,
     price: i64,
@@ -1302,9 +1353,6 @@ pub fn check_bid(
     let entity = world.firms.get(firm).ok_or("no_firm")?;
     if !entity.operative() {
         return Err("firm_not_operating");
-    }
-    if !crate::economy::fx::in_numeraire(world, ds, firm) {
-        return Err("foreign_currency");
     }
     if active_for(world, firm) >= MAX_ACTIVE_PER_FIRM {
         return Err("too_many_works");
@@ -1339,7 +1387,7 @@ fn bid_score(t: &Tender, b: &Bid) -> i64 {
     b.price_cents + b.weeks as i64 * t.budget_cents / 100
 }
 
-fn award(world: &mut World) {
+fn award(world: &mut World, ds: &Dataset) {
     let week = world.tick.0;
     let ids: Vec<u32> = world
         .civics
@@ -1361,9 +1409,10 @@ fn award(world: &mut World) {
             let cash = world
                 .firm(b.firm)
                 .map(|f| f.book.cash() - f.reserved_cash_cents)
+                .map(|c| crate::economy::fx::firm_to_numeraire(world, ds, b.firm, c))
                 .unwrap_or(0);
             if world.firm(b.firm).is_some_and(|f| f.operative())
-                && cash >= cost / 4
+                && cash >= working_capital(cost, b.weeks)
                 && active_for(world, b.firm) < MAX_ACTIVE_PER_FIRM
             {
                 chosen = Some(b);
@@ -1373,7 +1422,11 @@ fn award(world: &mut World) {
         let place = world.regions[t.region as usize].name.clone();
         match chosen {
             Some(b) => {
-                let cost = delivery_cost(world, &t, b.weeks);
+                // Works run over the estimate everybody bid on, by a figure nobody sees until the
+                // bill comes in, so the lowest bidder is the one most likely to have been too
+                // hopeful (the winner's curse).
+                let cost = delivery_cost(world, &t, b.weeks) * (10_000 + overrun_bps(world, t.id))
+                    / 10_000;
                 let firm_name = world
                     .firm(b.firm)
                     .map(|f| f.name.clone())
@@ -1456,18 +1509,22 @@ fn build_works(world: &mut World, ds: &Dataset) {
         // region, with the rest bought from the outside construction sector.
         let slice =
             (t.cost_cents / t.promised_weeks.max(1) as i64).min(t.cost_cents - t.cost_paid_cents);
+        // Prices, costs and the treasury are in the numeraire; a contractor in another money
+        // pays its bills and is paid in its own, converted at the week's rate.
         let cash = world
             .firm(firm)
             .map(|f| f.book.cash() - f.reserved_cash_cents)
+            .map(|c| crate::economy::fx::firm_to_numeraire(world, ds, firm, c))
             .unwrap_or(0);
         let mut worked = 0;
         if slice > 0 && cash >= slice {
+            let slice_own = crate::economy::fx::numeraire_to_firm(world, ds, firm, slice);
             if let Some(f) = world.firms.get_mut(firm) {
                 let _ = f.book.commit(
                     world.tick,
                     Txn::new()
-                        .credit(Account::Cash, slice, "public works cost")
-                        .debit(Account::CostOfGoods, slice, "public works cost"),
+                        .credit(Account::Cash, slice_own, "public works cost")
+                        .debit(Account::CostOfGoods, slice_own, "public works cost"),
                 );
             }
             crate::commands::pay_construction_service(
@@ -1475,7 +1532,7 @@ fn build_works(world: &mut World, ds: &Dataset) {
                 ds,
                 firm,
                 t.region,
-                slice,
+                slice_own,
                 "public works",
             );
             worked = slice;
@@ -1490,13 +1547,14 @@ fn build_works(world: &mut World, ds: &Dataset) {
             }
         }
         let paid_cost = t.cost_paid_cents + worked;
-        // The treasury pays by quarters of progress, as soon as it can.
+        // The treasury pays as the work progresses, as soon as it can, so a contractor's books show
+        // a steady margin and not a lump a quarter.
         let progress_bps = if t.cost_cents > 0 {
             paid_cost * 10_000 / t.cost_cents
         } else {
             10_000
         };
-        let owed_bps = (progress_bps / 2_500 * 2_500).min(10_000);
+        let owed_bps = progress_bps.min(10_000);
         let late = week.saturating_sub(t.started + t.promised_weeks);
         let mut owed = t.price_cents * owed_bps / 10_000;
         if owed_bps >= 10_000 && late > 0 {
@@ -1513,12 +1571,13 @@ fn build_works(world: &mut World, ds: &Dataset) {
                     .credit(Account::Cash, pay, "public works stage")
                     .debit(Account::OperatingExpense, pay, "public works stage"),
             );
+            let pay_own = crate::economy::fx::numeraire_to_firm(world, ds, firm, pay);
             if let Some(f) = world.firms.get_mut(firm) {
                 let _ = f.book.commit(
                     world.tick,
                     Txn::new()
-                        .debit(Account::Cash, pay, "public works stage")
-                        .credit(Account::Revenue, pay, "public works stage"),
+                        .debit(Account::Cash, pay_own, "public works stage")
+                        .credit(Account::Revenue, pay_own, "public works stage"),
                 );
             }
             world.civics.tender_paid_cents += pay;
@@ -1669,10 +1728,10 @@ pub fn weekly(world: &mut World, ds: &Dataset) {
     }
     disclose(world, ds);
     governor_letters(world, ds);
-    if week > 8 && week.is_multiple_of(TENDER_EVERY) {
+    if week > 8 && week.is_multiple_of(tender_interval(crate::economy::fiscal::stance_bps(world))) {
         open_tender(world, ds);
     }
-    award(world);
+    award(world, ds);
     build_works(world, ds);
 }
 
@@ -1831,7 +1890,21 @@ pub fn rival_gift(world: &World, ds: &Dataset, firm: Handle) -> Option<(u8, u8, 
         } else {
             1
         };
-        let amount = (cap * share_bps as i64 / 10_000).min(room).min(cash / 50);
+        // A gift is an expense, so a rival gives only out of what it earned: no more than a tenth
+        // of the quarter's profit, and nothing in a quarter that lost money.
+        let earned: i64 = entity
+            .book
+            .recent_weeks()
+            .iter()
+            .map(|w| w.net_income)
+            .sum();
+        if earned <= 0 {
+            continue;
+        }
+        let amount = (cap * share_bps as i64 / 10_000)
+            .min(room)
+            .min(cash / 50)
+            .min(earned / 10);
         if amount >= MIN_GIFT_CENTS {
             return Some((office, pick, amount));
         }
@@ -1843,10 +1916,10 @@ pub fn rival_gift(world: &World, ds: &Dataset, firm: Handle) -> Option<(u8, u8, 
 /// temperament over its own cost for the delivery time, and the quickest time it can afford.
 pub fn rival_bid(world: &World, ds: &Dataset, firm: Handle) -> Option<(u32, i64, u32)> {
     let entity = world.firms.get(firm)?;
-    if !entity.operative() || active_for(world, firm) >= 1 {
+    if !entity.operative() || active_for(world, firm) >= 2 {
         return None;
     }
-    let is_builder = entity.industry == 5 || entity.facilities.len() >= 2;
+    let is_builder = entity.industry == 5 || !entity.facilities.is_empty();
     if !is_builder {
         return None;
     }
@@ -1856,11 +1929,16 @@ pub fn rival_bid(world: &World, ds: &Dataset, firm: Handle) -> Option<(u32, i64,
         .map(|p| p.temperament);
     use cw_data::Temperament::*;
     let margin_bps = match temperament {
-        Some(Raider) | Some(Speculator) => 1_000,
-        Some(Cautious) | Some(Financier) => 2_200,
-        _ => 1_500,
+        Some(Raider) | Some(Speculator) => 800,
+        Some(Cautious) | Some(Financier) => 1_100,
+        _ => 900,
     };
-    let cash = entity.book.cash() - entity.reserved_cash_cents;
+    let cash = crate::economy::fx::firm_to_numeraire(
+        world,
+        ds,
+        firm,
+        entity.book.cash() - entity.reserved_cash_cents,
+    );
     for t in world
         .civics
         .tenders
@@ -1872,10 +1950,12 @@ pub fn rival_bid(world: &World, ds: &Dataset, firm: Handle) -> Option<(u32, i64,
         }
         let weeks = (t.min_weeks + t.max_weeks) / 2;
         let cost = delivery_cost(world, t, weeks);
-        if cash < cost / 3 {
+        if cash < working_capital(cost, weeks) {
             continue;
         }
-        let price = cost * (10_000 + margin_bps) / 10_000;
+        // The bidder's own reading of the cost, plus its margin.
+        let estimate = cost * (10_000 + estimate_error_bps(world, t.id, firm)) / 10_000;
+        let price = estimate * (10_000 + margin_bps) / 10_000;
         if price <= t.budget_cents {
             return Some((t.id, price, weeks));
         }

@@ -65,6 +65,10 @@ actor Engine {
         session?.executives(firm: firm)
     }
 
+    func playerChief() -> PlayerChiefDto? {
+        session?.playerChief()
+    }
+
     func politics(firm: UInt64?) -> PoliticsDto? {
         session?.politics(firm: firm)
     }

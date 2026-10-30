@@ -301,6 +301,12 @@ impl Session {
         &self.dataset.hash
     }
 
+    /// Seat the chief executive the player chose at the new-game screen. Presentation only. A
+    /// portrait outside the kit, a blank name or an unknown temperament take the kit's own.
+    pub fn set_player_chief(&mut self, name: &str, portrait: &str, temperament: &str) {
+        self.world.player_chief = cw_sim::state::PlayerChief::choose(name, portrait, temperament);
+    }
+
     /// Continue past a pause that is not a card waiting for an answer. A card pause is cleared
     /// by answering it through `RespondEvent`; a pause whose card is gone, answered or no longer
     /// the player's to answer is cleared here too, so nothing can leave the clock stopped.
@@ -2197,7 +2203,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "e58ae886b637208c71ca21a9481b407fd29a84c0725b9f3fb5b59b1bca5648a1"
+            "de25d78b750f0e832b661f3653acebf53191539b76a2b5aee3463cd78e063aa6"
         );
     }
 

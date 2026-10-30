@@ -830,6 +830,9 @@ mod tests {
             starting_capital_cents: None,
             price_path: String::new(),
             timeline: String::new(),
+            chief_name: String::new(),
+            chief_portrait: String::new(),
+            chief_temperament: String::new(),
         })
         .unwrap()
     }

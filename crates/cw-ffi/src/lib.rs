@@ -31,7 +31,8 @@ mod politics;
 mod statements;
 mod systems;
 pub use cast::{
-    DossierDto, MoveDto, PersonDto, PostDto, RivalMoveFeedDto, RivalSummaryDto, RivalTagDto,
+    DossierDto, MoveDto, PersonDto, PlayerChiefDto, PostDto, RivalMoveFeedDto, RivalSummaryDto,
+    RivalTagDto,
 };
 pub use catalogue::{ActionDto, FieldDto, OptionDto, action_catalogue};
 pub use paper::{
@@ -1734,6 +1735,12 @@ pub struct ScenarioDto {
 }
 
 /// The scenarios a new career can start in, in display order.
+/// Chief executives the new-game screen offers the player, one for each temperament.
+#[uniffi::export]
+pub fn chief_choices() -> Vec<cast::PersonDto> {
+    cast::chief_choices()
+}
+
 #[uniffi::export]
 pub fn scenarios() -> Vec<ScenarioDto> {
     cw_data::scenarios()
@@ -2410,6 +2417,15 @@ pub struct NewGameDto {
     /// takes historical.
     #[uniffi(default = "")]
     pub timeline: String,
+    /// The player's own chief executive (1.9): a name (blank takes the portrait's), a portrait id
+    /// from `chief_choices` (blank takes the first) and a temperament key (blank takes the
+    /// portrait's). Presentation only.
+    #[uniffi(default = "")]
+    pub chief_name: String,
+    #[uniffi(default = "")]
+    pub chief_portrait: String,
+    #[uniffi(default = "")]
+    pub chief_temperament: String,
 }
 
 #[uniffi::export]
@@ -2439,7 +2455,14 @@ impl SessionHandle {
                 timeline: cw_sim::economy::timeline::TimelineMode::from_key(&options.timeline),
             },
         };
-        let session = Session::create(config)?;
+        let mut session = Session::create(config)?;
+        if !options.chief_name.is_empty() || !options.chief_portrait.is_empty() {
+            session.set_player_chief(
+                &options.chief_name,
+                &options.chief_portrait,
+                &options.chief_temperament,
+            );
+        }
         Ok(Arc::new(SessionHandle {
             inner: Mutex::new(session),
         }))
@@ -5006,6 +5029,9 @@ mod tests {
             starting_capital_cents: None,
             price_path: String::new(),
             timeline: String::new(),
+            chief_name: String::new(),
+            chief_portrait: String::new(),
+            chief_temperament: String::new(),
         })
         .unwrap();
         let mut left = 20;
@@ -5430,6 +5456,9 @@ mod tests {
             starting_capital_cents: None,
             price_path: String::new(),
             timeline: String::new(),
+            chief_name: String::new(),
+            chief_portrait: String::new(),
+            chief_temperament: String::new(),
         })
         .unwrap();
         assert_eq!(career.scenario_id(), "texas-1981");
@@ -5454,6 +5483,9 @@ mod tests {
                 starting_capital_cents: None,
                 price_path: String::new(),
                 timeline: timeline.to_owned(),
+                chief_name: String::new(),
+                chief_portrait: String::new(),
+                chief_temperament: String::new(),
             })
             .unwrap()
         };
@@ -5520,6 +5552,9 @@ mod tests {
                 starting_capital_cents: None,
                 price_path: String::new(),
                 timeline: String::new(),
+                chief_name: String::new(),
+                chief_portrait: String::new(),
+                chief_temperament: String::new(),
             })
             .unwrap();
             session.advance(3);

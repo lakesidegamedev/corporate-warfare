@@ -82,6 +82,62 @@ const MODE_RADIUS: usize = 3;
 /// near flat country never gets a terrace wall around a handful of cells.
 const MIN_PATCH_CELLS: usize = 90;
 
+const RELIEF_RADIUS_DEG: f32 = 0.6;
+/// Relief (metres) at which mountain damping starts and where it is complete, and the share of
+/// the height above the valley floor that is taken off at full damping.
+const MOUNTAIN_RELIEF_LO_M: f32 = 800.0;
+const MOUNTAIN_RELIEF_HI_M: f32 = 2400.0;
+const MOUNTAIN_DAMP: f32 = 0.6;
+/// Land above this height with relief under the two limits gets a terrace step of 3 or 2 levels.
+const PLATEAU_MIN_M: f32 = 600.0;
+const FLAT_RELIEF_M: f32 = 350.0;
+const GENTLE_RELIEF_M: f32 = 700.0;
+
+fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
+    let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Separable box blur of a grid, clamped at the edges.
+fn box_blur(src: &[f32], w: usize, h: usize, radius: usize) -> Vec<f32> {
+    let mut tmp = vec![0.0f32; w * h];
+    for r in 0..h {
+        for c in 0..w {
+            let (lo, hi) = (c.saturating_sub(radius), (c + radius).min(w - 1));
+            tmp[r * w + c] = (lo..=hi).map(|k| src[r * w + k]).sum::<f32>() / (hi - lo + 1) as f32;
+        }
+    }
+    let mut out = vec![0.0f32; w * h];
+    for r in 0..h {
+        let (lo, hi) = (r.saturating_sub(radius), (r + radius).min(h - 1));
+        for c in 0..w {
+            out[r * w + c] = (lo..=hi).map(|k| tmp[k * w + c]).sum::<f32>() / (hi - lo + 1) as f32;
+        }
+    }
+    out
+}
+
+/// Separable box maximum (or minimum) of a grid, clamped at the edges.
+fn box_extreme(src: &[f32], w: usize, h: usize, radius: usize, max: bool) -> Vec<f32> {
+    let pick = |a: f32, b: f32| if max { a.max(b) } else { a.min(b) };
+    let start = if max { f32::MIN } else { f32::MAX };
+    let mut tmp = vec![0.0f32; w * h];
+    for r in 0..h {
+        for c in 0..w {
+            let (lo, hi) = (c.saturating_sub(radius), (c + radius).min(w - 1));
+            tmp[r * w + c] = (lo..=hi).fold(start, |m, k| pick(m, src[r * w + k]));
+        }
+    }
+    let mut out = vec![0.0f32; w * h];
+    for r in 0..h {
+        let (lo, hi) = (r.saturating_sub(radius), (r + radius).min(h - 1));
+        for c in 0..w {
+            out[r * w + c] = (lo..=hi).fold(start, |m, k| pick(m, tmp[k * w + c]));
+        }
+    }
+    out
+}
+
 /// Terrace level of every heightmap cell. Water sits on its own surface (lake chart datum or
 /// sea level). Land is smoothed before it is quantised, then cleaned with a mode filter and a
 /// minimum patch area, so flat country gets one or two gentle steps and no staircase.
@@ -106,40 +162,53 @@ pub fn build_levels(scene: &Scene) -> Vec<i32> {
         }
     }
     // Smooth the land heights (two box passes), keeping water where it is.
-    let boxed = |src: &[f32]| -> Vec<f32> {
-        let mut tmp = vec![0.0f32; w * h];
-        for r in 0..h {
-            for c in 0..w {
-                let (lo, hi) = (
-                    c.saturating_sub(SMOOTH_RADIUS),
-                    (c + SMOOTH_RADIUS).min(w - 1),
-                );
-                tmp[r * w + c] =
-                    (lo..=hi).map(|k| src[r * w + k]).sum::<f32>() / (hi - lo + 1) as f32;
-            }
-        }
-        let mut out = vec![0.0f32; w * h];
-        for r in 0..h {
-            let (lo, hi) = (
-                r.saturating_sub(SMOOTH_RADIUS),
-                (r + SMOOTH_RADIUS).min(h - 1),
-            );
-            for c in 0..w {
-                out[r * w + c] =
-                    (lo..=hi).map(|k| tmp[k * w + c]).sum::<f32>() / (hi - lo + 1) as f32;
-            }
-        }
-        out
-    };
+    let boxed = |src: &[f32]| box_blur(src, w, h, SMOOTH_RADIUS);
     let mut smooth = boxed(&boxed(&value));
     for i in 0..w * h {
         if water[i] {
             smooth[i] = value[i];
         }
     }
+
+    // Relief: the spread of heights within about 65 km. Steep mountain fronts are drawn lower
+    // (the height above the valley floor is scaled down by relief), so a 28 times exaggerated
+    // range reads as mountains and not as a wall. Flat plateaus get a wider terrace step below.
+    let rad = ((RELIEF_RADIUS_DEG / dx).round() as usize).clamp(2, 40);
+    let hi = box_extreme(&smooth, w, h, rad, true);
+    let lo = box_extreme(&smooth, w, h, rad, false);
+    let relief: Vec<f32> = hi.iter().zip(&lo).map(|(a, b)| a - b).collect();
+    let floor_m = box_blur(&lo, w, h, rad * 2);
+    let mut plateau = vec![0u8; w * h];
+    for i in 0..w * h {
+        if water[i] {
+            continue;
+        }
+        let k =
+            1.0 - MOUNTAIN_DAMP * smoothstep(MOUNTAIN_RELIEF_LO_M, MOUNTAIN_RELIEF_HI_M, relief[i]);
+        let base = floor_m[i].min(smooth[i]);
+        smooth[i] = (base + (smooth[i] - base) * k).max(0.0);
+        if smooth[i] > PLATEAU_MIN_M {
+            plateau[i] = if relief[i] < FLAT_RELIEF_M {
+                3
+            } else if relief[i] < GENTLE_RELIEF_M {
+                2
+            } else {
+                1
+            };
+        }
+    }
     let mut level: Vec<i32> = smooth
         .iter()
-        .map(|m| ((m + scene.terrace_offset_m) / scene.terrace_m).floor() as i32)
+        .zip(&plateau)
+        .map(|(m, &step)| {
+            let l = ((m + scene.terrace_offset_m) / scene.terrace_m).floor() as i32;
+            if step > 1 {
+                // Arid, low-relief country: a wider step, so flat country reads flat.
+                (l as f32 / step as f32).round() as i32 * step as i32
+            } else {
+                l
+            }
+        })
         .collect();
 
     // Mode filter on land: a cell takes the most common level in its window.
@@ -1014,45 +1083,40 @@ pub fn roads(scene: &Scene, band: usize) -> RoadMesh {
     RoadMesh { mesh: m, tiles }
 }
 
-/// How far the horizon extends past the terrain, in degrees, and the size of its first cells.
+/// How far the horizon extends past the terrain, in degrees (east and west; north and south
+/// use `APRON_REACH_NS_DEG`), how fast its cells grow with distance, and the biggest cell.
 const APRON_REACH_DEG: f32 = 90.0;
-const APRON_CELL_DEG: f32 = 0.4;
+const APRON_REACH_NS_DEG: f32 = 60.0;
+const APRON_GROWTH: f32 = 1.2;
+const APRON_MAX_CELL_DEG: f32 = 5.0;
 
-/// Breakpoints along one axis: from `lo` to `a` (the terrain's near edge), across the terrain to
-/// `b`, then out to `hi`. Cells start at the apron's cell size and grow by a quarter each step
-/// away from the terrain, so the far horizon costs a few big cells.
-fn apron_ticks(lo: f32, a: f32, b: f32, hi: f32) -> Vec<f32> {
-    let grow = |from: f32, to: f32, out: &mut Vec<f32>| {
-        // Walk outward from `from` toward `to`, then reverse for the low side.
-        let sign = if to >= from { 1.0 } else { -1.0 };
-        let mut x = from;
-        let mut step = APRON_CELL_DEG;
-        loop {
-            let next = x + sign * step;
-            if (to - next) * sign <= step * 0.5 {
-                out.push(to);
-                break;
-            }
-            out.push(next);
-            x = next;
-            step *= 1.25;
+/// Breakpoints along one axis, ascending: the terrain's own cell edges from `a` to `b` (`n`
+/// cells), and outside them cells that start one terrain cell wide and grow by a fifth each
+/// step, so detail steps down crisply with distance and the far horizon costs few cells.
+fn apron_axis(a: f32, b: f32, n: usize, reach: f32) -> Vec<f32> {
+    let cell = (b - a) / n as f32;
+    let outward = |from: f32, sign: f32| {
+        let mut out = Vec::new();
+        let (mut x, mut step) = (from, cell);
+        while (x - from).abs() < reach {
+            x += sign * step;
+            out.push(x);
+            step = (step * APRON_GROWTH).min(APRON_MAX_CELL_DEG);
         }
+        out
     };
-    let mut low = vec![a];
-    grow(a, lo, &mut low);
-    low.reverse();
-    let mut t = low;
-    let n = ((b - a) / APRON_CELL_DEG).ceil().max(1.0) as usize;
-    for k in 1..=n {
-        t.push(a + (b - a) * k as f32 / n as f32);
-    }
-    grow(b, hi, &mut t);
-    t.dedup_by(|x, y| (*x - *y).abs() < 1e-4);
+    let mut t: Vec<f32> = outward(a, -1.0);
+    t.reverse();
+    t.push(a);
+    t.extend((1..n).map(|k| a + cell * k as f32));
+    t.push(b);
+    t.extend(outward(b, 1.0));
     t
 }
 
-/// What the satellite picture shows at a point, as an apron class: water, or the land class.
-fn apron_class(scene: &Scene, lon: f32, lat: f32) -> u8 {
+/// The land class the satellite picture shows at a point (no water test), with the season's
+/// snow on top.
+fn land_class(scene: &Scene, lon: f32, lat: f32) -> u8 {
     let e = &scene.earth;
     let u = ((lon - e.bounds.west) / (e.bounds.east - e.bounds.west) * e.w as f32)
         .clamp(0.0, e.w as f32 - 1.0) as usize;
@@ -1063,36 +1127,76 @@ fn apron_class(scene: &Scene, lon: f32, lat: f32) -> u8 {
     if b > g * 1.05 && b > r * 1.25 {
         return APRON_WATER;
     }
-    let class = crate::ground::classify([e.rgba[p], e.rgba[p + 1], e.rgba[p + 2]]);
     if crate::ground::snow_cover(scene.week, lat, lon, 0.0) > 0.2 {
         crate::ground::G_SNOW
     } else {
-        class
+        crate::ground::classify([e.rgba[p], e.rgba[p + 1], e.rgba[p + 2]])
     }
 }
 
-/// The ring of land and sea beyond the terrain's edge, so a tilted view ends in a horizon of
-/// land and sea rather than a hard board edge. Coarse cells, a class and a terrace level each:
-/// the same terrace look as the terrain, at about 45 km a cell. Its level is the terrain's edge
-/// level at the nearest point (the sea is the lowest level), and a wall closes every step,
-/// including the one at the terrain's own edge, so nothing ever shows a gap.
-pub fn apron(scene: &Scene) -> Mesh {
+/// What the picture shows over a cell of the apron: the most common class among a grid of
+/// samples (water counts as a class), so a big far cell shows what most of it is.
+fn apron_class(scene: &Scene, lon: [f32; 2], lat: [f32; 2], samples: usize) -> u8 {
+    let mut votes = [0u32; 8];
+    for j in 0..samples {
+        for i in 0..samples {
+            let f = |k: usize| (k as f32 + 0.5) / samples as f32;
+            let class = land_class(
+                scene,
+                lon[0] + (lon[1] - lon[0]) * f(i),
+                lat[0] + (lat[1] - lat[0]) * f(j),
+            );
+            votes[class as usize & 7] += 1;
+        }
+    }
+    (0..8u8)
+        .max_by_key(|&c| (votes[c as usize], c != APRON_WATER))
+        .unwrap_or(0)
+}
+
+/// Class and level of every apron cell (`None` inside the terrain), with the cell edges.
+struct ApronGrid {
+    xs: Vec<f32>,
+    ys: Vec<f32>,
+    cells: Vec<Option<(u8, i32)>>,
+}
+
+fn apron_grid(scene: &Scene) -> ApronGrid {
     let hm = &scene.heightmap;
     let hb = hm.bounds;
-    let eb = scene.earth.bounds;
-    let _ = eb;
-    let (w0, e0) = (hb.west - APRON_REACH_DEG, hb.east + APRON_REACH_DEG);
-    let (s0, n0) = (hb.south - 60.0, hb.north + 60.0);
-    let xs = apron_ticks(w0.min(hb.west), hb.west, hb.east, e0.max(hb.east));
-    let ys = apron_ticks(s0.min(hb.south), hb.south, hb.north, n0.max(hb.north));
-    let sea = scene.levels.iter().copied().min().unwrap_or(0);
     let (dx, dy) = hm.cell_degrees();
-    let edge_level = |lon: f32, lat: f32| {
-        let (c, r) = hm.cell_of(
-            lon.clamp(hb.west + dx * 0.5, hb.east - dx * 0.5),
-            lat.clamp(hb.south + dy * 0.5, hb.north - dy * 0.5),
-        );
-        scene.level_at(c, r)
+    let xs = apron_axis(hb.west, hb.east, hm.w, APRON_REACH_DEG);
+    let ys = apron_axis(hb.south, hb.north, hm.h, APRON_REACH_NS_DEG);
+    let sea = scene.levels.iter().copied().min().unwrap_or(0);
+    // Land levels summed over every window of the terrain (summed area tables).
+    let (w, h) = (hm.w, hm.h);
+    let mut water = vec![false; w * h];
+    let mut sum = vec![0.0f64; (w + 1) * (h + 1)];
+    let mut cnt = vec![0i64; (w + 1) * (h + 1)];
+    for r in 0..h {
+        for c in 0..w {
+            let lon = hb.west + (c as f32 + 0.5) * dx;
+            let lat = hb.north - (r as f32 + 0.5) * dy;
+            let kind = scene.mask.at(lon, lat)[2];
+            let wet = kind == crate::data::WATER_OCEAN || kind == WATER_LAKE;
+            water[r * w + c] = wet;
+            let (l, n) = if wet {
+                (0.0, 0i64)
+            } else {
+                (scene.levels[r * w + c] as f64, 1i64)
+            };
+            let at = |rr: usize, cc: usize| rr * (w + 1) + cc;
+            sum[at(r + 1, c + 1)] = l + sum[at(r, c + 1)] + sum[at(r + 1, c)] - sum[at(r, c)];
+            cnt[at(r + 1, c + 1)] = n + cnt[at(r, c + 1)] + cnt[at(r + 1, c)] - cnt[at(r, c)];
+        }
+    }
+    let window = |c0: usize, c1: usize, r0: usize, r1: usize| -> Option<i32> {
+        let at = |rr: usize, cc: usize| rr * (w + 1) + cc;
+        let s =
+            sum[at(r1 + 1, c1 + 1)] - sum[at(r0, c1 + 1)] - sum[at(r1 + 1, c0)] + sum[at(r0, c0)];
+        let n =
+            cnt[at(r1 + 1, c1 + 1)] - cnt[at(r0, c1 + 1)] - cnt[at(r1 + 1, c0)] + cnt[at(r0, c0)];
+        (n > 0).then(|| (s / n as f64).round() as i32)
     };
     let inside =
         |lon: f32, lat: f32| lon > hb.west && lon < hb.east && lat > hb.south && lat < hb.north;
@@ -1104,22 +1208,74 @@ pub fn apron(scene: &Scene) -> Mesh {
             if inside(lon, lat) {
                 continue;
             }
-            let class = apron_class(scene, lon, lat);
+            // The terrain cell nearest this one, and how many terrain cells away it lies.
+            let (px, py) = (lon.clamp(hb.west, hb.east), lat.clamp(hb.south, hb.north));
+            let (c, r) = hm.cell_of(
+                px.clamp(hb.west + dx * 0.5, hb.east - dx * 0.5),
+                py.clamp(hb.south + dy * 0.5, hb.north - dy * 0.5),
+            );
+            let away = ((lon - px).abs() / dx).max((lat - py).abs() / dy);
+            let own = r * w + c;
+            if away < 1.1 {
+                let class = if water[own] {
+                    APRON_WATER
+                } else {
+                    match land_class(scene, px, py) {
+                        APRON_WATER => crate::ground::G_FIELD,
+                        class => class,
+                    }
+                };
+                cells[j * nx + i] = Some((class, scene.levels[own]));
+                continue;
+            }
+            // The picture is read over a patch about as wide as the cell is far from the
+            // terrain, so a strip beside the edge settles into blocks rather than streaks.
+            let (hx, hy) = (
+                ((xs[i + 1] - xs[i]) / 2.0).max(0.35 * (away - 1.1) * dx),
+                ((ys[j + 1] - ys[j]) / 2.0).max(0.35 * (away - 1.1) * dy),
+            );
+            let wide = hx > dx * 1.5 || hy > dy * 1.5;
+            let class = apron_class(
+                scene,
+                [lon - hx, lon + hx],
+                [lat - hy, lat + hy],
+                if wide { 5 } else { 1 },
+            );
             let level = if class == APRON_WATER {
                 sea
             } else {
-                edge_level(lon, lat)
+                let reach = (away - 1.1) * 0.8;
+                let (rc, rr) = (reach.ceil() as usize, reach.ceil() as usize);
+                window(
+                    c.saturating_sub(rc),
+                    (c + rc).min(w - 1),
+                    r.saturating_sub(rr),
+                    (r + rr).min(h - 1),
+                )
+                .unwrap_or(scene.levels[own])
             };
             cells[j * nx + i] = Some((class, level));
         }
     }
+    ApronGrid { xs, ys, cells }
+}
+
+/// The ring of land and sea beyond the terrain's edge, so a tilted view ends in a horizon of
+/// land and sea rather than a hard board edge. It is the terrain's own look at a coarser grain:
+/// the same land classes, the same terrace look, and cells that begin one terrain cell wide and
+/// grow with distance. The first ring copies the terrain's edge cells exactly (class, water and
+/// level), so there is no wall at the seam. Further out the level is the mean of the terrain's
+/// land over a window that widens with distance, so the far land settles to one flat level and
+/// the horizon is a clean line.
+pub fn apron(scene: &Scene) -> Mesh {
+    let ApronGrid { xs, ys, cells } = apron_grid(scene);
+    let (nx, ny) = (xs.len() - 1, ys.len() - 1);
     let mut m = Mesh::default();
     let km = |lon: f32, lat: f32| scene.projection.to_km(lon, lat);
     let top = |class: u8| [class, 0, 0, KIND_APRON_TOP];
     let wall_c = |class: u8| [class, 0, 0, KIND_APRON_WALL];
     // A sloped wall along the segment (a to b) in km, from the high level down to the low one,
-    // leaning toward the low side `dir`. The run is a fixed fraction of a cell so it is never
-    // thinner than a few pixels.
+    // leaning toward the low side `dir`.
     let wall = |m: &mut Mesh,
                 a: (f32, f32),
                 b: (f32, f32),
@@ -1128,7 +1284,7 @@ pub fn apron(scene: &Scene) -> Mesh {
                 hi: i32,
                 class: u8| {
         let (za, zb) = (level_z_km(scene, lo), level_z_km(scene, hi));
-        let run = slope_run(scene, zb - za) * 2.0;
+        let run = slope_run(scene, zb - za);
         let n = slope_normal([dir.0, dir.1], zb - za, run);
         m.quad(
             [
@@ -1142,6 +1298,45 @@ pub fn apron(scene: &Scene) -> Mesh {
             [[0.0; 3]; 4],
         );
     };
+    // Tops: cells of one class and level merge into rectangles, like the terrain's.
+    let mut done = vec![false; nx * ny];
+    for j in 0..ny {
+        for i in 0..nx {
+            let Some(v) = cells[j * nx + i] else { continue };
+            if done[j * nx + i] {
+                continue;
+            }
+            let mut i1 = i + 1;
+            while i1 < nx && !done[j * nx + i1] && cells[j * nx + i1] == Some(v) {
+                i1 += 1;
+            }
+            let mut j1 = j + 1;
+            'grow: while j1 < ny {
+                for k in i..i1 {
+                    if done[j1 * nx + k] || cells[j1 * nx + k] != Some(v) {
+                        break 'grow;
+                    }
+                }
+                j1 += 1;
+            }
+            for jj in j..j1 {
+                for ii in i..i1 {
+                    done[jj * nx + ii] = true;
+                }
+            }
+            let (x0, y0) = km(xs[i], ys[j]);
+            let (x1, y1) = km(xs[i1], ys[j1]);
+            let z = level_z_km(scene, v.1);
+            m.quad(
+                [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]],
+                [0.0, 0.0, 1.0],
+                top(v.0),
+                [[0.0; 3]; 4],
+            );
+        }
+    }
+    // Walls between neighbouring cells of different levels (never at the terrain's own edge,
+    // whose first ring matches it).
     for j in 0..ny {
         for i in 0..nx {
             let Some((class, level)) = cells[j * nx + i] else {
@@ -1149,22 +1344,14 @@ pub fn apron(scene: &Scene) -> Mesh {
             };
             let (x0, y0) = km(xs[i], ys[j]);
             let (x1, y1) = km(xs[i + 1], ys[j + 1]);
-            let z = level_z_km(scene, level);
-            m.quad(
-                [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]],
-                [0.0, 0.0, 1.0],
-                top(class),
-                [[0.0; 3]; 4],
-            );
-            // Walls to the east and north neighbours when the levels differ.
             if i + 1 < nx
                 && let Some((c2, l2)) = cells[j * nx + i + 1]
                 && l2 != level
             {
                 let (lo, hi, dir, c) = if level > l2 {
-                    (l2, level, (1.0, 0.0), c2)
+                    (l2, level, (1.0, 0.0), class)
                 } else {
-                    (level, l2, (-1.0, 0.0), class)
+                    (level, l2, (-1.0, 0.0), c2)
                 };
                 wall(&mut m, (x1, y0), (x1, y1), dir, lo, hi, c);
             }
@@ -1173,61 +1360,11 @@ pub fn apron(scene: &Scene) -> Mesh {
                 && l2 != level
             {
                 let (lo, hi, dir, c) = if level > l2 {
-                    (l2, level, (0.0, 1.0), c2)
+                    (l2, level, (0.0, 1.0), class)
                 } else {
-                    (level, l2, (0.0, -1.0), class)
+                    (level, l2, (0.0, -1.0), c2)
                 };
                 wall(&mut m, (x0, y1), (x1, y1), dir, lo, hi, c);
-            }
-        }
-    }
-    // The terrain's own edge: a wall wherever the neighbouring apron cell is at another level.
-    let apron_at = |lon: f32, lat: f32| -> Option<(u8, i32)> {
-        let i = xs.partition_point(|&t| t <= lon).checked_sub(1)?;
-        let j = ys.partition_point(|&t| t <= lat).checked_sub(1)?;
-        if i >= nx || j >= ny {
-            return None;
-        }
-        cells[j * nx + i]
-    };
-    let eps = 0.02;
-    for r in 0..hm.h {
-        let lat = hb.north - (r as f32 + 0.5) * dy;
-        for (c, lon_out, dir, lon_edge) in [
-            (0, hb.west - eps, (-1.0, 0.0), hb.west),
-            (hm.w - 1, hb.east + eps, (1.0, 0.0), hb.east),
-        ] {
-            let own = scene.level_at(c, r);
-            if let Some((class, l2)) = apron_at(lon_out, lat)
-                && l2 != own
-            {
-                let (ya, yb) = (hb.north - r as f32 * dy, hb.north - (r + 1) as f32 * dy);
-                let (a, b) = (km(lon_edge, ya), km(lon_edge, yb));
-                if l2 < own {
-                    wall(&mut m, a, b, dir, l2, own, class);
-                } else {
-                    wall(&mut m, a, b, (-dir.0, -dir.1), own, l2, class);
-                }
-            }
-        }
-    }
-    for c in 0..hm.w {
-        let lon = hb.west + (c as f32 + 0.5) * dx;
-        for (r, lat_out, dir, lat_edge) in [
-            (0, hb.north + eps, (0.0, 1.0), hb.north),
-            (hm.h - 1, hb.south - eps, (0.0, -1.0), hb.south),
-        ] {
-            let own = scene.level_at(c, r);
-            if let Some((class, l2)) = apron_at(lon, lat_out)
-                && l2 != own
-            {
-                let (xa, xb) = (hb.west + c as f32 * dx, hb.west + (c + 1) as f32 * dx);
-                let (a, b) = (km(xa, lat_edge), km(xb, lat_edge));
-                if l2 < own {
-                    wall(&mut m, a, b, dir, l2, own, class);
-                } else {
-                    wall(&mut m, a, b, (-dir.0, -dir.1), own, l2, class);
-                }
             }
         }
     }
@@ -1269,4 +1406,36 @@ pub fn camera_target_z(scene: &Scene, x: f32, y: f32, width_km: f32) -> f32 {
         sum += ground_z(scene, x + ox, y + oy);
     }
     sum / 9.0
+}
+
+/// Number of apron cells touching the terrain whose level differs from the terrain cell they
+/// touch. Zero means there is no wall at the seam.
+pub fn apron_seam_steps(scene: &Scene) -> usize {
+    let hm = &scene.heightmap;
+    let hb = hm.bounds;
+    let (dx, dy) = hm.cell_degrees();
+    let g = apron_grid(scene);
+    let (nx, ny) = (g.xs.len() - 1, g.ys.len() - 1);
+    let mut bad = 0;
+    for j in 0..ny {
+        for i in 0..nx {
+            let Some((_, level)) = g.cells[j * nx + i] else {
+                continue;
+            };
+            let (lon, lat) = ((g.xs[i] + g.xs[i + 1]) / 2.0, (g.ys[j] + g.ys[j + 1]) / 2.0);
+            let (px, py) = (lon.clamp(hb.west, hb.east), lat.clamp(hb.south, hb.north));
+            let away = ((lon - px).abs() / dx).max((lat - py).abs() / dy);
+            if away >= 1.1 {
+                continue;
+            }
+            let (c, r) = hm.cell_of(
+                px.clamp(hb.west + dx * 0.5, hb.east - dx * 0.5),
+                py.clamp(hb.south + dy * 0.5, hb.north - dy * 0.5),
+            );
+            if scene.level_at(c, r) != level {
+                bad += 1;
+            }
+        }
+    }
+    bad
 }
