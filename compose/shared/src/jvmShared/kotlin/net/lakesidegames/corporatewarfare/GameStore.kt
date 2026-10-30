@@ -1,6 +1,7 @@
 package net.lakesidegames.corporatewarfare
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.io.File
@@ -90,7 +91,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var running by mutableStateOf(false); private set
     /** Weeks a second while running: 1, 2 or 4. */
     var speed by mutableStateOf(1); private set
-    var status by mutableStateOf(""); private set
+    private var statusText by mutableStateOf("")
+    /** What the last accepted action or save said; [statusSerial] counts every new message, so the same words twice still show. */
+    var status: String
+        get() = statusText
+        private set(value) { statusText = value; if (value.isNotEmpty()) statusSerial++ }
+    var statusSerial by mutableIntStateOf(0); private set
     var error by mutableStateOf<String?>(null)
 
     var overview by mutableStateOf<OverviewDto?>(null); private set
@@ -367,17 +373,17 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     }
 
     fun respond(event: ULong, choice: String) =
-        submit(CommandJson.command("RespondEvent", "event" to event, "choice" to choice))
+        submit(CommandJson.command("RespondEvent", "event" to event, "choice" to choice), "Decision made.")
 
     fun setPosture(product: UInt, mode: Int, bps: Int) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("SetPricePosture", "firm" to firm, "product" to product, "mode" to mode, "bps" to bps))
+        submit(CommandJson.command("SetPricePosture", "firm" to firm, "product" to product, "mode" to mode, "bps" to bps), "Pricing updated.")
     }
 
     /** Every plant of the selected company runs at [bps] of full capacity, 0 to 10,000. */
     fun setTarget(bps: Int) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("SetProductionTarget", "firm" to firm, "target_bps" to bps))
+        submit(CommandJson.command("SetProductionTarget", "firm" to firm, "target_bps" to bps), "Production target set. Plants change output when the week closes.")
     }
 
     /** Every plant in [plants] keeps [weeks] of inputs on hand (zero is the company default). */
@@ -413,12 +419,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     /** A supplying division's transfer price to the rest of its group, 0 at cost, 10,000 at market. */
     fun setTransferPrice(detail: DivisionDetailDto, bps: Int) =
-        submit(CommandJson.command("SetTransferPrice", "firm" to detail.firm, "region" to detail.regionIndex, "industry" to detail.industryIndex, "bps" to bps))
+        submit(CommandJson.command("SetTransferPrice", "firm" to detail.firm, "region" to detail.regionIndex, "industry" to detail.industryIndex, "bps" to bps), "Transfer price set. It applies when the week closes.")
 
     /** The weekly wage the selected company offers in one tier, 0 low to 2 high. */
     fun setWageOffer(tier: Int, wageCents: Long) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("SetWageOffer", "firm" to firm, "tier" to tier, "wage_cents" to wageCents))
+        submit(CommandJson.command("SetWageOffer", "firm" to firm, "tier" to tier, "wage_cents" to wageCents), "Wage offer set. Staff respond when the week closes.")
     }
 
     /** Index of a region in the engine's region list, for commands that take one. */
@@ -427,20 +433,20 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     /** Buy [lots] of a good into storage in a region, paying up to [limitBps] of its reference price. */
     fun buyToStore(product: UInt, region: UInt, lots: Long, limitBps: Int) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("BuyToStore", "firm" to firm, "product" to product, "region" to region, "lots" to lots, "limit_bps" to limitBps))
+        submit(CommandJson.command("BuyToStore", "firm" to firm, "product" to product, "region" to region, "lots" to lots, "limit_bps" to limitBps), "Buy order placed. It fills at the weekly market, when the week closes.")
     }
 
     /** Release stored goods for sale; zero lots releases everything held there. */
     fun releaseStored(product: UInt, region: UInt, lots: Long) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("SellFromStore", "firm" to firm, "product" to product, "region" to region, "lots" to lots))
+        submit(CommandJson.command("SellFromStore", "firm" to firm, "product" to product, "region" to region, "lots" to lots), "Sale placed from storage.")
     }
 
     /** A division's shipping policy: 0 cheapest, 1 fastest, 2 own carriers first, 3 most reliable, and an optional preferred mode. */
     fun setShippingPolicy(plant: ULong, kind: Int, mode: Int?) {
         val fields = mutableListOf<Pair<String, Any>>("facility" to plant, "kind" to kind)
         if (mode != null) fields.add("mode" to mode)
-        submit(CommandJson.command("SetShippingPolicy", *fields.toTypedArray()))
+        submit(CommandJson.command("SetShippingPolicy", *fields.toTypedArray()), "Shipping policy set.")
     }
 
     /** One division's (or, with [facility] zero, the whole company's) freight for the week just closed, with policies priced. */
@@ -458,7 +464,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     /** Reserve [lots] a week on a lane for [weeks] at the lane's rate, locked for the term. */
     fun reserveLane(from: String, to: String, mode: UInt, lots: Int, weeks: Int) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("ReserveLane", "firm" to firm, "from" to regionIndex(from), "to" to regionIndex(to), "mode" to mode, "lots" to lots, "weeks" to weeks))
+        submit(CommandJson.command("ReserveLane", "firm" to firm, "from" to regionIndex(from), "to" to regionIndex(to), "mode" to mode, "lots" to lots, "weeks" to weeks), "Lane reserved.")
     }
 
     /** What a build would cost, computed by the engine without changing anything. */
@@ -514,12 +520,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     /** Launch a market raid; the outcome lands in [recentRaids]. */
     fun raid(option: RaidOptionDto, budgetCents: Long) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("RaidMarket", "firm" to firm, "target" to option.target, "region" to option.regionIndex, "industry" to option.industryIndex, "budget_cents" to budgetCents))
+        submit(CommandJson.command("RaidMarket", "firm" to firm, "target" to option.target, "region" to option.regionIndex, "industry" to option.industryIndex, "budget_cents" to budgetCents), "Raid launched.")
     }
 
     fun build(region: UInt, recipe: UInt, blocks: UInt) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("BuildFacility", "firm" to firm, "region" to region, "recipe" to recipe, "blocks" to blocks))
+        submit(CommandJson.command("BuildFacility", "firm" to firm, "region" to region, "recipe" to recipe, "blocks" to blocks), "Construction started. It takes weeks to finish.")
     }
 
     /** A personal trade against the public float, settled at once; `done` is the confirmation shown on success. */
@@ -776,19 +782,19 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     fun refreshPolitics() { scope.launch { loadPolitics(force = true) } }
 
     fun giveToCandidate(firm: ULong, office: Int, candidate: Int, cents: Long) =
-        submit(CommandJson.command("GiveToCandidate", "firm" to firm, "office" to office, "candidate" to candidate, "cents" to cents))
+        submit(CommandJson.command("GiveToCandidate", "firm" to firm, "office" to office, "candidate" to candidate, "cents" to cents), "Gift made. It is disclosed in the paper next week.")
 
     fun bidOnTender(firm: ULong, tender: Int, priceCents: Long, weeks: Int) =
-        submit(CommandJson.command("BidOnTender", "firm" to firm, "tender" to tender, "price_cents" to priceCents, "weeks" to weeks))
+        submit(CommandJson.command("BidOnTender", "firm" to firm, "tender" to tender, "price_cents" to priceCents, "weeks" to weeks), "Bid submitted.")
 
     fun hireExecutive(firm: ULong, post: Int, person: Int) =
-        submit(CommandJson.command("HireExecutive", "firm" to firm, "post" to post, "person" to person))
+        submit(CommandJson.command("HireExecutive", "firm" to firm, "post" to post, "person" to person), "Executive hired.")
 
     fun dismissExecutive(firm: ULong, post: Int) =
-        submit(CommandJson.command("DismissExecutive", "firm" to firm, "post" to post))
+        submit(CommandJson.command("DismissExecutive", "firm" to firm, "post" to post), "Executive dismissed.")
 
     fun poachExecutive(firm: ULong, from: ULong, post: Int, offerCents: Long) =
-        submit(CommandJson.command("PoachExecutive", "firm" to firm, "from" to from, "post" to post, "offer_cents" to offerCents))
+        submit(CommandJson.command("PoachExecutive", "firm" to firm, "from" to from, "post" to post, "offer_cents" to offerCents), "Offer made to the executive.")
 
     /** Read the brief now, for the panel when it opens or the weekly pop-up. */
     fun refreshBrief() { scope.launch { loadBrief(force = true) } }
@@ -845,12 +851,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     /** Take the board's goal in position [pick] (0 to 2) for [firm]. */
     fun chooseMandate(firm: ULong, pick: Int) {
         hallStale = true
-        submit(CommandJson.command("ChooseMandate", "firm" to firm, "pick" to pick))
+        submit(CommandJson.command("ChooseMandate", "firm" to firm, "pick" to pick), "Mandate chosen.")
     }
 
     /** Tell the analysts what operating profit to expect this quarter, in cents. */
     fun giveGuidance(firm: ULong, lowCents: Long, highCents: Long) {
-        submit(CommandJson.command("GiveGuidance", "firm" to firm, "low_cents" to lowCents, "high_cents" to highCents))
+        submit(CommandJson.command("GiveGuidance", "firm" to firm, "low_cents" to lowCents, "high_cents" to highCents), "Guidance given.")
     }
 
     private suspend fun loadMarkets() {
@@ -895,13 +901,40 @@ object CommandJson {
         "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 }
 
-/** Player-facing copy for engine rejections; the key is stable, the words live here. */
+/**
+ * Player-facing copy for engine rejections; the key is stable, the words live here. The engine's own detail is a
+ * developer dump (`InvalidEntity { .. }`), so it is never shown: a refusal says what is wrong and what to do.
+ */
 object Messages {
-    fun rejection(key: String, detail: String): String = when (key) {
-        "error.insufficient_cash" -> "Not enough cash for that."
-        "error.no_authority" -> "You do not have the authority for that."
-        "error.wrong_phase" -> "That cannot be done right now."
-        "error.arithmetic" -> "That amount is out of range."
-        else -> if (detail.isNotEmpty()) detail else key
+    fun rejection(key: String, detail: String): String {
+        phase(detail)?.let { return it }
+        return when (key) {
+            "error.insufficient_cash" -> "Not enough cash for that. This spends the company's own free cash: lower the amount, or fund the company first."
+            "error.insufficient_stock" -> "You hold fewer shares or lots than that needs. Reduce the quantity."
+            "error.no_authority" -> "You do not have the authority for that. You need control of the company acting: more than half the votes, or the CEO seat with three board seats."
+            "error.wrong_phase" -> "That cannot be done right now. It is in a different state than this action allows."
+            "error.arithmetic" -> "That amount is out of range. Check the units and that quantities are positive."
+            "error.stale_revision" -> "The world moved on while you were deciding. Try again."
+            "error.invalid_entity" -> "That company, facility or policy no longer exists. Go back and choose a current one."
+            "error.capacity_unavailable" -> "There is not enough physical capacity. Add workers, inputs or another facility first."
+            "error.solvency_restriction" -> "A payout, credit or capital rule blocks this. Check the cash buffer and credit standing."
+            "error.ownership_cycle" -> "That would make a company own part of itself. Choose a target outside your group."
+            "error.quote_expired" -> "The quote expired at the week close. Confirm again."
+            "error.legal_review_required" -> "A competition review is still running. Wait for its deadline."
+            "error.duplicate_command" -> "That was already done."
+            "error.resource_limit" -> "The world limit was reached."
+            "error.malformed_command" -> "The app could not build that action. Nothing changed."
+            else -> "That could not be done. Nothing changed."
+        }
+    }
+
+    /** Wrong-phase refusals that name a specific division or raid rule. */
+    private fun phase(detail: String): String? = when {
+        detail.contains("division_strategy") -> "Your division runs another strategy. Build that strategy here, or retool the division first."
+        detail.contains("own_division") -> "You can only raid a market you serve. Build a plant of this sector in the region first."
+        detail.contains("rival_division") -> "The rival needs at least two plants here: a raid never takes its last one."
+        detail.contains("raid_cooldown") -> "You can raid the same market once every thirteen weeks."
+        detail.contains("rival_firm") -> "Raids target rivals outside the group you control."
+        else -> null
     }
 }

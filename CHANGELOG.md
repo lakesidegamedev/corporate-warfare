@@ -422,6 +422,8 @@ heading.
 
 ### Changed
 
+- Tooling: the Android and desktop builds now share a dependency cache and retry a download that Maven Central or Google rate-limited, so a 403 from a repository no longer fails a build that would pass a minute later. The Apple build keeps its Rust dependencies between runs, which removes most of its longest step, and no longer builds the extra size-report engine on pull requests.
+- Tooling: the first-map-draw timing test on iPhone warms up SwiftUI's own one-time startup on a blank canvas before measuring, so a cold test runner no longer fails a budget meant for the map's layers.
 - Tooling: every change to the Android app now starts the trimmed release build on an emulator in
   CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
   so a trimming mistake fails the check and not a phone.
@@ -465,6 +467,10 @@ heading.
 
 ### Fixed
 
+- No button is out of reach any more. Every pop-up window in the game (the game menu, pricing, the board's offer, a news story, giving to a candidate, bidding on a contract, dismissing an executive and the rest) now scrolls its body on a short window or a phone, with its buttons always in view. A test draws the pop-ups at a short desktop size and at phone size, and another fails the build if a new pop-up is added without a scrolling body.
+- Every action now answers. When a command is accepted, a short message appears at the bottom of the screen saying what happened (for example that a wage offer is set and staff respond when the week closes, or that a gift will be disclosed in the paper next week). Before, a success was shown only in Settings. The research and marketing budget sliders also now say when they are refused instead of failing silently.
+- Refusals now explain themselves in plain words. A rejected action used to be able to show the engine's internal text; it now always says what is wrong and what to do about it, the same wording as the iPhone and Mac app.
+- The Stats screen now closes with Escape or the Android back button, like every other screen.
 - On the new map, plants are now a believable size. A plant stands a few hundred metres to about two
   kilometres across and is never taller than it is wide, so a city's plants no longer dwarf the
   counties around them. They never stand on lakes or the sea: a plant whose spot is water slides along

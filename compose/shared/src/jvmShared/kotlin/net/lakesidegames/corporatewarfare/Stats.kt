@@ -100,6 +100,7 @@ object ResultBuckets {
  */
 @Composable
 fun StatsScreen(store: GameStore, onBack: () -> Unit) {
+    BackAction(onBack = onBack)
     val firm = store.selectedFirmDto
     var period by remember { mutableStateOf(StatsPeriod.Month) }
     val buckets = ResultBuckets.make(period, store.finance?.recentWeeks ?: emptyList(), store.history)

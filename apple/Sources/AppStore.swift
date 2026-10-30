@@ -1429,7 +1429,7 @@ final class AppStore: ObservableObject {
             let key = receipt.errorKey ?? "error.internal_fault"
             errorMessage = Remedy.title(for: key)
             lastErrorDetail = receipt.errorDetail
-            statusLine = receipt.errorDetail ?? key
+            statusLine = CommandRejection(key: key, detail: receipt.errorDetail ?? "").message
         }
     }
 
