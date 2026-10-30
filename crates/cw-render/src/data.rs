@@ -146,6 +146,31 @@ impl Mask {
     }
 }
 
+impl Mask {
+    /// True when the square of half-width `half_km` round a position is all land: no corner,
+    /// edge midpoint or centre falls on sea or lake. `km_per_deg_lon` is the scenario's.
+    pub fn footprint_on_land(&self, lon: f32, lat: f32, half_km: f32, km_per_deg_lon: f32) -> bool {
+        let (dx, dy) = (half_km / km_per_deg_lon, half_km / KM_PER_DEG_LAT);
+        for (sx, sy) in [
+            (0.0, 0.0),
+            (-1.0, -1.0),
+            (1.0, -1.0),
+            (1.0, 1.0),
+            (-1.0, 1.0),
+            (0.0, -1.0),
+            (0.0, 1.0),
+            (-1.0, 0.0),
+            (1.0, 0.0),
+        ] {
+            let kind = self.at(lon + sx * dx, lat + sy * dy)[2];
+            if kind == WATER_OCEAN || kind == WATER_LAKE {
+                return false;
+            }
+        }
+        true
+    }
+}
+
 /// An RGBA8 image that covers a geographic box (rows north first).
 pub struct GeoImage {
     pub w: u32,
@@ -160,6 +185,8 @@ pub struct VoxelBox {
     pub min: [f32; 3],
     pub max: [f32; 3],
     pub colour: Rgb,
+    /// Roof or trim that takes the player's firm colour (gold) when the building is theirs.
+    pub trim: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -366,6 +393,10 @@ struct RawUrban {
     areas: Vec<RawRings>,
 }
 
+/// The GPU map's plant models (built by tools/plant_models.py): low sheds, tanks, stacks and
+/// towers on a 24 voxel footprint, replacing the classic sprites for every sector.
+pub const PLANT_MODELS: &str = include_str!("../assets/plant-models.json");
+
 /// The eight states of the Great Lakes 2000 scenario.
 pub const GREAT_LAKES_STATES: [&str; 8] = ["IL", "IN", "KY", "MI", "NY", "OH", "PA", "WV"];
 /// Regions drawn as the player's holdings in the spike.
@@ -400,7 +431,14 @@ fn parse_models(json: &str) -> Result<HashMap<String, VoxelModel>, String> {
     struct RawModel {
         w: f32,
         d: f32,
-        boxes: Vec<(f32, f32, f32, f32, f32, f32, String)>,
+        boxes: Vec<RawBox>,
+    }
+    /// x0 y0 z0 x1 y1 z1 colour, plus an optional trim flag.
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum RawBox {
+        Trim(f32, f32, f32, f32, f32, f32, String, bool),
+        Plain(f32, f32, f32, f32, f32, f32, String),
     }
     let raw: Raw = serde_json::from_str(json).map_err(|e| e.to_string())?;
     let hex = |s: &str| -> Rgb {
@@ -414,10 +452,21 @@ fn parse_models(json: &str) -> Result<HashMap<String, VoxelModel>, String> {
             let boxes = m
                 .boxes
                 .iter()
-                .map(|b| VoxelBox {
-                    min: [b.0, b.1, b.2],
-                    max: [b.3, b.4, b.5],
-                    colour: hex(&b.6),
+                .map(|b| {
+                    let (v, colour, trim) = match b {
+                        RawBox::Trim(a, b, c, d, e, f, col, t) => {
+                            ([*a, *b, *c, *d, *e, *f], col, *t)
+                        }
+                        RawBox::Plain(a, b, c, d, e, f, col) => {
+                            ([*a, *b, *c, *d, *e, *f], col, false)
+                        }
+                    };
+                    VoxelBox {
+                        min: [v[0], v[1], v[2]],
+                        max: [v[3], v[4], v[5]],
+                        colour: hex(colour),
+                        trim,
+                    }
                 })
                 .collect();
             (
@@ -706,7 +755,7 @@ fn collect_lines(map: &RawMap, scenario: &str, b: &Bounds) -> Vec<Line> {
 }
 
 /// Footprint of one downtown block in kilometres: a real city block cluster, not a district.
-const BLOCK_KM: f32 = 1.1;
+const BLOCK_KM: f32 = 0.55;
 
 /// A few small voxel blocks round the centre of every big city: more blocks for bigger cities,
 /// each picked and turned from the city's own position so the same map always builds the same
@@ -892,9 +941,11 @@ impl Scene {
         let earth = load_geo_image(&res.join(format!("earth-{}.jpg", spec.id)), region)?;
         let mut clouds = load_geo_image(&res.join(format!("clouds-{}.webp", spec.id)), region)?;
         blur_alpha(&mut clouds, 2, 2);
-        let models = parse_models(
+        let mut models = parse_models(
             &String::from_utf8(read(&res.join("voxel-models.json"))?).map_err(|e| e.to_string())?,
         )?;
+        // The GPU map's own plant models replace the classic sprites' keys.
+        models.extend(parse_models(PLANT_MODELS)?);
         let map: RawMap = serde_json::from_str(&map_json).map_err(|e| e.to_string())?;
         let mut codes: Vec<&String> = map
             .hubs
@@ -902,6 +953,7 @@ impl Scene {
             .filter(|c| spec.states.contains(&&c[..2]))
             .collect();
         codes.sort();
+        let hb0 = heightmap.bounds;
         let mut buildings: Vec<Placement> = if options.hub_buildings {
             codes
                 .iter()
@@ -920,9 +972,17 @@ impl Scene {
                         yaw: 0.0,
                         scale: models
                             .get(model)
-                            .map_or(1.0, |m| Placement::scale_for_km(VOXEL_KM, m, 2.5)),
+                            .map_or(1.0, |m| Placement::scale_for_km(VOXEL_KM, m, 1.2)),
                         owner: Owner::Rival,
                     }
+                })
+                .filter(|b| {
+                    mask.footprint_on_land(
+                        b.lon,
+                        b.lat,
+                        0.6,
+                        KM_PER_DEG_LON_EQ * ((hb0.south + hb0.north) / 2.0).to_radians().cos(),
+                    )
                 })
                 .collect()
         } else {
@@ -959,8 +1019,12 @@ impl Scene {
             downtown_blocks(&cities, &models, mid_lat, VOXEL_KM)
                 .into_iter()
                 .filter(|b| {
-                    let kind = mask.at(b.lon, b.lat)[2];
-                    kind == WATER_NONE || kind == WATER_URBAN
+                    mask.footprint_on_land(
+                        b.lon,
+                        b.lat,
+                        BLOCK_KM / 2.0,
+                        KM_PER_DEG_LON_EQ * mid_lat.to_radians().cos(),
+                    )
                 }),
         );
         let lines = collect_lines(&map, spec.id, &hb);
@@ -1038,11 +1102,13 @@ impl Scene {
                         min: [-3.0, -3.0, 0.0],
                         max: [3.0, 3.0, 1.0],
                         colour: [0x6F, 0xA8, 0x3B],
+                        trim: false,
                     },
                     VoxelBox {
                         min: [-2.0, -2.0, 1.0],
                         max: [2.0, 2.0, 6.0],
                         colour: [0xB2, 0x3A, 0x2E],
+                        trim: false,
                     },
                 ],
                 footprint: [6.0, 6.0],

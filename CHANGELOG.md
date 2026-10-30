@@ -447,6 +447,12 @@ heading.
 
 ### Fixed
 
+- On the new map, plants are now a believable size. A plant stands a few hundred metres to about two
+  kilometres across and is never taller than it is wide, so a city's plants no longer dwarf the
+  counties around them. They never stand on lakes or the sea: a plant whose spot is water slides along
+  the ring, then inward, until it is on dry land, and the same goes for the downtown blocks. Every
+  sector has a new, cleaner look from any angle and any tilt: low halls with roof detail, tanks,
+  stacks, cranes, silos and towers, with your firm's gold on the roofs. The classic map is unchanged.
 - Your own share orders now cost what they fill and no more. A buy order used to take your cash when
   you placed it and then charge the price again when it filled, and the unused part of your limit was
   never given back; now the cash is held once, the fill spends it, and whatever is left (a price under
