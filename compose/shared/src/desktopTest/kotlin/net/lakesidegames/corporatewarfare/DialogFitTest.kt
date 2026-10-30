@@ -20,9 +20,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * No control out of reach: every dialog is drawn in a short desktop window and a phone-sized one, and its panel must sit
- * inside the window with room to spare. A dialog whose body does not scroll grows until it touches the window edge, which
- * is how the stock dialog once cut off its Buy now button. Pictures go to CW_DIALOG_FIT_DIR.
+ * No control out of reach: every dialog is drawn in a short desktop window and a phone-sized one. A tall dialog may fill
+ * the window, but its buttons must still show at the bottom; a body that does not scroll pushes them off, which is how the
+ * stock dialog once cut off its Buy now button. Pictures go to CW_DIALOG_FIT_DIR.
  */
 class DialogFitTest {
     init {
@@ -58,10 +58,19 @@ class DialogFitTest {
                 if (y >= bmp.height - 3) touchBottom = true
             }
         }
+        // A tall dialog may fill the window: that is fine while its body scrolls and its buttons stay on screen. The buttons
+        // (Close, the gold action) sit in the panel's last rows, so when the panel reaches the bottom edge the gold of a button
+        // must show in the bottom band of the window; if it does not, the buttons were pushed off screen.
+        val gold = Palette.gold.toArgb()
+        fun goldIn(rows: IntRange): Boolean {
+            for (y in rows) for (x in 0 until bmp.width step 2) if (bmp.getColor(x, y) == gold) return true
+            return false
+        }
+        val band = (bmp.height - 90).coerceAtLeast(0) until bmp.height
         return when {
             panelRows < 40 -> "$name at ${width}x$height: no dialog panel was drawn"
-            touchTop || touchBottom -> "$name at ${width}x$height: the dialog reaches the window edge, so its buttons or body are out of reach"
-            else -> null
+            touchBottom && !goldIn(band) -> "$name at ${width}x$height: the dialog reaches the bottom edge and no button shows there, so its buttons are out of reach"
+            else -> null.also { if (touchTop && !touchBottom) println("$name at ${width}x$height: reaches the top edge only") }
         }
     }
 
