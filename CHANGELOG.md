@@ -13,6 +13,28 @@ heading.
 
 ### Added
 
+- Elections with faces, campaign money, state laws and public tenders. Every state now has a
+  governor race, and the country has a leader race, each between two named people with a portrait
+  and two or three promises (right to work, corporate tax, environmental rules, and for the country
+  common carrier and merger review). A weekly poll follows the economy in that state (jobs, wages
+  and prices) and campaign money. The winner's promises become that state's laws thirteen weeks after
+  the vote. States now differ: right to work slows unions down, a state corporate tax adjustment is
+  added to the national rate for companies headquartered there, and stricter or lighter environmental
+  rules change what heavy industry pays and waits to build. You can give to a candidate from the
+  company's cash in the last six months before a vote, up to a cap the state's law sets (default
+  $250,000 per company per race). The gift is printed in the paper the next week with your name,
+  adds a bounded few points to that candidate's poll, costs a little standing with the other side
+  and earns some favour if your candidate wins. Rivals give too, by temperament and by which laws
+  help them. The state also puts roads, power lines and port expansions out to tender: companies,
+  rivals included, bid a price and a delivery time, the best bid wins, builds it (paying
+  contractors and buying steel in the region) and is paid in four stages from the state's budget,
+  less for finishing late. When it is finished the region really changes: more truck or sea lane
+  capacity, more port room or a stronger power grid. The paper reports polls, debates, gifts, results,
+  tender openings and awards, governors write to companies with big plants in their state, and the
+  weekly brief lists tenders you can bid on and elections near your plants. In the app the Economy
+  tab has a Politics section with the races, candidate cards, a Give button showing the cap and the
+  disclosure warning, the poll chart, the laws in force and coming, and tenders with a bid form that
+  quotes your cost and profit. Saves from before this load fine; the races are drawn the next week.
 - A new map for the Windows and Linux game, as an opt-in preview. In Settings, under Graphics, turn
   on "New map (preview)" (it starts Off). The map is then drawn on your graphics card in the new
   stylized look: terrain, lakes, roads, rails, cities, and your plants and your rivals' plants as

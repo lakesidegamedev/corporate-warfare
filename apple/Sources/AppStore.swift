@@ -42,6 +42,9 @@ final class AppStore: ObservableObject {
     /// Office shows them.
     @Published var executives: ExecutivesDto?
     var executivesOpen = false
+    /// Races, polls, laws and tenders. Read only while the Politics section is on screen.
+    @Published var politics: PoliticsDto?
+    var politicsOpen = false
     private var briefWeek: UInt32?
     private var briefRevision: UInt64?
     private var briefFirm: UInt64?
@@ -186,6 +189,23 @@ final class AppStore: ObservableObject {
         guard let firm = selectedFirm else { return }
         let fresh = await engine.executives(firm: firm)
         if fresh != executives { executives = fresh }
+    }
+
+    func refreshPolitics() async {
+        let fresh = await engine.politics(firm: selectedFirm)
+        if fresh != politics { politics = fresh }
+    }
+
+    func giveToCandidate(firm: UInt64, office: Int, candidate: Int, cents: Int64) async -> CommandRejection? {
+        let result = await submit(CommandJSON.command("GiveToCandidate", ["firm": firm, "office": office, "candidate": candidate, "cents": cents]))
+        await refreshPolitics()
+        return result
+    }
+
+    func bidOnTender(firm: UInt64, tender: Int, priceCents: Int64, weeks: Int) async -> CommandRejection? {
+        let result = await submit(CommandJSON.command("BidOnTender", ["firm": firm, "tender": tender, "price_cents": priceCents, "weeks": weeks]))
+        await refreshPolitics()
+        return result
     }
 
     func hireExecutive(firm: UInt64, post: Int, person: Int) async -> CommandRejection? {

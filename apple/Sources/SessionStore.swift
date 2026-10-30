@@ -65,6 +65,10 @@ actor Engine {
         session?.executives(firm: firm)
     }
 
+    func politics(firm: UInt64?) -> PoliticsDto? {
+        session?.politics(firm: firm)
+    }
+
     func cfoAdvice(firm: UInt64) -> [CfoAdviceDto] {
         session?.cfoAdvice(firm: firm) ?? []
     }
