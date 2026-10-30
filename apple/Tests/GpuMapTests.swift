@@ -101,8 +101,9 @@ final class GpuMapTests: XCTestCase {
                                          night: false, clouds: 2, week: 28))
         let camera = GpuCamera(MapCamera.scenario(in: size, map: map), size: size, tilt: GraphicsSettings.pitch(forTilt: 1))
         session.request(camera: camera, size: size)
-        await wait(60) { session.framesPresented >= 3 }
-        XCTAssertGreaterThanOrEqual(session.framesPresented, 3, "frames are presented to the layer")
+        // The map draws on demand (a new camera, size or update), so a still camera presents one or two frames, not a stream.
+        await wait(60) { session.framesPresented >= 1 && session.shown != nil }
+        XCTAssertGreaterThanOrEqual(session.framesPresented, 1, "frames are presented to the layer")
         XCTAssertNil(session.failure)
         XCTAssertNotNil(session.shown, "the frame on screen has its camera")
         // A tap on the first region's anchor, projected by the camera of the frame shown.
@@ -144,8 +145,8 @@ final class GpuMapTests: XCTestCase {
             previous = live
             XCTAssertNotNil(live, "\(name): the map screen opens the GPU map when the setting is on")
             XCTAssertNil(live?.failure, "\(name): \(live?.failure ?? "")")
-            await wait(60) { (live?.framesPresented ?? 0) >= 3 }
-            XCTAssertGreaterThanOrEqual(live?.framesPresented ?? 0, 3, "\(name): the map screen presents frames")
+            await wait(60) { (live?.framesPresented ?? 0) >= 1 }
+            XCTAssertGreaterThanOrEqual(live?.framesPresented ?? 0, 1, "\(name): the map screen presents frames")
             await wait(2) { false }
             print("gpu-map: \(name) screen: \(live?.line ?? "none"), \(live?.framesPresented ?? 0) frames")
             let format = UIGraphicsImageRendererFormat.default()
