@@ -11,6 +11,8 @@ use crate::palette::Rgb;
 
 /// Kilometres per degree of latitude, and of longitude at the scenario's reference latitude.
 pub const KM_PER_DEG_LAT: f32 = 110.57;
+/// Nominal kilometres per voxel before a building is sized to its real footprint.
+pub const VOXEL_KM: f32 = 2.4;
 pub const KM_PER_DEG_LON_EQ: f32 = 111.32;
 
 /// Mask water kinds (blue channel).
@@ -166,6 +168,16 @@ pub struct VoxelModel {
     pub footprint: [f32; 2],
 }
 
+/// Whose building it is. The scenery (downtown blocks) is nobody's; the player's own buildings
+/// are gold roofed and rivals keep their sector's colours.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Owner {
+    #[default]
+    Scenery,
+    Player,
+    Rival,
+}
+
 /// A building placed on the map. `yaw` turns it in degrees (0 faces south).
 #[derive(Clone, Debug)]
 pub struct Placement {
@@ -173,8 +185,17 @@ pub struct Placement {
     pub lon: f32,
     pub lat: f32,
     pub yaw: f32,
-    /// Multiplier of the scene's voxel size: 1 for the sector hubs, smaller for downtown blocks.
+    /// Multiplier of the scene's voxel size. Set from the building's real size in kilometres
+    /// (`Placement::sized`), so a building is the same size on the ground at every zoom.
     pub scale: f32,
+    pub owner: Owner,
+}
+
+impl Placement {
+    /// The `scale` that makes `model` stand `size_km` across on its longest side.
+    pub fn scale_for_km(voxel_km: f32, model: &VoxelModel, size_km: f32) -> f32 {
+        size_km / (model.footprint[0].max(model.footprint[1]).max(1.0) * voxel_km)
+    }
 }
 
 /// Road classes of [`Line`]: the 1.8 map's interstates, its main roads and its railways.
@@ -220,6 +241,10 @@ pub struct Scene {
     /// (row major). Both are derived from the fields above by `finish`.
     pub ground: Ground,
     pub levels: Vec<i32>,
+    /// Week of the year the snow is drawn for (1 to 52), and a counter bumped when it changes so
+    /// the renderer repaints only the ground and the apron.
+    pub week: u32,
+    pub season_rev: u64,
     /// The scenario's regions in mask order: region `i` is painted `i + 1` in the mask's red
     /// channel. Hub positions are where a region's own buildings stand.
     pub regions: Vec<RegionInfo>,
@@ -254,6 +279,16 @@ impl Scene {
             }
         }
         self.mask_rev += 1;
+    }
+
+    /// Set the season: snow follows the week of the year, by latitude and height.
+    pub fn set_week(&mut self, week: u32) {
+        let week = week.clamp(1, 52);
+        if week != self.week {
+            self.week = week;
+            self.ground.set_week(week);
+            self.season_rev += 1;
+        }
     }
 
     /// Replace the placed buildings and mark them for upload.
@@ -670,13 +705,18 @@ fn collect_lines(map: &RawMap, scenario: &str, b: &Bounds) -> Vec<Line> {
     out
 }
 
+/// Footprint of one downtown block in kilometres: a real city block cluster, not a district.
+const BLOCK_KM: f32 = 1.1;
+
 /// A few small voxel blocks round the centre of every big city: more blocks for bigger cities,
 /// each picked and turned from the city's own position so the same map always builds the same
-/// skyline.
+/// skyline. The blocks stand inside the city's downtown, whose radius follows its population
+/// (the same radius the dense downtown ground uses).
 fn downtown_blocks(
     cities: &[City],
     models: &HashMap<String, VoxelModel>,
     lat: f32,
+    voxel_km: f32,
 ) -> Vec<Placement> {
     const KINDS: [&str; 6] = [
         "financial/1",
@@ -690,6 +730,7 @@ fn downtown_blocks(
     let mut out = Vec::new();
     for c in cities.iter().filter(|c| c.population >= 600_000) {
         let n = (2.0 + (c.population as f32 / 1.0e6).sqrt()).min(7.0) as usize;
+        let reach = 2.0 + 3.2 * (c.population as f32 / 1.0e6).sqrt();
         let seed = ((c.lon * 977.0 + c.lat * 313.0).sin() * 43758.5)
             .fract()
             .abs();
@@ -698,18 +739,19 @@ fn downtown_blocks(
             let ring = if i == 0 {
                 0.0
             } else {
-                3.0 + 1.2 * ((i * 7) % 5) as f32
+                reach * (0.3 + 0.12 * ((i * 7) % 5) as f32)
             };
             let kind = KINDS[((seed * 97.0) as usize + i * 5) % KINDS.len()];
-            if !models.contains_key(kind) {
+            let Some(model) = models.get(kind) else {
                 continue;
-            }
+            };
             out.push(Placement {
                 model: kind.into(),
                 lon: c.lon + a.cos() * ring / kx,
                 lat: c.lat + a.sin() * ring / KM_PER_DEG_LAT,
                 yaw: (((seed * 31.0) as usize + i) % 4) as f32 * 90.0,
-                scale: 0.42,
+                scale: Placement::scale_for_km(voxel_km, model, BLOCK_KM),
+                owner: Owner::Scenery,
             });
         }
     }
@@ -723,6 +765,8 @@ fn empty_ground(bounds: Bounds) -> Ground {
         bounds,
         ppd: 1.0,
         classes: Vec::new(),
+        base: Vec::new(),
+        elev: Vec::new(),
         variant: Vec::new(),
     }
 }
@@ -874,7 +918,10 @@ impl Scene {
                         lon: p[0] as f32 / 1e4,
                         lat: p[1] as f32 / 1e4,
                         yaw: 0.0,
-                        scale: 1.0,
+                        scale: models
+                            .get(model)
+                            .map_or(1.0, |m| Placement::scale_for_km(VOXEL_KM, m, 2.5)),
+                        owner: Owner::Rival,
                     }
                 })
                 .collect()
@@ -909,7 +956,7 @@ impl Scene {
             .collect();
         let mid_lat = (hb.south + hb.north) / 2.0;
         buildings.extend(
-            downtown_blocks(&cities, &models, mid_lat)
+            downtown_blocks(&cities, &models, mid_lat, VOXEL_KM)
                 .into_iter()
                 .filter(|b| {
                     let kind = mask.at(b.lon, b.lat)[2];
@@ -931,12 +978,14 @@ impl Scene {
             buildings,
             lines,
             cities,
-            voxel_km: 2.4,
+            voxel_km: VOXEL_KM,
             exaggeration: 28.0,
             terrace_m: 200.0,
             terrace_offset_m: 60.0,
             ground: empty_ground(hb),
             levels: Vec::new(),
+            week: 28,
+            season_rev: 0,
             regions,
             mask_rev: 0,
             buildings_rev: 0,
@@ -1020,6 +1069,7 @@ impl Scene {
                 lat: 41.0,
                 yaw: 0.0,
                 scale: 1.0,
+                owner: Owner::Rival,
             }],
             lines: vec![
                 // An interstate across the ridge and its terrace walls, a main road and a railway.
@@ -1052,6 +1102,8 @@ impl Scene {
             terrace_offset_m: 0.0,
             ground: empty_ground(bounds),
             levels: Vec::new(),
+            week: 28,
+            season_rev: 0,
             regions: vec![
                 RegionInfo {
                     code: "AA-ONE".into(),

@@ -258,6 +258,27 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         return vec4<f32>(pal(RAMP_CLOUD, step), 1.0);
     }
 
+    if (in.kind == 6u || in.kind == 7u) {
+        // The land and sea beyond the terrain: flat class colour per coarse cell, no texture,
+        // no region lines. Class 7 is water, anything else a ground class.
+        let acls = u32(round(in.colour.r * 255.0));
+        let ash = lit(in.world, n);
+        let in_shade = ash < 0.5 || ndl <= 0.0 || (g.cloud.w > 0.5 && cloud_alpha(ll + g.cloud2.xy) >= g.cloud.x);
+        let wall = in.kind == 7u;
+        let hi = wall && (1.0 - in.uv.y) / max(fuv.y, 1e-5) < 1.0;
+        if (acls == 7u) {
+            var wstep = 2;
+            if (in_shade) { wstep = 1; }
+            if (wall) { wstep = 0; }
+            return vec4<f32>(pal(RAMP_WATER, wstep), 1.0);
+        }
+        var astep = 2;
+        if (wall) { astep = 1; }
+        if (hi) { astep = 3; }
+        if (in_shade && !wall) { astep = 1; }
+        return vec4<f32>(pal(ramp_of(acls), astep), 1.0);
+    }
+
     if (in.kind == 0u || in.kind == 1u) {
         let m = mask_at(ll);
         let mr = mask_at(lonlat(in.world.xy + dpx.xy));

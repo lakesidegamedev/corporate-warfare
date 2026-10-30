@@ -20,9 +20,9 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 
 use cw_render::{
-    AssetDirs, Camera, CloudLevel, Placement, PlantSite, Renderer, ScenarioSpec, Scene,
-    SceneOptions, SiteStatus, Style, layout_plants, pick_ground, project, ramp_by_name,
-    region_tints,
+    AssetDirs, Camera, CloudLevel, Owner, Placement, PlantSite, Renderer, ScenarioSpec, Scene,
+    SceneOptions, SiteStatus, Style, building_boxes, layout_plants, pick_ground, project,
+    ramp_by_name, region_tints,
 };
 use serde::Deserialize;
 
@@ -41,6 +41,8 @@ pub struct Update {
     pub night: Option<bool>,
     /// 0 off, 1 thin, 2 light, 3 heavy: the classic map's cloud setting.
     pub clouds: Option<u8>,
+    /// Week of the year (1 to 52) for the snow, from the game's calendar.
+    pub week: Option<u32>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -196,6 +198,9 @@ impl GpuMap {
             }
         }
         let mut scene = self.scene.write().unwrap();
+        if let Some(week) = u.week {
+            scene.set_week(week);
+        }
         if let Some(plants) = &u.plants {
             let mut all = self.base_buildings.clone();
             all.extend(layout_plants(&scene, &sites_of(plants)));
@@ -267,6 +272,63 @@ impl GpuMap {
         let scene = self.scene.read().unwrap();
         let (lon, lat) = pick_ground(&scene, &camera(cam), width, height, px, py)?;
         scene.region_at(lon, lat).map(|r| r.code.clone())
+    }
+
+    /// The placed buildings as JSON for the shell: position, owner, sector and body colour, in
+    /// the order `building_rects` answers for. Fixed between updates.
+    pub fn buildings_json(&self) -> String {
+        let scene = self.scene.read().unwrap();
+        let items: Vec<serde_json::Value> = building_boxes(&scene)
+            .iter()
+            .map(|b| {
+                serde_json::json!({
+                    "lon": b.lon,
+                    "lat": b.lat,
+                    "owner": match b.owner {
+                        Owner::Player => "player",
+                        Owner::Rival => "rival",
+                        Owner::Scenery => "scenery",
+                    },
+                    "kind": b.model.split('/').next().unwrap_or(""),
+                    "colour": format!("{:02X}{:02X}{:02X}", b.colour[0], b.colour[1], b.colour[2]),
+                })
+            })
+            .collect();
+        serde_json::Value::Array(items).to_string()
+    }
+
+    /// The screen rectangle (left, top, right, bottom) each building fills for this camera,
+    /// ground footprint and roof together, NaN when any corner is behind the camera. Computed
+    /// from the same matrices as the frame, so the interface can keep names off buildings and
+    /// decide whether one is big enough to show.
+    pub fn building_rects(&self, cam: [f64; 6], width: f32, height: f32) -> Vec<[f32; 4]> {
+        let scene = self.scene.read().unwrap();
+        let c = camera(cam);
+        let kx = scene.projection.km_per_deg_lon();
+        building_boxes(&scene)
+            .iter()
+            .map(|b| {
+                let (dlon, dlat) = (b.half_km / kx, b.half_km / cw_render::KM_PER_DEG_LAT);
+                let mut r = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+                for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+                    for lift in [0.0, b.height_km] {
+                        let Some((x, y)) = project(
+                            &scene,
+                            &c,
+                            width,
+                            height,
+                            b.lon + sx * dlon,
+                            b.lat + sy * dlat,
+                            lift,
+                        ) else {
+                            return [f32::NAN; 4];
+                        };
+                        r = [r[0].min(x), r[1].min(y), r[2].max(x), r[3].max(y)];
+                    }
+                }
+                r
+            })
+            .collect()
     }
 
     /// Positions of the placed buildings, for tests and the shell's labels.
@@ -530,6 +592,50 @@ pub unsafe extern "C" fn cw_gpu_pick(
             Some(code) => unsafe { put_text(&code, buf, len) },
             None => 0,
         })
+    })
+}
+
+/// The placed buildings as JSON (see `GpuMap::buildings_json`), written to `buf`; the text
+/// length, or a negative number (minus the size needed) when the buffer is too small.
+///
+/// # Safety
+/// `buf` must be writable for `len` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cw_gpu_buildings(id: u64, buf: *mut c_char, len: usize) -> i32 {
+    guarded(-1, || {
+        let m = get(id).ok_or("no such map")?;
+        Ok(unsafe { put_text(&m.buildings_json(), buf, len) })
+    })
+}
+
+/// Screen rectangles of the buildings for a camera: four floats (left, top, right, bottom) per
+/// building, in the order of `cw_gpu_buildings`, NaN when behind the camera. Returns the number
+/// of buildings; at most `max` are written.
+///
+/// # Safety
+/// `cam` must be readable for 6 doubles and `out` writable for `4 * max` floats.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cw_gpu_building_rects(
+    id: u64,
+    cam: *const f64,
+    width: f32,
+    height: f32,
+    out: *mut f32,
+    max: usize,
+) -> i32 {
+    guarded(-1, || {
+        let m = get(id).ok_or("no such map")?;
+        let cam: [f64; 6] = unsafe { std::slice::from_raw_parts(cam, 6) }
+            .try_into()
+            .map_err(|_| "camera")?;
+        let rects = m.building_rects(cam, width, height);
+        if !out.is_null() {
+            let o = unsafe { std::slice::from_raw_parts_mut(out, max * 4) };
+            for (i, r) in rects.iter().take(max).enumerate() {
+                o[i * 4..i * 4 + 4].copy_from_slice(r);
+            }
+        }
+        Ok(rects.len() as i32)
     })
 }
 
@@ -823,5 +929,120 @@ mod tests {
             .count();
         eprintln!("great lakes grid picks {hits}");
         assert!(hits > 0);
+    }
+
+    /// Writes the review views to the folder in CW_GPU_DUMP (a P6 picture each); does nothing
+    /// otherwise. Run it by hand: `CW_GPU_DUMP=dir cargo test -p cw-ffi --features gpu-map dump_polish_views -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn dump_polish_views() {
+        let Ok(out) = std::env::var("CW_GPU_DUMP") else {
+            return;
+        };
+        let out = std::path::PathBuf::from(out);
+        std::fs::create_dir_all(&out).unwrap();
+        let dir = assets();
+        let (w, h) = (1600u32, 1000u32);
+        let only = std::env::var("CW_GPU_ONLY").unwrap_or_default();
+        for (id, hub, views) in [
+            (
+                "great-lakes-2000",
+                "OH-CEN",
+                [
+                    ("scenario", [-82.0, 41.9, 2250.0, 24.0, 0.0, 28.0]),
+                    ("close", [-82.9, 40.0, 420.0, 40.0, 0.0, 28.0]),
+                    ("turned", [-82.3, 41.1, 900.0, 52.0, 38.0, 28.0]),
+                    ("edge", [-83.0, 44.0, 1800.0, 64.0, 0.0, 28.0]),
+                ],
+            ),
+            (
+                "texas-1981",
+                "TX-HOU",
+                [
+                    ("scenario", [-97.5, 31.0, 2300.0, 24.0, 0.0, 28.0]),
+                    ("close", [-95.4, 29.8, 380.0, 40.0, 0.0, 28.0]),
+                    ("turned", [-100.0, 31.5, 1100.0, 52.0, 38.0, 28.0]),
+                    ("edge", [-98.0, 31.0, 1800.0, 64.0, 200.0, 28.0]),
+                ],
+            ),
+            (
+                "ruhr-rhine-1991",
+                "",
+                [
+                    ("scenario", [8.0, 51.0, 1500.0, 24.0, 0.0, 28.0]),
+                    ("close", [7.2, 51.4, 300.0, 40.0, 0.0, 28.0]),
+                    ("turned", [8.0, 50.5, 800.0, 52.0, 38.0, 28.0]),
+                    ("edge", [8.0, 49.0, 1500.0, 64.0, 0.0, 28.0]),
+                ],
+            ),
+            (
+                "silicon-valley-1995",
+                "",
+                [
+                    ("scenario", [-119.5, 37.0, 1500.0, 24.0, 0.0, 28.0]),
+                    ("close", [-121.9, 37.4, 300.0, 40.0, 0.0, 28.0]),
+                    ("turned", [-120.0, 37.5, 800.0, 52.0, 38.0, 28.0]),
+                    ("edge", [-120.5, 36.0, 1500.0, 64.0, 270.0, 28.0]),
+                ],
+            ),
+        ] {
+            if !only.is_empty() && !id.contains(&only) {
+                continue;
+            }
+            let _ = hub;
+            let Ok(map) = GpuMap::open(&dir, id) else {
+                eprintln!("no adapter");
+                return;
+            };
+            let session = career(id);
+            let plants: Vec<PlantIn> = session.map_plants().iter().map(PlantIn::from).collect();
+            let held: Vec<String> = session
+                .map_divisions()
+                .iter()
+                .map(|d| d.region.clone())
+                .collect();
+            for (season, week) in [("day", 28u32), ("winter", 3)] {
+                map.apply(&Update {
+                    plants: Some(plants.clone()),
+                    holdings: Some(held.clone()),
+                    week: Some(week),
+                    ..Update::default()
+                });
+                let mut views = views.to_vec();
+                if let Some(b) = map
+                    .scene
+                    .read()
+                    .unwrap()
+                    .buildings
+                    .iter()
+                    .find(|b| b.owner == Owner::Player)
+                {
+                    views.push((
+                        "building",
+                        [b.lon as f64, b.lat as f64, 40.0, 45.0, 20.0, 28.0],
+                    ));
+                }
+                for (name, cam) in views {
+                    let mut buf = vec![0u8; (w * h * 4) as usize];
+                    map.render(cam, w, h, 1, &mut buf);
+                    let rects = map.building_rects(cam, w as f32, h as f32);
+                    let sizes: Vec<f32> = rects
+                        .iter()
+                        .filter(|r| r[0].is_finite())
+                        .map(|r| (r[2] - r[0]).max(r[3] - r[1]))
+                        .collect();
+                    let big = sizes.iter().filter(|s| **s >= 6.0).count();
+                    eprintln!(
+                        "{id} {season} {name}: {} buildings, {big} at 6 px or more",
+                        sizes.len()
+                    );
+                    let mut ppm = format!("P6\n{w} {h}\n255\n").into_bytes();
+                    for p in buf.chunks_exact(4) {
+                        ppm.extend_from_slice(&p[..3]);
+                    }
+                    std::fs::write(out.join(format!("{id}-{name}-{season}.ppm")), ppm).unwrap();
+                }
+            }
+        }
     }
 }

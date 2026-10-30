@@ -6,6 +6,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -23,6 +24,15 @@ import kotlin.math.max
  * hidden there and the classic map is always used).
  */
 data class GpuCamera(val lon: Double, val lat: Double, val widthKm: Double, val tiltDeg: Double, val headingDeg: Double)
+
+/** One building of the map: where it stands and whose it is. The renderer keeps the footprint; the screen size comes from [GpuMapSession.buildingRects]. */
+class GpuBuilding(val lon: Double, val lat: Double, val owner: String, val kind: String, val colour: Int) {
+    val scenery get() = owner == "scenery"
+    val player get() = owner == "player"
+}
+
+/** A finished frame and the camera it was drawn for. */
+class GpuShown(val image: ImageBitmap, val camera: GpuCamera)
 
 interface GpuMapSession {
     /** The graphics adapter's name, and whether it is a software one. */
@@ -42,11 +52,20 @@ interface GpuMapSession {
     /** The camera [frame] was drawn for. Labels and overlays use this one, never the live gesture camera, so every layer shows the same view. */
     val frameCamera: GpuCamera?
 
+    /** The newest frame and its camera as one read, so the two can never come from different frames. */
+    val shown: GpuShown?
+
     /** Sends game state as JSON (plants, holdings, map mode, night, clouds). */
     fun update(json: String)
 
     /** Asks the render thread for a frame of the view; only the newest request is drawn. */
     fun request(camera: GpuCamera, width: Int, height: Int, moving: Boolean)
+
+    /** The placed buildings, in the order [buildingRects] answers for; changes only with [update]. */
+    fun buildings(): List<GpuBuilding>
+
+    /** The screen rectangle (left, top, right, bottom) each building fills for the camera, NaN when it is behind the camera. */
+    fun buildingRects(camera: GpuCamera, width: Int, height: Int): FloatArray
 
     /** Screen points of (lon, lat) pairs; NaN for points behind the camera. */
     fun project(camera: GpuCamera, width: Int, height: Int, lonLat: DoubleArray): FloatArray
@@ -121,7 +140,7 @@ internal fun MapLayer.gpuRamp(): String = when (this) {
 /** Game state as the GPU map's update JSON. */
 internal fun gpuUpdateJson(
     plants: List<uniffi.cw_ffi.MapPlantDto>, divisions: List<uniffi.cw_ffi.MapDivisionDto>, layer: MapLayer,
-    shaded: Map<String, Double>, night: Boolean, clouds: Int,
+    shaded: Map<String, Double>, night: Boolean, clouds: Int, week: Int = 28,
 ): String {
     fun q(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
     val plantJson = plants.joinToString(",", "[", "]") {
@@ -130,23 +149,37 @@ internal fun gpuUpdateJson(
     val holdings = divisions.map { it.region }.distinct().joinToString(",", "[", "]") { q(it) }
     val heat = if (layer == MapLayer.Presence || layer == MapLayer.Freight) "{}"
     else shaded.entries.joinToString(",", "{", "}") { "${q(it.key)}:${(it.value * 3.999).toInt().coerceIn(0, 3)}" }
-    return """{"plants":$plantJson,"holdings":$holdings,"heat":$heat,"heat_ramp":${q(layer.gpuRamp())},"night":$night,"clouds":$clouds}"""
+    return """{"plants":$plantJson,"holdings":$holdings,"heat":$heat,"heat_ramp":${q(layer.gpuRamp())},"night":$night,"clouds":$clouds,"week":$week}"""
 }
 
-/** Blits the newest frame over the whole view, scaled up with hard pixels when it was drawn smaller. */
-internal fun DrawScope.drawGpuFrame(session: GpuMapSession) {
+/**
+ * Blits the newest frame over the whole view, scaled up with hard pixels when it was drawn smaller.
+ * Returns the camera that frame was drawn for: every other layer of this draw (names, badges) must use
+ * it, so nothing slides against the picture while the view moves.
+ */
+internal fun DrawScope.drawGpuFrame(session: GpuMapSession): GpuCamera? {
     session.version
-    val image = session.frame ?: return
+    val shown = session.shown ?: return null
+    val image = shown.image
     drawImage(
         image, srcOffset = IntOffset.Zero, srcSize = IntSize(image.width, image.height),
         dstOffset = IntOffset.Zero, dstSize = IntSize(size.width.toInt(), size.height.toInt()), filterQuality = FilterQuality.None,
     )
+    return shown.camera
 }
+
+/** Below this many pixels across a building is a speck, so a badge marks it instead (the badge is a marker, the building stays the same size on the ground). */
+internal const val BUILDING_MIN_PX = 6f
+
+/** Size of a building badge, in pixels. */
+private const val BUILDING_BADGE_PX = 11f
 
 /**
  * City names, region names and division badges over the GPU frame, placed by the same label
  * planner as the classic map. Positions come from the renderer's own camera, so a name sits on
- * the place the frame shows.
+ * the place the frame shows. Buildings come first: each one's footprint on screen is reserved so no
+ * name lands on it, and a building too small to read (under [BUILDING_MIN_PX]) is marked by a badge
+ * at its position, the player's in gold and the rivals' in their sector's colour.
  */
 internal fun DrawScope.drawGpuLabels(
     session: GpuMapSession, camera: GpuCamera, map: WorldMap, plants: List<uniffi.cw_ffi.MapPlantDto>,
@@ -154,6 +187,9 @@ internal fun DrawScope.drawGpuLabels(
 ) {
     if (graphics.labels == 0) return
     val w = size.width.toInt(); val h = size.height.toInt()
+    val buildings = session.buildings()
+    val rects = session.buildingRects(camera, w, h)
+    val markers = if (buildings.isEmpty()) FloatArray(0) else session.project(camera, w, h, DoubleArray(buildings.size * 2) { if (it % 2 == 0) buildings[it / 2].lon else buildings[it / 2].lat })
     // Cities (every one in the scenario) first, then regions; one batch call for all of them.
     val cities = map.cities.filter { (c, _) -> widthKm < 900 || c.population >= 500_000 }.take(80)
     val regions = if (graphics.labels >= 2 && widthKm < 1400) map.regions.mapNotNull { r -> map.anchor(r.code)?.let { r to it } } else emptyList()
@@ -171,6 +207,26 @@ internal fun DrawScope.drawGpuLabels(
     }
     val all = session.project(camera, w, h, pts.copyOf(i) + badgePts)
     planner.frame {
+        // Buildings first: their footprints are kept clear, and the specks get a badge (player's last, on top).
+        val order = buildings.indices.filter { !buildings[it].scenery }.sortedBy { buildings[it].player }
+        val small = HashSet<Int>()
+        for (b in buildings.indices) {
+            val l = rects[4 * b]; val t = rects[4 * b + 1]; val r = rects[4 * b + 2]; val bt = rects[4 * b + 3]
+            if (l.isNaN() || r < -20 || l > w + 20 || bt < -20 || t > h + 20) continue
+            if (maxOf(r - l, bt - t) >= BUILDING_MIN_PX) reserve(l - 1f, t - 1f, r + 1f, bt + 1f) else if (!buildings[b].scenery) small += b
+        }
+        for (b in order) {
+            if (b !in small) continue
+            val x = markers[2 * b]; val y = markers[2 * b + 1]
+            if (x.isNaN() || x < -20 || y < -20 || x > w + 20 || y > h + 20) continue
+            val half = BUILDING_BADGE_PX / 2f
+            val top = Offset(x - half, y - half)
+            val fill = if (buildings[b].player) Palette.gold else Color(buildings[b].colour)
+            drawRect(Palette.ink, topLeft = top - Offset(1f, 1f), size = androidx.compose.ui.geometry.Size(BUILDING_BADGE_PX + 2f, BUILDING_BADGE_PX + 2f))
+            drawRect(fill, topLeft = top, size = androidx.compose.ui.geometry.Size(BUILDING_BADGE_PX, BUILDING_BADGE_PX))
+            if (buildings[b].player) drawRect(Palette.ink, topLeft = top + Offset(3f, 3f), size = androidx.compose.ui.geometry.Size(BUILDING_BADGE_PX - 6f, BUILDING_BADGE_PX - 6f))
+            reserve(x - half - 1f, y - half - 1f, x + half + 1f, y + half + 1f)
+        }
         // Badges first so a name that would cross one is the name that goes.
         badgeList.forEachIndexed { k, (_, items) ->
             val x = all[i + 2 * k]; val y = all[i + 2 * k + 1]
