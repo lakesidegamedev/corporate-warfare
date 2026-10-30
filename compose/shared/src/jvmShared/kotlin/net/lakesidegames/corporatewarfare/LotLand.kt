@@ -24,12 +24,16 @@ internal object LotLand {
     private val arounds = ConcurrentHashMap<String, Around>()
     private val answers = ConcurrentHashMap<String, Pair<Double, Double>>()
 
-    private fun around(map: WorldMap, region: String): Around? = arounds.getOrPut("${System.identityHashCode(map)}/$region") {
+    private fun around(map: WorldMap, region: String): Around? {
         val hub = map.anchor(region) ?: return null
+        return arounds.getOrPut("${System.identityHashCode(map)}/$region") { build(map, region, hub) }
+    }
+
+    private fun build(map: WorldMap, region: String, hub: GeoRing): Around {
         // Rings whose box comes within about three degrees of the hub: far more than any lot reaches.
         val m = 0.06
         val near = { r: GeoRing -> r.size >= 3 && r.lon.min() - m <= hub.lon[0] && r.lon.max() + m >= hub.lon[0] && r.lat.min() - m <= hub.lat[0] && r.lat.max() + m >= hub.lat[0] }
-        Around(
+        return Around(
             map.countries.flatMap { it.rings }.filter(near),
             map.lakes.filter(near),
             map.regions.firstOrNull { it.code == region }?.rings.orEmpty(),
@@ -78,26 +82,29 @@ internal object LotLand {
      * already: the nearest spot to the offset among those on the way to the hub and round it.
      * A lot nothing fits (a hub with no dry land round it) stays where it is.
      */
-    fun dry(map: WorldMap, region: String, offset: Pair<Double, Double>, radius: Double): Pair<Double, Double> =
-        answers.getOrPut("${System.identityHashCode(map)}/$region/${offset.first}/${offset.second}/$radius") {
-            val hub = map.anchor(region) ?: return offset
-            val a = around(map, region) ?: return offset
-            val (east, north) = offset
-            if (fits(hub, a, east, north, radius, true)) return@getOrPut offset
-            val tries = ArrayList<Triple<Double, Double, Double>>()
-            for (scale in 10 downTo 0) {
-                val s = scale / 10.0
-                for (step in 0..24) {
-                    // 0, +15, -15, +30, -30 ... degrees round the hub.
-                    val turn = ((step + 1) / 2) * (if (step % 2 == 1) 1 else -1) * 15.0 * PI / 180
-                    val e = (east * cos(turn) - north * sin(turn)) * s
-                    val n = (east * sin(turn) + north * cos(turn)) * s
-                    tries.add(Triple(e, n, hypot(e - east, n - north)))
-                }
+    fun dry(map: WorldMap, region: String, offset: Pair<Double, Double>, radius: Double): Pair<Double, Double> {
+        val hub = map.anchor(region) ?: return offset
+        val a = around(map, region) ?: return offset
+        return answers.getOrPut("${System.identityHashCode(map)}/$region/${offset.first}/${offset.second}/$radius") { walk(hub, a, offset, radius) }
+    }
+
+    private fun walk(hub: GeoRing, a: Around, offset: Pair<Double, Double>, radius: Double): Pair<Double, Double> {
+        val (east, north) = offset
+        if (fits(hub, a, east, north, radius, true)) return offset
+        val tries = ArrayList<Triple<Double, Double, Double>>()
+        for (scale in 10 downTo 0) {
+            val s = scale / 10.0
+            for (step in 0..24) {
+                // 0, +15, -15, +30, -30 ... degrees round the hub.
+                val turn = ((step + 1) / 2) * (if (step % 2 == 1) 1 else -1) * 15.0 * PI / 180
+                val e = (east * cos(turn) - north * sin(turn)) * s
+                val n = (east * sin(turn) + north * cos(turn)) * s
+                tries.add(Triple(e, n, hypot(e - east, n - north)))
             }
-            tries.sortBy { it.third }
-            val best = tries.firstOrNull { fits(hub, a, it.first, it.second, radius, true) }
-                ?: tries.firstOrNull { fits(hub, a, it.first, it.second, radius, false) }
-            if (best == null) offset else best.first to best.second
         }
+        tries.sortBy { it.third }
+        val best = tries.firstOrNull { fits(hub, a, it.first, it.second, radius, true) }
+            ?: tries.firstOrNull { fits(hub, a, it.first, it.second, radius, false) }
+        return if (best == null) offset else best.first to best.second
+    }
 }
