@@ -26,7 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -47,7 +46,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.onSizeChanged
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.math.floor
@@ -528,27 +530,35 @@ internal fun OfficeWindowMap(store: GameStore, modifier: Modifier) {
     val measurer = androidx.compose.ui.text.rememberTextMeasurer(cacheSize = 32)
     val geometry = remember(map) { MapGeometryCache() }
     val graphics = remember { GraphicsConfig.Default.copy(earth = false, clouds = 0, traffic = 0, animations = false, dayNight = false, showFps = false, labels = 0, lighting = 1, countryside = false) }
-    // The picture only changes when the week turns, so it is painted once into a bitmap and the room shows that;
-    // drawing the vector map again on every frame was the Office's whole cost at rest.
-    Box(
-        modifier.drawWithCache {
-            val w = size.width.roundToInt()
-            val h = size.height.roundToInt()
-            val picture = if (map == null || w < 1 || h < 1) null else ImageBitmap(w, h).also { bitmap ->
+    // The picture only changes when the week turns, so it is painted into a bitmap on a background thread and the room
+    // shows the newest one; the UI thread never walks the map's vector drawing. The measurer and the geometry are used
+    // by that one thread only, one bake at a time.
+    var size by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var picture by remember { mutableStateOf<ImageBitmap?>(null) }
+    val divisions = store.mapDivisions
+    val plants = store.mapPlants
+    val week = store.overview?.tick?.toInt() ?: 28
+    val bakeLock = remember { kotlinx.coroutines.sync.Mutex() }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    LaunchedEffect(map, code, size, divisions, plants, week) {
+        if (map == null || size.width < 1 || size.height < 1) return@LaunchedEffect
+        val baked = withContext(MapBake.dispatcher) {
+            bakeLock.withLock {
+                val view = Size(size.width.toFloat(), size.height.toFloat())
                 val anchor = code?.let { map.anchor(it) }
-                val base = MapCamera.scenario(size, map)
+                val base = MapCamera.scenario(view, map)
                 val camera = if (anchor != null) base.copy(lon = Math.toDegrees(anchor.lon[0]), lat = Math.toDegrees(anchor.lat[0]), zoom = base.zoom * 2.4) else base
-                val divisions = store.mapDivisions
-                val plants = store.mapPlants
-                val week = store.overview?.tick?.toInt() ?: 28
-                androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(this, layoutDirection, androidx.compose.ui.graphics.Canvas(bitmap), size) {
+                val bitmap = ImageBitmap(size.width, size.height)
+                androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(density, androidx.compose.ui.unit.LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(bitmap), view) {
                     drawWorldMap(
                         map, camera, scenarioTint(map.scenarioId.orEmpty()), emptyMap(), code, divisions, measurer,
                         space = false, geometry = geometry, graphics = graphics, pitch = 0.0, plants = plants, week = week,
                     )
                 }
+                bitmap
             }
-            onDrawBehind { picture?.let { drawImage(it) } }
-        },
-    )
+        }
+        picture = baked
+    }
+    Canvas(modifier.onSizeChanged { size = it }) { picture?.let { drawImage(it) } }
 }

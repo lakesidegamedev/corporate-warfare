@@ -209,7 +209,7 @@ fun WorldMapView(
     }
     val geometry = remember(map) { MapGeometryCache() }
     // Ground, clouds and structures are baked together for one camera and swapped in as a set; traffic and effects ride the same warp.
-    val layers = remember { MapLayerSet(scope) }
+    val layers = remember { MapLayerSet(scope, carryKey = map?.scenarioId) }
     DisposableEffect(layers) { onDispose { layers.close() } }
     val firmSector = remember(store.mapPlants) { firmSectors(store.mapPlants) }
     val shaded = remember(layer, store.boards, store.mapDivisions) { shading(store, layer) }

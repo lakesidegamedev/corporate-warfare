@@ -42,10 +42,12 @@ class DesktopPerfHarness {
         val self = HashMap<String, Int>()
         var samples = 0
         @Volatile private var live = true
+        /** Samples are kept only while this is set, so a profile can cover just the frames of interest. */
+        @Volatile var active = true
         private val thread = Thread {
             while (live) {
                 val st = target.stackTrace
-                if (st.isNotEmpty()) {
+                if (active && st.isNotEmpty()) {
                     samples++
                     val top = st[0]; self.merge("${top.className.substringAfterLast('.')}.${top.methodName}", 1, Int::plus)
                     st.filter { it.className.startsWith("net.lakesidegames") || it.className.startsWith("androidx.compose.foundation") || it.className.startsWith("androidx.compose.material") }.map { "${it.className.substringAfterLast('.')}.${it.methodName}" }.distinct().forEach { inclusive.merge(it, 1, Int::plus) }
@@ -59,7 +61,7 @@ class DesktopPerfHarness {
     private fun printProfile(label: String, sampler: Sampler) {
         sampler.stop()
         line("  profile $label: ${sampler.samples} samples")
-        sampler.inclusive.entries.filter { !it.key.startsWith("Thread.") && !it.key.startsWith("Sampler") }.sortedByDescending { it.value }.take(60)
+        sampler.inclusive.entries.filter { !it.key.startsWith("Thread.") && !it.key.startsWith("Sampler") }.sortedByDescending { it.value }.take(40)
             .forEach { line("    incl %5d  %s".format(it.value, it.key)) }
         sampler.self.entries.sortedByDescending { it.value }.take(12).forEach { line("    self %5d  %s".format(it.value, it.key)) }
     }
@@ -147,7 +149,7 @@ class DesktopPerfHarness {
 
         // The UI thread, one page at a time.
         val settings = AppSettings(File(dir, "settings.properties"))
-        val pages = listOf("Map" to 0, "Office" to 1, "Research" to 2, "Stats" to 3, "Markets" to 4, "Inbox" to 6, "Portfolio" to 8, "Paper" to 7, "Hall" to 9)
+        val pages = listOf("Map" to 0, "Map again" to 0, "Office" to 1, "Research" to 2, "Stats" to 3, "Markets" to 4, "Inbox" to 6, "Portfolio" to 8, "Paper" to 7, "Hall" to 9)
         line("--- page: UI thread ms at 1600x900 (first draw / still frame median / frame as a week lands median)")
         for ((name, index) in pages) {
             val scene = ImageComposeScene(1600, 900, Density(1f)) {
@@ -155,7 +157,7 @@ class DesktopPerfHarness {
             }
             var clock = 0L
             fun frame(): Double { clock += 16_666_667L; val s = System.nanoTime(); scene.render(clock); return (System.nanoTime() - s) / 1e6 }
-            val profile = System.getenv("CW_PERF_PROFILE")?.split(',')?.contains(name) == true
+            val profile = System.getenv("CW_PERF_PROFILE")?.split(',')?.contains(name.substringBefore(" again")) == true
             var sampler = if (profile) Sampler(Thread.currentThread()) else null
             val first = frame()
             sampler?.let { printProfile("$name first draw", it) }
@@ -163,10 +165,13 @@ class DesktopPerfHarness {
             sampler = if (profile) Sampler(Thread.currentThread()) else null
             val still = median(List(30) { frame() })
             sampler?.let { printProfile("$name still frames", it) }
+            val landSampler = if (profile) Sampler(Thread.currentThread()).also { it.active = false } else null
             val landing = List(5) {
                 oneWeek(store)
-                frame()
+                landSampler?.active = true
+                frame().also { landSampler?.active = false }
             }
+            landSampler?.let { printProfile("$name week landing", it) }
             line("page %-10s %8.1f %8.1f %8.1f".format(name, first, still, median(landing)))
             scene.close()
         }
