@@ -1103,6 +1103,8 @@ const APRON_REACH_DEG: f32 = 90.0;
 const APRON_REACH_NS_DEG: f32 = 60.0;
 const APRON_GROWTH: f32 = 1.2;
 const APRON_MAX_CELL_DEG: f32 = 0.25;
+/// The smallest class patch, in degrees either side; patches double from here.
+const APRON_PATCH_UNIT_DEG: f32 = 0.0625;
 /// Distance in terrain cells past which far land is one flat level.
 const APRON_FLAT_AFTER_CELLS: usize = 24;
 /// The widest patch of the picture a far cell reads its land class from, in degrees either side.
@@ -1304,15 +1306,20 @@ fn apron_grid(scene: &Scene) -> ApronGrid {
             // The picture is read over a patch about as wide as the cell is far from the
             // terrain, so detail fades with distance and a strip beside the edge settles into
             // blocks rather than streaks.
-            // The patch is as wide as it is tall, so a column of narrow cells settles with its
-            // neighbours instead of streaking.
-            let half = (((xs[i + 1] - xs[i]).max(ys[j + 1] - ys[j])) / 2.0)
+            // The patch is as wide as it is tall, and a power of two wide, and sits on a lattice
+            // of its own width, so neighbouring cells read the same patch and a class settles
+            // into blocks as wide as the patch instead of one narrow cell's stripe.
+            let want = (((xs[i + 1] - xs[i]).max(ys[j + 1] - ys[j])) / 2.0)
                 .max(0.35 * (away - 1.1) * dx.max(dy))
                 .min(APRON_MAX_PATCH_DEG);
+            let half = APRON_PATCH_UNIT_DEG
+                * 2f32.powi((want / APRON_PATCH_UNIT_DEG).log2().ceil().max(0.0) as i32);
+            let snap = |v: f32| ((v / (2.0 * half)).floor() + 0.5) * 2.0 * half;
+            let (pcx, pcy) = (snap(lon), snap(lat));
             let class = far_class(
                 scene,
-                [lon - half, lon + half],
-                [lat - half, lat + half],
+                [pcx - half, pcx + half],
+                [pcy - half, pcy + half],
                 if half > 0.15 { 7 } else { 1 },
             );
             // The window of terrain it averages is centred on a lattice as wide as the window's
@@ -1629,6 +1636,30 @@ pub fn apron(scene: &Scene) -> Mesh {
         }
     }
     m
+}
+
+/// The apron's land tops as boxes in degrees (west, south, east, north), one per quad, and the
+/// centre of each. For tests that check the far land is shaped like the world and has no long
+/// thin stripes.
+pub fn apron_land_boxes(scene: &Scene) -> Vec<[f32; 4]> {
+    let m = apron(scene);
+    let mut out = Vec::new();
+    for q in m.vertices.chunks_exact(4) {
+        if q[0].colour[3] != KIND_APRON_TOP || q[0].colour[0] == APRON_WATER {
+            continue;
+        }
+        let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+        for v in q {
+            x0 = x0.min(v.pos[0]);
+            x1 = x1.max(v.pos[0]);
+            y0 = y0.min(v.pos[1]);
+            y1 = y1.max(v.pos[1]);
+        }
+        let (w, s) = scene.projection.to_lonlat(x0, y0);
+        let (e, n) = scene.projection.to_lonlat(x1, y1);
+        out.push([w, s, e, n]);
+    }
+    out
 }
 
 /// West, south, east and north extent of the horizon apron in kilometres, for tests.
