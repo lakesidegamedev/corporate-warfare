@@ -365,8 +365,10 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
         },
         confirmButton = {
             val shares = quantity.toLongOrNull() ?: 0
-            val ready = quote?.let { it.qty > 0 } == true
-            GoldButton(if (buy) "Buy now" else "Sell now", enabled = shares > 0 && ready && !store.busy) {
+            // The quote is a guide; the engine checks cash and shares itself and says why when it refuses, so the
+            // button never waits on the quote (a quote that is slow or missing must not leave the trade dead).
+            val nothing = quote?.let { it.qty <= 0 } == true
+            GoldButton(if (buy) "Buy now" else "Sell now", enabled = shares > 0 && !nothing && !store.busy) {
                 val q = quote
                 store.orderShares(line.firm, buy, shares, limitCents, q?.let { doneText(line.name, it, buy) } ?: "Accepted.")
                 onClose()
