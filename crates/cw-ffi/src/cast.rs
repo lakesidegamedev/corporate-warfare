@@ -75,11 +75,7 @@ pub(crate) fn person(p: &Person) -> PersonDto {
         home: p.home.clone(),
         background: p.background.clone(),
         temperament: p.temperament.key().to_owned(),
-        roles: p
-            .roles
-            .iter()
-            .map(|r: &Role| r.key().to_owned())
-            .collect(),
+        roles: p.roles.iter().map(|r: &Role| r.key().to_owned()).collect(),
         stance: p.stance,
         mood: Mood::Neutral.key().to_owned(),
         office_portrait: p.office_portrait,

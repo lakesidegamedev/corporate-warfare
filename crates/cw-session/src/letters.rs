@@ -939,7 +939,13 @@ fn analyst_letters(
                 id: story.id.clone(),
                 kind: "analyst",
                 week: story.week,
-                sender: scenario_sender(dataset, Role::Analyst, "Analyst", masthead, "Markets analyst"),
+                sender: scenario_sender(
+                    dataset,
+                    Role::Analyst,
+                    "Analyst",
+                    masthead,
+                    "Markets analyst",
+                ),
                 tone: Tone::Formal,
                 addressee: player_home(world),
                 facts: vec![format!(
@@ -1776,7 +1782,10 @@ mod tests {
         // Quiet worlds with no news and no deal leave a person neutral.
         let t = quiet("great-lakes-2000", 30);
         let chief = chief(&t.world, &t.dataset, rival(&t, 0)).expect("a chief");
-        assert_eq!(person_sender(&chief, "Chief executive", "x").mood, Mood::Neutral);
+        assert_eq!(
+            person_sender(&chief, "Chief executive", "x").mood,
+            Mood::Neutral
+        );
     }
 
     #[test]
@@ -1787,13 +1796,26 @@ mod tests {
         assert!(sender.person.is_empty());
         assert_eq!(sender.name, "Rep");
         // Every shipped scenario has a union leader, a journalist and an analyst.
-        for id in ["texas-1981", "ruhr-rhine-1991", "silicon-valley-1995", "great-lakes-2000"] {
+        for id in [
+            "texas-1981",
+            "ruhr-rhine-1991",
+            "silicon-valley-1995",
+            "great-lakes-2000",
+        ] {
             s.dataset.scenario_id = id.to_owned();
             for role in [Role::UnionLeader, Role::Journalist, Role::Analyst] {
-                assert!(!scenario_sender(&s.dataset, role, "t", "x", "f").person.is_empty(), "{id}");
+                assert!(
+                    !scenario_sender(&s.dataset, role, "t", "x", "f")
+                        .person
+                        .is_empty(),
+                    "{id}"
+                );
             }
         }
-        assert_eq!(analyst_sender(&s.dataset, "x", Mood::Pleased).mood, Mood::Pleased);
+        assert_eq!(
+            analyst_sender(&s.dataset, "x", Mood::Pleased).mood,
+            Mood::Pleased
+        );
     }
 
     #[test]

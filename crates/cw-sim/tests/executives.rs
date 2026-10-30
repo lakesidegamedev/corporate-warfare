@@ -585,6 +585,12 @@ fn the_scenarios_named_people_for_hire_are_drawn_before_generated_ones() {
         world.cast.scenario_id.clear();
         world.executives = Default::default();
         ex::weekly(&mut world, &dataset);
-        assert!(world.executives.people.iter().all(|c| c.extra < NAMED_HIRE_BASE));
+        assert!(
+            world
+                .executives
+                .people
+                .iter()
+                .all(|c| c.extra < NAMED_HIRE_BASE)
+        );
     }
 }
