@@ -297,6 +297,15 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         status = ""
     }
 
+    /** Stop time, save and wait for the disk, then run [then] (quitting the app from the game menu). */
+    fun saveAndThen(then: () -> Unit) = perform {
+        runJob?.cancel()
+        runJob = null
+        running = false
+        if (session != null) save(manual = true)
+        then()
+    }
+
     fun toggleRun() = playAt(if (runJob == null) 1 else 0)
 
     /**
