@@ -107,7 +107,7 @@ fn the_pool_is_drawn_once_with_levels_one_to_five_for_every_post() {
         let list = ex::candidates(&world, post);
         assert!(list.len() >= 8, "{post:?} has candidates");
         assert!(list.iter().all(|c| (1..=5).contains(&c.level)));
-        assert!(list.iter().all(|c| ex::extra_of(c).is_some()));
+        assert!(list.iter().all(|c| ex::person_of(c).is_some()));
     }
     let mut extras: Vec<u16> = world.executives.people.iter().map(|c| c.extra).collect();
     extras.sort_unstable();
@@ -538,4 +538,59 @@ fn the_state_hashes_and_replays_the_same() {
         cw_sim::state::canonical_hash(&empty),
         "executives are future-affecting and hashed"
     );
+}
+
+#[test]
+fn the_scenarios_named_people_for_hire_are_drawn_before_generated_ones() {
+    use cw_data::cast::{NAMED_HIRE_BASE, named_hires};
+    for scenario in [
+        "texas-1981",
+        "ruhr-rhine-1991",
+        "silicon-valley-1995",
+        "great-lakes-2000",
+    ] {
+        let dataset = Dataset::load_scenario(scenario).unwrap();
+        let mut world = seed::build(&dataset, 5, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        world.cast.scenario_id = scenario.to_owned();
+        world.executives = Default::default();
+        ex::weekly(&mut world, &dataset);
+        let named: Vec<_> = world
+            .executives
+            .people
+            .iter()
+            .filter(|c| c.extra >= NAMED_HIRE_BASE)
+            .collect();
+        assert_eq!(named.len(), 2, "{scenario}: two named people for hire");
+        for c in &named {
+            let hire = ex::hire_of(c).unwrap();
+            assert!(hire.named && hire.person.scenario == scenario, "{scenario}");
+            assert!(!hire.person.hire_note.is_empty());
+            assert_eq!(ex::portrait_id(c), hire.person.id);
+        }
+        // Named people sit at the head of the pool: lower ids than any generated candidate of
+        // their post, and the pool is otherwise the usual size.
+        for c in &named {
+            let first_generated = world
+                .executives
+                .people
+                .iter()
+                .filter(|g| g.post == c.post && g.extra < NAMED_HIRE_BASE)
+                .map(|g| g.id)
+                .min()
+                .unwrap();
+            assert!(c.id < first_generated, "{scenario}");
+        }
+        assert_eq!(named_hires().len(), 8);
+        // A world with no scenario draws only generated people.
+        world.cast.scenario_id.clear();
+        world.executives = Default::default();
+        ex::weekly(&mut world, &dataset);
+        assert!(
+            world
+                .executives
+                .people
+                .iter()
+                .all(|c| c.extra < NAMED_HIRE_BASE)
+        );
+    }
 }

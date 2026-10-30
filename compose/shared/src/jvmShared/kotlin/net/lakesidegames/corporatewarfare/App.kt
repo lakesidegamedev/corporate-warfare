@@ -294,7 +294,7 @@ internal fun TabList(content: LazyListScope.() -> Unit) {
 // MARK: CEO Office
 
 @Composable
-private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
+internal fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
     val firm = store.selectedFirmDto
     var editing by remember { mutableStateOf<ProductLineDto?>(null) }
     var stats by remember { mutableStateOf(false) }

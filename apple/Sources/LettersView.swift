@@ -24,7 +24,7 @@ struct SenderPortrait: View {
 
     var body: some View {
         if !sender.person.isEmpty, CastPortraits.all[sender.person] != nil {
-            PixelPortrait(person: sender.person, size: size)
+            PixelPortrait(person: sender.person, size: size, mood: sender.mood)
         } else {
             PixelIcon("people", size: size / 2)
                 .foregroundStyle(Theme.secondary)

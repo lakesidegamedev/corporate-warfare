@@ -184,10 +184,14 @@ struct PaperView: View {
     }
 
     private func byline(_ story: StoryDto) -> some View {
-        Text((story.byline + (story.yours ? " · about you" : "")).uppercased())
-            .font(Pixel.font(10))
-            .tracking(0.6)
-            .foregroundStyle(story.yours ? Theme.gold : Theme.secondary)
+        let by = story.authorName.isEmpty ? story.byline : "\(story.authorName) · \(story.byline)"
+        return HStack(spacing: 6) {
+            if !story.author.isEmpty { PixelPortrait(person: story.author, size: 24, mood: story.mood) }
+            Text((by + (story.yours ? " · about you" : "")).uppercased())
+                .font(Pixel.font(10))
+                .tracking(0.6)
+                .foregroundStyle(story.yours ? Theme.gold : Theme.secondary)
+        }
     }
 
     private func brief(_ story: StoryDto) -> some View {

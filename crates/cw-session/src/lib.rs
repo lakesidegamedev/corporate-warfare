@@ -2169,7 +2169,9 @@ mod tests {
         // which changes the opening loans, wages and rates from the first week. In 1.9 it moved
         // from 1bf6e771... when the world gained its executive state (the pool of people who can
         // be hired is drawn in the first week and is hashed, like the chapter state), with no
-        // change to any rule this fixture exercises. The Swift
+        // change to any rule this fixture exercises. In 1.9 it moved from 28f7d351... when the cast grew from twelve to forty and the generated
+        // people were redrawn (the same first-week pool now picks from a new list of extras, with
+        // different names, ages and temperaments), with no change to any rule this fixture exercises. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2195,7 +2197,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "28f7d351af0f0c22ca6365beb70fd9c350cb1e03158c842d07233a8e3cd93771"
+            "68e31e982014ec7458159fbbb9788dd120c461ac934572add0de6552744edcb7"
         );
     }
 
