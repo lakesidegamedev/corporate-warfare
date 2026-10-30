@@ -1984,7 +1984,7 @@ struct Memo {
     public_price: BTreeMap<(u16, u8), i64>,
     import_netback: BTreeMap<(u16, u8), Option<i64>>,
     /// Holders of each (region, industry) cell with their shares.
-    cells: BTreeMap<(u8, u8), Vec<(Handle, i64)>>,
+    cells: BTreeMap<(u8, u8), cw_sim::economy::sectors::Cell>,
 }
 
 thread_local! {
@@ -2030,10 +2030,19 @@ impl Drop for MemoPass {
 
 /// The holders of a cell and their shares (`cw_sim::economy::sectors::cell`).
 fn cell_holders(world: &World, dataset: &Dataset, region: u8, sector: u8) -> Vec<(Handle, i64)> {
+    cell_read(world, dataset, region, sector).0
+}
+
+fn cell_read(
+    world: &World,
+    dataset: &Dataset,
+    region: u8,
+    sector: u8,
+) -> cw_sim::economy::sectors::Cell {
     Memo::read(
         |m| &mut m.cells,
         (region, sector),
-        || cw_sim::economy::sectors::cell(world, dataset, region, sector).0,
+        || cw_sim::economy::sectors::cell(world, dataset, region, sector),
     )
 }
 
@@ -2278,9 +2287,16 @@ fn best_expansion(
             // Three years of contribution, less the real build cost (entry fee, founding
             // discount, dominance) and three years of financing at the policy rate
             // (docs/rules/FINANCE-LABOUR-AI.md, build candidate).
-            let cost =
-                cw_sim::economy::sectors::build_cost(world, dataset, firm, region, index as u16, 1)
-                    .total_cents();
+            let cost = cw_sim::economy::sectors::build_cost_in(
+                world,
+                dataset,
+                firm,
+                region,
+                index as u16,
+                1,
+                &cell_read(world, dataset, region, sector),
+            )
+            .total_cents();
             let financing = cost * world.macro_state.policy_rate_bps as i64 * 3 / 10_000;
             // A good is sold where it is imported: value the output at what it nets there after
             // freight instead of at this state's own quote, so plants go near the demand.
@@ -2648,9 +2664,21 @@ fn storage_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut
             {
                 continue;
             }
-            let cost =
-                cw_sim::economy::sectors::build_cost(world, dataset, firm, region, index as u16, 1)
-                    .total_cents();
+            let cost = cw_sim::economy::sectors::build_cost_in(
+                world,
+                dataset,
+                firm,
+                region,
+                index as u16,
+                1,
+                &cell_read(
+                    world,
+                    dataset,
+                    region,
+                    cw_sim::economy::sectors::recipe_industry(dataset, index as u16),
+                ),
+            )
+            .total_cents();
             if cash < reserve * 2 + cost {
                 continue;
             }
