@@ -161,7 +161,8 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(line.name + if (line.controlledByYou) " ★" else "", color = Palette.primaryText, fontWeight = FontWeight.Medium, maxLines = 1)
-                        Text("${Sectors.name(line.industry)} · cap ${Format.compact(line.marketCapCents)}", color = Palette.secondary, fontSize = 11.sp, maxLines = 1)
+                        // Non-breaking space keeps "cap" with its figure; large text wraps to a second line instead of dropping it.
+                        Text("${Sectors.name(line.industry)} · cap\u00A0${Format.compact(line.marketCapCents)}", color = Palette.secondary, fontSize = 11.sp, maxLines = 2)
                         // Companies reporting results this week are marked on the board.
                         if (line.earnings.reportsThisWeek) Text("Reports this week · analysts: ${ratingText(line.earnings.rating)}", color = Palette.gold, fontSize = 11.sp, maxLines = 1)
                     }
