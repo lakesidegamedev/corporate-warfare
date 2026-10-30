@@ -442,14 +442,15 @@ fun WorldMapView(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val zoomedIn = (current()?.zoom ?: 1.0) > MapCamera.FLAT_START
-                MapButton("zoom_in") { current()?.let { fly(it.zoomed(1.8)) } }
-                MapButton("zoom_out") { current()?.let { fly(it.zoomed(1 / 1.8)) } }
-                MapButton(if (zoomedIn) "globe" else "scope") { toggleGlobe() }
+                MapButton("zoom_in", "Zoom in") { current()?.let { fly(it.zoomed(1.8)) } }
+                MapButton("zoom_out", "Zoom out") { current()?.let { fly(it.zoomed(1 / 1.8)) } }
+                MapButton(if (zoomedIn) "globe" else "scope", if (zoomedIn) "Show the globe" else "Zoom to the map") { toggleGlobe() }
                 // Clouds in one tap: heavy, light, thin, off, and round again.
                 val settings = LocalAppSettings.current
                 if (settings != null) {
                     Box(
-                        Modifier.size(40.dp).clickable { settings.chooseGraphics(graphics.copy(clouds = (graphics.clouds + 3) % 4)) },
+                        Modifier.size(40.dp).clickable { settings.chooseGraphics(graphics.copy(clouds = (graphics.clouds + 3) % 4)) }
+                            .described("Clouds: ${listOf("off", "thin", "light", "heavy")[graphics.clouds.coerceIn(0, 3)]}. Tap to change.", androidx.compose.ui.semantics.Role.Button),
                         contentAlignment = Alignment.Center,
                     ) {
                         PixelIcon(if (graphics.clouds == 0) "cloud_off" else "cloud", size = 22.dp, tint = if (graphics.clouds == 0) null else Palette.primaryText.copy(alpha = 0.4f + 0.2f * graphics.clouds))
@@ -463,7 +464,7 @@ fun WorldMapView(
                     }
                 }
                 if (graphics.tilt > 0) {
-                    Box(Modifier.size(40.dp).clickable { tilted = !tilted }, contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(40.dp).clickable { tilted = !tilted }.described(if (tilted) "Tilted view on. Tap to look straight down." else "Looking straight down. Tap to tilt the map.", androidx.compose.ui.semantics.Role.Button), contentAlignment = Alignment.Center) {
                         Text("3D", color = if (tilted) Palette.gold else Palette.secondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -1375,9 +1376,9 @@ private fun MapLegend(layer: MapLayer, modifier: Modifier) {
 }
 
 @Composable
-private fun MapButton(symbol: String, onClick: () -> Unit) {
+private fun MapButton(symbol: String, description: String, onClick: () -> Unit) {
     Box(Modifier.size(40.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        PixelIcon(symbol, size = 22.dp, tint = Palette.primaryText)
+        PixelIcon(symbol, size = 22.dp, tint = Palette.primaryText, description = description)
     }
 }
 
@@ -1539,6 +1540,7 @@ fun TimeBar(store: GameStore) {
         }
         Row(
             Modifier.clip(Pixel.small).background(Palette.panelRaised).clickable { open = !open }
+                .described(if (open) "Time controls, open. Tap to fold." else "Time controls. Tap to open.", androidx.compose.ui.semantics.Role.Button)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
