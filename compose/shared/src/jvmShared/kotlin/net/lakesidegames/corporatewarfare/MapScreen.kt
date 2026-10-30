@@ -64,6 +64,7 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -246,6 +247,17 @@ fun WorldMapView(
         withContext(Dispatchers.Default) { runCatching { session.update(json) } }
     }
 
+    // The plant under the mouse (GPU map, desktop), and the rival firm whose dossier a click on its plant opened.
+    var hover by remember { mutableStateOf<Offset?>(null) }
+    var rivalFirm by remember { mutableStateOf<ULong?>(null) }
+    val gpuHover by rememberUpdatedState(gpu != null && gpuOn)
+    fun openPlant(b: GpuBuilding): Boolean {
+        gpuPlantDivision(b, store.divisions)?.let { store.showDivision(it); return true }
+        val firm = b.firm ?: return false
+        rivalFirm = firm.toULong()
+        return true
+    }
+
     fun current(): MapCamera? = camera ?: map?.let { if (viewSize.width > 0) MapCamera.scenario(viewSize, it) else null }
     fun fly(target: MapCamera) {
         val start = current() ?: return
@@ -288,6 +300,9 @@ fun WorldMapView(
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent()
+                                if (gpuHover && event.type == PointerEventType.Move && !event.buttons.isPrimaryPressed && !event.buttons.isSecondaryPressed) {
+                                    hover = event.changes.firstOrNull()?.position
+                                } else if (event.type == PointerEventType.Exit || event.buttons.isPrimaryPressed) hover = null
                                 // On desktop, dragging with the right button turns the map.
                                 if (event.type == PointerEventType.Move && event.buttons.isSecondaryPressed) {
                                     val dx = event.changes.firstOrNull()?.let { it.position.x - it.previousPosition.x } ?: 0f
@@ -316,8 +331,12 @@ fun WorldMapView(
                             onTap = { tap ->
                                 val now = current() ?: return@detectTapGestures
                                 if (gpu != null && gpuOn) {
-                                    // The GPU map picks from its own geometry: the region under the tap is the one drawn there.
-                                    val code = gpu.pick(gpuCamera(now, viewSize.width, viewSize.height, pitch), viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
+                                    // The GPU map picks from its own geometry: a plant under the tap opens its division (or its firm),
+                                    // else the region under it is the one drawn there. Both use the camera the picture is shown for.
+                                    val gc = gpuCamera(now, viewSize.width, viewSize.height, pitch)
+                                    val plant = gpuBuildingAt(gpu, gc, viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
+                                    if (plant != null && openPlant(plant)) return@detectTapGestures
+                                    val code = gpu.pick(gc, viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
                                     onSelect(code.takeIf { it != selected })
                                     return@detectTapGestures
                                 }
@@ -340,10 +359,23 @@ fun WorldMapView(
                 if (gpu != null && gpuOn) {
                     val gc = gpuCamera(cam, size.width, size.height, pitch)
                     gpu.request(gc, size.width.toInt(), size.height.toInt(), true)
-                    val shown = drawGpuFrame(gpu) ?: gc
+                    // The newest frame carried to this camera, so the ground, names, badges and building boxes all agree.
+                    val shown = drawGpuFrame(gpu, gc) ?: gc
                     // Names and division badges, projected by the camera of the frame on screen so nothing slides.
                     gpu.version
                     drawGpuLabels(gpu, shown, map, store.mapPlants, store.mapDivisions, graphics, shown.widthKm, labelMeasurer, labelPlanner)
+                    hover?.let { at ->
+                        val b = gpuBuildingAt(gpu, shown, size.width.toInt(), size.height.toInt(), at.x, at.y) ?: return@let
+                        val firmName = store.mapPlants.firstOrNull { it.firm.toLong() == b.firm }?.firmName ?: "A company"
+                        val industry = (b.industry ?: b.kind).replace('_', ' ').replaceFirstChar { it.uppercase() }
+                        val count = if (b.plants == 1) "1 plant" else "${b.plants} plants"
+                        val tip = measurer.measure("$firmName\n$industry, $count", TextStyle(color = Palette.primaryText, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                        val left = (at.x + 14f).coerceAtMost(size.width - tip.size.width - 14f).coerceAtLeast(2f)
+                        val top = (at.y + 16f).coerceAtMost(size.height - tip.size.height - 10f).coerceAtLeast(2f)
+                        drawRect(Palette.ink.copy(alpha = 0.9f), Offset(left - 6f, top - 4f), Size(tip.size.width + 12f, tip.size.height + 8f))
+                        drawRect(Palette.gold, Offset(left - 6f, top - 4f), Size(tip.size.width + 12f, tip.size.height + 8f), style = Stroke(1f))
+                        drawText(tip, topLeft = Offset(left, top))
+                    }
                     if (graphics.showFps) {
                         val rate = fps.tick(System.nanoTime())
                         val tag = RenderInfo.label()?.let { " · $it" } ?: ""
@@ -429,6 +461,7 @@ fun WorldMapView(
                     drawText(label, topLeft = Offset(12f, size.height - label.size.height - 10f))
                 }
             }
+            rivalFirm?.let { firm -> DossierDialog(store, firm) { rivalFirm = null } }
             // What the colours mean for the active mode.
             if (layer == MapLayer.Freight) {
                 FreightLegend(store.lanes, Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 24.dp))
