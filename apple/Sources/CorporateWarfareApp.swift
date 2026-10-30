@@ -21,6 +21,10 @@ struct CorporateWarfareApp: App {
         _ = MapClock.now
         // Read in the background now, so the first map draw never waits for the models.
         VoxelModels.preload()
+        // The world map decodes off the main thread; the menu shows its globe once it is ready.
+        WorldMap.prewarm()
+        // The office's art and portraits too, so the first visit to the office is not a stall.
+        UiWarmup.start()
         if Self.isUITesting {
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("CorporateWarfareUITests", isDirectory: true)
@@ -58,6 +62,10 @@ struct CorporateWarfareApp: App {
                 // Behind the menu, so the map's first frame does not pay for the renderer's setup.
                 try? await Task.sleep(nanoseconds: 400_000_000)
                 RenderWarmup.run()
+            }
+            .onChange(of: store.sessionReady) { _, ready in
+                // Back at the menu: free the map scene kept for the next visit to the map tab.
+                if !ready { GpuMapSession.discardParked() }
             }
             .onChange(of: scenePhase) { _, phase in
                 // Background asks for one bounded stop-and-save. Foreground never replays an

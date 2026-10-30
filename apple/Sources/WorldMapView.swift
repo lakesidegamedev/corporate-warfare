@@ -2029,7 +2029,7 @@ struct WorldMapView: View {
             acquired = takeovers.update(plants, week: Int(week))
             refreshGpu()
         }
-        .onDisappear { closeGpu() }
+        .onDisappear { parkGpu() }
         .onChange(of: newMap) { _, _ in refreshGpu() }
         .onChange(of: regionCodes) { _, _ in refreshGpu() }
         .onChange(of: gpuInputs) { _, _ in pushGpu() }
@@ -2078,9 +2078,18 @@ struct WorldMapView: View {
         guard newMap, let id = map.scenarioId else { closeGpu(); return }
         if let gpu, gpu.scenario == id, gpu.failure == nil { return }
         closeGpu()
-        let session = GpuMapSession(scenario: id)
+        let session = GpuMapSession.adopt(scenario: id) ?? GpuMapSession(scenario: id)
         session.onChange = { gpuTick &+= 1 }
         gpu = session
+        // A session built ahead of time is already ready, so no readiness change will send the game.
+        if session.isReady { pushGpu() }
+    }
+
+    /// The map tab went away: keep the built scene for the next visit.
+    private func parkGpu() {
+        guard let session = gpu else { return }
+        gpu = nil
+        if newMap { GpuMapSession.park(session) } else { session.close() }
     }
 
     private func closeGpu() {

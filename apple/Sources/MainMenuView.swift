@@ -15,6 +15,22 @@ private func scenarioTint(_ id: String) -> Color {
 /// the map, so the two always look alike.
 struct GlobeBackdrop: View {
     var offsetX: CGFloat = 0.22
+    var menuEdge: CGFloat = 0
+    /// The world file is read in the background at launch; the globe appears when it is ready.
+    @State private var map = WorldMap.sharedIfReady
+
+    var body: some View {
+        if let map {
+            GlobeScene(map: map, offsetX: offsetX, menuEdge: menuEdge)
+        } else {
+            Color.clear.task { map = await Task.detached(priority: .userInitiated) { WorldMap.shared }.value }
+        }
+    }
+}
+
+private struct GlobeScene: View {
+    let map: WorldMap
+    var offsetX: CGFloat = 0.22
     /// Where the menu column ends, in points from the left. Scenario names never show under it,
     /// where they would read through the gaps between the buttons.
     var menuEdge: CGFloat = 0
@@ -28,8 +44,6 @@ struct GlobeBackdrop: View {
     @AppStorage(GraphicsKeys.clouds) private var clouds = 1
     @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
     @State private var geometry = MapGeometryCache()
-
-    private let map = WorldMap.shared
 
     private static let names: [String: String] = {
         var result: [String: String] = [:]

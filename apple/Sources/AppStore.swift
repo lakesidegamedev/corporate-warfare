@@ -168,6 +168,7 @@ final class AppStore: ObservableObject {
         _ = await pendingWrite?.value
         saves = saveManager.list()
         sessionReady = false
+        GpuMapSession.discardParked()
         statusLine = ""
     }
 
@@ -296,6 +297,7 @@ final class AppStore: ObservableObject {
             do {
                 let overview = try await self.engine.start(options: options)
                 self.tutorial.beginCareer()
+                await self.prepareMap()
                 self.apply(overview)
                 await self.reload()
                 await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
@@ -312,6 +314,7 @@ final class AppStore: ObservableObject {
             do {
                 let overview = try await self.engine.startCustom(scenario, guided: guided, seed: seed, fiveYear: fiveYear)
                 self.tutorial.beginCareer()
+                await self.prepareMap()
                 self.apply(overview)
                 await self.reload()
                 await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
@@ -327,6 +330,7 @@ final class AppStore: ObservableObject {
         do {
             let data = try saveManager.load(save)
             let overview = try await engine.loadSave(data)
+            await prepareMap()
             apply(overview)
             recoveryIssue = nil
             await reload()
@@ -351,6 +355,7 @@ final class AppStore: ObservableObject {
         do {
             let candidate = try saveManager.recover(slot: slot)
             let overview = try await engine.loadSave(candidate.data)
+            await prepareMap()
             apply(overview)
             recoveryIssue = nil
             errorMessage = nil
@@ -1121,6 +1126,14 @@ final class AppStore: ObservableObject {
             if receipt?.accepted == true, let done { self.statusLine = done }
             await self.reload()
         }
+    }
+
+    /// Builds the career's map off the main thread before the career screens open, so the first map
+    /// view does not build it while the player waits with a frozen screen.
+    private func prepareMap() async {
+        let id = await WorldMap.prepare(scenario: await engine.scenarioId())
+        // The GPU map (when it is switched on) builds its scene now too, so the map tab opens at once.
+        GpuMapSession.prewarm(scenario: id)
     }
 
     private func apply(_ overview: OverviewDto) {

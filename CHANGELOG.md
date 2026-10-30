@@ -422,6 +422,12 @@ heading.
 
 ### Changed
 
+- iPhone and iPad start faster and stall less. The world map is read in the background while the
+  app opens, so the main menu no longer waits for it (the globe fades in as soon as it is ready).
+  Opening a career builds its map in the background too, and the CEO Office's room art and portraits
+  are prepared behind the menu, so the first visit to the office does not freeze. With the new GPU
+  map switched on, its scene is built as soon as the career opens, and the map tab keeps it between
+  visits, so opening the map is immediate instead of a few seconds of waiting each time.
 - Tooling: every change to the Android app now starts the trimmed release build on an emulator in
   CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
   so a trimming mistake fails the check and not a phone.
