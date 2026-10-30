@@ -1341,7 +1341,8 @@ fn edge_pieces(cell: Cell, fa: f32, fb: f32, sea: i32) -> Vec<(f32, f32, i32, u8
 /// between them. Corners go round from the south west (x, y in kilometres), `f` is the land
 /// cover at each; the coastline is where it crosses a half.
 type Poly = Vec<[f32; 2]>;
-fn split_coast(p: [[f32; 2]; 4], f: [f32; 4]) -> (Vec<Poly>, Vec<Poly>, Vec<([f32; 2], [f32; 2])>) {
+type Coast = (Vec<Poly>, Vec<Poly>, Vec<([f32; 2], [f32; 2])>);
+fn split_coast(p: [[f32; 2]; 4], f: [f32; 4]) -> Coast {
     let on = [f[0] >= 0.5, f[1] >= 0.5, f[2] >= 0.5, f[3] >= 0.5];
     let cross = |k: usize| {
         let (a, b) = (k, (k + 1) % 4);
