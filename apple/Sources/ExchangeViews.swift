@@ -272,12 +272,7 @@ struct StockSheet: View {
                                  note: Format.moneyCompact(stock.yourShares * stock.priceCents)),
                         ]
                     )
-                    StockHistorySection(firm: stock.firm)
-                    EarningsSection(earnings: stock.earnings, onGiveGuidance: nil)
-                    DossierSection(firm: stock.firm)
-                    if showPage {
-                        Button("Open company page") { showCompany = true }.buttonStyle(PixelButtonStyle())
-                    }
+                    // The order sits right under the price, so it is seen without scrolling past the history.
                     Panel(padding: 12) {
                         VStack(alignment: .leading, spacing: 10) {
                             Eyebrow(text: "Order")
@@ -319,6 +314,12 @@ struct StockSheet: View {
                             .disabled(quantity == nil || (quote?.qty ?? 0) <= 0 || store.isBusy)
                         }
                         .foregroundStyle(Theme.primaryText)
+                    }
+                    StockHistorySection(firm: stock.firm)
+                    EarningsSection(earnings: stock.earnings, onGiveGuidance: nil)
+                    DossierSection(firm: stock.firm)
+                    if showPage {
+                        Button("Open company page") { showCompany = true }.buttonStyle(PixelButtonStyle())
                     }
                 }
                 .padding(16)

@@ -328,7 +328,9 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Scrolls, so the history and the dossier never push the trade off a short window; the trade sits
+            // right under the price, where it is seen without scrolling.
+            Column(Modifier.heightIn(max = 640.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatGroup(
                     Stat("Share price", Format.price(line.priceCents), note = "${changeText(line.changeWeekBps)} this week"),
                     listOf(
@@ -340,10 +342,6 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
                         Stat("You hold", Format.count(line.yourShares), note = Format.compact(line.yourShares * line.priceCents)),
                     ),
                 )
-                StockHistoryChart(store, line.firm)
-                EarningsSection(line.earnings, null)
-                DossierSection(store, line.firm)
-                if (showPage) TextButton(onClick = { page = true }) { Text("Open company page") }
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     SegmentedButton(selected = buy, onClick = { buy = true }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Buy") }
                     SegmentedButton(selected = !buy, onClick = { buy = false }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Sell") }
@@ -355,7 +353,11 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
                 TextButton(onClick = {
                     store.shareQuote(line.firm, buy, Long.MAX_VALUE, limitCents) { it?.let { q -> quantity = q.maxQty.toString() } }
                 }) { Text(if (buy) "Max: all I can afford or the public holds" else "Max: all I hold") }
-                Text(quoteText(quote, buy), color = Palette.secondary, fontSize = 12.sp)
+                Text(quoteText(quote, buy), color = Palette.primaryText, fontSize = 13.sp)
+                StockHistoryChart(store, line.firm)
+                EarningsSection(line.earnings, null)
+                DossierSection(store, line.firm)
+                if (showPage) TextButton(onClick = { page = true }) { Text("Open company page") }
             }
         },
         confirmButton = {
