@@ -26,6 +26,9 @@ class MainActivity : ComponentActivity() {
             }
         })
         Pixel.font = androidPixelFont()
+        // The world map (3 MB of outlines) and the picture files are read here, off the main thread,
+        // while the main menu comes up, so the map's first frame does not stop to parse them.
+        Thread(Preload::run, "cw-preload").apply { priority = Thread.MIN_PRIORITY + 1 }.start()
         MeshCanvas.draw = { canvas, positions, tex, colors, indices, vertices, indexCount, paint ->
             // Clouds go to the graphics chip as arrays in one call.
             canvas.nativeCanvas.drawVertices(

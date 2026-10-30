@@ -6,6 +6,7 @@ kotlin = "2.2.21"
 agp = "8.13.2"
 composeMultiplatform = "1.9.3"
 activityCompose = "1.10.1"
+profileinstaller = "1.4.0"
 jna = "5.17.0"
 serialization = "1.8.1"
 compileSdk = "36"
@@ -13,6 +14,7 @@ minSdk = "26"
 
 [libraries]
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 

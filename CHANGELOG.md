@@ -422,6 +422,10 @@ heading.
 
 ### Changed
 
+- Android: the game starts and opens its first map faster. The app now ships a startup profile, so the
+  phone prepares the game's code when it installs the app instead of working it out on first launch,
+  and the world map and picture files are read in the background while the main menu comes up, so the
+  map no longer stops to load them when a career opens.
 - Weeks play faster and saves are quicker. On a large map a week now takes roughly a fifth to a
   quarter less time, the rivals think through their moves with far fewer repeated lookups, and
   saving and loading a five-year career takes about half as long. Results are unchanged: the same
