@@ -163,7 +163,7 @@ private fun GiveDialog(store: GameStore, race: ElectionRaceDto, c: PoliticalCand
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("The law caps gifts at ${Format.compact(race.capCents, currency)} per company for this race. You have given ${Format.compact(race.youGaveCents, currency)}, so ${Format.compact(room, currency)} is left.", color = Palette.secondary, fontSize = 12.sp)
                 OutlinedTextField(value = text, onValueChange = { text = it.filter(Char::isDigit) }, label = { Text("Amount") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.textEntry())
                 Text(note, color = Palette.warning, fontSize = 12.sp)
             }
         },
@@ -215,9 +215,9 @@ private fun BidDialog(store: GameStore, t: PublicTenderDto, currency: String, on
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("The state pays up to ${Format.compact(t.budgetCents, currency)}. The best bid wins: lowest price, with each week of delivery counted as a hundredth of that budget. You build it, paying for contractors and materials as you go, and are paid in four stages as it is built. A week late costs a tenth of the price.", color = Palette.secondary, fontSize = 12.sp)
                 OutlinedTextField(value = weeks, onValueChange = { weeks = it.filter(Char::isDigit) }, label = { Text("Delivery in weeks (${t.minWeeks} to ${t.maxWeeks})") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.textEntry())
                 OutlinedTextField(value = price, onValueChange = { price = it.filter(Char::isDigit) }, label = { Text("Your price") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.textEntry())
                 Text("It costs you about ${Format.compact(cost, currency)} to deliver in $w weeks. At this price your profit is ${Format.compact(profit, currency)}.",
                     color = if (profit >= 0) Palette.positive else Palette.negative, fontSize = 12.sp)
             }

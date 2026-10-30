@@ -329,9 +329,9 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
                     SegmentedButton(selected = !buy, onClick = { buy = false }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Sell") }
                 }
                 OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Shares") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.textEntry())
                 OutlinedTextField(limit, { limit = it }, label = { Text("Limit per share ($), default %.2f".format(line.priceCents / 100.0)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.textEntry())
                 Text("Orders fill at the weekly close, best price first, up to 2% of the freely held shares a week.", color = Palette.secondary, fontSize = 11.sp)
             }
         },
