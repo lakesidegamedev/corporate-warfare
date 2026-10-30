@@ -543,8 +543,8 @@ player has; the plan only decides what to send and when. Implemented in
 **Opening.** From week 26, each rival looks once every 13 weeks (by its handle's slot). There is
 room for one plan for every 8 companies in the world, a rival runs one at a time, and a rival
 waits 104 weeks after a plan ends. The target must be listed, not state owned, not in the rival's
-group, free of any holder with a majority, with at least 5 percent of its votes in outside hands for
-every point of the 2.5 percent goal (so 5 percent outside), and no other rival already after it. The rival
+group, free of any holder with a majority, with at least half of its votes in outside hands (twice the
+goal), and no other rival already after it. The rival
 must hold cash over eight weeks of mandatory outflow, and the campaign (the stake, then the
 escrow of the bid) may cost no more than twice that spare cash, since earnings keep arriving. The
 score is the discount of the traded mark to the fair estimate (capped), plus a quarter of the

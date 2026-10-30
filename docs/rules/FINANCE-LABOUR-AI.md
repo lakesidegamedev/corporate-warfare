@@ -360,6 +360,5 @@ net movers by week. The houses on the map follow the region's economy; migration
 population behind that economy.
 
 **Saved state.** The references, carries and the weekly net movers (104 weeks) are saved with the
-rival plans in the `PLAN` trailer, folded into the hash while not empty. A save from before 1.9 preview
-4 loads with it empty and takes the references at the next week.
+rival plans in the `PLAN` trailer, folded into the hash while not empty. A save from before this version loads with it empty and takes the references at the next week.
 
