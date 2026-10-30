@@ -241,6 +241,7 @@ struct StockSheet: View {
     @State private var buy = true
     @State private var quantityText = "1000"
     @State private var limitText = ""
+    @State private var quote: ShareQuoteDto?
 
     private var annualEarnings: Int64? {
         guard stock.earningsWeeks > 0 else { return nil }
@@ -290,28 +291,32 @@ struct StockSheet: View {
                                     .frame(maxWidth: 140)
                             }
                             HStack {
-                                Text("Limit per share ($)").foregroundStyle(Theme.secondary)
+                                Text("Limit per share ($), optional").foregroundStyle(Theme.secondary)
                                 Spacer()
-                                TextField(String(format: "%.2f", Double(stock.priceCents) / 100), text: $limitText)
+                                TextField("none", text: $limitText)
                                     .keyboardType(.decimalPad)
                                     .multilineTextAlignment(.trailing)
                                     .frame(maxWidth: 140)
                             }
-                            Text("Orders fill at the weekly close, best price first, up to 2% of the freely held shares a week. Unfilled orders lapse after a week.")
+                            Button(buy ? "Max: all I can afford or the public holds" : "Max: all I hold") {
+                                Task { await fillMax() }
+                            }
+                            .buttonStyle(PixelButtonStyle())
+                            Text(quoteLine)
                                 .font(.caption)
                                 .foregroundStyle(Theme.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                             Button {
                                 Task { await place() }
                             } label: {
-                                Text(buy ? "Place buy order" : "Place sell order")
+                                Text(buy ? "Buy now" : "Sell now")
                                     .font(.callout.weight(.semibold))
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(PixelButtonStyle(prominent: true))
                             .tint(Theme.gold)
                             .foregroundStyle(Theme.ink)
-                            .disabled(quantity == nil || store.isBusy)
+                            .disabled(quantity == nil || (quote?.qty ?? 0) <= 0 || store.isBusy)
                         }
                         .foregroundStyle(Theme.primaryText)
                     }
@@ -323,6 +328,31 @@ struct StockSheet: View {
             .sheet(isPresented: $showCompany) { CompanyPageSheet(firm: stock.firm) }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+            .task(id: "\(buy)|\(quantityText)|\(limitText)") { await refreshQuote() }
+        }
+    }
+
+    private var quoteLine: String {
+        guard let quote else { return "Enter a number of shares to see the price." }
+        if quote.qty <= 0 {
+            return buy ? "Nothing to buy at that limit, or the public holds none."
+                       : "Nothing would sell at that limit, or no buyer has the money."
+        }
+        return "\(Figures.count(quote.qty)) shares at about \(Format.price(quote.averageCents)) each, "
+            + "\(Format.money(quote.totalCents)) in all; the price ends at \(Format.price(quote.finalCents)); "
+            + "you would own \(Format.percentBps(quote.stakeAfterBps))."
+    }
+
+    private func refreshQuote() async {
+        guard let quantity else { quote = nil; return }
+        let (firm, side, limitCents) = (stock.firm, buy, limit)
+        quote = await store.read { $0.quoteShares(firm: firm, buy: side, qty: quantity, limitCents: limitCents, asFirm: 0) }
+    }
+
+    private func fillMax() async {
+        let (firm, side, limitCents) = (stock.firm, buy, limit)
+        if let q = await store.read({ $0.quoteShares(firm: firm, buy: side, qty: Int64.max, limitCents: limitCents, asFirm: 0) }) {
+            quantityText = String(q.maxQty)
         }
     }
 
@@ -332,14 +362,18 @@ struct StockSheet: View {
     }
 
     private var limit: Int64 {
+        // No limit unless one is typed: the trade walks the whole price curve.
         if let cents = parseDollarsToCents(limitText), cents > 0 { return cents }
-        // Default limits sit two percent through the current price so the order is marketable.
-        return buy ? stock.priceCents * 102 / 100 : stock.priceCents * 98 / 100
+        return 0
     }
 
     private func place() async {
         guard let quantity else { return }
-        await store.orderShares(firm: stock.firm, buy: buy, quantity: quantity, limit: max(limit, 1))
+        var done: String?
+        if let q = quote, q.qty > 0 {
+            done = "\(buy ? "Bought" : "Sold") \(Figures.count(q.qty)) shares of \(stock.name) for \(Format.money(q.totalCents)). The price is now \(Format.price(q.finalCents))."
+        }
+        await store.orderShares(firm: stock.firm, buy: buy, quantity: quantity, limit: limit, done: done)
         dismiss()
     }
 }
