@@ -160,6 +160,8 @@ class DesktopPerfHarness {
             // The classic map with one thing changed, to see what its resting frame is made of.
             Triple("Map [Medium]", 0, base.copy(detail = MapDetail.Medium)), Triple("Map [no motion]", 0, base.copy(animations = false)),
             Triple("Map [no clouds]", 0, base.copy(clouds = 0)), Triple("Map [no earth]", 0, base.copy(earth = false)),
+            // The GPU map preview keeps the frame clock running while paused, which is how the classic map behaved before it learned to rest.
+            Triple("Map [clock on]", 0, base.copy(newMap = true)),
         )
         line("--- page: UI thread ms at 1600x900 (first draw / still frame median / frame as a week lands median)")
         for ((name, index, graphics) in pages) {
