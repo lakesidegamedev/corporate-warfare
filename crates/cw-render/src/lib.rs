@@ -7,6 +7,7 @@
 
 mod camera;
 mod data;
+mod far;
 mod game;
 mod ground;
 mod mesh;
@@ -28,6 +29,6 @@ pub use renderer::{AdapterSummary, CloudLevel, Frame, FrameStats, NoAdapter, Ren
 
 pub use ground::snow_cover;
 pub use mesh::{
-    BuildingBox, ROAD_BANDS, RoadPoint, apron_extent_km, apron_seam_steps, building_boxes,
-    ground_z, road_band, road_chains, road_chains_for_band,
+    BuildingBox, ROAD_BANDS, RoadPoint, apron_extent_km, apron_land_boxes, apron_seam_steps,
+    building_boxes, ground_z, road_band, road_chains, road_chains_for_band,
 };

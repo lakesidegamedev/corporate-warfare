@@ -912,7 +912,7 @@ private fun GeoRing.overlaps(box: DoubleArray): Boolean =
     size >= 3 && lon.max() >= box[0] && lon.min() <= box[1] && lat.max() >= box[2] && lat.min() <= box[3]
 
 /** Even-odd test of a place against one ring, on longitude and latitude. */
-private fun geoInside(ring: GeoRing, lon: Double, lat: Double): Boolean {
+internal fun geoInside(ring: GeoRing, lon: Double, lat: Double): Boolean {
     if (ring.size < 3) return false
     var inside = false
     var j = ring.size - 1

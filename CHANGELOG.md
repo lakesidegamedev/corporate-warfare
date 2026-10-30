@@ -467,6 +467,14 @@ heading.
 
 ### Fixed
 
+- Zoomed far out, the new map no longer shows broken land at the world's edge. Beyond the scenario
+  the world now follows the real coastlines, with smooth shores, flat land in the same colours as the
+  terrain, and detail that fades with distance, instead of coarse slabs, long streaks and stair-step
+  coasts. The scenario's own terrain blends into it without a seam.
+- On the classic map, plants no longer stand in lakes or the sea. A plant whose usual spot beside its
+  region's hub is over water is moved along the way to the hub, and round it, to the nearest dry spot
+  inside the region, the same one every time.
+
 - On the new map, plants are now a believable size. A plant stands a few hundred metres to about two
   kilometres across and is never taller than it is wide, so a city's plants no longer dwarf the
   counties around them. They never stand on lakes or the sea: a plant whose spot is water slides along
