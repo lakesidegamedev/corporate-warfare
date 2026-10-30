@@ -171,7 +171,7 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                 onSave = { store.saveNow() },
                 onSettings = { closeGameMenu(resume = false); showSettings = true },
                 onMainMenu = { closeGameMenu(resume = false); store.exitToMenu() },
-                onQuit = onQuit?.let { quit -> { closeGameMenu(resume = false); quit() } },
+                onQuit = onQuit?.let { quit -> { closeGameMenu(resume = false); store.saveAndThen(quit) } },
             )
             store.error?.let { message ->
                 AlertDialog(
