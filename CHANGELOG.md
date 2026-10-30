@@ -13,6 +13,7 @@ heading.
 
 ### Added
 
+- Escape on desktop opens a game menu that pauses time: Resume, Save, Settings, Save and return to main menu, and Save and quit. Escape also closes Settings and other open screens. The sidebar keeps Save, Settings, Game menu and Main menu in view on a short window, and its pages scroll.
 - A rival that is the target of a takeover now gets help from friends. Once a raider's stake in a
   rival company is public (5 percent of the votes), one friendly rival with cash to spare steps in: it
   makes the company a friendly offer above the market if it can fund one, or otherwise buys a

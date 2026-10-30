@@ -39,6 +39,13 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -79,6 +86,20 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
     var showSettings by remember { mutableStateOf(false) }
     // Set up again, or the wizard a 1.8 player chose from What's new.
     var rerunSetup by remember { mutableStateOf(false) }
+    // The desktop game menu (Escape): pauses time while open and resumes it at the same speed after.
+    var gameMenu by remember { mutableStateOf(false) }
+    var resumeSpeed by remember { mutableStateOf(0) }
+    val rootFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    fun openGameMenu() {
+        resumeSpeed = if (store.running) store.speed else 0
+        if (store.running) store.playAt(0)
+        gameMenu = true
+    }
+    fun closeGameMenu(resume: Boolean) {
+        gameMenu = false
+        if (resume && resumeSpeed > 0) store.playAt(resumeSpeed)
+        resumeSpeed = 0
+    }
     val analytics = settings.analytics
     androidx.compose.runtime.SideEffect {
         store.preferredCurrency = settings.reportingCurrency
@@ -106,7 +127,23 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
         androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density * settings.uiScale, density.fontScale),
     ) {
         CorporateWarfareTheme {
-            Box(Modifier.fillMaxSize().background(Palette.ink)) {
+            androidx.compose.runtime.LaunchedEffect(showSettings, store.ready) { runCatching { rootFocus.requestFocus() } }
+            Box(
+                Modifier.fillMaxSize().background(Palette.ink)
+                    .focusRequester(rootFocus).focusable()
+                    // Escape on desktop: close the deepest open screen (settings, an overlay); with nothing open in a
+                    // career, open or close the game menu. Runs on the way back up, so a focused field or dialog acts first.
+                    .onKeyEvent { event ->
+                        if (onQuit == null || event.type != KeyEventType.KeyDown || event.key != Key.Escape) return@onKeyEvent false
+                        when {
+                            gameMenu -> { closeGameMenu(resume = true); true }
+                            showSettings -> { showSettings = false; true }
+                            Back.press() -> true
+                            store.ready -> { openGameMenu(); true }
+                            else -> false
+                        }
+                    },
+            ) {
                 when {
                     rerunSetup || settings.setupState == SetupState.Fresh ->
                         SetupWizard(settings, updater, saveFolder, firstRun = settings.setupState == SetupState.Fresh && !rerunSetup, onDone = { rerunSetup = false })
@@ -121,7 +158,7 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                     store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         if (maxWidth >= DesktopBreakpoint) {
                             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                                DesktopShell(store, onSettings = { showSettings = true })
+                                DesktopShell(store, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
                                 if (settings.showBriefEachWeek) BriefWeeklyHost(store)
                             }
                         }
@@ -129,6 +166,13 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                     }
                     else -> StartScreen(store, updater, onSettings = { showSettings = true }, onQuit = onQuit)
                 }
+            if (gameMenu && store.ready) GameMenuDialog(
+                onResume = { closeGameMenu(resume = true) },
+                onSave = { store.saveNow() },
+                onSettings = { closeGameMenu(resume = false); showSettings = true },
+                onMainMenu = { closeGameMenu(resume = false); store.exitToMenu() },
+                onQuit = onQuit?.let { quit -> { closeGameMenu(resume = false); quit() } },
+            )
             store.error?.let { message ->
                 AlertDialog(
                     onDismissRequest = { store.error = null },
@@ -790,4 +834,27 @@ fun SpeedControl(store: GameStore) {
 @Composable
 private fun NavLabel(text: String) {
     Text(text, fontSize = chromeSp(11f), maxLines = 1, softWrap = false)
+}
+
+
+/** The desktop game menu Escape opens: time is paused while it shows. */
+@Composable
+internal fun GameMenuDialog(onResume: () -> Unit, onSave: () -> Unit, onSettings: () -> Unit, onMainMenu: () -> Unit, onQuit: (() -> Unit)?) {
+    var saved by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onResume,
+        containerColor = Palette.panel,
+        title = { Text("Paused") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.widthIn(min = 280.dp)) {
+                GoldButton("Resume", modifier = Modifier.fillMaxWidth()) { onResume() }
+                OutlinedButton(onClick = { onSave(); saved = true }, modifier = Modifier.fillMaxWidth()) { Text(if (saved) "Saved" else "Save", color = Palette.primaryText) }
+                OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("Settings", color = Palette.primaryText) }
+                OutlinedButton(onClick = onMainMenu, modifier = Modifier.fillMaxWidth()) { Text("Save and return to main menu", color = Palette.primaryText) }
+                if (onQuit != null) OutlinedButton(onClick = onQuit, modifier = Modifier.fillMaxWidth()) { Text("Save and quit to desktop", color = Palette.primaryText) }
+                Text("Esc resumes.", color = Palette.secondary, fontSize = 11.sp)
+            }
+        },
+        confirmButton = {},
+    )
 }
