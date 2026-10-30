@@ -40,10 +40,11 @@ struct GpuBuilding {
     var isScenery: Bool { owner == "scenery" }
 }
 
-/// A UIView whose layer is a CAMetalLayer: the engine draws into it and presents each frame.
+/// A UIView that hosts a CAMetalLayer as a sublayer: the engine draws into it and presents each
+/// frame from its own thread. The Metal layer is deliberately not the view's backing layer: UIKit
+/// forbids changing a view's own layer off the main thread, and presenting resizes the drawable.
 final class GpuMetalView: UIView {
-    override class var layerClass: AnyClass { CAMetalLayer.self }
-    var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
+    let metalLayer = CAMetalLayer()
     /// Called on the main thread when the size, scale or window changes.
     var onChange: (() -> Void)?
 
@@ -53,17 +54,27 @@ final class GpuMetalView: UIView {
         isUserInteractionEnabled = false
         backgroundColor = UIColor(red: 0.043, green: 0.086, blue: 0.133, alpha: 1)
         metalLayer.isOpaque = true
+        // No implicit animations when the frame or drawable changes.
+        metalLayer.actions = ["bounds": NSNull(), "position": NSNull(), "contents": NSNull(), "contentsScale": NSNull()]
+        layer.addSublayer(metalLayer)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        metalLayer.frame = bounds
+        // Same cap as the drawing scale in request(camera:size:), so a frame fills the layer one to one.
+        metalLayer.contentsScale = min(max(traitCollection.displayScale, 1), 2)
+        CATransaction.commit()
         onChange?()
     }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        setNeedsLayout()
         onChange?()
     }
 }
