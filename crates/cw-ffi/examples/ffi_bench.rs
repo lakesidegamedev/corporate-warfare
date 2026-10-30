@@ -145,6 +145,44 @@ fn main() {
         });
         timed("freight_summary", &mut rows, || (h.freight_summary(), 1));
         timed("structure_view", &mut rows, || (h.structure_view(), 1));
+        macro_rules! many {
+            ($name:expr, $call:expr) => {
+                timed($name, &mut rows, || {
+                    let v = $call;
+                    let n = v.len();
+                    (v, n)
+                })
+            };
+        }
+        macro_rules! one {
+            ($name:expr, $call:expr) => {
+                timed($name, &mut rows, || ($call, 1))
+            };
+        }
+        let firm_id = firm.unwrap();
+        one!("weekly_brief", h.weekly_brief(firm_id));
+        many!("letters", h.letters(0));
+        many!("map_plants", h.map_plants());
+        one!("firm_ops", h.firm_ops(firm_id));
+        many!("cast_people", h.cast_people());
+        one!("dossier", h.dossier(firm_id));
+        one!("company_page", h.company_page(firm_id));
+        many!("cfo_advice", h.cfo_advice(firm_id));
+        many!("rivals", h.rivals(firm_id));
+        many!("rival_feed", h.rival_feed(30));
+        timed("market_snapshot_json", &mut rows, || {
+            let v = h.market_snapshot_json();
+            let n = v.len();
+            (v, n)
+        });
+        many!("group_tree", h.group_tree());
+        one!("objective", h.objective());
+        many!("statements", h.statements(firm_id, "quarter".into()));
+        many!("contracts", h.contracts(firm_id));
+        many!("deals", h.deals());
+        one!("labour", h.labour(firm_id));
+        many!("storage_cells", h.storage_cells(firm_id));
+        one!("paper", h.paper(h.overview().tick));
         let products = h.products();
         let regions = h.region_boards(firm);
         let region = regions[0].index;

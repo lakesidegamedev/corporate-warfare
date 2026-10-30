@@ -10,6 +10,7 @@ use cw_core::RULES_VERSION;
 use cw_core::error::{DomainError, SaveFault};
 use cw_core::hash::{DOMAIN_SAVE, digest};
 use cw_sim::state::World;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub const MAGIC: &[u8; 4] = b"CWSV";
 /// The schema is the layout of the postcard world payload (`cw_sim::legacy`). Postcard is not
@@ -74,6 +75,9 @@ const POLITICS_MAGIC: &[u8; 4] = b"POLI";
 /// order after the systems trailer.
 const PLANS_MAGIC: &[u8; 4] = b"PLAN";
 
+/// Payload size of the most recent save in this process.
+static LAST_PAYLOAD: AtomicUsize = AtomicUsize::new(0);
+
 pub fn encode(world: &World, career_id: u64) -> Result<Vec<u8>, DomainError> {
     encode_with(world, career_id, None)
 }
@@ -85,9 +89,16 @@ pub fn encode_with(
     career_id: u64,
     custom: Option<&cw_data::CustomScenario>,
 ) -> Result<Vec<u8>, DomainError> {
-    let payload = postcard::to_allocvec(world).map_err(|_| DomainError::InvalidSave {
+    // Start the buffer at the size of the last save, so the payload is not copied again each time
+    // the buffer doubles. Only the capacity depends on it, never the bytes.
+    let payload = postcard::to_extend(
+        world,
+        Vec::with_capacity(LAST_PAYLOAD.load(Ordering::Relaxed) + 4096),
+    )
+    .map_err(|_| DomainError::InvalidSave {
         detail: SaveFault::MalformedPayload,
     })?;
+    LAST_PAYLOAD.store(payload.len(), Ordering::Relaxed);
     if payload.len() > MAX_BYTES {
         return Err(DomainError::InvalidSave {
             detail: SaveFault::Oversize,

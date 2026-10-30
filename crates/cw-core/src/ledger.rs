@@ -130,9 +130,12 @@ impl Memo {
 
     pub fn as_str(&self) -> &str {
         match &self.0 {
-            // Only whole `&str`s are copied in, so the bytes are valid UTF-8.
             MemoRepr::Inline { len, bytes } => {
-                std::str::from_utf8(&bytes[..*len as usize]).unwrap_or_default()
+                let used = &bytes[..*len as usize];
+                debug_assert!(std::str::from_utf8(used).is_ok());
+                // SAFETY: `From<&str>` is the only way to build the inline form and it copies
+                // one whole `&str`, so these bytes are valid UTF-8 as copied.
+                unsafe { std::str::from_utf8_unchecked(used) }
             }
             MemoRepr::Heap(text) => text,
         }

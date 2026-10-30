@@ -4,16 +4,19 @@
 //! Add `--features phase-timing` for the per-phase breakdown. The id `default` is the plain
 //! guided start with no scenario file.
 //!
-//! cargo run --release -p cw-session --example week_bench -- [scenario-id ...] [--weeks N]
+//! cargo run --release -p cw-session --example week_bench -- [scenario-id ...] [--weeks N] [--io-repeat N]
 use std::time::Instant;
 
 fn main() {
     let mut weeks: u32 = 260;
+    let mut io_repeat: u32 = 5;
     let mut scenarios: Vec<String> = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         if arg == "--weeks" {
             weeks = args.next().and_then(|v| v.parse().ok()).unwrap_or(260);
+        } else if arg == "--io-repeat" {
+            io_repeat = args.next().and_then(|v| v.parse().ok()).unwrap_or(5).max(1);
         } else {
             scenarios.push(arg);
         }
@@ -65,13 +68,18 @@ fn main() {
             }
         }
         let phases = cw_sim::prof::take();
-        let t = Instant::now();
-        let bytes = session.export_save().unwrap();
-        let save_ms = t.elapsed().as_secs_f64() * 1000.0;
-        let t = Instant::now();
-        let loaded = cw_session::Session::import_save(&bytes).unwrap();
-        let load_ms = t.elapsed().as_secs_f64() * 1000.0;
-        assert_eq!(loaded.canonical_hash(), session.canonical_hash());
+        // Best of several: one save or load is short enough for the machine's noise to show.
+        let (mut save_ms, mut load_ms) = (f64::MAX, f64::MAX);
+        let mut bytes = Vec::new();
+        for _ in 0..io_repeat {
+            let t = Instant::now();
+            bytes = session.export_save().unwrap();
+            save_ms = save_ms.min(t.elapsed().as_secs_f64() * 1000.0);
+            let t = Instant::now();
+            let loaded = cw_session::Session::import_save(&bytes).unwrap();
+            load_ms = load_ms.min(t.elapsed().as_secs_f64() * 1000.0);
+            assert_eq!(loaded.canonical_hash(), session.canonical_hash());
+        }
         let total: f64 = times.iter().sum();
         let mut sorted = times.clone();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
