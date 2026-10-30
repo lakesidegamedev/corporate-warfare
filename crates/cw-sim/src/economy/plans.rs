@@ -180,7 +180,6 @@ pub struct PlanStats {
     pub tenders: u32,
     pub won: u32,
     pub abandoned: u32,
-    pub bought_shares: i64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -307,7 +306,13 @@ fn campaign_cost(world: &World, raider: Handle, target: Handle) -> i64 {
 }
 
 /// A target worth a plan, scored; None when the rival may not or cannot go after it.
-fn score_target(world: &World, ds: &Dataset, raider: Handle, target: Handle, code: u8) -> Option<i64> {
+fn score_target(
+    world: &World,
+    ds: &Dataset,
+    raider: Handle,
+    target: Handle,
+    code: u8,
+) -> Option<i64> {
     let t = world.firms.get(target)?;
     let b = world.firms.get(raider)?;
     if target == raider
@@ -436,7 +441,11 @@ fn open(world: &mut World, ds: &Dataset, now: u32) {
             || firm.state_owned_since.is_some()
             || is_player_side(world, raider)
             || world.plans.plan_of(raider).is_some()
-            || world.plans.cooldown.get(&raider).is_some_and(|until| now < *until)
+            || world
+                .plans
+                .cooldown
+                .get(&raider)
+                .is_some_and(|until| now < *until)
             || firm.shares.controller().is_some()
         {
             continue;
@@ -484,7 +493,7 @@ fn advance(world: &mut World, now: u32) {
             .get(plan.target)
             .map(|f| f.shares.mark_cents)
             .unwrap_or(0);
-        let mut event: Option<(EventKind, Option<Outcome>)> = None;
+        let mut events: Vec<(EventKind, Option<Outcome>)> = Vec::new();
         let mut next_stage = plan.stage;
         let mut reason = plan.reason;
         let mut disclosed = plan.disclosed;
@@ -503,7 +512,8 @@ fn advance(world: &mut World, now: u32) {
                 {
                     Some(Outcome::Gone)
                 } else if plan.deal.is_none()
-                    && mark > plan.entry_mark_cents * (10_000 + run_cap_bps(plan.temperament)) / 10_000
+                    && mark
+                        > plan.entry_mark_cents * (10_000 + run_cap_bps(plan.temperament)) / 10_000
                 {
                     Some(Outcome::PriceRan)
                 } else if now.saturating_sub(plan.started) > MAX_WEEKS && plan.deal.is_none() {
@@ -526,7 +536,7 @@ fn advance(world: &mut World, now: u32) {
                 if let Some(why) = give_up {
                     next_stage = Stage::SellingOut;
                     reason = Some(why);
-                    event = Some((EventKind::Abandoned, Some(why)));
+                    events.push((EventKind::Abandoned, Some(why)));
                 } else if plan.stage == Stage::Building && stake >= GOAL_BPS {
                     next_stage = Stage::Tender;
                 } else if plan.stage == Stage::Tender && plan.deal.is_none() {
@@ -534,7 +544,7 @@ fn advance(world: &mut World, now: u32) {
                     if let Some(handle) = find_bid(world, plan.raider, plan.target) {
                         world.plans.plans[index].deal = Some(handle);
                         world.plans.stats.tenders += 1;
-                        event = Some((EventKind::Tender, None));
+                        events.push((EventKind::Tender, None));
                     }
                 }
                 if let Some(handle) = world.plans.plans[index].deal
@@ -544,11 +554,11 @@ fn advance(world: &mut World, now: u32) {
                     if deal.state == DealState::Settled {
                         finished.push((index, Outcome::Won));
                         world.plans.stats.won += 1;
-                        event = Some((EventKind::Won, Some(Outcome::Won)));
+                        events.push((EventKind::Won, Some(Outcome::Won)));
                     } else {
                         next_stage = Stage::SellingOut;
                         reason = Some(Outcome::TenderFailed);
-                        event = Some((EventKind::Abandoned, Some(Outcome::TenderFailed)));
+                        events.push((EventKind::Abandoned, Some(Outcome::TenderFailed)));
                     }
                 }
             }
@@ -568,7 +578,7 @@ fn advance(world: &mut World, now: u32) {
         if disclosed.is_none() && stake >= DISCLOSE_BPS {
             disclosed = Some(now);
             world.plans.stats.disclosed += 1;
-            event = event.or(Some((EventKind::Disclosed, None)));
+            events.insert(0, (EventKind::Disclosed, None));
             let text = format!(
                 "Disclosed a {} percent stake in {}.",
                 stake / 100,
@@ -583,10 +593,10 @@ fn advance(world: &mut World, now: u32) {
             && stake < DISCLOSE_BPS
             && plan.stage == Stage::SellingOut;
         if dropped {
-            event = Some((EventKind::Dropped, None));
+            events.push((EventKind::Dropped, None));
         }
-        if grew && event.is_none() {
-            event = Some((EventKind::Grew, None));
+        if grew && events.is_empty() {
+            events.push((EventKind::Grew, None));
         }
         {
             let p = &mut world.plans.plans[index];
@@ -604,14 +614,17 @@ fn advance(world: &mut World, now: u32) {
                 }
             }
         }
-        if let Some((kind, why)) = event {
+        for (kind, why) in events {
             let text = match kind {
                 EventKind::Tender => Some(format!("Bid for {}.", firm_name(world, plan.target))),
                 EventKind::Abandoned => Some(format!(
                     "Gave up on {} and is selling its stake.",
                     firm_name(world, plan.target)
                 )),
-                EventKind::Won => Some(format!("Took control of {}.", firm_name(world, plan.target))),
+                EventKind::Won => Some(format!(
+                    "Took control of {}.",
+                    firm_name(world, plan.target)
+                )),
                 _ => None,
             };
             if let Some(text) = text {
@@ -638,11 +651,13 @@ fn advance(world: &mut World, now: u32) {
     finished.dedup_by_key(|(i, _)| *i);
     for (index, outcome) in finished {
         let p = world.plans.plans.remove(index);
-        world
-            .plans
-            .cooldown
-            .insert(p.raider, now + COOLDOWN_WEEKS);
-        let peak = p.history.iter().map(|(_, b)| *b).max().unwrap_or(p.stake_bps);
+        world.plans.cooldown.insert(p.raider, now + COOLDOWN_WEEKS);
+        let peak = p
+            .history
+            .iter()
+            .map(|(_, b)| *b)
+            .max()
+            .unwrap_or(p.stake_bps);
         world.plans.ended.push(Ended {
             raider: p.raider,
             target: p.target,
@@ -839,7 +854,12 @@ pub fn likely_next_move(world: &World, rival: Handle) -> Option<String> {
     }
     // A filed stake and which way it is going.
     let mut best: Option<(i32, Handle)> = None;
-    for plan in world.plans.plans.iter().filter(|p| p.raider == rival && p.disclosed.is_some()) {
+    for plan in world
+        .plans
+        .plans
+        .iter()
+        .filter(|p| p.raider == rival && p.disclosed.is_some())
+    {
         if best.is_none_or(|(b, _)| plan.stake_bps > b) {
             best = Some((plan.stake_bps, plan.target));
         }
@@ -851,7 +871,9 @@ pub fn likely_next_move(world: &World, rival: Handle) -> Option<String> {
         return Some(if change < -50 {
             format!("Selling down its {percent} percent stake in {who}.")
         } else if now >= GOAL_BPS - 500 {
-            format!("Holds {percent} percent of {who} and is close to a bid. Expect a takeover offer soon.")
+            format!(
+                "Holds {percent} percent of {who} and is close to a bid. Expect a takeover offer soon."
+            )
         } else if change > 50 {
             format!(
                 "Building a stake in {who}, now {percent} percent and rising. A bid usually follows once it nears a quarter."
@@ -869,7 +891,13 @@ pub fn likely_next_move(world: &World, rival: Handle) -> Option<String> {
         .rev()
         .find(|e| e.raider == rival && e.disclosed.is_some() && now.saturating_sub(e.ended) < 52)
         .map(|e| match e.outcome {
-            Outcome::Won => format!("Took control of {} recently. Expect it to turn to the next target.", firm_name(world, e.target)),
-            _ => format!("Backed away from {} recently. Another campaign is not likely before next year.", firm_name(world, e.target)),
+            Outcome::Won => format!(
+                "Took control of {} recently. Expect it to turn to the next target.",
+                firm_name(world, e.target)
+            ),
+            _ => format!(
+                "Backed away from {} recently. Another campaign is not likely before next year.",
+                firm_name(world, e.target)
+            ),
         })
 }

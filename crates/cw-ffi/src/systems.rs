@@ -109,8 +109,11 @@ pub struct RegionDossierDto {
     pub tiers: Vec<LabourPoolDto>,
     pub demand: Vec<DemandDto>,
     pub competitors: Vec<CompetitorDto>,
-    /// population, employed, wage, land_index, spend, then `share:<industry>` for each of your
-    /// divisions here.
+    /// Workers who moved in minus those who moved out, over the last 52 weeks and the last week.
+    pub net_migration_year: i64,
+    pub net_migration_week: i64,
+    /// population, employed, wage, land_index, spend, migration (net movers a week), then
+    /// `share:<industry>` for each of your divisions here.
     pub series: Vec<SeriesDto>,
 }
 
@@ -625,6 +628,20 @@ impl SessionHandle {
             series(weeks, "land_index", |w| at(w).map(|r| r.land_index_bps)),
             series(weeks, "spend", |w| at(w).map(|r| r.spend_cents)),
         ];
+        let moved = world
+            .plans
+            .migration
+            .net
+            .get(index as usize)
+            .cloned()
+            .unwrap_or_default();
+        series_list.push(SeriesDto {
+            key: "migration".to_owned(),
+            weeks: (0..moved.len() as u32)
+                .map(|i| (world.tick.0 + 1 + i).saturating_sub(moved.len() as u32))
+                .collect(),
+            values: moved.iter().map(|n| *n as i64).collect(),
+        });
         let mut industries: Vec<u8> = weeks
             .iter()
             .flat_map(|w| w.divisions.iter())
@@ -668,6 +685,8 @@ impl SessionHandle {
                 .collect(),
             demand,
             competitors,
+            net_migration_year: world.plans.migration.net_over(index as usize, 52),
+            net_migration_week: world.plans.migration.net_over(index as usize, 1),
             series: series_list,
         })
     }

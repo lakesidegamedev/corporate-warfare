@@ -516,13 +516,29 @@ fn settle_trade(
             .investors
             .iter()
             .enumerate()
-            .max_by(|a, b| a.1.capital_cents.cmp(&b.1.capital_cents).then(b.0.cmp(&a.0)))
+            .max_by(|a, b| {
+                a.1.capital_cents
+                    .cmp(&b.1.capital_cents)
+                    .then(b.0.cmp(&a.0))
+            })
             .map(|(i, h)| (i as u32, h.capital_cents));
         let Some((index, capital)) = pick else { return };
-        let affordable = if price > 0 { capital.max(0) / price } else { qty };
+        let affordable = if price > 0 {
+            capital.max(0) / price
+        } else {
+            qty
+        };
         let chunk = qty.min(affordable);
         if chunk > 0 {
-            settle_one(world, firm, seller, HolderId::Outside(index), chunk, price, dataset);
+            settle_one(
+                world,
+                firm,
+                seller,
+                HolderId::Outside(index),
+                chunk,
+                price,
+                dataset,
+            );
         }
         return;
     }

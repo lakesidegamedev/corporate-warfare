@@ -32,9 +32,11 @@ fn fund(w: &mut World, firm: Handle, cents: i64) {
         .book
         .commit(
             w.tick,
-            Txn::new()
-                .debit(Account::Cash, cents, "fixture")
-                .credit(Account::ShareCapital, cents, "fixture"),
+            Txn::new().debit(Account::Cash, cents, "fixture").credit(
+                Account::ShareCapital,
+                cents,
+                "fixture",
+            ),
         )
         .unwrap();
 }
@@ -80,7 +82,11 @@ fn plan_world() -> (World, Dataset, Handle, Handle) {
 }
 
 fn held(w: &World, raider: Handle, target: Handle) -> i64 {
-    w.firms.get(target).unwrap().shares.qty(HolderId::Firm(raider))
+    w.firms
+        .get(target)
+        .unwrap()
+        .shares
+        .qty(HolderId::Firm(raider))
 }
 
 fn all_holders(w: &World, target: Handle) -> i64 {
@@ -103,11 +109,18 @@ fn a_step_buys_at_most_half_the_float_and_pays_the_impact_price() {
     let outside = plans::outside_held(&w, target);
     let float = plans::weekly_float(&w, target);
     assert_eq!(float, outside * 2 / 100);
-    let Some(Action::Buy { qty, limit_cents, .. }) = plans::rival_action(&w, &ds, raider) else {
+    let Some(Action::Buy {
+        qty, limit_cents, ..
+    }) = plans::rival_action(&w, &ds, raider)
+    else {
         panic!("a plan in its building stage buys");
     };
     assert_eq!(qty, float / 2, "half the executable float and no more");
-    assert_eq!(limit_cents, mark + mark * 2 / 100, "no more than two percent over the mark");
+    assert_eq!(
+        limit_cents,
+        mark + mark * 2 / 100,
+        "no more than two percent over the mark"
+    );
     let cash = w.firms.get(raider).unwrap().book.cash();
     send(
         &mut w,
@@ -166,7 +179,10 @@ fn an_order_the_float_cannot_fill_is_released_in_full() {
     w.tick = Tick(w.tick.0 + 1);
     equity::clear_exchange(&mut w, &ds);
     let got = held(&w, raider, target);
-    assert!(got <= 2 * float, "never past the float in a week: {got} vs {float}");
+    assert!(
+        got <= 2 * float,
+        "never past the float in a week: {got} vs {float}"
+    );
     let lot = w.firms.get(target).unwrap().shares.holders[&HolderId::Firm(raider)];
     let book = &w.firms.get(raider).unwrap().book;
     assert_eq!(book.cash(), cash - lot.cost_cents);
@@ -183,15 +199,26 @@ fn crossing_five_percent_is_disclosed_and_four_point_nine_is_not() {
         let want = eligible * bps / 10_000;
         let f = w.firms.get_mut(target).unwrap();
         if want > have {
-            f.shares.transfer(from, HolderId::Firm(raider), want - have, (want - have) * 500);
+            f.shares.transfer(
+                from,
+                HolderId::Firm(raider),
+                want - have,
+                (want - have) * 500,
+            );
         }
     };
     give(&mut w, 490);
     plans::weekly(&mut w, &ds);
     assert!(w.plans.plans[0].disclosed.is_none());
-    assert!(w.plans.plans[0].history.is_empty(), "nothing is public below the line");
+    assert!(
+        w.plans.plans[0].history.is_empty(),
+        "nothing is public below the line"
+    );
     assert!(plans::disclosed_stakes(&w, target).is_empty());
-    assert!(plans::likely_next_move(&w, raider).is_none(), "intent below the line stays hidden");
+    assert!(
+        plans::likely_next_move(&w, raider).is_none(),
+        "intent below the line stays hidden"
+    );
     give(&mut w, 510);
     w.tick = Tick(31);
     plans::weekly(&mut w, &ds);
@@ -201,23 +228,33 @@ fn crossing_five_percent_is_disclosed_and_four_point_nine_is_not() {
     assert_eq!(shown.len(), 1);
     assert_eq!(shown[0].holder, raider);
     assert_eq!(shown[0].bps, 510);
-    assert!(plans::likely_next_move(&w, raider).unwrap().contains("5 percent"));
+    assert!(
+        plans::likely_next_move(&w, raider)
+            .unwrap()
+            .contains("5 percent")
+    );
 }
 
 #[test]
 fn a_quarter_of_the_votes_launches_the_tender_at_the_standard_premium() {
     let (mut w, ds, raider, target) = plan_world();
     let eligible = w.firms.get(target).unwrap().shares.eligible_votes();
-    w.firms
-        .get_mut(target)
-        .unwrap()
-        .shares
-        .transfer(HolderId::Outside(1), HolderId::Firm(raider), eligible / 4, eligible / 4 * 500);
+    w.firms.get_mut(target).unwrap().shares.transfer(
+        HolderId::Outside(1),
+        HolderId::Firm(raider),
+        eligible / 4,
+        eligible / 4 * 500,
+    );
     plans::weekly(&mut w, &ds);
     assert_eq!(w.plans.plans[0].stage, Stage::Tender);
     let mark = w.firms.get(target).unwrap().shares.mark_cents;
     let held_now = held(&w, raider, target);
-    let Some(Action::Tender { price_cents, shares, .. }) = plans::rival_action(&w, &ds, raider) else {
+    let Some(Action::Tender {
+        price_cents,
+        shares,
+        ..
+    }) = plans::rival_action(&w, &ds, raider)
+    else {
         panic!("tender stage launches the bid");
     };
     assert_eq!(price_cents, mark + mark * 25 / 100);
@@ -240,7 +277,11 @@ fn a_quarter_of_the_votes_launches_the_tender_at_the_standard_premium() {
     let deal = w.plans.plans[0].deal.expect("the plan found its deal");
     assert!(w.deals.get(deal).is_some());
     assert_eq!(w.plans.stats.tenders, 1);
-    assert!(plans::likely_next_move(&w, raider).unwrap().contains("offer"));
+    assert!(
+        plans::likely_next_move(&w, raider)
+            .unwrap()
+            .contains("offer")
+    );
 }
 
 #[test]
@@ -274,7 +315,12 @@ fn a_price_that_runs_away_abandons_the_plan_and_the_stake_is_sold_back() {
     while w.plans.plans.first().is_some() && weeks < 60 {
         w.tick = Tick(w.tick.0 + 1);
         let float = plans::weekly_float(&w, target);
-        if let Some(Action::Sell { qty, target: t, limit_cents }) = plans::rival_action(&w, &ds, raider) {
+        if let Some(Action::Sell {
+            qty,
+            target: t,
+            limit_cents,
+        }) = plans::rival_action(&w, &ds, raider)
+        {
             assert!(qty <= (float / 2).max(1));
             send(
                 &mut w,
@@ -293,12 +339,22 @@ fn a_price_that_runs_away_abandons_the_plan_and_the_stake_is_sold_back() {
         plans::weekly(&mut w, &ds);
         weeks += 1;
     }
-    assert!(w.plans.plans.is_empty(), "the plan ended once the stake was gone");
+    assert!(
+        w.plans.plans.is_empty(),
+        "the plan ended once the stake was gone"
+    );
     assert_eq!(held(&w, raider, target), 0);
     let ended = w.plans.ended.last().unwrap();
     assert_eq!(ended.outcome, Outcome::PriceRan);
-    assert!(ended.peak_bps >= 790, "history keeps the peak: {}", ended.peak_bps);
-    assert!(w.plans.cooldown[&raider] > w.tick.0, "no new plan for two years");
+    assert!(
+        ended.peak_bps >= 790,
+        "history keeps the peak: {}",
+        ended.peak_bps
+    );
+    assert!(
+        w.plans.cooldown[&raider] > w.tick.0,
+        "no new plan for two years"
+    );
     // The books stay whole: nothing was left in restricted cash and the cost of the shares left
     // the investments account when they were sold.
     let book = &w.firms.get(raider).unwrap().book;
@@ -355,7 +411,12 @@ fn the_target_buys_back_shares_against_a_disclosed_stake_but_never_into_the_raid
     }
     let qty = asked.expect("a rival target with cash buys back");
     assert_eq!(qty, eligible / 100);
-    send(&mut w, &ds, target, CommandIntent::RepurchaseShares { firm: target, qty });
+    send(
+        &mut w,
+        &ds,
+        target,
+        CommandIntent::RepurchaseShares { firm: target, qty },
+    );
     assert_eq!(w.firms.get(target).unwrap().shares.treasury(), qty);
     // Close to the control line, the answer stops: a buyback would hand over control.
     let (mut w2, _ds2, raider2, target2) = plan_world();
@@ -402,7 +463,10 @@ fn only_temperaments_that_take_over_open_plans_and_only_against_a_discount() {
             break;
         }
     }
-    let plan = w.plans.plan_of(raider).expect("the raider opens a plan against the discount");
+    let plan = w
+        .plans
+        .plan_of(raider)
+        .expect("the raider opens a plan against the discount");
     assert_eq!(plan.target, target);
     assert_eq!(plan.stage, Stage::Building);
     // One plan per target, and none for a firm that has no ear for takeovers.
@@ -439,7 +503,11 @@ fn run_weeks(w: &mut World, ds: &Dataset, weeks: u32) {
 fn no_pay_gap_means_no_migration() {
     let (mut w, ds) = world();
     run_weeks(&mut w, &ds, 40);
-    assert!(w.plans.migration.total.iter().all(|t| *t == 0), "{:?}", w.plans.migration.total);
+    assert!(
+        w.plans.migration.total.iter().all(|t| *t == 0),
+        "{:?}",
+        w.plans.migration.total
+    );
 }
 
 #[test]
@@ -453,19 +521,35 @@ fn workers_move_toward_the_better_paying_region_and_nothing_is_lost() {
         let l = &mut w.regions[b].labour[tier];
         l.prevailing_wage_cents = l.prevailing_wage_cents * 125 / 100;
     }
-    let pop_b = w.regions[b].labour.iter().map(|l| l.population).sum::<i64>();
+    let pop_b = w.regions[b]
+        .labour
+        .iter()
+        .map(|l| l.population)
+        .sum::<i64>();
     run_weeks(&mut w, &ds, 104);
     let after = totals(&w);
-    assert_eq!(before, after, "people, savings, baseline income and baseline demand are conserved");
+    assert_eq!(
+        before, after,
+        "people, savings, baseline income and baseline demand are conserved"
+    );
     let net_b = w.plans.migration.total[b];
     assert!(net_b > 0, "the better paying region gains workers: {net_b}");
-    let pop_b_after = w.regions[b].labour.iter().map(|l| l.population).sum::<i64>();
+    let pop_b_after = w.regions[b]
+        .labour
+        .iter()
+        .map(|l| l.population)
+        .sum::<i64>();
     assert_eq!(pop_b_after - pop_b, net_b);
     assert!(w.plans.migration.total[a] <= 0 || w.plans.migration.total.iter().any(|t| *t < 0));
     // A few percent a year at most: two years is below ten percent of the destination.
     assert!(net_b * 100 / pop_b < 10, "{net_b} of {pop_b}");
     // The dossier figure is the sum of the last 52 weekly entries.
-    let year: i64 = w.plans.migration.net[b].iter().rev().take(52).map(|n| *n as i64).sum();
+    let year: i64 = w.plans.migration.net[b]
+        .iter()
+        .rev()
+        .take(52)
+        .map(|n| *n as i64)
+        .sum();
     assert_eq!(w.plans.migration.net_over(b, 52), year);
 }
 
@@ -483,7 +567,10 @@ fn a_bigger_gap_pulls_more_workers_and_distance_and_borders_hold_them_back() {
         w.plans.migration.total[1]
     };
     let (small, big) = (flow(10), flow(30));
-    assert!(big > small, "a gap of thirty percent pulls more than ten: {big} vs {small}");
+    assert!(
+        big > small,
+        "a gap of thirty percent pulls more than ten: {big} vs {small}"
+    );
     assert!(small > 0);
     // Friction oracle: halved at 400 km, halved again over a state line.
     let n = w0.regions.len();

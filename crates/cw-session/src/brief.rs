@@ -125,6 +125,11 @@ fn signed(world: &World, dataset: &Dataset, firm: Handle, cents: i64) -> String 
 
 /// Facts about the week that closed, biggest first, three at most. The size of each is its
 /// weekly value in cents, so a rival's raid, a price swing and a profit swing compare.
+/// A share of the votes in basis points as percent with one decimal: 5.4.
+fn tenths(bps: i32) -> String {
+    format!("{}.{}", bps / 100, bps % 100 / 10)
+}
+
 fn changes(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefChange> {
     let now = world.tick.0;
     let mut items: Vec<(i64, BriefChange)> = Vec::new();
@@ -227,6 +232,36 @@ fn changes(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefChange> {
                 },
             ));
         }
+    }
+
+    // A rival's disclosed stake in this company, when it grew over the last four weeks.
+    for plan in world.plans.plans_against(firm) {
+        let Some(_) = plan.disclosed else { continue };
+        let Some(&(week_now, now_bps)) = plan.history.last() else {
+            continue;
+        };
+        let then = plan
+            .history
+            .iter()
+            .rev()
+            .find(|(w, _)| week_now.saturating_sub(*w) >= 4)
+            .map(|(_, b)| *b);
+        let Some(then_bps) = then else { continue };
+        if now_bps <= then_bps || player_side(world, plan.raider) {
+            continue;
+        }
+        let who = paper::firm_name(world, plan.raider).unwrap_or_default();
+        items.push((
+            i64::from(now_bps) * 1_000_000,
+            BriefChange {
+                kind: "stake".to_owned(),
+                text: format!(
+                    "{who} holds {} percent of your company, up from {} percent four weeks ago.",
+                    tenths(now_bps),
+                    tenths(then_bps)
+                ),
+            },
+        ));
     }
 
     // A timeline event that fired this week.

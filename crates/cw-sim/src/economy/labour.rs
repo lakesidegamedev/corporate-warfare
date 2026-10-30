@@ -295,8 +295,10 @@ fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: u
 /// sells enough to be run back up.
 pub fn desired_workers(world: &World, dataset: &Dataset, facility: &Facility, tier: usize) -> i64 {
     let full = facility_full_workers(facility, dataset, tier);
-    let crew_bps =
-        crate::economy::production::crew_need_bps(world, &dataset.recipes[facility.recipe as usize]);
+    let crew_bps = crate::economy::production::crew_need_bps(
+        world,
+        &dataset.recipes[facility.recipe as usize],
+    );
     (full * facility.target_bps as i64 * crew_bps + 99_999_999) / 100_000_000
 }
 
@@ -307,7 +309,11 @@ pub fn named_workers(world: &World) -> Vec<[i64; 3]> {
         let Some(row) = out.get_mut(facility.region as usize) else {
             continue;
         };
-        if !world.firms.get(facility.firm).is_some_and(|f| f.operative()) {
+        if !world
+            .firms
+            .get(facility.firm)
+            .is_some_and(|f| f.operative())
+        {
             continue;
         }
         if facility.status != FacilityStatus::Operating
@@ -331,7 +337,11 @@ pub fn open_jobs(world: &World, dataset: &Dataset) -> Vec<[i64; 3]> {
         let Some(row) = out.get_mut(facility.region as usize) else {
             continue;
         };
-        if !world.firms.get(facility.firm).is_some_and(|f| f.operative()) {
+        if !world
+            .firms
+            .get(facility.firm)
+            .is_some_and(|f| f.operative())
+        {
             continue;
         }
         let hiring = facility.status == FacilityStatus::Operating
@@ -341,7 +351,8 @@ pub fn open_jobs(world: &World, dataset: &Dataset) -> Vec<[i64; 3]> {
             continue;
         }
         for (tier, slot) in row.iter_mut().enumerate() {
-            *slot += (desired_workers(world, dataset, facility, tier) - facility.workers[tier]).max(0);
+            *slot +=
+                (desired_workers(world, dataset, facility, tier) - facility.workers[tier]).max(0);
         }
     }
     out

@@ -65,7 +65,13 @@ impl MigrationState {
 }
 
 /// The pull of a tier in a region, basis points around 10,000.
-fn pull(world: &World, state: &MigrationState, open: &[[i64; 3]], region: usize, tier: usize) -> i64 {
+fn pull(
+    world: &World,
+    state: &MigrationState,
+    open: &[[i64; 3]],
+    region: usize,
+    tier: usize,
+) -> i64 {
     let r = &world.regions[region];
     let lab = &r.labour[tier];
     let ref_wage = state.reference_wage[region][tier].max(1);
@@ -148,7 +154,9 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
     let mut pairs: BTreeMap<(usize, usize), i64> = BTreeMap::new();
     let mut moves: Vec<(usize, usize, usize, i64)> = Vec::new();
     for tier in 0..3 {
-        let pulls: Vec<i64> = (0..n).map(|r| pull(world, &state, &open, r, tier)).collect();
+        let pulls: Vec<i64> = (0..n)
+            .map(|r| pull(world, &state, &open, r, tier))
+            .collect();
         for a in 0..n {
             for b in 0..n {
                 if a == b || currency[a] != currency[b] {
@@ -187,7 +195,10 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
             (
                 share(h.savings_cents.max(0)),
                 share(h.baseline_income_cents.max(0)),
-                h.baseline_lots.iter().map(|(p, l)| (*p, share(*l))).collect(),
+                h.baseline_lots
+                    .iter()
+                    .map(|(p, l)| (*p, share(*l)))
+                    .collect(),
             )
         };
         {
