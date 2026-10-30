@@ -805,6 +805,11 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         submit(CommandJson.command("ChooseMandate", "firm" to firm, "pick" to pick))
     }
 
+    /** Tell the analysts what operating profit to expect this quarter, in cents. */
+    fun giveGuidance(firm: ULong, lowCents: Long, highCents: Long) {
+        submit(CommandJson.command("GiveGuidance", "firm" to firm, "low_cents" to lowCents, "high_cents" to highCents))
+    }
+
     private suspend fun loadMarkets() {
         val handle = session ?: return
         val code = marketRegion

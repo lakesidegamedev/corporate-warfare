@@ -68,6 +68,19 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
                 intent: CommandIntent::ChooseMandate { firm: handle, pick },
             });
         }
+        // Management guidance, through the same command and checks as the player's.
+        if let Some((low_cents, high_cents)) =
+            cw_sim::economy::earnings::rival_guidance(world, handle)
+        {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::GiveGuidance {
+                    firm: handle,
+                    low_cents,
+                    high_cents,
+                },
+            });
+        }
         // Executives for hire, taken through the same commands a player uses: only when the
         // effect pays and the firm can carry the pay.
         if let Some((post, person)) =
