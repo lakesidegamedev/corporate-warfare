@@ -94,7 +94,7 @@ private enum class Page(val id: String, val title: String, val icon: String, val
  * the time controls always in view, keyboard shortcuts, and dense multi-pane screens.
  */
 @Composable
-fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
+fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0, onMenu: () -> Unit = {}) {
     var page by remember { mutableStateOf(Page.entries[startPage]) }
     var query by remember { mutableStateOf("") }
     val focus = remember { androidx.compose.ui.focus.FocusRequester() }
@@ -155,7 +155,7 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
     ) {
         DivisionDetailHost(store)
         Row(Modifier.fillMaxSize().focusGroup()) {
-            Sidebar(store, page, ::open, onSettings, docks[page.id] != null) { toggleDock(page) }
+            Sidebar(store, page, ::open, onSettings, onMenu, docks[page.id] != null) { toggleDock(page) }
             Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.stroke))
             Column(Modifier.weight(1f).fillMaxHeight().focusGroup()) {
                 StatusBar(store) { text ->
@@ -199,8 +199,10 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
 }
 
 @Composable
-private fun Sidebar(store: GameStore, page: Page, onPage: (Page) -> Unit, onSettings: () -> Unit, docked: Boolean, onDock: () -> Unit) {
+private fun Sidebar(store: GameStore, page: Page, onPage: (Page) -> Unit, onSettings: () -> Unit, onMenu: () -> Unit, docked: Boolean, onDock: () -> Unit) {
     Column(Modifier.width(206.dp).fillMaxHeight().background(Palette.panel).padding(vertical = 14.dp).focusGroup()) {
+        // The pages scroll on a short window; the game controls at the bottom always stay in view.
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
         Box(Modifier.fillMaxWidth().padding(bottom = 10.dp), contentAlignment = Alignment.Center) { LogoArt(Modifier.width(112.dp)) }
         CompanySwitcher(store)
         var group = ""
@@ -215,10 +217,12 @@ private fun Sidebar(store: GameStore, page: Page, onPage: (Page) -> Unit, onSett
             val due = if (item == Page.Inbox) store.inboxBadge else 0
             SidebarItem(item.icon, item.title, item.key, page == item, badge = due) { onPage(item) }
         }
-        Spacer(Modifier.weight(1f))
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
         if (page != Page.Map) SidebarItem("map", if (docked) "Undock map" else "Dock map", "Ctrl M", docked, onClick = onDock)
         SidebarItem("save", "Save", "", false) { store.saveNow() }
         SidebarItem("settings", "Settings", "", false, onClick = onSettings)
+        SidebarItem("menu", "Game menu", "Esc", false, onClick = onMenu)
         SidebarItem("quit", "Main menu", "", false) { store.exitToMenu() }
     }
 }
