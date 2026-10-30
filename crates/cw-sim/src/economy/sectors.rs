@@ -378,8 +378,13 @@ pub fn build_cost(
     };
     let (excess, capacity) = construction_excess(world, firm, blocks);
     let rush = rush_bps(excess, capacity);
+    // The state's environmental rules change what heavy industry pays to build.
+    let (rules_bps, _) =
+        crate::economy::civics::build_factors(world, region, industry_name(dataset, recipe));
     BuildCost {
-        capex_cents: (base as i128 * dominance as i128 / 10_000 * rush as i128 / 10_000) as i64,
+        capex_cents: (base as i128 * dominance as i128 / 10_000 * rush as i128 / 10_000
+            * rules_bps as i128
+            / 10_000) as i64,
         rush_bps: rush,
         entry_fee_cents: if opens { ENTRY_FEE_CENTS } else { 0 },
         opens_division: opens,
@@ -722,4 +727,9 @@ fn take_blocks(
         }
     }
     (taken, capex, depreciation)
+}
+
+/// The recipe's industry as the content names it.
+pub fn industry_name(dataset: &Dataset, recipe: u16) -> &str {
+    dataset.recipes[recipe as usize].industry.as_str()
 }

@@ -293,6 +293,7 @@ struct EconomyCard: View {
                 lawsTable(pending, heading: "From \(ResultBuckets.weekLabel(e.pendingEffectiveWeek))")
             }
             marketRules(e)
+            PoliticsPanel(currency: store.selectedFirmDto?.currency ?? "")
         }
     }
 

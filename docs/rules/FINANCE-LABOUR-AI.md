@@ -292,3 +292,14 @@ realised receipts minus non-labour mandatory outflows. Never lower existing cont
 wages by this cap. If capped affordable wage is below an existing contractual floor,
 record failed settlement and enter normal payment-grace/restructuring instead of pretending
 to fund it. It is possible for the company to fail; there is no free arbitrator bailout.
+
+## Campaign contributions (1.9)
+
+Lobbying (above) buys regional rules and never a law. Campaign contributions are the other way a
+firm leans on politics: `GiveToCandidate` puts cash behind a governor or leader candidate in the six
+months before the vote, capped by the state's law, disclosed in the paper the next week, worth a
+bounded poll bonus, and settled in reputation after the vote. Rules in MARKETS.md, Elections, state
+laws and public tenders. A rival gives by temperament and by which candidate's laws help it, through
+the same command and the same cap; there is no AI-only route. A rival bids on tenders through
+`BidOnTender` at its own delivery cost plus a margin by temperament (raiders and speculators 10,
+builders and integrators 15, cautious and financiers 22 percent).

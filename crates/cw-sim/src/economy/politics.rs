@@ -180,10 +180,13 @@ pub fn weekly(world: &mut World, ds: &Dataset) {
         });
     }
 
+    let mut held: Option<bool> = None;
     if week >= p.next_election {
         let mut rng =
             Rng::entity_stream(world.seed, TAG_POLITICS, cw_core::ids::Handle(week as u64));
-        let hold = (p.approval_bps + 300).clamp(500, 9_500);
+        // Campaign gifts move the chance a little, never beyond the bounded poll swing.
+        let swing = crate::economy::civics::national_swing_bps_for(p.party, &world.civics);
+        let hold = (p.approval_bps + 300 + swing).clamp(500, 9_500);
         let kept = rng.chance_bps(hold);
         let year = cw_core::calendar::Tick(week).year_from(world.start_year);
         if kept {
@@ -232,12 +235,14 @@ pub fn weekly(world: &mut World, ds: &Dataset) {
             });
         }
         p.next_election = week + TERM_WEEKS;
+        held = Some(kept);
     }
     let excess = p.news.len().saturating_sub(NEWS_KEPT);
     p.news.drain(..excess);
-    if world.politics.next_election == week + TERM_WEEKS {
-        // An election was held this week: the states choose their governors again.
-        crate::economy::cast::redraw_governors(world, ds);
+    if let Some(kept) = held {
+        // An election was held this week: the race is settled and the next one drawn. The
+        // states' governors are chosen in their own races (`civics`).
+        crate::economy::civics::national_result(world, ds, kept);
     }
 
     quotas(world, ds);

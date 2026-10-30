@@ -23,6 +23,8 @@ pub const MAX_CHANGES: usize = 3;
 pub const MAX_MOVES: usize = 3;
 /// Most lines under "what is due".
 pub const MAX_DUE: usize = 5;
+/// Most tender and election lines after those.
+pub const MAX_CIVIC_DUE: usize = 2;
 /// A price must move at least this much in a week to be news, in basis points.
 const PRICE_NEWS_BPS: i64 = 500;
 /// A raid is worth suggesting when it is at least this likely to work, in basis points.
@@ -380,8 +382,70 @@ fn due(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefDue> {
         });
     }
 
+    let mut extra: Vec<BriefDue> = Vec::new();
+    // Tenders the company could win and elections near its plants.
+    for t in world
+        .civics
+        .tenders
+        .iter()
+        .filter(|t| t.status == cw_sim::economy::civics::TenderStatus::Open)
+    {
+        let bid = t.bids.iter().any(|b| b.firm == firm);
+        extra.push(BriefDue {
+            kind: "tender".to_owned(),
+            text: format!(
+                "Tender: {} in {}, up to {}{}",
+                t.kind.label(),
+                world.regions[t.region as usize].name,
+                paper::money(world, dataset, firm, t.budget_cents),
+                if bid { " (you have bid)" } else { "" }
+            ),
+            weeks_left: t.closes.saturating_sub(now),
+        });
+    }
+    let mut states: Vec<usize> = world
+        .firms
+        .get(firm)
+        .map(|f| {
+            f.facilities
+                .iter()
+                .filter_map(|h| world.facilities.get(*h))
+                .filter_map(|p| world.civics.state_of(p.region))
+                .collect()
+        })
+        .unwrap_or_default();
+    states.sort_unstable();
+    states.dedup();
+    for i in states {
+        let race = &world.civics.states[i].race;
+        if race.open(now) {
+            extra.push(BriefDue {
+                kind: "election".to_owned(),
+                text: format!(
+                    "Governor election in {}: {} against {}",
+                    dataset.states[i].name, race.candidates[0].name, race.candidates[1].name
+                ),
+                weeks_left: race.election - now,
+            });
+        }
+    }
+    if let Some(race) = world.civics.national.as_ref().filter(|r| r.open(now)) {
+        extra.push(BriefDue {
+            kind: "election".to_owned(),
+            text: format!(
+                "Leader election: {} against {}",
+                race.candidates[0].name, race.candidates[1].name
+            ),
+            weeks_left: race.election - now,
+        });
+    }
+
     out.sort_by(|a, b| a.weeks_left.cmp(&b.weeks_left).then(a.text.cmp(&b.text)));
     out.truncate(MAX_DUE);
+    // Politics and tenders come after the decisions that cannot wait.
+    extra.sort_by(|a, b| a.weeks_left.cmp(&b.weeks_left).then(a.text.cmp(&b.text)));
+    extra.truncate(MAX_CIVIC_DUE);
+    out.extend(extra);
     out
 }
 
@@ -1247,7 +1311,7 @@ mod tests {
         assert_eq!(a, b);
         assert!(a.changes.len() <= MAX_CHANGES);
         assert!(a.moves.len() <= MAX_MOVES);
-        assert!(a.due.len() <= MAX_DUE);
+        assert!(a.due.len() <= MAX_DUE + MAX_CIVIC_DUE);
         for text in a
             .changes
             .iter()

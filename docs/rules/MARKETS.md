@@ -587,3 +587,65 @@ the reserve sells instead when the price is over 120% of the average, or over 11
 and buy beside it when the reserve buys.
 
 Systemic events, state rescue and vertical review: see EVENTS.md and CORPORATE.md.
+
+## Elections, state laws and public tenders (1.9)
+
+All of this lives in `economy::civics` (save trailer `POLI`, see INTERFACE.md) and runs the same
+in every scenario; scenarios only supply the states, the regions and the cast.
+
+**Races.** Every state has a governor race and the country has a leader race, each between two
+people, one for each party, drawn from the cast (free governor or leader capable people) or, when
+none is free, a generated face. A candidate states two or three positions: corporate tax (a state
+adjustment of 100 to 300 points, or the national programme's rate), right to work, environmental
+rules, and for the leader race common carrier and merger review. State terms are four years; state
+`i` votes in week `45 + 52 * (i mod 4)` and every 208 weeks after, the leader race in the existing
+election week. Gifts and the campaign are open for the last 26 weeks.
+
+**Poll.** The business candidate's share, 0 to 10,000. State: the sitting governor's target is
+`5000 + mood + gift swing`, clamped 1,500 to 8,500, and the poll closes an eighth of the gap each
+week. Mood is `(600 - unemployment)/2 + wage change/2 - price change/2` in basis points, clamped
+to plus or minus 1,500, where wage and price change are measured against references that follow
+the present over 52 weeks. National: the poll is the governing party's hold chance,
+`approval + 300 + gift swing`, the same chance the election always used, so with no gifts the
+national result is unchanged. A candidate's gift bonus is `600 * F / (F + $200,000)` basis points
+for total funds `F`, so it never reaches 6 points.
+
+**Results.** State: the business candidate wins with chance equal to the poll (clamped 5 to 95
+percent), drawn once from a stream of the week and state. The winner becomes governor and their
+positions become the state's laws 13 weeks later (the same delay as national laws), keeping any
+law they did not speak to. The leader race result still sets the national programme through
+`politics::programme` after 13 weeks.
+
+**State laws.** Right to work weakens union law by one step for firms headquartered in the state
+(union drift in `unions.rs`). The corporate tax adjustment is added to the national rate in both
+the quarterly accrual and the dividend/tax estimate. Environmental rules change the build cost
+and lead time of heavy industry (extraction, energy, chemicals, manufacturing): lax 95 percent
+cost and 90 percent time, standard 100, strict 108 percent cost and 115 percent time. The gift cap
+(default $250,000 per firm per race; $1,000,000 nationally) is a state law too.
+
+**Campaign gifts.** `GiveToCandidate`: cash leaves the firm as an expense and lands in the outside
+advocacy sector (like a lobbying fee), so no money is made or lost. Refused outside the campaign
+window, below $1,000, over the cap, or without cash beyond reserves. The next week the paper
+discloses it and the other side holds it against the giver (reputation down by a quarter of the
+gift's weight, weight being 1 bp per $2,000 up to 100). After the vote donors to the winner gain
+half the weight and donors to the loser lose a quarter. Reputation feeds lobbying odds
+(`policy::success_bps`). Rivals give once a month by temperament (cautious never, financier 20,
+builder and integrator 40, speculator 60, raider 90 percent of the cap) to the side whose positions
+help them: heavy plants, carrier ownership (national race) and large payrolls lean business.
+
+**Tenders.** Every 13 weeks, if the treasury's weekly procurement budget is positive and open and
+unfinished tenders commit less than 40 weeks of it, the state opens a tender for a road upgrade
+(6 weeks of the budget, 8 to 26 weeks), power line (8 weeks, 10 to 30) or port expansion (10
+weeks, 13 to 39) in the region of a state taken in turn with the least of that kind of works.
+Bids close after 4 weeks. A bid is a price (at most the budget) and a delivery time; the lowest
+`price + weeks * budget / 100` wins, skipping bidders that are not operating, foreign currency, hold
+three works already, or lack a quarter of the cost in cash. The winner's cost is 70 percent of the
+budget scaled by the region's land index, plus up to 12 percent for hurrying. Each week it pays
+cost/promised weeks as construction bought from contractors in the region (the existing construction
+service path), adds steel demand in the region, and the treasury pays the price in quarters as the
+cost is spent, never more than half the week's procurement budget or the treasury's cash. A finish
+after the promised time forfeits a tenth of the price per week late, at most half. A failed
+contractor lapses the tender. Finished works add 10 percent lane capacity on trucks to and from the
+region (cap 40), 15 percent on sea lanes and sea terminal access (cap 45), or 5 points of power grid
+score (cap 15, never above 100 percent). Defence procurement and the strategic reserve are
+untouched and draw on the same treasury.

@@ -559,6 +559,31 @@
     "................"
    ]
   },
+  "cat_politics": {
+   "palette": {
+    "g": "#E2B04A",
+    "s": "#8996A6",
+    "w": "#E8EEF4"
+   },
+   "rows": [
+    "................",
+    ".......gg.......",
+    ".....gggggg.....",
+    "....gggggggg....",
+    "..gggggggggggg..",
+    "................",
+    "..wwwwwwwwwwww..",
+    "..wwwwwwwwwwww..",
+    "...ww..ww..ww...",
+    "...ww..ww..ww...",
+    "...ww..ww..ww...",
+    "...ww..ww..ww...",
+    "...ww..ww..ww...",
+    ".ssssssssssssss.",
+    ".ssssssssssssss.",
+    "................"
+   ]
+  },
   "cat_research": {
    "palette": {
     "b": "#4DA3F0",

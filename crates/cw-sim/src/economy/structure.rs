@@ -435,7 +435,8 @@ pub fn tax_rate_bps(world: &World, firm: Handle) -> i32 {
     } else {
         0
     };
-    (world.politics.laws.corporate_tax_bps + modifier).clamp(0, 10_000)
+    let state = crate::economy::civics::tax_delta_bps(world, entity.region);
+    (world.politics.laws.corporate_tax_bps + modifier + state).clamp(0, 10_000)
 }
 
 fn weekly_outflow_buffer(world: &World, firm: Handle) -> i64 {

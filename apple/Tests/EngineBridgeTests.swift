@@ -33,9 +33,9 @@ final class EngineBridgeTests: XCTestCase {
         // and multi-output plants changed the dataset, and in 1.7 preview 4 when the world gained
         // government laws, the reserve and systemic incidents, and in 1.7 preview 5 when rivals chose
         // moves by temperament and the world gained grudges and alliances, and in 1.7.1 when seed
-        // shares began from an opening earnings prior and the world gained its start year, and in 1.9 when save schema 3 added the scenario timeline cursor (four empty bytes in this fixture, which names no scenario), and again in 1.9 when board mandates replaced the quarterly objectives and the world gained its chapter state (the hash folds it in), and again in 1.9 when the world gained its executive state (the pool of hireable people is drawn in the first week and is hashed; no rule this fixture uses changed), and again in 1.9 when the cast grew from twelve to forty and the generated people were redrawn (the first week pool picks from a new list of extras; no rule changed). This needs
+        // shares began from an opening earnings prior and the world gained its start year, and in 1.9 when save schema 3 added the scenario timeline cursor (four empty bytes in this fixture, which names no scenario), and again in 1.9 when board mandates replaced the quarterly objectives and the world gained its chapter state (the hash folds it in), and again in 1.9 when the world gained its executive state (the pool of hireable people is drawn in the first week and is hashed; no rule this fixture uses changed), and again in 1.9 when the cast grew from twelve to forty and the generated people were redrawn (the first week pool picks from a new list of extras; no rule changed), and again in 1.9 when the world gained its politics state (the races, candidates and state laws are drawn in the second week and are hashed; the fixture's two weeks now include them). This needs
         // a fresh simulator run on the Mac runner before R05 is claimed again.
-        XCTAssertEqual(session.canonicalHash(), "68e31e982014ec7458159fbbb9788dd120c461ac934572add0de6552744edcb7")
+        XCTAssertEqual(session.canonicalHash(), "e58ae886b637208c71ca21a9481b407fd29a84c0725b9f3fb5b59b1bca5648a1")
 
         let data = try session.exportSave()
         XCTAssertGreaterThan(data.count, 1_000)

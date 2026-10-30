@@ -437,6 +437,7 @@ fn collect(world: &World, dataset: &Dataset, week: u32) -> Vec<Candidate> {
     incidents(world, week, &mut found);
     timeline(world, dataset, week, &mut found);
     politics(world, week, &mut found);
+    civics(world, dataset, week, &mut found);
     distress(world, week, &mut found);
     results(world, dataset, week, &mut found);
     earnings_season(world, dataset, week, &mut found);
@@ -1134,6 +1135,87 @@ fn politics(world: &World, week: u32, out: &mut Vec<Candidate>) {
             base,
             0,
         ));
+    }
+}
+
+/// Polls, debates, disclosed gifts, results, tender openings and awards, and governors' letters.
+fn civics(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) {
+    for (i, item) in world
+        .civics
+        .news
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| in_window(n.week, week))
+    {
+        // A governor's letter is a letter, not a story.
+        if item.kind == "letter" {
+            continue;
+        }
+        let (base, desk) = match item.kind.as_str() {
+            "result" => (7, "Politics desk"),
+            "debate" => (6, "Politics desk"),
+            "gift" => (5, "Politics desk"),
+            "award" => (5, "Business desk"),
+            _ => (4, "Business desk"),
+        };
+        let first = item.text.split(". ").next().unwrap_or(&item.text);
+        let yours = item.firm.is_some_and(|f| player_side(world, f));
+        out.push(candidate(
+            format!("civics:{}:{}", item.week, i),
+            item.week,
+            first.trim_end_matches('.'),
+            lead_sentences(&item.text, 2),
+            desk,
+            item.firm
+                .map(PaperLink::company)
+                .unwrap_or_else(PaperLink::none),
+            yours,
+            if yours { base + 2 } else { base },
+            0,
+        ));
+    }
+    // A poll story a month, for the national race and the states in the final half year.
+    if week.is_multiple_of(4) {
+        let mut races: Vec<&cw_sim::economy::civics::Race> = Vec::new();
+        if let Some(r) = world.civics.national.as_ref() {
+            races.push(r);
+        }
+        races.extend(world.civics.states.iter().map(|s| &s.race));
+        for race in races {
+            if !race.open(week) || race.candidates.len() < 2 {
+                continue;
+            }
+            let (a, b) = (&race.candidates[0], &race.candidates[1]);
+            let lead = if race.poll_bps >= 5_000 { a } else { b };
+            let share = race.poll_bps.max(10_000 - race.poll_bps) / 100;
+            let place = if race.office == cw_sim::economy::civics::NATIONAL {
+                "the leadership".to_owned()
+            } else {
+                dataset
+                    .states
+                    .get(race.office as usize)
+                    .map(|s| format!("governor of {}", s.name))
+                    .unwrap_or_default()
+            };
+            let near = race.election.saturating_sub(week) <= 8;
+            out.push(candidate(
+                format!("poll:{}:{}", race.office, week),
+                week,
+                &format!("{} leads the race for {place} on {share}%", lead.name),
+                format!(
+                    "{} leads {} {share} to {} in the latest poll for {place}. The vote is in {} weeks.",
+                    lead.name,
+                    if lead.id == a.id { &b.name } else { &a.name },
+                    100 - share,
+                    race.election.saturating_sub(week)
+                ),
+                "Politics desk",
+                PaperLink::none(),
+                false,
+                if near { 6 } else { 3 },
+                0,
+            ));
+        }
     }
 }
 

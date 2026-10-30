@@ -57,6 +57,11 @@ const MAIL_MAGIC: &[u8; 4] = b"MAIL";
 /// payload so the schema does not move. A save without it loads with no executives and the pool
 /// is drawn again on the next week. The reader accepts it in any order after the systems trailer.
 const EXEC_MAGIC: &[u8; 4] = b"EXEC";
+/// Marks the politics trailer (1.9): races with candidates, campaign gifts, state laws and public
+/// tenders. Future-affecting, so `canonical_hash` folds it in while it is not empty; outside the
+/// postcard payload so the schema does not move. A save without it loads with it empty and the
+/// races are drawn on the next week. The reader accepts it in any order after the systems trailer.
+const POLITICS_MAGIC: &[u8; 4] = b"POLI";
 
 pub fn encode(world: &World, career_id: u64) -> Result<Vec<u8>, DomainError> {
     encode_with(world, career_id, None)
@@ -189,6 +194,20 @@ pub fn encode_with(
             });
         }
         out.extend_from_slice(EXEC_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.civics.is_empty() {
+        let bytes = postcard::to_allocvec(&world.civics).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(POLITICS_MAGIC);
         out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
         out.extend_from_slice(&bytes);
@@ -373,6 +392,12 @@ pub fn decode_with(
                 postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
                     detail: SaveFault::MalformedPayload,
                 })?;
+            rest = &rest[40 + body.len()..];
+        } else if magic == POLITICS_MAGIC {
+            let body = trailer_body(rest)?;
+            world.civics = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
             rest = &rest[40 + body.len()..];
         } else if magic == MAIL_MAGIC {
             let body = trailer_body(rest)?;

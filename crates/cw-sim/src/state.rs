@@ -1609,6 +1609,12 @@ pub struct World {
     /// and the first estimates are written at the next quarter's close. See `economy::earnings`.
     #[serde(skip)]
     pub earnings: crate::economy::earnings::EarningsState,
+    /// Elections with candidates, campaign gifts, state laws and public tenders (1.9). Outside
+    /// the postcard encoding like the chapter state, folded into the hash while not empty, saved
+    /// in its own `POLI` trailer. A save without it loads with it empty and the races are drawn
+    /// on the next week. See `economy::civics`.
+    #[serde(skip)]
+    pub civics: crate::economy::civics::CivicState,
     /// Executives and the pool of people who can be hired (1.9). Outside the postcard encoding
     /// like the chapter state, folded into the hash while not empty, saved in its own `EXEC`
     /// trailer. A save without the trailer loads with it empty and the pool is drawn on the
@@ -2017,6 +2023,12 @@ pub fn canonical_hash(world: &World) -> String {
             if !world.earnings.is_empty() {
                 match postcard::to_allocvec(&world.earnings) {
                     Ok(earnings) => bytes.extend_from_slice(&earnings),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.civics.is_empty() {
+                match postcard::to_allocvec(&world.civics) {
+                    Ok(civics) => bytes.extend_from_slice(&civics),
                     Err(_) => return String::from("unhashable"),
                 }
             }

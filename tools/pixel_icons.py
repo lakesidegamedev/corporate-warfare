@@ -737,6 +737,14 @@ def _(g):
         g.disc(x + 2, 3.5, 1.7, 'g')
 
 
+@icon('cat_politics')
+def _(g):
+    g.poly([(8, 1), (15, 5), (1, 5)], 'g').rect(2, 6, 13, 7, 'w')
+    for x in (3, 7, 11):
+        g.rect(x, 8, x + 1, 12, 'w')
+    g.rect(1, 13, 14, 14, 's')
+
+
 @icon('cat_banking')
 def _(g):
     g.poly([(8, 1), (15, 5), (1, 5)], 'g').rect(1, 5, 14, 5, 'w')
