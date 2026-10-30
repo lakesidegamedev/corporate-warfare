@@ -527,6 +527,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         submit(CommandJson.command("PlaceShareOrder", "investor" to true, "firm" to firm, "buy" to buy, "qty" to quantity, "limit_price_cents" to limitCents), done)
 
     /** What a float trade would do right now (limit 0 for none), computed without changing anything. */
+    /** The engine's quote for a share trade, worked out on the engine thread and returned to the caller's coroutine. */
+    suspend fun quoteShares(firm: ULong, buy: Boolean, quantity: Long, limitCents: Long): uniffi.cw_ffi.ShareQuoteDto? {
+        val handle = session ?: return null
+        return withContext(engine) { runCatching { handle.quoteShares(firm, buy, quantity, limitCents, 0uL) }.getOrNull() }
+    }
+
     fun shareQuote(firm: ULong, buy: Boolean, quantity: Long, limitCents: Long, onResult: (uniffi.cw_ffi.ShareQuoteDto?) -> Unit) {
         val handle = session ?: return onResult(null)
         scope.launch { onResult(withContext(engine) { handle.quoteShares(firm, buy, quantity, limitCents, 0uL) }) }

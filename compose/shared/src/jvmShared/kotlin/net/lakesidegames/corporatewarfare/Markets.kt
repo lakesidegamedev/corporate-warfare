@@ -1,5 +1,6 @@
 package net.lakesidegames.corporatewarfare
 
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
@@ -311,10 +312,12 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
     var quantity by remember { mutableStateOf(startQuantity) }
     var limit by remember { mutableStateOf("") }
     var quote by remember { mutableStateOf<uniffi.cw_ffi.ShareQuoteDto?>(null) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val limitCents = limit.toDoubleOrNull()?.let { (it * 100).toLong() } ?: 0L
     LaunchedEffect(buy, quantity, limit, line.firm) {
         val shares = quantity.toLongOrNull() ?: 0L
-        if (shares > 0) store.shareQuote(line.firm, buy, shares, limitCents) { quote = it } else quote = null
+        // Asked and assigned in this effect's own coroutine, so the line and Buy now update with every keystroke.
+        quote = if (shares > 0) store.quoteShares(line.firm, buy, shares, limitCents) else null
     }
     val annual = if (line.earningsWeeks > 0u) line.earningsCents * 52 / line.earningsWeeks.toLong() else 0L
     val pe = if (annual <= 0) "Loss" else (line.marketCapCents.toDouble() / annual).let { if (it > 200) "n/m" else "%.1f".format(it) }
@@ -351,7 +354,7 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
                 OutlinedTextField(limit, { limit = it }, label = { Text("Limit per share ($), optional") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.textEntry())
                 TextButton(onClick = {
-                    store.shareQuote(line.firm, buy, Long.MAX_VALUE, limitCents) { it?.let { q -> quantity = q.maxQty.toString() } }
+                    scope.launch { store.quoteShares(line.firm, buy, Long.MAX_VALUE, limitCents)?.let { q -> quantity = q.maxQty.toString() } }
                 }) { Text(if (buy) "Max: all I can afford or the public holds" else "Max: all I hold") }
                 Text(quoteText(quote, buy), color = Palette.primaryText, fontSize = 13.sp)
                 StockHistoryChart(store, line.firm)
