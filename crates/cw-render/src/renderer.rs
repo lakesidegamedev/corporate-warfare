@@ -10,6 +10,7 @@ use crate::mesh::{self, Mesh, VERTEX_BYTES, Vertex};
 use crate::palette::{COLOURS, Palette, STEPS, ramp};
 
 const SHADER: &str = include_str!("shaders/scene.wgsl");
+/// The offscreen target's format. A window surface uses its own (see `SurfaceState`).
 const COLOUR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
@@ -136,6 +137,9 @@ pub struct FrameStats {
     pub draw_calls: u32,
     pub gpu_wait: Duration,
     pub readback: Duration,
+    /// A surface frame that was not drawn because the window could not take one (hidden,
+    /// minimised, timed out). Always false for offscreen renders.
+    pub skipped: bool,
 }
 
 pub struct Frame {
@@ -217,6 +221,15 @@ pub struct Renderer {
     uniforms: wgpu::Buffer,
     cache: Option<GpuScene>,
     targets: Option<Targets>,
+    surface: Option<SurfaceState>,
+}
+
+/// A window surface the renderer presents to, with the linear format its pipelines were built for.
+struct SurfaceState {
+    surface: wgpu::Surface<'static>,
+    format: wgpu::TextureFormat,
+    alpha: wgpu::CompositeAlphaMode,
+    size: Option<(u32, u32)>,
 }
 
 /// Render targets kept between frames: a frame allocates nothing while the size stays.
@@ -224,10 +237,15 @@ struct Targets {
     width: u32,
     height: u32,
     shadow_size: u32,
-    colour: wgpu::Texture,
-    colour_view: wgpu::TextureView,
     depth_view: wgpu::TextureView,
     shadow_view: wgpu::TextureView,
+    /// The offscreen colour target and its readback buffer; absent when drawing to a surface.
+    offscreen: Option<Offscreen>,
+}
+
+struct Offscreen {
+    colour: wgpu::Texture,
+    colour_view: wgpu::TextureView,
     readback: wgpu::Buffer,
     padded: u32,
 }
@@ -258,14 +276,68 @@ impl Renderer {
     /// Find an adapter and build the pipelines. Fails cleanly when the machine has no
     /// graphics adapter at all (CI), so callers and tests can skip.
     pub fn new() -> Result<Renderer, NoAdapter> {
+        Self::create(None)
+    }
+
+    /// A renderer that draws straight into a `CAMetalLayer` (iOS, Mac Catalyst, macOS) and
+    /// presents each frame, with no readback. Use [`Renderer::render_to_surface`].
+    ///
+    /// # Safety
+    /// `layer` must be a valid `CAMetalLayer` that outlives the renderer.
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    pub unsafe fn for_metal_layer(layer: *mut std::ffi::c_void) -> Result<Renderer, NoAdapter> {
+        Self::create(Some(layer))
+    }
+
+    fn create(layer: Option<*mut std::ffi::c_void>) -> Result<Renderer, NoAdapter> {
         let instance = wgpu::Instance::default();
+        let surface: Option<wgpu::Surface<'static>> = match layer {
+            None => None,
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            Some(layer) => Some(
+                unsafe {
+                    instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(
+                        layer,
+                    ))
+                }
+                .map_err(|e| NoAdapter(e.to_string()))?,
+            ),
+            #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+            Some(_) => return Err(NoAdapter("window surfaces are Apple only".into())),
+        };
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             force_fallback_adapter: false,
-            compatible_surface: None,
+            compatible_surface: surface.as_ref(),
             apply_limit_buckets: false,
         }))
         .map_err(|e| NoAdapter(e.to_string()))?;
+        // The pipelines write the shader's colours as they are, so the surface needs a linear
+        // (non sRGB) format; Bgra8Unorm is the one every Metal layer has.
+        let surface = match surface {
+            None => None,
+            Some(surface) => {
+                let caps = surface.get_capabilities(&adapter);
+                let format = [
+                    wgpu::TextureFormat::Bgra8Unorm,
+                    wgpu::TextureFormat::Rgba8Unorm,
+                ]
+                .into_iter()
+                .find(|f| caps.formats.contains(f))
+                .ok_or_else(|| NoAdapter("the display has no linear colour format".into()))?;
+                Some(SurfaceState {
+                    surface,
+                    format,
+                    alpha: caps
+                        .alpha_modes
+                        .first()
+                        .copied()
+                        .unwrap_or(wgpu::CompositeAlphaMode::Auto),
+                    size: None,
+                })
+            }
+        };
+        let colour_format = surface.as_ref().map_or(COLOUR_FORMAT, |s| s.format);
         let ai = adapter.get_info();
         let info = AdapterSummary {
             name: ai.name.clone(),
@@ -402,7 +474,7 @@ impl Renderer {
                 entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: COLOUR_FORMAT,
+                    format: colour_format,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -427,7 +499,7 @@ impl Renderer {
                 entry_point: Some("fs_road"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: COLOUR_FORMAT,
+                    format: colour_format,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -476,6 +548,7 @@ impl Renderer {
             uniforms,
             cache: None,
             targets: None,
+            surface,
         })
     }
 
@@ -672,7 +745,7 @@ impl Renderer {
             style,
             width,
             height,
-            &mut |data, rw, rh, padded| {
+            Some(&mut |data, rw, rh, padded| {
                 let t1 = Instant::now();
                 let (ow, oh) = (rw * ps, rh * ps);
                 rgba = vec![255u8; (ow * oh * 4) as usize];
@@ -686,7 +759,7 @@ impl Renderer {
                 }
                 t_copy = t1.elapsed();
                 (ow, oh)
-            },
+            }),
         );
         stats.readback = t_copy;
         Frame {
@@ -717,7 +790,7 @@ impl Renderer {
             style,
             width,
             height,
-            &mut |data, rw, rh, padded| {
+            Some(&mut |data, rw, rh, padded| {
                 let t1 = Instant::now();
                 let row_bytes = (rw * 4) as usize;
                 assert!(
@@ -731,12 +804,27 @@ impl Renderer {
                 // The target is cleared opaque and never blended, so alpha is already 255.
                 t_copy = t1.elapsed();
                 (rw, rh)
-            },
+            }),
         );
         stats.readback = t_copy;
         stats.width = (width / style.pixel_scale.max(1)).max(1);
         stats.height = (height / style.pixel_scale.max(1)).max(1);
         stats
+    }
+
+    /// Draw the scene into the window surface and present it, at exactly `width` x `height`
+    /// pixels (`style.pixel_scale` is ignored). Nothing is read back. `skipped` in the result
+    /// says the window could not take a frame. Only for a renderer built with
+    /// [`Renderer::for_metal_layer`].
+    pub fn render_to_surface(
+        &mut self,
+        scene: &Scene,
+        camera: &Camera,
+        style: &Style,
+        width: u32,
+        height: u32,
+    ) -> FrameStats {
+        self.render_with(scene, camera, style, width, height, None)
     }
 
     fn render_with(
@@ -746,15 +834,41 @@ impl Renderer {
         style: &Style,
         width: u32,
         height: u32,
-        finish: &mut Finish,
+        finish: Option<&mut Finish>,
     ) -> FrameStats {
+        // No `finish` means the frame goes to the window surface instead of a readback.
+        let to_surface = finish.is_none();
+        assert_eq!(
+            to_surface,
+            self.surface.is_some(),
+            "a surface renderer draws only to its surface, an offscreen one only offscreen"
+        );
         self.prepare(scene, style);
         let road_band = mesh::road_band(camera.width_km);
         if style.roads {
             self.ensure_roads(scene, road_band);
         }
-        let ps = style.pixel_scale.max(1);
+        let ps = if to_surface {
+            1
+        } else {
+            style.pixel_scale.max(1)
+        };
         let (rw, rh) = ((width / ps).max(1), (height / ps).max(1));
+        let surface_frame = if to_surface {
+            match self.acquire(rw, rh) {
+                Some(f) => Some(f),
+                None => {
+                    return FrameStats {
+                        width: rw,
+                        height: rh,
+                        skipped: true,
+                        ..Default::default()
+                    };
+                }
+            }
+        } else {
+            None
+        };
         let aspect = rw as f32 / rh as f32;
 
         let (tx, ty) = scene.projection.to_km(camera.lon, camera.lat);
@@ -879,43 +993,52 @@ impl Renderer {
                     .write_buffer(&r.ib, 0, bytemuck::cast_slice(&gathered));
             }
         }
-        let stale = self
-            .targets
-            .as_ref()
-            .is_none_or(|t| t.width != rw || t.height != rh || t.shadow_size != style.shadow_size);
+        let stale = self.targets.as_ref().is_none_or(|t| {
+            t.width != rw
+                || t.height != rh
+                || t.shadow_size != style.shadow_size
+                || t.offscreen.is_some() == to_surface
+        });
         if stale {
-            let colour = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("colour"),
-                size: wgpu::Extent3d {
-                    width: rw,
-                    height: rh,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: COLOUR_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[],
-            });
-            let padded = (rw * 4).div_ceil(256) * 256;
+            let offscreen = if to_surface {
+                None
+            } else {
+                let colour = self.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("colour"),
+                    size: wgpu::Extent3d {
+                        width: rw,
+                        height: rh,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: COLOUR_FORMAT,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                });
+                let padded = (rw * 4).div_ceil(256) * 256;
+                Some(Offscreen {
+                    colour_view: colour.create_view(&Default::default()),
+                    colour,
+                    readback: self.device.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some("readback"),
+                        size: (padded * rh) as u64,
+                        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                        mapped_at_creation: false,
+                    }),
+                    padded,
+                })
+            };
             self.targets = Some(Targets {
                 width: rw,
                 height: rh,
                 shadow_size: style.shadow_size,
-                colour_view: colour.create_view(&Default::default()),
-                colour,
                 depth_view: depth_texture_sized(&self.device, rw, rh, "depth")
                     .create_view(&Default::default()),
                 shadow_view: depth_texture(&self.device, style.shadow_size, "shadow")
                     .create_view(&Default::default()),
-                readback: self.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("readback"),
-                    size: (padded * rh) as u64,
-                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                    mapped_at_creation: false,
-                }),
-                padded,
+                offscreen,
             });
         }
         let targets = self.targets.as_ref().expect("targets");
@@ -967,11 +1090,15 @@ impl Renderer {
         let shadow_group = group(&self.dummy_shadow);
         let main_group = group(shadow_view);
 
-        let colour = &targets.colour;
-        let colour_view = &targets.colour_view;
+        let surface_view = surface_frame
+            .as_ref()
+            .map(|f| f.texture.create_view(&Default::default()));
+        let colour_view = match (&surface_view, &targets.offscreen) {
+            (Some(v), _) => v,
+            (None, Some(o)) => &o.colour_view,
+            (None, None) => unreachable!("targets match the sink"),
+        };
         let depth_view = &targets.depth_view;
-        let padded = targets.padded;
-        let readback = &targets.readback;
 
         let mut stats = FrameStats {
             width: rw * ps,
@@ -1066,6 +1193,17 @@ impl Renderer {
                 draw(&mut pass, &gpu.clouds, &mut stats, true);
             }
         }
+        let t0 = Instant::now();
+        let Some(finish) = finish else {
+            self.queue.submit([enc.finish()]);
+            if let Some(frame) = surface_frame {
+                self.queue.present(frame);
+            }
+            stats.gpu_wait = t0.elapsed();
+            return stats;
+        };
+        let off = targets.offscreen.as_ref().expect("offscreen targets");
+        let (colour, readback, padded) = (&off.colour, &off.readback, off.padded);
         enc.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
                 texture: colour,
@@ -1087,7 +1225,6 @@ impl Renderer {
                 depth_or_array_layers: 1,
             },
         );
-        let t0 = Instant::now();
         self.queue.submit([enc.finish()]);
         let slice = readback.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map readback"));
@@ -1105,6 +1242,48 @@ impl Renderer {
         stats.width = ow;
         stats.height = oh;
         stats
+    }
+
+    /// Configure the surface for this size when it changed, then take the next frame to draw
+    /// into. `None` when the window cannot take a frame now (hidden, timed out, lost): the
+    /// caller skips the frame and tries again later.
+    fn acquire(&mut self, w: u32, h: u32) -> Option<wgpu::SurfaceTexture> {
+        let s = self.surface.as_mut()?;
+        let configure = |s: &SurfaceState| {
+            s.surface.configure(
+                &self.device,
+                &wgpu::SurfaceConfiguration {
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    format: s.format,
+                    color_space: wgpu::SurfaceColorSpace::Auto,
+                    width: w,
+                    height: h,
+                    desired_maximum_frame_latency: 2,
+                    present_mode: wgpu::PresentMode::Fifo,
+                    alpha_mode: s.alpha,
+                    view_formats: vec![],
+                },
+            );
+        };
+        if s.size != Some((w, h)) {
+            configure(s);
+            s.size = Some((w, h));
+        }
+        for _ in 0..2 {
+            match s.surface.get_current_texture() {
+                wgpu::CurrentSurfaceTexture::Success(t) => return Some(t),
+                wgpu::CurrentSurfaceTexture::Suboptimal(t) => {
+                    // Drawn this once; the next frame reconfigures.
+                    s.size = None;
+                    return Some(t);
+                }
+                wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                    configure(s);
+                }
+                _ => return None,
+            }
+        }
+        None
     }
 }
 

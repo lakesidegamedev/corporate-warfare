@@ -156,8 +156,34 @@ impl GpuMap {
     /// Build the scenario's scene and start the renderer. Fails when the scenario is unknown,
     /// its files are missing, or the machine has no graphics adapter.
     pub fn open(assets: &Path, scenario: &str) -> Result<GpuMap, String> {
+        Self::open_with(assets, scenario, || {
+            Renderer::new().map_err(|e| e.to_string())
+        })
+    }
+
+    /// Like [`GpuMap::open`], drawing into a `CAMetalLayer` and presenting each frame (see
+    /// [`GpuMap::render_to_surface`]).
+    ///
+    /// # Safety
+    /// `layer` must be a valid `CAMetalLayer` that outlives the map.
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    pub unsafe fn open_layer(
+        assets: &Path,
+        scenario: &str,
+        layer: *mut std::ffi::c_void,
+    ) -> Result<GpuMap, String> {
+        Self::open_with(assets, scenario, || {
+            unsafe { Renderer::for_metal_layer(layer) }.map_err(|e| e.to_string())
+        })
+    }
+
+    fn open_with(
+        assets: &Path,
+        scenario: &str,
+        renderer: impl FnOnce() -> Result<Renderer, String>,
+    ) -> Result<GpuMap, String> {
         let scene = build_scene(assets, scenario)?;
-        let renderer = Renderer::new().map_err(|e| e.to_string())?;
+        let renderer = renderer()?;
         let a = renderer.adapter().clone();
         let base_buildings = scene.buildings.clone();
         Ok(GpuMap {
@@ -250,6 +276,27 @@ impl GpuMap {
             height: stats.height,
             draw_calls: stats.draw_calls,
         }
+    }
+
+    /// Draw a frame of `width` x `height` pixels into the window surface and present it.
+    /// `draw_calls` is 0 for a skipped frame (the window could not take one).
+    pub fn render_to_surface(&self, cam: [f64; 6], width: u32, height: u32) -> (FrameTiming, bool) {
+        let scene = self.scene.read().unwrap();
+        let style = self.style.read().unwrap().clone();
+        let mut renderer = self.renderer.lock().unwrap();
+        let t0 = Instant::now();
+        let stats = renderer.render_to_surface(&scene, &camera(cam), &style, width, height);
+        let total = t0.elapsed().as_secs_f64() * 1000.0;
+        (
+            FrameTiming {
+                render_ms: total,
+                copy_ms: 0.0,
+                width: stats.width,
+                height: stats.height,
+                draw_calls: stats.draw_calls,
+            },
+            stats.skipped,
+        )
     }
 
     /// Screen position of each (lon, lat) pair, `None` behind the camera.
@@ -437,6 +484,71 @@ pub unsafe extern "C" fn cw_gpu_open(assets: *const c_char, scenario: *const c_c
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
         MAPS.lock().unwrap().push((id, Arc::new(map)));
         Ok(id)
+    })
+}
+
+/// Open the map drawing into a `CAMetalLayer` (iOS, Mac Catalyst): frames go to the screen with
+/// `cw_gpu_render_layer`, no pixels are copied. Returns a handle, or 0 (see `cw_gpu_last_error`).
+/// Close the map (`cw_gpu_close`) before the layer is released.
+///
+/// # Safety
+/// `assets` and `scenario` must be NUL-terminated strings and `layer` a valid `CAMetalLayer`.
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cw_gpu_open_layer(
+    assets: *const c_char,
+    scenario: *const c_char,
+    layer: *mut std::ffi::c_void,
+) -> u64 {
+    guarded(0, || {
+        if layer.is_null() {
+            return Err("no layer".into());
+        }
+        let (assets, scenario) = unsafe { (text(assets)?, text(scenario)?) };
+        let map = unsafe { GpuMap::open_layer(Path::new(assets), scenario, layer) }?;
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
+        MAPS.lock().unwrap().push((id, Arc::new(map)));
+        Ok(id)
+    })
+}
+
+/// Draw one frame of `width` x `height` pixels into the layer the map was opened on and present
+/// it. Returns 0 when drawn, 1 when the display could not take a frame (try again later), a
+/// negative number on failure. `cam` points at six doubles as for `cw_gpu_render`; `timing` (or
+/// null) receives six doubles: render ms, 0, width, height, draw calls, 0.
+///
+/// # Safety
+/// `cam` must be readable for 6 doubles and `timing` writable for 6 doubles.
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cw_gpu_render_layer(
+    id: u64,
+    cam: *const f64,
+    width: u32,
+    height: u32,
+    timing: *mut f64,
+) -> i32 {
+    guarded(-1, || {
+        let m = get(id).ok_or("no such map")?;
+        if cam.is_null() || width == 0 || height == 0 {
+            return Err("bad frame request".into());
+        }
+        let cam: [f64; 6] = unsafe { std::slice::from_raw_parts(cam, 6) }
+            .try_into()
+            .map_err(|_| "camera")?;
+        let (t, skipped) = m.render_to_surface(cam, width, height);
+        if !timing.is_null() {
+            let o = unsafe { std::slice::from_raw_parts_mut(timing, 6) };
+            o.copy_from_slice(&[
+                t.render_ms,
+                0.0,
+                t.width as f64,
+                t.height as f64,
+                t.draw_calls as f64,
+                0.0,
+            ]);
+        }
+        Ok(skipped as i32)
     })
 }
 
