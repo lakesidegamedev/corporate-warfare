@@ -163,7 +163,7 @@ class MapCoherenceTest {
         val map = WorldMap.shared!!
         val earth = 6_371_000.0
         // Hand-computed lots, in metres east and north of the hub: the sector's place in the list decides, nothing about the view does.
-        val lots = mapOf("OH-CEN/manufacturing" to (-120_000.0 to -35_000.0), "MI-DET/energy" to (-60_000.0 to -35_000.0), "PA-WES/technology" to (0.0 to -90_000.0), "IL-CHI/logistics" to (-60_000.0 to -90_000.0))
+        val lots = mapOf("OH-CEN/manufacturing" to (120_000.0 to -35_000.0), "MI-DET/energy" to (0.0 to -35_000.0), "PA-WES/technology" to (120_000.0 to -90_000.0), "IL-CHI/logistics" to (-60_000.0 to -90_000.0))
         val base = MapCamera.scenario(size, map)
         var worldDistance: Double? = null
         for (zoom in listOf(1.6, 2.5, 4.0, 9.0)) for (pitch in listOf(0.0, 0.7)) for (bearing in listOf(0.0, 37.0, 200.0)) {

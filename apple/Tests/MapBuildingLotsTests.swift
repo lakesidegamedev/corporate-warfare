@@ -11,8 +11,8 @@ final class MapBuildingLotsTests: XCTestCase {
         let region = try XCTUnwrap(map.regions.first?.code)
         let hub = try XCTUnwrap(map.anchor(of: region))
         let divisions = [DivisionMarker(region: region, sector: "manufacturing", plants: 4)]
-        // Manufacturing is the fifth sector, so its lot is 120 km west and 35 km south of the hub, worked out by hand.
-        let east = -120_000.0, north = -35_000.0
+        // Manufacturing is the fifth sector, so its lot is 120 km east and 35 km south of the hub, worked out by hand.
+        let east = 120_000.0, north = -35_000.0
         let lon = hub.lon + east / (6_371_000 * cos(hub.lat))
         let lat = hub.lat + north / 6_371_000
         var metres: [Double] = []

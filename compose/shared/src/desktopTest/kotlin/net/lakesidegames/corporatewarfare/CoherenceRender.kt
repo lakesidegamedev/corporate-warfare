@@ -146,7 +146,7 @@ class CoherenceRender {
         val scenario = MapCamera.scenario(size, map)
         val panels = ArrayList<Surface>()
         val captions = ArrayList<String>()
-        for (factor in listOf(5.0, 8.0, 13.0, 21.0)) {
+        for (factor in listOf(2.0, 3.5, 6.0, 10.0)) {
             val cam = scenario.copy(lon = lon * 180 / Math.PI, lat = lat * 180 / Math.PI).zoomed(factor).rotated(18.0)
             val surface = Surface.makeRasterN32Premul(size.width.toInt(), size.height.toInt())
             val geo = MapGeometryCache()
