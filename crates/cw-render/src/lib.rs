@@ -7,6 +7,7 @@
 
 mod camera;
 mod data;
+mod far;
 mod game;
 mod ground;
 mod mesh;
