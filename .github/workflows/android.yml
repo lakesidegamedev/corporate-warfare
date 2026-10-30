@@ -170,6 +170,24 @@ jobs:
           if (-not $p.WaitForExit(120000)) { $p.Kill() }
           if (Test-Path $err) { Get-Content $err }
           if (-not ((Test-Path $err) -and (Select-String -Path $err -Pattern 'main menu shown' -Quiet))) { throw 'The main menu did not show within 120 seconds' }
+      # The new GPU map (an opt-in preview) must start in the packaged release app: it opens the map,
+      # draws a frame and prints the frame counter line (CW_GPU_PROBE). The runner has no graphics
+      # card, so Direct3D 12 uses WARP, the software adapter; the milliseconds are a relative number,
+      # not a player's. Reported, not gating.
+      - name: New GPU map probe (Windows, WARP)
+        if: ${{ matrix.os == 'windows-latest' }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:RUNNER_TEMP 'cw-gpu'
+          New-Item -ItemType Directory -Force $data | Out-Null
+          $env:CW_GPU_PROBE = '1'
+          $err = Join-Path $data 'probe.txt'
+          $exe = "$PWD\compose\shared\build\compose\binaries\main-release\app\Corporate Warfare\Corporate Warfare.exe"
+          $p = Start-Process $exe -PassThru -RedirectStandardError $err
+          if (-not $p.WaitForExit(180000)) { $p.Kill() }
+          if (Test-Path $err) { Get-Content $err }
+          if (-not ((Test-Path $err) -and (Select-String -Path $err -Pattern '^map: GPU' -Quiet))) { throw 'The new map did not draw a frame' }
       - name: Launch to the main menu (Linux)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         continue-on-error: true
@@ -182,6 +200,15 @@ jobs:
           export CW_STARTUP_TIMELINE=exit SKIKO_RENDER_API=SOFTWARE_FAST
           timeout 120 xvfb-run -a "shared/build/compose/binaries/main-release/app/Corporate Warfare/bin/Corporate Warfare" 2>&1 | tee "$RUNNER_TEMP/timeline.txt"
           grep -q "main menu shown" "$RUNNER_TEMP/timeline.txt"
+      - name: New GPU map probe (Linux, software Vulkan)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        continue-on-error: true
+        working-directory: compose
+        run: |
+          sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
+          export CW_GPU_PROBE=1 SKIKO_RENDER_API=SOFTWARE_FAST
+          timeout 180 xvfb-run -a "shared/build/compose/binaries/main-release/app/Corporate Warfare/bin/Corporate Warfare" 2>&1 | tee "$RUNNER_TEMP/gpu-probe.txt"
+          grep -q "^map: GPU" "$RUNNER_TEMP/gpu-probe.txt"
       - uses: actions/upload-artifact@v4
         if: ${{ matrix.os == 'windows-latest' }}
         with:

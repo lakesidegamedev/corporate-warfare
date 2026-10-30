@@ -41,6 +41,8 @@ pub struct Style {
     /// coverage. Between the two the cloud threshold rises smoothly (the 1.8 rule: clouds
     /// clear as you zoom in, so a close look is never through haze).
     pub cloud_clear_km: (f32, f32),
+    /// Palette ramp that map modes (region levels) are painted in.
+    pub heat_ramp: usize,
 }
 
 /// The 1.8 cloud setting levels. Each is a threshold on the cloud image: a higher one leaves
@@ -82,6 +84,7 @@ impl Default for Style {
             cloud_altitude_km: 18.0,
             dither: 2.5,
             cloud_clear_km: (600.0, 1800.0),
+            heat_ramp: ramp::BRICK,
         }
     }
 }
@@ -180,7 +183,8 @@ struct GpuRoads {
 }
 
 struct GpuScene {
-    id: *const Scene,
+    /// Address of the scene it was built from; identity only, never dereferenced.
+    id: usize,
     terrain: GpuMesh,
     buildings: GpuMesh,
     clouds: GpuMesh,
@@ -188,6 +192,8 @@ struct GpuScene {
     roads: [Option<GpuRoads>; 3],
     cloud_altitude: f32,
     building_tier: f32,
+    mask_rev: u64,
+    buildings_rev: u64,
     earth: wgpu::TextureView,
     cloud_tex: wgpu::TextureView,
     mask: wgpu::TextureView,
@@ -208,6 +214,20 @@ pub struct Renderer {
     dummy_shadow: wgpu::TextureView,
     uniforms: wgpu::Buffer,
     cache: Option<GpuScene>,
+    targets: Option<Targets>,
+}
+
+/// Render targets kept between frames: a frame allocates nothing while the size stays.
+struct Targets {
+    width: u32,
+    height: u32,
+    shadow_size: u32,
+    colour: wgpu::Texture,
+    colour_view: wgpu::TextureView,
+    depth_view: wgpu::TextureView,
+    shadow_view: wgpu::TextureView,
+    readback: wgpu::Buffer,
+    padded: u32,
 }
 
 fn wgsl_prelude() -> String {
@@ -453,6 +473,7 @@ impl Renderer {
             dummy_shadow,
             uniforms,
             cache: None,
+            targets: None,
         })
     }
 
@@ -476,8 +497,22 @@ impl Renderer {
         label: &str,
         format: wgpu::TextureFormat,
     ) -> wgpu::TextureView {
-        let tex = self.device.create_texture_with_data(
-            &self.queue,
+        texture_of(&self.device, &self.queue, w, h, data, label, format)
+    }
+}
+
+fn texture_of(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    w: u32,
+    h: u32,
+    data: &[u8],
+    label: &str,
+    format: wgpu::TextureFormat,
+) -> wgpu::TextureView {
+    {
+        let tex = device.create_texture_with_data(
+            queue,
             &wgpu::TextureDescriptor {
                 label: Some(label),
                 size: wgpu::Extent3d {
@@ -497,28 +532,39 @@ impl Renderer {
         );
         tex.create_view(&Default::default())
     }
+}
 
+/// Receives the padded readback bytes, the row stride and the frame size; returns the size written.
+type Finish<'a> = dyn FnMut(&[u8], u32, u32, u32) -> (u32, u32) + 'a;
+
+impl Renderer {
     fn prepare(&mut self, scene: &Scene, style: &Style, camera: &Camera) {
-        let id = scene as *const Scene;
-        // Buildings shrink in steps as the camera closes in, so a skyline never swallows the
-        // streets round it. The mesh is small, so a step rebuilds only that.
-        let tier = if camera.width_km >= 700.0 {
-            1.0
-        } else if camera.width_km >= 330.0 {
-            0.5
-        } else if camera.width_km >= 140.0 {
-            0.25
-        } else {
-            0.12
-        };
+        let id = scene as *const Scene as usize;
+        // A building is a fixed object with a fixed world size. Only at far zoom, where it
+        // would fall under a readable size on screen, it is drawn larger (a minimum on-screen
+        // size), in coarse steps so the mesh is rebuilt rarely.
+        let tier = ((camera.width_km / 700.0).max(1.0) * 2.0).round() / 2.0;
         if let Some(c) = &mut self.cache
             && c.id == id
             && (c.cloud_altitude - style.cloud_altitude_km).abs() < 1e-6
         {
-            if (c.building_tier - tier).abs() > 1e-6 {
+            if (c.building_tier - tier).abs() > 1e-6 || c.buildings_rev != scene.buildings_rev {
                 c.building_tier = tier;
+                c.buildings_rev = scene.buildings_rev;
                 let m = mesh::buildings(scene, tier);
                 c.buildings = upload(&self.device, &m, "buildings");
+            }
+            if c.mask_rev != scene.mask_rev {
+                c.mask_rev = scene.mask_rev;
+                c.mask = texture_of(
+                    &self.device,
+                    &self.queue,
+                    scene.mask.w as u32,
+                    scene.mask.h as u32,
+                    &scene.mask.rgba,
+                    "mask",
+                    wgpu::TextureFormat::Rgba8Unorm,
+                );
             }
             return;
         }
@@ -527,6 +573,8 @@ impl Renderer {
             terrain: self.upload_mesh(&mesh::terrain(scene), "terrain"),
             buildings: self.upload_mesh(&mesh::buildings(scene, tier), "buildings"),
             building_tier: tier,
+            mask_rev: scene.mask_rev,
+            buildings_rev: scene.buildings_rev,
             clouds: self.upload_mesh(&mesh::cloud_sheet(scene, style.cloud_altitude_km), "clouds"),
             roads: [None, None, None],
             cloud_altitude: style.cloud_altitude_km,
@@ -589,6 +637,11 @@ impl Renderer {
         }
     }
 
+    /// Drop everything cached for the current scene (a new scenario was loaded).
+    pub fn forget_scene(&mut self) {
+        self.cache = None;
+    }
+
     /// Render the scene from the camera and read it back. The result is deterministic for a
     /// given adapter and driver.
     pub fn render_to_rgba(
@@ -599,6 +652,91 @@ impl Renderer {
         width: u32,
         height: u32,
     ) -> Frame {
+        let ps = style.pixel_scale.max(1);
+        let mut rgba = Vec::new();
+        let mut t_copy = Duration::ZERO;
+        let mut stats = self.render_with(
+            scene,
+            camera,
+            style,
+            width,
+            height,
+            &mut |data, rw, rh, padded| {
+                let t1 = Instant::now();
+                let (ow, oh) = (rw * ps, rh * ps);
+                rgba = vec![255u8; (ow * oh * 4) as usize];
+                for y in 0..oh {
+                    let row = &data[((y / ps) * padded) as usize..];
+                    for x in 0..ow {
+                        let s = ((x / ps) * 4) as usize;
+                        let d = ((y * ow + x) * 4) as usize;
+                        rgba[d..d + 3].copy_from_slice(&row[s..s + 3]);
+                    }
+                }
+                t_copy = t1.elapsed();
+                (ow, oh)
+            },
+        );
+        stats.readback = t_copy;
+        Frame {
+            width: stats.width,
+            height: stats.height,
+            rgba,
+            stats,
+        }
+    }
+
+    /// Render at `width` x `height` divided by `style.pixel_scale` and write tightly packed RGBA8
+    /// (alpha 255) into `out`, which must hold `(width / n) * (height / n) * 4` bytes. The
+    /// caller scales the small image up if it wants the full size. Nothing is allocated per
+    /// frame once the size is settled.
+    pub fn render_into(
+        &mut self,
+        scene: &Scene,
+        camera: &Camera,
+        style: &Style,
+        width: u32,
+        height: u32,
+        out: &mut [u8],
+    ) -> FrameStats {
+        let mut t_copy = Duration::ZERO;
+        let mut stats = self.render_with(
+            scene,
+            camera,
+            style,
+            width,
+            height,
+            &mut |data, rw, rh, padded| {
+                let t1 = Instant::now();
+                let row_bytes = (rw * 4) as usize;
+                assert!(
+                    out.len() >= row_bytes * rh as usize,
+                    "output buffer too small"
+                );
+                for y in 0..rh as usize {
+                    let src = &data[y * padded as usize..y * padded as usize + row_bytes];
+                    out[y * row_bytes..(y + 1) * row_bytes].copy_from_slice(src);
+                }
+                // The target is cleared opaque and never blended, so alpha is already 255.
+                t_copy = t1.elapsed();
+                (rw, rh)
+            },
+        );
+        stats.readback = t_copy;
+        stats.width = (width / style.pixel_scale.max(1)).max(1);
+        stats.height = (height / style.pixel_scale.max(1)).max(1);
+        stats
+    }
+
+    fn render_with(
+        &mut self,
+        scene: &Scene,
+        camera: &Camera,
+        style: &Style,
+        width: u32,
+        height: u32,
+        finish: &mut Finish,
+    ) -> FrameStats {
         self.prepare(scene, style, camera);
         let road_band = mesh::road_band(camera.width_km);
         if style.roads {
@@ -686,7 +824,12 @@ impl Renderer {
                 style.cloud_altitude_km,
                 if clouds_on { 1.0 } else { 0.0 },
             ],
-            cloud2: [sx / km_lon, sy / crate::data::KM_PER_DEG_LAT, texel_km, 0.0],
+            cloud2: [
+                sx / km_lon,
+                sy / crate::data::KM_PER_DEG_LAT,
+                texel_km,
+                style.heat_ramp as f32,
+            ],
             road: [inter_px, main_px, rail_px, detail],
             tex: [texel, tex_on, rw as f32, rh as f32],
             ground_b: [gb.west, gb.south, gb.east, gb.north],
@@ -721,8 +864,47 @@ impl Renderer {
                     .write_buffer(&r.ib, 0, bytemuck::cast_slice(&gathered));
             }
         }
-        let shadow_tex = depth_texture(&self.device, style.shadow_size, "shadow");
-        let shadow_view = shadow_tex.create_view(&Default::default());
+        let stale = self
+            .targets
+            .as_ref()
+            .is_none_or(|t| t.width != rw || t.height != rh || t.shadow_size != style.shadow_size);
+        if stale {
+            let colour = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("colour"),
+                size: wgpu::Extent3d {
+                    width: rw,
+                    height: rh,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: COLOUR_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let padded = (rw * 4).div_ceil(256) * 256;
+            self.targets = Some(Targets {
+                width: rw,
+                height: rh,
+                shadow_size: style.shadow_size,
+                colour_view: colour.create_view(&Default::default()),
+                colour,
+                depth_view: depth_texture_sized(&self.device, rw, rh, "depth")
+                    .create_view(&Default::default()),
+                shadow_view: depth_texture(&self.device, style.shadow_size, "shadow")
+                    .create_view(&Default::default()),
+                readback: self.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("readback"),
+                    size: (padded * rh) as u64,
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                }),
+                padded,
+            });
+        }
+        let targets = self.targets.as_ref().expect("targets");
+        let shadow_view = &targets.shadow_view;
         let group = |shadow: &wgpu::TextureView| {
             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("scene"),
@@ -768,32 +950,13 @@ impl Renderer {
             })
         };
         let shadow_group = group(&self.dummy_shadow);
-        let main_group = group(&shadow_view);
+        let main_group = group(shadow_view);
 
-        let colour = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("colour"),
-            size: wgpu::Extent3d {
-                width: rw,
-                height: rh,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: COLOUR_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let colour_view = colour.create_view(&Default::default());
-        let depth_view =
-            depth_texture_sized(&self.device, rw, rh, "depth").create_view(&Default::default());
-        let padded = (rw * 4).div_ceil(256) * 256;
-        let readback = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("readback"),
-            size: (padded * rh) as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+        let colour = &targets.colour;
+        let colour_view = &targets.colour_view;
+        let depth_view = &targets.depth_view;
+        let padded = targets.padded;
+        let readback = &targets.readback;
 
         let mut stats = FrameStats {
             width: rw * ps,
@@ -806,7 +969,7 @@ impl Renderer {
                 label: Some("shadow"),
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &shadow_view,
+                    view: shadow_view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: wgpu::StoreOp::Store,
@@ -843,7 +1006,7 @@ impl Renderer {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("main"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &colour_view,
+                    view: colour_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -852,7 +1015,7 @@ impl Renderer {
                     },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_view,
+                    view: depth_view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: wgpu::StoreOp::Discard,
@@ -890,13 +1053,13 @@ impl Renderer {
         }
         enc.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
-                texture: &colour,
+                texture: colour,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
             wgpu::TexelCopyBufferInfo {
-                buffer: &readback,
+                buffer: readback,
                 layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(padded),
@@ -917,29 +1080,16 @@ impl Renderer {
             .poll(wgpu::PollType::wait_indefinitely())
             .expect("poll");
         stats.gpu_wait = t0.elapsed();
-        let t1 = Instant::now();
         let data = slice.get_mapped_range().expect("mapped");
-        let (ow, oh) = (rw * ps, rh * ps);
-        let mut rgba = vec![255u8; (ow * oh * 4) as usize];
-        for y in 0..oh {
-            let row = &data[((y / ps) * padded) as usize..];
-            for x in 0..ow {
-                let s = ((x / ps) * 4) as usize;
-                let d = ((y * ow + x) * 4) as usize;
-                rgba[d..d + 3].copy_from_slice(&row[s..s + 3]);
-            }
-        }
+        let t1 = Instant::now();
+        let (ow, oh) = finish(&data, rw, rh, padded);
+        let finish_time = t1.elapsed();
         drop(data);
         readback.unmap();
-        stats.readback = t1.elapsed();
+        stats.readback = finish_time;
         stats.width = ow;
         stats.height = oh;
-        Frame {
-            width: ow,
-            height: oh,
-            rgba,
-            stats,
-        }
+        stats
     }
 }
 

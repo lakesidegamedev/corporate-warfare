@@ -486,25 +486,10 @@ pub fn buildings(scene: &Scene, tier: f32) -> Mesh {
             continue;
         };
         let (cx, cy) = scene.projection.to_km(p.lon, p.lat);
-        let (hi, lo) = ground_range(
-            scene,
-            model,
-            if p.scale < 1.0 {
-                p.scale * tier.sqrt()
-            } else {
-                tier
-            },
-            cx,
-            cy,
-        );
+        let (hi, lo) = ground_range(scene, model, p.scale * tier, cx, cy);
         let (z_top, z_low) = (level_z_km(scene, hi), level_z_km(scene, lo));
         let (s, c) = p.yaw.to_radians().sin_cos();
-        let v = scene.voxel_km
-            * if p.scale < 1.0 {
-                p.scale * tier.sqrt()
-            } else {
-                tier
-            };
+        let v = scene.voxel_km * p.scale * tier;
         let rot = move |n: [f32; 3]| [n[0] * c - n[1] * s, n[0] * s + n[1] * c, n[2]];
         let tf = move |q: [f32; 3]| {
             [

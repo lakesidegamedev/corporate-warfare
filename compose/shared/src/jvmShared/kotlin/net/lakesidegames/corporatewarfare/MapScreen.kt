@@ -74,9 +74,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import uniffi.cw_ffi.MapDivisionDto
 import uniffi.cw_ffi.RegionBoardDto
 import kotlin.math.exp
@@ -227,6 +229,21 @@ fun WorldMapView(
     val takeovers = remember { TakeoverLog() }
     val acquired = remember(store.mapPlants, store.overview?.tick) { takeovers.update(store.mapPlants, store.overview?.tick?.toInt() ?: 0) }
     val heightsNow by rememberUpdatedState(heights)
+    // The new GPU map (desktop preview): drawn instead of the classic ground, clouds, traffic and buildings while the
+    // camera is flat; the globe, the Freight mode and any failure keep the classic map.
+    val gpu = rememberGpuMap(graphics.newMap, map?.scenarioId)
+    val gpuOn by remember(gpu, layer) { derivedStateOf { gpu != null && layer != MapLayer.Freight && (camera?.zoom ?: MapCamera.FLAT_END) >= MapCamera.FLAT_END } }
+    val gpuNight by remember(map, graphics.dayNight) {
+        derivedStateOf {
+            val b = map?.playBounds
+            graphics.dayNight && b != null && Sun.moving(sunStep / 3.0).facing(Math.toRadians((b[0] + b[2]) / 2), Math.toRadians((b[1] + b[3]) / 2)) < 0
+        }
+    }
+    LaunchedEffect(gpu, store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds) {
+        val session = gpu ?: return@LaunchedEffect
+        val json = gpuUpdateJson(store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds)
+        withContext(Dispatchers.Default) { runCatching { session.update(json) } }
+    }
 
     fun current(): MapCamera? = camera ?: map?.let { if (viewSize.width > 0) MapCamera.scenario(viewSize, it) else null }
     fun fly(target: MapCamera) {
@@ -292,11 +309,17 @@ fun WorldMapView(
                             }
                         }
                     }
-                    .pointerInput(layer, pickedLane, selected, pitch) {
+                    .pointerInput(layer, pickedLane, selected, pitch, gpu, gpuOn) {
                         detectTapGestures(
                             onDoubleTap = { toggleGlobe() },
                             onTap = { tap ->
                                 val now = current() ?: return@detectTapGestures
+                                if (gpu != null && gpuOn) {
+                                    // The GPU map picks from its own geometry: the region under the tap is the one drawn there.
+                                    val code = gpu.pick(gpuCamera(now, viewSize.width, viewSize.height, pitch), viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
+                                    onSelect(code.takeIf { it != selected })
+                                    return@detectTapGestures
+                                }
                                 val g = geometry.of(map, now, viewSize, graphics.detail, pitch)
                                 val projection = g.p
                                 if (layer == MapLayer.Freight && onLane != null) {
@@ -313,6 +336,27 @@ fun WorldMapView(
                     },
             ) {
                 val cam = camera ?: MapCamera.scenario(size, map)
+                if (gpu != null && gpuOn) {
+                    val gc = gpuCamera(cam, size.width, size.height, pitch)
+                    gpu.request(gc, size.width.toInt(), size.height.toInt(), true)
+                    drawGpuFrame(gpu)
+                    // Names and division badges, projected by the camera of the frame on screen so nothing slides.
+                    gpu.version
+                    val shown = gpu.frameCamera ?: gc
+                    drawGpuLabels(gpu, shown, map, store.mapPlants, store.mapDivisions, graphics, shown.widthKm, labelMeasurer, labelPlanner)
+                    if (graphics.showFps) {
+                        val rate = fps.tick(System.nanoTime())
+                        val tag = RenderInfo.label()?.let { " · $it" } ?: ""
+                        val mapLine = gpuMapLine(graphics.newMap, gpu)?.let { "\n$it" } ?: ""
+                        val label = measurer.measure(
+                            "${rate.toInt()} fps$tag · ${size.width.toInt()}x${size.height.toInt()}$mapLine",
+                            TextStyle(color = if (RenderInfo.software) Palette.warning else Palette.positive, fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                        )
+                        drawRect(Color.Black.copy(alpha = 0.55f), Offset(6f, size.height - label.size.height - 14f), Size(label.size.width + 12f, label.size.height + 8f))
+                        drawText(label, topLeft = Offset(12f, size.height - label.size.height - 10f))
+                    }
+                    return@Canvas
+                }
                 val tint = layerTint(layer)
                 val lanes = store.lanes
                 val freight = layer == MapLayer.Freight
@@ -375,8 +419,9 @@ fun WorldMapView(
                     // The backend and the map's pixel size sit beside the rate; software drawing is flagged.
                     val tag = RenderInfo.label()?.let { " · $it" } ?: ""
                     val warn = RenderInfo.software
+                    val mapLine = gpuMapLine(graphics.newMap, gpu)?.let { "\n$it" } ?: ""
                     val label = measurer.measure(
-                        "${rate.toInt()} fps$tag · ${size.width.toInt()}x${size.height.toInt()}",
+                        "${rate.toInt()} fps$tag · ${size.width.toInt()}x${size.height.toInt()}$mapLine",
                         TextStyle(color = if (warn) Palette.warning else Palette.positive, fontSize = 11.sp, fontWeight = FontWeight.Bold),
                     )
                     drawRect(Color.Black.copy(alpha = 0.55f), Offset(6f, size.height - label.size.height - 14f), Size(label.size.width + 12f, label.size.height + 8f))
@@ -920,9 +965,9 @@ internal object MapProfiler {
 
 private val LabelShadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(0f, 1f), 3f)
 /** One weight for every map label; only region names are tracked small caps. */
-private val CityStyle = TextStyle(color = Palette.primaryText.copy(alpha = 0.9f), fontSize = 10.sp, fontWeight = FontWeight.Medium, shadow = LabelShadow)
-private val RegionStyle = TextStyle(color = Palette.secondary.copy(alpha = 0.8f), fontSize = 9.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.8.sp, shadow = LabelShadow)
-private val BadgeStyle = TextStyle(color = Palette.ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+internal val CityStyle = TextStyle(color = Palette.primaryText.copy(alpha = 0.9f), fontSize = 10.sp, fontWeight = FontWeight.Medium, shadow = LabelShadow)
+internal val RegionStyle = TextStyle(color = Palette.secondary.copy(alpha = 0.8f), fontSize = 9.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.8.sp, shadow = LabelShadow)
+internal val BadgeStyle = TextStyle(color = Palette.ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
 private val RivalRoof = Color(0xFF2A2F36)
 private val sectorTones = HashMap<String, (Color) -> Color>()
 /** A rival's building drawn in its sector's colour: the model's own colours pulled towards the sector palette. */

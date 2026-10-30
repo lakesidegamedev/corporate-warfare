@@ -7,6 +7,10 @@
 -keep class * implements com.sun.jna.** { *; }
 -dontwarn com.sun.jna.**
 
+# The GPU map's C interface (CwGpu, next to the uniffi one in the same library): JNA looks its
+# functions up by name.
+-keep class net.lakesidegames.corporatewarfare.CwGpu { *; }
+
 # The engine bindings (uniffi) are loaded through JNA the same way: interface methods, structure
 # fields and callback classes are looked up by name.
 -keep class uniffi.** { *; }

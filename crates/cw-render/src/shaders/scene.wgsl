@@ -13,7 +13,7 @@ struct Globals {
     mask_b: vec4<f32>,     // west, south, east, north of the mask
     mask_dim: vec4<f32>,   // width, height, pixels per degree, dither band half width in pixels
     cloud: vec4<f32>,      // threshold, core threshold, altitude km, enabled
-    cloud2: vec4<f32>,     // shadow offset (degrees lon, lat), shadow texel km, unused
+    cloud2: vec4<f32>,     // shadow offset (degrees lon, lat), shadow texel km, map mode ramp
     road: vec4<f32>,       // interstate, main road and railway widths in pixels, detail on (0 or 1)
     tex: vec4<f32>,        // texture texel in km, texture on (0 or 1), render width and height in pixels
     ground_b: vec4<f32>,   // west, south, east, north of the ground class raster
@@ -291,11 +291,16 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
             return vec4<f32>(pal(RAMP_WATER, w), 1.0);
         }
 
-        let player = m.a > 1.5;
+        // Holdings (class 2) are gold. Map modes (class 3 and up) paint the whole region in the
+        // mode's ramp, one step per level. Both count as held for the region lines.
+        let held = m.a > 1.5;
+        let player = m.a > 1.5 && m.a < 2.5;
+        let heat = m.a > 2.5;
         let cls = ground_class(tcf, fw, frag, select(g.mask_dim.w, 0.0, in.kind == 1u));
         var ramp = ramp_of(cls);
         var base = 2;
         if (player) { ramp = RAMP_GOLD; base = gold_base(cls); }
+        if (heat) { ramp = u32(g.cloud2.w); base = clamp(i32(round(m.a)) - 2, 1, 3); }
 
         let tc = vec2<i32>(floor(tcf));
         if (in.kind == 1u) {
@@ -314,14 +319,14 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
                 let o = ms[i];
                 let land = !is_water(o);
                 let diff_r = land && o.r != m.r;
-                let own = o.a < 0.5 || (i < 2 && (o.a < 1.5 || player)) || (player && o.a < 1.5);
+                let own = o.a < 0.5 || (i < 2 && (o.a < 1.5 || held)) || (held && o.a < 1.5);
                 if (diff_r && own) {
                     edge = true;
                     if (o.g != m.g) { state_edge = true; }
                 }
             }
             if (edge) {
-                if (player) { return vec4<f32>(pal(RAMP_SIGNAL, 1), 1.0); }
+                if (held) { return vec4<f32>(pal(RAMP_SIGNAL, 1), 1.0); }
                 if (state_edge) { return vec4<f32>(pal(RAMP_CLOUD, 3), 1.0); }
                 return vec4<f32>(pal(RAMP_CLOUD, 2), 1.0);
             }
@@ -333,7 +338,7 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         step = step - shade;
         // Pixel texture of the class, in world space, at a texel that is always a few screen
         // pixels wide; gone (flat class colour) once the camera is too far out.
-        if (g.tex.y > 0.5) {
+        if (g.tex.y > 0.5 && !heat) {
             let tx = i32(floor(in.world.x / g.tex.x));
             let ty = i32(floor(in.world.y / g.tex.x));
             let tv = class_texel(cls, variant_at(tc), tx, ty);
@@ -450,7 +455,7 @@ fn fs_road(in: ROut) -> RFOut {
         let cls = class_at(vec2<i32>(floor(ground_tc(ll))));
         var ramp = ramp_of(cls);
         var base = 2;
-        if (m.a > 1.5) { ramp = RAMP_GOLD; base = gold_base(cls); }
+        if (m.a > 1.5 && m.a < 2.5) { ramp = RAMP_GOLD; base = gold_base(cls); }
         c = pal(ramp, base + 1);
     } else {
         // Railway: a thin light grey-brown line, with sleepers across it up close.

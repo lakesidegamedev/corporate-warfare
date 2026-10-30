@@ -35,6 +35,8 @@ cp apple/Resources/pixel-icons.json "$OUT/resources/"
 cp apple/Resources/pixel-icons.json "$OUT/desktop/"
 cp apple/Resources/cast-portraits.json "$OUT/resources/"
 cp apple/Resources/cast-portraits.json "$OUT/desktop/"
+# The desktop GPU map reads its baked terrain and city outlines from the same folder.
+cp crates/cw-render/assets/*.cwh crates/cw-render/assets/urban-*.json "$OUT/desktop/"
 
 android() {
   local ndk="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"
@@ -64,7 +66,8 @@ android() {
 }
 
 desktop() {
-  cargo build --locked -p cw-ffi --profile small
+  # The desktop library also carries the GPU map (wgpu: Direct3D 12 and Vulkan, no extra installs).
+  cargo build --locked -p cw-ffi --profile small --features gpu-map
   local lib platform
   case "$(uname -s)-$(uname -m)" in
     Linux-x86_64) lib=libcw_ffi.so; platform=linux-x86-64 ;;

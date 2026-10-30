@@ -15,3 +15,10 @@ cw-sim.workspace = true
 cw-session.workspace = true
 serde_json.workspace = true
 uniffi.workspace = true
+cw-render = { path = "../cw-render", optional = true }
+serde = { workspace = true, optional = true }
+
+[features]
+# The desktop apps' GPU map: wgpu and the renderer behind a small C interface (gpu_map.rs). Off for
+# the phone and Apple builds, which never link it.
+gpu-map = ["dep:cw-render", "dep:serde"]

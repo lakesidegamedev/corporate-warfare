@@ -8,7 +8,7 @@ publish.workspace = true
 description = "Stylized GPU map renderer prototype (wgpu), offscreen only."
 
 [dependencies]
-wgpu = { version = "30.0.1", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan"] }
+wgpu = { version = "30.0.1", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan", "dx12", "metal"] }
 bytemuck = { version = "1", features = ["derive"] }
 pollster = "1"
 glam = "0.30"
