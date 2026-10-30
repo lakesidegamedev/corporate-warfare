@@ -21,7 +21,7 @@ use std::time::Instant;
 
 use cw_render::{
     AssetDirs, Camera, CloudLevel, Owner, Placement, PlantSite, Renderer, ScenarioSpec, Scene,
-    SceneOptions, SiteStatus, Style, building_boxes, layout_plants, pick_ground, project,
+    SceneOptions, SiteStatus, Style, SurfaceTarget, building_boxes, layout_plants, pick_ground, project,
     ramp_by_name, region_tints,
 };
 use serde::Deserialize;
@@ -164,19 +164,18 @@ impl GpuMap {
         })
     }
 
-    /// Like [`GpuMap::open`], drawing into a `CAMetalLayer` and presenting each frame (see
-    /// [`GpuMap::render_to_surface`]).
+    /// Like [`GpuMap::open`], drawing into a native window or layer and presenting each frame
+    /// (see [`GpuMap::render_to_surface`]).
     ///
     /// # Safety
-    /// `layer` must be a valid `CAMetalLayer` that outlives the map.
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    pub unsafe fn open_layer(
+    /// The target window (or layer) and display must outlive the map.
+    pub unsafe fn open_surface(
         assets: &Path,
         scenario: &str,
-        layer: *mut std::ffi::c_void,
+        target: SurfaceTarget,
     ) -> Result<GpuMap, String> {
         Self::open_with(assets, scenario, || {
-            unsafe { Renderer::for_metal_layer(layer) }.map_err(|e| e.to_string())
+            unsafe { Renderer::for_window(target) }.map_err(|e| e.to_string())
         })
     }
 
@@ -578,23 +577,80 @@ pub unsafe extern "C" fn cw_gpu_open_layer(
             return Err("no layer".into());
         }
         let (assets, scenario) = unsafe { (text(assets)?, text(scenario)?) };
-        let map = unsafe { GpuMap::open_layer(Path::new(assets), scenario, layer) }?;
+        let map = unsafe {
+            GpuMap::open_surface(Path::new(assets), scenario, SurfaceTarget::MetalLayer(layer))
+        }?;
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
         MAPS.lock().unwrap().push((id, Arc::new(map)));
         Ok(id)
     })
 }
 
-/// Draw one frame of `width` x `height` pixels into the layer the map was opened on and present
-/// it. Returns 0 when drawn, 1 when the display could not take a frame (try again later), a
+/// Open the map drawing straight into a native desktop window (no pixels are copied): `kind` 1 is
+/// a Windows `HWND` (`window`), 2 an X11 window id (`window`) on the `Display*` `display`. Frames
+/// go to the screen with `cw_gpu_render_surface`. Returns a handle, or 0 (see `cw_gpu_last_error`).
+/// Close the map (`cw_gpu_close`) before the window is destroyed.
+///
+/// # Safety
+/// `assets` and `scenario` must be NUL-terminated strings; the window and display must be valid.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cw_gpu_open_surface(
+    assets: *const c_char,
+    scenario: *const c_char,
+    kind: u32,
+    window: u64,
+    display: *mut std::ffi::c_void,
+) -> u64 {
+    guarded(0, || {
+        let (assets, scenario) = unsafe { (text(assets)?, text(scenario)?) };
+        let target = match kind {
+            1 => SurfaceTarget::Win32(window as isize),
+            2 => SurfaceTarget::Xlib { window, display },
+            _ => return Err("this kind of window is not supported".into()),
+        };
+        let map = unsafe { GpuMap::open_surface(Path::new(assets), scenario, target) }?;
+        map.style.write().unwrap().texel_min_px = DESKTOP_TEXEL_MIN_PX;
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
+        MAPS.lock().unwrap().push((id, Arc::new(map)));
+        Ok(id)
+    })
+}
+
+/// Draw one frame of `width` x `height` pixels into the window or layer the map was opened on and
+/// present it. Returns 0 when drawn, 1 when the display could not take a frame (try again later), a
 /// negative number on failure. `cam` points at six doubles as for `cw_gpu_render`; `timing` (or
 /// null) receives six doubles: render ms, 0, width, height, draw calls, 0.
 ///
 /// # Safety
 /// `cam` must be readable for 6 doubles and `timing` writable for 6 doubles.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cw_gpu_render_surface(
+    id: u64,
+    cam: *const f64,
+    width: u32,
+    height: u32,
+    timing: *mut f64,
+) -> i32 {
+    unsafe { render_surface(id, cam, width, height, timing) }
+}
+
+/// The Apple name of [`cw_gpu_render_surface`], kept for the Swift host.
+///
+/// # Safety
+/// As for `cw_gpu_render_surface`.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cw_gpu_render_layer(
+    id: u64,
+    cam: *const f64,
+    width: u32,
+    height: u32,
+    timing: *mut f64,
+) -> i32 {
+    unsafe { render_surface(id, cam, width, height, timing) }
+}
+
+unsafe fn render_surface(
     id: u64,
     cam: *const f64,
     width: u32,

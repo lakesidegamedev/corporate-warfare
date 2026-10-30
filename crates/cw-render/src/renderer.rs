@@ -108,6 +108,52 @@ impl Style {
     }
 }
 
+/// Where a surface renderer presents: a native window the host owns.
+#[derive(Clone, Copy, Debug)]
+pub enum SurfaceTarget {
+    /// A `CAMetalLayer` (Apple).
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    MetalLayer(*mut std::ffi::c_void),
+    /// A Windows window handle (`HWND`).
+    Win32(isize),
+    /// An X11 window id and the `Display*` it belongs to.
+    Xlib { window: u64, display: *mut std::ffi::c_void },
+}
+
+impl SurfaceTarget {
+    fn into_wgpu(self) -> Result<wgpu::SurfaceTargetUnsafe, NoAdapter> {
+        use raw_window_handle::{
+            RawDisplayHandle, RawWindowHandle, Win32WindowHandle,
+            WindowsDisplayHandle, XlibDisplayHandle, XlibWindowHandle,
+        };
+        let bad = |what: &str| NoAdapter(format!("no {what} to draw into"));
+        Ok(match self {
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            SurfaceTarget::MetalLayer(layer) => wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(layer),
+            SurfaceTarget::Win32(hwnd) => {
+                let hwnd = std::num::NonZeroIsize::new(hwnd).ok_or_else(|| bad("window"))?;
+                wgpu::SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle: Some(RawDisplayHandle::Windows(WindowsDisplayHandle::new())),
+                    raw_window_handle: RawWindowHandle::Win32(Win32WindowHandle::new(hwnd)),
+                }
+            }
+            SurfaceTarget::Xlib { window, display } => {
+                let display = std::ptr::NonNull::new(display).ok_or_else(|| bad("display"))?;
+                if window == 0 {
+                    return Err(bad("window"));
+                }
+                wgpu::SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle: Some(RawDisplayHandle::Xlib(XlibDisplayHandle::new(
+                        Some(display),
+                        0,
+                    ))),
+                    raw_window_handle: RawWindowHandle::Xlib(XlibWindowHandle::new(window)),
+                }
+            }
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct NoAdapter(pub String);
 
@@ -286,23 +332,27 @@ impl Renderer {
     /// `layer` must be a valid `CAMetalLayer` that outlives the renderer.
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub unsafe fn for_metal_layer(layer: *mut std::ffi::c_void) -> Result<Renderer, NoAdapter> {
-        Self::create(Some(layer))
+        Self::create(Some(SurfaceTarget::MetalLayer(layer)))
     }
 
-    fn create(layer: Option<*mut std::ffi::c_void>) -> Result<Renderer, NoAdapter> {
+    /// A renderer that draws straight into a native desktop window (a Windows `HWND` or an X11
+    /// window) and presents each frame at the display's rate, with no readback. Use
+    /// [`Renderer::render_to_surface`].
+    ///
+    /// # Safety
+    /// The window (and the X display) must stay valid until the renderer is dropped.
+    pub unsafe fn for_window(target: SurfaceTarget) -> Result<Renderer, NoAdapter> {
+        Self::create(Some(target))
+    }
+
+    fn create(target: Option<SurfaceTarget>) -> Result<Renderer, NoAdapter> {
         let instance = wgpu::Instance::default();
-        let surface: Option<wgpu::Surface<'static>> = match layer {
+        let surface: Option<wgpu::Surface<'static>> = match target {
             None => None,
-            #[cfg(any(target_os = "macos", target_os = "ios"))]
-            Some(layer) => Some(
-                unsafe {
-                    instance
-                        .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(layer))
-                }
-                .map_err(|e| NoAdapter(e.to_string()))?,
+            Some(target) => Some(
+                unsafe { instance.create_surface_unsafe(target.into_wgpu()?) }
+                    .map_err(|e| NoAdapter(e.to_string()))?,
             ),
-            #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-            Some(_) => return Err(NoAdapter("window surfaces are Apple only".into())),
         };
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
