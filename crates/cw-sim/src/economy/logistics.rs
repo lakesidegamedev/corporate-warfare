@@ -597,9 +597,9 @@ fn build_access(world: &World, ds: &Dataset) -> Vec<Vec<bool>> {
         .collect();
     // Ports the state has had expanded take ships even where nobody has built a terminal.
     if let Some(sea) = ds.logistics.mode_index("sea") {
-        for r in 0..n {
+        for (r, slot) in access[sea as usize].iter_mut().enumerate() {
             if crate::economy::civics::port_bps(world, r as u8) > 0 {
-                access[sea as usize][r] = true;
+                *slot = true;
             }
         }
     }

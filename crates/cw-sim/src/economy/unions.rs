@@ -303,6 +303,10 @@ pub fn settle_payment(world: &mut World, firm: Handle, amount: i64) {
     }
 }
 
+fn firm_region(world: &World, firm: Handle) -> u8 {
+    world.firms.get(firm).map(|f| f.region).unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -356,8 +360,4 @@ mod tests {
             BargainState::Idle
         ));
     }
-}
-
-fn firm_region(world: &World, firm: Handle) -> u8 {
-    world.firms.get(firm).map(|f| f.region).unwrap_or(0)
 }

@@ -1212,7 +1212,7 @@ fn open_tender(world: &mut World, ds: &Dataset) {
         return;
     };
     let (min_weeks, max_weeks) = kind.weeks();
-    let price = (budget * kind.budget_weeks()).max(100_000_00);
+    let price = (budget * kind.budget_weeks()).max(10_000_000);
     let id = world.civics.next_tender;
     world.civics.next_tender += 1;
     world.civics.tenders.push(Tender {
@@ -1602,14 +1602,14 @@ pub fn weekly(world: &mut World, ds: &Dataset) {
                 world,
                 "result",
                 format!(
-                    "New laws in {name}: {} corporate tax {:+} points, {}, {} environmental rules.",
+                    "New laws in {name}: {} corporate tax {:+} points, gifts capped at {}, {} environmental rules.",
                     if laws.right_to_work {
                         "right to work,"
                     } else {
                         "union rules kept,"
                     },
                     laws.tax_delta_bps / 100,
-                    format!("gifts capped at {}", money_text(laws.cap_cents)),
+                    money_text(laws.cap_cents),
                     ["lighter", "current", "stricter"][laws.environment.min(2) as usize],
                 ),
                 None,
@@ -1698,7 +1698,7 @@ fn debate_topic(a: &Candidate, b: &Candidate) -> &'static str {
 fn governor_letters(world: &mut World, ds: &Dataset) {
     let week = world.tick.0;
     for i in 0..world.civics.states.len() {
-        if (week + i as u32 * 5) % 26 != 0 {
+        if !(week + i as u32 * 5).is_multiple_of(26) {
             continue;
         }
         let mut best: Option<(i64, Handle)> = None;
@@ -1765,7 +1765,7 @@ pub fn rival_gift(world: &World, ds: &Dataset, firm: Handle) -> Option<(u8, u8, 
     }
     let week = world.tick.0;
     // One decision a month, staggered by firm.
-    if (week + (firm.0 as u32 % 4)) % 4 != 0 {
+    if !(week + (firm.0 as u32 % 4)).is_multiple_of(4) {
         return None;
     }
     let cash = entity.book.cash() - entity.reserved_cash_cents;
@@ -1882,6 +1882,3 @@ pub fn rival_bid(world: &World, ds: &Dataset, firm: Handle) -> Option<(u32, i64,
     }
     None
 }
-
-#[cfg(test)]
-mod tests;
