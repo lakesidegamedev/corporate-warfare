@@ -1008,6 +1008,20 @@ mod tests {
                     week: Some(week),
                     ..Update::default()
                 });
+                let mut views = views.to_vec();
+                if let Some(b) = map
+                    .scene
+                    .read()
+                    .unwrap()
+                    .buildings
+                    .iter()
+                    .find(|b| b.owner == Owner::Player)
+                {
+                    views.push((
+                        "building",
+                        [b.lon as f64, b.lat as f64, 40.0, 45.0, 20.0, 28.0],
+                    ));
+                }
                 for (name, cam) in views {
                     let mut buf = vec![0u8; (w * h * 4) as usize];
                     map.render(cam, w, h, 1, &mut buf);

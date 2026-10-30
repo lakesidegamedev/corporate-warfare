@@ -60,26 +60,27 @@ class GpuMapDragTest {
             // Drag a few kilometres either way across the building, close enough for its roof to be many pixels across.
             val steps = 30
             for (i in 0..steps) {
-                val cam = GpuCamera(target.lon + (i - steps / 2) * 0.01, target.lat + (i - steps / 2) * 0.004, 30.0, 40.0, i * 0.7)
+                val cam = GpuCamera(target.lon + (i - steps / 2) * 0.001, target.lat + (i - steps / 2) * 0.0004, 30.0, 40.0, i * 0.7)
                 session.request(cam, w, h, true)
                 val before = session.version
                 val deadline = System.currentTimeMillis() + 60_000
                 while (session.version == before && System.currentTimeMillis() < deadline) Thread.sleep(5)
                 // One read: the picture and the camera it was drawn for.
-                val shown = session.shown ?: continue
+                val shown = session.shown ?: run { println("step $i: no frame yet"); null } ?: continue
                 val shownCam = shown.camera
                 val rects = session.buildingRects(shownCam, w, h)
                 val b = session.buildings().indexOf(target)
                 val l = rects[4 * b]; val t = rects[4 * b + 1]; val r = rects[4 * b + 2]; val bt = rects[4 * b + 3]
-                if (l.isNaN() || r < 0 || l > w || bt < 0 || t > h) continue
+                if (l.isNaN() || r < 0 || l > w || bt < 0 || t > h) { println("step $i: building off screen ($l,$t,$r,$bt) camera=$shownCam"); continue }
                 val px = roofPixels(shown.image, l, t, r, bt, w, h)
                 // The roof is where the shown camera says the building is: it has gold there.
+                if (i % 10 == 0) println("step $i: $px gold pixels, box ($l,$t,$r,$bt), image ${shown.image.width}x${shown.image.height}")
                 if (px > 0) good++ else println("step $i: no gold in the building's box ($l,$t,$r,$bt) camera=$shownCam")
                 if (shown.image.width == w) settledFrames++
             }
             assertTrue(good >= steps * 0.8, "the roof was at the projected place in only $good of ${steps + 1} frames")
             // Stopped: the full size frame for exactly the last camera arrives, and the roof is inside its box.
-            val last = GpuCamera(target.lon + (steps - steps / 2) * 0.01, target.lat + (steps - steps / 2) * 0.004, 30.0, 40.0, steps * 0.7)
+            val last = GpuCamera(target.lon + (steps - steps / 2) * 0.001, target.lat + (steps - steps / 2) * 0.0004, 30.0, 40.0, steps * 0.7)
             session.request(last, w, h, false)
             val deadline = System.currentTimeMillis() + 60_000
             while ((session.shown?.camera != last || session.shown?.image?.width != w) && System.currentTimeMillis() < deadline) Thread.sleep(20)

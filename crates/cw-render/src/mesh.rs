@@ -1248,3 +1248,25 @@ pub fn apron_extent_km(scene: &Scene) -> [f32; 4] {
     }
     e
 }
+
+/// Height the camera looks at: the terrain's mean height round the target, in kilometres. The
+/// terrain is drawn exaggerated, so a close view over a plateau would otherwise sit inside it.
+/// Averaged over the view (not read at one point) so a pan does not jerk at each terrace.
+pub fn camera_target_z(scene: &Scene, x: f32, y: f32, width_km: f32) -> f32 {
+    let r = width_km * 0.2;
+    let mut sum = 0.0;
+    for (ox, oy) in [
+        (0.0, 0.0),
+        (-r, 0.0),
+        (r, 0.0),
+        (0.0, -r),
+        (0.0, r),
+        (-r, -r),
+        (r, -r),
+        (-r, r),
+        (r, r),
+    ] {
+        sum += ground_z(scene, x + ox, y + oy);
+    }
+    sum / 9.0
+}

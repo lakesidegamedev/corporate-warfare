@@ -758,7 +758,11 @@ impl Renderer {
         let aspect = rw as f32 / rh as f32;
 
         let (tx, ty) = scene.projection.to_km(camera.lon, camera.lat);
-        let view = camera.view((tx, ty), 0.0, aspect);
+        let view = camera.view(
+            (tx, ty),
+            mesh::camera_target_z(scene, tx, ty, camera.width_km),
+            aspect,
+        );
         let light = style.light_dir();
         let (light_vp, texel_km) = light_matrix(scene, &view, light, style.shadow_size);
         let palette = if style.night {
