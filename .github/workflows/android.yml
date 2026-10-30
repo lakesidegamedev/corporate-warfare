@@ -1,10 +1,10 @@
 name: Android and desktop
 on:
   pull_request:
-    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "tools/installer_art.py", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
+    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "tools/installer_art.py", "tools/dmg_art.py", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
   push:
     branches: [main]
-    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "tools/installer_art.py", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
+    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "tools/installer_art.py", "tools/dmg_art.py", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -135,6 +135,20 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.path }}
+          retention-days: 14
+      # The AppImage wraps the same release app image the .deb is made from.
+      - name: AppImage (Linux)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          mkdir -p appimage-out
+          # packageReleaseDeb does not leave the app image folder behind, so build it.
+          (cd compose && ./gradlew --no-daemon :shared:createReleaseDistributable)
+          bash compose/shared/packaging/linux/build-appimage.sh "$(ls -d compose/shared/build/compose/binaries/main-release/app/*/ | head -1)" "appimage-out/CorporateWarfare-linux.AppImage"
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        with:
+          name: corporate-warfare-linux-appimage
+          path: appimage-out/*.AppImage
           retention-days: 14
       - name: Setup program (Windows)
         if: ${{ matrix.os == 'windows-latest' }}

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Corporate Warfare
+GenericName=Economic strategy game
+Comment=Corporate Warfare: an economic strategy game
+Exec=corporate-warfare
+Icon=corporate-warfare
+Terminal=false
+Categories=Game;StrategyGame;

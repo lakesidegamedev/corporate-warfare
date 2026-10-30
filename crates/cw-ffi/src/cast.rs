@@ -169,6 +169,17 @@ fn ally_reason(cause: cw_sim::economy::rivalry::Cause) -> &'static str {
     }
 }
 
+/// Newest first, with the same move in the same week shown once. A move's text names its kind
+/// and its good or place, so two moves with the same week and text are the same move (a rival
+/// that starts buying fuel for storage in two of its plants in one week reads as one line).
+pub(crate) fn recent_moves(mut moves: Vec<MoveDto>, keep: usize) -> Vec<MoveDto> {
+    moves.sort_by_key(|m| std::cmp::Reverse(m.week));
+    let mut seen: std::collections::HashSet<(u32, String)> = std::collections::HashSet::new();
+    moves.retain(|m| seen.insert((m.week, m.text.clone())));
+    moves.truncate(keep);
+    moves
+}
+
 pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
     let world = &session.world;
     let handle = Handle(firm);
@@ -247,8 +258,7 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
             text,
         });
     }
-    moves.sort_by_key(|m| std::cmp::Reverse(m.week));
-    moves.truncate(8);
+    let moves = recent_moves(moves, 8);
     let style = entity
         .archetype
         .map(|a| a.key().replace('_', " "))
@@ -514,5 +524,51 @@ impl SessionHandle {
     /// The chief executive the player chose at the new-game screen, if they chose one.
     pub fn player_chief(&self) -> Option<PlayerChiefDto> {
         player_chief_dto(&self.lock().world)
+    }
+}
+
+#[cfg(test)]
+mod dossier_move_tests {
+    use super::*;
+
+    fn mv(week: u32, text: &str) -> MoveDto {
+        MoveDto {
+            week,
+            text: text.to_owned(),
+        }
+    }
+
+    #[test]
+    fn the_same_move_in_the_same_week_shows_once() {
+        let moves = vec![
+            mv(10, "Started buying fuel for storage."),
+            mv(10, "Started buying fuel for storage."),
+            mv(10, "Started buying steel for storage."),
+            mv(9, "Started buying fuel for storage."),
+            mv(12, "Issued bonds."),
+        ];
+        let shown = recent_moves(moves, 8);
+        let lines: Vec<(u32, &str)> = shown.iter().map(|m| (m.week, m.text.as_str())).collect();
+        assert_eq!(
+            lines,
+            vec![
+                (12, "Issued bonds."),
+                (10, "Started buying fuel for storage."),
+                (10, "Started buying steel for storage."),
+                (9, "Started buying fuel for storage."),
+            ]
+        );
+    }
+
+    #[test]
+    fn repeats_do_not_use_up_the_limit() {
+        let mut moves: Vec<MoveDto> = (0..6)
+            .map(|_| mv(5, "Started buying fuel for storage."))
+            .collect();
+        moves.push(mv(4, "Issued bonds."));
+        moves.push(mv(3, "Floated a subsidiary."));
+        let shown = recent_moves(moves, 3);
+        assert_eq!(shown.len(), 3);
+        assert_eq!(shown[2].text, "Floated a subsidiary.");
     }
 }

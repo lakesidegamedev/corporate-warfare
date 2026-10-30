@@ -62,8 +62,19 @@ private fun MoveArrow(bps: Long) {
  * and classifieds. Wide screens put the briefs in columns beside the markets; phones stack.
  * Tapping a story opens what it is about.
  */
+/** The chief the player chose and the companies they control, so a story about their company can show who runs it. */
+internal class YourChief(val chief: uniffi.cw_ffi.PlayerChiefDto?, val firms: Set<ULong>)
+
+private val LocalYourChief = androidx.compose.runtime.staticCompositionLocalOf { YourChief(null, emptySet()) }
+
 @Composable
 fun PaperScreen(store: GameStore) {
+    val yours = YourChief(store.playerChief, store.firms.filter { it.controlled }.map { it.handle }.toSet())
+    androidx.compose.runtime.CompositionLocalProvider(LocalYourChief provides yours) { PaperPage(store) }
+}
+
+@Composable
+private fun PaperPage(store: GameStore) {
     val now = store.overview?.tick?.toInt() ?: 0
     var picked by remember { mutableStateOf<Int?>(null) }
     // A new week brings the new issue unless the reader is deliberately on a back issue.
@@ -162,6 +173,8 @@ private fun Chip(text: String, enabled: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun Byline(story: StoryDto) {
+    val mine = LocalYourChief.current
+    val chief = mine.chief?.takeIf { story.yours && story.link.kind == "company" && story.link.id in mine.firms }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         if (story.author.isNotEmpty()) PixelPortrait(story.author, size = 24.dp, mood = story.mood)
         val by = if (story.authorName.isNotEmpty()) "${story.authorName} · ${story.byline}" else story.byline
@@ -169,6 +182,12 @@ private fun Byline(story: StoryDto) {
             (by + if (story.yours) " · about you" else "").uppercase(), color = if (story.yours) Palette.gold else Palette.secondary,
             fontSize = 10.sp, fontFamily = Pixel.font, letterSpacing = 0.6.sp,
         )
+    }
+    if (chief != null) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            PixelPortrait(chief.portrait, size = 24.dp)
+            Text("Your chief executive: ${chief.name}".uppercase(), color = Palette.gold, fontSize = 10.sp, fontFamily = Pixel.font, letterSpacing = 0.6.sp)
+        }
     }
 }
 

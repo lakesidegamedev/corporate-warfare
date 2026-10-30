@@ -11,8 +11,29 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- On the desktop the map can sit beside any page. Press Ctrl M or use "Dock map" in the sidebar and the
+  page you are on gets the map on its left, with a handle between them to drag (or use the arrow keys
+  on it). Each page remembers its own width and whether it is docked. Pages that need room scroll
+  sideways instead of squeezing.
+- Hover any figure in the status bar, the CEO Office, Financials, Markets and Stats and a short note says
+  what it is and how it is worked out, in plain words. The brief's lines and your CFO's reasons explain
+  themselves in the same way.
+- The chief executive you chose now shows up everywhere: letters to your company greet them by name,
+  your company page shows their face and temperament, and the paper shows who runs the company beside
+  any story about it.
+- A Linux AppImage is built beside the .deb from the same release image, with a desktop entry and the
+  game icon. The Mac download is now a disk image with the game's artwork and an arrow to drag the app
+  to Applications (still unsigned).
+- Screen readers: every icon-only button and every chart now has a spoken description, and charts say
+  their last value and which way they are heading.
+
 ### Fixed
 
+- A rival's recent moves no longer list the same move twice in one week (for example "Started buying
+  fuel for storage" for two plants).
+- At 130 percent system font size on Android the bottom bar no longer breaks "Portfolio" across two lines.
 - Public works contracts are now a fair fight and not a money tap. Rival bids sit near the real
   cost plus a normal margin of 8 to 11 percent (they used to add 10 to 22), every firm with a plant
   can bid, firms that keep their books in another currency can win in Europe, and the works run over

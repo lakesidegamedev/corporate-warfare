@@ -167,8 +167,9 @@ fun Chart(
         }
         val measurer = rememberTextMeasurer()
         val labelStyle = TextStyle(color = Palette.secondary, fontSize = 8.sp, fontFamily = Pixel.font)
+        val summary = (title?.let { "$it. " } ?: "") + shown.joinToString(" ") { s -> chartSummary(s.name, s.points.map { it.value }, format) }
         Canvas(
-            Modifier.fillMaxWidth().height(height).pointerInput(weeks.size) {
+            Modifier.fillMaxWidth().height(height).described("Chart. $summary", androidx.compose.ui.semantics.Role.Image).pointerInput(weeks.size) {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
