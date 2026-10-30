@@ -1141,16 +1141,17 @@ impl Renderer {
             }
         }
         {
-            let ink = Palette::day().ramps[ramp::INK][0];
-            let ink = if style.night {
-                Palette::night().ramps[ramp::INK][0]
+            // Beyond the apron (the far horizon of a tilted view) is open sea, never a void: the
+            // clear colour is the apron's own water step, so the world fades into the sea.
+            let sea = if style.night {
+                Palette::night().ramps[ramp::WATER][2]
             } else {
-                ink
+                Palette::day().ramps[ramp::WATER][2]
             };
             let clear = wgpu::Color {
-                r: ink[0] as f64 / 255.0,
-                g: ink[1] as f64 / 255.0,
-                b: ink[2] as f64 / 255.0,
+                r: sea[0] as f64 / 255.0,
+                g: sea[1] as f64 / 255.0,
+                b: sea[2] as f64 / 255.0,
                 a: 1.0,
             };
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {

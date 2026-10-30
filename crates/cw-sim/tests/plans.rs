@@ -8,7 +8,7 @@ use cw_core::ledger::{Account, Txn};
 use cw_data::Dataset;
 use cw_sim::commands::{CommandEnvelope, CommandIntent};
 use cw_sim::economy::plans::{self, Action, EventKind, Outcome, Plan, Stage};
-use cw_sim::economy::{equity, migration, seed};
+use cw_sim::economy::{migration, seed};
 use cw_sim::state::{HolderId, ScenarioKind, ScenarioMode, World};
 
 fn world() -> (World, Dataset) {
@@ -134,32 +134,30 @@ fn a_step_buys_at_most_half_the_float_and_pays_the_impact_price() {
             limit_price_cents: limit_cents,
         },
     );
-    equity::clear_exchange(&mut w, &ds);
     let bought = held(&w, raider, target) - before;
-    assert_eq!(bought, qty, "the order fills in full inside the float");
+    assert_eq!(bought, qty, "the order fills at once and in full");
     assert!(bought <= float);
-    // Oracle: impact is ten basis points per percent of the outside holdings the step takes,
-    // and the buyer pays mark plus that impact on every share.
-    let impact_bps = qty * 10_000 / outside / 10;
-    let price = mark + mark * impact_bps / 10_000;
+    // Oracle: the price rises along mark x (1 + x / outside), so the step pays the area under
+    // that line: mark x (q + q^2 / (2 x outside)), to within a cent a share.
+    let area = mark as i128 * (2 * outside as i128 * qty as i128 + (qty as i128).pow(2))
+        / (2 * outside as i128);
     let lot = w.firms.get(target).unwrap().shares.holders[&HolderId::Firm(raider)];
-    assert_eq!(lot.cost_cents, qty * price);
-    // The unused part of the reserved limit comes straight back, and the cash that left is
-    // exactly the price paid.
+    assert!((lot.cost_cents as i128 - area).abs() <= qty as i128);
+    // Cash left once and exactly that amount; nothing was reserved.
     let book = &w.firms.get(raider).unwrap().book;
-    assert_eq!(book.cash(), cash - qty * price);
+    assert_eq!(book.cash(), cash - lot.cost_cents);
     assert_eq!(book.balance(Account::RestrictedCash), 0);
     // No share was made up: the holders still add up to what they did before.
     assert_eq!(all_holders(&w, target), holders_before);
 }
 
 #[test]
-fn an_order_the_float_cannot_fill_is_released_in_full() {
+fn an_order_past_the_float_fills_the_float_and_no_more() {
     let (mut w, ds, raider, target) = plan_world();
     let cash = w.firms.get(raider).unwrap().book.cash();
-    let float = plans::weekly_float(&w, target);
-    // Twice the float cannot fill past the float; the rest of the reservation comes back.
+    let outside = plans::outside_held(&w, target);
     let mark = w.firms.get(target).unwrap().shares.mark_cents;
+    // Cheap target, deep pockets: ask for twice what the public holds.
     send(
         &mut w,
         &ds,
@@ -168,25 +166,24 @@ fn an_order_the_float_cannot_fill_is_released_in_full() {
             investor: false,
             firm: target,
             buy: true,
-            qty: float * 2,
-            limit_price_cents: mark * 2,
+            qty: outside * 2,
+            limit_price_cents: 0,
         },
     );
-    equity::clear_exchange(&mut w, &ds);
-    let got = held(&w, raider, target);
-    assert_eq!(got, float, "the first week fills the float and no more");
-    // The order stays for one more clearing, then expires and its reserve comes back.
-    w.tick = Tick(w.tick.0 + 1);
-    equity::clear_exchange(&mut w, &ds);
-    let got = held(&w, raider, target);
-    assert!(
-        got <= 2 * float,
-        "never past the float in a week: {got} vs {float}"
+    assert_eq!(
+        held(&w, raider, target),
+        outside,
+        "everything the public held"
     );
     let lot = w.firms.get(target).unwrap().shares.holders[&HolderId::Firm(raider)];
     let book = &w.firms.get(raider).unwrap().book;
     assert_eq!(book.cash(), cash - lot.cost_cents);
     assert_eq!(book.balance(Account::RestrictedCash), 0);
+    assert_eq!(
+        w.firms.get(target).unwrap().shares.mark_cents,
+        mark * 2,
+        "buying the whole float doubles the price"
+    );
 }
 
 #[test]
@@ -335,7 +332,6 @@ fn a_price_that_runs_away_abandons_the_plan_and_the_stake_is_sold_back() {
                 },
             );
         }
-        equity::clear_exchange(&mut w, &ds);
         plans::weekly(&mut w, &ds);
         weeks += 1;
     }

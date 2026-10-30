@@ -1106,7 +1106,8 @@ final class AppStore: ObservableObject {
         }
     }
 
-    func orderShares(firm: UInt64, buy: Bool, quantity: Int64, limit: Int64) async {
+    /// A personal trade against the public float, settled at once. `done` is the confirmation line.
+    func orderShares(firm: UInt64, buy: Bool, quantity: Int64, limit: Int64, done: String? = nil) async {
         await perform {
             let json = CommandJSON.command("PlaceShareOrder", [
                 "investor": true,
@@ -1117,6 +1118,7 @@ final class AppStore: ObservableObject {
             ])
             let receipt = await self.engine.submit(json: json)
             self.handle(receipt)
+            if receipt?.accepted == true, let done { self.statusLine = done }
             await self.reload()
         }
     }
