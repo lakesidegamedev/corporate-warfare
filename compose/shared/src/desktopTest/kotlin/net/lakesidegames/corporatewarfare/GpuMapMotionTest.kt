@@ -260,6 +260,7 @@ class GpuMapMotionTest {
             }
             // Once the view is still, the frame settles at the real pixel size of the view.
             val last = path.last()
+            session.request(last, w, h, false)
             val settled = waitFor(session) { it?.view == last && it.factor == 1f }
             assertEquals(w + 2 * settled.margin, settled.image.width, "the settled frame is the view plus its margin at real pixel size")
             println(timings)
