@@ -118,7 +118,10 @@ pub enum SurfaceTarget {
     Win32(isize),
     /// An X11 window id and the `Display*` it belongs to.
     #[cfg(unix)]
-    Xlib { window: u64, display: *mut std::ffi::c_void },
+    Xlib {
+        window: u64,
+        display: *mut std::ffi::c_void,
+    },
 }
 
 impl SurfaceTarget {
@@ -131,11 +134,15 @@ impl SurfaceTarget {
         let bad = |what: &str| NoAdapter(format!("no {what} to draw into"));
         Ok(match self {
             #[cfg(any(target_os = "macos", target_os = "ios"))]
-            SurfaceTarget::MetalLayer(layer) => wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(layer),
+            SurfaceTarget::MetalLayer(layer) => {
+                wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(layer)
+            }
             SurfaceTarget::Win32(hwnd) => {
                 let hwnd = std::num::NonZeroIsize::new(hwnd).ok_or_else(|| bad("window"))?;
                 wgpu::SurfaceTargetUnsafe::RawHandle {
-                    raw_display_handle: Some(RawDisplayHandle::Windows(WindowsDisplayHandle::new())),
+                    raw_display_handle: Some(
+                        RawDisplayHandle::Windows(WindowsDisplayHandle::new()),
+                    ),
                     raw_window_handle: RawWindowHandle::Win32(Win32WindowHandle::new(hwnd)),
                 }
             }
@@ -150,7 +157,9 @@ impl SurfaceTarget {
                         Some(display),
                         0,
                     ))),
-                    raw_window_handle: RawWindowHandle::Xlib(XlibWindowHandle::new(window as std::ffi::c_ulong)),
+                    raw_window_handle: RawWindowHandle::Xlib(XlibWindowHandle::new(
+                        window as std::ffi::c_ulong,
+                    )),
                 }
             }
         })

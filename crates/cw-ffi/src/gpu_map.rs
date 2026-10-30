@@ -21,8 +21,8 @@ use std::time::Instant;
 
 use cw_render::{
     AssetDirs, Camera, CloudLevel, Owner, Placement, PlantSite, Renderer, ScenarioSpec, Scene,
-    SceneOptions, SiteStatus, Style, SurfaceTarget, building_boxes, layout_plants, pick_ground, project,
-    ramp_by_name, region_tints,
+    SceneOptions, SiteStatus, Style, SurfaceTarget, building_boxes, layout_plants, pick_ground,
+    project, ramp_by_name, region_tints,
 };
 use serde::Deserialize;
 
@@ -581,7 +581,11 @@ pub unsafe extern "C" fn cw_gpu_open_layer(
         }
         let (assets, scenario) = unsafe { (text(assets)?, text(scenario)?) };
         let map = unsafe {
-            GpuMap::open_surface(Path::new(assets), scenario, SurfaceTarget::MetalLayer(layer))
+            GpuMap::open_surface(
+                Path::new(assets),
+                scenario,
+                SurfaceTarget::MetalLayer(layer),
+            )
         }?;
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
         MAPS.lock().unwrap().push((id, Arc::new(map)));

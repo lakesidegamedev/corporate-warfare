@@ -25,7 +25,9 @@ pub use data::{
 pub use game::{PlantSite, SiteStatus, layout_plants, plant_size_km, ramp_by_name, region_tints};
 pub use palette::{COLOURS as PALETTE_COLOURS, Palette};
 pub use pick::{pick_ground, project};
-pub use renderer::{AdapterSummary, CloudLevel, Frame, FrameStats, NoAdapter, Renderer, Style, SurfaceTarget};
+pub use renderer::{
+    AdapterSummary, CloudLevel, Frame, FrameStats, NoAdapter, Renderer, Style, SurfaceTarget,
+};
 
 pub use ground::snow_cover;
 pub use mesh::{
