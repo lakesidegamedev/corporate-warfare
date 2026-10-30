@@ -684,6 +684,7 @@ fn systemic_events_strike_deterministically_and_through_a_save() {
             // carry it across as a save would.
             reloaded.earnings = a.earnings.clone();
             reloaded.civics = a.civics.clone();
+            reloaded.plans = a.plans.clone();
             copy = Some(reloaded);
         }
     }
