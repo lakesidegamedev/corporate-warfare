@@ -14,7 +14,7 @@ concurrency:
 jobs:
   unsigned-apple:
     runs-on: macos-26
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - run: xcodebuild -version && xcrun --sdk iphoneos --show-sdk-version
