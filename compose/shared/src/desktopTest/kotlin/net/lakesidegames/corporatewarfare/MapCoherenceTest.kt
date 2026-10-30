@@ -75,7 +75,7 @@ class MapCoherenceTest {
     private var size = Size(960f, 600f)
 
     /** One recorded drag: what each frame drew, and how many frames behind the newest camera the picture was. */
-    class Drag(val frames: List<Triple<MapLayerSet.Report, Int, Double>>, val settledFull: Boolean, val bakes: List<Pair<Float, Double>>)
+    internal class Drag(val frames: List<Triple<MapLayerSet.Report, Int, Double>>, val settledFull: Boolean, val bakes: List<Pair<Float, Double>>)
 
     internal fun drag(w: Int, h: Int, preset: GraphicsPreset, frames: Int, pace: Long = 16): Drag {
         size = Size(w.toFloat(), h.toFloat())
