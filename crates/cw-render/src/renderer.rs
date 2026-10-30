@@ -499,7 +499,6 @@ impl Renderer {
     ) -> wgpu::TextureView {
         texture_of(&self.device, &self.queue, w, h, data, label, format)
     }
-
 }
 
 fn texture_of(
@@ -534,6 +533,9 @@ fn texture_of(
         tex.create_view(&Default::default())
     }
 }
+
+/// Receives the padded readback bytes, the row stride and the frame size; returns the size written.
+type Finish<'a> = dyn FnMut(&[u8], u32, u32, u32) -> (u32, u32) + 'a;
 
 impl Renderer {
     fn prepare(&mut self, scene: &Scene, style: &Style, camera: &Camera) {
@@ -653,21 +655,28 @@ impl Renderer {
         let ps = style.pixel_scale.max(1);
         let mut rgba = Vec::new();
         let mut t_copy = Duration::ZERO;
-        let mut stats = self.render_with(scene, camera, style, width, height, &mut |data, rw, rh, padded| {
-            let t1 = Instant::now();
-            let (ow, oh) = (rw * ps, rh * ps);
-            rgba = vec![255u8; (ow * oh * 4) as usize];
-            for y in 0..oh {
-                let row = &data[((y / ps) * padded) as usize..];
-                for x in 0..ow {
-                    let s = ((x / ps) * 4) as usize;
-                    let d = ((y * ow + x) * 4) as usize;
-                    rgba[d..d + 3].copy_from_slice(&row[s..s + 3]);
+        let mut stats = self.render_with(
+            scene,
+            camera,
+            style,
+            width,
+            height,
+            &mut |data, rw, rh, padded| {
+                let t1 = Instant::now();
+                let (ow, oh) = (rw * ps, rh * ps);
+                rgba = vec![255u8; (ow * oh * 4) as usize];
+                for y in 0..oh {
+                    let row = &data[((y / ps) * padded) as usize..];
+                    for x in 0..ow {
+                        let s = ((x / ps) * 4) as usize;
+                        let d = ((y * ow + x) * 4) as usize;
+                        rgba[d..d + 3].copy_from_slice(&row[s..s + 3]);
+                    }
                 }
-            }
-            t_copy = t1.elapsed();
-            (ow, oh)
-        });
+                t_copy = t1.elapsed();
+                (ow, oh)
+            },
+        );
         stats.readback = t_copy;
         Frame {
             width: stats.width,
@@ -691,18 +700,28 @@ impl Renderer {
         out: &mut [u8],
     ) -> FrameStats {
         let mut t_copy = Duration::ZERO;
-        let mut stats = self.render_with(scene, camera, style, width, height, &mut |data, rw, rh, padded| {
-            let t1 = Instant::now();
-            let row_bytes = (rw * 4) as usize;
-            assert!(out.len() >= row_bytes * rh as usize, "output buffer too small");
-            for y in 0..rh as usize {
-                let src = &data[y * padded as usize..y * padded as usize + row_bytes];
-                out[y * row_bytes..(y + 1) * row_bytes].copy_from_slice(src);
-            }
-            // The target is cleared opaque and never blended, so alpha is already 255.
-            t_copy = t1.elapsed();
-            (rw, rh)
-        });
+        let mut stats = self.render_with(
+            scene,
+            camera,
+            style,
+            width,
+            height,
+            &mut |data, rw, rh, padded| {
+                let t1 = Instant::now();
+                let row_bytes = (rw * 4) as usize;
+                assert!(
+                    out.len() >= row_bytes * rh as usize,
+                    "output buffer too small"
+                );
+                for y in 0..rh as usize {
+                    let src = &data[y * padded as usize..y * padded as usize + row_bytes];
+                    out[y * row_bytes..(y + 1) * row_bytes].copy_from_slice(src);
+                }
+                // The target is cleared opaque and never blended, so alpha is already 255.
+                t_copy = t1.elapsed();
+                (rw, rh)
+            },
+        );
         stats.readback = t_copy;
         stats.width = (width / style.pixel_scale.max(1)).max(1);
         stats.height = (height / style.pixel_scale.max(1)).max(1);
@@ -716,7 +735,7 @@ impl Renderer {
         style: &Style,
         width: u32,
         height: u32,
-        finish: &mut dyn FnMut(&[u8], u32, u32, u32) -> (u32, u32),
+        finish: &mut Finish,
     ) -> FrameStats {
         self.prepare(scene, style, camera);
         let road_band = mesh::road_band(camera.width_km);
@@ -845,9 +864,10 @@ impl Renderer {
                     .write_buffer(&r.ib, 0, bytemuck::cast_slice(&gathered));
             }
         }
-        let stale = self.targets.as_ref().is_none_or(|t| {
-            t.width != rw || t.height != rh || t.shadow_size != style.shadow_size
-        });
+        let stale = self
+            .targets
+            .as_ref()
+            .is_none_or(|t| t.width != rw || t.height != rh || t.shadow_size != style.shadow_size);
         if stale {
             let colour = self.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("colour"),
@@ -1039,7 +1059,7 @@ impl Renderer {
                 aspect: wgpu::TextureAspect::All,
             },
             wgpu::TexelCopyBufferInfo {
-                buffer: &readback,
+                buffer: readback,
                 layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(padded),

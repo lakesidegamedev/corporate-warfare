@@ -20,8 +20,8 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 
 use cw_render::{
-    AssetDirs, Camera, CloudLevel, Placement, PlantSite, Renderer, Scene, SceneOptions,
-    ScenarioSpec, SiteStatus, Style, layout_plants, pick_ground, project, ramp_by_name,
+    AssetDirs, Camera, CloudLevel, Placement, PlantSite, Renderer, ScenarioSpec, Scene,
+    SceneOptions, SiteStatus, Style, layout_plants, pick_ground, project, ramp_by_name,
     region_tints,
 };
 use serde::Deserialize;
@@ -110,7 +110,8 @@ pub fn sites_of(plants: &[PlantIn]) -> Vec<PlantSite> {
 
 /// The scenario's terrain, regions, roads and cities with no game state in it yet.
 pub fn build_scene(assets: &Path, scenario: &str) -> Result<Scene, String> {
-    let spec = ScenarioSpec::find(scenario).ok_or_else(|| format!("unknown scenario {scenario}"))?;
+    let spec =
+        ScenarioSpec::find(scenario).ok_or_else(|| format!("unknown scenario {scenario}"))?;
     Scene::for_scenario(
         &AssetDirs {
             resources: assets,
@@ -246,7 +247,13 @@ impl GpuMap {
     }
 
     /// Screen position of each (lon, lat) pair, `None` behind the camera.
-    pub fn project(&self, cam: [f64; 6], width: f32, height: f32, pts: &[(f32, f32)]) -> Vec<Option<(f32, f32)>> {
+    pub fn project(
+        &self,
+        cam: [f64; 6],
+        width: f32,
+        height: f32,
+        pts: &[(f32, f32)],
+    ) -> Vec<Option<(f32, f32)>> {
         let scene = self.scene.read().unwrap();
         let c = camera(cam);
         pts.iter()
@@ -337,7 +344,9 @@ unsafe fn text<'a>(p: *const c_char) -> Result<&'a str, String> {
     if p.is_null() {
         return Err("null string".into());
     }
-    unsafe { CStr::from_ptr(p) }.to_str().map_err(|e| e.to_string())
+    unsafe { CStr::from_ptr(p) }
+        .to_str()
+        .map_err(|e| e.to_string())
 }
 
 unsafe fn put_text(s: &str, buf: *mut c_char, len: usize) -> i32 {
@@ -389,7 +398,12 @@ pub unsafe extern "C" fn cw_gpu_info(id: u64, buf: *mut c_char, len: usize) -> i
         let i = m.info();
         Ok(unsafe {
             put_text(
-                &format!("{}|{}|{}", i.name.replace('|', "/"), i.backend, i.software as u8),
+                &format!(
+                    "{}|{}|{}",
+                    i.name.replace('|', "/"),
+                    i.backend,
+                    i.software as u8
+                ),
                 buf,
                 len,
             )
@@ -551,8 +565,14 @@ mod tests {
         ]);
         assert_eq!(sites.len(), 3);
         let mine = sites.iter().find(|s| s.firm == 1).unwrap();
-        assert_eq!((mine.plants, mine.status, mine.player), (2, SiteStatus::Running, true));
-        let rival = sites.iter().find(|s| s.firm == 2 && s.region == "TX-1").unwrap();
+        assert_eq!(
+            (mine.plants, mine.status, mine.player),
+            (2, SiteStatus::Running, true)
+        );
+        let rival = sites
+            .iter()
+            .find(|s| s.firm == 2 && s.region == "TX-1")
+            .unwrap();
         assert_eq!((rival.status, rival.player), (SiteStatus::Site, false));
         assert_eq!(
             sites.iter().find(|s| s.region == "TX-2").unwrap().status,
@@ -566,7 +586,10 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let dir = std::env::temp_dir().join(format!("cw-gpu-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        for src in [root.join("apple/Resources"), root.join("crates/cw-render/assets")] {
+        for src in [
+            root.join("apple/Resources"),
+            root.join("crates/cw-render/assets"),
+        ] {
             for e in std::fs::read_dir(src).unwrap().flatten() {
                 let p = e.path();
                 if p.is_file() {
@@ -601,9 +624,14 @@ mod tests {
             assert!(!plants.is_empty(), "{id}: the career has no plants");
             let sites = sites_of(&plants);
             let placed = layout_plants(&scene, &sites);
-            let in_scenario: Vec<&PlantSite> =
-                sites.iter().filter(|s| scene.regions.iter().any(|r| r.code == s.region)).collect();
-            assert!(!in_scenario.is_empty(), "{id}: no plant is in a scenario region");
+            let in_scenario: Vec<&PlantSite> = sites
+                .iter()
+                .filter(|s| scene.regions.iter().any(|r| r.code == s.region))
+                .collect();
+            assert!(
+                !in_scenario.is_empty(),
+                "{id}: no plant is in a scenario region"
+            );
             // Every placed building stands inside the region its site belongs to, near its hub.
             let kx = scene.projection.km_per_deg_lon();
             for b in &placed {
@@ -613,7 +641,10 @@ mod tests {
                     let dy = (b.lat - r.lat) * cw_render::KM_PER_DEG_LAT;
                     (dx * dx + dy * dy).sqrt() < 25.0
                 });
-                assert!(hub_near || home.is_some(), "{id}: a building floats away from every region");
+                assert!(
+                    hub_near || home.is_some(),
+                    "{id}: a building floats away from every region"
+                );
             }
             // The player's own plants are among them, and none is dropped for a region it is in.
             for s in in_scenario.iter().filter(|s| s.player) {
@@ -629,10 +660,18 @@ mod tests {
                 );
             }
             // Holdings tint exactly the regions the divisions are in.
-            let held: Vec<String> = session.map_divisions().iter().map(|d| d.region.clone()).collect();
+            let held: Vec<String> = session
+                .map_divisions()
+                .iter()
+                .map(|d| d.region.clone())
+                .collect();
             let tints = region_tints(&scene, &held, &HashMap::new());
             for r in &scene.regions {
-                let want = if held.contains(&r.code) { cw_render::TINT_PLAYER } else { cw_render::TINT_PLAY };
+                let want = if held.contains(&r.code) {
+                    cw_render::TINT_PLAYER
+                } else {
+                    cw_render::TINT_PLAY
+                };
                 assert_eq!(tints[&r.code], want, "{id}: tint of {}", r.code);
             }
         }
@@ -643,7 +682,12 @@ mod tests {
         let dir = assets();
         for spec in cw_render::SCENARIOS.iter() {
             let scene = build_scene(&dir, spec.id).unwrap_or_else(|e| panic!("{}: {e}", spec.id));
-            assert!(scene.regions.len() >= 3, "{}: {} regions", spec.id, scene.regions.len());
+            assert!(
+                scene.regions.len() >= 3,
+                "{}: {} regions",
+                spec.id,
+                scene.regions.len()
+            );
             assert!(!scene.cities.is_empty(), "{}: no cities", spec.id);
             assert!(!scene.lines.is_empty(), "{}: no roads or rails", spec.id);
         }
@@ -651,7 +695,13 @@ mod tests {
 
     #[test]
     fn a_missing_or_unknown_scenario_opens_nothing_and_says_why() {
-        let dir = CString::new(std::env::temp_dir().join("cw-gpu-no-such-folder").to_str().unwrap()).unwrap();
+        let dir = CString::new(
+            std::env::temp_dir()
+                .join("cw-gpu-no-such-folder")
+                .to_str()
+                .unwrap(),
+        )
+        .unwrap();
         let bad = CString::new("atlantis-1").unwrap();
         let ok = CString::new("texas-1981").unwrap();
         for scenario in [&bad, &ok] {
@@ -664,7 +714,18 @@ mod tests {
         // Calls on a map that is not open fail cleanly instead of crashing.
         let mut cam = [0.0f64; 6];
         let mut out = [0u8; 16];
-        let code = unsafe { cw_gpu_render(99, cam.as_mut_ptr(), 2, 2, 1, out.as_mut_ptr(), 16, std::ptr::null_mut()) };
+        let code = unsafe {
+            cw_gpu_render(
+                99,
+                cam.as_mut_ptr(),
+                2,
+                2,
+                1,
+                out.as_mut_ptr(),
+                16,
+                std::ptr::null_mut(),
+            )
+        };
         assert!(code < 0);
     }
 
@@ -690,20 +751,35 @@ mod tests {
         let cam = [-99.5, 31.0, 1800.0, 20.0, 0.0, 28.0];
         let t = map.render(cam, w, h, 1, &mut out);
         assert_eq!((t.width, t.height), (w, h));
-        assert!(out.chunks_exact(4).any(|p| p[0] != p[1] || p[1] != p[2]), "the frame is flat grey");
+        assert!(
+            out.chunks_exact(4).any(|p| p[0] != p[1] || p[1] != p[2]),
+            "the frame is flat grey"
+        );
         // A tap on the centre of the view lands in a Texas region.
         let hit = map.pick(cam, w as f32, h as f32, w as f32 / 2.0, h as f32 / 2.0);
         let mut grid = 0;
         for gy in 0..10 {
             for gx in 0..16 {
-                if map.pick(cam, w as f32, h as f32, gx as f32 * 20.0 + 10.0, gy as f32 * 20.0 + 10.0).is_some() {
+                if map
+                    .pick(
+                        cam,
+                        w as f32,
+                        h as f32,
+                        gx as f32 * 20.0 + 10.0,
+                        gy as f32 * 20.0 + 10.0,
+                    )
+                    .is_some()
+                {
                     grid += 1;
                 }
             }
         }
         eprintln!("grid picks: {grid} of 160");
         assert!(grid > 0, "no point of the view picks a region");
-        eprintln!("centre pick: {hit:?}, render {:.1} ms copy {:.1} ms", t.render_ms, t.copy_ms);
+        eprintln!(
+            "centre pick: {hit:?}, render {:.1} ms copy {:.1} ms",
+            t.render_ms, t.copy_ms
+        );
     }
 
     #[test]
@@ -718,10 +794,32 @@ mod tests {
         let cam = [-81.6846, 42.34405, 2330.0, 0.0, 0.0, 28.0];
         map.render(cam, w, h, 1, &mut out);
         let at = |x: usize, y: usize| out[(y * w as usize + x) * 4..][..3].to_vec();
-        let land = out.chunks_exact(4).filter(|p| p[..3] != [0x0b, 0x16, 0x22]).count();
-        eprintln!("centre {:?} corner {:?} non-clear {land}", at(160, 100), at(5, 5));
-        assert!(land > (w * h) as usize / 2, "most of the view is the clear colour");
-        let hits = (0..10).flat_map(|gy| (0..16).filter_map(move |gx| Some((gx, gy)))).filter(|(gx, gy)| map.pick(cam, w as f32, h as f32, *gx as f32 * 20.0 + 10.0, *gy as f32 * 20.0 + 10.0).is_some()).count();
+        let land = out
+            .chunks_exact(4)
+            .filter(|p| p[..3] != [0x0b, 0x16, 0x22])
+            .count();
+        eprintln!(
+            "centre {:?} corner {:?} non-clear {land}",
+            at(160, 100),
+            at(5, 5)
+        );
+        assert!(
+            land > (w * h) as usize / 2,
+            "most of the view is the clear colour"
+        );
+        let hits = (0..10)
+            .flat_map(|gy| (0..16).filter_map(move |gx| Some((gx, gy))))
+            .filter(|(gx, gy)| {
+                map.pick(
+                    cam,
+                    w as f32,
+                    h as f32,
+                    *gx as f32 * 20.0 + 10.0,
+                    *gy as f32 * 20.0 + 10.0,
+                )
+                .is_some()
+            })
+            .count();
         eprintln!("great lakes grid picks {hits}");
         assert!(hits > 0);
     }

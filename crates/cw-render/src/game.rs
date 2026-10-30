@@ -4,9 +4,7 @@
 
 use std::collections::HashMap;
 
-use crate::data::{
-    KM_PER_DEG_LAT, Placement, Scene, TINT_HEAT, TINT_PLAY, TINT_PLAYER,
-};
+use crate::data::{KM_PER_DEG_LAT, Placement, Scene, TINT_HEAT, TINT_PLAY, TINT_PLAYER};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SiteStatus {

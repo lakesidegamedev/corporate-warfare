@@ -833,8 +833,8 @@ impl Scene {
         )?)?;
         let map_json =
             String::from_utf8(read(&res.join("world-map.json"))?).map_err(|e| e.to_string())?;
-        let urban_json = std::fs::read_to_string(dirs.baked.join(format!("urban-{}.json", spec.id)))
-            .ok();
+        let urban_json =
+            std::fs::read_to_string(dirs.baked.join(format!("urban-{}.json", spec.id))).ok();
         let player: Vec<&str> = options.player_regions.iter().map(|s| s.as_str()).collect();
         let mask = rasterise_mask(
             &map_json,
@@ -903,7 +903,9 @@ impl Scene {
                 lat: c.y as f32 / 1e4,
                 population: c.population,
             })
-            .filter(|c| c.lon >= hb.west && c.lon <= hb.east && c.lat >= hb.south && c.lat <= hb.north)
+            .filter(|c| {
+                c.lon >= hb.west && c.lon <= hb.east && c.lat >= hb.south && c.lat <= hb.north
+            })
             .collect();
         let mid_lat = (hb.south + hb.north) / 2.0;
         buildings.extend(
