@@ -70,7 +70,8 @@ impl From<&MapPlantDto> for PlantIn {
 /// how many there are. A division is a construction site while every plant is still building,
 /// and mothballed when every plant is.
 pub fn sites_of(plants: &[PlantIn]) -> Vec<PlantSite> {
-    let mut groups: Vec<((String, String, u64), Vec<&PlantIn>)> = Vec::new();
+    type Group<'a> = ((String, String, u64), Vec<&'a PlantIn>);
+    let mut groups: Vec<Group> = Vec::new();
     for p in plants {
         let key = (p.region.clone(), p.industry.clone(), p.firm);
         match groups.iter_mut().find(|(k, _)| *k == key) {
@@ -808,7 +809,7 @@ mod tests {
             "most of the view is the clear colour"
         );
         let hits = (0..10)
-            .flat_map(|gy| (0..16).filter_map(move |gx| Some((gx, gy))))
+            .flat_map(|gy| (0..16).map(move |gx| (gx, gy)))
             .filter(|(gx, gy)| {
                 map.pick(
                     cam,
