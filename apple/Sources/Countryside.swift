@@ -4,7 +4,9 @@ import SwiftUI
 /// The diorama up close: small voxel props scattered over the satellite ground by what the ground
 /// is. Forest gets conifers in the north and leafy trees further south, farmland gets crop rows and
 /// the odd barn, dry land a few rocks, and houses gather round each city, spreading further in a
-/// boom and pulling in during a recession. Each prop has a summer, autumn and winter look, so the
+/// boom and pulling in during a recession, and thicker in a region people are moving into and
+/// thinner in one they are leaving. Every house stands at a fixed place in the world, so a region
+/// that gains people only shows more of the houses that were always there to be built. Each prop has a summer, autumn and winter look, so the
 /// countryside follows the seasons with the Earth beneath it. The props come from the scenario's
 /// satellite crop, read once in the background; only the current scenario's are kept.
 enum Countryside {
@@ -17,6 +19,48 @@ enum Countryside {
         let city: Double
         /// Turns the prop its own way, so a field of trees never looks stamped.
         let seed: Int
+        /// For a house: the region it stands in, and its stable rank (0 to 99) among the houses that could stand here.
+        var region = ""
+        var rank = 0
+    }
+
+    /// Houses with a rank under this stand when the region's people are steady.
+    private static let steady = 45.0
+    /// Houses that could ever stand: ranks below this are generated, so a gaining region has some to add.
+    private static let most = 70
+
+    /// The rank a house needs to stand in a region whose net migration over the year is `bps` of its
+    /// people: steady at 45, up to 55 percent more when the region gains 2 percent or more, as many fewer
+    /// when it loses.
+    static func houseLimit(_ bps: Int?) -> Double {
+        let gain = min(max(Double(bps ?? 0) / 200, -1), 1)
+        return steady * (1 + 0.55 * gain)
+    }
+
+    private struct Area {
+        let code: String
+        let rings: [GeoRing]
+        let west: Double, east: Double, south: Double, north: Double
+    }
+
+    /// The code of the region whose outline holds the point (degrees), or empty. Even-odd on the flat plane.
+    private static func regionAt(_ areas: [Area], _ lonDeg: Double, _ latDeg: Double) -> String {
+        let px = lonDeg * .pi / 180
+        let py = latDeg * .pi / 180
+        for area in areas {
+            if px < area.west || px > area.east || py < area.south || py > area.north { continue }
+            var inside = false
+            for ring in area.rings {
+                var j = ring.points.count - 1
+                for i in 0..<ring.points.count {
+                    let a = ring.points[i], b = ring.points[j]
+                    if (a.lat > py) != (b.lat > py), px < (b.lon - a.lon) * (py - a.lat) / (b.lat - a.lat) + a.lon { inside.toggle() }
+                    j = i
+                }
+            }
+            if inside { return area.code }
+        }
+        return ""
     }
 
     static let ready = Notification.Name("Countryside.ready")
@@ -104,6 +148,12 @@ enum Countryside {
         let north = b.north + 3
         let step = 0.14
         let cities = map.cities.map { (lon: Double($0.x) / 10_000, lat: Double($0.y) / 10_000, pop: Double($0.population)) }
+        let areas = map.regions.map { f -> Area in
+            let points = f.rings.flatMap(\.points)
+            return Area(code: f.code, rings: f.rings,
+                        west: points.map(\.lon).min() ?? 0, east: points.map(\.lon).max() ?? 0,
+                        south: points.map(\.lat).min() ?? 0, north: points.map(\.lat).max() ?? 0)
+        }
         var out: [Prop] = []
         var lat = south
         var row = 0
@@ -134,7 +184,7 @@ enum Countryside {
                 }
                 var kind: String?
                 if near < 1 {
-                    if roll < 45 { kind = "house" }
+                    if roll < most { kind = "house" }
                 } else {
                     let u = Int((x - region.west) / (region.east - region.west) * Double(width))
                     let v = Int((region.north - y) / (region.north - region.south) * Double(height))
@@ -162,7 +212,8 @@ enum Countryside {
                 }
                 if let kind {
                     out.append(Prop(lon: x * .pi / 180, lat: y * .pi / 180, latDeg: y, kind: kind, city: near < 1 ? near : 0,
-                                    seed: Int(seed % 4)))
+                                    seed: Int(seed % 4),
+                                    region: kind == "house" ? regionAt(areas, x, y) : "", rank: kind == "house" ? Int(roll) : 0))
                 }
                 lon += step
                 col += 1
@@ -174,9 +225,11 @@ enum Countryside {
     }
 
     /// Draws the props on screen for the current camera, far ones first, at most `limit`. Houses
-    /// further from a city than the economy supports are left out: towns grow in a boom.
+    /// further from a city than the economy supports are left out: towns grow in a boom. `settlement` is each
+    /// region's net migration over the year in basis points of its people: houses thin out where people
+    /// leave and fill in where they arrive.
     static func draw(in context: inout GraphicsContext, projection p: MapProjection, map: WorldMap, week: Int, unit: Double,
-                     lift: Double, economyPhase: String?, size: CGSize, limit: Int = 500) {
+                     lift: Double, economyPhase: String?, settlement: [String: Int] = [:], size: CGSize, limit: Int = 500) {
         guard let props = props(map) else { return }
         let reach: Double
         switch economyPhase {
@@ -189,7 +242,7 @@ enum Countryside {
         }
         var shown: [(at: CGPoint, ground: CGPoint, prop: Prop)] = []
         for prop in props {
-            if prop.kind == "house" && prop.city > reach { continue }
+            if prop.kind == "house" && (prop.city > reach || Double(prop.rank) >= houseLimit(settlement[prop.region])) { continue }
             guard let g = p.ground(lon: prop.lon, lat: prop.lat) else { continue }
             let at = p.lift(g, lift)
             if at.x < -20 || at.y < -20 || at.x > size.width + 20 || at.y > size.height + 20 { continue }

@@ -13,6 +13,15 @@ heading.
 
 ### Added
 
+- A rival that is the target of a takeover now gets help from friends. Once a raider's stake in a
+  rival company is public (5 percent of the votes), one friendly rival with cash to spare steps in: it
+  makes the company a friendly offer above the market if it can fund one, or otherwise buys a
+  blocking stake on the exchange a little at a time. Friends are firms in the same group or allies
+  with no grudge and no closer tie to the raider. It never defends your own company for you.
+- Houses on the map now follow where people move. Zoomed in, a region that people are moving into
+  shows more houses round its cities and a region they are leaving shows fewer, on top of the boom and
+  recession look. Every house stays at the same spot on the ground at the same size; only how many of
+  the possible houses are built changes, so nothing slides or jumps as you move the map.
 - On the desktop the map can sit beside any page. Press Ctrl M or use "Dock map" in the sidebar and the
   page you are on gets the map on its left, with a handle between them to drag (or use the arrow keys
   on it). Each page remembers its own width and whether it is docked. Pages that need room scroll
@@ -447,6 +456,12 @@ heading.
 
 ### Fixed
 
+- On the new map, plants are now a believable size. A plant stands a few hundred metres to about two
+  kilometres across and is never taller than it is wide, so a city's plants no longer dwarf the
+  counties around them. They never stand on lakes or the sea: a plant whose spot is water slides along
+  the ring, then inward, until it is on dry land, and the same goes for the downtown blocks. Every
+  sector has a new, cleaner look from any angle and any tilt: low halls with roof detail, tanks,
+  stacks, cranes, silos and towers, with your firm's gold on the roofs. The classic map is unchanged.
 - The new map (preview) on the desktop no longer lags, jitters or goes black. While you drag or zoom, the last finished picture is carried to where the camera is now, so the ground follows you at once and names and markers never slide against it. The picture is drawn wider than the window, so a pan or a zoom out shows real map instead of an empty edge, and the far edge of the world is calm sea instead of black. Pictures are drawn at the window's real pixel size when still (and at three quarters of it while you move, sharpening within a moment of stopping), smoothed instead of blocky, and the ground texture is finer. Click a plant on the new map to open that division, or the rival company's page for a rival plant, and hover one for its company, industry and plant count.
 - Your own share orders now cost what they fill and no more. A buy order used to take your cash when
   you placed it and then charge the price again when it filled, and the unused part of your limit was
