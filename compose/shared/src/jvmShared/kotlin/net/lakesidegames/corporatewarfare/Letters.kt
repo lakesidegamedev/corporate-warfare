@@ -52,7 +52,7 @@ const val INBOX_WEEKS = 8
 @Composable
 fun SenderPortrait(sender: LetterSenderDto, size: androidx.compose.ui.unit.Dp = 40.dp) {
     if (sender.person.isNotEmpty() && CastPortraits.all.containsKey(sender.person)) {
-        PixelPortrait(sender.person, size = size)
+        PixelPortrait(sender.person, size = size, mood = sender.mood)
     } else {
         Box(
             Modifier.size(size).clip(Pixel.small).background(Palette.panelRaised).border(1.dp, Palette.stroke, Pixel.small),

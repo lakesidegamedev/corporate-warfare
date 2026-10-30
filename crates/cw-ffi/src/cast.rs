@@ -1,7 +1,7 @@
 //! The character cast for the apps: people, the posts they hold, and a rival's dossier.
 
 use cw_core::ids::Handle;
-use cw_data::{Dataset, Person, Role};
+use cw_data::{Dataset, Mood, Person, Role};
 use cw_session::Session;
 use cw_sim::state::World;
 
@@ -15,10 +15,15 @@ pub struct PersonDto {
     pub background: String,
     /// integrator, raider, financier, speculator, builder or cautious.
     pub temperament: String,
-    /// What they can be asked to do: ceo, chair, governor, leader.
+    /// What they can be asked to do: ceo, chair, governor, leader, union_leader, journalist,
+    /// analyst, cfo, coo or logistics.
     pub roles: Vec<String>,
     /// Central bank stance, dovish negative to hawkish positive, for chair-capable people.
     pub stance: Option<i32>,
+    /// neutral, pleased or displeased: which face of the portrait to draw this time.
+    pub mood: String,
+    /// Whether the person has a 64 by 64 office portrait for large views.
+    pub office_portrait: bool,
 }
 
 /// A post someone holds: chair, country leader, party leader or governor.
@@ -62,7 +67,7 @@ pub fn person_dto(ds: &Dataset, p: u8) -> Option<PersonDto> {
     ds.cast.get(p as usize).map(person)
 }
 
-fn person(p: &Person) -> PersonDto {
+pub(crate) fn person(p: &Person) -> PersonDto {
     PersonDto {
         id: p.id.clone(),
         name: p.name.clone(),
@@ -70,20 +75,10 @@ fn person(p: &Person) -> PersonDto {
         home: p.home.clone(),
         background: p.background.clone(),
         temperament: p.temperament.key().to_owned(),
-        roles: p
-            .roles
-            .iter()
-            .map(|r| {
-                match r {
-                    Role::Ceo => "ceo",
-                    Role::Chair => "chair",
-                    Role::Governor => "governor",
-                    Role::Leader => "leader",
-                }
-                .to_owned()
-            })
-            .collect(),
+        roles: p.roles.iter().map(|r: &Role| r.key().to_owned()).collect(),
         stance: p.stance,
+        mood: Mood::Neutral.key().to_owned(),
+        office_portrait: p.office_portrait,
     }
 }
 
@@ -199,11 +194,24 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
             text: m.text.clone(),
         });
     }
+    // The chief's look follows their latest raid: pleased after taking plants or holding them,
+    // displeased after losing plants or a failed raid; otherwise friendly or bitter ties decide.
+    let mut mood = (0u32, Mood::Neutral);
     for raid in world
         .raids
         .iter()
         .filter(|r| r.attacker == handle || r.defender == handle)
     {
+        if raid.tick >= mood.0 {
+            mood = (
+                raid.tick,
+                if (raid.attacker == handle) == raid.success {
+                    Mood::Pleased
+                } else {
+                    Mood::Displeased
+                },
+            );
+        }
         let industry = cw_sim::state::INDUSTRY_NAMES
             .get(raid.industry as usize)
             .copied()
@@ -249,7 +257,7 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
         s if s >= 3_000 => "strong",
         _ => "mild",
     };
-    let grudges = cw_sim::economy::rivalry::grudges_of(world, handle)
+    let grudges: Vec<String> = cw_sim::economy::rivalry::grudges_of(world, handle)
         .into_iter()
         .map(|(holder, m)| {
             format!(
@@ -261,7 +269,7 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
         })
         .take(3)
         .collect();
-    let allies = cw_sim::economy::rivalry::allies_of(world, handle)
+    let allies: Vec<String> = cw_sim::economy::rivalry::allies_of(world, handle)
         .into_iter()
         .map(|(holder, m)| {
             format!(
@@ -272,6 +280,20 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
         })
         .take(3)
         .collect();
+    let ceo = ceo.map(|mut p| {
+        p.mood = if mood.1 != Mood::Neutral {
+            mood.1
+        } else if !grudges.is_empty() {
+            Mood::Displeased
+        } else if !allies.is_empty() {
+            Mood::Pleased
+        } else {
+            Mood::Neutral
+        }
+        .key()
+        .to_owned();
+        p
+    });
     Some(DossierDto {
         firm,
         grudges,

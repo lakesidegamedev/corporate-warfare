@@ -162,10 +162,14 @@ private fun Chip(text: String, enabled: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun Byline(story: StoryDto) {
-    Text(
-        (story.byline + if (story.yours) " · about you" else "").uppercase(), color = if (story.yours) Palette.gold else Palette.secondary,
-        fontSize = 10.sp, fontFamily = Pixel.font, letterSpacing = 0.6.sp,
-    )
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (story.author.isNotEmpty()) PixelPortrait(story.author, size = 24.dp, mood = story.mood)
+        val by = if (story.authorName.isNotEmpty()) "${story.authorName} · ${story.byline}" else story.byline
+        Text(
+            (by + if (story.yours) " · about you" else "").uppercase(), color = if (story.yours) Palette.gold else Palette.secondary,
+            fontSize = 10.sp, fontFamily = Pixel.font, letterSpacing = 0.6.sp,
+        )
+    }
 }
 
 @Composable

@@ -109,20 +109,10 @@ pub(crate) fn resolved_ceo(session: &Session, firm: Handle) -> Option<PersonDto>
         home: p.home,
         background: p.background,
         temperament: p.temperament.key().to_owned(),
-        roles: p
-            .roles
-            .iter()
-            .map(|r| {
-                match r {
-                    cw_data::Role::Ceo => "ceo",
-                    cw_data::Role::Chair => "chair",
-                    cw_data::Role::Governor => "governor",
-                    cw_data::Role::Leader => "leader",
-                }
-                .to_owned()
-            })
-            .collect(),
+        roles: p.roles.iter().map(|r| r.key().to_owned()).collect(),
         stance: p.stance,
+        mood: cw_data::Mood::Neutral.key().to_owned(),
+        office_portrait: p.office_portrait,
     })
 }
 

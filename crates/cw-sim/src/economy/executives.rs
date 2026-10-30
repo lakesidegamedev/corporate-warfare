@@ -7,7 +7,8 @@
 //! * Logistics chief: the premium outside carriers charge over the owners' empty-lane rate (5 percent
 //!   less per level, 25 percent at level 5) and the fee for reserving lane capacity (1 percent per level).
 //!
-//! Candidates come from the generated people in `content/cast.json` (the extras, with their
+//! Candidates come from the named people for hire in `content/cast.json` (the scenario's own
+//! chief financial, operating and logistics officers, drawn first) and from its generated people (the extras, with their
 //! temperaments and portraits). A pool of them is drawn when a world starts to play, each with a
 //! post they suit and a level from 1 to 5. A company hires with `HireExecutive` (a fee of four
 //! weeks of pay, then weekly pay that scales with level and with the size of the company),
@@ -28,7 +29,7 @@ use cw_core::error::{DomainError, DomainResult};
 use cw_core::ids::Handle;
 use cw_core::ledger::{Account, Txn};
 use cw_core::rng::Rng;
-use cw_data::cast::extras;
+use cw_data::cast::{NAMED_HIRE_BASE, extras, named_hires};
 use cw_data::{Dataset, Temperament};
 
 const TAG_EXEC: u64 = 0x4558_4543_5554_4956;
@@ -89,7 +90,8 @@ impl Post {
     }
 }
 
-/// A person who can hold a post. `extra` is an index into the generated people.
+/// A person who can hold a post. `extra` is a hire index: below `NAMED_HIRE_BASE` it indexes the
+/// generated people, at or above it the named people for hire (see `cw_data::cast::hire`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Candidate {
     pub id: u16,
@@ -267,14 +269,19 @@ pub fn lane_fee_after_cut(world: &World, firm: Handle, fee_cents: i64) -> i64 {
 
 // ----- people and pay -----
 
-/// The generated person behind a candidate.
-pub fn extra_of(c: &Candidate) -> Option<&'static cw_data::cast::Extra> {
-    extras().get(c.extra as usize)
+/// The person behind a candidate, named or generated.
+pub fn hire_of(c: &Candidate) -> Option<cw_data::cast::Hire> {
+    cw_data::cast::hire(c.extra)
+}
+
+/// The person behind a candidate as a cast record.
+pub fn person_of(c: &Candidate) -> Option<cw_data::Person> {
+    hire_of(c).map(|h| h.person)
 }
 
 pub fn temperament_of(c: &Candidate) -> Temperament {
-    extra_of(c)
-        .map(|e| e.temperament)
+    person_of(c)
+        .map(|p| p.temperament)
         .unwrap_or(Temperament::Cautious)
 }
 
@@ -697,6 +704,8 @@ fn seed_pool(world: &mut World) {
     let mut rng = Rng::stream(world.seed, TAG_EXEC);
     let mut taken: Vec<u16> = world.executives.people.iter().map(|c| c.extra).collect();
     for post in Post::ALL {
+        // The scenario's own named people for this post come first, then generated ones.
+        add_named(world, &mut rng, post, &mut taken);
         for _ in 0..POOL_PER_POST {
             add_candidate(world, &mut rng, post, &mut taken);
         }
@@ -704,15 +713,42 @@ fn seed_pool(world: &mut World) {
     world.executives.seeded = true;
 }
 
+/// The role a person must have to be offered for a post.
+const fn role_for(post: Post) -> cw_data::Role {
+    match post {
+        Post::Cfo => cw_data::Role::Cfo,
+        Post::Coo => cw_data::Role::Coo,
+        Post::Logistics => cw_data::Role::Logistics,
+    }
+}
+
+/// Offer the scenario's named people for hire for a post, in cast order.
+fn add_named(world: &mut World, rng: &mut Rng, post: Post, taken: &mut Vec<u16>) {
+    let scenario = world.cast.scenario_id.clone();
+    if scenario.is_empty() {
+        return;
+    }
+    for (at, person) in named_hires().iter().enumerate() {
+        let index = NAMED_HIRE_BASE + at as u16;
+        if person.scenario == scenario && person.can(role_for(post)) && !taken.contains(&index) {
+            push_candidate(world, rng, post, index, taken);
+        }
+    }
+}
+
 fn add_candidate(world: &mut World, rng: &mut Rng, post: Post, taken: &mut Vec<u16>) {
     let pool = extras();
-    if taken.len() >= pool.len() {
+    if taken.iter().filter(|t| **t < NAMED_HIRE_BASE).count() >= pool.len() {
         return;
     }
     let mut at = rng.uniform_below(pool.len() as u64) as u16;
     while taken.contains(&at) {
         at = (at + 1) % pool.len() as u16;
     }
+    push_candidate(world, rng, post, at, taken);
+}
+
+fn push_candidate(world: &mut World, rng: &mut Rng, post: Post, at: u16, taken: &mut Vec<u16>) {
     taken.push(at);
     // Levels one to five, middling ones commonest.
     let level = 1 + rng.weighted_index(&[30, 28, 22, 14, 6]) as u8;
@@ -1060,12 +1096,12 @@ pub fn effect_text(post: Post, level: u8) -> String {
     }
 }
 
-/// The generated person's name, or a placeholder if the content is missing.
+/// The person's name, or a placeholder if the content is missing.
 pub fn name_of(c: &Candidate) -> String {
-    extra_of(c).map(|e| e.name.clone()).unwrap_or_default()
+    person_of(c).map(|p| p.name).unwrap_or_default()
 }
 
 /// Tests and screens: the person's id for the portrait atlas.
 pub fn portrait_id(c: &Candidate) -> String {
-    extra_of(c).map(|e| e.id.clone()).unwrap_or_default()
+    person_of(c).map(|p| p.id).unwrap_or_default()
 }
