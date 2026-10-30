@@ -188,15 +188,7 @@ fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: u
             Some(facility) => facility,
             None => continue,
         };
-        let full = facility_full_workers(facility, dataset, tier);
-        let crew_bps = crate::economy::production::crew_need_bps(
-            world,
-            &dataset.recipes[facility.recipe as usize],
-        );
-        // Rounded up: a plant run down to its floor still needs one worker of every tier its
-        // recipe uses, or a crew of three high-tier staff rounds to none and the plant, making
-        // nothing, never sells enough to be run back up.
-        let desired = (full * facility.target_bps as i64 * crew_bps + 99_999_999) / 100_000_000;
+        let desired = desired_workers(world, dataset, facility, tier);
         // A lower production target is a real layoff, not just a hiring freeze. Severance is
         // one week's wage per released worker, paid through solvency rules.
         if *workers > desired {
@@ -294,6 +286,76 @@ fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: u
     region.labour[tier].prevailing_wage_cents = new_prevailing;
     region.labour[tier].reservation_wage_cents = (new_prevailing * 70 / 100).max(1);
     region.labour[tier].search_carry = carry_remainder;
+}
+
+/// Workers a plant wants in a tier at its production target.
+///
+/// Rounded up: a plant run down to its floor still needs one worker of every tier its recipe
+/// uses, or a crew of three high-tier staff rounds to none and the plant, making nothing, never
+/// sells enough to be run back up.
+pub fn desired_workers(world: &World, dataset: &Dataset, facility: &Facility, tier: usize) -> i64 {
+    let full = facility_full_workers(facility, dataset, tier);
+    let crew_bps = crate::economy::production::crew_need_bps(
+        world,
+        &dataset.recipes[facility.recipe as usize],
+    );
+    (full * facility.target_bps as i64 * crew_bps + 99_999_999) / 100_000_000
+}
+
+/// Workers on named payrolls in each region and tier.
+pub fn named_workers(world: &World) -> Vec<[i64; 3]> {
+    let mut out = vec![[0i64; 3]; world.regions.len()];
+    for (_, facility) in world.facilities.iter() {
+        let Some(row) = out.get_mut(facility.region as usize) else {
+            continue;
+        };
+        if !world
+            .firms
+            .get(facility.firm)
+            .is_some_and(|f| f.operative())
+        {
+            continue;
+        }
+        if facility.status != FacilityStatus::Operating
+            && facility.status != FacilityStatus::Building
+        {
+            continue;
+        }
+        for (tier, slot) in row.iter_mut().enumerate() {
+            *slot += facility.workers[tier];
+        }
+    }
+    out
+}
+
+/// Positions named employers want filled and have not, by region and tier: what the plants that
+/// are operating (or about to open) want, less who they have. These are the open jobs that draw
+/// workers from other regions.
+pub fn open_jobs(world: &World, dataset: &Dataset) -> Vec<[i64; 3]> {
+    let mut out = vec![[0i64; 3]; world.regions.len()];
+    for (_, facility) in world.facilities.iter() {
+        let Some(row) = out.get_mut(facility.region as usize) else {
+            continue;
+        };
+        if !world
+            .firms
+            .get(facility.firm)
+            .is_some_and(|f| f.operative())
+        {
+            continue;
+        }
+        let hiring = facility.status == FacilityStatus::Operating
+            || (facility.status == FacilityStatus::Building
+                && facility.completes.0 <= world.tick.0 + PREHIRE_WEEKS);
+        if !hiring {
+            continue;
+        }
+        for (tier, slot) in row.iter_mut().enumerate() {
+            *slot +=
+                (desired_workers(world, dataset, facility, tier) - facility.workers[tier]).max(0);
+        }
+    }
+    out
 }
 
 fn facility_full_workers(facility: &Facility, dataset: &Dataset, tier: usize) -> i64 {

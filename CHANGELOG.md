@@ -13,6 +13,21 @@ heading.
 
 ### Fixed
 
+- Your own share orders now cost what they fill and no more. A buy order used to take your cash when
+  you placed it and then charge the price again when it filled, and the unused part of your limit was
+  never given back; now the cash is held once, the fill spends it, and whatever is left (a price under
+  your limit, a part fill, a cancelled order) returns to you straight away. Sales always paid once.
+- On a computer, the space bar, N and the 1, 2 and 3 keys no longer play, step or speed up the game while
+  you are typing in a text box, and Enter or Space on a focused button now presses that button instead
+  of also running the shortcut. Tab now goes through the sidebar first, then the page from top to bottom.
+- With large text on a phone (130 percent), the bottom bar no longer breaks "Portfolio" in two, the
+  Markets tabs stay on one line, the economy summary wraps inside its card, and the Research level
+  header and its "what the next level buys" numbers no longer clip or break.
+- Buying and selling shares with the outside market no longer makes shares up or loses cash. A trade
+  with outside investors now runs against investors who really hold the company or have the money, a
+  company's unused buy order returns to its cash instead of locking it a second time, a company that sells
+  shares books the right cost, and a company that already holds shares in another can buy more of it (the
+  check against ownership loops pointed the wrong way).
 - Public works contracts are now a fair fight and not a money tap. Rival bids sit near the real
   cost plus a normal margin of 8 to 11 percent (they used to add 10 to 22), every firm with a plant
   can bid, firms that keep their books in another currency can win in Europe, and the works run over
@@ -31,6 +46,22 @@ heading.
   a firm into a losing quarter (the first-year losing share is back where it was before politics).
 
 ### Added
+
+- Rivals can now plan a takeover over several quarters. A rival with a raider, financier or
+  integrator for a chief picks a company that trades under what it is worth, buys its shares on the
+  exchange a little each week (never more than half of what the market can fill, and never at more
+  than 2 percent over the price), and tells the world when it passes 5 percent: a story in the paper and
+  a letter to you if it is your company. If the price runs away, the campaign drags on past a year and a
+  half, the rival's cash runs short or someone else takes control, it gives up and sells. Otherwise,
+  at a quarter of the votes, it launches an ordinary takeover bid. You can answer with the tools you
+  already have: buy back shares, find a friendly buyer, issue shares, or raise guidance so the price
+  runs past the rival's limit. There is no poison pill yet. Rival dossiers say what the rival is likely
+  to do next, from its public stake and open bids only. The company page and the dossier of the target list
+  every stake of 5 percent or more with a small line of how it grew, and the weekly brief warns you when a
+  stake in your company grows.
+- Workers move between regions for pay and jobs, a few percent a year at most, less with distance
+  and across state lines, and their households and their spending move with them, so demand follows
+  the work. Region dossiers show how many workers moved in or out over the year and week by week.
 
 - Pick your own chief executive when you start a game: one of six faces from the portrait kit, one
   for each temperament, a name of your own if you like, and a line on how that temperament runs a

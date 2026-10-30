@@ -188,6 +188,7 @@ pub fn build_with(
         earnings: Default::default(),
         civics: Default::default(),
         executives: Default::default(),
+        plans: Default::default(),
         systems: Default::default(),
         mail: Default::default(),
         player_chief: None,

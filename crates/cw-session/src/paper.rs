@@ -442,6 +442,7 @@ fn collect(world: &World, dataset: &Dataset, week: u32) -> Vec<Candidate> {
     results(world, dataset, week, &mut found);
     earnings_season(world, dataset, week, &mut found);
     executives(world, dataset, week, &mut found);
+    stakes(world, week, &mut found);
     sign(dataset, &mut found);
     found
 }
@@ -577,6 +578,69 @@ fn raids(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) 
             yours,
             base,
             raid.budget_cents,
+        ));
+    }
+}
+
+/// Stakes a rival has made public: the filing that crosses 5 percent, each five points after,
+/// and the rival backing away. Only what a filing or a sale shows; never why.
+fn stakes(world: &World, week: u32, out: &mut Vec<Candidate>) {
+    use cw_sim::economy::plans::{DISCLOSE_BPS, EventKind};
+    for event in world
+        .plans
+        .events
+        .iter()
+        .filter(|e| in_window(e.week, week) && e.stake_bps >= DISCLOSE_BPS - 1)
+    {
+        let (Some(raider), Some(target)) = (
+            firm_name(world, event.raider),
+            firm_name(world, event.target),
+        ) else {
+            continue;
+        };
+        let percent = event.stake_bps / 100;
+        let (headline, body, base) = match event.kind {
+            EventKind::Disclosed => (
+                format!("{raider} discloses a {percent} percent stake in {target}"),
+                format!(
+                    "{raider} now holds {percent} percent of the shares of {target}, over the 5 percent line at which holdings are made public. It has not said what it intends."
+                ),
+                4,
+            ),
+            EventKind::Grew => (
+                format!("{raider} raises its stake in {target} to {percent} percent"),
+                format!(
+                    "{raider} has kept buying and now holds {percent} percent of {target}. Holders of that size can ask for a seat and a say."
+                ),
+                3,
+            ),
+            EventKind::Abandoned => (
+                format!("{raider} gives up on {target}"),
+                format!(
+                    "{raider} is selling the {percent} percent it holds in {target}. The price of the shares ran ahead of what it was willing to pay, or the plan stalled."
+                ),
+                3,
+            ),
+            EventKind::Dropped => (
+                format!("{raider} falls below 5 percent of {target}"),
+                format!("{raider} has sold down under the line at which holdings are made public."),
+                2,
+            ),
+            _ => continue,
+        };
+        out.push(candidate(
+            format!(
+                "stake:{}:{}:{}:{:?}",
+                event.week, event.raider.0, event.target.0, event.kind
+            ),
+            event.week,
+            &headline,
+            body,
+            "Business desk",
+            PaperLink::company(event.target),
+            player_side(world, event.target),
+            base,
+            event.stake_bps as i64,
         ));
     }
 }

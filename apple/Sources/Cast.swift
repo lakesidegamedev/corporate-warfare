@@ -141,6 +141,8 @@ struct DossierBody: View {
                 }
             }
             RivalExecutivesList(posts: dossier.executives, currency: currency)
+            LikelyNextMove(text: dossier.likelyNext)
+            DisclosedStakes(stakes: dossier.stakes)
             RaidMarketsList(firm: dossier.firm)
             if !dossier.moves.isEmpty {
                 Eyebrow(text: "Recent moves")
