@@ -149,16 +149,17 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
             .map(|f| f.book.cash())
             .unwrap_or(0)
             .max(0);
-        let full_cost = deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0
-            + quoted(
-                world,
-                dataset,
-                contract.buyer,
-                product,
-                contract.from_region,
-                contract.to_region,
-                deliverable,
-            );
+        let full_freight = quoted(
+            world,
+            dataset,
+            contract.buyer,
+            product,
+            contract.from_region,
+            contract.to_region,
+            deliverable,
+        );
+        let full_cost =
+            deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0 + full_freight;
         let wanted = deliverable;
         let mut deliverable = deliverable;
         let bill = |world: &mut World, lots: MilliLots| {
@@ -216,15 +217,21 @@ fn settle_contracts(world: &mut World, dataset: &Dataset) {
         let goods_value = deliverable.value_at(Cents(price)).unwrap_or(Cents::ZERO).0;
         let margin = goods_value.saturating_sub(carrying).max(0);
         crate::economy::structure::note_delivery(world, handle, deliverable, price);
-        let freight = quoted(
-            world,
-            dataset,
-            contract.buyer,
-            product,
-            contract.from_region,
-            contract.to_region,
-            deliverable,
-        );
+        // The same quote as before when the whole delivery goes ahead: nothing since has touched
+        // the lanes, carriers or ownership it reads.
+        let freight = if deliverable == wanted {
+            full_freight
+        } else {
+            quoted(
+                world,
+                dataset,
+                contract.buyer,
+                product,
+                contract.from_region,
+                contract.to_region,
+                deliverable,
+            )
+        };
         let paid = (goods_value + freight).min(buyer_cash);
         let paid_goods = goods_value.min(paid);
         if paid_goods > 0 {
