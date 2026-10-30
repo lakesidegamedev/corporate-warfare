@@ -163,6 +163,8 @@ private fun ChartGrid(specs: List<PanelSpec>) {
     }
 }
 
+private fun signedCount(n: Long): String = (if (n > 0) "+" else if (n < 0) "-" else "") + Format.count(kotlin.math.abs(n))
+
 @Composable
 private fun EmptyHistory() = Callout("History builds up as weeks close. A career saved before this version starts it now.", Palette.secondary)
 
@@ -261,6 +263,11 @@ fun RegionDossierView(d: RegionDossierDto, onDivision: (String) -> Unit = {}) {
                 Stat("Land price", "${d.landIndexBps / 100}%", note = "of the corridor"),
                 Stat("Demand index", "${d.demandIndexBps / 100}%"),
                 Stat("Spend / wk", Format.compact(d.spendCents), note = "households"),
+                Stat(
+                    "Net migration / yr", signedCount(d.netMigrationYear),
+                    if (d.netMigrationYear > 0) Palette.positive else if (d.netMigrationYear < 0) Palette.negative else Palette.primaryText,
+                    note = "workers moving in or out",
+                ),
             ),
         )
         Split(
@@ -295,6 +302,7 @@ fun RegionDossierView(d: RegionDossierDto, onDivision: (String) -> Unit = {}) {
             listOfNotNull(
                 PanelSpec("Workers and jobs", listOf(ChartSeries("Workforce", blue, s.of("population")), ChartSeries("Employed", Palette.positive, s.of("employed"))), format = { Format.count(it) }, scale = ChartScale.Level),
                 PanelSpec("Average wage", listOf(ChartSeries("Wage", Palette.gold, s.of("wage"))), format = { Format.money(it) }, scale = ChartScale.Level),
+                PanelSpec("Workers moving in or out each week", listOf(ChartSeries("Net movers", violet, s.of("migration"))), ChartKind.Bar, format = { signedCount(it) }, scale = ChartScale.Level),
                 PanelSpec("Land price (100 is the corridor)", listOf(ChartSeries("Land", Palette.warning, s.of("land_index"))), format = { "%.0f".format(it / 100.0) }, scale = ChartScale.Level),
                 PanelSpec("Household spending per week", listOf(ChartSeries("Spend", violet, s.of("spend"))), ChartKind.Bar),
                 if (shares.isNotEmpty()) {

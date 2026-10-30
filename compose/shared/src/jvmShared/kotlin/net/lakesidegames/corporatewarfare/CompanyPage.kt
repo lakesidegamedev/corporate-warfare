@@ -155,6 +155,7 @@ fun CompanyPageBody(store: GameStore, p: CompanyPageDto, onOpenFirm: (ULong) -> 
                 Text("${h.holder}: ${Format.count(h.quantity)} shares, ${"%.1f%%".format(h.votesBps / 100.0)} of votes", color = Palette.secondary, fontSize = 12.sp)
             }
         }
+        DisclosedStakes(p.stakes, onOpenFirm)
         LinkedRows("Parent", listOfNotNull(p.parent), onOpenFirm)
         LinkedRows("Subsidiaries", p.subsidiaries, onOpenFirm)
         LinkedRows("Joint ventures", p.ventures, onOpenFirm)

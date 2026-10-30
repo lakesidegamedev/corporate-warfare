@@ -145,6 +145,8 @@ fun DossierBody(d: DossierDto, currency: String = "") {
             Text(ceo.background, color = Palette.secondary, fontSize = 12.sp)
         }
         RivalExecutives(d.executives, currency)
+        LikelyNextMove(d.likelyNext)
+        DisclosedStakes(d.stakes)
         d.grudges.forEach { line ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 PixelIcon("target", size = 12.dp, tint = Palette.negative)
