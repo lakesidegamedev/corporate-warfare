@@ -108,6 +108,7 @@ pub fn friction_bps(world: &World, dataset: &Dataset, a: usize, b: usize) -> i64
 }
 
 /// Weekly: move workers and their households. Runs before the labour market clears.
+#[allow(clippy::needless_range_loop)]
 pub fn weekly(world: &mut World, dataset: &Dataset) {
     let n = world.regions.len();
     if n < 2 {

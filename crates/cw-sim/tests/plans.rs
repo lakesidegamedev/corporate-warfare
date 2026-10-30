@@ -312,7 +312,7 @@ fn a_price_that_runs_away_abandons_the_plan_and_the_stake_is_sold_back() {
     assert_eq!(w.plans.events.last().unwrap().kind, EventKind::Abandoned);
     // It sells step by step through the same order, never more than half the float.
     let mut weeks = 0;
-    while w.plans.plans.first().is_some() && weeks < 60 {
+    while !w.plans.plans.is_empty() && weeks < 60 {
         w.tick = Tick(w.tick.0 + 1);
         let float = plans::weekly_float(&w, target);
         if let Some(Action::Sell {
