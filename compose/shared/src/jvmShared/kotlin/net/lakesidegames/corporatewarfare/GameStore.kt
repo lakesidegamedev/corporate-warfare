@@ -151,6 +151,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var score by mutableStateOf<uniffi.cw_ffi.ScoreDto?>(null); private set
     /** The Hall of Careers page is open, so the chapter data is kept current even at speed. */
     var hallOpen: Boolean = false
+    /** The phone's Regions market list is on screen, so its rows are kept current (the desktop never shows them). */
+    var marketsOpen: Boolean = false
+    /** False reads every board every week, as before the fast clock skipped some; the perf harness compares the two. */
+    internal var thinReads: Boolean = true
     private var hallStale = false
     /** The last chapter whose result the player has already been shown. */
     private var resultSeen = 0
@@ -309,7 +313,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
             runJob?.cancel()
             runJob = null
             running = false
-            scope.launch { loadHall(force = true) }
+            scope.launch { reload(); loadHall(force = true) }
             return
         }
         speed = weeksPerSecond
@@ -329,7 +333,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         }
     }
 
-    private suspend fun step() {
+    /** One week as the clock plays it; [fast] is a clock at 2x or 4x (the perf harness passes it to time that path). */
+    internal fun advanceAs(fast: Boolean) = perform { step(fast) }
+
+    private suspend fun step(fast: Boolean = running && speed > 1) {
         val handle = session ?: return
         val before = overview?.tick ?: 0u
         val policy = if (pauseOnWarnings) "decisions_and_warnings" else "decisions"
@@ -338,7 +345,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
             handle.advance(1u)
         }
         status = "Advanced to week ${result.finalWeek}."
-        reload()
+        reload(thin = thinReads && fast && result.finalWeek % 4u != 0u)
         if ((overview?.tick ?: 0u) % 4u == 0u) save()
         val week = overview?.tick ?: 0u
         val sink = snapshotSink
@@ -355,8 +362,11 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     fun selectRegion(code: String) = perform {
         marketRegion = code
-        loadMarkets()
+        loadMarkets(force = true)
     }
+
+    /** Read the phone's Regions list now, for when it opens. */
+    fun refreshMarkets() { scope.launch { loadMarkets(force = true) } }
 
     /** Opening a letter marks it read; the engine keeps the flag, the list updates in place. */
     fun markRead(ids: List<String>) {
@@ -647,7 +657,13 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         else scope.launch(saver) { runCatching { write() } }
     }
 
-    private suspend fun reload() {
+    /**
+     * Reads the world into the screens' state. The company, the clock and the economy come every time. The boards and
+     * lists behind them (markets, map, freight, rivals, history) come with them, except in the weeks a fast clock skips:
+     * at 2x and 4x with no decision waiting, [thin] leaves them as they were three weeks in four and pausing reads them
+     * all, as the Hall page does. The market rows of the phone's Regions list are read only while that list is open.
+     */
+    private suspend fun reload(thin: Boolean = false) {
         val handle = session ?: return
         val firm = selectedFirm
         if (catalogueOf !== handle) {
@@ -656,66 +672,57 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
             productCatalogue = productsNow
             catalogueOf = handle
         }
-        withContext(engine) {
+        val core = withContext(engine) {
             val overviewNow = handle.overview()
-            val firmsNow = handle.firms()
-            val eventsNow = handle.events()
-            val boardsNow = handle.regionBoards(firm)
-            val financeNow = firm?.let { handle.finance(it) }
-            val linesNow = firm?.let { handle.productLines(it) } ?: emptyList()
-            val facilitiesNow = firm?.let { handle.facilities(it) } ?: emptyList()
-            val divisionsNow = firm?.let { handle.divisions(it) } ?: emptyList()
-            listOf(
-                overviewNow, firmsNow, eventsNow, boardsNow, financeNow, linesNow, facilitiesNow, divisionsNow,
-                handle.stockBoard(), handle.commodityBoard(), handle.mapDivisions(),
-                firm?.let { handle.history(it) } ?: emptyList<PeriodDto>(), firm?.let { handle.ownership(it) },
-                handle.recentRaids(),
-                handle.economy(), firm?.let { handle.research(it) },
-                firm?.let { handle.heldStock(it) } ?: emptyList<HeldStockDto>(),
-                firm?.let { handle.storageSummary(it) },
-                handle.lanes(), handle.laneContracts(), handle.freightSummary(),
-                handle.structureView(),
-                firm?.let { handle.rivals(it) } ?: emptyList<RivalSummaryDto>(),
-                handle.rivalFeed(12u),
-                handle.mapPlants(),
-                firm?.let { handle.cfoAdvice(it) } ?: emptyList<uniffi.cw_ffi.CfoAdviceDto>(),
-                handle.letters(if (overviewNow.tick > 8u) overviewNow.tick - 8u else 1u),
+            Core(
+                overviewNow, handle.firms(), handle.events(), handle.regionBoards(firm), firm?.let { handle.finance(it) },
+                firm?.let { handle.productLines(it) } ?: emptyList(), firm?.let { handle.facilities(it) } ?: emptyList(),
+                firm?.let { handle.divisions(it) } ?: emptyList(), handle.economy(),
             )
-        }.let { parts ->
-            @Suppress("UNCHECKED_CAST")
-            run {
-                overview = parts[0] as OverviewDto
-                ResultBuckets.startYear = (parts[0] as OverviewDto).startYear
-                firms = parts[1] as List<FirmDto>
-                events = parts[2] as List<EventDto>
-                boards = parts[3] as List<RegionBoardDto>
-                finance = parts[4] as FinanceDto?
-                productLines = parts[5] as List<ProductLineDto>
-                facilities = parts[6] as List<FacilityDto>
-                divisions = parts[7] as List<DivisionDto>
-                stocks = parts[8] as List<StockDto>
-                commodities = parts[9] as List<CommodityDto>
-                mapDivisions = parts[10] as List<MapDivisionDto>
-                history = parts[11] as List<PeriodDto>
-                ownership = parts[12] as OwnershipDto?
-                recentRaids = parts[13] as List<RaidRecordDto>
-                economy = parts[14] as uniffi.cw_ffi.EconomyDto
-                val fx = economy?.fx
-                if (fx == null) Format.reset()
-                else Format.configure(fx.reportingSymbol, fx.currencies.associate { it.id to it.symbol }, fx.currencies.firstOrNull()?.id.orEmpty())
-                research = parts[15] as uniffi.cw_ffi.ResearchDto?
-                held = parts[16] as List<HeldStockDto>
-                storageSummary = parts[17] as StorageSummaryDto?
-                lanes = parts[18] as List<LaneDto>
-                laneContracts = parts[19] as List<LaneContractDto>
-                freight = parts[20] as FreightSummaryDto?
-                structure = parts[21] as uniffi.cw_ffi.StructureViewDto
-                rivals = parts[22] as List<RivalSummaryDto>
-                rivalFeed = parts[23] as List<RivalMoveFeedDto>
-                mapPlants = parts[24] as List<MapPlantDto>
-                cfoAdvice = parts[25] as List<uniffi.cw_ffi.CfoAdviceDto>
-                letters = parts[26] as List<uniffi.cw_ffi.LetterDto>
+        }
+        val overviewNow = core.overview
+        overview = overviewNow
+        ResultBuckets.startYear = overviewNow.startYear
+        firms = core.firms
+        events = core.events
+        boards = core.boards
+        finance = core.finance
+        productLines = core.productLines
+        facilities = core.facilities
+        divisions = core.divisions
+        economy = core.economy
+        val fx = core.economy.fx
+        if (fx == null) Format.reset()
+        else Format.configure(fx.reportingSymbol, fx.currencies.associate { it.id to it.symbol }, fx.currencies.firstOrNull()?.id.orEmpty())
+        if (!thin || overviewNow.pause != null) {
+            val more = withContext(engine) {
+                More(
+                    handle.stockBoard(), handle.commodityBoard(), handle.mapDivisions(),
+                    firm?.let { handle.history(it) } ?: emptyList(), firm?.let { handle.ownership(it) }, handle.recentRaids(),
+                    firm?.let { handle.research(it) }, firm?.let { handle.heldStock(it) } ?: emptyList(), firm?.let { handle.storageSummary(it) },
+                    handle.lanes(), handle.laneContracts(), handle.freightSummary(), handle.structureView(),
+                    firm?.let { handle.rivals(it) } ?: emptyList(), handle.rivalFeed(12u), handle.mapPlants(),
+                    firm?.let { handle.cfoAdvice(it) } ?: emptyList(), handle.letters(if (overviewNow.tick > 8u) overviewNow.tick - 8u else 1u),
+                )
             }
+            stocks = more.stocks
+            commodities = more.commodities
+            mapDivisions = more.mapDivisions
+            history = more.history
+            ownership = more.ownership
+            recentRaids = more.recentRaids
+            research = more.research
+            held = more.held
+            storageSummary = more.storageSummary
+            lanes = more.lanes
+            laneContracts = more.laneContracts
+            freight = more.freight
+            structure = more.structure
+            rivals = more.rivals
+            rivalFeed = more.rivalFeed
+            mapPlants = more.mapPlants
+            cfoAdvice = more.cfoAdvice
+            letters = more.letters
         }
         loadMarkets()
         loadHall()
@@ -723,6 +730,21 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         loadExecutives()
         loadPolitics()
     }
+
+    private class Core(
+        val overview: OverviewDto, val firms: List<FirmDto>, val events: List<EventDto>, val boards: List<RegionBoardDto>,
+        val finance: FinanceDto?, val productLines: List<ProductLineDto>, val facilities: List<FacilityDto>,
+        val divisions: List<DivisionDto>, val economy: uniffi.cw_ffi.EconomyDto,
+    )
+
+    private class More(
+        val stocks: List<StockDto>, val commodities: List<CommodityDto>, val mapDivisions: List<MapDivisionDto>,
+        val history: List<PeriodDto>, val ownership: OwnershipDto?, val recentRaids: List<RaidRecordDto>,
+        val research: uniffi.cw_ffi.ResearchDto?, val held: List<HeldStockDto>, val storageSummary: StorageSummaryDto?,
+        val lanes: List<LaneDto>, val laneContracts: List<LaneContractDto>, val freight: FreightSummaryDto?,
+        val structure: uniffi.cw_ffi.StructureViewDto, val rivals: List<RivalSummaryDto>, val rivalFeed: List<RivalMoveFeedDto>,
+        val mapPlants: List<MapPlantDto>, val cfoAdvice: List<uniffi.cw_ffi.CfoAdviceDto>, val letters: List<uniffi.cw_ffi.LetterDto>,
+    )
 
     /**
      * The brief is read only when it can be seen. It is read again after a command changes the
@@ -853,7 +875,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         submit(CommandJson.command("GiveGuidance", "firm" to firm, "low_cents" to lowCents, "high_cents" to highCents))
     }
 
-    private suspend fun loadMarkets() {
+    private suspend fun loadMarkets(force: Boolean = false) {
+        if (!force && !marketsOpen) return
         val handle = session ?: return
         val code = marketRegion
             ?: selectedFirmDto?.let { firm -> boards.firstOrNull { it.name == firm.region }?.code }
