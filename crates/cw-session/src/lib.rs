@@ -2178,6 +2178,9 @@ mod tests {
         // change to any rule this fixture exercises. In 1.9 it moved from 28f7d351... when the cast grew from twelve to forty and the generated
         // people were redrawn (the same first-week pool now picks from a new list of extras, with
         // different names, ages and temperaments), with no change to any rule this fixture exercises. The Swift
+        // In 1.9 it moved from de25d78b... when the world gained its rival plan and migration state
+        // (the migration references are taken in week one and hashed), with no change to any
+        // other rule this fixture exercises. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2203,7 +2206,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "de25d78b750f0e832b661f3653acebf53191539b76a2b5aee3463cd78e063aa6"
+            "a08ddca23a2e702a0eb02692ddc605c60c4f5ddf3c33085889c0cfdcb9efce1b"
         );
     }
 
