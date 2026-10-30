@@ -26,8 +26,11 @@ use std::collections::BTreeMap;
 use cw_core::hash::{CanonicalHasher, DOMAIN_STATE};
 use serde::{Deserialize, Serialize};
 
+/// People in the cast before 1.9; see `Dataset::legacy_hash`.
+const CAST_BEFORE_1_9: usize = 12;
+
 pub use balance::{Balance, BalanceOverlay, Product, ProductKind, Recipe, StorageClass};
-pub use cast::{Person, Role, Temperament};
+pub use cast::{Mood, Person, Role, Temperament};
 pub use currency::{CountryDef, CurrencyDef, CurrencySet, PegDef};
 pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetting};
 pub use events::EventCard;
@@ -274,7 +277,15 @@ impl Dataset {
         SCENARIO_CONTENT
             .iter()
             .filter_map(|content| Dataset::load_scenario(content.id).ok())
-            .find(|dataset| dataset.hash == hash)
+            .find(|dataset| dataset.hash == hash || dataset.legacy_hash() == hash)
+    }
+
+    /// The hash this dataset had before the 1.9 cast grew from twelve people to forty: the same
+    /// content with only the first twelve people folded in. People are appended to the cast and
+    /// never change, so a save written before the growth names this hash and still loads (the
+    /// people are content, not part of a save).
+    pub fn legacy_hash(&self) -> String {
+        self.hash_with_cast(CAST_BEFORE_1_9)
     }
 
     /// Load one scenario's pinned in-repo dataset and validate it. A scenario with no content
@@ -900,6 +911,10 @@ impl Dataset {
     }
 
     pub fn compute_hash(&self) -> String {
+        self.hash_with_cast(self.cast.len())
+    }
+
+    fn hash_with_cast(&self, cast_people: usize) -> String {
         let mut hasher = CanonicalHasher::new(DOMAIN_STATE);
         hasher.string("cw-dataset-v1");
         for product in &self.products {
@@ -1008,7 +1023,7 @@ impl Dataset {
                 }
             }
         }
-        for person in &self.cast {
+        for person in self.cast.iter().take(cast_people) {
             hasher
                 .string(&person.id)
                 .string(&person.scenario)
@@ -1165,6 +1180,18 @@ mod tests {
             dataset.lane_km("OH-CEN", "MI-DET"),
             dataset.lane_km("MI-DET", "OH-CEN")
         );
+    }
+
+    #[test]
+    fn a_save_naming_the_twelve_person_hash_still_finds_its_dataset() {
+        let dataset = Dataset::load().unwrap();
+        assert!(dataset.cast.len() > CAST_BEFORE_1_9);
+        let legacy = dataset.legacy_hash();
+        assert_ne!(legacy, dataset.hash, "the grown cast moves the hash");
+        let found = Dataset::for_hash(&legacy).expect("the old hash resolves");
+        assert_eq!(found.hash, dataset.hash, "and loads the current content");
+        assert!(Dataset::for_hash(&dataset.hash).is_some());
+        assert!(Dataset::for_hash("not a hash").is_none());
     }
 
     #[test]

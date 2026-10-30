@@ -23,6 +23,10 @@ pub struct CandidateDto {
     pub temperament: String,
     /// Names the portrait in the generated portrait atlas.
     pub portrait_id: String,
+    /// One line on what the person is good at, for the named people for hire; empty otherwise.
+    pub hire_note: String,
+    /// A named member of the cast rather than a generated person.
+    pub named: bool,
     pub level: u32,
     /// What they would change, in plain words with the numbers.
     pub effect: String,
@@ -47,6 +51,8 @@ pub struct ExecutiveDto {
     pub background: String,
     pub temperament: String,
     pub portrait_id: String,
+    pub hire_note: String,
+    pub named: bool,
     pub level: u32,
     pub effect: String,
     pub pay_cents: i64,
@@ -89,7 +95,8 @@ pub struct CandidatePostDto {
 }
 
 fn candidate_dto(world: &World, ds: &Dataset, firm: Handle, c: &Candidate) -> Option<CandidateDto> {
-    let extra = ex::extra_of(c)?;
+    let hire = ex::hire_of(c)?;
+    let extra = hire.person;
     let ask = ex::ask_cents(world, firm, c);
     let fee = ask * ex::SIGNING_WEEKS;
     let value = ex::yearly_value_cents(world, ds, firm, c.post, c.level);
@@ -103,6 +110,8 @@ fn candidate_dto(world: &World, ds: &Dataset, firm: Handle, c: &Candidate) -> Op
         background: extra.background.clone(),
         temperament: extra.temperament.key().to_owned(),
         portrait_id: extra.id.clone(),
+        hire_note: extra.hire_note.clone(),
+        named: hire.named,
         level: c.level as u32,
         effect: ex::effect_text(c.post, c.level),
         ask_cents: ask,
@@ -119,7 +128,8 @@ fn candidate_dto(world: &World, ds: &Dataset, firm: Handle, c: &Candidate) -> Op
 
 fn executive_dto(world: &World, e: &Executive, poach: bool) -> Option<ExecutiveDto> {
     let c = world.executives.person(e.person)?;
-    let extra = ex::extra_of(c)?;
+    let hire = ex::hire_of(c)?;
+    let extra = hire.person;
     Some(ExecutiveDto {
         name: extra.name.clone(),
         age: extra.age,
@@ -127,6 +137,8 @@ fn executive_dto(world: &World, e: &Executive, poach: bool) -> Option<ExecutiveD
         background: extra.background.clone(),
         temperament: extra.temperament.key().to_owned(),
         portrait_id: extra.id.clone(),
+        hire_note: extra.hire_note.clone(),
+        named: hire.named,
         level: c.level as u32,
         effect: ex::effect_text(e.post, c.level),
         pay_cents: e.pay_cents,

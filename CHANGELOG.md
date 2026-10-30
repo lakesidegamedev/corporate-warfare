@@ -13,6 +13,22 @@ heading.
 
 ### Added
 
+- The 1.9 cast. The game now has forty named people instead of twelve, ten for each scenario, and
+  every one has a face. Each scenario has its own union leader, newspaper journalist and market
+  analyst, and the rest are chiefs, governors, party leaders and central bank chairs as before. The
+  paper puts the scenario's journalist's name and face on its stories, union letters come from the
+  union leader, and analyst notes come from the analyst. Each scenario also has two named people for
+  hire (a chief financial officer, chief operating officer or logistics chief) who are always in the
+  first pool of candidates, with a one line note on what they are good at. Faces show a mood: a rival
+  looks pleased in a letter about a deal or after beating off a raid, displeased after losing plants
+  to you or when workers walk out, and neutral otherwise; the journalist looks displeased on stories
+  about raids, failures and unpaid bills; and a rival's page follows how its latest raid went.
+  Portraits are 32 pixel busts with three moods in letters, the paper and company pages, 16 pixel
+  busts in lists, and a 64 pixel office portrait for the named chiefs on company pages. Every
+  generated chief executive has a face drawn from their own name and age, so a name never sits on an
+  obviously wrong face, and none shares a first or last name with a named person. Moustaches, long
+  hair and one stray stripe on a smiling face were redrawn. Saves from earlier previews still load:
+  the people are content, not part of a save, and the first twelve keep their places.
 - Earnings season. Every listed company now reports each quarter. At the start of the quarter an
   analyst writes an estimate of its operating profit from its trend, its sector and a little
   luck, so estimates can miss. On results day the share price moves on the surprise: a beat lifts

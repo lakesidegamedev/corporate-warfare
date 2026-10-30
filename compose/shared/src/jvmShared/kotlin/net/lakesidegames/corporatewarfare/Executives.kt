@@ -181,6 +181,7 @@ internal fun HireListBody(people: List<CandidateDto>, currency: String, busy: Bo
                         Text(c.name, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Text("Level ${c.level} of 5 · ${temperamentLabel(c.temperament)} · ${c.age}", color = Palette.gold, fontSize = 12.sp)
                         Text(c.effect + ".", color = Palette.primaryText, fontSize = 12.sp)
+                        if (c.hireNote.isNotEmpty()) Text(c.hireNote, color = Palette.secondary, fontSize = 11.sp)
                     }
                 }
                 Text(

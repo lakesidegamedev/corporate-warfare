@@ -143,6 +143,7 @@ struct HireSheet: View {
                     Text("Level \(c.level) of 5 · \(temperamentLabel(c.temperament)) · \(c.age)")
                         .font(.caption).foregroundStyle(Theme.gold)
                     Text("\(c.effect).").font(.caption).foregroundStyle(Theme.primaryText)
+                    if !c.hireNote.isEmpty { Text(c.hireNote).font(.caption2).foregroundStyle(Theme.secondary) }
                 }
             }
             let worth = c.paybackWeeks > 0

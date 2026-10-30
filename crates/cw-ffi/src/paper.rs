@@ -25,6 +25,11 @@ pub struct StoryDto {
     pub week: u32,
     /// The player is party to the story.
     pub yours: bool,
+    /// The journalist's portrait id, empty when the scenario has none.
+    pub author: String,
+    pub author_name: String,
+    /// neutral, pleased or displeased: which face of the journalist to draw.
+    pub mood: String,
 }
 
 #[derive(Clone, uniffi::Record)]
@@ -89,6 +94,9 @@ fn story_dto(story: Story) -> StoryDto {
         link: link_dto(story.link),
         week: story.week,
         yours: story.yours,
+        author: story.author,
+        author_name: story.author_name,
+        mood: story.mood.key().to_owned(),
     }
 }
 
