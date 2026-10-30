@@ -138,6 +138,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     /** The selected company's executives and the people it could hire. Read only while the section is on screen. */
     var executives by mutableStateOf<uniffi.cw_ffi.ExecutivesDto?>(null); private set
     var executivesOpen: Boolean = false
+    /** Races, polls, laws and tenders. Read only while the Politics section is on screen. */
+    var politics by mutableStateOf<uniffi.cw_ffi.PoliticsDto?>(null); private set
+    var politicsOpen: Boolean = false
+    private var politicsRevision = -1L
     private var executivesRevision = -1L
     /** The five-year score, when the career is scored. */
     var score by mutableStateOf<uniffi.cw_ffi.ScoreDto?>(null); private set
@@ -701,6 +705,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         loadHall()
         loadBrief()
         loadExecutives()
+        loadPolitics()
     }
 
     /**
@@ -737,6 +742,25 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     }
 
     fun refreshExecutives() { scope.launch { loadExecutives(force = true) } }
+
+    private suspend fun loadPolitics(force: Boolean = false) {
+        val handle = session ?: return
+        val now = overview ?: return
+        val stamp = now.revision.toLong() * 7 + now.tick.toLong()
+        if (!force && (!politicsOpen || stamp == politicsRevision)) return
+        politicsRevision = stamp
+        val firm = selectedFirm
+        val dto = withContext(engine) { handle.politics(firm) }
+        if (session === handle) politics = dto
+    }
+
+    fun refreshPolitics() { scope.launch { loadPolitics(force = true) } }
+
+    fun giveToCandidate(firm: ULong, office: Int, candidate: Int, cents: Long) =
+        submit(CommandJson.command("GiveToCandidate", "firm" to firm, "office" to office, "candidate" to candidate, "cents" to cents))
+
+    fun bidOnTender(firm: ULong, tender: Int, priceCents: Long, weeks: Int) =
+        submit(CommandJson.command("BidOnTender", "firm" to firm, "tender" to tender, "price_cents" to priceCents, "weeks" to weeks))
 
     fun hireExecutive(firm: ULong, post: Int, person: Int) =
         submit(CommandJson.command("HireExecutive", "firm" to firm, "post" to post, "person" to person))

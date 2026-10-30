@@ -874,6 +874,52 @@ fn government_letters(
     }
 }
 
+/// Governors writing to firms with big plants in their state.
+fn governor_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
+    for (i, item) in world.civics.news.iter().enumerate() {
+        if item.kind != "letter" || item.week < since {
+            continue;
+        }
+        let Some(firm) = item
+            .firm
+            .filter(|f| cw_sim::economy::events_engine::player_side(world, *f))
+        else {
+            continue;
+        };
+        let Some(state) = world.civics.states.get(item.office as usize) else {
+            continue;
+        };
+        let place = dataset
+            .states
+            .get(item.office as usize)
+            .map(|s| s.name.clone())
+            .unwrap_or_default();
+        let sender = Sender {
+            person: state.governor.id.clone(),
+            name: state.governor.name.clone(),
+            role: format!("Governor of {place}"),
+            organisation: place,
+            temperament: String::new(),
+            mood: Mood::Neutral,
+        };
+        out.push(finish(
+            world,
+            Draft {
+                id: format!("governor:{}:{}", item.week, i),
+                kind: "government",
+                week: item.week,
+                sender,
+                tone: Tone::Formal,
+                addressee: paper::firm_name(world, firm)
+                    .unwrap_or_else(|| "your company".to_owned()),
+                facts: vec![item.text.clone()],
+                link: PaperLink::company(firm),
+            },
+            None,
+        ));
+    }
+}
+
 fn union_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
     for (i, item) in world.news.iter().enumerate() {
         if item.key != "news.strike" || item.week.0 < since {
@@ -1513,6 +1559,7 @@ pub fn letters(world: &World, dataset: &Dataset, since_week: u32) -> Vec<Letter>
     bid_letters(world, dataset, since, &mut out);
     rate_letters(world, dataset, since, &mut out);
     government_letters(world, dataset, &stories, since, &mut out);
+    governor_letters(world, dataset, since, &mut out);
     union_letters(world, dataset, since, &mut out);
     analyst_letters(world, dataset, &stories, since, &mut out);
     earnings_letters(world, dataset, since, &mut out);

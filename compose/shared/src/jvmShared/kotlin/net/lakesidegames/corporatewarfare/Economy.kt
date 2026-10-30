@@ -165,6 +165,7 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
         LawsTable(e.laws, null)
         e.pendingLaws?.let { LawsTable(it, "From ${ResultBuckets.weekLabel(e.pendingEffectiveWeek.toInt())}") }
         MarketRules(e)
+        PoliticsPanel(store, store.selectedFirmDto?.currency ?: "")
         if (e.news.isNotEmpty()) {
             Eyebrow("News")
             e.news.take(5).forEach { n ->
