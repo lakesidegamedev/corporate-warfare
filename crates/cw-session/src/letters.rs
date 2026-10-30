@@ -252,6 +252,31 @@ pub(crate) const SALUTATIONS: [[&str; 2]; 3] = [
     ],
 ];
 
+/// Salutations by tone when the letter is for the player's own chief executive, who has a name.
+/// `{}` is that name.
+pub(crate) const NAMED_SALUTATIONS: [[&str; 2]; 3] = [
+    ["To {},", "Dear {},"],
+    ["Dear {},", "Hello {},"],
+    ["To {}, chief executive,", "Dear {},"],
+];
+
+/// The name of the chief the player chose, when a letter is addressed to one of the player's own
+/// companies (or to "your company"): such a letter is for the chief by name.
+fn your_chief_for(world: &World, addressee: &str) -> Option<String> {
+    let chief = world.player_chief.as_ref()?;
+    if addressee == "your company" {
+        return Some(chief.name.clone());
+    }
+    let yours = world
+        .firms
+        .handles_sorted()
+        .into_iter()
+        .filter(|h| player_side(world, *h))
+        .filter_map(|h| world.firms.get(h))
+        .any(|f| f.name == addressee);
+    yours.then(|| chief.name.clone())
+}
+
 /// Opening and closing lines for a sender who is an office or a role, with no temperament,
 /// by kind of letter.
 pub(crate) const OFFICE_FRAMES: [(&str, &str, &str); 10] = [
@@ -518,8 +543,14 @@ fn finish(world: &World, d: Draft, card: Option<Card>) -> Letter {
             )
         }
     };
-    let salutation =
-        SALUTATIONS[d.tone.index()][(fnv(&d.id, 2) % 2) as usize].replace("{}", &d.addressee);
+    let salutation = match your_chief_for(world, &d.addressee) {
+        Some(name) => {
+            NAMED_SALUTATIONS[d.tone.index()][(fnv(&d.id, 2) % 2) as usize].replace("{}", &name)
+        }
+        None => {
+            SALUTATIONS[d.tone.index()][(fnv(&d.id, 2) % 2) as usize].replace("{}", &d.addressee)
+        }
+    };
     let mut facts = d.facts.iter().map(|f| plain(f));
     let first = facts.next().unwrap_or_default();
     let mut paragraphs = vec![format!("{open} {first}")];
@@ -1847,6 +1878,27 @@ mod tests {
         assert_eq!(l.link.id, r.0);
         assert_eq!(l.week, 30);
         assert!(!l.read && l.event.is_none());
+    }
+
+    #[test]
+    fn a_letter_to_your_company_greets_the_chief_you_chose_by_name() {
+        let mut s = quiet("great-lakes-2000", 30);
+        let (r, y) = (rival(&s, 0), you(&s));
+        s.world.raids.push(raid(r, y, true));
+        let yours = s.world.firms.get(y).unwrap().name.clone();
+        let before = letters(&s.world, &s.dataset, 25);
+        let l = before.iter().find(|l| l.kind == "rival").expect("a letter");
+        assert!(
+            l.salutation.contains(&yours),
+            "no chief chosen: {}",
+            l.salutation
+        );
+        s.world.player_chief = cw_sim::state::PlayerChief::choose("Ada Marsh", "", "raider");
+        let after = letters(&s.world, &s.dataset, 25);
+        let l = after.iter().find(|l| l.kind == "rival").expect("a letter");
+        check(l);
+        assert!(l.salutation.contains("Ada Marsh"), "{}", l.salutation);
+        assert!(!l.salutation.contains(&yours), "{}", l.salutation);
     }
 
     #[test]

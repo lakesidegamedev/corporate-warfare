@@ -95,9 +95,10 @@ fun DrawScope.drawPixelIcon(icon: PixelIcons.Icon, tint: Color?) {
 
 /** A pixel icon by name. Pass [tint] for one-colour use in menus, buttons and bars; omit it for the full palette. */
 @Composable
-fun PixelIcon(name: String, modifier: Modifier = Modifier, size: Dp = 18.dp, tint: Color? = null) {
+fun PixelIcon(name: String, modifier: Modifier = Modifier, size: Dp = 18.dp, tint: Color? = null, description: String? = null) {
     val icon = PixelIcons.all[name]
-    Canvas(modifier.size(size)) { if (icon != null) drawPixelIcon(icon, tint) }
+    // An icon that stands alone as a button says what it does; one beside a label stays silent.
+    Canvas((if (description != null) modifier.described(description, androidx.compose.ui.semantics.Role.Image) else modifier).size(size)) { if (icon != null) drawPixelIcon(icon, tint) }
 }
 
 /** The content of a Back style text button: pixel arrow then the label. */

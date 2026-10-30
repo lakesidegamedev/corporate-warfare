@@ -252,7 +252,7 @@ private fun pegStatus(c: CurrencyDto): Pair<String, Color> {
 /** A 52 week line of one rate, scaled to its own range. */
 @Composable
 private fun Sparkline(values: List<Long>, color: Color) {
-    Canvas(Modifier.width(96.dp).height(30.dp)) {
+    Canvas(Modifier.width(96.dp).height(30.dp).described("Rate over 52 weeks. ${chartSummary("Rate", values) { pct(it.toInt(), 2) }}", androidx.compose.ui.semantics.Role.Image)) {
         val low = values.min()
         val span = (values.max() - low).coerceAtLeast(1L).toFloat()
         val step = size.width / (values.size - 1)

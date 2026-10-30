@@ -61,6 +61,20 @@ jobs:
           name: preview-${{ matrix.name }}
           path: out/*
           retention-days: 30
+      - name: AppImage (Linux)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        shell: bash
+        run: |
+          mkdir -p appimage-out
+          # packageReleaseDeb does not leave the app image folder behind, so build it.
+          (cd compose && ./gradlew --no-daemon :shared:createReleaseDistributable)
+          bash compose/shared/packaging/linux/build-appimage.sh "$(ls -d compose/shared/build/compose/binaries/main-release/app/*/ | head -1)" "appimage-out/CorporateWarfare-${TAG#v}-linux.AppImage"
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        with:
+          name: preview-linux.AppImage
+          path: appimage-out/*
+          retention-days: 30
       # The branded setup program, beside the MSI. Its name ends -setup.exe, which the updater
       # prefers over the MSI.
       - name: Setup program (Windows)

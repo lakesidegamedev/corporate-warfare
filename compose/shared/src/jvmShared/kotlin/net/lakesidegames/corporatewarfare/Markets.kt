@@ -91,8 +91,8 @@ internal fun changeTint(bps: Long) = if (bps > 0) Palette.positive else if (bps 
 
 /** A small line of closing prices, scaled to its own range. */
 @Composable
-fun Sparkline(values: List<Long>, tint: Color, modifier: Modifier) {
-    Canvas(modifier) {
+fun Sparkline(values: List<Long>, tint: Color, modifier: Modifier, name: String = "Price", format: (Long) -> String = { Format.price(it) }) {
+    Canvas(modifier.described("$name trend. ${chartSummary(name, values, format)}", androidx.compose.ui.semantics.Role.Image)) {
         if (values.size < 2) return@Canvas
         val low = values.min()
         val span = maxOf(values.max() - low, 1L).toFloat()
@@ -127,7 +127,7 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
                         Text(Format.count(last), color = Palette.primaryText, fontSize = 26.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                         Text("${changeText(week)} this week · ${store.stocks.size} companies", color = changeTint(week), fontSize = 12.sp)
                     }
-                    Sparkline(index, changeTint(last - index.first()), Modifier.width(140.dp).height(44.dp))
+                    Sparkline(index, changeTint(last - index.first()), Modifier.width(140.dp).height(44.dp), name = "Corridor index", format = { Format.count(it) })
                 }
             }
         }

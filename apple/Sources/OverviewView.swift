@@ -252,6 +252,7 @@ enum GraphicsKeys {
     static let labels = "graphics.labels"
     static let animations = "graphics.animations"
     static let showFps = "graphics.showFps"
+    static let newMap = "graphics.newMap"
 }
 
 /// How much the map draws: 0 low, 1 medium, 2 high.
@@ -307,6 +308,7 @@ struct GraphicsSettingsPanel: View {
     @AppStorage(GraphicsKeys.labels) private var labels = 2
     @AppStorage(GraphicsKeys.animations) private var animations = true
     @AppStorage(GraphicsKeys.showFps) private var showFps = false
+    @AppStorage(GraphicsKeys.newMap) private var newMap = false
 
     var body: some View {
         Panel(padding: 12) {
@@ -356,6 +358,8 @@ struct GraphicsSettingsPanel: View {
                 }
                 Divider().overlay(Theme.stroke)
                 choice("Animations", onOff($animations), ["Off", "On"], "Camera flights, the menu and moving effects.")
+                choice("New map (preview)", onOff($newMap), ["Off", "On"],
+                       "A new look for the map, drawn on the phone's graphics chip: terrain, roads, rails and buildings. A preview for testers; the frame rate counter shows what it costs. If the device cannot run it the game keeps the current map.")
                 choice("Show frame rate", onOff($showFps), ["Off", "On"], "A frame counter in the corner of the map.")
             }
         }

@@ -67,12 +67,13 @@ fun ValueSlider(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label(value), color = Palette.primaryText, fontSize = 18.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Nudge("minus") { val v = snap(current - step); onValue(v); onCommit(v) }
+            Nudge("minus", "Decrease") { val v = snap(current - step); onValue(v); onCommit(v) }
             Spacer(Modifier.width(6.dp))
-            Nudge("plus") { val v = snap(current + step); onValue(v); onCommit(v) }
+            Nudge("plus", "Increase") { val v = snap(current + step); onValue(v); onCommit(v) }
         }
         Canvas(
             Modifier.fillMaxWidth().height(30.dp)
+                .described("Slider: ${label(value)}. Use the minus and plus buttons for exact steps.")
                 .pointerInput(range, step) {
                     detectTapGestures { pos ->
                         val inset = 14.dp.toPx()
@@ -122,8 +123,8 @@ fun ValueSlider(
 }
 
 @Composable
-private fun Nudge(symbol: String, onClick: () -> Unit) {
+private fun Nudge(symbol: String, description: String, onClick: () -> Unit) {
     Box(Modifier.size(30.dp).clip(Pixel.small).background(Palette.panelRaised).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        PixelIcon(symbol, size = 16.dp, tint = Palette.primaryText)
+        PixelIcon(symbol, size = 16.dp, tint = Palette.primaryText, description = description)
     }
 }

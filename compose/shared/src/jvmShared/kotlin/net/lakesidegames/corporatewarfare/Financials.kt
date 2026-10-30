@@ -320,7 +320,7 @@ private fun StatementTable(columns: List<StatementDto>, lines: List<Line>) {
         lines.forEach { line ->
             Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
                 val weight = if (line.total) FontWeight.SemiBold else FontWeight.Normal
-                Text(line.title, color = Palette.primaryText, fontSize = 12.sp, fontWeight = weight, modifier = Modifier.weight(1.6f))
+                Explain(Words.about(line.title), Modifier.weight(1.6f)) { Text(line.title, color = Palette.primaryText, fontSize = 12.sp, fontWeight = weight) }
                 columns.forEach { s ->
                     val v = line.value?.invoke(s)
                     val text = line.text?.invoke(s) ?: when {
