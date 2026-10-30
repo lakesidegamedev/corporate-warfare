@@ -39,6 +39,9 @@ interface GpuMapSession {
     /** The newest finished frame, with the size of the view it was drawn for. */
     val frame: ImageBitmap?
 
+    /** The camera [frame] was drawn for. Labels and overlays use this one, never the live gesture camera, so every layer shows the same view. */
+    val frameCamera: GpuCamera?
+
     /** Sends game state as JSON (plants, holdings, map mode, night, clouds). */
     fun update(json: String)
 

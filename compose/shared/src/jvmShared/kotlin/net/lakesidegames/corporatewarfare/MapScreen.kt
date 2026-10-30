@@ -399,7 +399,7 @@ fun WorldMapView(
                     val cam = camera ?: MapCamera.scenario(size, map)
                     val gc = gpuCamera(cam, size.width, size.height, pitch)
                     gpu.version
-                    drawGpuLabels(gpu, gc, map, store.mapPlants, store.mapDivisions, graphics, gc.widthKm, labelMeasurer, labelPlanner)
+                    drawGpuLabels(gpu, gpu.frameCamera ?: gc, map, store.mapPlants, store.mapDivisions, graphics, (gpu.frameCamera ?: gc).widthKm, labelMeasurer, labelPlanner)
                 }
             } else Canvas(Modifier.fillMaxSize().graphicsLayer()) {
                 val cam = camera ?: MapCamera.scenario(size, map)

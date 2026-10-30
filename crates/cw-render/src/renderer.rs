@@ -538,17 +538,10 @@ fn texture_of(
 impl Renderer {
     fn prepare(&mut self, scene: &Scene, style: &Style, camera: &Camera) {
         let id = scene as *const Scene as usize;
-        // Buildings shrink in steps as the camera closes in, so a skyline never swallows the
-        // streets round it. The mesh is small, so a step rebuilds only that.
-        let tier = if camera.width_km >= 700.0 {
-            1.0
-        } else if camera.width_km >= 330.0 {
-            0.5
-        } else if camera.width_km >= 140.0 {
-            0.25
-        } else {
-            0.12
-        };
+        // A building is a fixed object with a fixed world size. Only at far zoom, where it
+        // would fall under a readable size on screen, it is drawn larger (a minimum on-screen
+        // size), in coarse steps so the mesh is rebuilt rarely.
+        let tier = ((camera.width_km / 700.0).max(1.0) * 2.0).round() / 2.0;
         if let Some(c) = &mut self.cache
             && c.id == id
             && (c.cloud_altitude - style.cloud_altitude_km).abs() < 1e-6

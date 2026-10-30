@@ -25,6 +25,8 @@ heading.
   the Freight map mode always use the current map. Texas, Silicon Valley and Ruhr and Rhine now
   have terrain and city outlines for it, as Great Lakes already did. Testers: this is a preview for
   finding performance problems on real machines, please send the frame counter line with any report.
+  Buildings keep one true size at every zoom (they no longer shrink as you zoom in), and names and
+  badges are placed for exactly the view the picture shows, so nothing slides while you move.
 - Earnings season. Every listed company now reports each quarter. At the start of the quarter an
   analyst writes an estimate of its operating profit from its trend, its sector and a little
   luck, so estimates can miss. On results day the share price moves on the surprise: a beat lifts

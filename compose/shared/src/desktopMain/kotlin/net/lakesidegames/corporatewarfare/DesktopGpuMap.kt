@@ -100,7 +100,10 @@ private class DesktopGpuSession(
 
     @Volatile override var renderMs = 0.0
     @Volatile override var copyMs = 0.0
-    @Volatile override var frame: ImageBitmap? = null
+    private class Shown(val image: ImageBitmap, val camera: GpuCamera)
+    @Volatile private var shown: Shown? = null
+    override val frame: ImageBitmap? get() = shown?.image
+    override val frameCamera: GpuCamera? get() = shown?.camera
     override var version by mutableLongStateOf(0L)
         private set
 
@@ -184,7 +187,7 @@ private class DesktopGpuSession(
             val skia = (System.nanoTime() - t0) / 1e6
             renderMs = timing[0]
             copyMs = timing[1] + skia
-            frame = image
+            shown = Shown(image, job.camera)
             lock.withLock { rendered = job; renderedScale = scale }
             version += 1
         }
