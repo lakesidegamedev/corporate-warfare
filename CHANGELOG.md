@@ -433,7 +433,6 @@ heading.
   redrawn, a new week no longer rebuilds the interstates, and the room's pixel art loads faster.
 - Desktop: the launcher loads the engine, the world map and the icons at the same time, so the game
   reaches the main menu sooner, and the phone's regional market list is only read while it is open.
-
 - Android: the game starts and opens its first map faster. The app now ships a startup profile, so the
   phone prepares the game's code when it installs the app instead of working it out on first launch,
   and the world map and picture files are read in the background while the main menu comes up, so the
