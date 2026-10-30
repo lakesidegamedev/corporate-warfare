@@ -241,6 +241,11 @@ class WorldMap private constructor(val file: WorldMapFile, val scenarioId: Strin
         /** The default scenario's map, loaded once from the app's resources; null if the file is missing. */
         val shared: WorldMap? by lazy { forScenario(loaded?.scenarios?.firstOrNull()?.id) }
 
+        /** Reads and builds the default map now, for a background thread at launch, so the map's first frame does not wait for it. */
+        fun preload() {
+            shared
+        }
+
         /** One scenario's map, built once. */
         fun forScenario(id: String?): WorldMap? {
             val file = loaded ?: return null

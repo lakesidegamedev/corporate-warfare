@@ -36,7 +36,7 @@ final class MaxSpeedTests: XCTestCase {
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow()
         window.frame = CGRect(x: 0, y: 0, width: 393, height: 852)
-        let host = UIHostingController(rootView: AnyView(RootView().environmentObject(store)))
+        let host = UIHostingController(rootView: AnyView(RootView().environment(store)))
         window.rootViewController = host
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
@@ -86,7 +86,7 @@ final class MaxSpeedTests: XCTestCase {
         await breathe(1)
         for tab in [AppTab.office, .markets, .inbox, .portfolio, .map, .office] {
             phase = "\(tab)"
-            host.rootView = AnyView(RootView(initialTab: tab).id(tab).environmentObject(store))
+            host.rootView = AnyView(RootView(initialTab: tab).id(tab).environment(store))
             // The new tab's first render is the navigation itself, not the run loop holding the
             // main thread, so it settles unmeasured; the time after it is measured.
             await breathe(0.8, measured: false)

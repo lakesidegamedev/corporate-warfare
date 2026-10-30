@@ -432,6 +432,10 @@ heading.
   any change anywhere in the game (a price tick, a new letter, the clock) made every open screen
   rebuild itself, which cost frames while time ran fast. This should make scrolling and fast-forward
   feel smoother.
+- Android: the game starts and opens its first map faster. The app now ships a startup profile, so the
+  phone prepares the game's code when it installs the app instead of working it out on first launch,
+  and the world map and picture files are read in the background while the main menu comes up, so the
+  map no longer stops to load them when a career opens.
 - Tooling: every change to the Android app now starts the trimmed release build on an emulator in
   CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
   so a trimming mistake fails the check and not a phone.
