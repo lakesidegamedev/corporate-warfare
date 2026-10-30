@@ -60,3 +60,13 @@ fun Modifier.plainShortcuts(enabled: Boolean = true, onShortcut: (PlainShortcut)
         val shortcut = if (enabled && !TextEntryFocus.active) plainShortcutFor(event) else null
         if (shortcut == null) false else { onShortcut(shortcut); true }
     }
+
+/**
+ * A text size for tight chrome (tab bars, segmented buttons) that follows the system font scale only up to 110 percent,
+ * so a label that must fit one line in a fixed-width slot still fits when the player runs large text.
+ */
+@androidx.compose.runtime.Composable
+fun chromeSp(size: Float): androidx.compose.ui.unit.TextUnit {
+    val d = androidx.compose.ui.platform.LocalDensity.current
+    return androidx.compose.ui.unit.TextUnit(size * minOf(d.fontScale, 1.1f) / d.fontScale, androidx.compose.ui.unit.TextUnitType.Sp)
+}

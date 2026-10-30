@@ -224,7 +224,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
                                 PixelIcon(item.icon, size = 24.dp)
                             }
                         },
-                        label = { Text(item.title, fontSize = 11.sp) },
+                        label = { Text(item.title, fontSize = chromeSp(11f), maxLines = 1, softWrap = false) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Palette.gold,
                             selectedTextColor = Palette.gold,
@@ -238,7 +238,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
                     selected = false,
                     onClick = { menu = true },
                     icon = { PixelIcon("menu", size = 24.dp) },
-                    label = { Text("Menu", fontSize = 11.sp) },
+                    label = { Text("Menu", fontSize = chromeSp(11f), maxLines = 1, softWrap = false) },
                     colors = NavigationBarItemDefaults.colors(unselectedIconColor = Palette.secondary, unselectedTextColor = Palette.secondary),
                 )
             }

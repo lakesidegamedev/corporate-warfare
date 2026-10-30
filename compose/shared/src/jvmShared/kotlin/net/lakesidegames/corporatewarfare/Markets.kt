@@ -69,7 +69,8 @@ fun MarketsScreen(store: GameStore) {
                         selected = section == option,
                         onClick = { section = option },
                         shape = SegmentedButtonDefaults.itemShape(index, Section.entries.size),
-                    ) { Text(option.title, fontSize = 13.sp) }
+                        icon = {},
+                    ) { Text(if (option == Section.Commodities && androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f) "Goods" else option.title, fontSize = chromeSp(12f), maxLines = 1, softWrap = false) }
                 }
             }
         }

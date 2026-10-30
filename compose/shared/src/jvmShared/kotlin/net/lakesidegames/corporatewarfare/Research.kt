@@ -44,15 +44,29 @@ fun ResearchScreen(store: GameStore) {
                 return@Column
             }
             Panel {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
+                // Side by side when there is room; stacked when large text or a narrow phone leaves none.
+                androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val level: @Composable () -> Unit = {
                         Eyebrow("Technology level")
-                        Text("${research.level} of ${research.maxLevel}", color = Palette.primaryText, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                        Text("${research.level} of ${research.maxLevel}", color = Palette.primaryText, fontSize = 30.sp, fontWeight = FontWeight.Bold, softWrap = false)
                     }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Eyebrow("Industry frontier")
-                        Text("Level ${research.frontier}", color = Palette.gold, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                        Text("You can research one level past it", color = Palette.secondary, fontSize = 11.sp)
+                    val frontier: @Composable (Alignment.Horizontal) -> Unit = { align ->
+                        Column(horizontalAlignment = align) {
+                            Eyebrow("Industry frontier")
+                            Text("Level ${research.frontier}", color = Palette.gold, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                            Text("You can research one level past it", color = Palette.secondary, fontSize = 11.sp)
+                        }
+                    }
+                    if (maxWidth >= 420.dp) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) { level() }
+                            frontier(Alignment.End)
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column { level() }
+                            frontier(Alignment.Start)
+                        }
                     }
                 }
                 // The ladder: one step per level, filled to the company's level.

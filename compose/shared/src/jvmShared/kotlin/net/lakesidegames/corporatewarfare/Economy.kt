@@ -68,8 +68,11 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
             Eyebrow("Economy")
             Spacer(Modifier.width(8.dp))
             PhasePill(e.phase)
-            Spacer(Modifier.weight(1f))
-            Text("Rate ${pct(e.policyRateBps, 2)} · inflation ${pct(e.inflationBps)}", color = Palette.secondary, fontSize = 12.sp)
+            // The summary takes the room left and wraps inside it, so large text never pushes the pill aside.
+            Text(
+                "Rate ${pct(e.policyRateBps, 2)} · inflation ${pct(e.inflationBps)}", color = Palette.secondary, fontSize = 12.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(1f).padding(start = 8.dp),
+            )
             if (collapsible) PixelIcon(if (open) "chevron_up" else "chevron_down", size = 12.dp, tint = Palette.secondary, modifier = Modifier.padding(start = 6.dp))
         }
         if (!open) return@Panel
