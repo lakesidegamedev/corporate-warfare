@@ -186,12 +186,14 @@ struct GpuScene {
     /// Address of the scene it was built from; identity only, never dereferenced.
     id: usize,
     terrain: GpuMesh,
+    /// The land and sea beyond the terrain's edge; rebuilt when the season moves the snow line.
+    apron: GpuMesh,
     buildings: GpuMesh,
     clouds: GpuMesh,
     /// Road ribbons per zoom band, built the first time a camera needs the band.
     roads: [Option<GpuRoads>; 3],
     cloud_altitude: f32,
-    building_tier: f32,
+    season_rev: u64,
     mask_rev: u64,
     buildings_rev: u64,
     earth: wgpu::TextureView,
@@ -501,6 +503,26 @@ impl Renderer {
     }
 }
 
+/// The ground class raster as a texture: class in red, crop row variant in green.
+fn ground_texture(device: &wgpu::Device, queue: &wgpu::Queue, scene: &Scene) -> wgpu::TextureView {
+    let data: Vec<u8> = scene
+        .ground
+        .classes
+        .iter()
+        .zip(&scene.ground.variant)
+        .flat_map(|(c, v)| [*c, *v])
+        .collect();
+    texture_of(
+        device,
+        queue,
+        scene.ground.w as u32,
+        scene.ground.h as u32,
+        &data,
+        "ground",
+        wgpu::TextureFormat::Rg8Unorm,
+    )
+}
+
 fn texture_of(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -538,21 +560,21 @@ fn texture_of(
 type Finish<'a> = dyn FnMut(&[u8], u32, u32, u32) -> (u32, u32) + 'a;
 
 impl Renderer {
-    fn prepare(&mut self, scene: &Scene, style: &Style, camera: &Camera) {
+    fn prepare(&mut self, scene: &Scene, style: &Style) {
         let id = scene as *const Scene as usize;
-        // A building is a fixed object with a fixed world size. Only at far zoom, where it
-        // would fall under a readable size on screen, it is drawn larger (a minimum on-screen
-        // size), in coarse steps so the mesh is rebuilt rarely.
-        let tier = ((camera.width_km / 700.0).max(1.0) * 2.0).round() / 2.0;
         if let Some(c) = &mut self.cache
             && c.id == id
             && (c.cloud_altitude - style.cloud_altitude_km).abs() < 1e-6
         {
-            if (c.building_tier - tier).abs() > 1e-6 || c.buildings_rev != scene.buildings_rev {
-                c.building_tier = tier;
+            if c.buildings_rev != scene.buildings_rev {
                 c.buildings_rev = scene.buildings_rev;
-                let m = mesh::buildings(scene, tier);
+                let m = mesh::buildings(scene);
                 c.buildings = upload(&self.device, &m, "buildings");
+            }
+            if c.season_rev != scene.season_rev {
+                c.season_rev = scene.season_rev;
+                c.apron = upload(&self.device, &mesh::apron(scene), "apron");
+                c.ground = ground_texture(&self.device, &self.queue, scene);
             }
             if c.mask_rev != scene.mask_rev {
                 c.mask_rev = scene.mask_rev;
@@ -571,8 +593,9 @@ impl Renderer {
         let gpu = GpuScene {
             id,
             terrain: self.upload_mesh(&mesh::terrain(scene), "terrain"),
-            buildings: self.upload_mesh(&mesh::buildings(scene, tier), "buildings"),
-            building_tier: tier,
+            apron: self.upload_mesh(&mesh::apron(scene), "apron"),
+            buildings: self.upload_mesh(&mesh::buildings(scene), "buildings"),
+            season_rev: scene.season_rev,
             mask_rev: scene.mask_rev,
             buildings_rev: scene.buildings_rev,
             clouds: self.upload_mesh(&mesh::cloud_sheet(scene, style.cloud_altitude_km), "clouds"),
@@ -591,19 +614,7 @@ impl Renderer {
                 &scene.mask.rgba,
                 "mask",
             ),
-            ground: self.texture(
-                scene.ground.w as u32,
-                scene.ground.h as u32,
-                &scene
-                    .ground
-                    .classes
-                    .iter()
-                    .zip(&scene.ground.variant)
-                    .flat_map(|(c, v)| [*c, *v])
-                    .collect::<Vec<u8>>(),
-                "ground",
-                wgpu::TextureFormat::Rg8Unorm,
-            ),
+            ground: ground_texture(&self.device, &self.queue, scene),
         };
         self.cache = Some(gpu);
     }
@@ -737,7 +748,7 @@ impl Renderer {
         height: u32,
         finish: &mut Finish,
     ) -> FrameStats {
-        self.prepare(scene, style, camera);
+        self.prepare(scene, style);
         let road_band = mesh::road_band(camera.width_km);
         if style.roads {
             self.ensure_roads(scene, road_band);
@@ -747,7 +758,11 @@ impl Renderer {
         let aspect = rw as f32 / rh as f32;
 
         let (tx, ty) = scene.projection.to_km(camera.lon, camera.lat);
-        let view = camera.view((tx, ty), 0.0, aspect);
+        let view = camera.view(
+            (tx, ty),
+            mesh::camera_target_z(scene, tx, ty, camera.width_km),
+            aspect,
+        );
         let light = style.light_dir();
         let (light_vp, texel_km) = light_matrix(scene, &view, light, style.shadow_size);
         let palette = if style.night {
@@ -1028,7 +1043,7 @@ impl Renderer {
             });
             pass.set_pipeline(&self.main_pipeline);
             pass.set_bind_group(0, Some(&main_group), &[]);
-            let mut meshes = vec![&gpu.terrain];
+            let mut meshes = vec![&gpu.terrain, &gpu.apron];
             if style.buildings {
                 meshes.push(&gpu.buildings);
             }

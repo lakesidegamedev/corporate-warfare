@@ -41,6 +41,8 @@ struct PixelPortrait: View {
     var size: CGFloat = 40
     var mood: String = "neutral"
     var office = false
+    /// Draws the 16 by 16 bust at any size, for a row of small busts in the CEO Office.
+    var forceSmall = false
 
     var body: some View {
         Canvas { context, area in
@@ -55,7 +57,7 @@ struct PixelPortrait: View {
             }
             guard let art = CastPortraits.all[person] else { return }
             let m = CastPortraits.mood(mood)
-            let small = size < 32
+            let small = forceSmall || size < 32
             guard let rows = small ? art.small[m] : art.expressions[m] else { return }
             PixelIcons.draw(
                 rows: rows, palette: art.palette, gridSize: rows.count,

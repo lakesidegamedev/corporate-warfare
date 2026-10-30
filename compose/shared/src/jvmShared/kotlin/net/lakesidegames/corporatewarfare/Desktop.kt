@@ -21,6 +21,10 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -561,19 +565,64 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
             OutlinedButton(onClick = { onOpen(Page.Hall) }) { Text("Hall", color = Palette.primaryText) }
             GoldButton("Actions") { onOpen(Page.Actions) }
         }
+        val scroll = rememberScrollState()
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        val anchors = remember { mutableMapOf<OfficeSection, Int>() }
+        fun Modifier.anchor(section: OfficeSection) = onGloballyPositioned { anchors[section] = it.positionInParent().y.roundToInt() }
+        fun route(r: OfficeRoute) {
+            when (r) {
+                is OfficeRoute.Screen -> Page.entries.firstOrNull { it.id == r.id }?.let(onOpen)
+                is OfficeRoute.Section -> scope.launch { anchors[r.section]?.let { scroll.animateScrollTo(it) } }
+            }
+        }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Column(Modifier.weight(0.9f).fillMaxHeight().verticalScroll(rememberScrollState())) {
-                BriefPanel(store, firm.currency)
+            // The room on the left with the pricing and division tables under it; the details on the right.
+            Column(Modifier.weight(1.1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OfficeRoomHost(store, ::route)
+                val pc = listOf(Col("Product", 1.5f), Col("Price", 0.8f, true), Col("Posture", 1f), Col("Cost", 0.8f, true), Col("Margin", 0.8f, true), Col("Made", 0.6f, true), Col("Sold", 0.6f, true), Col("Stock", 0.75f, true))
+                Pane("Pricing: click a product to change its posture", Modifier.fillMaxWidth().height(300.dp)) {
+                    TableHeader(pc)
+                    store.productLines.forEachIndexed { i, line ->
+                        val margin = line.priceCents - line.unitCostCents
+                        val sold = if (line.madeLastWeekLots > 0) (line.soldLastWeekLots * 100 / line.madeLastWeekLots) else null
+                        TableRow(i, onClick = { editing = line }) {
+                            Cell(line.name, pc[0], bold = true)
+                            Cell(Format.money(line.priceCents), pc[1])
+                            Cell(postureLabel(line), pc[2], Palette.secondary)
+                            Cell(if (line.unitCostCents > 0) Format.money(line.unitCostCents) else "n/a", pc[3])
+                            Cell(if (line.unitCostCents > 0) Format.signed(margin) else "", pc[4], if (margin >= 0) Palette.positive else Palette.negative)
+                            Cell(Format.count(line.madeLastWeekLots), pc[5])
+                            Cell(sold?.let { "$it%" } ?: "", pc[6], when { sold == null -> Palette.secondary; sold >= 95 -> Palette.positive; sold >= 70 -> Palette.gold; else -> Palette.negative })
+                            Cell(Format.count(line.stockLots), pc[7])
+                        }
+                    }
+                }
+                val dc = listOf(Col("Division", 1.6f), Col("Strategy", 1.2f), Col("Plants", 0.6f, true), Col("Share", 0.6f, true))
+                Pane("Divisions", Modifier.fillMaxWidth().height(260.dp)) {
+                    TableHeader(dc)
+                    store.divisions.forEachIndexed { i, d ->
+                        TableRow(i, onClick = { store.showDivision(d) }) {
+                            Cell("${Sectors.name(d.industry)} · ${d.regionName}", dc[0], bold = true)
+                            Cell(d.strategyName + if (d.retooling) " (retooling)" else "", dc[1], Palette.secondary)
+                            Cell("${d.blocks}", dc[2])
+                            Cell("${d.shareBps / 100}%", dc[3], Palette.gold)
+                        }
+                    }
+                }
+
+            }
+            Column(Modifier.weight(0.9f).fillMaxHeight().verticalScroll(scroll)) {
+                Box(Modifier.anchor(OfficeSection.Brief)) { BriefPanel(store, firm.currency) }
                 Spacer(Modifier.height(10.dp))
                 if (store.boardOffer != null || store.activeMandate != null || store.chapterResult != null) {
-                    ChapterBlock(store)
+                    Box(Modifier.anchor(OfficeSection.Goal)) { ChapterBlock(store) }
                     Spacer(Modifier.height(10.dp))
                 }
                 if (store.cfoAdvice.isNotEmpty()) {
                     CfoPanel(store, firm.currency)
                     Spacer(Modifier.height(10.dp))
                 }
-                ExecutivesPanel(store, firm.currency)
+                Box(Modifier.anchor(OfficeSection.Executives)) { ExecutivesPanel(store, firm.currency) }
                 Spacer(Modifier.height(10.dp))
                 RivalsCard(store)
                 Spacer(Modifier.height(10.dp))
@@ -591,36 +640,6 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
                     Panel {
                         Eyebrow("Four-weekly results")
                         ResultsChart(periods)
-                    }
-                }
-            }
-            val pc = listOf(Col("Product", 1.5f), Col("Price", 0.8f, true), Col("Posture", 1f), Col("Cost", 0.8f, true), Col("Margin", 0.8f, true), Col("Made", 0.6f, true), Col("Sold", 0.6f, true), Col("Stock", 0.75f, true))
-            Pane("Pricing: click a product to change its posture", Modifier.weight(1.4f).fillMaxHeight()) {
-                TableHeader(pc)
-                store.productLines.forEachIndexed { i, line ->
-                    val margin = line.priceCents - line.unitCostCents
-                    val sold = if (line.madeLastWeekLots > 0) (line.soldLastWeekLots * 100 / line.madeLastWeekLots) else null
-                    TableRow(i, onClick = { editing = line }) {
-                        Cell(line.name, pc[0], bold = true)
-                        Cell(Format.money(line.priceCents), pc[1])
-                        Cell(postureLabel(line), pc[2], Palette.secondary)
-                        Cell(if (line.unitCostCents > 0) Format.money(line.unitCostCents) else "n/a", pc[3])
-                        Cell(if (line.unitCostCents > 0) Format.signed(margin) else "", pc[4], if (margin >= 0) Palette.positive else Palette.negative)
-                        Cell(Format.count(line.madeLastWeekLots), pc[5])
-                        Cell(sold?.let { "$it%" } ?: "", pc[6], when { sold == null -> Palette.secondary; sold >= 95 -> Palette.positive; sold >= 70 -> Palette.gold; else -> Palette.negative })
-                        Cell(Format.count(line.stockLots), pc[7])
-                    }
-                }
-            }
-            val dc = listOf(Col("Division", 1.6f), Col("Strategy", 1.2f), Col("Plants", 0.6f, true), Col("Share", 0.6f, true))
-            Pane("Divisions", Modifier.weight(1.1f).fillMaxHeight()) {
-                TableHeader(dc)
-                store.divisions.forEachIndexed { i, d ->
-                    TableRow(i, onClick = { store.showDivision(d) }) {
-                        Cell("${Sectors.name(d.industry)} · ${d.regionName}", dc[0], bold = true)
-                        Cell(d.strategyName + if (d.retooling) " (retooling)" else "", dc[1], Palette.secondary)
-                        Cell("${d.blocks}", dc[2])
-                        Cell("${d.shareBps / 100}%", dc[3], Palette.gold)
                     }
                 }
             }

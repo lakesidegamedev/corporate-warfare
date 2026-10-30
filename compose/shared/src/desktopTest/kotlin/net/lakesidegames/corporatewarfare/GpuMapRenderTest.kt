@@ -105,6 +105,57 @@ class GpuMapRenderTest {
         if (out != null) File(out, "timings-${if (drew) "gpu" else "none"}.md").writeText(table.toString())
     }
 
+    /** The review set: scenario, close and turned views in summer and midwinter, with the labels and badges over them. */
+    @Test
+    fun reviewViewsWithLabelsAndBadges() {
+        GpuMapHost.opener = ::openDesktopGpuMap
+        val out = System.getenv("CW_GPU_RENDER_DIR")?.let(::File)?.also { it.mkdirs() } ?: return
+        val views = mapOf(
+            "great-lakes-2000" to listOf(
+                "scenario" to GpuCamera(-82.0, 41.9, 2250.0, 24.0, 0.0), "close" to GpuCamera(-82.9, 40.0, 420.0, 40.0, 0.0),
+                "turned" to GpuCamera(-82.3, 41.1, 900.0, 52.0, 38.0), "building" to GpuCamera(-82.9, 40.0, 60.0, 45.0, 20.0),
+            ),
+            "texas-1981" to listOf(
+                "scenario" to GpuCamera(-97.5, 31.0, 2300.0, 24.0, 0.0), "close" to GpuCamera(-95.4, 29.8, 380.0, 40.0, 0.0),
+                "turned" to GpuCamera(-100.0, 31.5, 1100.0, 52.0, 38.0), "building" to GpuCamera(-95.4, 29.8, 60.0, 45.0, 20.0),
+            ),
+        )
+        for ((id, list) in views) {
+            val session = try { openDesktopGpuMap(id) } catch (e: Throwable) { println("no adapter: ${e.message}"); return }
+            try {
+                val game = career(id)
+                val plants = game.mapPlants(); val divisions = game.mapDivisions()
+                val map = assertNotNull(WorldMap.forScenario(id))
+                for ((season, week) in listOf("day" to 28, "winter" to 3)) {
+                    session.update(gpuUpdateJson(plants, divisions, MapLayer.Presence, emptyMap(), night = false, clouds = 2, week = week))
+                    for ((name, gc) in list) {
+                        session.request(gc, 1600, 1000, false)
+                        val deadline = System.currentTimeMillis() + 120_000
+                        while ((session.shown?.camera != gc || session.shown?.image?.width != 1600) && System.currentTimeMillis() < deadline) Thread.sleep(50)
+                        val scene = ImageComposeScene(1600, 1000, Density(1f)) {
+                            val measurer = rememberTextMeasurer()
+                            val planner = remember { LabelPlanner() }
+                            Canvas(Modifier.fillMaxSize()) {
+                                val shown = drawGpuFrame(session) ?: gc
+                                drawGpuLabels(session, shown, map, plants, divisions, GraphicsConfig.Default, shown.widthKm, measurer, planner)
+                            }
+                        }
+                        val png = scene.render().encodeToData(EncodedImageFormat.PNG)!!.bytes
+                        scene.close()
+                        File(out, "$id-$name-$season.png").writeBytes(png)
+                        File(out, "$id-$name-$season-phone.jpg").writeBytes(
+                            org.jetbrains.skia.Image.makeFromEncoded(png).let { img ->
+                                val sf = org.jetbrains.skia.Surface.makeRasterN32Premul(1000, 625)
+                                sf.canvas.drawImageRect(img, org.jetbrains.skia.Rect.makeWH(1000f, 625f))
+                                sf.makeImageSnapshot().encodeToData(EncodedImageFormat.JPEG, 82)!!.bytes
+                            },
+                        )
+                    }
+                }
+            } finally { session.close() }
+        }
+    }
+
     @Test
     fun withoutAnAdapterTheClassicMapStaysAndTheCounterSaysSo() {
         GpuMapHost.opener = { error("no graphics adapter") }

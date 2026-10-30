@@ -19,6 +19,36 @@ final class SnapshotTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
+    /// The CEO Office as a room: every object in the art routes somewhere, and the room renders on a
+    /// phone and on an iPad from a career a few weeks in.
+    func testRenderOfficeRoom() async throws {
+        let store = AppStore(saveManager: SaveManager(directory: directory))
+        await store.newCareer(guided: true, fiveYear: true, seed: 7)
+        XCTAssertTrue(store.sessionReady)
+        if let primary = store.overview?.primaryFirm { await store.selectFirm(primary) }
+        for _ in 0..<12 {
+            await store.advance(weeks: 1)
+            await store.continueCareer()
+        }
+        await store.refreshHall()
+        await store.refreshExecutives()
+        await store.refreshBrief()
+        let objects = OfficeRoomArt.file?.objects ?? []
+        XCTAssertEqual(objects.count, 16, "the room has its sixteen objects")
+        for object in objects {
+            XCTAssertNotNil(OfficeRoute.of(object.id), "\(object.id) routes to a screen")
+            XCTAssertFalse(object.label.isEmpty, "\(object.id) has a label for VoiceOver")
+        }
+        XCTAssertEqual(OfficeRoute.of("door"), .screen(.research))
+        XCTAssertEqual(OfficeRoute.of("phone"), .screen(.inbox))
+        XCTAssertEqual(OfficeRoute.of("paper"), .screen(.paper))
+        XCTAssertEqual(OfficeRoute.of("chart"), .screen(.stats))
+        XCTAssertNil(OfficeRoute.of("nowhere"))
+        let page = NavigationStack { ScrollView { OfficeRoomHost().padding(16) }.background(Theme.ink) }.environmentObject(store)
+        render("office-room-phone", CGSize(width: 393, height: 420), compact: true, page)
+        render("office-room-pad", CGSize(width: 1180, height: 760), compact: false, page)
+    }
+
     /// The board's offer, the goal in force and the Hall of Careers, from a career in its first year.
     func testRenderChapterScreens() async throws {
         let store = AppStore(saveManager: SaveManager(directory: directory))

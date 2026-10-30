@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::data::{Scene, VoxelModel, WATER_LAKE};
+use crate::data::{Owner, Scene, VoxelModel, WATER_LAKE};
 
 /// Vertex kinds, carried in the colour alpha byte.
 pub const KIND_TOP: u8 = 0;
@@ -13,6 +13,11 @@ pub const KIND_BUILDING: u8 = 2;
 pub const KIND_PLAIN: u8 = 3;
 pub const KIND_CLOUD: u8 = 4;
 pub const KIND_ROAD: u8 = 5;
+/// The land and sea beyond the scenario's terrain, at low detail. The ground class is carried in
+/// the red byte (a `ground` class, or `APRON_WATER`).
+pub const KIND_APRON_TOP: u8 = 6;
+pub const KIND_APRON_WALL: u8 = 7;
+pub const APRON_WATER: u8 = 7;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -479,17 +484,17 @@ fn box_faces(
 }
 
 /// Voxel buildings standing on the terrain, each on a plinth down to the lowest ground under it.
-pub fn buildings(scene: &Scene, tier: f32) -> Mesh {
+pub fn buildings(scene: &Scene) -> Mesh {
     let mut m = Mesh::default();
     for p in &scene.buildings {
         let Some(model) = scene.models.get(&p.model) else {
             continue;
         };
         let (cx, cy) = scene.projection.to_km(p.lon, p.lat);
-        let (hi, lo) = ground_range(scene, model, p.scale * tier, cx, cy);
+        let (hi, lo) = ground_range(scene, model, p.scale, cx, cy);
         let (z_top, z_low) = (level_z_km(scene, hi), level_z_km(scene, lo));
         let (s, c) = p.yaw.to_radians().sin_cos();
-        let v = scene.voxel_km * p.scale * tier;
+        let v = scene.voxel_km * p.scale;
         let rot = move |n: [f32; 3]| [n[0] * c - n[1] * s, n[0] * s + n[1] * c, n[2]];
         let tf = move |q: [f32; 3]| {
             [
@@ -524,8 +529,77 @@ pub fn buildings(scene: &Scene, tier: f32) -> Mesh {
                 if tall { KIND_BUILDING } else { KIND_PLAIN },
             );
         }
+        if p.owner == Owner::Player {
+            // Gold roofs: a thin gold slab over every top-most roof of the player's buildings.
+            let top = model.boxes.iter().map(|b| b.max[2]).fold(0.0f32, f32::max);
+            for b in &model.boxes {
+                let wide = (b.max[0] - b.min[0]) * (b.max[1] - b.min[1]) >= 4.0;
+                if b.max[2] >= top - 0.01 && wide {
+                    box_faces(
+                        &mut m,
+                        &tf,
+                        &rot,
+                        [b.min[0], b.min[1], b.max[2]],
+                        [b.max[0], b.max[1], b.max[2] + 0.7],
+                        PLAYER_ROOF,
+                        KIND_PLAIN,
+                    );
+                }
+            }
+        }
     }
     m
+}
+
+/// Roof colour of the player's own buildings (the palette's gold).
+const PLAYER_ROOF: [u8; 3] = [0xE2, 0xB0, 0x4A];
+
+/// A placed building's ground footprint and height, for the interface: it reserves the space on
+/// the label planner and decides whether the building is big enough to show on screen.
+#[derive(Clone, Debug)]
+pub struct BuildingBox {
+    pub lon: f32,
+    pub lat: f32,
+    /// Half the footprint's longest side, in kilometres.
+    pub half_km: f32,
+    pub height_km: f32,
+    pub owner: Owner,
+    pub model: String,
+    /// The body colour of the sector's model.
+    pub colour: [u8; 3],
+}
+
+pub fn building_boxes(scene: &Scene) -> Vec<BuildingBox> {
+    scene
+        .buildings
+        .iter()
+        .filter_map(|p| {
+            let model = scene.models.get(&p.model)?;
+            let v = scene.voxel_km * p.scale;
+            let top = model.boxes.iter().map(|b| b.max[2]).fold(0.0f32, f32::max);
+            // The sector colour is the colour of the biggest box above the plinth.
+            let body = model
+                .boxes
+                .iter()
+                .filter(|b| b.min[2] >= 1.0)
+                .max_by(|a, b| {
+                    let vol = |x: &crate::data::VoxelBox| {
+                        (x.max[0] - x.min[0]) * (x.max[1] - x.min[1]) * (x.max[2] - x.min[2])
+                    };
+                    vol(a).total_cmp(&vol(b))
+                })
+                .map_or([0x80, 0x80, 0x80], |b| b.colour);
+            Some(BuildingBox {
+                lon: p.lon,
+                lat: p.lat,
+                half_km: model.footprint[0].max(model.footprint[1]) * v / 2.0,
+                height_km: top * v,
+                owner: p.owner,
+                model: p.model.clone(),
+                colour: body,
+            })
+        })
+        .collect()
 }
 
 /// Highest and lowest terrace level under a building's footprint.
@@ -938,4 +1012,261 @@ pub fn roads(scene: &Scene, band: usize) -> RoadMesh {
         });
     }
     RoadMesh { mesh: m, tiles }
+}
+
+/// How far the horizon extends past the terrain, in degrees, and the size of its first cells.
+const APRON_REACH_DEG: f32 = 90.0;
+const APRON_CELL_DEG: f32 = 0.4;
+
+/// Breakpoints along one axis: from `lo` to `a` (the terrain's near edge), across the terrain to
+/// `b`, then out to `hi`. Cells start at the apron's cell size and grow by a quarter each step
+/// away from the terrain, so the far horizon costs a few big cells.
+fn apron_ticks(lo: f32, a: f32, b: f32, hi: f32) -> Vec<f32> {
+    let grow = |from: f32, to: f32, out: &mut Vec<f32>| {
+        // Walk outward from `from` toward `to`, then reverse for the low side.
+        let sign = if to >= from { 1.0 } else { -1.0 };
+        let mut x = from;
+        let mut step = APRON_CELL_DEG;
+        loop {
+            let next = x + sign * step;
+            if (to - next) * sign <= step * 0.5 {
+                out.push(to);
+                break;
+            }
+            out.push(next);
+            x = next;
+            step *= 1.25;
+        }
+    };
+    let mut low = vec![a];
+    grow(a, lo, &mut low);
+    low.reverse();
+    let mut t = low;
+    let n = ((b - a) / APRON_CELL_DEG).ceil().max(1.0) as usize;
+    for k in 1..=n {
+        t.push(a + (b - a) * k as f32 / n as f32);
+    }
+    grow(b, hi, &mut t);
+    t.dedup_by(|x, y| (*x - *y).abs() < 1e-4);
+    t
+}
+
+/// What the satellite picture shows at a point, as an apron class: water, or the land class.
+fn apron_class(scene: &Scene, lon: f32, lat: f32) -> u8 {
+    let e = &scene.earth;
+    let u = ((lon - e.bounds.west) / (e.bounds.east - e.bounds.west) * e.w as f32)
+        .clamp(0.0, e.w as f32 - 1.0) as usize;
+    let v = ((e.bounds.north - lat) / (e.bounds.north - e.bounds.south) * e.h as f32)
+        .clamp(0.0, e.h as f32 - 1.0) as usize;
+    let p = (v * e.w as usize + u) * 4;
+    let (r, g, b) = (e.rgba[p] as f32, e.rgba[p + 1] as f32, e.rgba[p + 2] as f32);
+    if b > g * 1.05 && b > r * 1.25 {
+        return APRON_WATER;
+    }
+    let class = crate::ground::classify([e.rgba[p], e.rgba[p + 1], e.rgba[p + 2]]);
+    if crate::ground::snow_cover(scene.week, lat, lon, 0.0) > 0.2 {
+        crate::ground::G_SNOW
+    } else {
+        class
+    }
+}
+
+/// The ring of land and sea beyond the terrain's edge, so a tilted view ends in a horizon of
+/// land and sea rather than a hard board edge. Coarse cells, a class and a terrace level each:
+/// the same terrace look as the terrain, at about 45 km a cell. Its level is the terrain's edge
+/// level at the nearest point (the sea is the lowest level), and a wall closes every step,
+/// including the one at the terrain's own edge, so nothing ever shows a gap.
+pub fn apron(scene: &Scene) -> Mesh {
+    let hm = &scene.heightmap;
+    let hb = hm.bounds;
+    let eb = scene.earth.bounds;
+    let _ = eb;
+    let (w0, e0) = (hb.west - APRON_REACH_DEG, hb.east + APRON_REACH_DEG);
+    let (s0, n0) = (hb.south - 60.0, hb.north + 60.0);
+    let xs = apron_ticks(w0.min(hb.west), hb.west, hb.east, e0.max(hb.east));
+    let ys = apron_ticks(s0.min(hb.south), hb.south, hb.north, n0.max(hb.north));
+    let sea = scene.levels.iter().copied().min().unwrap_or(0);
+    let (dx, dy) = hm.cell_degrees();
+    let edge_level = |lon: f32, lat: f32| {
+        let (c, r) = hm.cell_of(
+            lon.clamp(hb.west + dx * 0.5, hb.east - dx * 0.5),
+            lat.clamp(hb.south + dy * 0.5, hb.north - dy * 0.5),
+        );
+        scene.level_at(c, r)
+    };
+    let inside =
+        |lon: f32, lat: f32| lon > hb.west && lon < hb.east && lat > hb.south && lat < hb.north;
+    let (nx, ny) = (xs.len() - 1, ys.len() - 1);
+    let mut cells: Vec<Option<(u8, i32)>> = vec![None; nx * ny];
+    for j in 0..ny {
+        for i in 0..nx {
+            let (lon, lat) = ((xs[i] + xs[i + 1]) / 2.0, (ys[j] + ys[j + 1]) / 2.0);
+            if inside(lon, lat) {
+                continue;
+            }
+            let class = apron_class(scene, lon, lat);
+            let level = if class == APRON_WATER {
+                sea
+            } else {
+                edge_level(lon, lat)
+            };
+            cells[j * nx + i] = Some((class, level));
+        }
+    }
+    let mut m = Mesh::default();
+    let km = |lon: f32, lat: f32| scene.projection.to_km(lon, lat);
+    let top = |class: u8| [class, 0, 0, KIND_APRON_TOP];
+    let wall_c = |class: u8| [class, 0, 0, KIND_APRON_WALL];
+    // A sloped wall along the segment (a to b) in km, from the high level down to the low one,
+    // leaning toward the low side `dir`. The run is a fixed fraction of a cell so it is never
+    // thinner than a few pixels.
+    let wall = |m: &mut Mesh,
+                a: (f32, f32),
+                b: (f32, f32),
+                dir: (f32, f32),
+                lo: i32,
+                hi: i32,
+                class: u8| {
+        let (za, zb) = (level_z_km(scene, lo), level_z_km(scene, hi));
+        let run = slope_run(scene, zb - za) * 2.0;
+        let n = slope_normal([dir.0, dir.1], zb - za, run);
+        m.quad(
+            [
+                [a.0 + dir.0 * run, a.1 + dir.1 * run, za],
+                [b.0 + dir.0 * run, b.1 + dir.1 * run, za],
+                [b.0, b.1, zb],
+                [a.0, a.1, zb],
+            ],
+            n,
+            wall_c(class),
+            [[0.0; 3]; 4],
+        );
+    };
+    for j in 0..ny {
+        for i in 0..nx {
+            let Some((class, level)) = cells[j * nx + i] else {
+                continue;
+            };
+            let (x0, y0) = km(xs[i], ys[j]);
+            let (x1, y1) = km(xs[i + 1], ys[j + 1]);
+            let z = level_z_km(scene, level);
+            m.quad(
+                [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]],
+                [0.0, 0.0, 1.0],
+                top(class),
+                [[0.0; 3]; 4],
+            );
+            // Walls to the east and north neighbours when the levels differ.
+            if i + 1 < nx
+                && let Some((c2, l2)) = cells[j * nx + i + 1]
+                && l2 != level
+            {
+                let (lo, hi, dir, c) = if level > l2 {
+                    (l2, level, (1.0, 0.0), c2)
+                } else {
+                    (level, l2, (-1.0, 0.0), class)
+                };
+                wall(&mut m, (x1, y0), (x1, y1), dir, lo, hi, c);
+            }
+            if j + 1 < ny
+                && let Some((c2, l2)) = cells[(j + 1) * nx + i]
+                && l2 != level
+            {
+                let (lo, hi, dir, c) = if level > l2 {
+                    (l2, level, (0.0, 1.0), c2)
+                } else {
+                    (level, l2, (0.0, -1.0), class)
+                };
+                wall(&mut m, (x0, y1), (x1, y1), dir, lo, hi, c);
+            }
+        }
+    }
+    // The terrain's own edge: a wall wherever the neighbouring apron cell is at another level.
+    let apron_at = |lon: f32, lat: f32| -> Option<(u8, i32)> {
+        let i = xs.partition_point(|&t| t <= lon).checked_sub(1)?;
+        let j = ys.partition_point(|&t| t <= lat).checked_sub(1)?;
+        if i >= nx || j >= ny {
+            return None;
+        }
+        cells[j * nx + i]
+    };
+    let eps = 0.02;
+    for r in 0..hm.h {
+        let lat = hb.north - (r as f32 + 0.5) * dy;
+        for (c, lon_out, dir, lon_edge) in [
+            (0, hb.west - eps, (-1.0, 0.0), hb.west),
+            (hm.w - 1, hb.east + eps, (1.0, 0.0), hb.east),
+        ] {
+            let own = scene.level_at(c, r);
+            if let Some((class, l2)) = apron_at(lon_out, lat)
+                && l2 != own
+            {
+                let (ya, yb) = (hb.north - r as f32 * dy, hb.north - (r + 1) as f32 * dy);
+                let (a, b) = (km(lon_edge, ya), km(lon_edge, yb));
+                if l2 < own {
+                    wall(&mut m, a, b, dir, l2, own, class);
+                } else {
+                    wall(&mut m, a, b, (-dir.0, -dir.1), own, l2, class);
+                }
+            }
+        }
+    }
+    for c in 0..hm.w {
+        let lon = hb.west + (c as f32 + 0.5) * dx;
+        for (r, lat_out, dir, lat_edge) in [
+            (0, hb.north + eps, (0.0, 1.0), hb.north),
+            (hm.h - 1, hb.south - eps, (0.0, -1.0), hb.south),
+        ] {
+            let own = scene.level_at(c, r);
+            if let Some((class, l2)) = apron_at(lon, lat_out)
+                && l2 != own
+            {
+                let (xa, xb) = (hb.west + c as f32 * dx, hb.west + (c + 1) as f32 * dx);
+                let (a, b) = (km(xa, lat_edge), km(xb, lat_edge));
+                if l2 < own {
+                    wall(&mut m, a, b, dir, l2, own, class);
+                } else {
+                    wall(&mut m, a, b, (-dir.0, -dir.1), own, l2, class);
+                }
+            }
+        }
+    }
+    m
+}
+
+/// West, south, east and north extent of the horizon apron in kilometres, for tests.
+pub fn apron_extent_km(scene: &Scene) -> [f32; 4] {
+    let m = apron(scene);
+    let mut e = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+    for v in &m.vertices {
+        e = [
+            e[0].min(v.pos[0]),
+            e[1].min(v.pos[1]),
+            e[2].max(v.pos[0]),
+            e[3].max(v.pos[1]),
+        ];
+    }
+    e
+}
+
+/// Height the camera looks at: the terrain's mean height round the target, in kilometres. The
+/// terrain is drawn exaggerated, so a close view over a plateau would otherwise sit inside it.
+/// Averaged over the view (not read at one point) so a pan does not jerk at each terrace.
+pub fn camera_target_z(scene: &Scene, x: f32, y: f32, width_km: f32) -> f32 {
+    let r = width_km * 0.2;
+    let mut sum = 0.0;
+    for (ox, oy) in [
+        (0.0, 0.0),
+        (-r, 0.0),
+        (r, 0.0),
+        (0.0, -r),
+        (0.0, r),
+        (-r, -r),
+        (r, -r),
+        (-r, r),
+        (r, r),
+    ] {
+        sum += ground_z(scene, x + ox, y + oy);
+    }
+    sum / 9.0
 }

@@ -13,6 +13,19 @@ heading.
 
 ### Added
 
+- The CEO Office is now a room you can walk around. At the top of the screen is a pixel-art boardroom
+  with the things that matter standing on the furniture. Your chief executive sits behind the desk,
+  smiling when the quarter made money and frowning when it lost it, with a name plate. The window
+  shows the map around your headquarters. A wall chart shows this quarter's profit with a small
+  line, the phone blinks red when letters are waiting, and the newspaper on the side table shows
+  today's headline. The board sits behind its table with the goal it set you standing on a card,
+  three chairs hold your executives (or an empty chair that says Hire), the safe shows your cash,
+  the trophy shelf fills as you earn achievements, the weekly brief is a memo on the desk, and a
+  door leads to Research. Tap any of them to open the screen it belongs to. Hover over an object, or
+  press and hold it on a phone or tablet, to see what it is called. Screen readers read out every
+  object with its figure. If you have Reduce Motion on, the phone's light stays on instead of
+  blinking. Everything the CEO Office showed before is still there, below the room on a phone and
+  to the right of it on a computer.
 - Elections with faces, campaign money, state laws and public tenders. Every state now has a
   governor race, and the country has a leader race, each between two named people with a portrait
   and two or three promises (right to work, corporate tax, environmental rules, and for the country
@@ -272,6 +285,15 @@ heading.
 
 ### Fixed
 
+- The new map (preview) looks right in more places. Buildings are now a true size, a plant one to
+  three kilometres across and a downtown block about a kilometre, so they no longer swamp the cities;
+  they stay put and stay the same size on the ground when you zoom. When a building would be only a
+  speck on screen, a small badge marks its place instead (gold for yours, the sector colour for your
+  rivals). Your own buildings have gold roofs. West Texas and northern Mexico are tan scrub and
+  desert instead of snow and grey rock: snow now follows the calendar and the place, so it falls on
+  northern winters (the Ruhr in January) and on high mountains such as the Sierra, never on hot
+  lowlands. Names keep clear of buildings. The edge of the map is no longer a hard board edge with
+  black beyond it: when you tilt the view the land and sea carry on to a clean horizon.
 - The map no longer comes apart when you drag it. The ground, clouds, buildings, labels, traffic
   and effects used to be drawn at slightly different moments, so they slid against each other and
   popped into place a moment late. They now always show the same view and move together, a quick

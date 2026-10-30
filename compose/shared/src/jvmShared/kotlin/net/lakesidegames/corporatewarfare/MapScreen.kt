@@ -239,9 +239,10 @@ fun WorldMapView(
             graphics.dayNight && b != null && Sun.moving(sunStep / 3.0).facing(Math.toRadians((b[0] + b[2]) / 2), Math.toRadians((b[1] + b[3]) / 2)) < 0
         }
     }
-    LaunchedEffect(gpu, store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds) {
+    val gpuWeek = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28
+    LaunchedEffect(gpu, store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds, gpuWeek) {
         val session = gpu ?: return@LaunchedEffect
-        val json = gpuUpdateJson(store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds)
+        val json = gpuUpdateJson(store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds, gpuWeek)
         withContext(Dispatchers.Default) { runCatching { session.update(json) } }
     }
 
@@ -339,10 +340,9 @@ fun WorldMapView(
                 if (gpu != null && gpuOn) {
                     val gc = gpuCamera(cam, size.width, size.height, pitch)
                     gpu.request(gc, size.width.toInt(), size.height.toInt(), true)
-                    drawGpuFrame(gpu)
+                    val shown = drawGpuFrame(gpu) ?: gc
                     // Names and division badges, projected by the camera of the frame on screen so nothing slides.
                     gpu.version
-                    val shown = gpu.frameCamera ?: gc
                     drawGpuLabels(gpu, shown, map, store.mapPlants, store.mapDivisions, graphics, shown.widthKm, labelMeasurer, labelPlanner)
                     if (graphics.showFps) {
                         val rate = fps.tick(System.nanoTime())

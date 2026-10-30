@@ -14,6 +14,7 @@ struct CEOOfficeView: View {
     var body: some View {
         TabScreen(title: "CEO Office", subtitle: store.overview?.weekLabel) {
             if let firm {
+                OfficeRoomHost()
                 masthead(firm)
                 ChapterBlock()
                 figures(firm)

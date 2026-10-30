@@ -404,6 +404,7 @@ struct NewsTicker: View {
                 headlines = fresh
                 shown = 0
             }
+            if let first = fresh.first, store.headline != first { store.headline = first }
         }
         .task(id: cycling) {
             shown = 0

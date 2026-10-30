@@ -6,7 +6,7 @@ use glam::{Vec3, Vec4};
 
 use crate::camera::Camera;
 use crate::data::Scene;
-use crate::mesh::ground_z;
+use crate::mesh::{camera_target_z, ground_z};
 
 /// Where a map position lands on a `width` x `height` screen, `lift_km` above the ground. None
 /// when it is behind the camera.
@@ -20,7 +20,11 @@ pub fn project(
     lift_km: f32,
 ) -> Option<(f32, f32)> {
     let (tx, ty) = scene.projection.to_km(camera.lon, camera.lat);
-    let view = camera.view((tx, ty), 0.0, width / height);
+    let view = camera.view(
+        (tx, ty),
+        camera_target_z(scene, tx, ty, camera.width_km),
+        width / height,
+    );
     let (x, y) = scene.projection.to_km(lon, lat);
     let z = ground_z(scene, x, y) + lift_km;
     let clip = view.view_proj * Vec4::new(x, y, z, 1.0);
@@ -41,7 +45,11 @@ pub fn pick_ground(
     py: f32,
 ) -> Option<(f32, f32)> {
     let (tx, ty) = scene.projection.to_km(camera.lon, camera.lat);
-    let view = camera.view((tx, ty), 0.0, width / height);
+    let view = camera.view(
+        (tx, ty),
+        camera_target_z(scene, tx, ty, camera.width_km),
+        width / height,
+    );
     let (nx, ny) = (px / width * 2.0 - 1.0, 1.0 - py / height * 2.0);
     let near = view.inv_view_proj.project_point3(Vec3::new(nx, ny, 0.0));
     let far = view.inv_view_proj.project_point3(Vec3::new(nx, ny, 1.0));

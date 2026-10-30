@@ -34,6 +34,8 @@ final class AppStore: ObservableObject {
     /// This career's chapters, board goals and achievements. Read when the Hall page is open, right
     /// after a choice, and when the week changes with time paused or at 1x; never at 2x or 4x.
     @Published var hall: HallDto?
+    /// The top headline the ticker last read, for the CEO Office's newspaper.
+    @Published var headline: String?
     /// The weekly brief for the selected company. Read only while the CEO Office shows it, and at
     /// 2x or 4x no more than once a week.
     @Published var brief: BriefDto?

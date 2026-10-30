@@ -29,6 +29,8 @@ internal interface CwGpu : Library {
     fun cw_gpu_render(id: Long, cam: DoubleArray, width: Int, height: Int, scale: Int, out: ByteArray, outLen: Long, timing: DoubleArray): Int
     fun cw_gpu_project(id: Long, cam: DoubleArray, width: Float, height: Float, pts: DoubleArray, n: Long, out: FloatArray): Int
     fun cw_gpu_pick(id: Long, cam: DoubleArray, width: Float, height: Float, px: Float, py: Float, buf: ByteArray, len: Long): Int
+    fun cw_gpu_buildings(id: Long, buf: ByteArray, len: Long): Int
+    fun cw_gpu_building_rects(id: Long, cam: DoubleArray, width: Float, height: Float, out: FloatArray, max: Long): Int
     fun cw_gpu_close(id: Long)
 
     companion object {
@@ -101,18 +103,41 @@ private class DesktopGpuSession(
     @Volatile override var renderMs = 0.0
     @Volatile override var copyMs = 0.0
     private class Shown(val image: ImageBitmap, val camera: GpuCamera)
-    @Volatile private var shown: Shown? = null
-    override val frame: ImageBitmap? get() = shown?.image
-    override val frameCamera: GpuCamera? get() = shown?.camera
+    @Volatile private var latest: Shown? = null
+    override val frame: ImageBitmap? get() = latest?.image
+    override val frameCamera: GpuCamera? get() = latest?.camera
+    override val shown: GpuShown? get() = latest?.let { GpuShown(it.image, it.camera) }
     override var version by mutableLongStateOf(0L)
         private set
 
     private val worker = thread(name = "cw-gpu-map", isDaemon = true) { loop() }
 
+    @Volatile private var placed: List<GpuBuilding> = emptyList()
+
     override fun update(json: String) {
         val code = lib.cw_gpu_update(id, json)
         if (code < 0) return
+        placed = readBuildings()
         lock.withLock { dirty = true; wake.signalAll() }
+    }
+
+    override fun buildings(): List<GpuBuilding> = placed
+
+    override fun buildingRects(camera: GpuCamera, width: Int, height: Int): FloatArray {
+        val out = FloatArray(placed.size * 4) { Float.NaN }
+        if (placed.isNotEmpty()) lib.cw_gpu_building_rects(id, cam(camera), width.toFloat(), height.toFloat(), out, placed.size.toLong())
+        return out
+    }
+
+    private fun readBuildings(): List<GpuBuilding> {
+        val text = lib.text { lib.cw_gpu_buildings(id, it, it.size.toLong()) } ?: return emptyList()
+        return runCatching {
+            kotlinx.serialization.json.Json.parseToJsonElement(text).let { it as kotlinx.serialization.json.JsonArray }.map { e ->
+                val o = e as kotlinx.serialization.json.JsonObject
+                fun str(k: String) = (o[k] as kotlinx.serialization.json.JsonPrimitive).content
+                GpuBuilding(str("lon").toDouble(), str("lat").toDouble(), str("owner"), str("kind"), (0xFF000000L or str("colour").toLong(16)).toInt())
+            }
+        }.getOrDefault(emptyList())
     }
 
     override fun request(camera: GpuCamera, width: Int, height: Int, moving: Boolean) {
@@ -187,7 +212,7 @@ private class DesktopGpuSession(
             val skia = (System.nanoTime() - t0) / 1e6
             renderMs = timing[0]
             copyMs = timing[1] + skia
-            shown = Shown(image, job.camera)
+            latest = Shown(image, job.camera)
             lock.withLock { rendered = job; renderedScale = scale }
             version += 1
         }
