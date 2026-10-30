@@ -683,6 +683,7 @@ fn systemic_events_strike_deterministically_and_through_a_save() {
             // Earnings state travels in its own save trailer (cw-session), outside the payload;
             // carry it across as a save would.
             reloaded.earnings = a.earnings.clone();
+            reloaded.civics = a.civics.clone();
             copy = Some(reloaded);
         }
     }

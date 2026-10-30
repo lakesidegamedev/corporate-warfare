@@ -2942,7 +2942,9 @@ mod tests {
             cw_sim::tick::advance(&mut world, &dataset);
         }
         let bytes = postcard::to_allocvec(&world).unwrap();
-        let reloaded: World = postcard::from_bytes(&bytes).unwrap();
+        let mut reloaded: World = postcard::from_bytes(&bytes).unwrap();
+        // The politics state travels in its own save trailer, outside the payload.
+        reloaded.civics = world.civics.clone();
         let first: Vec<String> = propose(&world, &dataset)
             .iter()
             .map(|p| format!("{p:?}"))
