@@ -220,6 +220,13 @@ heading.
 
 ### Fixed
 
+- The map no longer comes apart when you drag it. The ground, clouds, buildings, labels, traffic
+  and effects used to be drawn at slightly different moments, so they slid against each other and
+  popped into place a moment late. They now always show the same view and move together, a quick
+  rougher picture follows your hand while you drag, and the sharp one arrives as soon as you let go.
+  Buildings are now fixed objects: each division, rival plant and city stands on its own lot on
+  the ground at a real size, so it stays put and keeps its size relative to the land as you zoom,
+  tilt and turn. Far out, a building never shrinks below a small minimum and gives way to a badge.
 - The outside world no longer runs out of money. It used to buy your exports and keep them on its
   books forever while its cash only fell: in Texas it dropped from $855 million to $360 million in
   four years, in Great Lakes from $463 million to $201 million in five, and once it was empty
