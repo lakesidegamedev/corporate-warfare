@@ -13,6 +13,11 @@ heading.
 
 ### Added
 
+- A rival that is the target of a takeover now gets help from friends. Once a raider's stake in a
+  rival company is public (5 percent of the votes), one friendly rival with cash to spare steps in: it
+  makes the company a friendly offer above the market if it can fund one, or otherwise buys a
+  blocking stake on the exchange a little at a time. Friends are firms in the same group or allies
+  with no grudge and no closer tie to the raider. It never defends your own company for you.
 - On the desktop the map can sit beside any page. Press Ctrl M or use "Dock map" in the sidebar and the
   page you are on gets the map on its left, with a handle between them to drag (or use the arrow keys
   on it). Each page remembers its own width and whether it is docked. Pages that need room scroll

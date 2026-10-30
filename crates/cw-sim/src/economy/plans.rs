@@ -746,6 +746,146 @@ pub fn rival_action(world: &World, ds: &Dataset, firm: Handle) -> Option<Action>
     }
 }
 
+/// Weeks after a friendly firm's own offer for a target ended before it makes another.
+const KNIGHT_RETRY_WEEKS: u32 = 26;
+/// A friendly offer pays this far over the higher of the target's mark and fair estimate.
+const KNIGHT_PREMIUM_BPS: i64 = 3_000;
+/// A blocking stake aims this far above the raider's stake, in basis points of the votes.
+const KNIGHT_MARGIN_BPS: i32 = 500;
+/// The most a friendly firm builds as a blocking stake, in basis points of the votes.
+const KNIGHT_CAP_BPS: i32 = 3_500;
+
+/// Whether `firm` is a friend of `target`: the same group, or an alliance that counts, with no
+/// live grudge and no closer tie to the raider.
+fn is_friend(world: &World, firm: Handle, target: Handle, raider: Handle) -> bool {
+    if firm == target || firm == raider || ownership::same_group(world, firm, raider) {
+        return false;
+    }
+    if ownership::same_group(world, firm, target) {
+        return true;
+    }
+    let tie = rivalry::alliance(world, firm, target);
+    tie >= rivalry::ACTIVE
+        && rivalry::grudge(world, firm, target) < rivalry::ACTIVE
+        && tie > rivalry::alliance(world, firm, raider)
+}
+
+/// Spare cash of a rival after its reserve.
+fn spare_cash(world: &World, firm: Handle) -> i64 {
+    world
+        .firms
+        .get(firm)
+        .map(|f| (f.book.cash() - reserve_of(world, firm)).max(0))
+        .unwrap_or(0)
+}
+
+/// The friendly firm that steps in for a target once a rival's plan against it is public: the
+/// strongest friend (the same group first, then the closest alliance, then the lowest handle)
+/// that has cash over its reserve and no plan of its own. Pure and deterministic.
+fn white_knight_for(world: &World, plan: &Plan) -> Option<Handle> {
+    let target = plan.target;
+    world
+        .firms
+        .iter()
+        .filter(|(h, f)| {
+            f.operative()
+                && !is_player_side(world, *h)
+                && world.plans.plan_of(*h).is_none()
+                && is_friend(world, *h, target, plan.raider)
+                && spare_cash(world, *h) > 0
+        })
+        .map(|(h, _)| {
+            let group = ownership::same_group(world, h, target);
+            (
+                std::cmp::Reverse(group),
+                std::cmp::Reverse(rivalry::alliance(world, h, target)),
+                h,
+            )
+        })
+        .min()
+        .map(|(_, _, h)| h)
+}
+
+/// A friendly rival's move to defend a target a raider has made public, if any. Once the raider's
+/// stake in an AI company has crossed the disclosure line, the strongest friendly firm either
+/// sends a friendly offer for the company (a deal above the market, so it is not hostile) when
+/// it can fund one, or builds a blocking stake on the exchange, as a plan does, a step of at
+/// most half the weekly float bid at most 2 percent over the mark. It never acts for the
+/// player's company: the player answers for it. The AI sends the result as ordinary commands.
+pub fn white_knight(world: &World, firm: Handle) -> Option<Action> {
+    let me = world.firms.get(firm)?;
+    if !me.operative() || world.plans.plan_of(firm).is_some() {
+        return None;
+    }
+    let now = world.tick.0;
+    for plan in &world.plans.plans {
+        if plan.disclosed.is_none()
+            || plan.stake_bps < DISCLOSE_BPS
+            || plan.stage == Stage::SellingOut
+            || plan.target == firm
+            || is_player_side(world, plan.target)
+        {
+            continue;
+        }
+        let target = plan.target;
+        let Some(t) = world.firms.get(target) else {
+            continue;
+        };
+        if !t.status.can_trade()
+            || t.shares.controller().is_some()
+            || !is_friend(world, firm, target, plan.raider)
+            || spare_cash(world, firm) <= 0
+            || white_knight_for(world, plan) != Some(firm)
+        {
+            continue;
+        }
+        let mine = || {
+            world
+                .deals
+                .iter()
+                .filter(move |(_, d)| d.buyer == firm && d.target == target)
+        };
+        if mine().any(|(_, d)| !d.state.terminal()) {
+            // Its offer is out; wait for the answer.
+            return None;
+        }
+        let eligible = t.shares.eligible_votes();
+        let held = t.shares.qty(HolderId::Firm(firm));
+        let recent = mine().any(|(_, d)| now.saturating_sub(d.started.0) < KNIGHT_RETRY_WEEKS);
+        let reference = t.shares.mark_cents.max(t.shares.fair_cents).max(1);
+        let price = reference + reference * KNIGHT_PREMIUM_BPS / 10_000;
+        let wanted = (eligible / 2 + 1 - held).max(0);
+        if !recent && wanted > 0 {
+            let escrow = deals::escrow_required(price, wanted);
+            let diligence = price.saturating_mul(wanted) / 200;
+            if spare_cash(world, firm) >= escrow + diligence {
+                return Some(Action::Tender {
+                    target,
+                    price_cents: price,
+                    shares: wanted,
+                });
+            }
+        }
+        // A blocking stake: more than the raider holds, within a cap.
+        let goal_bps = (plan.stake_bps + KNIGHT_MARGIN_BPS).min(KNIGHT_CAP_BPS);
+        let goal = eligible * goal_bps as i64 / 10_000;
+        let mark = t.shares.mark_cents.max(1);
+        let limit = mark * (10_000 + LIMIT_BPS) / 10_000;
+        let room = (weekly_float(world, target) * STEP_FLOAT_BPS / 10_000).max(0);
+        let qty = room
+            .min((goal - held).max(0))
+            .min(spare_cash(world, firm) / limit.max(1));
+        if qty > 0 {
+            return Some(Action::Buy {
+                target,
+                qty,
+                limit_cents: limit,
+            });
+        }
+    }
+    None
+}
+
 /// A target's own answer to a disclosed hostile stake: buy back shares, which takes them out of
 /// the float and lifts the price. Returns the quantity. The target never lets a buyback push the
 /// rival over the control line, and keeps a cash cushion.
