@@ -481,11 +481,17 @@ pub unsafe extern "C" fn cw_gpu_open(assets: *const c_char, scenario: *const c_c
     guarded(0, || {
         let (assets, scenario) = unsafe { (text(assets)?, text(scenario)?) };
         let map = GpuMap::open(Path::new(assets), scenario)?;
+        // The desktop picture is copied out and scaled by the app: texture steps are drawn at
+        // least one screen pixel wide (the renderer's default is two), so ground detail stays crisp.
+        map.style.write().unwrap().texel_min_px = DESKTOP_TEXEL_MIN_PX;
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
         MAPS.lock().unwrap().push((id, Arc::new(map)));
         Ok(id)
     })
 }
+
+/// Smallest ground texture step on the desktop, in screen pixels.
+const DESKTOP_TEXEL_MIN_PX: f32 = 1.0;
 
 /// Open the map drawing into a `CAMetalLayer` (iOS, Mac Catalyst): frames go to the screen with
 /// `cw_gpu_render_layer`, no pixels are copied. Returns a handle, or 0 (see `cw_gpu_last_error`).
@@ -1018,7 +1024,7 @@ mod tests {
         let at = |x: usize, y: usize| out[(y * w as usize + x) * 4..][..3].to_vec();
         let land = out
             .chunks_exact(4)
-            .filter(|p| p[..3] != [0x0b, 0x16, 0x22])
+            .filter(|p| p[..3] != [0x1e, 0x47, 0x72])
             .count();
         eprintln!(
             "centre {:?} corner {:?} non-clear {land}",
