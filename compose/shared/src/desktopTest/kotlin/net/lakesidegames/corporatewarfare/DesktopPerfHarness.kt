@@ -58,6 +58,10 @@ class DesktopPerfHarness {
         fun stop() { live = false; thread.join() }
     }
 
+    /** The share of sampled time spent replaying recorded drawing in native Skia (software here, the graphics card in the app). */
+    private fun nativeShare(sampler: Sampler): Double =
+        (sampler.self.entries.filter { it.key.startsWith("RenderNodeKt.RenderNode_nDrawInto") || it.key.startsWith("CanvasKt._nClear") }.sumOf { it.value }) / sampler.samples.coerceAtLeast(1).toDouble()
+
     private fun printProfile(label: String, sampler: Sampler) {
         sampler.stop()
         line("  profile $label: ${sampler.samples} samples")
@@ -149,22 +153,31 @@ class DesktopPerfHarness {
 
         // The UI thread, one page at a time.
         val settings = AppSettings(File(dir, "settings.properties"))
-        val pages = listOf("Map" to 0, "Map again" to 0, "Office" to 1, "Research" to 2, "Stats" to 3, "Markets" to 4, "Inbox" to 6, "Portfolio" to 8, "Paper" to 7, "Hall" to 9)
+        val base = settings.graphics
+        val pages = listOf(
+            Triple("Map", 0, base), Triple("Map again", 0, base), Triple("Office", 1, base), Triple("Research", 2, base), Triple("Stats", 3, base),
+            Triple("Markets", 4, base), Triple("Inbox", 6, base), Triple("Portfolio", 8, base), Triple("Paper", 7, base), Triple("Hall", 9, base),
+            // The classic map with one thing changed, to see what its resting frame is made of.
+            Triple("Map [Medium]", 0, base.copy(detail = MapDetail.Medium)), Triple("Map [no motion]", 0, base.copy(animations = false)),
+            Triple("Map [no clouds]", 0, base.copy(clouds = 0)), Triple("Map [no earth]", 0, base.copy(earth = false)),
+        )
         line("--- page: UI thread ms at 1600x900 (first draw / still frame median / frame as a week lands median)")
-        for ((name, index) in pages) {
+        for ((name, index, graphics) in pages) {
+            settings.chooseGraphics(graphics)
             val scene = ImageComposeScene(1600, 900, Density(1f)) {
                 CorporateWarfareTheme { CompositionLocalProvider(LocalAppSettings provides settings) { DesktopShell(store, onSettings = {}, startPage = index) } }
             }
             var clock = 0L
             fun frame(): Double { clock += 16_666_667L; val s = System.nanoTime(); scene.render(clock); return (System.nanoTime() - s) / 1e6 }
             val profile = System.getenv("CW_PERF_PROFILE")?.split(',')?.contains(name.substringBefore(" again")) == true
-            var sampler = if (profile) Sampler(Thread.currentThread()) else null
+            val sampler = if (profile) Sampler(Thread.currentThread()) else null
             val first = frame()
             sampler?.let { printProfile("$name first draw", it) }
             repeat(25) { frame(); Thread.sleep(80) }
-            sampler = if (profile) Sampler(Thread.currentThread()) else null
+            val stillSampler = Sampler(Thread.currentThread())
             val still = median(List(30) { frame() })
-            sampler?.let { printProfile("$name still frames", it) }
+            if (profile) printProfile("$name still frames", stillSampler) else stillSampler.stop()
+            val kotlinSide = still * (1 - nativeShare(stillSampler))
             val landSampler = if (profile) Sampler(Thread.currentThread()).also { it.active = false } else null
             val landing = List(5) {
                 oneWeek(store)
@@ -172,7 +185,7 @@ class DesktopPerfHarness {
                 frame().also { landSampler?.active = false }
             }
             landSampler?.let { printProfile("$name week landing", it) }
-            line("page %-10s %8.1f %8.1f %8.1f".format(name, first, still, median(landing)))
+            line("page %-16s %8.1f %8.1f %8.1f   (still frame: %.1f ms is Kotlin side, the rest is Skia replaying the picture)".format(name, first, still, median(landing), kotlinSide))
             scene.close()
         }
 

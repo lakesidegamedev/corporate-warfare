@@ -1304,6 +1304,18 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
 
     private var overlayKey: List<Any?>? = null
     private var overlayValue: OverlayGeometry? = null
+    private var roadKey: Pair<Boolean, Boolean>? = null
+    private var roadValue: List<Polyline> = emptyList()
+
+    /** The interstates as screen polylines depend only on this camera, not on the week's lanes, so a new week reuses them. */
+    private fun roadLinesFor(wanted: Boolean, raised: Boolean): List<Polyline> {
+        if (!wanted) return emptyList()
+        if (roadKey != wanted to raised) {
+            roadValue = buildPolylines(p, map.interstates, if (raised) plinth else 0.0, size)
+            roadKey = wanted to raised
+        }
+        return roadValue
+    }
 
     /** What the moving layer needs, rebuilt only when the camera or the data under it changes. */
     fun overlay(
@@ -1317,7 +1329,7 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
         val ground = if (raised) heights else FlatGround
         val laneCount = if (graphics.traffic >= 2 || freightLayer) 120 else if (graphics.traffic == 1) 60 else 0
         val tracks = if (p.t > 0.5 && laneCount > 0) laneTracks(map, p, lanes, laneCount, firmSector) else emptyList()
-        val roadLines = if (graphics.traffic > 0 && detailLevel == MapDetail.High && cam.zoom > 9) buildPolylines(p, map.interstates, if (raised) plinth else 0.0, size) else emptyList()
+        val roadLines = roadLinesFor(graphics.traffic > 0 && detailLevel == MapDetail.High && cam.zoom > 9, raised)
         val spots = if (graphics.buildings > 0 && closeUp && p.t > 0.5) buildings(divisions, ground).map { b ->
             val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
             // The rooftop light and smoke sit on the model's top.
