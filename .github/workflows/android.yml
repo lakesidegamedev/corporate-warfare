@@ -141,6 +141,8 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           mkdir -p appimage-out
+          # packageReleaseDeb does not leave the app image folder behind, so build it.
+          (cd compose && ./gradlew --no-daemon :shared:createReleaseDistributable)
           bash compose/shared/packaging/linux/build-appimage.sh "$(ls -d compose/shared/build/compose/binaries/main-release/app/*/ | head -1)" "appimage-out/CorporateWarfare-linux.AppImage"
       - uses: actions/upload-artifact@v4
         if: ${{ matrix.os == 'ubuntu-latest' }}

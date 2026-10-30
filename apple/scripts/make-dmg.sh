@@ -14,8 +14,10 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-python3 -m pip install --quiet pillow
-python3 "$root/tools/dmg_art.py" "$work/art"
+# The runner Python is managed by Homebrew, so Pillow goes into a throwaway environment.
+python3 -m venv "$work/venv"
+"$work/venv/bin/pip" install --quiet pillow
+"$work/venv/bin/python" "$root/tools/dmg_art.py" "$work/art"
 # One file with both resolutions, so the window is sharp on Retina screens.
 tiffutil -cathidpicheck "$work/art/dmg-background.png" "$work/art/dmg-background@2x.png" -out "$work/art/background.tiff"
 
