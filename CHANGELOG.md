@@ -422,6 +422,10 @@ heading.
 
 ### Changed
 
+- Android: the game starts and opens its first map faster. The app now ships a startup profile, so the
+  phone prepares the game's code when it installs the app instead of working it out on first launch,
+  and the world map and picture files are read in the background while the main menu comes up, so the
+  map no longer stops to load them when a career opens.
 - Tooling: the Android and desktop builds now share a dependency cache and retry a download that Maven Central or Google rate-limited, so a 403 from a repository no longer fails a build that would pass a minute later. The Apple build keeps its Rust dependencies between runs, which removes most of its longest step, and no longer builds the extra size-report engine on pull requests.
 - Tooling: the first-map-draw timing test on iPhone warms up SwiftUI's own one-time startup on a blank canvas before measuring, so a cold test runner no longer fails a budget meant for the map's layers.
 - Tooling: every change to the Android app now starts the trimmed release build on an emulator in

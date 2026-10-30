@@ -1,0 +1,19 @@
+# Baseline profile for startup and the main tabs. Android compiles these classes and methods
+# ahead of time when the app is installed (profileinstaller applies it), so the first launch,
+# the main menu, the map and the tab screens do not run through the interpreter or wait for the
+# just-in-time compiler. The patterns are wildcards: H hot, S startup, P after startup.
+# Compose, the activity library and the Kotlin runtime ship their own profiles, which the build merges in.
+
+# The game's own code: the activity, the store, every screen and the map renderers.
+HSPLnet/lakesidegames/corporatewarfare/**;->**(**)**
+Lnet/lakesidegames/corporatewarfare/**;
+
+# The engine bindings and the JNA bridge they call through, used on the first frame of a career.
+HSPLuniffi/**;->**(**)**
+Luniffi/**;
+HSPLcom/sun/jna/**;->**(**)**
+Lcom/sun/jna/**;
+
+# Saves and settings are read at launch, before the first screen.
+HSPLkotlinx/serialization/json/**;->**(**)**
+Lkotlinx/serialization/json/**;
