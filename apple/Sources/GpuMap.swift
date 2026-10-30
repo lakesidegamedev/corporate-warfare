@@ -341,7 +341,7 @@ final class GpuMapSession: @unchecked Sendable {
     }
 
     private func fail(_ reason: String) {
-        locked { _failure = String(reason.prefix(80)) }
+        locked { _failure = String(reason.prefix(200)) }
         queueNotify()
     }
 

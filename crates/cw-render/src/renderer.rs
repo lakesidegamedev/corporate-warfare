@@ -346,13 +346,22 @@ impl Renderer {
                 .trim()
                 .to_string(),
         };
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("cw-render"),
-            required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
-            ..Default::default()
-        }))
-        .map_err(|e| NoAdapter(e.to_string()))?;
+        let request = |limits: wgpu::Limits| {
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+                label: Some("cw-render"),
+                required_features: wgpu::Features::empty(),
+                required_limits: limits,
+                ..Default::default()
+            }))
+        };
+        // The standard limits first; an adapter that offers a little less (the iOS simulator's
+        // Metal has fewer shader varyings than the default asks for) gets what it has, which the
+        // scene fits in: the shaders pass six varyings and bind nine resources.
+        let (device, queue) =
+            match request(wgpu::Limits::default().using_resolution(adapter.limits())) {
+                Ok(d) => d,
+                Err(_) => request(adapter.limits()).map_err(|e| NoAdapter(e.to_string()))?,
+            };
 
         let source = format!("{}{}", wgsl_prelude(), SHADER);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
