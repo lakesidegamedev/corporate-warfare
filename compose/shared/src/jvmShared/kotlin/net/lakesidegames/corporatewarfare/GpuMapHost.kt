@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.IntOffset
@@ -23,16 +24,29 @@ import kotlin.math.max
  * interfaces; the desktop build installs [GpuMapHost.opener] (Android never does, so the option is
  * hidden there and the classic map is always used).
  */
-data class GpuCamera(val lon: Double, val lat: Double, val widthKm: Double, val tiltDeg: Double, val headingDeg: Double)
+data class GpuCamera(val lon: Double, val lat: Double, val widthKm: Double, val tiltDeg: Double, val headingDeg: Double, val fovDeg: Double = 28.0)
 
-/** One building of the map: where it stands and whose it is. The renderer keeps the footprint; the screen size comes from [GpuMapSession.buildingRects]. */
-class GpuBuilding(val lon: Double, val lat: Double, val owner: String, val kind: String, val colour: Int) {
+/**
+ * One building of the map: where it stands and whose it is. The renderer keeps the footprint; the screen size comes from
+ * [GpuMapSession.buildingRects]. A plant building also says which division it stands for (region code, industry, firm).
+ */
+class GpuBuilding(
+    val lon: Double, val lat: Double, val owner: String, val kind: String, val colour: Int,
+    val region: String? = null, val industry: String? = null, val firm: Long? = null, val plants: Int = 0,
+) {
     val scenery get() = owner == "scenery"
     val player get() = owner == "player"
 }
 
-/** A finished frame and the camera it was drawn for. */
-class GpuShown(val image: ImageBitmap, val camera: GpuCamera)
+/**
+ * A finished frame. It was drawn for [camera] (the requested view widened by an overscan margin of [margin] view pixels on every
+ * side, so a pan or a small zoom out reveals real map), at [factor] image pixels per view pixel; [view] is the camera of the
+ * view that was asked for, [viewWidth] by [viewHeight] pixels.
+ */
+class GpuShown(
+    val image: ImageBitmap, val camera: GpuCamera, val view: GpuCamera,
+    val viewWidth: Int = image.width, val viewHeight: Int = image.height, val margin: Int = 0, val factor: Float = 1f,
+)
 
 interface GpuMapSession {
     /** The graphics adapter's name, and whether it is a software one. */
@@ -58,7 +72,7 @@ interface GpuMapSession {
     /** Sends game state as JSON (plants, holdings, map mode, night, clouds). */
     fun update(json: String)
 
-    /** Asks the render thread for a frame of the view; only the newest request is drawn. */
+    /** Asks the render thread for a frame of the view; only the newest request is drawn. [moving] tells it the camera is in motion (a smaller, quicker frame). */
     fun request(camera: GpuCamera, width: Int, height: Int, moving: Boolean)
 
     /** The placed buildings, in the order [buildingRects] answers for; changes only with [update]. */
@@ -113,7 +127,8 @@ internal fun gpuMapLine(enabled: Boolean, session: GpuMapSession?): String? = wh
     !enabled || GpuMapHost.opener == null -> null
     session != null -> {
         val soft = if (session.software) " (software)" else ""
-        "map: GPU ${session.adapter}$soft, ${"%.1f".format(session.renderMs)} ms render, ${"%.1f".format(session.copyMs)} ms copy"
+        val size = session.frame?.let { " ${it.width}x${it.height}" } ?: ""
+        "map: GPU ${session.adapter}$soft,$size ${"%.1f".format(session.renderMs)} ms render + ${"%.1f".format(session.copyMs)} ms copy"
     }
     GpuMapHost.failure != null -> "map: classic, no GPU"
     else -> "map: classic, GPU map loading"
@@ -152,20 +167,136 @@ internal fun gpuUpdateJson(
     return """{"plants":$plantJson,"holdings":$holdings,"heat":$heat,"heat_ramp":${q(layer.gpuRamp())},"night":$night,"clouds":$clouds,"week":$week}"""
 }
 
+/** The sea of the palette (water ramp, step 2): the ground under the picture, so nothing of the view is ever a void. */
+internal val GpuSea = Color(0xFF1E4772)
+
+/** The overscan margin on each side, as a share of the view. */
+internal const val GPU_OVERSCAN = 0.2
+
+/** The camera of the widened frame: the same viewpoint and focal length, seen through a window [mx] and [my] pixels larger on each side. */
+internal fun overscanCamera(c: GpuCamera, w: Int, h: Int, mx: Int, my: Int): GpuCamera {
+    if (mx == 0 && my == 0) return c
+    val tanHalf = Math.tan(Math.toRadians(c.fovDeg / 2))
+    val bigW = w + 2 * mx; val bigH = h + 2 * my
+    return c.copy(widthKm = c.widthKm * bigW / w, fovDeg = 2 * Math.toDegrees(Math.atan(tanHalf * bigH / h)))
+}
+
 /**
- * Blits the newest frame over the whole view, scaled up with hard pixels when it was drawn smaller.
- * Returns the camera that frame was drawn for: every other layer of this draw (names, badges) must use
- * it, so nothing slides against the picture while the view moves.
+ * The homography (row-major, 8 numbers with the last fixed to 1) that carries the ground plane as the frame camera drew it onto the
+ * ground plane as the live camera sees it. Pan, zoom, turn and tilt of a flat ground are all one such mapping, so applying it to the
+ * finished frame puts every point of the ground where the live camera projects it. Null when a corner is behind a camera.
  */
-internal fun DrawScope.drawGpuFrame(session: GpuMapSession): GpuCamera? {
+internal fun groundHomography(
+    project: (GpuCamera, Int, Int, DoubleArray) -> FloatArray,
+    frame: GpuCamera, frameW: Int, frameH: Int, live: GpuCamera, w: Int, h: Int,
+): DoubleArray? {
+    val kmLon = 111.32 * Math.cos(Math.toRadians(live.lat)).coerceAtLeast(0.05)
+    val d = live.widthKm * 0.3
+    val dx = d / kmLon
+    val dy = d * (h.toDouble() / w) / 111.0
+    val pts = doubleArrayOf(
+        live.lon - dx, live.lat - dy, live.lon + dx, live.lat - dy, live.lon + dx, live.lat + dy, live.lon - dx, live.lat + dy,
+    )
+    val src = project(frame, frameW, frameH, pts)
+    val dst = project(live, w, h, pts)
+    if (src.any { it.isNaN() } || dst.any { it.isNaN() }) return null
+    // Eight equations for the eight unknowns: dst = (h0 x + h1 y + h2) / (h6 x + h7 y + 1), likewise for y.
+    val m = Array(8) { DoubleArray(9) }
+    for (k in 0 until 4) {
+        val x = src[2 * k].toDouble(); val y = src[2 * k + 1].toDouble()
+        val u = dst[2 * k].toDouble(); val v = dst[2 * k + 1].toDouble()
+        m[2 * k] = doubleArrayOf(x, y, 1.0, 0.0, 0.0, 0.0, -u * x, -u * y, u)
+        m[2 * k + 1] = doubleArrayOf(0.0, 0.0, 0.0, x, y, 1.0, -v * x, -v * y, v)
+    }
+    for (c in 0 until 8) {
+        var best = c
+        for (r in c + 1 until 8) if (Math.abs(m[r][c]) > Math.abs(m[best][c])) best = r
+        if (Math.abs(m[best][c]) < 1e-9) return null
+        val t = m[c]; m[c] = m[best]; m[best] = t
+        for (r in 0 until 8) {
+            if (r == c) continue
+            val f = m[r][c] / m[c][c]
+            if (f != 0.0) for (k in c until 9) m[r][k] -= f * m[c][k]
+        }
+    }
+    return DoubleArray(8) { m[it][8] / m[it][it] }
+}
+
+/** Where a frame point lands in the view under [h] from [groundHomography]. */
+internal fun applyHomography(h: DoubleArray, x: Double, y: Double): Pair<Double, Double> {
+    val w = h[6] * x + h[7] * y + 1.0
+    return Pair((h[0] * x + h[1] * y + h[2]) / w, (h[3] * x + h[4] * y + h[5]) / w)
+}
+
+/**
+ * Draws the newest finished frame carried to the live camera, so the picture follows a drag or a zoom at once and never waits for
+ * the next frame to land: the sea is drawn first, then the frame warped by the ground homography between the camera it was drawn
+ * for and [live]. Returns the camera every other layer of this draw (names, badges, building boxes) must use: [live] when the
+ * picture was carried to it, the frame's own view camera if it could only be placed unchanged. Null when no frame exists yet.
+ */
+internal fun DrawScope.drawGpuFrame(session: GpuMapSession, live: GpuCamera): GpuCamera? {
     session.version
+    val w = size.width.toInt(); val h = size.height.toInt()
+    drawRect(GpuSea)
     val shown = session.shown ?: return null
     val image = shown.image
-    drawImage(
-        image, srcOffset = IntOffset.Zero, srcSize = IntSize(image.width, image.height),
-        dstOffset = IntOffset.Zero, dstSize = IntSize(size.width.toInt(), size.height.toInt()), filterQuality = FilterQuality.None,
-    )
-    return shown.camera
+    val hom = groundHomography(session::project, shown.camera, image.width, image.height, live, w, h)
+    if (hom == null) {
+        // Cannot be carried (a corner behind the camera): show the frame's view part unchanged, with its own camera.
+        val f = shown.factor
+        drawImage(
+            image, srcOffset = IntOffset((shown.margin * f).toInt(), (shown.margin * f).toInt()),
+            srcSize = IntSize((shown.viewWidth * f).toInt(), (shown.viewHeight * f).toInt()),
+            dstOffset = IntOffset.Zero, dstSize = IntSize(w, h), filterQuality = FilterQuality.Medium,
+        )
+        return shown.view
+    }
+    // Same size, no turn, whole-pixel shift: copy the pixels exactly, no resampling blur while the view is still.
+    val still = Math.abs(hom[0] - 1) < 1e-3 && Math.abs(hom[4] - 1) < 1e-3 && Math.abs(hom[1]) < 1e-3 && Math.abs(hom[3]) < 1e-3 &&
+        Math.abs(hom[6]) < 1e-6 && Math.abs(hom[7]) < 1e-6
+    if (still) {
+        drawImage(image, dstOffset = IntOffset(Math.round(hom[2]).toInt(), Math.round(hom[5]).toInt()), dstSize = IntSize(image.width, image.height), filterQuality = FilterQuality.None)
+        return live
+    }
+    val matrix = androidx.compose.ui.graphics.Matrix()
+    // Compose stores the matrix column by column: the translation sits at [3, 0] and [3, 1], the perspective terms at [0, 3] and [1, 3].
+    matrix[0, 0] = hom[0].toFloat(); matrix[1, 0] = hom[1].toFloat(); matrix[3, 0] = hom[2].toFloat()
+    matrix[0, 1] = hom[3].toFloat(); matrix[1, 1] = hom[4].toFloat(); matrix[3, 1] = hom[5].toFloat()
+    matrix[0, 3] = hom[6].toFloat(); matrix[1, 3] = hom[7].toFloat()
+    withTransform({ transform(matrix) }) {
+        drawImage(image, filterQuality = FilterQuality.Medium)
+    }
+    return live
+}
+
+/**
+ * The plant building under a screen point for the camera of the picture shown: a building whose box (with a few pixels of slop, so
+ * a small one can still be hit) holds the point, the nearest by distance from its centre. A building always wins over the region
+ * under it. Scenery is not a plant and is never returned.
+ */
+internal fun gpuBuildingAt(session: GpuMapSession, camera: GpuCamera, width: Int, height: Int, x: Float, y: Float): GpuBuilding? {
+    val buildings = session.buildings()
+    if (buildings.isEmpty()) return null
+    val rects = session.buildingRects(camera, width, height)
+    var best: GpuBuilding? = null
+    var bestD = Float.MAX_VALUE
+    for (i in buildings.indices) {
+        if (buildings[i].scenery) continue
+        val l = rects[4 * i]; val t = rects[4 * i + 1]; val r = rects[4 * i + 2]; val b = rects[4 * i + 3]
+        if (l.isNaN()) continue
+        val slop = 5f
+        if (x < l - slop || x > r + slop || y < t - slop || y > b + slop) continue
+        val d = Math.hypot((x - (l + r) / 2f).toDouble(), (y - (t + b) / 2f).toDouble()).toFloat()
+        if (d < bestD) { bestD = d; best = buildings[i] }
+    }
+    return best
+}
+
+/** The player's division a plant building stands for, or null for a rival's plant (or a plant of a firm the player is not looking at). */
+internal fun gpuPlantDivision(b: GpuBuilding, divisions: List<uniffi.cw_ffi.DivisionDto>): uniffi.cw_ffi.DivisionDto? {
+    val industry = b.industry ?: return null
+    if (!b.player) return null
+    return divisions.firstOrNull { it.region == b.region && it.industry == industry }
 }
 
 /** Below this many pixels across a building is a speck, so a badge marks it instead (the badge is a marker, the building stays the same size on the ground). */

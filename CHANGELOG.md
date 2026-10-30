@@ -464,6 +464,13 @@ heading.
 
 ### Fixed
 
+- On the new map, plants are now a believable size. A plant stands a few hundred metres to about two
+  kilometres across and is never taller than it is wide, so a city's plants no longer dwarf the
+  counties around them. They never stand on lakes or the sea: a plant whose spot is water slides along
+  the ring, then inward, until it is on dry land, and the same goes for the downtown blocks. Every
+  sector has a new, cleaner look from any angle and any tilt: low halls with roof detail, tanks,
+  stacks, cranes, silos and towers, with your firm's gold on the roofs. The classic map is unchanged.
+- The new map (preview) on the desktop no longer lags, jitters or goes black. While you drag or zoom, the last finished picture is carried to where the camera is now, so the ground follows you at once and names and markers never slide against it. The picture is drawn wider than the window, so a pan or a zoom out shows real map instead of an empty edge, and the far edge of the world is calm sea instead of black. Pictures are drawn at the window's real pixel size when still (and at three quarters of it while you move, sharpening within a moment of stopping), smoothed instead of blocky, and the ground texture is finer. Click a plant on the new map to open that division, or the rival company's page for a rival plant, and hover one for its company, industry and plant count.
 - Your own share orders now cost what they fill and no more. A buy order used to take your cash when
   you placed it and then charge the price again when it filled, and the unused part of your limit was
   never given back; now the cash is held once, the fill spends it, and whatever is left (a price under
