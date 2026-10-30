@@ -250,6 +250,8 @@ pub struct Scene {
     pub heightmap: Heightmap,
     pub mask: Mask,
     pub earth: GeoImage,
+    /// Land outlines and land cover of the whole world, for the horizon beyond the terrain.
+    pub far: crate::far::FarWorld,
     pub clouds: GeoImage,
     pub models: HashMap<String, VoxelModel>,
     pub buildings: Vec<Placement>,
@@ -939,6 +941,7 @@ impl Scene {
         )?;
         let region = spec.image_bounds;
         let earth = load_geo_image(&res.join(format!("earth-{}.jpg", spec.id)), region)?;
+        let far = crate::far::FarWorld::load(res, spec.id, region)?;
         let mut clouds = load_geo_image(&res.join(format!("clouds-{}.webp", spec.id)), region)?;
         blur_alpha(&mut clouds, 2, 2);
         let mut models = parse_models(
@@ -1037,6 +1040,7 @@ impl Scene {
             heightmap,
             mask,
             earth,
+            far,
             clouds,
             models,
             buildings,
@@ -1127,6 +1131,7 @@ impl Scene {
             },
             mask,
             earth: flat([40, 60, 22, 255]),
+            far: crate::far::FarWorld::flat_land(),
             clouds: flat([255, 255, 255, 0]),
             models,
             buildings: vec![Placement {

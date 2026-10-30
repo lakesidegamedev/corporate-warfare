@@ -471,6 +471,13 @@ heading.
 - Every action now answers. When a command is accepted, a short message appears at the bottom of the screen saying what happened (for example that a wage offer is set and staff respond when the week closes, or that a gift will be disclosed in the paper next week). Before, a success was shown only in Settings. The research and marketing budget sliders also now say when they are refused instead of failing silently.
 - Refusals now explain themselves in plain words. A rejected action used to be able to show the engine's internal text; it now always says what is wrong and what to do about it, the same wording as the iPhone and Mac app.
 - The Stats screen now closes with Escape or the Android back button, like every other screen.
+- Zoomed far out, the new map no longer shows broken land at the world's edge. Beyond the scenario
+  the world now follows the real coastlines, with smooth shores, flat land in the same colours as the
+  terrain, and detail that fades with distance, instead of coarse slabs, long streaks and stair-step
+  coasts. The scenario's own terrain blends into it without a seam.
+- On the classic map, plants no longer stand in lakes or the sea. A plant whose usual spot beside its
+  region's hub is over water is moved along the way to the hub, and round it, to the nearest dry spot
+  inside the region, the same one every time.
 - On the new map, plants are now a believable size. A plant stands a few hundred metres to about two
   kilometres across and is never taller than it is wide, so a city's plants no longer dwarf the
   counties around them. They never stand on lakes or the sea: a plant whose spot is water slides along
