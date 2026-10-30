@@ -232,8 +232,17 @@ fun WorldMapView(
     val heightsNow by rememberUpdatedState(heights)
     // The new GPU map (desktop preview): drawn instead of the classic ground, clouds, traffic and buildings while the
     // camera is flat; the globe, the Freight mode and any failure keep the classic map.
-    val gpu = rememberGpuMap(graphics.newMap, map?.scenarioId)
+    // On a desktop that can do it, the map is drawn by the graphics card straight into a native surface behind the UI.
+    var surface by remember { mutableStateOf<Any?>(null) }
+    var surfaceBad by remember { mutableStateOf(false) }
+    val surfaceHost = GpuMapHost.surfaceHost
+    val useSurface = surfaceHost != null && graphics.newMap && !surfaceBad && GpuMapHost.surfaceUsable()
+    val gpu = rememberGpuMap(graphics.newMap, map?.scenarioId, surface.takeIf { useSurface }, useSurface) { surfaceBad = true }
     val gpuOn by remember(gpu, layer) { derivedStateOf { gpu != null && layer != MapLayer.Freight && (camera?.zoom ?: MapCamera.FLAT_END) >= MapCamera.FLAT_END } }
+    // The native surface shows through (the map's own background and ground are not drawn over it) while it is what draws the map.
+    val surfaceShows = gpuOn && gpu?.direct == true
+    // Once the native surface has received a mouse event itself it is the source of pointer input over the map.
+    var surfaceMouse by remember { mutableStateOf(false) }
     val gpuNight by remember(map, graphics.dayNight) {
         derivedStateOf {
             val b = map?.playBounds
@@ -280,7 +289,62 @@ fun WorldMapView(
         fly(if (now.zoom > MapCamera.FLAT_START) now.copy(zoom = 1.0) else MapCamera.scenario(viewSize, map ?: return))
     }
 
-    Box(modifier.clipToBounds().background(Palette.ink)) {
+    fun mapTap(tap: Offset) {
+        val map = map ?: return
+        val now = current() ?: return
+        if (gpu != null && gpuOn) {
+            // The GPU map picks from its own geometry: a plant under the tap opens its division (or its firm),
+            // else the region under it is the one drawn there. Both use the camera the picture is shown for.
+            val gc = gpuCamera(now, viewSize.width, viewSize.height, pitch)
+            val plant = gpuBuildingAt(gpu, gc, viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
+            if (plant != null && openPlant(plant)) return
+            val code = gpu.pick(gc, viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
+            onSelect(code.takeIf { it != selected })
+            return
+        }
+        val g = geometry.of(map, now, viewSize, graphics.detail, pitch)
+        val projection = g.p
+        if (layer == MapLayer.Freight && onLane != null) {
+            val lane = laneAt(map, projection, store.lanes, tap)
+            if (lane != null) {
+                onLane(if (laneKey(lane) == pickedLane) null else laneKey(lane))
+                return
+            }
+            onLane(null)
+        }
+        onSelect(regionAt(map, g, graphics, heightsNow, tap).takeIf { it != selected })
+    }
+
+    // Pointer input from the native surface (see SurfaceMouse): the same drag, turn, zoom, tap and hover as the map's own input.
+    var press by remember { mutableStateOf<SurfaceMouse?>(null) }
+    var dragged by remember { mutableStateOf(false) }
+    var last by remember { mutableStateOf(Offset.Zero) }
+    fun onSurfaceMouse(e: SurfaceMouse) {
+        val at = Offset(e.x, e.y)
+        when (e.kind) {
+            SurfaceMouse.Kind.Press -> { press = e; dragged = false; last = at; hover = null }
+            SurfaceMouse.Kind.Drag -> {
+                val p = press ?: return
+                val now = current() ?: return
+                val d = at - last
+                last = at
+                if ((at - Offset(p.x, p.y)).getDistance() > 4f) dragged = true
+                flight?.cancel()
+                camera = if (p.button == 3) now.rotated(d.x * 0.4) else now.panned(d, viewSize, pitch)
+            }
+            SurfaceMouse.Kind.Release -> {
+                val p = press
+                press = null
+                if (p != null && p.button == 1 && !dragged) { if (e.clicks >= 2) toggleGlobe() else mapTap(at) }
+            }
+            SurfaceMouse.Kind.Move -> if (gpuHover) hover = at
+            SurfaceMouse.Kind.Exit -> hover = null
+            SurfaceMouse.Kind.Wheel -> current()?.let { flight?.cancel(); camera = it.zoomed(exp(-e.wheel.toDouble() * 0.15)) }
+        }
+    }
+
+    Box(modifier.clipToBounds().then(if (surfaceShows) Modifier else Modifier.background(Palette.ink))) {
+        if (useSurface && map != null) surfaceHost?.invoke(Modifier.fillMaxSize(), { surface = it }) { e -> surfaceMouse = true; onSurfaceMouse(e) }
         if (map == null) {
             Text("The map file is missing from this build.", color = Palette.secondary, modifier = Modifier.padding(24.dp))
         } else {
@@ -290,6 +354,7 @@ fun WorldMapView(
                     .onSizeChanged { viewSize = Size(it.width.toFloat(), it.height.toFloat()) }
                     .pointerInput(Unit) {
                         detectTransformGestures { _, panChange, zoomChange, rotationChange ->
+                            if (surfaceMouse) return@detectTransformGestures
                             flight?.cancel()
                             val now = current() ?: return@detectTransformGestures
                             // A two-finger twist turns the map; drags go any way, almost to the poles.
@@ -300,6 +365,7 @@ fun WorldMapView(
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent()
+                                if (surfaceMouse) continue
                                 if (gpuHover && event.type == PointerEventType.Move && !event.buttons.isPrimaryPressed && !event.buttons.isSecondaryPressed) {
                                     hover = event.changes.firstOrNull()?.position
                                 } else if (event.type == PointerEventType.Exit || event.buttons.isPrimaryPressed) hover = null
@@ -327,31 +393,8 @@ fun WorldMapView(
                     }
                     .pointerInput(layer, pickedLane, selected, pitch, gpu, gpuOn) {
                         detectTapGestures(
-                            onDoubleTap = { toggleGlobe() },
-                            onTap = { tap ->
-                                val now = current() ?: return@detectTapGestures
-                                if (gpu != null && gpuOn) {
-                                    // The GPU map picks from its own geometry: a plant under the tap opens its division (or its firm),
-                                    // else the region under it is the one drawn there. Both use the camera the picture is shown for.
-                                    val gc = gpuCamera(now, viewSize.width, viewSize.height, pitch)
-                                    val plant = gpuBuildingAt(gpu, gc, viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
-                                    if (plant != null && openPlant(plant)) return@detectTapGestures
-                                    val code = gpu.pick(gc, viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
-                                    onSelect(code.takeIf { it != selected })
-                                    return@detectTapGestures
-                                }
-                                val g = geometry.of(map, now, viewSize, graphics.detail, pitch)
-                                val projection = g.p
-                                if (layer == MapLayer.Freight && onLane != null) {
-                                    val lane = laneAt(map, projection, store.lanes, tap)
-                                    if (lane != null) {
-                                        onLane(if (laneKey(lane) == pickedLane) null else laneKey(lane))
-                                        return@detectTapGestures
-                                    }
-                                    onLane(null)
-                                }
-                                onSelect(regionAt(map, g, graphics, heightsNow, tap).takeIf { it != selected })
-                            },
+                            onDoubleTap = { if (!surfaceMouse) toggleGlobe() },
+                            onTap = { tap -> if (!surfaceMouse) mapTap(tap) },
                         )
                     },
             ) {
@@ -360,7 +403,8 @@ fun WorldMapView(
                     val gc = gpuCamera(cam, size.width, size.height, pitch)
                     gpu.request(gc, size.width.toInt(), size.height.toInt(), true)
                     // The newest frame carried to this camera, so the ground, names, badges and building boxes all agree.
-                    val shown = drawGpuFrame(gpu, gc) ?: gc
+                    // On a native surface the card has drawn this very camera already, so there is nothing to carry or warp.
+                    val shown = if (gpu.direct) gc else drawGpuFrame(gpu, gc) ?: gc
                     // Names and division badges, projected by the camera of the frame on screen so nothing slides.
                     gpu.version
                     drawGpuLabels(gpu, shown, map, store.mapPlants, store.mapDivisions, graphics, shown.widthKm, labelMeasurer, labelPlanner)

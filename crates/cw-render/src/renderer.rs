@@ -183,6 +183,10 @@ pub struct FrameStats {
     pub draw_calls: u32,
     pub gpu_wait: Duration,
     pub readback: Duration,
+    /// Surface frames: time waiting for the window to hand over its next image (the display's
+    /// refresh, when frames are queued) and time in the present call.
+    pub acquire: Duration,
+    pub present: Duration,
     /// A surface frame that was not drawn because the window could not take one (hidden,
     /// minimised, timed out). Always false for offscreen renders.
     pub skipped: bool,
@@ -912,8 +916,12 @@ impl Renderer {
             style.pixel_scale.max(1)
         };
         let (rw, rh) = ((width / ps).max(1), (height / ps).max(1));
+        let mut acquire_time = Duration::ZERO;
         let surface_frame = if to_surface {
-            match self.acquire(rw, rh) {
+            let ta = Instant::now();
+            let got = self.acquire(rw, rh);
+            acquire_time = ta.elapsed();
+            match got {
                 Some(f) => Some(f),
                 None => {
                     return FrameStats {
@@ -1256,7 +1264,10 @@ impl Renderer {
         let Some(finish) = finish else {
             self.queue.submit([enc.finish()]);
             if let Some(frame) = surface_frame {
+                let tp = Instant::now();
                 self.queue.present(frame);
+                stats.present = tp.elapsed();
+                stats.acquire = acquire_time;
             }
             stats.gpu_wait = t0.elapsed();
             return stats;

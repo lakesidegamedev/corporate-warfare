@@ -1,0 +1,43 @@
+name: Direct map
+# The desktop map draws straight into a native window. This proves it on a Windows machine (wgpu over DirectX 12, software
+# adapter): a window opens, frames present, a drag and zoom out keeps every frame on the live camera, and Compose draws over it.
+on:
+  pull_request:
+    paths:
+      - "crates/cw-render/**"
+      - "crates/cw-ffi/**"
+      - "compose/**"
+      - ".github/workflows/gpu-direct.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gpu-direct-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    env:
+      CW_DIRECT_OUT: ${{ github.workspace }}/direct-out
+      CW_BLEND_TEST: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: rustup show
+        shell: bash
+      - run: bash compose/scripts/build-engine.sh desktop
+        shell: bash
+      - name: Direct map tests
+        working-directory: compose
+        run: ./gradlew --no-daemon :shared:desktopTest --tests "*GpuMapDirectTest" --tests "*GpuMapBlendTest" -i
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: direct-map-windows
+          path: direct-out
+          if-no-files-found: ignore

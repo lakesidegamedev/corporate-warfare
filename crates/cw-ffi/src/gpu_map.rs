@@ -293,10 +293,13 @@ impl GpuMap {
         let t0 = Instant::now();
         let stats = renderer.render_to_surface(&scene, &camera(cam), &style, width, height);
         let total = t0.elapsed().as_secs_f64() * 1000.0;
+        // Taking the window's next image and presenting both wait for the display, so they are
+        // reported as the "present" time, apart from the drawing.
+        let wait = (stats.acquire + stats.present).as_secs_f64() * 1000.0;
         (
             FrameTiming {
-                render_ms: total,
-                copy_ms: 0.0,
+                render_ms: (total - wait).max(0.0),
+                copy_ms: wait,
                 width: stats.width,
                 height: stats.height,
                 draw_calls: stats.draw_calls,
@@ -670,7 +673,7 @@ unsafe fn render_surface(
             let o = unsafe { std::slice::from_raw_parts_mut(timing, 6) };
             o.copy_from_slice(&[
                 t.render_ms,
-                0.0,
+                t.copy_ms,
                 t.width as f64,
                 t.height as f64,
                 t.draw_calls as f64,
