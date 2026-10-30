@@ -847,28 +847,50 @@ impl Session {
                     .get(*firm)
                     .map(|entity| entity.name.clone())
                     .unwrap_or_default();
-                let reserved = if *buy {
-                    qty.saturating_mul(*limit_price_cents).saturating_neg()
+                let holder = if *investor {
+                    cw_sim::state::HolderId::Investor
                 } else {
-                    qty.saturating_mul(*limit_price_cents)
+                    cw_sim::state::HolderId::Firm(Handle(actor))
+                };
+                let side = if *buy {
+                    cw_sim::state::OrderSide::Buy
+                } else {
+                    cw_sim::state::OrderSide::Sell
+                };
+                let quote = cw_sim::economy::equity::quote_shares(
+                    &self.world,
+                    holder,
+                    *firm,
+                    side,
+                    *qty,
+                    *limit_price_cents,
+                );
+                let cash = if *buy {
+                    quote.total_cents.saturating_neg()
+                } else {
+                    quote.total_cents
                 };
                 cash_preview(
                     revision,
-                    reserved,
+                    cash,
                     vec![
-                        format!("{qty} shares of {name} at a {limit_price_cents} cent limit"),
                         format!(
-                            "reserved from {}",
+                            "{} of {qty} shares of {name} at about {} cents each",
+                            quote.qty, quote.average_cents
+                        ),
+                        format!(
+                            "settles at once {} {}",
+                            if *buy { "from" } else { "into" },
                             if *investor {
                                 "your personal account"
                             } else {
                                 "the firm's account"
                             }
                         ),
-                        "price impact is 10 percent of quantity over weekly float, capped at 25 percent"
-                            .to_owned(),
-                        "the quote expires at the next boundary and revalidates cash and ownership"
-                            .to_owned(),
+                        format!(
+                            "the price moves from {} to {} cents as you trade",
+                            quote.mark_cents, quote.final_cents
+                        ),
                     ],
                 )
             }

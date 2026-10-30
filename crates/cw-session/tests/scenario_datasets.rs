@@ -76,7 +76,9 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// restructuring began mothballing plants that lose money and lasting its full year, and in 1.9
 /// when rivals began long plans against a target's shares and workers began to move between
 /// regions (the migration references are taken in week one and hashed, and the exchange now trades
-/// against real holders), so the fixture path moves from the first week.
+/// against real holders), so the fixture path moves from the first week. In 1.9 float trades also
+/// settle at once along a price curve (rival long plans buy this way from week one of a plan), which
+/// moves the great-lakes seeds 1 to 4 pins; the fixture path of seed 5 and the Swift pin are unchanged.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -88,15 +90,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "2e1fd482c95f12f4a03cccd2218d6531954ce02ac0c39ed9925afc44bb58667e",
+            "9e2ff9a758bf1fcdaea02b2fad118c91f1e752d8870f812e868fea13e35cf007",
         ),
         (
             2,
-            "ef1a46d6e25797cd39a092c7829abc1e8803b173f60ae5c06c77c2e4405f0eb1",
+            "86e1fd48466e8018124ab5662f53e0e31ff6376a5f568888f9d6e2062dd338d9",
         ),
         (
             3,
-            "ed8efcc5260031d670652a61c45a8813c711a608caf7c533193ab951efbdedce",
+            "2ed035714f65fd3f1442c4cc345990f0e067b4cac207362ccd39011cbb477e2d",
         ),
     ];
     for (seed, hash) in pins {
@@ -108,7 +110,7 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "0d25d4f3b04454bc5f0f4ca3b4c385455e5bc7f84e27f039b0309b4575002f5f"
+        "0903cef2c5aec63802a01bdad265aa1f89c9e207020aea1d3200c03bcc28fe66"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(

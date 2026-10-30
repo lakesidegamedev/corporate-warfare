@@ -637,10 +637,12 @@ struct ShareOrderSheet: View {
 
     private var firm: FirmDto? { store.selectedFirmDto }
     private var quantity: Int64? { parseCount(quantityText) }
-    private var limit: Int64? { parseDollarsToCents(limitText) }
 
     private func json() -> String? {
-        guard let firm, let quantity, let limit else { return nil }
+        guard let firm, let quantity else { return nil }
+        // Blank means no limit; a typed limit must be a price.
+        let limit = limitText.trimmingCharacters(in: .whitespaces).isEmpty ? Int64(0) : parseDollarsToCents(limitText)
+        guard let limit else { return nil }
         return CommandJSON.command("PlaceShareOrder", [
             "investor": true,
             "firm": firm.handle,
@@ -654,8 +656,8 @@ struct ShareOrderSheet: View {
         CommandSheet(
             title: "Share order",
             actorName: "You, the investor",
-            actorDetail: "Trades your personal holding in \(firm?.name ?? "the selected firm"). Cash or shares are reserved until the next week boundary.",
-            submitTitle: buy ? "Place buy order" : "Place sell order",
+            actorDetail: "Trades your personal holding in \(firm?.name ?? "the selected firm") against the public float, at once. Your own trading moves the price as it goes.",
+            submitTitle: buy ? "Buy now" : "Sell now",
             preview: preview,
             rejection: rejection,
             isBusy: store.isBusy,
@@ -674,18 +676,13 @@ struct ShareOrderSheet: View {
                 TextField("Shares", text: $quantityText)
                     .keyboardType(.numberPad)
                     .accessibilityLabel("Number of shares")
-                TextField("Limit price per share in dollars", text: $limitText)
+                TextField("Limit price per share in dollars (optional)", text: $limitText)
                     .keyboardType(.decimalPad)
                     .accessibilityLabel("Limit price per share in dollars")
                 if let firm {
                     DetailRow(title: "Traded mark", value: Format.money(firm.markCents, currency: Format.numeraire))
                     DetailRow(title: "Your votes", value: Format.percentBps(firm.investorVotesBps))
                 }
-            }
-        }
-        .onAppear {
-            if limitText.isEmpty, let firm {
-                limitText = String(format: "%.2f", Double(firm.markCents) / 100.0)
             }
         }
         .task { await refresh() }
