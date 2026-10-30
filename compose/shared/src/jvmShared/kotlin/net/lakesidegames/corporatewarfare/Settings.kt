@@ -49,6 +49,10 @@ val Resolutions = listOf(1280 to 720, 1366 to 768, 1600 to 900, 1920 to 1080, 25
 /** Window pixels above which a first start suggests Medium: 2.5 million, a little over 1920 by 1200. */
 internal const val SUGGEST_MEDIUM_ABOVE = 2_500_000L
 
+const val DOCK_MIN = 0.2f
+const val DOCK_MAX = 0.8f
+const val DOCK_DEFAULT = 0.45f
+
 class AppSettings(private val file: File) {
     /** Whether a settings file was already there: a player upgrading from 1.8 has one, a first launch does not. */
     private val existedAtLaunch = file.exists()
@@ -79,6 +83,12 @@ class AppSettings(private val file: File) {
     var showBriefEachWeek by mutableStateOf(props.getProperty("showBriefEachWeek")?.toBoolean() ?: false); private set
     /** The brief panel at the top of the CEO Office is folded away. */
     var briefCollapsed by mutableStateOf(props.getProperty("briefCollapsed")?.toBoolean() ?: false); private set
+    /** Pages with the map docked beside them, and how much of the width the map takes (0.2 to 0.8), per page id. */
+    val docks = androidx.compose.runtime.mutableStateMapOf<String, Float>().apply {
+        props.stringPropertyNames().filter { it.startsWith("dock.") }.forEach { key ->
+            props.getProperty(key)?.toFloatOrNull()?.let { put(key.removePrefix("dock."), it.coerceIn(DOCK_MIN, DOCK_MAX)) }
+        }
+    }
     var uiScale by mutableStateOf(props.getProperty("uiScale")?.toFloatOrNull() ?: 1f); private set
     var windowMode by mutableStateOf(enumOr(props.getProperty("windowMode"), WindowMode.Windowed)); private set
     var resolution by mutableStateOf(
@@ -137,6 +147,11 @@ class AppSettings(private val file: File) {
     fun choosePauseOnWarnings(value: Boolean) { pauseOnWarnings = value; store() }
     fun chooseShowBriefEachWeek(value: Boolean) { showBriefEachWeek = value; store() }
     fun chooseBriefCollapsed(value: Boolean) { briefCollapsed = value; store() }
+    /** Dock the map beside a page with the given share of the width, or undock it with null. */
+    fun chooseDock(pageId: String, share: Float?) {
+        if (share == null) docks.remove(pageId) else docks[pageId] = share.coerceIn(DOCK_MIN, DOCK_MAX)
+        store()
+    }
     fun chooseUiScale(value: Float) { uiScale = value; store() }
     fun chooseWindowMode(value: WindowMode) { windowMode = value; store() }
     fun chooseResolution(value: Pair<Int, Int>) { resolution = value; store() }
@@ -175,6 +190,8 @@ class AppSettings(private val file: File) {
         props.setProperty("pauseOnWarnings", pauseOnWarnings.toString())
         props.setProperty("showBriefEachWeek", showBriefEachWeek.toString())
         props.setProperty("briefCollapsed", briefCollapsed.toString())
+        props.stringPropertyNames().filter { it.startsWith("dock.") }.forEach { props.remove(it) }
+        docks.forEach { (id, share) -> props.setProperty("dock.$id", share.toString()) }
         props.setProperty("uiScale", uiScale.toString())
         props.setProperty("windowMode", windowMode.name)
         props.setProperty("resolution", "${resolution.first}x${resolution.second}")
