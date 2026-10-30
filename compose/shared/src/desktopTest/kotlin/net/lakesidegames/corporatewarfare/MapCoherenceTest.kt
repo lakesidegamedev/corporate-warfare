@@ -171,7 +171,8 @@ class MapCoherenceTest {
             val (g, buildings) = lotsOf(map, cam, pitch)
             assertEquals(lots.size, buildings.size)
             for (b in buildings) {
-                val (east, north) = lots.getValue(b.key)
+                // A lot over water (Detroit's south lot is in Lake Erie) stands on the nearest dry spot instead, the same at every camera.
+                val (east, north) = LotLand.dry(map, b.key.substringBefore('/'), lots.getValue(b.key), LotLand.PLAYER_RADIUS_M)
                 val hub = map.anchor(b.key.substringBefore('/'))!!
                 val lon = hub.lon[0] + east / (earth * cos(hub.lat[0]))
                 val lat = hub.lat[0] + north / earth
