@@ -41,7 +41,7 @@ pub fn annualised_ebitda(ledger: &Ledger) -> i64 {
 /// Measured over a year on the scenario seed firms, realised EBITDA is a fifth of standard for
 /// the typical firm and often negative. Assuming more priced the opening shares several times
 /// above where a quarter of real earnings put them, and a share can only fall ten percent a week.
-pub const OPENING_REALISATION_BPS: i64 = 2_000;
+pub const OPENING_REALISATION_BPS: i64 = 4_300;
 
 /// Weekly EBITDA a seed firm is assumed to earn before it has any history, from its plants'
 /// standard annual EBITDA. None when there is nothing to assume.

@@ -618,6 +618,8 @@ fn accrue_tax(world: &mut World, dataset: &Dataset, firm: Handle) {
 
 fn refresh_household_income(world: &mut World, dataset: &Dataset) {
     world.government.unpaid_transfer_need_cents = 0;
+    let tax_rate =
+        crate::economy::fiscal::labour_tax_bps(crate::economy::fiscal::stance_bps(world));
     for region_index in 0..world.regions.len() {
         let mut income = 0i64;
         for tier in 0..3 {
@@ -630,7 +632,7 @@ fn refresh_household_income(world: &mut World, dataset: &Dataset) {
         // Taxable labour income pays twenty percent to the government. Households spend
         // from what remains; transfer support is not taxable wage income.
         let earned = income;
-        let labour_tax = earned * crate::economy::fiscal::LABOUR_TAX_BPS / 10_000;
+        let labour_tax = earned * tax_rate / 10_000;
         if labour_tax > 0 {
             let receipt = crate::economy::fx::region_to_numeraire(
                 world,

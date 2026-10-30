@@ -52,6 +52,10 @@ const EARNINGS_MAGIC: &[u8; 4] = b"EARN";
 /// the hashed world; a save without it loads with every letter unread. The reader accepts the
 /// chapters and letters trailers in either order.
 const MAIL_MAGIC: &[u8; 4] = b"MAIL";
+/// Marks the player's chief executive trailer (1.9): the name, portrait and temperament chosen at
+/// the new-game screen. Presentation only, folded into the hash while set, outside the postcard
+/// payload so the schema does not move. A save without it has no chosen chief.
+const CHIEF_MAGIC: &[u8; 4] = b"CHIE";
 /// Marks the executives trailer: the people who can be hired and the posts they hold (1.9).
 /// Future-affecting, so `canonical_hash` folds it in while it is not empty; outside the postcard
 /// payload so the schema does not move. A save without it loads with no executives and the pool
@@ -208,6 +212,20 @@ pub fn encode_with(
             });
         }
         out.extend_from_slice(POLITICS_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if let Some(chief) = &world.player_chief {
+        let bytes = postcard::to_allocvec(chief).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(CHIEF_MAGIC);
         out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
         out.extend_from_slice(&bytes);
@@ -399,6 +417,15 @@ pub fn decode_with(
                 detail: SaveFault::MalformedPayload,
             })?;
             rest = &rest[40 + body.len()..];
+        } else if magic == CHIEF_MAGIC {
+            let body = trailer_body(rest)?;
+            world.player_chief =
+                Some(
+                    postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                        detail: SaveFault::MalformedPayload,
+                    })?,
+                );
+            rest = &rest[40 + body.len()..];
         } else if magic == MAIL_MAGIC {
             let body = trailer_body(rest)?;
             world.mail = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
@@ -525,6 +552,27 @@ mod tests {
         assert_eq!(again.chapters, world.chapters);
         assert!(again.mail.is_read("letter-a"));
         assert_eq!(cw_sim::state::canonical_hash(&again), hash);
+    }
+
+    #[test]
+    fn the_players_chief_survives_a_save_and_moves_the_hash() {
+        let mut world = world();
+        let plain = cw_sim::state::canonical_hash(&world);
+        world.player_chief = cw_sim::state::PlayerChief::choose("Ada Marsh", "", "raider");
+        let chief = world.player_chief.clone().expect("the kit has a portrait");
+        assert_eq!(chief.name, "Ada Marsh");
+        assert_eq!(chief.temperament, "raider");
+        let hash = cw_sim::state::canonical_hash(&world);
+        assert_ne!(hash, plain, "the chosen chief is part of the state");
+        let bytes = encode(&world, 9).unwrap();
+        let (restored, _) = decode(&bytes).unwrap();
+        assert_eq!(restored.player_chief, Some(chief));
+        assert_eq!(cw_sim::state::canonical_hash(&restored), hash);
+        // A save from before the choice has none and loads as it always did.
+        world.player_chief = None;
+        let (old, _) = decode(&encode(&world, 9).unwrap()).unwrap();
+        assert_eq!(old.player_chief, None);
+        assert_eq!(cw_sim::state::canonical_hash(&old), plain);
     }
 
     #[test]
