@@ -1164,6 +1164,7 @@ struct QuoteBindSheet: View {
     @State private var rejection: CommandRejection?
 
     private var firm: FirmDto? { store.selectedFirmDto }
+    private var limit: Int64? { parseDollarsToCents(limitText) }
     private var deductible: Int64? { parseDollarsToCents(deductibleText) }
     private var insurers: [InstitutionDto] {
         store.institutions.filter { $0.kind.contains("insurer") }
