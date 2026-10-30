@@ -132,9 +132,11 @@ class GpuMapDirectTest {
 
                 // What is on screen is the renderer's picture for that camera: several stills along a second drag, each compared
                 // with an offscreen render of the same view.
-                val offscreen = openDesktopGpuMap(scenario)
+                val lib = CwGpu.instance
+                val oid = lib.cw_gpu_open(gpuAssetFolder(scenario).absolutePath, scenario)
+                assertTrue(oid != 0L, "the offscreen renderer opened")
                 try {
-                    offscreen.update(gpuUpdateJson(game.mapPlants(), game.mapDivisions(), MapLayer.Presence, emptyMap(), night = false, clouds = 2))
+                    lib.cw_gpu_update(oid, gpuUpdateJson(game.mapPlants(), game.mapDivisions(), MapLayer.Presence, emptyMap(), night = false, clouds = 2))
                     for (k in 0 until 4) {
                         for (i in 0 until 15) {
                             cam = cam.panned(Offset(-6f, 1f), size, pitch).zoomed(1.01)
@@ -152,29 +154,34 @@ class GpuMapDirectTest {
                     }
                     var compared = 0
                     for ((gc, img, _) in shots) {
-                        offscreen.request(gc, w, h, false)
-                        val until = System.currentTimeMillis() + 60_000
-                        while ((offscreen.shown?.view != gc || offscreen.shown?.factor != 1f) && System.currentTimeMillis() < until) Thread.sleep(30)
-                        val shown = assertNotNull(offscreen.shown)
-                        val bmp = shown.image.asSkiaBitmap()
-                        // Compare the view part of the offscreen frame (it has an overscan margin) with the captured window.
-                        val m = shown.margin
+                        val px = ByteArray(w * h * 4)
+                        val code = lib.cw_gpu_render(oid, doubleArrayOf(gc.lon, gc.lat, gc.widthKm, gc.tiltDeg, gc.headingDeg, gc.fovDeg), w, h, 1, px, px.size.toLong(), DoubleArray(6))
+                        assertTrue(code >= 0, "the offscreen render of the same camera drew")
+                        // Block averages, so the renderer's fine ground texture does not count, only where the large shapes are.
                         var differing = 0; var total = 0
-                        for (y in 0 until h step 7) for (x in 0 until w step 7) {
-                            val a = bmp.getColor(x + m, y + m)
-                            val b = img.getRGB(x, y)
-                            val d = abs(((a shr 16) and 255) - ((b shr 16) and 255)) + abs(((a shr 8) and 255) - ((b shr 8) and 255)) + abs((a and 255) - (b and 255))
-                            total++; if (d > 60) differing++
+                        val block = 16
+                        for (by in 0 until h / block) for (bx in 0 until w / block) {
+                            var sa = 0L; var sb = 0L
+                            for (c in 0..2) {
+                                var ta = 0; var tb = 0
+                                for (y in 0 until block step 2) for (x in 0 until block step 2) {
+                                    ta += px[((by * block + y) * w + bx * block + x) * 4 + c].toInt() and 255
+                                    tb += (img.getRGB(bx * block + x, by * block + y) shr (16 - 8 * c)) and 255
+                                }
+                                sa += ta / 64; sb += tb / 64
+                                if (abs(ta / 64 - tb / 64) > 40) sa += 1000
+                            }
+                            total++; if (sa >= 1000) differing++
                         }
                         val share = differing.toDouble() / total
-                        println("direct map still: ${"%.1f".format(share * 100)}% of sampled pixels differ from the offscreen render of the same camera")
+                        println("direct map still: ${"%.1f".format(share * 100)}% of 16 pixel blocks differ from the offscreen render of the same camera")
                         // The overscan frame is drawn with a wider field of view, so only the broad picture must agree.
                         if (img.getRGB(w / 2, h / 2) != 0 || img.getRGB(5, 5) != 0) compared++
-                        assertTrue(share < 0.6, "the window shows the picture of its camera (${share * 100}% differ)")
+                        assertTrue(share < 0.25, "the window shows the picture of its camera (${share * 100}% differ)")
                     }
                     assertTrue(compared > 0, "the window capture had content")
                 } finally {
-                    offscreen.close()
+                    lib.cw_gpu_close(oid)
                 }
                 out?.let { File(it, "motion.txt").writeText("frames=${inMotion.size} seconds=$motionSeconds fps=$fps render_median_ms=${render[render.size / 2]} present_median_ms=${present[present.size / 2]} software=${session.software} adapter=${session.adapter}\n") }
             } finally {
