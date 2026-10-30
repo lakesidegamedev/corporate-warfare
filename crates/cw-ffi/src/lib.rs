@@ -746,6 +746,25 @@ pub struct PreviewDto {
     pub blocked_detail: Option<String>,
 }
 
+/// What buying or selling shares from the public float would do right now, changing nothing.
+#[derive(uniffi::Record)]
+pub struct ShareQuoteDto {
+    /// Shares that would change hands.
+    pub qty: i64,
+    pub average_cents: i64,
+    /// What a buy costs or a sale pays.
+    pub total_cents: i64,
+    /// The price once the trade is done.
+    pub final_cents: i64,
+    pub mark_cents: i64,
+    /// Shares the public holds.
+    pub float_qty: i64,
+    /// Most you could buy (cash and float) or sell (your holding).
+    pub max_qty: i64,
+    /// Your stake after the trade, in basis points of the votes.
+    pub stake_after_bps: i32,
+}
+
 #[derive(uniffi::Record)]
 pub struct LabourDto {
     pub firm: u64,
@@ -4659,6 +4678,47 @@ impl SessionHandle {
         };
         let session = self.lock();
         preview_dto(session.preview(cw_sim::commands::INVESTOR_ACTOR, &intent))
+    }
+
+    /// Live quote for the buy and sell dialogs. `as_firm` is the company trading, or 0 for the
+    /// investor's own account; `limit_cents` of 0 means no limit.
+    pub fn quote_shares(
+        &self,
+        firm: u64,
+        buy: bool,
+        qty: i64,
+        limit_cents: i64,
+        as_firm: u64,
+    ) -> ShareQuoteDto {
+        let session = self.lock();
+        let holder = if as_firm == 0 {
+            cw_sim::state::HolderId::Investor
+        } else {
+            cw_sim::state::HolderId::Firm(cw_core::ids::Handle(as_firm))
+        };
+        let side = if buy {
+            cw_sim::state::OrderSide::Buy
+        } else {
+            cw_sim::state::OrderSide::Sell
+        };
+        let q = cw_sim::economy::equity::quote_shares(
+            &session.world,
+            holder,
+            cw_core::ids::Handle(firm),
+            side,
+            qty,
+            limit_cents,
+        );
+        ShareQuoteDto {
+            qty: q.qty,
+            average_cents: q.average_cents,
+            total_cents: q.total_cents,
+            final_cents: q.final_cents,
+            mark_cents: q.mark_cents,
+            float_qty: q.float_qty,
+            max_qty: q.max_qty,
+            stake_after_bps: q.stake_after_bps,
+        }
     }
 
     /// Typed dilution preview used by the issuance sheet.

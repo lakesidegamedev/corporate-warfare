@@ -53,12 +53,23 @@ Tie means status quo. Public minority holders can vote against a controller's co
 
 ## Shares, payouts and values
 
-Weekly exchange uses external float plus explicit holder orders. Outstanding treasury
-shares have zero votes/dividends. Quotes: fair value/share +/-2 percent spread; external
-weekly executable float is 2 percent of freely held shares. Price impact = 10 percent
-of requested quantity / weekly float, capped at 25 percent. Quote reserves cash/shares,
-expires next boundary and revalidates solvency/ownership. Same beneficial owner cannot
-match itself. Selling below a prior cost is a realised investor loss, not company expense.
+Trading against the public float settles at once, when the command runs (`PlaceShareOrder`,
+the same command and rules for the player and for rivals). The float is the shares outside
+investors hold. Shares come from, and go to, real outside holders (a buy takes the largest lot
+first; a sale goes to the outside investor with the most money), never invented, and cash moves
+once, with no reserve. Treasury shares have zero votes/dividends. With `F` the shares the public
+holds and `m` the mark, the marginal price after `x` shares have traded is `m x (1 + x / F)` for
+a buy and `m x (1 - x / 2F)` for a sale, never under half the mark. The trade pays the area under
+that line (the average along the curve), within a cent a share. A buy is capped at `F`; a sale at
+the seller's holding and at what the buyers can pay. An optional limit price (0 for none) stops the
+walk where the next share would pass it, so the order fills in part. The mark then moves to the
+final marginal price and relaxes toward fair value through the weekly valuation (one eighth a
+week). `quote_shares` (FFI `quote_shares`) gives the same numbers without trading: shares,
+average price, total, final price, the most the holder could trade and the stake afterwards. A
+buy checks cash, numeraire holder and the ownership cycle; stakes, disclosure lines and control
+follow from the holdings. Resting orders from older saves are still cleared at the weekly close
+(company against company, then the float at two percent a week) and expire after a week. Selling
+below a prior cost is a realised investor loss, not company expense.
 
 Issue shares at >=90 percent of fair price with a funding buyer, board authority and
 100 percent paid cash at settlement. Show exact dilution before acceptance. IPO costs
@@ -553,9 +564,10 @@ percent, a financier 10 percent, an integrator a vertical link to the target (a 
 customer) and gets 20 points for it. Nothing in the opening draws from a random stream.
 
 **Building.** Each week the rival bids with `PlaceShareOrder` for at most half of the week's
-executable float (2 percent of the shares outside investors hold), at no more than 2 percent over
-the mark, so price impact (10 basis points for each percent of the outside holdings a step takes)
-and the float cap every step, and the order simply does not fill if the price would be higher. It
+executable float (2 percent of the shares outside investors hold, so one percent of them), at no
+more than 2 percent over the mark. The step settles at once along the price curve above, which
+moves the price one percent for each percent of the outside holdings a step takes, and the limit
+stops the walk if the price would pass it. It
 never buys past a quarter of the votes (the goal) or into its cash reserve.
 
 **Disclosure.** At 5 percent of the votes the stake is public: the stake and the week are filed
