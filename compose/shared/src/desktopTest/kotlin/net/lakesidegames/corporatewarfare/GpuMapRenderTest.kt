@@ -62,17 +62,19 @@ class GpuMapRenderTest {
                     session.request(gc, 1280, 800, true)
                     val deadline = System.currentTimeMillis() + 120_000
                     // The full-size frame follows the quick one once the view has settled.
-                    while ((session.version < before + 1 || session.frame?.width != 1280) && System.currentTimeMillis() < deadline) Thread.sleep(50)
+                    while ((session.version < before + 1 || session.shown?.view != gc || session.shown?.factor != 1f) && System.currentTimeMillis() < deadline) Thread.sleep(50)
                     val frame = assertNotNull(session.frame, "$id $view: a frame was drawn")
                     println("view $id $view camera=$gc view=${frame.width}x${frame.height} centre=${Integer.toHexString(frame.asSkiaBitmap().getColor(frame.width / 2, frame.height / 2))} corner=${Integer.toHexString(frame.asSkiaBitmap().getColor(5, 5))} line=${gpuMapLine(true, session)}")
                     // The frame is not the clear colour: the camera really sees the map (a flat view once drew nothing).
-                    assertTrue(frame.asSkiaBitmap().getColor(frame.width / 2, frame.height / 2) != 0xFF0B1622.toInt(), "$id $view: the middle of the frame is empty")
+                    val bmp = frame.asSkiaBitmap()
+                    val colours = (0 until 40).flatMap { gy -> (0 until 40).map { gx -> bmp.getColor(gx * frame.width / 40, gy * frame.height / 40) } }.toSet()
+                    assertTrue(colours.size > 6, "$id $view: the frame is nearly one colour")
                     table.append("| $id | $view | ${frame.width}x${frame.height} | ${"%.1f".format(session.renderMs)} | ${"%.1f".format(session.copyMs)} |\n")
                     val scene = ImageComposeScene(1280, 800, Density(1f)) {
                         val measurer = rememberTextMeasurer()
                         val planner = remember { LabelPlanner() }
                         Canvas(Modifier.fillMaxSize()) {
-                            drawGpuFrame(session)
+                            drawGpuFrame(session, gc)
                             drawGpuLabels(session, gc, map, plants, divisions, GraphicsConfig.Default, gc.widthKm, measurer, planner)
                         }
                     }
@@ -131,12 +133,12 @@ class GpuMapRenderTest {
                     for ((name, gc) in list) {
                         session.request(gc, 1600, 1000, false)
                         val deadline = System.currentTimeMillis() + 120_000
-                        while ((session.shown?.camera != gc || session.shown?.image?.width != 1600) && System.currentTimeMillis() < deadline) Thread.sleep(50)
+                        while ((session.shown?.view != gc || session.shown?.factor != 1f) && System.currentTimeMillis() < deadline) Thread.sleep(50)
                         val scene = ImageComposeScene(1600, 1000, Density(1f)) {
                             val measurer = rememberTextMeasurer()
                             val planner = remember { LabelPlanner() }
                             Canvas(Modifier.fillMaxSize()) {
-                                val shown = drawGpuFrame(session) ?: gc
+                                val shown = drawGpuFrame(session, gc) ?: gc
                                 drawGpuLabels(session, shown, map, plants, divisions, GraphicsConfig.Default, shown.widthKm, measurer, planner)
                             }
                         }

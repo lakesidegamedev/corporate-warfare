@@ -255,7 +255,7 @@ internal fun DrawScope.drawGpuFrame(session: GpuMapSession, live: GpuCamera): Gp
     val still = Math.abs(hom[0] - 1) < 1e-3 && Math.abs(hom[4] - 1) < 1e-3 && Math.abs(hom[1]) < 1e-3 && Math.abs(hom[3]) < 1e-3 &&
         Math.abs(hom[6]) < 1e-6 && Math.abs(hom[7]) < 1e-6
     if (still) {
-        drawImage(image, topLeft = Offset(Math.round(hom[2]).toFloat(), Math.round(hom[5]).toFloat()), filterQuality = FilterQuality.None)
+        drawImage(image, dstOffset = IntOffset(Math.round(hom[2]).toInt(), Math.round(hom[5]).toInt()), filterQuality = FilterQuality.None)
         return live
     }
     val matrix = androidx.compose.ui.graphics.Matrix()
