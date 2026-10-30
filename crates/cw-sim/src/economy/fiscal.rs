@@ -16,6 +16,9 @@
 use crate::state::World;
 
 pub const LABOUR_TAX_BPS: i64 = 2_000;
+/// Within a tenth of the reserve either way nothing moves: the plain rate and plain budgets.
+const DEAD_BAND_LOW: i64 = 9_000;
+const DEAD_BAND_HIGH: i64 = 11_000;
 const LABOUR_TAX_MIN_BPS: i64 = 800;
 const LABOUR_TAX_MAX_BPS: i64 = 2_200;
 /// Weeks of receipts the treasury aims to keep in hand.
@@ -47,6 +50,9 @@ pub fn stance_bps(world: &World) -> i64 {
 /// percent at the reserve, falling a point for every eighth of a reserve of surplus over it down
 /// to eight, and rising a point for every quarter short of it up to twenty-two.
 pub fn labour_tax_bps(stance_bps: i64) -> i64 {
+    if (DEAD_BAND_LOW..=DEAD_BAND_HIGH).contains(&stance_bps) {
+        return LABOUR_TAX_BPS;
+    }
     if stance_bps >= 10_000 {
         (LABOUR_TAX_BPS - (stance_bps - 10_000) / 12).max(LABOUR_TAX_MIN_BPS)
     } else {
@@ -57,6 +63,9 @@ pub fn labour_tax_bps(stance_bps: i64) -> i64 {
 /// How hard the budgets run, in basis points of the plain eighty percent: cut in proportion when
 /// the treasury is under its reserve, and raised by half the excess when it is over.
 pub fn spending_factor_bps(stance_bps: i64) -> i64 {
+    if (DEAD_BAND_LOW..=DEAD_BAND_HIGH).contains(&stance_bps) {
+        return 10_000;
+    }
     if stance_bps < 10_000 {
         stance_bps.max(FACTOR_MIN_BPS)
     } else {
@@ -108,9 +117,11 @@ mod tests {
     #[test]
     fn budgets_are_eighty_percent_of_the_trailing_thirteen_week_mean() {
         let mut world = world();
-        // A single high receipt week shifts the mean; the window is bounded.
+        // Receipts of a thirteenth of the treasury keep it at its reserve, so the plain eighty
+        // percent applies. The window is bounded.
+        let receipt = world.government.book.cash() / 13;
         for _ in 0..14 {
-            super::record(&mut world, 130_000);
+            super::record(&mut world, receipt);
             close_week(&mut world);
         }
         assert_eq!(world.government.tax_receipts_history.len(), 13);

@@ -303,3 +303,27 @@ laws and public tenders. A rival gives by temperament and by which candidate's l
 the same command and the same cap; there is no AI-only route. A rival bids on tenders through
 `BidOnTender` at its own delivery cost plus a margin by temperament (raiders and speculators 10,
 builders and integrators 15, cautious and financiers 22 percent).
+
+## Treasury response (1.9 balance pass 4)
+
+The treasury aims to hold a reserve of 13 weeks of receipts, which is what it opens with. Its
+stance is its cash over that reserve (10,000 basis points is exactly the reserve). Before this
+pass the budgets were a flat 80 percent of receipts and the only large outlet was public works, so
+a three-year treasury ended at about thirteen times its opening ($1.29 billion from $102.6
+million). It now answers to its cash:
+
+- **Dead band.** Within a tenth of the reserve either way the plain 20 percent and plain budgets hold.
+- **Budgets.** The factor on the plain 80 percent is the stance when under the reserve (at least
+  half), and one plus half the excess over it (at most 130 percent). Budgets follow what the plain
+  20 percent rate would take, so a tax cut does not also shrink spending.
+- **Labour tax.** 20 percent at the reserve; one point less for every 1,200 basis points of stance
+  over it, down to 8 percent; one point more for every 2,500 short of it, up to 22 percent. Handing a
+  surplus back as lower taxes is the transfer to households when flush.
+- **Public works.** A new tender every 13 weeks; every 6 above 150 percent of the reserve; none
+  under 50 percent.
+- **Measured** (6 seeds, treasury at year ends, $M, opening in brackets): Texas 90 then 183, 189,
+  205, 270, 300; Ruhr and Rhine 96 then 296, 369, 347, 372, 385; Silicon Valley 89 then 201, 197,
+  143, 111, 150; Great Lakes 102 then 248, 305, 379, 411, 513. It runs surpluses and deficits with
+  the cycle instead of a straight climb. Only public works, defence deliveries and care purchases
+  are large enough to spend into, so a state that taxes wages at 20 percent would otherwise bank the
+  difference for ever.

@@ -633,17 +633,28 @@ half the weight and donors to the loser lose a quarter. Reputation feeds lobbyin
 builder and integrator 40, speculator 60, raider 90 percent of the cap) to the side whose positions
 help them: heavy plants, carrier ownership (national race) and large payrolls lean business.
 
-**Tenders.** Every 13 weeks, if the treasury's weekly procurement budget is positive and open and
+**Tenders.** Every 13 weeks (every 6 when the treasury holds more than one and a half reserves, none
+when it holds under half of one, see FINANCE-LABOUR-AI.md, Treasury response), if the treasury's
+weekly procurement budget is positive and open and
 unfinished tenders commit less than 40 weeks of it, the state opens a tender for a road upgrade
 (6 weeks of the budget, 8 to 26 weeks), power line (8 weeks, 10 to 30) or port expansion (10
-weeks, 13 to 39) in the region of a state taken in turn with the least of that kind of works.
+weeks, 13 to 39) in the region of a state taken in turn with the least of that kind of works (a place
+that drew no bid last time goes to the back of the line). The ceiling is scaled by the region's land
+index (0.8 to 1.3).
 Bids close after 4 weeks. A bid is a price (at most the budget) and a delivery time; the lowest
-`price + weeks * budget / 100` wins, skipping bidders that are not operating, foreign currency, hold
-three works already, or lack a quarter of the cost in cash. The winner's cost is 70 percent of the
-budget scaled by the region's land index, plus up to 12 percent for hurrying. Each week it pays
+`price + weeks * budget / 100` wins, skipping bidders that are not operating, hold three works already, or lack a month of the work
+in cash (cost times four over the weeks promised). A contractor in another money is paid, and pays,
+converted at the week's rate. The estimate is 70 percent of the
+ceiling scaled by the region's land index, plus up to 12 percent for hurrying; the bill the winner
+meets is that estimate plus an overrun of 0 to 8 percent that nobody sees until the award (one figure
+per tender from the world seed), so the lowest bidder is the one most likely to have been too hopeful
+(the winner's curse). A rival reads the cost with its own error of up to 3 percent either way and adds
+a margin of 8 (raider, speculator), 9 (others) or 11 (cautious, financier) percent; any firm with a
+plant bids, up to two works at once. Measured over four scenarios the winner's price is 102 to 103
+percent of its real bill, against 112 to 115 before, with 5 to 17 bids per award. Each week it pays
 cost/promised weeks as construction bought from contractors in the region (the existing construction
-service path), adds steel demand in the region, and the treasury pays the price in quarters as the
-cost is spent, never more than half the week's procurement budget or the treasury's cash. A finish
+service path), adds steel demand in the region, and the treasury pays the price in step with the cost spent (no quarterly lumps, which the share
+valuation read as a year of profit), never more than half the week's procurement budget or the treasury's cash. A finish
 after the promised time forfeits a tenth of the price per week late, at most half. A failed
 contractor lapses the tender. Finished works add 10 percent lane capacity on trucks to and from the
 region (cap 40), 15 percent on sea lanes and sea terminal access (cap 45), or 5 points of power grid
