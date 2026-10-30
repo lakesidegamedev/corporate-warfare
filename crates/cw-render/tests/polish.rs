@@ -135,23 +135,82 @@ fn the_ruhr_whitens_in_winter_and_the_sierra_holds_its_snow_high() {
     assert_eq!(valley_snow, 0, "the Central Valley stays bare");
 }
 
+const SECTORS: [&str; 15] = [
+    "energy",
+    "chemical_industries",
+    "manufacturing",
+    "extraction",
+    "agriculture",
+    "logistics",
+    "construction",
+    "defense",
+    "media",
+    "healthcare",
+    "technology",
+    "financial",
+    "retail",
+    "real_estate",
+    "telecommunications",
+];
+
 #[test]
-fn plants_stand_one_to_three_kilometres_across_and_keep_that_size() {
-    for industry in [
-        "energy",
-        "financial",
-        "manufacturing",
-        "retail",
-        "extraction",
-    ] {
+fn plants_stand_a_few_hundred_metres_to_two_kilometres_and_never_tower() {
+    for industry in SECTORS {
         for plants in [1, 2, 5, 12, 40] {
             let km = plant_size_km(industry, plants, false);
-            assert!((1.0..=3.0).contains(&km), "{industry} x{plants}: {km} km");
+            assert!((0.3..=2.0).contains(&km), "{industry} x{plants}: {km} km");
         }
     }
     assert!(plant_size_km("energy", 6, false) > plant_size_km("energy", 1, false));
+    assert!(
+        plant_size_km("energy", 1, true) < 0.5,
+        "a site is a small yard"
+    );
 
-    let scene = scenario("texas-1981");
+    // Every sector at every plant count: the footprint and the height, measured from the
+    // placed buildings, stay in range. Heights are at most one footprint width (a lone mast
+    // may reach a quarter more), so nothing dwarfs the counties round it.
+    let mut scene = scenario("great-lakes-2000");
+    let region = scene.regions[0].code.clone();
+    let mut worst = (0.0f32, 0.0f32);
+    for industry in SECTORS.iter().chain(&["site"]) {
+        for plants in [1u32, 3, 4, 8, 9, 40] {
+            let sites = [PlantSite {
+                region: region.clone(),
+                industry: (*industry).into(),
+                firm: 1,
+                plants,
+                player: true,
+                status: if *industry == "site" {
+                    SiteStatus::Site
+                } else {
+                    SiteStatus::Running
+                },
+            }];
+            scene.set_buildings(layout_plants(&scene, &sites));
+            let boxes = building_boxes(&scene);
+            assert_eq!(boxes.len(), 1);
+            let b = &boxes[0];
+            let across = b.half_km * 2.0;
+            assert!(
+                (0.3..=2.0).contains(&across),
+                "{industry} x{plants}: {across} km across"
+            );
+            let limit = if *industry == "telecommunications" {
+                1.3
+            } else {
+                1.0
+            };
+            assert!(
+                b.height_km <= across * limit + 1e-3,
+                "{industry} x{plants}: {} km tall on {across} km",
+                b.height_km
+            );
+            worst = (worst.0.max(across), worst.1.max(b.height_km));
+        }
+    }
+    assert!(worst.0 <= 2.0 && worst.1 <= 2.6, "worst {worst:?}");
+
     let region = scene.regions[0].code.clone();
     let sites: Vec<PlantSite> = (0..4)
         .map(|i| PlantSite {
@@ -163,18 +222,9 @@ fn plants_stand_one_to_three_kilometres_across_and_keep_that_size() {
             status: SiteStatus::Running,
         })
         .collect();
-    let mut scene = scene;
     scene.set_buildings(layout_plants(&scene, &sites));
     let boxes = building_boxes(&scene);
     assert_eq!(boxes.len(), 4);
-    for b in &boxes {
-        let across = b.half_km * 2.0;
-        assert!(
-            (0.95..=3.05).contains(&across),
-            "{}: {across} km across",
-            b.model
-        );
-    }
     // The size is a property of the building, not of any camera: the footprint is the same
     // however often it is asked for.
     let again = building_boxes(&scene);
@@ -188,9 +238,95 @@ fn plants_stand_one_to_three_kilometres_across_and_keep_that_size() {
         .collect();
     assert!(!scenery.is_empty());
     assert!(
-        scenery.iter().all(|b| b.half_km * 2.0 < 1.6),
-        "a downtown block is about a kilometre"
+        scenery
+            .iter()
+            .all(|b| b.half_km * 2.0 < 0.8 && b.height_km < 0.8),
+        "a downtown block is half a kilometre"
     );
+}
+
+#[test]
+fn no_building_footprint_touches_water_in_any_scenario() {
+    let mut checked = 0;
+    for id in [
+        "great-lakes-2000",
+        "texas-1981",
+        "ruhr-rhine-1991",
+        "silicon-valley-1995",
+    ] {
+        let mut scene = scenario(id);
+        let kx = scene.projection.km_per_deg_lon();
+        let sites: Vec<PlantSite> = scene
+            .regions
+            .iter()
+            .flat_map(|r| {
+                (0..6).map(move |i| PlantSite {
+                    region: r.code.clone(),
+                    industry: SECTORS[(i * 2) % SECTORS.len()].into(),
+                    firm: i as u64,
+                    plants: [1, 5, 12, 3, 9, 2][i],
+                    player: i == 0,
+                    status: SiteStatus::Running,
+                })
+            })
+            .collect();
+        let mut all = layout_plants(&scene, &sites);
+        // The downtown blocks the scene starts with stand on land too.
+        all.extend(scene.buildings.iter().cloned());
+        scene.set_buildings(all);
+        let boxes = building_boxes(&scene);
+        for b in &boxes {
+            checked += 1;
+            assert!(
+                scene.mask.footprint_on_land(b.lon, b.lat, b.half_km, kx),
+                "{id}: a {} footprint at {:.3}, {:.3} touches water",
+                b.model,
+                b.lon,
+                b.lat
+            );
+        }
+    }
+    assert!(checked > 400, "{checked} buildings checked");
+}
+
+#[test]
+fn every_plant_model_is_clean_solid_geometry() {
+    let json: serde_json::Value = serde_json::from_str(cw_render::PLANT_MODELS).unwrap();
+    let models = json["models"].as_object().unwrap();
+    assert!(models.len() >= 50, "{} models", models.len());
+    for (key, m) in models {
+        let boxes: Vec<Vec<f64>> = m["boxes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| (0..6).map(|i| b[i].as_f64().unwrap()).collect())
+            .collect();
+        let overlap = |a: &[f64], b: &[f64], i: usize| a[i + 3].min(b[i + 3]) - a[i].max(b[i]);
+        for (n, a) in boxes.iter().enumerate() {
+            assert!(
+                a[0] >= -12.01 && a[3] <= 12.01 && a[1] >= -12.01 && a[4] <= 12.01,
+                "{key}: a box leaves the footprint"
+            );
+            for b in &boxes[n + 1..] {
+                assert!(
+                    !(overlap(a, b, 0) > 1e-6
+                        && overlap(a, b, 1) > 1e-6
+                        && overlap(a, b, 2) > 1e-6),
+                    "{key}: two boxes poke through each other"
+                );
+            }
+            if a[2] > 1e-6 {
+                assert!(
+                    boxes.iter().any(|b| {
+                        (b[5] - a[2]).abs() < 1e-6
+                            && overlap(a, b, 0) > 1e-6
+                            && overlap(a, b, 1) > 1e-6
+                    }),
+                    "{key}: a box floats"
+                );
+            }
+        }
+    }
 }
 
 #[test]

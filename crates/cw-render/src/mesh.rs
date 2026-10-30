@@ -586,19 +586,32 @@ pub fn buildings(scene: &Scene) -> Mesh {
                 KIND_PLAIN,
             );
         }
+        // The plant models mark their own roofs and trim; the player's firm colour replaces them.
+        let marked = model.boxes.iter().any(|b| b.trim);
         for b in &model.boxes {
-            let tall = b.max[2] - b.min[2] >= 2.0 && b.min[2] >= 1.0;
+            let tall = if marked {
+                b.max[2] - b.min[2] >= 3.0
+                    && b.max[0] - b.min[0] >= 4.0
+                    && b.max[1] - b.min[1] >= 4.0
+            } else {
+                b.max[2] - b.min[2] >= 2.0 && b.min[2] >= 1.0
+            };
+            let colour = if marked && b.trim && p.owner == Owner::Player {
+                PLAYER_ROOF
+            } else {
+                b.colour
+            };
             box_faces(
                 &mut m,
                 &tf,
                 &rot,
                 b.min,
                 b.max,
-                b.colour,
+                colour,
                 if tall { KIND_BUILDING } else { KIND_PLAIN },
             );
         }
-        if p.owner == Owner::Player {
+        if p.owner == Owner::Player && !marked {
             // Gold roofs: a thin gold slab over every top-most roof of the player's buildings.
             let top = model.boxes.iter().map(|b| b.max[2]).fold(0.0f32, f32::max);
             for b in &model.boxes {
@@ -650,7 +663,7 @@ pub fn building_boxes(scene: &Scene) -> Vec<BuildingBox> {
             let body = model
                 .boxes
                 .iter()
-                .filter(|b| b.min[2] >= 1.0)
+                .filter(|b| b.min[2] >= 0.4)
                 .max_by(|a, b| {
                     let vol = |x: &crate::data::VoxelBox| {
                         (x.max[0] - x.min[0]) * (x.max[1] - x.min[1]) * (x.max[2] - x.min[2])
