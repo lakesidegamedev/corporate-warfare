@@ -58,7 +58,7 @@ class FloatBuyRenderTest {
         store.refresh()
         val wait = System.currentTimeMillis() + 15_000
         while (store.stocks.isEmpty() && System.currentTimeMillis() < wait) Thread.sleep(100)
-        val line = assertNotNull(store.stocks.filter { it.floatBps > 500u }.maxByOrNull { it.marketCapCents })
+        val line = assertNotNull(store.stocks.filter { it.floatBps.toLong() > 500L }.maxByOrNull { it.marketCapCents })
         // The quote is the engine's; ask it directly and check the shape.
         var quote: uniffi.cw_ffi.ShareQuoteDto? = null
         store.shareQuote(line.firm, true, 10_000, 0) { quote = it }
@@ -66,7 +66,7 @@ class FloatBuyRenderTest {
         while (quote == null && System.currentTimeMillis() < by) Thread.sleep(50)
         val q = assertNotNull(quote)
         assertTrue(q.qty > 0 && q.finalCents >= q.markCents && q.averageCents >= q.markCents)
-        assertEquals(q.totalCents, q.totalCents)
+        assertTrue(kotlin.math.abs(q.totalCents.toLong() - q.averageCents.toLong() * q.qty.toLong()) <= q.qty.toLong(), "the total is the average times the shares, within a cent a share")
         println("quote: " + quoteText(q, true))
         shot("buy-dialog-desktop", settings, 1100, 900, 1f) { StockDialog(store, line, startQuantity = "10000") {} }
         shot("buy-dialog-phone", settings, 824, 1800, 2f) { StockDialog(store, line, startQuantity = "10000") {} }
