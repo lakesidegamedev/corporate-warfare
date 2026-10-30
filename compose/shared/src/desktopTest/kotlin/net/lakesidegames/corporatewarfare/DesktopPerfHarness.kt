@@ -25,6 +25,8 @@ import kotlin.test.assertTrue
 class DesktopPerfHarness {
     init {
         Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
+        // As the app runs: map layers are baked off the UI thread and the UI thread draws what has landed.
+        MapBake.enabled = true
         MeshCanvas.draw = desktopMeshDraw
         MeshCanvas.shader = desktopLinearShader
         Pixel.font = desktopPixelFont()
@@ -46,7 +48,7 @@ class DesktopPerfHarness {
                 if (st.isNotEmpty()) {
                     samples++
                     val top = st[0]; self.merge("${top.className.substringAfterLast('.')}.${top.methodName}", 1, Int::plus)
-                    st.map { "${it.className.substringAfterLast('.')}.${it.methodName}" }.distinct().forEach { inclusive.merge(it, 1, Int::plus) }
+                    st.filter { it.className.startsWith("net.lakesidegames") || it.className.startsWith("androidx.compose.foundation") || it.className.startsWith("androidx.compose.material") }.map { "${it.className.substringAfterLast('.')}.${it.methodName}" }.distinct().forEach { inclusive.merge(it, 1, Int::plus) }
                 }
                 Thread.sleep(1)
             }
@@ -157,7 +159,7 @@ class DesktopPerfHarness {
             var sampler = if (profile) Sampler(Thread.currentThread()) else null
             val first = frame()
             sampler?.let { printProfile("$name first draw", it) }
-            repeat(6) { frame(); Thread.sleep(20) }
+            repeat(25) { frame(); Thread.sleep(80) }
             sampler = if (profile) Sampler(Thread.currentThread()) else null
             val still = median(List(30) { frame() })
             sampler?.let { printProfile("$name still frames", it) }
