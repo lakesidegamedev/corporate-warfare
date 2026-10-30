@@ -1,10 +1,10 @@
 name: Apple smoke
 on:
   pull_request:
-    paths: ["apple/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/apple.yml"]
+    paths: ["apple/**", "tools/dmg_art.py", "tools/installer_art.py", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/apple.yml"]
   push:
     branches: [main]
-    paths: ["apple/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/apple.yml"]
+    paths: ["apple/**", "tools/dmg_art.py", "tools/installer_art.py", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/apple.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -44,6 +44,16 @@ jobs:
         with:
           name: corporate-warfare-mac-unsigned
           path: apple/build/CorporateWarfare-mac.zip
+          retention-days: 14
+      # The release's Mac download: a disk image with the branded background and the drag arrow.
+      - name: Mac disk image
+        run: |
+          app=$(find apple/build/catalyst -path '*Release-maccatalyst/*.app' -maxdepth 6 -type d | head -1)
+          bash apple/scripts/make-dmg.sh "$app" apple/build/CorporateWarfare-mac.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corporate-warfare-mac-dmg
+          path: apple/build/CorporateWarfare-mac.dmg
           retention-days: 14
       - name: Execute Rust bridge in simulator
         run: bash apple/scripts/test-simulator.sh

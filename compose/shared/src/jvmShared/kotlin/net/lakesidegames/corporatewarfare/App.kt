@@ -224,7 +224,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
                                 PixelIcon(item.icon, size = 24.dp)
                             }
                         },
-                        label = { Text(item.title, fontSize = 11.sp) },
+                        label = { NavLabel(item.title) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Palette.gold,
                             selectedTextColor = Palette.gold,
@@ -238,7 +238,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
                     selected = false,
                     onClick = { menu = true },
                     icon = { PixelIcon("menu", size = 24.dp) },
-                    label = { Text("Menu", fontSize = 11.sp) },
+                    label = { NavLabel("Menu") },
                     colors = NavigationBarItemDefaults.colors(unselectedIconColor = Palette.secondary, unselectedTextColor = Palette.secondary),
                 )
             }
@@ -440,7 +440,9 @@ internal fun CfoPanel(store: GameStore, currency: String) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(item.headline, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    Text("-${Format.compact(item.weeklyCents, currency)} a week", color = Palette.negative, fontSize = 12.sp)
+                    Explain("What this costs you every week, worked out by your CFO. ${item.detail}") {
+                        Text("-${Format.compact(item.weeklyCents, currency)} a week", color = Palette.negative, fontSize = 12.sp)
+                    }
                 }
                 Text(item.detail, color = Palette.secondary, fontSize = 12.sp)
                 OutlinedButton(onClick = { store.applyAdvice(item) }) { Text(item.actionLabel, color = Palette.primaryText) }
@@ -780,3 +782,13 @@ fun SpeedControl(store: GameStore) {
     }
 }
 
+
+/**
+ * A bottom bar label. Six tabs share the width, so a label that grows with the system font past
+ * 115 percent would wrap mid-word ("Portfoli o") at 130. It grows up to that and holds there, on one line.
+ */
+@Composable
+private fun NavLabel(text: String) {
+    val scale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+    Text(text, fontSize = (11f * minOf(scale, 1.15f) / scale).sp, maxLines = 1, softWrap = false)
+}

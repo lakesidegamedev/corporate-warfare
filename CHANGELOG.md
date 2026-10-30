@@ -11,27 +11,23 @@ heading.
 
 ## [Unreleased]
 
-### Fixed
-
-- Public works contracts are now a fair fight and not a money tap. Rival bids sit near the real
-  cost plus a normal margin of 8 to 11 percent (they used to add 10 to 22), every firm with a plant
-  can bid, firms that keep their books in another currency can win in Europe, and the works run over
-  the estimate by 0 to 8 percent that nobody sees until the bill, so the lowest bidder often finds
-  the job cost more than it thought. The state pays as the work progresses, not in lumps a quarter.
-  A contractor now clears about 2 to 3 percent on a job, not 12 to 15.
-- The state treasury no longer piles up money for ever. It aims to hold thirteen weeks of its
-  income. When it holds more it spends more, opens public works twice as often and takes less tax
-  from wages (down to 8 percent from 20); when it holds less it cuts back, opens no new works and
-  takes a little more (up to 22). A three-year treasury used to end at about thirteen times where
-  it began; it now wanders between one and a quarter and five times, with deficits as well as surpluses.
-- Share prices now open where they trade a quarter later. They used to open at about half of what
-  the companies' earnings supported and double in the first year in every scenario, which made
-  everything look like a bargain. The first-year rise is now near zero to ten percent.
-- Rivals only give campaign money out of what they earned that quarter, so a gift no longer tips
-  a firm into a losing quarter (the first-year losing share is back where it was before politics).
-
 ### Added
 
+- On the desktop the map can sit beside any page. Press Ctrl M or use "Dock map" in the sidebar and the
+  page you are on gets the map on its left, with a handle between them to drag (or use the arrow keys
+  on it). Each page remembers its own width and whether it is docked. Pages that need room scroll
+  sideways instead of squeezing.
+- Hover any figure in the status bar, the CEO Office, Financials, Markets and Stats and a short note says
+  what it is and how it is worked out, in plain words. The brief's lines and your CFO's reasons explain
+  themselves in the same way.
+- The chief executive you chose now shows up everywhere: letters to your company greet them by name,
+  your company page shows their face and temperament, and the paper shows who runs the company beside
+  any story about it.
+- A Linux AppImage is built beside the .deb from the same release image, with a desktop entry and the
+  game icon. The Mac download is now a disk image with the game's artwork and an arrow to drag the app
+  to Applications (still unsigned).
+- Screen readers: every icon-only button and every chart now has a spoken description, and charts say
+  their last value and which way they are heading.
 - The new map now also runs on iPhone, iPad and Mac, as an opt-in preview. Turn on "New map (preview)"
   under Graphics in Settings and the map is drawn by the device's graphics chip: stylized terrain,
   roads, rails and buildings that keep one size on the ground however far you zoom. Names, division
@@ -314,6 +310,25 @@ heading.
 
 ### Fixed
 
+- A rival's recent moves no longer list the same move twice in one week (for example "Started buying
+  fuel for storage" for two plants).
+- At 130 percent system font size on Android the bottom bar no longer breaks "Portfolio" across two lines.
+- Public works contracts are now a fair fight and not a money tap. Rival bids sit near the real
+  cost plus a normal margin of 8 to 11 percent (they used to add 10 to 22), every firm with a plant
+  can bid, firms that keep their books in another currency can win in Europe, and the works run over
+  the estimate by 0 to 8 percent that nobody sees until the bill, so the lowest bidder often finds
+  the job cost more than it thought. The state pays as the work progresses, not in lumps a quarter.
+  A contractor now clears about 2 to 3 percent on a job, not 12 to 15.
+- The state treasury no longer piles up money for ever. It aims to hold thirteen weeks of its
+  income. When it holds more it spends more, opens public works twice as often and takes less tax
+  from wages (down to 8 percent from 20); when it holds less it cuts back, opens no new works and
+  takes a little more (up to 22). A three-year treasury used to end at about thirteen times where
+  it began; it now wanders between one and a quarter and five times, with deficits as well as surpluses.
+- Share prices now open where they trade a quarter later. They used to open at about half of what
+  the companies' earnings supported and double in the first year in every scenario, which made
+  everything look like a bargain. The first-year rise is now near zero to ten percent.
+- Rivals only give campaign money out of what they earned that quarter, so a gift no longer tips
+  a firm into a losing quarter (the first-year losing share is back where it was before politics).
 - The new map's far land, seams, deserts and mountains are cleaned up. The land beyond the playable
   area now uses the same land colours as the land you play on, in fine cells near the edge that
   grow coarser with distance, and ends in a clean horizon of land or sea instead of big blocky

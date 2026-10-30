@@ -737,6 +737,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         val handle = session ?: return
         val firm = selectedFirm
         val now = overview ?: return
+        // The chief is cheap and shows in letters, the paper and the company page, so it loads whichever screen is open.
+        if (playerChief == null) withContext(engine) { handle.playerChief() }?.let { if (session === handle) playerChief = it }
         if (firm == null) { executives = null; return }
         val stamp = now.revision.toLong() * 7 + now.tick.toLong()
         if (!force && (!executivesOpen || stamp == executivesRevision)) return
