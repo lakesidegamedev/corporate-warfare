@@ -18,7 +18,7 @@ pub use camera::Camera;
 pub use data::{
     AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, LINE_INTERSTATE, LINE_MAIN, LINE_RAIL,
     Line, Mask, PLAYER_REGIONS, Placement, Projection, RegionInfo, SCENARIOS, Scene, SceneOptions,
-    ScenarioSpec, TINT_HEAT, TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel,
+    ScenarioSpec, TINT_HEAT, TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel, KM_PER_DEG_LAT,
 };
 pub use game::{PlantSite, SiteStatus, layout_plants, ramp_by_name, region_tints};
 pub use pick::{pick_ground, project};

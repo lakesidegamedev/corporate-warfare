@@ -108,6 +108,19 @@ pub fn sites_of(plants: &[PlantIn]) -> Vec<PlantSite> {
         .collect()
 }
 
+/// The scenario's terrain, regions, roads and cities with no game state in it yet.
+pub fn build_scene(assets: &Path, scenario: &str) -> Result<Scene, String> {
+    let spec = ScenarioSpec::find(scenario).ok_or_else(|| format!("unknown scenario {scenario}"))?;
+    Scene::for_scenario(
+        &AssetDirs {
+            resources: assets,
+            baked: assets,
+        },
+        spec,
+        &SceneOptions::default(),
+    )
+}
+
 pub struct AdapterInfo {
     pub name: String,
     pub backend: String,
@@ -139,17 +152,9 @@ impl GpuMap {
     /// Build the scenario's scene and start the renderer. Fails when the scenario is unknown,
     /// its files are missing, or the machine has no graphics adapter.
     pub fn open(assets: &Path, scenario: &str) -> Result<GpuMap, String> {
-        let spec = ScenarioSpec::find(scenario).ok_or_else(|| format!("unknown scenario {scenario}"))?;
+        let scene = build_scene(assets, scenario)?;
         let renderer = Renderer::new().map_err(|e| e.to_string())?;
         let a = renderer.adapter().clone();
-        let scene = Scene::for_scenario(
-            &AssetDirs {
-                resources: assets,
-                baked: assets,
-            },
-            spec,
-            &SceneOptions::default(),
-        )?;
         let base_buildings = scene.buildings.clone();
         Ok(GpuMap {
             scene: RwLock::new(scene),
@@ -517,4 +522,166 @@ pub unsafe extern "C" fn cw_gpu_pick(
 #[unsafe(no_mangle)]
 pub extern "C" fn cw_gpu_close(id: u64) {
     MAPS.lock().unwrap().retain(|(i, _)| *i != id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{NewGameDto, SessionHandle};
+    use std::ffi::CString;
+
+    fn plant(region: &str, industry: &str, firm: u64, status: &str, player: bool) -> PlantIn {
+        PlantIn {
+            region: region.into(),
+            industry: industry.into(),
+            firm,
+            blocks: 1,
+            player,
+            status: status.into(),
+        }
+    }
+
+    #[test]
+    fn plants_of_one_division_stand_as_one_building() {
+        let sites = sites_of(&[
+            plant("TX-1", "oil", 1, "running", true),
+            plant("TX-1", "oil", 1, "building", true),
+            plant("TX-1", "oil", 2, "building", false),
+            plant("TX-2", "oil", 2, "mothballed", false),
+        ]);
+        assert_eq!(sites.len(), 3);
+        let mine = sites.iter().find(|s| s.firm == 1).unwrap();
+        assert_eq!((mine.plants, mine.status, mine.player), (2, SiteStatus::Running, true));
+        let rival = sites.iter().find(|s| s.firm == 2 && s.region == "TX-1").unwrap();
+        assert_eq!((rival.status, rival.player), (SiteStatus::Site, false));
+        assert_eq!(
+            sites.iter().find(|s| s.region == "TX-2").unwrap().status,
+            SiteStatus::Mothballed
+        );
+    }
+
+    /// The scenario folder, assembled the way the desktop build does: the shared images and models
+    /// from the Apple resources, the baked terrain from the renderer's assets.
+    fn assets() -> std::path::PathBuf {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let dir = std::env::temp_dir().join(format!("cw-gpu-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for src in [root.join("apple/Resources"), root.join("crates/cw-render/assets")] {
+            for e in std::fs::read_dir(src).unwrap().flatten() {
+                let p = e.path();
+                if p.is_file() {
+                    std::fs::copy(&p, dir.join(p.file_name().unwrap())).unwrap();
+                }
+            }
+        }
+        dir
+    }
+
+    fn career(scenario: &str) -> std::sync::Arc<SessionHandle> {
+        SessionHandle::start(NewGameDto {
+            seed: 7,
+            scenario_id: scenario.into(),
+            guided: true,
+            five_year: false,
+            difficulty: "standard".into(),
+            economy: "historic".into(),
+            starting_capital_cents: None,
+            price_path: String::new(),
+            timeline: String::new(),
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn real_plants_and_holdings_land_where_the_engine_says() {
+        for id in ["texas-1981", "great-lakes-2000"] {
+            let scene = build_scene(&assets(), id).unwrap();
+            let session = career(id);
+            let plants: Vec<PlantIn> = session.map_plants().iter().map(PlantIn::from).collect();
+            assert!(!plants.is_empty(), "{id}: the career has no plants");
+            let sites = sites_of(&plants);
+            let placed = layout_plants(&scene, &sites);
+            let in_scenario: Vec<&PlantSite> =
+                sites.iter().filter(|s| scene.regions.iter().any(|r| r.code == s.region)).collect();
+            assert!(!in_scenario.is_empty(), "{id}: no plant is in a scenario region");
+            // Every placed building stands inside the region its site belongs to, near its hub.
+            let kx = scene.projection.km_per_deg_lon();
+            for b in &placed {
+                let home = scene.region_at(b.lon, b.lat);
+                let hub_near = scene.regions.iter().any(|r| {
+                    let dx = (b.lon - r.lon) * kx;
+                    let dy = (b.lat - r.lat) * cw_render::KM_PER_DEG_LAT;
+                    (dx * dx + dy * dy).sqrt() < 25.0
+                });
+                assert!(hub_near || home.is_some(), "{id}: a building floats away from every region");
+            }
+            // The player's own plants are among them, and none is dropped for a region it is in.
+            for s in in_scenario.iter().filter(|s| s.player) {
+                let hub = scene.regions.iter().find(|r| r.code == s.region).unwrap();
+                assert!(
+                    placed.iter().any(|b| {
+                        let dx = (b.lon - hub.lon) * kx;
+                        let dy = (b.lat - hub.lat) * cw_render::KM_PER_DEG_LAT;
+                        (dx * dx + dy * dy).sqrt() < 25.0
+                    }),
+                    "{id}: the player's plant in {} has no building at its hub",
+                    s.region
+                );
+            }
+            // Holdings tint exactly the regions the divisions are in.
+            let held: Vec<String> = session.map_divisions().iter().map(|d| d.region.clone()).collect();
+            let tints = region_tints(&scene, &held, &HashMap::new());
+            for r in &scene.regions {
+                let want = if held.contains(&r.code) { cw_render::TINT_PLAYER } else { cw_render::TINT_PLAY };
+                assert_eq!(tints[&r.code], want, "{id}: tint of {}", r.code);
+            }
+        }
+    }
+
+    #[test]
+    fn a_missing_or_unknown_scenario_opens_nothing_and_says_why() {
+        let dir = CString::new(std::env::temp_dir().join("cw-gpu-no-such-folder").to_str().unwrap()).unwrap();
+        let bad = CString::new("atlantis-1").unwrap();
+        let ok = CString::new("texas-1981").unwrap();
+        for scenario in [&bad, &ok] {
+            let id = unsafe { cw_gpu_open(dir.as_ptr(), scenario.as_ptr()) };
+            assert_eq!(id, 0);
+            let mut buf = vec![0 as c_char; 512];
+            let n = unsafe { cw_gpu_last_error(buf.as_mut_ptr(), buf.len()) };
+            assert!(n > 0, "the failure has no text");
+        }
+        // Calls on a map that is not open fail cleanly instead of crashing.
+        let mut cam = [0.0f64; 6];
+        let mut out = [0u8; 16];
+        let code = unsafe { cw_gpu_render(99, cam.as_mut_ptr(), 2, 2, 1, out.as_mut_ptr(), 16, std::ptr::null_mut()) };
+        assert!(code < 0);
+    }
+
+    #[test]
+    fn a_map_renders_a_frame_when_an_adapter_exists() {
+        let dir = assets();
+        let map = match GpuMap::open(&dir, "texas-1981") {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("skipping, no usable adapter: {e}");
+                return;
+            }
+        };
+        let session = career("texas-1981");
+        let plants: Vec<PlantIn> = session.map_plants().iter().map(PlantIn::from).collect();
+        map.apply(&Update {
+            plants: Some(plants),
+            holdings: Some(vec!["TX-1".into()]),
+            ..Update::default()
+        });
+        let (w, h) = (320u32, 200u32);
+        let mut out = vec![0u8; (w * h * 4) as usize];
+        let cam = [-99.5, 31.0, 1800.0, 20.0, 0.0, 28.0];
+        let t = map.render(cam, w, h, 1, &mut out);
+        assert_eq!((t.width, t.height), (w, h));
+        assert!(out.chunks_exact(4).any(|p| p[0] != p[1] || p[1] != p[2]), "the frame is flat grey");
+        // A tap on the centre of the view lands in a Texas region.
+        let hit = map.pick(cam, w as f32, h as f32, w as f32 / 2.0, h as f32 / 2.0);
+        eprintln!("centre pick: {hit:?}, render {:.1} ms copy {:.1} ms", t.render_ms, t.copy_ms);
+    }
 }

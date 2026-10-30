@@ -28,7 +28,12 @@ CACHE = ROOT / "tools" / ".cache"
 OUT = ROOT / "crates" / "cw-render" / "assets"
 URL = "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_urban_areas.zip"
 # West, south, east, north in whole degrees, the heightmap box of render_bake.py.
-AREAS = {"great-lakes-2000": (-97, 34, -67, 50)}
+AREAS = {
+    "great-lakes-2000": (-97, 34, -67, 50),
+    "texas-1981": (-110, 23, -86, 39),
+    "silicon-valley-1995": (-127, 31, -112, 44),
+    "ruhr-rhine-1991": (-1, 45, 17, 57),
+}
 TOLERANCE = 0.004
 
 
