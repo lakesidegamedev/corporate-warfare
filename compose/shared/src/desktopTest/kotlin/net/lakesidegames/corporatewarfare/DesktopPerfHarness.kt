@@ -54,6 +54,14 @@ class DesktopPerfHarness {
     fun harness() {
         val out = System.getenv("CW_PERF_REPORT") ?: return
         line("HOST load ${File("/proc/loadavg").takeIf { it.exists() }?.readText()?.trim() ?: "n/a"} cpus ${Runtime.getRuntime().availableProcessors()}")
+        // The launcher's three loads, cold and one at a time: the app now runs them side by side, so its wait is about the longest.
+        fun timed(label: String, block: () -> Unit): Double { val s = System.nanoTime(); block(); return ((System.nanoTime() - s) / 1e6).also { line("startup %-26s %8.1f ms".format(label, it)) } }
+        val startup = listOf(
+            timed("engine library") { runCatching { uniffi.cw_ffi.engineInfo() } },
+            timed("world map") { WorldMap.shared },
+            timed("icons and logo") { SectorIcons.all; PixelLogo.file },
+        )
+        line("startup %-26s %8.1f ms one after another, %.1f ms side by side (the longest)".format("launcher total", startup.sum(), startup.max()))
         val heapStart = heapMb()
 
         // Opening a career, engine side.
