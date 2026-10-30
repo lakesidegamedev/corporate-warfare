@@ -13,6 +13,18 @@ heading.
 
 ### Added
 
+- A new map for the Windows and Linux game, as an opt-in preview. In Settings, under Graphics, turn
+  on "New map (preview)" (it starts Off). The map is then drawn on your graphics card in the new
+  stylized look: terrain, lakes, roads, rails, cities, and your plants and your rivals' plants as
+  buildings, with day and night and clouds following your settings. Clicking a region still opens
+  its board, map modes still tint the regions, and names, badges and the legend are the same as
+  before. While you drag or zoom the picture is drawn at a lower detail and sharpens when you stop,
+  so it stays smooth. The frame counter shows what it costs, for example "map: GPU (your card),
+  3.1 ms render, 2.4 ms copy". If the computer has no usable graphics card, or anything goes wrong,
+  the game quietly keeps the current map and the counter says "map: classic, no GPU". The globe and
+  the Freight map mode always use the current map. Texas, Silicon Valley and Ruhr and Rhine now
+  have terrain and city outlines for it, as Great Lakes already did. Testers: this is a preview for
+  finding performance problems on real machines, please send the frame counter line with any report.
 - Earnings season. Every listed company now reports each quarter. At the start of the quarter an
   analyst writes an estimate of its operating profit from its trend, its sector and a little
   luck, so estimates can miss. On results day the share price moves on the surprise: a beat lifts

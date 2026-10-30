@@ -100,6 +100,7 @@ fun main() {
         StartupTimeline.origin = java.lang.management.ManagementFactory.getRuntimeMXBean().startTime
     }
     StartupTimeline.mark("main() entered")
+    if (System.getenv("CW_GPU_PROBE") != null) exitProcess(gpuProbe())
     // One copy at a time: a second launch brings the open game forward and exits (SingleInstance).
     when (SingleInstance.start(saveDirectory(), onActivate = ::bringToFront)) {
         is SingleInstance.Start.First -> Unit

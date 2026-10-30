@@ -194,3 +194,32 @@ private class DesktopGpuSession(
         const val SETTLE_NANOS = 250_000_000L
     }
 }
+
+/**
+ * CW_GPU_PROBE=1 starts the game headless to try the new map: open it, draw one frame at 1920x1080
+ * (a quick half-size one, then the full one), print the frame counter line and exit. The CI build
+ * of the release app runs it, so the packaged libraries, the shrunk classes and the map files are
+ * proven together; the exit code is 0 only when the GPU map drew.
+ */
+internal fun gpuProbe(): Int {
+    return try {
+        val session = openDesktopGpuMap("great-lakes-2000")
+        try {
+            session.update(gpuUpdateJson(emptyList(), emptyList(), MapLayer.Presence, emptyMap(), night = false, clouds = 2))
+            val map = WorldMap.forScenario("great-lakes-2000") ?: error("the world map did not load")
+            val size = androidx.compose.ui.geometry.Size(1920f, 1080f)
+            val camera = gpuCamera(MapCamera.scenario(size, map), size.width, size.height, Math.toRadians(28.0))
+            session.request(camera, 1920, 1080, true)
+            val deadline = System.currentTimeMillis() + 120_000
+            while ((session.frame?.width ?: 0) < 1920 && System.currentTimeMillis() < deadline) Thread.sleep(50)
+            if ((session.frame?.width ?: 0) < 1920) error("no frame within 120 seconds")
+            System.err.println(gpuMapLine(true, session))
+            0
+        } finally {
+            session.close()
+        }
+    } catch (e: Throwable) {
+        System.err.println("map: classic, no GPU (${(e.message ?: e.javaClass.simpleName).take(120)})")
+        3
+    }
+}
