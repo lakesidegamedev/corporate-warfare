@@ -13,6 +13,7 @@ heading.
 
 ### Added
 
+- Escape on desktop opens a game menu that pauses time: Resume, Save, Settings, Save and return to main menu, and Save and quit. Escape also closes Settings and other open screens. The sidebar keeps Save, Settings, Game menu and Main menu in view on a short window, and its pages scroll.
 - A rival that is the target of a takeover now gets help from friends. Once a raider's stake in a
   rival company is public (5 percent of the votes), one friendly rival with cash to spare steps in: it
   makes the company a friendly offer above the market if it can fund one, or otherwise buys a
@@ -22,6 +23,14 @@ heading.
   shows more houses round its cities and a region they are leaving shows fewer, on top of the boom and
   recession look. Every house stays at the same spot on the ground at the same size; only how many of
   the possible houses are built changes, so nothing slides or jumps as you move the map.
+- Buying and selling shares now happens at once, straight from the public float, like Capitalism Lab.
+  Press Buy now and the shares are yours, bought from the investors who actually hold them. The price
+  climbs as you buy (and falls as you sell), and you pay the average along the way. You can buy
+  everything the public holds if you can pay for it. A price limit is optional: set one and the
+  buying stops where the price would pass it. The buy and sell dialogs show a live quote as you
+  type (shares, average price, total, where the price ends and how much of the company you would
+  own), with a Max button. Rivals trade the same way, so their takeover plans now buy at once in
+  small steps.
 - On the desktop the map can sit beside any page. Press Ctrl M or use "Dock map" in the sidebar and the
   page you are on gets the map on its left, with a handle between them to drag (or use the arrow keys
   on it). Each page remembers its own width and whether it is docked. Pages that need room scroll

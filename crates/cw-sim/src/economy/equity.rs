@@ -7,6 +7,8 @@
 
 use std::collections::BTreeMap;
 
+use serde::{Deserialize, Serialize};
+
 use cw_core::calendar::Tick;
 use cw_core::error::{DomainError, DomainResult, EntityKind};
 use cw_core::ids::Handle;
@@ -252,6 +254,342 @@ pub fn place_order(
         filled: 0,
     };
     Ok(world.exchange.orders.insert(order))
+}
+
+/// What a trade against the public float would do, worked out without changing anything.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShareQuote {
+    /// Shares that would change hands (after the float, your holding, a buyer's money and the limit).
+    pub qty: i64,
+    /// Average price per share along the curve, in cents.
+    pub average_cents: i64,
+    /// What a buy costs, or what a sale pays, in cents.
+    pub total_cents: i64,
+    /// The price the next share would trade at once this one is done.
+    pub final_cents: i64,
+    /// The price before the trade.
+    pub mark_cents: i64,
+    /// Shares the public holds (the most a buy can take).
+    pub float_qty: i64,
+    /// Most shares the holder could take (buy: afford and float) or give (sell: hold).
+    pub max_qty: i64,
+    /// The holder's stake after the trade, in basis points of the votes.
+    pub stake_after_bps: i32,
+}
+
+/// Cents paid for the first `x` shares on the buy curve (marginal price mark x (1 + x / float)).
+fn buy_cum(mark: i64, float: i64, x: i64) -> i64 {
+    if float <= 0 || x <= 0 {
+        return 0;
+    }
+    let (m, o, x) = (mark as i128, float as i128, x as i128);
+    round_even_div(m * (2 * o * x + x * x), 2 * o) as i64
+}
+
+/// Cents received for the first `x` shares on the sell curve (marginal price mark x (1 - x / 2 float),
+/// never below half the mark).
+fn sell_cum(mark: i64, float: i64, x: i64) -> i64 {
+    if x <= 0 {
+        return 0;
+    }
+    let (m, o, x) = (mark as i128, float.max(1) as i128, x as i128);
+    if x <= o {
+        round_even_div(m * (4 * o * x - x * x), 4 * o) as i64
+    } else {
+        (round_even_div(m * 3 * o, 4) + round_even_div((x - o) * m, 2)) as i64
+    }
+}
+
+/// Price of the next share after `x` have traded.
+fn marginal(side: OrderSide, mark: i64, float: i64, x: i64) -> i64 {
+    let (m, o, x) = (mark as i128, float.max(1) as i128, x as i128);
+    let price = match side {
+        OrderSide::Buy => m * (o + x) / o,
+        OrderSide::Sell => (m * (2 * o - x.min(2 * o)) / (2 * o)).max(m / 2),
+    };
+    (price as i64).max(1)
+}
+
+/// Public float: shares held by outside investors, largest lot first.
+fn float_lots(world: &World, firm: Handle) -> Vec<(HolderId, i64)> {
+    let mut lots: Vec<(HolderId, i64)> = world
+        .firms
+        .get(firm)
+        .map(|f| {
+            f.shares
+                .holders
+                .iter()
+                .filter(|(h, l)| matches!(h, HolderId::Outside(_)) && l.qty > 0)
+                .map(|(h, l)| (*h, l.qty))
+                .collect()
+        })
+        .unwrap_or_default();
+    lots.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    lots
+}
+
+fn spendable_cents(world: &World, holder: HolderId) -> i64 {
+    match holder {
+        HolderId::Investor => world.investor.cash_cents,
+        HolderId::Firm(h) => world.firms.get(h).map(|f| f.book.cash()).unwrap_or(0),
+        _ => 0,
+    }
+}
+
+/// One slice of a trade: the other side, the shares, and the cents for exactly those shares.
+struct Slice {
+    other: HolderId,
+    qty: i64,
+    cents: i64,
+}
+
+/// The slices of a float trade for `qty` shares, with the limit applied. Sells find their buyers
+/// among the outside investors with the most money; buys take the largest lots first.
+fn plan_float_trade(
+    world: &World,
+    firm: Handle,
+    side: OrderSide,
+    qty: i64,
+    limit_cents: i64,
+) -> Vec<Slice> {
+    let Some(entity) = world.firms.get(firm) else {
+        return Vec::new();
+    };
+    let mark = entity.shares.mark_cents.max(1);
+    let lots = float_lots(world, firm);
+    let float: i64 = lots.iter().map(|(_, q)| *q).sum();
+    if float <= 0 || qty <= 0 {
+        return Vec::new();
+    }
+    let mut want = match side {
+        OrderSide::Buy => qty.min(float),
+        OrderSide::Sell => qty,
+    };
+    if limit_cents > 0 {
+        let reach = match side {
+            OrderSide::Buy if limit_cents <= mark => 0,
+            OrderSide::Buy => (float as i128 * (limit_cents - mark) as i128 / mark as i128) as i64,
+            OrderSide::Sell if limit_cents >= mark => 0,
+            OrderSide::Sell if limit_cents * 2 <= mark => i64::MAX,
+            OrderSide::Sell => (2 * float as i128 * (mark - limit_cents) as i128 / mark as i128)
+                .min(i64::MAX as i128) as i64,
+        };
+        want = want.min(reach);
+    }
+    let mut slices = Vec::new();
+    let mut done = 0i64;
+    match side {
+        OrderSide::Buy => {
+            for (holder, held) in lots {
+                if done >= want {
+                    break;
+                }
+                let chunk = held.min(want - done);
+                slices.push(Slice {
+                    other: holder,
+                    qty: chunk,
+                    cents: buy_cum(mark, float, done + chunk) - buy_cum(mark, float, done),
+                });
+                done += chunk;
+            }
+        }
+        OrderSide::Sell => {
+            let mut capital: Vec<i64> = world
+                .outside
+                .investors
+                .iter()
+                .map(|h| h.capital_cents.max(0))
+                .collect();
+            while done < want {
+                let Some((index, money)) = capital
+                    .iter()
+                    .enumerate()
+                    .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(&a.0)))
+                    .map(|(i, c)| (i, *c))
+                else {
+                    break;
+                };
+                let price = marginal(side, mark, float, done);
+                let mut chunk = (money / price).min(want - done);
+                while chunk > 0
+                    && sell_cum(mark, float, done + chunk) - sell_cum(mark, float, done) > money
+                {
+                    chunk -= 1;
+                }
+                if chunk <= 0 {
+                    break;
+                }
+                let cents = sell_cum(mark, float, done + chunk) - sell_cum(mark, float, done);
+                capital[index] -= cents;
+                slices.push(Slice {
+                    other: HolderId::Outside(index as u32),
+                    qty: chunk,
+                    cents,
+                });
+                done += chunk;
+            }
+        }
+    }
+    slices
+}
+
+/// Price a buy or sale against the public float for `holder`, changing nothing. `limit_cents` of 0
+/// means no limit. For a buy the quantity is also held to what the holder can pay for.
+pub fn quote_shares(
+    world: &World,
+    holder: HolderId,
+    firm: Handle,
+    side: OrderSide,
+    qty: i64,
+    limit_cents: i64,
+) -> ShareQuote {
+    let Some(entity) = world.firms.get(firm) else {
+        return ShareQuote::default();
+    };
+    let mark = entity.shares.mark_cents.max(1);
+    let float: i64 = float_lots(world, firm).iter().map(|(_, q)| *q).sum();
+    let held = entity.shares.qty(holder);
+    let eligible = entity.shares.eligible_votes().max(1);
+    let max_qty = match side {
+        OrderSide::Sell => held,
+        OrderSide::Buy => {
+            let cash = spendable_cents(world, holder);
+            let (mut low, mut high) = (0i64, float);
+            while low < high {
+                let mid = low + (high - low + 1) / 2;
+                if buy_cum(mark, float, mid) <= cash {
+                    low = mid;
+                } else {
+                    high = mid - 1;
+                }
+            }
+            low
+        }
+    };
+    let asked = qty.min(max_qty).max(0);
+    let slices = plan_float_trade(world, firm, side, asked, limit_cents);
+    let filled: i64 = slices.iter().map(|s| s.qty).sum();
+    let total: i64 = slices.iter().map(|s| s.cents).sum();
+    let (stake, final_cents) = if filled > 0 {
+        let after = match side {
+            OrderSide::Buy => held + filled,
+            OrderSide::Sell => held - filled,
+        };
+        (
+            (after as i128 * 10_000 / eligible as i128) as i32,
+            marginal(side, mark, float, filled),
+        )
+    } else {
+        ((held as i128 * 10_000 / eligible as i128) as i32, mark)
+    };
+    ShareQuote {
+        qty: filled,
+        average_cents: if filled > 0 {
+            round_even_div(total as i128, filled as i128) as i64
+        } else {
+            0
+        },
+        total_cents: total,
+        final_cents,
+        mark_cents: mark,
+        float_qty: float,
+        max_qty,
+        stake_after_bps: stake,
+    }
+}
+
+/// Buy from or sell to the public float at once, at the price along the impact curve. Shares come
+/// from (and go to) real outside holders; cash moves once. A limit (0 for none) stops the walk
+/// where the next share would pass it, so the trade can fill in part. Returns what was done.
+pub fn trade_float(
+    world: &mut World,
+    holder: HolderId,
+    firm: Handle,
+    side: OrderSide,
+    qty: i64,
+    limit_cents: i64,
+) -> DomainResult<ShareQuote> {
+    if qty <= 0 || limit_cents < 0 {
+        return Err(DomainError::Arithmetic {
+            detail: cw_core::error::ArithmeticFault::OutOfRange,
+        });
+    }
+    let Some(entity) = world.firms.get(firm) else {
+        return Err(DomainError::InvalidEntity {
+            handle: firm.0,
+            kind: EntityKind::Firm,
+        });
+    };
+    if !entity.status.can_trade() {
+        return Err(DomainError::SolvencyRestriction {
+            entity: firm.0,
+            reason: cw_core::error::SolvencyReason::PastDue,
+        });
+    }
+    let held = entity.shares.qty(holder);
+    match (side, holder) {
+        (OrderSide::Sell, _) if held < qty => {
+            return Err(DomainError::InsufficientStock {
+                product: 0,
+                required: qty,
+                available: held,
+            });
+        }
+        (OrderSide::Buy, HolderId::Firm(buyer)) => {
+            crate::economy::fx::require_numeraire_holder(world, buyer)?;
+            if crate::economy::ownership::would_create_cycle(world, buyer, firm) {
+                return Err(DomainError::OwnershipCycle {
+                    buyer: buyer.0,
+                    target: firm.0,
+                });
+            }
+        }
+        (OrderSide::Buy, HolderId::Investor) => {}
+        (OrderSide::Buy, _) => {
+            return Err(DomainError::NoAuthority {
+                actor: 0,
+                reason: cw_core::error::AuthorityReason::NotOwner,
+            });
+        }
+        _ => {}
+    }
+    // A shortfall in cash is an error, not a smaller trade.
+    let slices = plan_float_trade(world, firm, side, qty, limit_cents);
+    let filled: i64 = slices.iter().map(|s| s.qty).sum();
+    let total: i64 = slices.iter().map(|s| s.cents).sum();
+    if filled <= 0 {
+        return Err(DomainError::InsufficientStock {
+            product: 0,
+            required: qty,
+            available: 0,
+        });
+    }
+    if side == OrderSide::Buy {
+        let cash = spendable_cents(world, holder);
+        if cash < total {
+            return Err(DomainError::InsufficientCash {
+                entity: match holder {
+                    HolderId::Firm(h) => h.0,
+                    _ => 0,
+                },
+                required: total,
+                available: cash,
+            });
+        }
+    }
+    let result = quote_shares(world, holder, firm, side, qty, limit_cents);
+    for slice in &slices {
+        let (seller, buyer) = match side {
+            OrderSide::Buy => (slice.other, holder),
+            OrderSide::Sell => (holder, slice.other),
+        };
+        settle_cost(world, firm, seller, buyer, slice.qty, slice.cents, false);
+    }
+    if let Some(entity) = world.firms.get_mut(firm) {
+        entity.shares.mark_cents = result.final_cents.max(1);
+        entity.shares.last_trade_cents = result.average_cents;
+    }
+    Ok(result)
 }
 
 /// Clear the weekly exchange.
@@ -579,26 +917,57 @@ fn settle_one(
     dataset: &Dataset,
 ) {
     let _ = dataset;
-    let cost = qty.saturating_mul(price);
+    settle_cost(
+        world,
+        firm,
+        seller,
+        buyer,
+        qty,
+        qty.saturating_mul(price),
+        true,
+    );
+}
+
+/// Move `qty` shares for `cost` cents. `reserved` means the buyer's cash was set aside when a
+/// resting order was placed; otherwise (an immediate float trade) it is paid now, from cash.
+fn settle_cost(
+    world: &mut World,
+    firm: Handle,
+    seller: HolderId,
+    buyer: HolderId,
+    qty: i64,
+    cost: i64,
+    reserved: bool,
+) {
     // Buyer pays.
+    let source = if reserved {
+        Account::RestrictedCash
+    } else {
+        Account::Cash
+    };
     match buyer {
         HolderId::Investor => {
-            // The cash was taken from the player when the order was placed; the fill spends that
-            // reserve and takes nothing more.
+            if !reserved {
+                world.investor.cash_cents -= cost;
+            }
             let _ = world.investor.book.commit(
                 world.tick,
-                Txn::new()
-                    .credit(Account::RestrictedCash, cost, "share purchase")
-                    .debit(Account::Investments, cost, "share purchase"),
+                Txn::new().credit(source, cost, "share purchase").debit(
+                    Account::Investments,
+                    cost,
+                    "share purchase",
+                ),
             );
         }
         HolderId::Firm(handle) => {
             if let Some(entity) = world.firms.get_mut(handle) {
                 let _ = entity.book.commit(
                     world.tick,
-                    Txn::new()
-                        .credit(Account::RestrictedCash, cost, "share purchase")
-                        .debit(Account::Investments, cost, "share purchase"),
+                    Txn::new().credit(source, cost, "share purchase").debit(
+                        Account::Investments,
+                        cost,
+                        "share purchase",
+                    ),
                 );
             }
         }
@@ -1494,5 +1863,258 @@ mod tests {
             HolderId::Outside(2),
         );
         assert!(result.is_err());
+    }
+
+    /// A world where the player holds nothing of the primary group's outside float and has cash.
+    fn float_world() -> (World, Handle, i64, i64) {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 65, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let primary = world.investor.primary_group.unwrap();
+        refresh_valuation(&mut world, &dataset);
+        let owned = world.firm(primary).unwrap().shares.qty(HolderId::Investor);
+        world.firm_mut(primary).unwrap().shares.transfer(
+            HolderId::Investor,
+            HolderId::Outside(0),
+            owned,
+            0,
+        );
+        world.investor.cash_cents = 100_000_000_000;
+        for holder in world.outside.investors.iter_mut() {
+            holder.capital_cents = 100_000_000_000;
+        }
+        let mark = world.firm(primary).unwrap().shares.mark_cents.max(1);
+        let outside: i64 = float_lots(&world, primary).iter().map(|(_, q)| *q).sum();
+        assert!(outside > 1_000, "the seed has a public float");
+        (world, primary, mark, outside)
+    }
+
+    fn total_outside_capital(world: &World) -> i64 {
+        world
+            .outside
+            .investors
+            .iter()
+            .map(|h| h.capital_cents)
+            .sum()
+    }
+
+    /// Oracle: area under the line mark x (1 + x / float), by exact rational arithmetic.
+    fn buy_area(mark: i64, float: i64, q: i64) -> i128 {
+        mark as i128 * (2 * float as i128 * q as i128 + (q as i128).pow(2)) / (2 * float as i128)
+    }
+
+    #[test]
+    fn a_float_buy_settles_at_once_from_outside_holders_at_the_curve_price() {
+        let (mut world, primary, mark, outside) = float_world();
+        let issued = world.firm(primary).unwrap().shares.issued;
+        let cash = world.investor.cash_cents;
+        let capital = total_outside_capital(&world);
+        let qty = outside / 10;
+        let outside_before: Vec<i64> = float_lots(&world, primary).iter().map(|l| l.1).collect();
+        let quote = trade_float(
+            &mut world,
+            HolderId::Investor,
+            primary,
+            OrderSide::Buy,
+            qty,
+            0,
+        )
+        .unwrap();
+        let shares = &world.firm(primary).unwrap().shares;
+        assert_eq!(
+            shares.qty(HolderId::Investor),
+            qty,
+            "filled now, no clearing"
+        );
+        assert_eq!(shares.issued, issued, "no share made or lost");
+        let outside_after: i64 = float_lots(&world, primary).iter().map(|l| l.1).sum();
+        assert_eq!(
+            outside_after,
+            outside - qty,
+            "the shares came from the public"
+        );
+        let oracle = buy_area(mark, outside, qty);
+        let paid = cash - world.investor.cash_cents;
+        assert!(
+            (paid as i128 - oracle).abs() <= qty as i128,
+            "paid {paid} vs {oracle}"
+        );
+        assert_eq!(paid, quote.total_cents);
+        assert_eq!(shares.holders[&HolderId::Investor].cost_cents, paid);
+        assert_eq!(
+            total_outside_capital(&world) - capital,
+            paid,
+            "cash moved once, to the sellers"
+        );
+        assert_eq!(
+            shares.mark_cents,
+            mark * (outside + qty) / outside,
+            "mark ends on the final price"
+        );
+        assert!(world.investor.book.is_balanced());
+        // Largest lot first: the biggest holder gave up shares before any smaller one.
+        let biggest = outside_before[0];
+        let now: Vec<i64> = float_lots(&world, primary).iter().map(|l| l.1).collect();
+        assert!(now.iter().sum::<i64>() < outside_before.iter().sum::<i64>());
+        assert!(now.first().copied().unwrap_or(0) <= biggest);
+    }
+
+    #[test]
+    fn a_float_buy_is_capped_at_what_the_public_holds_and_doubles_the_price() {
+        let (mut world, primary, mark, outside) = float_world();
+        let q = trade_float(
+            &mut world,
+            HolderId::Investor,
+            primary,
+            OrderSide::Buy,
+            outside * 3,
+            0,
+        )
+        .unwrap();
+        assert_eq!(q.qty, outside);
+        assert_eq!(world.firm(primary).unwrap().shares.mark_cents, mark * 2);
+        let again = trade_float(
+            &mut world,
+            HolderId::Investor,
+            primary,
+            OrderSide::Buy,
+            1,
+            0,
+        );
+        assert!(again.is_err(), "nothing left to buy");
+    }
+
+    #[test]
+    fn a_limit_stops_the_walk_and_fills_in_part() {
+        let (mut world, primary, mark, outside) = float_world();
+        let limit = mark + mark * 3 / 100;
+        let q = trade_float(
+            &mut world,
+            HolderId::Investor,
+            primary,
+            OrderSide::Buy,
+            outside,
+            limit,
+        )
+        .unwrap();
+        // Marginal price mark x (1 + x / float) reaches the limit at 3 percent of the float.
+        let reach = outside * (limit - mark) / mark;
+        assert!(
+            (q.qty - reach).abs() <= 2,
+            "filled {} of reach {reach}",
+            q.qty
+        );
+        assert!(q.final_cents <= limit);
+        assert!(
+            trade_float(
+                &mut world,
+                HolderId::Investor,
+                primary,
+                OrderSide::Buy,
+                10,
+                mark - 1
+            )
+            .is_err(),
+            "a limit below the price fills nothing"
+        );
+    }
+
+    #[test]
+    fn a_float_sale_pays_along_the_falling_curve_and_is_floored() {
+        let (mut world, primary, mark, outside) = float_world();
+        trade_float(
+            &mut world,
+            HolderId::Investor,
+            primary,
+            OrderSide::Buy,
+            outside / 2,
+            0,
+        )
+        .unwrap();
+        let mark = world.firm(primary).unwrap().shares.mark_cents.max(mark);
+        let held = world.firm(primary).unwrap().shares.qty(HolderId::Investor);
+        let float_now: i64 = float_lots(&world, primary).iter().map(|l| l.1).sum();
+        let cash = world.investor.cash_cents;
+        let q = trade_float(
+            &mut world,
+            HolderId::Investor,
+            primary,
+            OrderSide::Sell,
+            held,
+            0,
+        )
+        .unwrap();
+        assert_eq!(q.qty, held);
+        let got = world.investor.cash_cents - cash;
+        // Oracle for x <= float: mark x (x - x^2 / (4 float)).
+        let (m, o, x) = (mark as i128, float_now as i128, held as i128);
+        let oracle = m * (4 * o * x - x * x) / (4 * o);
+        assert!(
+            (got as i128 - oracle).abs() <= held as i128,
+            "got {got} vs {oracle}"
+        );
+        assert!(world.firm(primary).unwrap().shares.mark_cents >= mark / 2);
+        assert!(world.investor.book.is_balanced());
+        assert_eq!(
+            world.firm(primary).unwrap().shares.qty(HolderId::Investor),
+            0
+        );
+        // Selling more than held is refused.
+        assert!(
+            trade_float(
+                &mut world,
+                HolderId::Investor,
+                primary,
+                OrderSide::Sell,
+                1,
+                0
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn a_buy_the_buyer_cannot_pay_for_is_refused_and_changes_nothing() {
+        let (mut world, primary, _mark, outside) = float_world();
+        world.investor.cash_cents = 1_000;
+        let before = world.firm(primary).unwrap().shares.holders.clone();
+        let r = trade_float(
+            &mut world,
+            HolderId::Investor,
+            primary,
+            OrderSide::Buy,
+            outside / 2,
+            0,
+        );
+        assert!(matches!(r, Err(DomainError::InsufficientCash { .. })));
+        assert_eq!(world.investor.cash_cents, 1_000);
+        assert_eq!(
+            world.firm(primary).unwrap().shares.holders.len(),
+            before.len()
+        );
+    }
+
+    #[test]
+    fn the_quote_matches_the_trade_and_changes_nothing() {
+        let (mut world, primary, _mark, outside) = float_world();
+        let qty = outside / 7;
+        let quote = quote_shares(&world, HolderId::Investor, primary, OrderSide::Buy, qty, 0);
+        assert_eq!(
+            world.firm(primary).unwrap().shares.qty(HolderId::Investor),
+            0
+        );
+        assert_eq!(quote.qty, qty);
+        assert!(quote.max_qty <= quote.float_qty);
+        let done = trade_float(
+            &mut world,
+            HolderId::Investor,
+            primary,
+            OrderSide::Buy,
+            qty,
+            0,
+        )
+        .unwrap();
+        assert_eq!(quote, done);
+        let eligible = world.firm(primary).unwrap().shares.eligible_votes();
+        assert_eq!(done.stake_after_bps as i64, qty * 10_000 / eligible);
     }
 }

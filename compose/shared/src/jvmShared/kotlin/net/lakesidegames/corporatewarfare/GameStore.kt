@@ -297,6 +297,24 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         status = ""
     }
 
+    /**
+     * Stop time, write the autosave and wait for the disk, then run [then] (quitting the app from the game
+     * menu or the window's close button). [then] always runs, even if the save fails, so the app can close.
+     */
+    fun saveAndThen(then: () -> Unit) {
+        scope.launch {
+            try {
+                runJob?.cancel()
+                runJob = null
+                running = false
+                if (session != null) save(wait = true)
+            } catch (_: Exception) {
+            } finally {
+                then()
+            }
+        }
+    }
+
     fun toggleRun() = playAt(if (runJob == null) 1 else 0)
 
     /**
@@ -522,9 +540,21 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         submit(CommandJson.command("BuildFacility", "firm" to firm, "region" to region, "recipe" to recipe, "blocks" to blocks))
     }
 
-    /** A personal share order, filled at the weekly close. */
-    fun orderShares(firm: ULong, buy: Boolean, quantity: Long, limitCents: Long) =
-        submit(CommandJson.command("PlaceShareOrder", "investor" to true, "firm" to firm, "buy" to buy, "qty" to quantity, "limit_price_cents" to limitCents))
+    /** A personal trade against the public float, settled at once; `done` is the confirmation shown on success. */
+    fun orderShares(firm: ULong, buy: Boolean, quantity: Long, limitCents: Long, done: String = "Accepted.") =
+        submit(CommandJson.command("PlaceShareOrder", "investor" to true, "firm" to firm, "buy" to buy, "qty" to quantity, "limit_price_cents" to limitCents), done)
+
+    /** What a float trade would do right now (limit 0 for none), computed without changing anything. */
+    /** The engine's quote for a share trade, worked out on the engine thread and returned to the caller's coroutine. */
+    suspend fun quoteShares(firm: ULong, buy: Boolean, quantity: Long, limitCents: Long): uniffi.cw_ffi.ShareQuoteDto? {
+        val handle = session ?: return null
+        return withContext(engine) { runCatching { handle.quoteShares(firm, buy, quantity, limitCents, 0uL) }.getOrNull() }
+    }
+
+    fun shareQuote(firm: ULong, buy: Boolean, quantity: Long, limitCents: Long, onResult: (uniffi.cw_ffi.ShareQuoteDto?) -> Unit) {
+        val handle = session ?: return onResult(null)
+        scope.launch { onResult(withContext(engine) { handle.quoteShares(firm, buy, quantity, limitCents, 0uL) }) }
+    }
 
     /** What an action would do, computed without changing anything. */
     fun preview(json: String, onResult: (uniffi.cw_ffi.PreviewDto?) -> Unit) {
@@ -588,12 +618,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         reload()
     }
 
-    fun submit(json: String) = perform {
+    fun submit(json: String, done: String = "Accepted.") = perform {
         val handle = session ?: return@perform
         val receipt = withContext(engine) { handle.submitJson(json) }
         if (receipt.accepted) {
             error = null
-            status = "Accepted."
+            status = done
             Tutorial.sent(json.substringAfter("{\"").substringBefore("\""))
         } else {
             error = Messages.rejection(receipt.errorKey ?: "error.internal_fault", receipt.errorDetail ?: "")

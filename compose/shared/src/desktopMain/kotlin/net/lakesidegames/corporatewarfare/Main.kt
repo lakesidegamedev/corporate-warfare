@@ -179,8 +179,12 @@ private fun game() = application {
             state.size = DpSize(settings.resolution.first.dp, settings.resolution.second.dp)
         }
     }
+    // The career is saved before the app closes, from the close button as from the game menu.
+    val scope = rememberCoroutineScope()
+    val store = remember { GameStore(saveDirectory(), scope) }
+    var closing by remember { mutableStateOf(false) }
     Window(
-        onCloseRequest = ::exitApplication,
+        onCloseRequest = { if (!closing) { closing = true; store.saveAndThen(::exitApplication) } },
         title = "Corporate Warfare",
         state = state,
     ) {
@@ -199,8 +203,6 @@ private fun game() = application {
             val pixels = window.width * (scale?.scaleX ?: 1.0) * window.height * (scale?.scaleY ?: 1.0)
             settings.suggestGraphics(pixels.toLong(), RenderInfo.software)
         }
-        val scope = rememberCoroutineScope()
-        val store = remember { GameStore(saveDirectory(), scope) }
         val updater = remember {
             Updater(DesktopUpdates, scope, File(saveDirectory(), "updates"), saveDirectory(), channel = { settings.updateChannel })
         }

@@ -94,6 +94,10 @@ class DockingRenderTest {
         save("dock-markets", { DesktopShell(store, onSettings = {}, startPage = 4) }, 1500, 860, settings = settings)
         save("dock-office", { DesktopShell(store, onSettings = {}, startPage = 1) }, 1500, 860, settings = settings)
 
+        // A short window: the sidebar's pages scroll and Settings, Game menu and Main menu stay in view; and the Escape menu.
+        save("sidebar-short-window", { DesktopShell(store, onSettings = {}, startPage = 1) }, 1300, 560, settings = settings)
+        save("game-menu", { GameMenuDialog(onResume = {}, onSave = {}, onSettings = {}, onMainMenu = {}, onQuit = {}) }, 900, 640, settings = settings)
+
         // A tooltip: rest the pointer on the Company cash figure in the status bar.
         save("tooltip-status-bar", { DesktopShell(store, onSettings = {}, startPage = 1) }, 1500, 860, hover = Offset(420f, 40f), settings = AppSettings(File(dir, "plain.properties")))
 
