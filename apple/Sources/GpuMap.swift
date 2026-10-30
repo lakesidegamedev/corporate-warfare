@@ -353,7 +353,7 @@ final class GpuMapSession: @unchecked Sendable {
         cond.unlock()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            locked { notifyQueued = false }
+            locked { self.notifyQueued = false }
             onChange?()
         }
     }
