@@ -164,6 +164,12 @@ impl std::ops::Deref for Memo {
     }
 }
 
+impl std::fmt::Display for Memo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 impl std::fmt::Debug for Memo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Debug::fmt(self.as_str(), f)
