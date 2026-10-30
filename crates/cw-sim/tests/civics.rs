@@ -348,3 +348,50 @@ fn rivals_give_and_bid_through_the_same_checks_as_the_player() {
     }
     assert!(bid > 0);
 }
+
+#[test]
+fn tenders_do_not_run_the_treasury_dry() {
+    let ds = Dataset::load().unwrap();
+    for seed_value in [21u64, 22] {
+        let mut world = seed::build(&ds, seed_value, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let start = world.government.book.cash();
+        let mut low = start;
+        for _ in 0..156 {
+            cw_sim::tick::advance(&mut world, &ds);
+            low = low.min(world.government.book.cash());
+        }
+        let c = &world.civics;
+        let started = c
+            .tenders
+            .iter()
+            .filter(|t| t.status != TenderStatus::Open)
+            .count();
+        eprintln!(
+            "seed {seed_value}: treasury {start} -> {} (low {low}), tenders {} ({started} awarded), done {}, paid {}",
+            world.government.book.cash(),
+            c.next_tender,
+            c.tenders_done,
+            c.tender_paid_cents
+        );
+        for t in &c.tenders {
+            eprintln!(
+                "  tender {} {:?} {:?} bids {} winner {:?} paid {} cost_paid {}",
+                t.id,
+                t.kind,
+                t.status,
+                t.bids.len(),
+                t.winner,
+                t.paid_cents,
+                t.cost_paid_cents
+            );
+        }
+        assert!(low >= 0, "the treasury never goes negative");
+        assert!(c.next_tender >= 8, "a tender opens every 13 weeks");
+        // Stage payments never exceed what the winners were promised.
+        for t in &c.tenders {
+            assert!(t.paid_cents <= t.price_cents);
+        }
+        // The treasury's tender spending is a small share of what it holds and collects.
+        assert!(c.tender_paid_cents <= start.max(1) * 3);
+    }
+}
