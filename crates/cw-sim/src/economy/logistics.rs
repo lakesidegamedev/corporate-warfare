@@ -1028,39 +1028,25 @@ fn close_stats(world: &mut World, ds: &Dataset) {
 // ---------------------------------------------------------------------------------------------
 // Quoting a leg
 
-struct Ctx {
-    own_carrier: Vec<bool>,
-    own_contract: Vec<bool>,
+struct Ctx<'a> {
+    world: &'a World,
+    shipper: Handle,
+    root: Option<HolderId>,
+    /// Whether each firm is in the shipper's group, found when a lane first asks about it.
+    same: std::cell::RefCell<BTreeMap<Handle, bool>>,
     /// Percent the shipper's logistics chief takes off the outside carriers' premium.
     premium_cut_pct: i64,
 }
 
-impl Ctx {
-    fn new(world: &World, shipper: Handle) -> Ctx {
-        let st = &world.logistics;
-        // Same answer as `same_group(shipper, firm)`, with the shipper's controller found once
-        // and each other firm's found once however many carriers and contracts it has.
-        let root = crate::economy::ownership::ultimate_controller(world, shipper);
-        let mut memo: BTreeMap<Handle, bool> = BTreeMap::new();
-        let mut same = |firm: Handle| -> bool {
-            if firm == shipper {
-                return true;
-            }
-            *memo.entry(firm).or_insert_with(|| {
-                match (
-                    root,
-                    crate::economy::ownership::ultimate_controller(world, firm),
-                ) {
-                    (Some(HolderId::Investor), Some(HolderId::Investor)) => true,
-                    (Some(HolderId::Outside(a)), Some(HolderId::Outside(b))) => a == b,
-                    (Some(HolderId::Firm(a)), Some(HolderId::Firm(b))) => a == b,
-                    _ => false,
-                }
-            })
-        };
+impl<'a> Ctx<'a> {
+    fn new(world: &'a World, shipper: Handle) -> Ctx<'a> {
         Ctx {
-            own_carrier: st.carriers.iter().map(|c| same(c.firm)).collect(),
-            own_contract: st.contracts.iter().map(|c| same(c.holder)).collect(),
+            world,
+            shipper,
+            // Same answer as `same_group(shipper, firm)`, with the shipper's controller found
+            // once and each other firm's found once, and only for the lanes a quote touches.
+            root: crate::economy::ownership::ultimate_controller(world, shipper),
+            same: Default::default(),
             premium_cut_pct: crate::economy::executives::premium_cut_pct_for(
                 crate::economy::executives::level(
                     world,
@@ -1070,11 +1056,36 @@ impl Ctx {
             ),
         }
     }
+
+    fn same_group(&self, firm: Handle) -> bool {
+        if firm == self.shipper {
+            return true;
+        }
+        *self.same.borrow_mut().entry(firm).or_insert_with(|| {
+            match (
+                self.root,
+                crate::economy::ownership::ultimate_controller(self.world, firm),
+            ) {
+                (Some(HolderId::Investor), Some(HolderId::Investor)) => true,
+                (Some(HolderId::Outside(a)), Some(HolderId::Outside(b))) => a == b,
+                (Some(HolderId::Firm(a)), Some(HolderId::Firm(b))) => a == b,
+                _ => false,
+            }
+        })
+    }
+
+    fn own_carrier(&self, carrier: u16) -> bool {
+        self.same_group(self.world.logistics.carriers[carrier as usize].firm)
+    }
+
+    fn own_contract(&self, index: usize) -> bool {
+        self.same_group(self.world.logistics.contracts[index].holder)
+    }
 }
 
 /// The outside price multiplier after the shipper's logistics chief, which takes a share off the
 /// premium over the owners' empty-lane rate and never goes below it.
-fn cut_premium(ds: &Dataset, ctx: &Ctx, mult_bps: i64) -> i64 {
+fn cut_premium(ds: &Dataset, ctx: &Ctx<'_>, mult_bps: i64) -> i64 {
     let floor = ds.logistics.empty_lane_bps;
     if ctx.premium_cut_pct == 0 || mult_bps <= floor {
         mult_bps
@@ -1089,7 +1100,7 @@ fn cut_premium(ds: &Dataset, ctx: &Ctx, mult_bps: i64) -> i64 {
 fn quote_leg(
     ds: &Dataset,
     st: &LogisticsState,
-    ctx: &Ctx,
+    ctx: &Ctx<'_>,
     product: u16,
     from: u8,
     to: u8,
@@ -1113,7 +1124,7 @@ fn quote_leg(
         if left <= 0 {
             break;
         }
-        if contract.key != key || !ctx.own_contract[index] {
+        if contract.key != key || !ctx.own_contract(index) {
             continue;
         }
         let take = left.min((contract.held - contract.used).max(0) as i64);
@@ -1134,7 +1145,7 @@ fn quote_leg(
             if left <= 0 {
                 break;
             }
-            if !ctx.own_carrier[alloc.carrier as usize] {
+            if !ctx.own_carrier(alloc.carrier as _) {
                 continue;
             }
             let take = left.min((alloc.cap - alloc.used - alloc.held).max(0) as i64);
@@ -1159,7 +1170,7 @@ fn quote_leg(
             let others: Vec<(u16, i32)> = lane
                 .allocs
                 .iter()
-                .filter(|a| !ctx.own_carrier[a.carrier as usize])
+                .filter(|a| !ctx.own_carrier(a.carrier as _))
                 .map(|a| (a.carrier, (a.cap - a.used - a.held).max(0)))
                 .filter(|(_, free)| *free > 0)
                 .collect();
