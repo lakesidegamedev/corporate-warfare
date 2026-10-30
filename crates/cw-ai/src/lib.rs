@@ -1786,6 +1786,11 @@ fn acquisition_bid(
     let price = mark + mark * 25 / 100;
     let eligible = entity.shares.eligible_votes();
     let held = entity.shares.qty(HolderId::Firm(buyer));
+    // A rival that already holds part of a company tops up only as the last step of its own
+    // long plan (which launches its bid itself); a stray second bid is not a plan.
+    if held > 0 {
+        return None;
+    }
     let wanted = (eligible / 2 + 1 - held).max(0);
     if wanted == 0 {
         return None;
