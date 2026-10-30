@@ -388,6 +388,7 @@ fn clear_firm(world: &mut World, dataset: &Dataset, firm: Handle) {
                 price,
                 dataset,
             );
+            refund_surplus(world, &order_buy, price, qty);
             if let Some(stored) = world.exchange.orders.get_mut(buyer_handle) {
                 stored.filled += qty;
             }
@@ -396,7 +397,7 @@ fn clear_firm(world: &mut World, dataset: &Dataset, firm: Handle) {
                 world,
                 order.firm,
                 order.holder,
-                HolderId::Outside(0),
+                OUTSIDE_POOL,
                 qty,
                 price,
                 dataset,
@@ -426,16 +427,37 @@ fn clear_firm(world: &mut World, dataset: &Dataset, firm: Handle) {
         settle_trade(
             world,
             order.firm,
-            HolderId::Outside(0),
+            OUTSIDE_POOL,
             order.holder,
             qty,
             price,
             dataset,
         );
         float -= qty;
+        refund_surplus(world, &order, price, qty);
         if let Some(stored) = world.exchange.orders.get_mut(bid) {
             stored.filled += qty;
         }
+    }
+}
+
+/// A company's buy order reserved cash at its limit; a fill below the limit frees the difference
+/// at once, so a limit above the price never ties cash up after the fill.
+fn refund_surplus(world: &mut World, order: &ShareOrder, price: i64, qty: i64) {
+    let HolderId::Firm(buyer) = order.holder else {
+        return;
+    };
+    let surplus = (order.limit_price_cents - price).max(0).saturating_mul(qty);
+    if surplus <= 0 {
+        return;
+    }
+    if let Some(firm) = world.firms.get_mut(buyer) {
+        let _ = firm.book.commit(
+            world.tick,
+            Txn::new()
+                .debit(Account::Cash, surplus, "order surplus")
+                .credit(Account::RestrictedCash, surplus, "order surplus"),
+        );
     }
 }
 
@@ -456,8 +478,59 @@ fn apply_impact(mark: i64, impact_bps: i32, seller_initiated: bool) -> i64 {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Stands for "the outside investors" on one side of a trade. The exchange resolves it to real
+/// holders: sellers are the outside holders with the biggest lots of the company, the buyer is
+/// the outside investor with the most capital. Shares are never made up and cash never invented.
+const OUTSIDE_POOL: HolderId = HolderId::Outside(u32::MAX);
+
 fn settle_trade(
+    world: &mut World,
+    firm: Handle,
+    seller: HolderId,
+    buyer: HolderId,
+    qty: i64,
+    price: i64,
+    dataset: &Dataset,
+) {
+    if seller == OUTSIDE_POOL {
+        let mut left = qty;
+        while left > 0 {
+            let lot = world.firms.get(firm).and_then(|f| {
+                f.shares
+                    .holders
+                    .iter()
+                    .filter(|(h, l)| matches!(h, HolderId::Outside(_)) && l.qty > 0)
+                    .max_by(|a, b| a.1.qty.cmp(&b.1.qty).then(b.0.cmp(a.0)))
+                    .map(|(h, l)| (*h, l.qty))
+            });
+            let Some((holder, held)) = lot else { break };
+            let chunk = left.min(held);
+            settle_one(world, firm, holder, buyer, chunk, price, dataset);
+            left -= chunk;
+        }
+        return;
+    }
+    if buyer == OUTSIDE_POOL {
+        let pick = world
+            .outside
+            .investors
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.capital_cents.cmp(&b.1.capital_cents).then(b.0.cmp(&a.0)))
+            .map(|(i, h)| (i as u32, h.capital_cents));
+        let Some((index, capital)) = pick else { return };
+        let affordable = if price > 0 { capital.max(0) / price } else { qty };
+        let chunk = qty.min(affordable);
+        if chunk > 0 {
+            settle_one(world, firm, seller, HolderId::Outside(index), chunk, price, dataset);
+        }
+        return;
+    }
+    settle_one(world, firm, seller, buyer, qty, price, dataset);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn settle_one(
     world: &mut World,
     firm: Handle,
     seller: HolderId,
@@ -525,19 +598,21 @@ fn settle_trade(
             );
         }
         HolderId::Firm(handle) => {
+            // The cost of the shares sold is read from the company's own share book, where the
+            // seller's lot is kept.
+            let basis = world
+                .firms
+                .get(firm)
+                .and_then(|issuer| issuer.shares.holders.get(&HolderId::Firm(handle)).copied())
+                .map(|lot| {
+                    if lot.qty > 0 {
+                        (lot.cost_cents as i128 * qty as i128 / lot.qty as i128) as i64
+                    } else {
+                        0
+                    }
+                })
+                .unwrap_or(0);
             if let Some(entity) = world.firms.get_mut(handle) {
-                let basis = entity
-                    .shares
-                    .holders
-                    .get(&HolderId::Firm(handle))
-                    .map(|lot| {
-                        if lot.qty > 0 {
-                            lot.cost_cents * qty / lot.qty
-                        } else {
-                            0
-                        }
-                    })
-                    .unwrap_or(0);
                 let _ = entity.book.commit(
                     world.tick,
                     Txn::new()
@@ -589,8 +664,8 @@ fn release_order(world: &mut World, handle: Handle) {
                     let _ = firm.book.commit(
                         world.tick,
                         Txn::new()
-                            .debit(Account::RestrictedCash, refund, "order release")
-                            .credit(Account::Cash, refund, "order release"),
+                            .debit(Account::Cash, refund, "order release")
+                            .credit(Account::RestrictedCash, refund, "order release"),
                     );
                 }
             }

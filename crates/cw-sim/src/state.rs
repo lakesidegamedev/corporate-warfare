@@ -1668,6 +1668,13 @@ pub struct World {
     /// next week. See `economy::executives`.
     #[serde(skip)]
     pub executives: crate::economy::executives::ExecState,
+    /// Rival long plans against a target's shares and workforce migration between regions (1.9).
+    /// Outside the postcard encoding like the chapter state, folded into the hash while not
+    /// empty, saved in its own `PLAN` trailer. A save without it loads with it empty: no plan is
+    /// running and the migration references are taken at the next week, never invented history.
+    /// See `economy::plans` and `economy::migration`.
+    #[serde(skip)]
+    pub plans: crate::economy::plans::PlanState,
     /// Which letters the player has read. Outside the encoding and the hash, in its own save
     /// trailer; no rule reads it. See `economy::mail`.
     #[serde(skip)]
@@ -2088,6 +2095,12 @@ pub fn canonical_hash(world: &World) -> String {
             if !world.executives.is_empty() {
                 match postcard::to_allocvec(&world.executives) {
                     Ok(executives) => bytes.extend_from_slice(&executives),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.plans.is_empty() {
+                match postcard::to_allocvec(&world.plans) {
+                    Ok(plans) => bytes.extend_from_slice(&plans),
                     Err(_) => return String::from("unhashable"),
                 }
             }

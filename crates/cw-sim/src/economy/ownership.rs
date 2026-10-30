@@ -95,12 +95,11 @@ pub fn would_create_cycle(world: &World, buyer: Handle, target: Handle) -> bool 
         if current == buyer {
             return true;
         }
-        let Some(firm) = world.firms.get(current) else {
-            continue;
-        };
-        for (holder, _) in firm.shares.holders.iter() {
-            if let HolderId::Firm(child) = holder {
-                stack.push(*child);
+        // The firms `current` holds shares in. A buyer that already holds shares of the target
+        // is no cycle; the target holding shares of the buyer, however deep, is.
+        for (child, firm) in world.firms.iter() {
+            if firm.shares.holders.contains_key(&HolderId::Firm(current)) {
+                stack.push(child);
             }
         }
     }

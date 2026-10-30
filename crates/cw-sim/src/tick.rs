@@ -76,6 +76,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         region.paid_named_wages_cents = 0;
     }
     crate::ph!(
+        "migration::weekly",
+        crate::economy::migration::weekly(world, dataset)
+    );
+    crate::ph!(
         "labour::clear",
         crate::economy::labour::clear(world, dataset)
     );
@@ -278,6 +282,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::ph!(
         "executives::weekly",
         crate::economy::executives::weekly(world, dataset)
+    );
+    crate::ph!(
+        "plans::weekly",
+        crate::economy::plans::weekly(world, dataset)
     );
     crate::ph!(
         "score::update",
