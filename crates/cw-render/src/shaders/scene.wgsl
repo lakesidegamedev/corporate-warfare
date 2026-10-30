@@ -371,6 +371,9 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
                 step = step + tv;
             }
         }
+        // The player's gold ground never reaches the roof gold (step 3), so their buildings'
+        // roofs are always the lightest thing on it.
+        if (player) { step = min(step, 2); }
         return vec4<f32>(pal(ramp, step), 1.0);
     }
 
