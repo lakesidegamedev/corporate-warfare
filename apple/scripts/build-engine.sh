@@ -7,14 +7,15 @@ if [[ "$(uname -s)" != Darwin ]]; then
 fi
 export IPHONEOS_DEPLOYMENT_TARGET=17.0
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim aarch64-apple-ios-macabi x86_64-apple-ios-macabi
-cargo build --locked -p cw-ffi --release --target aarch64-apple-ios
-cargo build --locked -p cw-ffi --release --target aarch64-apple-ios-sim
+cargo build --locked -p cw-ffi --release --features gpu-map --target aarch64-apple-ios
+cargo build --locked -p cw-ffi --release --features gpu-map --target aarch64-apple-ios-sim
 # Mac Catalyst: the same app on the Mac, for Apple silicon and Intel in one library.
-cargo build --locked -p cw-ffi --release --target aarch64-apple-ios-macabi
-cargo build --locked -p cw-ffi --release --target x86_64-apple-ios-macabi
+cargo build --locked -p cw-ffi --release --features gpu-map --target aarch64-apple-ios-macabi
+cargo build --locked -p cw-ffi --release --features gpu-map --target x86_64-apple-ios-macabi
 mkdir -p target/maccatalyst
 lipo -create target/aarch64-apple-ios-macabi/release/libcw_ffi.a target/x86_64-apple-ios-macabi/release/libcw_ffi.a \
   -output target/maccatalyst/libcw_ffi.a
+ls -l target/aarch64-apple-ios/release/libcw_ffi.a target/aarch64-apple-ios-sim/release/libcw_ffi.a target/maccatalyst/libcw_ffi.a
 mkdir -p apple/Generated
 cargo run --locked -p cw-bindgen -- generate target/aarch64-apple-ios/release/libcw_ffi.a --language swift --out-dir apple/Generated
 mkdir -p apple/Generated/Headers

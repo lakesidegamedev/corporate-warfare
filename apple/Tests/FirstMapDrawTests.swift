@@ -9,6 +9,18 @@ import XCTest
 @MainActor
 final class FirstMapDrawTests: XCTestCase {
     func testFirstStructuresDrawIsInsideTheBudget() async throws {
+        try await runFirstDraw()
+    }
+
+    /// The same run with the new GPU map switched on (it does not change the classic layers drawn
+    /// here); the numbers are printed next to the default ones.
+    func testFirstStructuresDrawWithTheNewMapOn() async throws {
+        UserDefaults.standard.set(true, forKey: GraphicsKeys.newMap)
+        defer { UserDefaults.standard.removeObject(forKey: GraphicsKeys.newMap) }
+        try await runFirstDraw()
+    }
+
+    private func runFirstDraw() async throws {
         // What the app does at launch.
         let loadStart = Date.timeIntervalSinceReferenceDate
         VoxelModels.preload()

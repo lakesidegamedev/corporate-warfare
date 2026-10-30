@@ -10,6 +10,18 @@ import XCTest
 @MainActor
 final class MaxSpeedTests: XCTestCase {
     func testNavigationAndSheetsRespondAtMaxSpeed() async throws {
+        try await runAtMaxSpeed(newMap: false)
+    }
+
+    /// The same run with the new GPU map switched on. The simulator's Metal may be software, so
+    /// the numbers are printed and only the functional checks gate.
+    func testNavigationAndSheetsRespondAtMaxSpeedWithTheNewMap() async throws {
+        UserDefaults.standard.set(true, forKey: GraphicsKeys.newMap)
+        defer { UserDefaults.standard.removeObject(forKey: GraphicsKeys.newMap) }
+        try await runAtMaxSpeed(newMap: true)
+    }
+
+    private func runAtMaxSpeed(newMap: Bool) async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CorporateWarfareMaxSpeed-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -114,7 +126,8 @@ final class MaxSpeedTests: XCTestCase {
         print("max-speed sheet marks: \(MainStalls.markLines(since: sheetOpened))")
         print("max-speed by phase: " + worstByPhase.keys.sorted().map { "\($0) \(Int((worstByPhase[$0] ?? 0) * 1000)) ms" }.joined(separator: ", "))
         print("max-speed named work: \(MainStalls.summary())")
-        print("max-speed: weeks \(startWeek) to \(endWeek), worst main-thread stall \(Int(worstStall * 1000)) ms")
+        print("max-speed\(newMap ? " (new map)" : ""): weeks \(startWeek) to \(endWeek), worst main-thread stall \(Int(worstStall * 1000)) ms")
+        if newMap { return }
         XCTAssertLessThan(worstStall, 0.75, "the main thread was never held for three quarters of a second at 4x (worst \(Int(worstStall * 1000)) ms)")
     }
 }

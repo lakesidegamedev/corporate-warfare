@@ -63,19 +63,50 @@ internal fun BriefPanel(store: GameStore, currency: String) {
     review?.let { BriefReview(store, it) { review = null } }
 }
 
+/** Plain notes for the brief's lines, by the kind the engine gives each line. The moves explain themselves in their own detail. */
+internal object BriefWords {
+    fun change(kind: String): String? = when (kind) {
+        "profit" -> "Last week's profit: what the company sold minus what it spent on goods, wages, running costs, interest and tax, set against the week before."
+        "price" -> "A good you sell moved enough in the market to matter. The percentage compares this week's market price with last week's."
+        "rival" -> "A rival spent money to take plants from you in one of your markets. If the raid wins, the plants change owners."
+        "event" -> "Something that happened in the world this week and may reach your company through prices, wages or demand."
+        "mandate" -> "Your board set you a goal. This says where it stands."
+        else -> null
+    }
+
+    fun due(kind: String): String? = when (kind) {
+        "card" -> "A decision is waiting in your Inbox. A decision that falls due stops the clock until you answer."
+        "mandate_offer" -> "The board has offered you a goal. The offer lapses on the date shown."
+        "mandate" -> "A board goal that must be met by the date shown."
+        "loan" -> "What your loans cost each week: the planned repayment, anything overdue and a week of interest. Missed payments hurt your credit grade."
+        "results" -> "The company publishes its quarterly results on this date. Analysts compare them with what they expected."
+        "bid" -> "Another company has bid to buy yours. The bid closes on the date shown, so decide before then."
+        "tender" -> "A public works contract open for bids. The date shown is when bidding closes."
+        "election" -> "An election near your plants. The winner can change taxes, spending and rules there."
+        else -> null
+    }
+
+    /** How the engine reached a move's numbers, in words. */
+    fun figures(move: BriefMoveDto): String = buildList {
+        if (move.weeklyGainCents > 0) add("The extra profit each week the engine expects if you do this, from this week's prices and sales.")
+        if (move.costCents > 0) add("The cost is paid once, up front.")
+        if (move.hasPayback && move.costCents > 0 && move.paybackWeeks > 0) add("The payback time is the cost divided by the weekly gain.")
+    }.joinToString(" ")
+}
+
 /** The brief itself, with no store behind it so it can be drawn from a saved game's numbers. */
 @Composable
 internal fun BriefBody(brief: BriefDto, currency: String, onReview: (BriefMoveDto) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         BriefHeading("What changed")
         if (brief.changes.isEmpty()) Text("A quiet week.", color = Palette.secondary, fontSize = 12.sp)
-        brief.changes.forEach { Text(it.text, color = Palette.primaryText, fontSize = 13.sp) }
+        brief.changes.forEach { Explain(BriefWords.change(it.kind), Modifier.fillMaxWidth()) { Text(it.text, color = Palette.primaryText, fontSize = 13.sp) } }
 
         BriefHeading("What is due")
         if (brief.due.isEmpty()) Text("Nothing is waiting on you.", color = Palette.secondary, fontSize = 12.sp)
         brief.due.forEach { due ->
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text(due.text, color = Palette.primaryText, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Explain(BriefWords.due(due.kind), Modifier.weight(1f)) { Text(due.text, color = Palette.primaryText, fontSize = 13.sp) }
                 Spacer(Modifier.width(8.dp))
                 SignalPill(
                     when (due.weeksLeft.toInt()) { 0 -> "This week"; 1 -> "1 week" else -> "${due.weeksLeft} weeks" },
@@ -99,7 +130,7 @@ internal fun BriefBody(brief: BriefDto, currency: String, onReview: (BriefMoveDt
                 Text(move.headline, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Text(move.detail, color = Palette.secondary, fontSize = 12.sp)
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Text(figures(move, currency), color = Palette.positive, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    Explain(BriefWords.figures(move), Modifier.weight(1f)) { Text(figures(move, currency), color = Palette.positive, fontSize = 12.sp) }
                     OutlinedButton(onClick = { onReview(move) }) { Text("Review", color = Palette.primaryText) }
                 }
             }

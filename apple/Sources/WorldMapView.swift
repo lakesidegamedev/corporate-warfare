@@ -1648,6 +1648,7 @@ struct WorldMapView: View {
     @AppStorage(GraphicsKeys.interstates) private var interstates = true
     @AppStorage(GraphicsKeys.seasons) private var seasons = true
     @AppStorage(GraphicsKeys.labels) private var labels = 2
+    @AppStorage(GraphicsKeys.newMap) private var newMap = false
     let shading: [String: Double]
     let layer: MapLayer
     let divisions: [DivisionMarker]
@@ -1686,6 +1687,11 @@ struct WorldMapView: View {
     @State private var labelPlanner = LabelPlanner()
     @State private var acquired: Set<String> = []
     @State private var countrysideReady = 0
+    /// The new GPU map (an opt-in preview) while the setting is on, and a counter that changes
+    /// whenever it presents a frame or changes state, so the names and counter redraw.
+    @State private var gpu: GpuMapSession?
+    @State private var gpuTick = 0
+    @State private var gpuNightNow = false
 
     private var map: WorldMap { WorldMap.forRegions(regionCodes) }
 
@@ -1717,7 +1723,17 @@ struct WorldMapView: View {
             // effects. Traffic runs under the buildings; buildings stand clear of the clouds.
             // Moving things follow the world clock, which stops while the game is paused.
             let sunMoves = easing || (look.dayNight && clockAllowed && gameSpeed > 0)
+            // The GPU map draws instead of the classic ground, clouds, traffic and buildings once it
+            // is ready, while the camera is flat; the globe, the Freight mode and any failure keep
+            // the classic map.
+            let _ = gpuTick
+            let gpuOn = newMap && layer != .freight && current.zoom >= MapCamera.flatEnd && (gpu?.isReady ?? false)
             ZStack(alignment: .topLeading) {
+                if gpuOn, let gpu {
+                    GpuMapSurface(session: gpu, camera: current, size: size, tilt: GraphicsSettings.pitch(forTilt: tiltSetting))
+                        .allowsHitTesting(false)
+                    GpuLabels(session: gpu, map: map, divisions: divisions, labels: look.labels, planner: labelPlanner, version: gpuTick)
+                } else {
                 if look.earth {
                     // Space and the ocean, then the satellite Earth over them, under the rest of the ground.
                     TimelineView(.animation(minimumInterval: easing ? interval : 1.0 / 3.0, paused: !sunMoves)) { timeline in
@@ -1807,8 +1823,14 @@ struct WorldMapView: View {
                     }
                     .allowsHitTesting(false)
                 }
+                }
             }
             .background(MapScene.spaceColor.color())
+            .overlay(alignment: .topLeading) {
+                if newMap && look.showFps {
+                    GpuCounter(session: gpuOn ? gpu : nil, line: gpuLine(on: gpuOn), version: gpuTick)
+                }
+            }
             // A right drag (a Mac, or an iPad with a mouse) turns the map.
             .background(SecondaryDrag { dx in
                 flight?.cancel()
@@ -1856,6 +1878,13 @@ struct WorldMapView: View {
                 fly(from: current, to: target)
             }
             .onTapGesture(coordinateSpace: .local) { location in
+                if gpuOn, let gpu {
+                    // The GPU map picks from the geometry of the frame on screen.
+                    let live = GpuCamera(current, size: size, tilt: GraphicsSettings.pitch(forTilt: tiltSetting))
+                    let code = gpu.pick(camera: gpu.shown?.camera ?? live, size: gpu.shown?.size ?? size, at: location)
+                    selected = code == selected ? nil : code
+                    return
+                }
                 let now = MapClock.now
                 let g = geometry.of(map: map, camera: current, size: size, tilt: look.tilt, detail: look.detail)
                 let tapped = scene(camera: current, look: look, now: now)
@@ -1910,7 +1939,23 @@ struct WorldMapView: View {
         }
         // Divisions the player has just taken over carry a flag for six weeks: a plant that was a
         // rival's last week and is the player's now.
-        .onAppear { acquired = takeovers.update(plants, week: Int(week)) }
+        .onAppear {
+            acquired = takeovers.update(plants, week: Int(week))
+            refreshGpu()
+        }
+        .onDisappear { closeGpu() }
+        .onChange(of: newMap) { _, _ in refreshGpu() }
+        .onChange(of: regionCodes) { _, _ in refreshGpu() }
+        .onChange(of: gpuInputs) { _, _ in pushGpu() }
+        .onChange(of: gpuReady) { _, ready in if ready { pushGpu() } }
+        .onChange(of: gpuNightNow) { _, _ in pushGpu() }
+        .task {
+            // The sun moves on game time: tell the GPU map when night falls or ends.
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                gpuNightNow = gpuNight()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: Countryside.ready)) { _ in countrysideReady += 1 }
         .onReceive(NotificationCenter.default.publisher(for: VoxelModels.ready)) { _ in countrysideReady += 1 }
         .onReceive(NotificationCenter.default.publisher(for: Routes.ready)) { _ in countrysideReady += 1 }
@@ -1924,6 +1969,55 @@ struct WorldMapView: View {
                 easing = false
             }
         }
+    }
+
+    /// Everything the GPU map is told about the game; a change sends it again.
+    private struct GpuInputs: Equatable {
+        var plants: [MapPlantDto]
+        var divisions: [DivisionMarker]
+        var layer: MapLayer
+        var shading: [String: Double]
+        var clouds: Int
+        var week: Int
+    }
+
+    private var gpuReady: Bool { gpuTick >= 0 && (gpu?.isReady ?? false) }
+
+    private var gpuInputs: GpuInputs {
+        GpuInputs(plants: plants, divisions: divisions, layer: layer, shading: shading, clouds: clouds, week: seasonWeek)
+    }
+
+    /// Opens the GPU map for the scenario while the setting is on, closes it when it is not.
+    private func refreshGpu() {
+        guard newMap, let id = map.scenarioId else { closeGpu(); return }
+        if let gpu, gpu.scenario == id, gpu.failure == nil { return }
+        closeGpu()
+        let session = GpuMapSession(scenario: id)
+        session.onChange = { gpuTick &+= 1 }
+        gpu = session
+    }
+
+    private func closeGpu() {
+        gpu?.close()
+        gpu = nil
+    }
+
+    private func gpuNight() -> Bool {
+        let b = map.playBounds
+        let sun = MapSun.moving(gameSeconds(MapClock.now))
+        return look.dayNight && sun.facing(lon: (b.west + b.east) / 2 * .pi / 180, lat: (b.south + b.north) / 2 * .pi / 180) < 0
+    }
+
+    private func pushGpu() {
+        guard let gpu else { return }
+        let night = gpuNight()
+        gpu.update(GpuMapUpdate.json(plants: plants, divisions: divisions, layer: layer, shading: shading,
+                                     night: night, clouds: clouds, week: seasonWeek))
+    }
+
+    private func gpuLine(on: Bool) -> String {
+        guard let gpu else { return "map: classic, GPU map loading" }
+        return gpu.isReady && !on ? gpu.line + " (classic view here)" : gpu.line
     }
 
     /// The world's time at a wall-clock moment: still while paused, faster at higher speeds.
