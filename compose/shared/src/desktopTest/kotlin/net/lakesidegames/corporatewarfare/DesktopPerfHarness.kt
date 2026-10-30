@@ -34,6 +34,34 @@ class DesktopPerfHarness {
 
     private fun line(text: String) { report.append(text).append('\n'); println(text) }
 
+    /** Samples the calling thread's stack every millisecond: where the UI thread's time goes, by function. */
+    private class Sampler(private val target: Thread) {
+        val inclusive = HashMap<String, Int>()
+        val self = HashMap<String, Int>()
+        var samples = 0
+        @Volatile private var live = true
+        private val thread = Thread {
+            while (live) {
+                val st = target.stackTrace
+                if (st.isNotEmpty()) {
+                    samples++
+                    val top = st[0]; self.merge("${top.className.substringAfterLast('.')}.${top.methodName}", 1, Int::plus)
+                    st.map { "${it.className.substringAfterLast('.')}.${it.methodName}" }.distinct().forEach { inclusive.merge(it, 1, Int::plus) }
+                }
+                Thread.sleep(1)
+            }
+        }.apply { isDaemon = true; start() }
+        fun stop() { live = false; thread.join() }
+    }
+
+    private fun printProfile(label: String, sampler: Sampler) {
+        sampler.stop()
+        line("  profile $label: ${sampler.samples} samples")
+        sampler.inclusive.entries.filter { !it.key.startsWith("Thread.") && !it.key.startsWith("Sampler") }.sortedByDescending { it.value }.take(60)
+            .forEach { line("    incl %5d  %s".format(it.value, it.key)) }
+        sampler.self.entries.sortedByDescending { it.value }.take(12).forEach { line("    self %5d  %s".format(it.value, it.key)) }
+    }
+
     private fun median(values: List<Double>) = values.sorted().let { it[it.size / 2] }
 
     private fun heapMb(): Double {
@@ -105,20 +133,13 @@ class DesktopPerfHarness {
         line("open career (store, to ready) %6.1f ms".format((System.nanoTime() - tOpen) / 1e6))
         kotlinx.coroutines.runBlocking { store.read { h -> playWeeks(h, 40) } }
         store.refresh(); waitUntil { !store.busy }
-        // The reload as it was (every board, every week, the phone's market rows too) against the reload now.
-        fun weeks(label: String, legacy: Boolean, fast: Boolean): Double {
-            store.thinReads = !legacy
-            store.marketsOpen = legacy
-            val ms = List(12) { val s = System.nanoTime(); oneWeek(store, fast); (System.nanoTime() - s) / 1e6 }
+        fun weeks(label: String): Double {
+            val ms = List(12) { val s = System.nanoTime(); oneWeek(store); (System.nanoTime() - s) / 1e6 }
             val mid = median(ms)
             line("week %-26s %8.1f ms median, mean %.1f, max %.1f (engine advance %.1f, so reload and publish cost %.1f)".format(label, mid, ms.average(), ms.max(), advance, mid - advance))
             return mid
         }
-        weeks("LEGACY at 1x", legacy = true, fast = false)
-        weeks("LEGACY at 4x", legacy = true, fast = true)
-        val weekMs = weeks("NOW at 1x", legacy = false, fast = false)
-        weeks("NOW at 4x", legacy = false, fast = true)
-        store.thinReads = true; store.marketsOpen = false
+        val weekMs = weeks("through the store")
         val manual = median(List(5) { val s = System.nanoTime(); store.refresh(); waitUntil { !store.busy }; (System.nanoTime() - s) / 1e6 })
         line("store.refresh() (reload)    %8.1f ms".format(manual))
 
@@ -132,9 +153,14 @@ class DesktopPerfHarness {
             }
             var clock = 0L
             fun frame(): Double { clock += 16_666_667L; val s = System.nanoTime(); scene.render(clock); return (System.nanoTime() - s) / 1e6 }
+            val profile = System.getenv("CW_PERF_PROFILE")?.split(',')?.contains(name) == true
+            var sampler = if (profile) Sampler(Thread.currentThread()) else null
             val first = frame()
+            sampler?.let { printProfile("$name first draw", it) }
             repeat(6) { frame(); Thread.sleep(20) }
-            val still = median(List(9) { frame() })
+            sampler = if (profile) Sampler(Thread.currentThread()) else null
+            val still = median(List(30) { frame() })
+            sampler?.let { printProfile("$name still frames", it) }
             val landing = List(5) {
                 oneWeek(store)
                 frame()
@@ -152,10 +178,10 @@ class DesktopPerfHarness {
     }
 
     /** One week through the store, returning when the week and everything read for it is published. */
-    private fun oneWeek(store: GameStore, fast: Boolean = false) {
+    private fun oneWeek(store: GameStore) {
         kotlinx.coroutines.runBlocking { store.read { h -> h.dismissPause() } }
         val before = store.overview?.tick ?: 0u
-        store.advanceAs(fast)
+        store.advance()
         waitUntil { (store.overview?.tick ?: 0u) > before }
         waitUntil { !store.busy }
     }

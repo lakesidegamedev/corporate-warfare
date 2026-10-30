@@ -422,7 +422,7 @@ heading.
 
 ### Changed
 
-- Faster weeks on desktop. At 2x and 4x speed the game refreshes the company, the clock and the economy every week and the slower boards (markets, map, freight, rivals, history) every fourth week, and everything at once when you pause or give an order, so the clock keeps its pace on slower machines. The phone's regional market list is only read while it is open. The launcher now loads the engine, the world map and the icons at the same time, so the game reaches the main menu sooner.
+- Faster weeks on desktop. The phone's regional market list is only read while it is open, so each week no longer pays for it on desktop. The launcher now loads the engine, the world map and the icons at the same time, so the game reaches the main menu sooner.
 
 - Tooling: every change to the Android app now starts the trimmed release build on an emulator in
   CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
