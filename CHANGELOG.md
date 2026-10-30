@@ -13,6 +13,12 @@ heading.
 
 ### Added
 
+- The new map now also runs on iPhone, iPad and Mac, as an opt-in preview. Turn on "New map (preview)"
+  under Graphics in Settings and the map is drawn by the device's graphics chip: stylized terrain,
+  roads, rails and buildings that keep one size on the ground however far you zoom. Names, division
+  badges and taps use the picture on screen, so nothing slides while you move the map. The globe, the
+  Freight view and any device that cannot run it keep the current map. It is off by default. With
+  "Show frame rate" on, a line in the corner says what is drawing the map and how long a frame takes.
 - The CEO Office is now a room you can walk around. At the top of the screen is a pixel-art boardroom
   with the things that matter standing on the furniture. Your chief executive sits behind the desk,
   smiling when the quarter made money and frowning when it lost it, with a name plate. The window

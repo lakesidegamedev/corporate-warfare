@@ -296,9 +296,8 @@ impl Renderer {
             #[cfg(any(target_os = "macos", target_os = "ios"))]
             Some(layer) => Some(
                 unsafe {
-                    instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(
-                        layer,
-                    ))
+                    instance
+                        .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(layer))
                 }
                 .map_err(|e| NoAdapter(e.to_string()))?,
             ),
