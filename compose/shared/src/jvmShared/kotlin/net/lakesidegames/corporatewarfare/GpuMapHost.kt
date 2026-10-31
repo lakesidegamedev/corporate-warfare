@@ -65,6 +65,9 @@ interface GpuMapSession {
      */
     val direct: Boolean get() = false
 
+    /** Set when a direct session is not keeping up (no frame soon after opening, or many slow presents in a row): why. The map then switches to copied frames. */
+    val trouble: String? get() = null
+
     /** Changes with every finished frame, so a canvas that reads it redraws. */
     val version: Long
 
@@ -123,6 +126,12 @@ object GpuMapHost {
     /** Why the last attempt fell back to the classic map, for the frame counter. */
     @Volatile var failure: String? = null
 
+    /** Whether the player's choice defaults to Direct on this machine (Windows with Direct3D, or forced for testing). */
+    @Volatile var directDefault: () -> Boolean = { false }
+
+    /** Set when the direct map stalled and the game switched to copied frames for the rest of this run: why. */
+    @Volatile var directFellBack: String? = null
+
     /** Why the native surface could not be used (the map then draws copied frames), for the frame counter. */
     @Volatile var surfaceNote: String? = null
 }
@@ -167,6 +176,7 @@ internal fun rememberGpuMap(enabled: Boolean, scenario: String?, surface: Any? =
 /** The frame counter line for the map: what is drawing it and what it costs. */
 internal fun gpuMapLine(enabled: Boolean, session: GpuMapSession?): String? = when {
     !enabled || GpuMapHost.opener == null -> null
+    session != null && !session.direct && GpuMapHost.directFellBack != null -> "map: copied, direct map fell back: ${GpuMapHost.directFellBack}"
     session != null -> {
         val soft = if (session.software) " (software)" else ""
         val size = session.frame?.let { " ${it.width}x${it.height}" } ?: ""

@@ -236,8 +236,18 @@ fun WorldMapView(
     var surface by remember { mutableStateOf<Any?>(null) }
     var surfaceBad by remember { mutableStateOf(false) }
     val surfaceHost = GpuMapHost.surfaceHost
-    val useSurface = surfaceHost != null && graphics.newMap && !surfaceBad && GpuMapHost.surfaceUsable()
+    val useSurface = surfaceHost != null && graphics.newMap && graphics.direct && !surfaceBad && GpuMapHost.directFellBack == null && GpuMapHost.surfaceUsable()
     val gpu = rememberGpuMap(graphics.newMap, map?.scenarioId, surface.takeIf { useSurface }, useSurface) { surfaceBad = true }
+    // The watchdog: a direct map that stalls (no frame soon after opening, or many slow presents in a row) is closed and the
+    // copied-frame map takes over for the rest of this run.
+    LaunchedEffect(gpu) {
+        val session = gpu?.takeIf { it.direct } ?: return@LaunchedEffect
+        while (true) {
+            delay(250)
+            val why = session.trouble
+            if (why != null) { GpuMapHost.directFellBack = why; surfaceBad = true; break }
+        }
+    }
     val gpuOn by remember(gpu, layer) { derivedStateOf { gpu != null && layer != MapLayer.Freight && (camera?.zoom ?: MapCamera.FLAT_END) >= MapCamera.FLAT_END } }
     // The native surface shows through (the map's own background and ground are not drawn over it) while it is what draws the map.
     val surfaceShows = gpuOn && gpu?.direct == true

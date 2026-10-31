@@ -41,7 +41,12 @@ data class GraphicsConfig(
     val labels: Int = 2,
     /** The new GPU map (desktop preview): stylized terrain, roads and buildings drawn on the graphics card. Off by default. */
     val newMap: Boolean = false,
+    /** How the new map reaches the screen: true straight into a native window, false as copied frames, null the machine's default. */
+    val directMap: Boolean? = null,
 ) {
+    /** Whether the new map is asked to draw straight to the screen (where the machine can). */
+    val direct: Boolean get() = directMap ?: GpuMapHost.directDefault()
+
     /** The tilt in radians once the map is flat. */
     val pitch: Double get() = when (tilt) { 0 -> 0.0; 1 -> 28 * PI / 180; else -> 48 * PI / 180 }
 
@@ -49,7 +54,7 @@ data class GraphicsConfig(
     val moves: Boolean get() = animations && (traffic > 0 || clouds > 0 || buildings > 0 || dayNight || lighting == 2)
 
     /** The preset this matches, or null when the player has mixed their own. */
-    val preset: GraphicsPreset? get() = GraphicsPreset.entries.firstOrNull { it.config(animations, showFps) == copy(newMap = false) }
+    val preset: GraphicsPreset? get() = GraphicsPreset.entries.firstOrNull { it.config(animations, showFps) == copy(newMap = false, directMap = null) }
 
     companion object {
         /** What the map draws with no settings file, as in tests and previews. */
@@ -83,6 +88,8 @@ internal class GraphicsOption(
     val set: (GraphicsConfig, Int) -> GraphicsConfig,
     /** Only shown where the desktop shell offers the GPU map. */
     val gpuOnly: Boolean = false,
+    /** Only shown where the desktop shell can draw the map into a native window. */
+    val surfaceOnly: Boolean = false,
 )
 
 private fun Boolean.int() = if (this) 1 else 0
@@ -109,6 +116,11 @@ internal val graphicsOptions = listOf(
         "New map (preview)",
         { "A new look for the map, drawn on your graphics card: terrain, roads, rails and buildings. A preview for testers; the frame rate counter shows what it costs. If your computer has no usable graphics card the game keeps the current map." },
         listOf("Off", "On"), { it.newMap.int() }, { c, v -> c.copy(newMap = v == 1) }, gpuOnly = true,
+    ),
+    GraphicsOption(
+        "Draw the new map",
+        { "Direct (fastest) draws the map straight to the screen every frame. Copied (compatible) draws it and copies each picture into the game, which works on any computer but is slower. Direct needs Windows with Direct3D; elsewhere, and if Direct stalls, the game uses Copied." },
+        listOf("Direct (fastest)", "Copied (compatible)"), { if (it.direct) 0 else 1 }, { c, v -> c.copy(directMap = v == 0) }, gpuOnly = true, surfaceOnly = true,
     ),
     GraphicsOption("Show frame rate", { "A frame counter in the corner of the map." }, listOf("Off", "On"), { it.showFps.int() }, { c, v -> c.copy(showFps = v == 1) }),
 )

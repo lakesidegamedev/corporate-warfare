@@ -28,8 +28,11 @@ internal class MapSurfaceCanvas : Canvas() {
     init {
         background = Color(0x0B, 0x16, 0x22)
         isFocusable = false
+        // The engine presents to this window itself: AWT must never paint it (no background, no repaint over the swap chain).
+        ignoreRepaint = true
     }
 
+    // Neither paint nor update draws anything: the window is the engine's. A repaint request only asks for a new frame.
     override fun paint(g: java.awt.Graphics?) { onPaint?.invoke() }
     override fun update(g: java.awt.Graphics?) { onPaint?.invoke() }
 
@@ -80,6 +83,8 @@ internal fun openDirectGpuMap(scenario: String, canvas: Canvas): GpuMapSession {
         throw IllegalStateException(lib.text { lib.cw_gpu_last_error(it, it.size.toLong()) } ?: "no graphics adapter for the window")
     }
     val info = lib.text { lib.cw_gpu_info(id, it, it.size.toLong()) }?.split('|') ?: listOf("unknown", "", "0")
+    val surfaceInfo = info.getOrElse(3) { "" }
+    println("direct map: adapter=${info.getOrElse(0) { "unknown" }} backend=${info.getOrElse(1) { "" }} surface ${canvas.width}x${canvas.height} ($surfaceInfo)")
     return DirectGpuSession(lib, id, info.getOrElse(0) { "unknown" }, info.getOrElse(2) { "0" } == "1", canvas, display)
 }
 
@@ -119,6 +124,22 @@ internal class DirectGpuSession(
     val presented = AtomicLong()
     @Volatile var frameListener: ((DirectFrame) -> Unit)? = null
 
+    private val firstRequestAt = AtomicLong(0)
+    private var slowRun = 0
+    @Volatile private var slowWhy: String? = null
+
+    /**
+     * The watchdog's verdict: no frame reached the window within 2 s of the first request, or presents took over 250 ms ten
+     * frames in a row. Read by the map screen, which then closes this session and draws copied frames instead.
+     */
+    override val trouble: String?
+        get() {
+            slowWhy?.let { return it }
+            val first = firstRequestAt.get()
+            if (presented.get() == 0L && first != 0L && System.nanoTime() - first > 2_000_000_000L) return "no frame reached the window in 2 seconds"
+            return null
+        }
+
     private val worker = thread(name = "cw-gpu-surface", isDaemon = true) { loop() }
 
     private val redraw = Runnable { lock.withLock { dirty = true; wake.signalAll() } }
@@ -145,6 +166,7 @@ internal class DirectGpuSession(
 
     override fun request(camera: GpuCamera, width: Int, height: Int, moving: Boolean) {
         if (width <= 0 || height <= 0) return
+        firstRequestAt.compareAndSet(0, System.nanoTime())
         lock.withLock {
             val old = wanted
             if (old == null || old.camera != camera || old.width != width || old.height != height) {
@@ -204,6 +226,7 @@ internal class DirectGpuSession(
             }
             renderMs = timing[0]
             copyMs = timing[1]
+            if (timing[1] > 250.0) { if (++slowRun >= 10) slowWhy = "frames took over 250 ms to present, ten in a row" } else slowRun = 0
             val seq = presented.incrementAndGet()
             frameListener?.invoke(DirectFrame(seq, job.camera, job.width, job.height, timing[0], timing[1], total, t0))
         }
@@ -265,4 +288,5 @@ internal fun installDirectSurface() {
     GpuMapHost.surfaceHost = { modifier, onSurface, onMouse -> MapSurfacePanel(modifier, onSurface, onMouse) }
     GpuMapHost.surfaceOpener = { scenario, surface -> openDirectGpuMap(scenario, surface as Canvas) }
     GpuMapHost.surfaceUsable = ::directSurfaceUsable
+    GpuMapHost.directDefault = { System.getenv("CW_DIRECT_MAP") == "1" || (onWindows && RenderInfo.backend == "DIRECT3D") }
 }

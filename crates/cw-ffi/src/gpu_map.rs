@@ -129,6 +129,8 @@ pub struct AdapterInfo {
     pub name: String,
     pub backend: String,
     pub software: bool,
+    /// The window surface's present mode, alpha mode and format (empty offscreen).
+    pub surface: String,
 }
 
 /// Timings of one frame, in milliseconds.
@@ -187,6 +189,7 @@ impl GpuMap {
         let scene = build_scene(assets, scenario)?;
         let renderer = renderer()?;
         let a = renderer.adapter().clone();
+        let renderer_surface = renderer.surface_summary();
         let base_buildings = scene.buildings.clone();
         Ok(GpuMap {
             scene: RwLock::new(scene),
@@ -197,6 +200,7 @@ impl GpuMap {
                 software: a.device_type == "Cpu" || a.name.to_lowercase().contains("llvmpipe"),
                 name: a.name,
                 backend: a.backend,
+                surface: renderer_surface,
             },
             holdings: Mutex::new(Vec::new()),
             heat: Mutex::new(HashMap::new()),
@@ -711,10 +715,11 @@ pub unsafe extern "C" fn cw_gpu_info(id: u64, buf: *mut c_char, len: usize) -> i
         Ok(unsafe {
             put_text(
                 &format!(
-                    "{}|{}|{}",
+                    "{}|{}|{}|{}",
                     i.name.replace('|', "/"),
                     i.backend,
-                    i.software as u8
+                    i.software as u8,
+                    i.surface.replace('|', "/")
                 ),
                 buf,
                 len,

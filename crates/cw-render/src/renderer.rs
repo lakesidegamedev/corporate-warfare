@@ -291,7 +291,40 @@ struct SurfaceState {
     surface: wgpu::Surface<'static>,
     format: wgpu::TextureFormat,
     alpha: wgpu::CompositeAlphaMode,
+    present_mode: wgpu::PresentMode,
+    /// What the display offered and what was chosen, for diagnostics.
+    summary: String,
     size: Option<(u32, u32)>,
+}
+
+/// The present mode to use: `CW_PRESENT_MODE` (fifo, mailbox, immediate) when it is offered, else
+/// vsync (Fifo), except on a software adapter, which has no display to wait for: there Fifo can
+/// stall for a second a frame, so Mailbox or Immediate is preferred.
+fn choose_present_mode(offered: &[wgpu::PresentMode], software: bool) -> wgpu::PresentMode {
+    use wgpu::PresentMode::*;
+    let forced = match std::env::var("CW_PRESENT_MODE")
+        .unwrap_or_default()
+        .to_lowercase()
+        .as_str()
+    {
+        "fifo" => Some(Fifo),
+        "mailbox" => Some(Mailbox),
+        "immediate" => Some(Immediate),
+        _ => None,
+    };
+    if let Some(m) = forced.filter(|m| offered.contains(m)) {
+        return m;
+    }
+    let order: &[wgpu::PresentMode] = if software {
+        &[Mailbox, Immediate, Fifo]
+    } else {
+        &[Fifo]
+    };
+    order
+        .iter()
+        .copied()
+        .find(|m| offered.contains(m))
+        .unwrap_or(Fifo)
 }
 
 /// Render targets kept between frames: a frame allocates nothing while the size stays.
@@ -390,14 +423,23 @@ impl Renderer {
                 .into_iter()
                 .find(|f| caps.formats.contains(f))
                 .ok_or_else(|| NoAdapter("the display has no linear colour format".into()))?;
+                let software = adapter.get_info().device_type == wgpu::DeviceType::Cpu;
+                let present_mode = choose_present_mode(&caps.present_modes, software);
+                let alpha = caps
+                    .alpha_modes
+                    .first()
+                    .copied()
+                    .unwrap_or(wgpu::CompositeAlphaMode::Auto);
+                let summary = format!(
+                    "present {:?} of {:?}, alpha {:?} of {:?}, format {:?}",
+                    present_mode, caps.present_modes, alpha, caps.alpha_modes, format
+                );
                 Some(SurfaceState {
                     surface,
                     format,
-                    alpha: caps
-                        .alpha_modes
-                        .first()
-                        .copied()
-                        .unwrap_or(wgpu::CompositeAlphaMode::Auto),
+                    alpha,
+                    present_mode,
+                    summary,
                     size: None,
                 })
             }
@@ -624,6 +666,14 @@ impl Renderer {
             targets: None,
             surface,
         })
+    }
+
+    /// The window surface's chosen present mode, alpha mode and format, or empty offscreen.
+    pub fn surface_summary(&self) -> String {
+        self.surface
+            .as_ref()
+            .map(|s| s.summary.clone())
+            .unwrap_or_default()
     }
 
     pub fn adapter(&self) -> &AdapterSummary {
@@ -1341,7 +1391,7 @@ impl Renderer {
                     width: w,
                     height: h,
                     desired_maximum_frame_latency: 2,
-                    present_mode: wgpu::PresentMode::Fifo,
+                    present_mode: s.present_mode,
                     alpha_mode: s.alpha,
                     view_formats: vec![],
                 },
