@@ -96,7 +96,7 @@ struct LetterRow: View {
 /// An open letter on a paper-like panel: letterhead with the organisation, the portrait, the
 /// body, the signature, then the buttons the inbox always offered.
 struct LetterPaperView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let letter: LetterDto
     @State private var target: PaperTarget?
 
@@ -147,7 +147,7 @@ struct LetterPaperView: View {
         .background(Stationery.sheet, in: Pixel.shape)
         .overlay(Pixel.shape.stroke(Stationery.edge, lineWidth: 2))
         .sheet(item: $target) { target in
-            PaperTargetSheet(target: target).environmentObject(store)
+            PaperTargetSheet(target: target).environment(store)
         }
         .task(id: letter.id) {
             if !letter.read { await store.markLettersRead([letter.id]) }
@@ -170,7 +170,7 @@ struct LetterPaperView: View {
 
 /// The letters of the last eight weeks, then older ones on request.
 struct LetterStack: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     var onOpen: (LetterDto) -> Void
     @State private var showArchive = false
     @State private var archive: [LetterDto] = []

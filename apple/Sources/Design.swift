@@ -668,7 +668,7 @@ struct ProfitDrivers: View {
 /// The CFO: up to three reasons profit is down, each with one button. Shown only when the
 /// company is losing money; the engine decides what matters.
 struct CfoPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let currency: String
     @Binding var rejection: CommandRejection?
 

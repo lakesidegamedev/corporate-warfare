@@ -4,7 +4,7 @@ import SwiftUI
 // MARK: - Finance
 
 struct FinanceView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var showingPrice = false
     @State private var showingDividend = false
@@ -122,23 +122,23 @@ struct FinanceView: View {
         }
         .background(Theme.background(for: scheme))
         .navigationTitle("Finance")
-        .sheet(isPresented: $showingPrice) { PriceSheet().environmentObject(store) }
-        .sheet(isPresented: $showingDividend) { DividendSheet().environmentObject(store) }
-        .sheet(isPresented: $showingIssue) { IssueSharesSheet().environmentObject(store) }
-        .sheet(isPresented: $showingRepurchase) { RepurchaseSheet().environmentObject(store) }
-        .sheet(isPresented: $showingRetire) { RetireTreasurySheet().environmentObject(store) }
-        .sheet(isPresented: $showingIPO) { IPOSheet().environmentObject(store) }
-        .sheet(isPresented: $showingLoan) { LoanSheet().environmentObject(store) }
-        .sheet(isPresented: $showingBond) { BondSheet().environmentObject(store) }
-        .sheet(isPresented: $showingTraining) { TrainingBudgetSheet().environmentObject(store) }
-        .sheet(isPresented: $showingQuality) { QualityBudgetSheet().environmentObject(store) }
+        .sheet(isPresented: $showingPrice) { PriceSheet().environment(store) }
+        .sheet(isPresented: $showingDividend) { DividendSheet().environment(store) }
+        .sheet(isPresented: $showingIssue) { IssueSharesSheet().environment(store) }
+        .sheet(isPresented: $showingRepurchase) { RepurchaseSheet().environment(store) }
+        .sheet(isPresented: $showingRetire) { RetireTreasurySheet().environment(store) }
+        .sheet(isPresented: $showingIPO) { IPOSheet().environment(store) }
+        .sheet(isPresented: $showingLoan) { LoanSheet().environment(store) }
+        .sheet(isPresented: $showingBond) { BondSheet().environment(store) }
+        .sheet(isPresented: $showingTraining) { TrainingBudgetSheet().environment(store) }
+        .sheet(isPresented: $showingQuality) { QualityBudgetSheet().environment(store) }
     }
 }
 
 // MARK: - Ownership
 
 struct OwnershipView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var showingNominate = false
     @State private var showingBoardAction = false
@@ -296,14 +296,14 @@ struct OwnershipView: View {
         }
         .background(Theme.background(for: scheme))
         .navigationTitle("Ownership")
-        .sheet(isPresented: $showingNominate) { NominateCEOSheet().environmentObject(store) }
-        .sheet(isPresented: $showingBoardAction) { BoardActionSheet().environmentObject(store) }
-        .sheet(isPresented: $showingShareOrder) { ShareOrderSheet().environmentObject(store) }
+        .sheet(isPresented: $showingNominate) { NominateCEOSheet().environment(store) }
+        .sheet(isPresented: $showingBoardAction) { BoardActionSheet().environment(store) }
+        .sheet(isPresented: $showingShareOrder) { ShareOrderSheet().environment(store) }
         .sheet(item: $castingVote) { vote in
-            CastVoteSheet(vote: vote).environmentObject(store)
+            CastVoteSheet(vote: vote).environment(store)
         }
         .sheet(item: $confirm) { request in
-            ConfirmCommandSheet(request: request).environmentObject(store)
+            ConfirmCommandSheet(request: request).environment(store)
         }
     }
 
@@ -315,7 +315,7 @@ struct OwnershipView: View {
 // MARK: - Facilities
 
 struct FacilitiesView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var showingBuild = false
     @State private var targetPercent: Double = 85
@@ -381,16 +381,16 @@ struct FacilitiesView: View {
         }
         .background(Theme.background(for: scheme))
         .navigationTitle("Facilities")
-        .sheet(isPresented: $showingBuild) { BuildSheet().environmentObject(store) }
-        .sheet(isPresented: $showingPrice) { PriceSheet().environmentObject(store) }
-        .sheet(isPresented: $showingWage) { WageSheet().environmentObject(store) }
+        .sheet(isPresented: $showingBuild) { BuildSheet().environment(store) }
+        .sheet(isPresented: $showingPrice) { PriceSheet().environment(store) }
+        .sheet(isPresented: $showingWage) { WageSheet().environment(store) }
     }
 }
 
 // MARK: - Supply
 
 struct SupplyView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -430,7 +430,7 @@ struct SupplyView: View {
 // MARK: - Group
 
 struct GroupView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var confirm: ConfirmRequest?
 
@@ -502,7 +502,7 @@ struct GroupView: View {
         .background(Theme.background(for: scheme))
         .navigationTitle("Group")
         .sheet(item: $confirm) { request in
-            ConfirmCommandSheet(request: request).environmentObject(store)
+            ConfirmCommandSheet(request: request).environment(store)
         }
     }
 }

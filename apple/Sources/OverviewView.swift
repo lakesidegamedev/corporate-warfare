@@ -3,7 +3,7 @@ import SwiftUI
 /// The player's own position: personal wealth and the companies it rests on, where cash is
 /// heading, the one recommended move, the clock, and game settings at the end.
 struct OverviewView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var showingBridge = false
     @State private var showingSettings = false
 
@@ -41,11 +41,11 @@ struct OverviewView: View {
             }
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsView().environmentObject(store)
+            SettingsView().environment(store)
         }
         .sheet(isPresented: $showingBridge) {
             CashBridgeView()
-                .environmentObject(store)
+                .environment(store)
         }
     }
 
@@ -171,7 +171,7 @@ struct OverviewView: View {
 
 /// Saving and analytics: game settings, not company business.
 struct GameSettingsPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var analytics = Telemetry.enabled
 
     var body: some View {
@@ -437,7 +437,7 @@ struct GraphicsSettingsPanel: View {
 /// does nothing, and the decision card is presented from a view that outlives the banner, so
 /// answering the card cannot tear its own sheet down halfway.
 struct PauseBanner: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var answering: UInt64?
     @State private var resolvingWeek: UInt32?
@@ -555,7 +555,7 @@ struct DecisionBanner: View {
 }
 
 struct CashBridgeView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -598,7 +598,7 @@ struct CashBridgeView: View {
 /// Game settings in one place: saving, analytics, the walkthrough and build details. Company
 /// business stays on the other tabs.
 struct SettingsView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var showingSaves = false
 
@@ -676,7 +676,7 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .sheet(isPresented: $showingSaves) { SavesView().environmentObject(store) }
+            .sheet(isPresented: $showingSaves) { SavesView().environment(store) }
         }
     }
 }

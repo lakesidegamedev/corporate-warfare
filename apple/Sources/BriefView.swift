@@ -12,7 +12,7 @@ struct BriefReviewItem: Identifiable {
 }
 
 struct BriefPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @AppStorage("briefCollapsed") private var collapsed = false
     let currency: String
     let firmName: String
@@ -48,7 +48,7 @@ struct BriefPanel: View {
         }
         .onDisappear { store.briefOpen = false }
         .sheet(item: $review) { item in
-            reviewSheet(item.move).environmentObject(store)
+            reviewSheet(item.move).environment(store)
         }
     }
 

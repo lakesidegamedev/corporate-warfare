@@ -127,7 +127,7 @@ struct SetupWizardView: View {
     let firstRun: Bool
     var startStep = SetupStep.welcome
     let onFinish: () -> Void
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @StateObject private var model = SetupModel()
     @State private var step = SetupStep.welcome
     @State private var preset = GraphicsPreset.high

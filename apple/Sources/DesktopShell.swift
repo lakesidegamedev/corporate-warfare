@@ -3,7 +3,7 @@ import SwiftUI
 /// The iPad and Mac layout: a sidebar for every screen, a status bar with the company, the
 /// economy and the time controls always in view, and multi-pane screens.
 struct DesktopShell: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var page: GamePage
     @State private var query = ""
     @State private var actionsSeed = 0
@@ -59,10 +59,10 @@ struct DesktopShell: View {
             store.tutorial.requestedPage = nil
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsView().environmentObject(store)
+            SettingsView().environment(store)
         }
-        .sheet(item: $store.openDivision) { division in
-            DivisionDetailSheet(division: division).environmentObject(store)
+        .sheet(item: Binding(get: { store.openDivision }, set: { store.openDivision = $0 })) { division in
+            DivisionDetailSheet(division: division).environment(store)
         }
     }
 
@@ -112,7 +112,7 @@ struct DesktopShell: View {
 // MARK: - Sidebar
 
 private struct DesktopSidebar: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let page: GamePage
     let onPage: (GamePage) -> Void
     let onSettings: () -> Void
@@ -205,7 +205,7 @@ private struct SidebarItem: View {
 
 /// Which company the screens act on, from the companies you control.
 private struct CompanySwitcher: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
 
     var body: some View {
         let firm = store.selectedFirmDto
@@ -247,7 +247,7 @@ private struct CompanySwitcher: View {
 /// Cash, profit, outlook, share price, net worth and the economy, with action search and the
 /// time controls, always in view.
 private struct DesktopStatusBar: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     var onSearch: (String) -> Void
     @State private var text = ""
 
@@ -342,7 +342,7 @@ private struct DesktopStatusBar: View {
 
 /// The CEO Office beside the company's results.
 private struct DesktopOffice: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
 
     var body: some View {
         if store.selectedFirmDto == nil && store.controlledFirms.isEmpty {
@@ -373,7 +373,7 @@ private struct DesktopMarkets: View {
         var id: String { rawValue }
     }
 
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var mode = Mode.exchange
 
     var body: some View {

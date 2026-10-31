@@ -44,7 +44,7 @@ final class SnapshotTests: XCTestCase {
         XCTAssertEqual(OfficeRoute.of("paper"), .screen(.paper))
         XCTAssertEqual(OfficeRoute.of("chart"), .screen(.stats))
         XCTAssertNil(OfficeRoute.of("nowhere"))
-        let page = NavigationStack { ScrollView { OfficeRoomHost().padding(16) }.background(Theme.ink) }.environmentObject(store)
+        let page = NavigationStack { ScrollView { OfficeRoomHost().padding(16) }.background(Theme.ink) }.environment(store)
         render("office-room-phone", CGSize(width: 393, height: 420), compact: true, page)
         render("office-room-pad", CGSize(width: 1180, height: 760), compact: false, page)
     }
@@ -63,7 +63,7 @@ final class SnapshotTests: XCTestCase {
         let phone = CGSize(width: 393, height: 1100)
         let pad = CGSize(width: 1180, height: 600)
         func both<V: View>(_ name: String, _ view: V, phoneHeight: CGFloat = 1100) {
-            let page = ScrollView { view.padding(16) }.background(Theme.ink).environmentObject(store)
+            let page = ScrollView { view.padding(16) }.background(Theme.ink).environment(store)
             render("\(name)-phone", CGSize(width: phone.width, height: phoneHeight), compact: true, page)
             render("\(name)-pad", pad, compact: false, page)
         }
@@ -100,7 +100,7 @@ final class SnapshotTests: XCTestCase {
         XCTAssertTrue(!brief.moves.isEmpty || !brief.hold.isEmpty, "the brief says what to do or why to hold")
         XCTAssertLessThanOrEqual(brief.moves.count, 3)
         let page = ScrollView { BriefPanel(currency: firm.currency, firmName: firm.name).padding(16) }
-            .background(Theme.ink).environmentObject(store)
+            .background(Theme.ink).environment(store)
         render("brief-phone", CGSize(width: 393, height: 1100), compact: true, page)
         render("brief-pad", CGSize(width: 760, height: 900), compact: false, page)
     }
@@ -174,38 +174,38 @@ final class SnapshotTests: XCTestCase {
         let phone = CGSize(width: 393, height: 852)
         let pad = CGSize(width: 1180, height: 820)
         let home = store.boards.first { $0.code == store.divisions.first?.region }
-        render("map-phone", phone, compact: true, MapHomeView().environmentObject(store))
-        render("map-pad", pad, compact: false, MapHomeView().environmentObject(store))
+        render("map-phone", phone, compact: true, MapHomeView().environment(store))
+        render("map-pad", pad, compact: false, MapHomeView().environment(store))
         renderCloseMaps(store, pad)
         if let home {
             render("region-phone", phone, compact: true,
-                   RegionBoardView(board: home, onBuild: {}, onClose: {}).environmentObject(store))
+                   RegionBoardView(board: home, onBuild: {}, onClose: {}).environment(store))
             render("build-phone", phone, compact: true,
-                   BuildFlowView(regionCode: home.code).environmentObject(store))
+                   BuildFlowView(regionCode: home.code).environment(store))
         }
-        render("ceo-phone", phone, compact: true, CEOOfficeView().environmentObject(store))
-        render("ceo-pad", pad, compact: false, CEOOfficeView().environmentObject(store))
-        render("markets-phone", phone, compact: true, MarketsView().environmentObject(store))
-        render("markets-commodities-phone", phone, compact: true, MarketsView(initialSection: .commodities).environmentObject(store))
-        render("markets-regions-phone", phone, compact: true, MarketsView(initialSection: .regions).environmentObject(store))
+        render("ceo-phone", phone, compact: true, CEOOfficeView().environment(store))
+        render("ceo-pad", pad, compact: false, CEOOfficeView().environment(store))
+        render("markets-phone", phone, compact: true, MarketsView().environment(store))
+        render("markets-commodities-phone", phone, compact: true, MarketsView(initialSection: .commodities).environment(store))
+        render("markets-regions-phone", phone, compact: true, MarketsView(initialSection: .regions).environment(store))
         if let stock = store.stocks.first(where: { $0.controlledByYou }) ?? store.stocks.first {
-            render("stock-sheet-phone", phone, compact: true, StockSheet(stock: stock).environmentObject(store))
+            render("stock-sheet-phone", phone, compact: true, StockSheet(stock: stock).environment(store))
         }
-        render("markets-pad", pad, compact: false, MarketsView().environmentObject(store))
-        render("inbox-phone", phone, compact: true, InboxView().environmentObject(store))
+        render("markets-pad", pad, compact: false, MarketsView().environment(store))
+        render("inbox-phone", phone, compact: true, InboxView().environment(store))
         if let letter = store.letters.first {
             render("letter-phone", phone, compact: true,
-                   ScrollView { LetterPaperView(letter: letter).padding(14) }.background(Theme.ink).environmentObject(store))
+                   ScrollView { LetterPaperView(letter: letter).padding(14) }.background(Theme.ink).environment(store))
         }
-        render("root-phone", phone, compact: true, RootView().environmentObject(store))
+        render("root-phone", phone, compact: true, RootView().environment(store))
         // Each tab inside the real tab bar, so content against the bar is reviewed as shipped.
-        render("tab-office-phone", phone, compact: true, RootView(initialTab: .office).environmentObject(store))
-        render("tab-markets-phone", phone, compact: true, RootView(initialTab: .markets).environmentObject(store))
-        render("tab-inbox-phone", phone, compact: true, RootView(initialTab: .inbox).environmentObject(store))
-        render("tab-portfolio-phone", phone, compact: true, RootView(initialTab: .portfolio).environmentObject(store))
+        render("tab-office-phone", phone, compact: true, RootView(initialTab: .office).environment(store))
+        render("tab-markets-phone", phone, compact: true, RootView(initialTab: .markets).environment(store))
+        render("tab-inbox-phone", phone, compact: true, RootView(initialTab: .inbox).environment(store))
+        render("tab-portfolio-phone", phone, compact: true, RootView(initialTab: .portfolio).environment(store))
         // The menu's globe with its clouds, and the settings with the Clouds option and credits.
-        render("menu-phone", phone, compact: true, StartView().environmentObject(store))
-        render("menu-pad", pad, compact: false, StartView().environmentObject(store))
+        render("menu-phone", phone, compact: true, StartView().environment(store))
+        render("menu-pad", pad, compact: false, StartView().environment(store))
         render("settings-phone", phone, compact: true,
                ScrollView { GraphicsSettingsPanel().padding(16) }.background(Theme.ink))
         if let home { renderSplitView(store, region: home.code) }
@@ -227,7 +227,7 @@ final class SnapshotTests: XCTestCase {
         let phone = CGSize(width: 393, height: 1800)
         let pad = CGSize(width: 1180, height: 1400)
         func both<V: View>(_ name: String, _ view: V) {
-            let page = ScrollView { view.padding(16) }.background(Theme.ink).environmentObject(store)
+            let page = ScrollView { view.padding(16) }.background(Theme.ink).environment(store)
             render("\(name)-phone", phone, compact: true, page)
             render("\(name)-pad", pad, compact: false, page)
         }
@@ -249,7 +249,7 @@ final class SnapshotTests: XCTestCase {
             ], title: "Revenue and profit", initialKind: .area)
         })
         if let stock = store.stocks.first(where: { $0.controlledByYou }) {
-            render("stock-history-phone", phone, compact: true, StockSheet(stock: stock).environmentObject(store))
+            render("stock-history-phone", phone, compact: true, StockSheet(stock: stock).environment(store))
         }
 
         let product = store.productLines.first?.product ?? store.commodities.first?.product ?? 0
@@ -310,16 +310,16 @@ final class SnapshotTests: XCTestCase {
         for slice in slices {
             let name = "split-\(slice.name)"
             if slice.compact {
-                render("\(name)-map", slice.size, compact: true, RootView(initialTab: .map).environmentObject(store))
-                render("\(name)-markets", slice.size, compact: true, RootView(initialTab: .markets).environmentObject(store))
+                render("\(name)-map", slice.size, compact: true, RootView(initialTab: .map).environment(store))
+                render("\(name)-markets", slice.size, compact: true, RootView(initialTab: .markets).environment(store))
             } else {
-                render("\(name)-map", slice.size, compact: false, DesktopShell(initialPage: .map).environmentObject(store))
-                render("\(name)-markets", slice.size, compact: false, DesktopShell(initialPage: .markets).environmentObject(store))
+                render("\(name)-map", slice.size, compact: false, DesktopShell(initialPage: .map).environment(store))
+                render("\(name)-markets", slice.size, compact: false, DesktopShell(initialPage: .markets).environment(store))
             }
             if let firm {
-                render("\(name)-company", slice.size, compact: slice.compact, CompanyPageSheet(firm: firm).environmentObject(store))
+                render("\(name)-company", slice.size, compact: slice.compact, CompanyPageSheet(firm: firm).environment(store))
             }
-            render("\(name)-build", slice.size, compact: slice.compact, BuildFlowView(regionCode: region).environmentObject(store))
+            render("\(name)-build", slice.size, compact: slice.compact, BuildFlowView(regionCode: region).environment(store))
         }
     }
 
@@ -449,18 +449,18 @@ final class SnapshotTests: XCTestCase {
         let pad = CGSize(width: 1032, height: 1376)
         let controlled = store.stocks.first { $0.controlledByYou } ?? store.stocks.first
 
-        storeShot("iphone", "01-map", phone, 3, compact: true, RootView(initialTab: .map).environmentObject(store))
-        storeShot("iphone", "02-office", phone, 3, compact: true, RootView(initialTab: .office).environmentObject(store))
-        storeShot("iphone", "03-markets", phone, 3, compact: true, RootView(initialTab: .markets).environmentObject(store))
+        storeShot("iphone", "01-map", phone, 3, compact: true, RootView(initialTab: .map).environment(store))
+        storeShot("iphone", "02-office", phone, 3, compact: true, RootView(initialTab: .office).environment(store))
+        storeShot("iphone", "03-markets", phone, 3, compact: true, RootView(initialTab: .markets).environment(store))
         if let stock = controlled {
-            storeShot("iphone", "04-company", phone, 3, compact: true, StockSheet(stock: stock).environmentObject(store))
+            storeShot("iphone", "04-company", phone, 3, compact: true, StockSheet(stock: stock).environment(store))
         }
-        storeShot("iphone", "05-inbox", phone, 3, compact: true, RootView(initialTab: .inbox).environmentObject(store))
-        storeShot("iphone", "06-portfolio", phone, 3, compact: true, RootView(initialTab: .portfolio).environmentObject(store))
+        storeShot("iphone", "05-inbox", phone, 3, compact: true, RootView(initialTab: .inbox).environment(store))
+        storeShot("iphone", "06-portfolio", phone, 3, compact: true, RootView(initialTab: .portfolio).environment(store))
 
-        storeShot("ipad", "01-map", pad, 2, compact: false, RootView(initialTab: .map).environmentObject(store))
-        storeShot("ipad", "02-office", pad, 2, compact: false, RootView(initialTab: .office).environmentObject(store))
-        storeShot("ipad", "03-markets", pad, 2, compact: false, RootView(initialTab: .markets).environmentObject(store))
+        storeShot("ipad", "01-map", pad, 2, compact: false, RootView(initialTab: .map).environment(store))
+        storeShot("ipad", "02-office", pad, 2, compact: false, RootView(initialTab: .office).environment(store))
+        storeShot("ipad", "03-markets", pad, 2, compact: false, RootView(initialTab: .markets).environment(store))
     }
 
     private func storeShot<V: View>(_ device: String, _ name: String, _ size: CGSize, _ scale: CGFloat, compact: Bool, _ view: V) {

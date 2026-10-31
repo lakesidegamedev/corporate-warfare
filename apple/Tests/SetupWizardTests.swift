@@ -49,7 +49,7 @@ final class SetupWizardTests: XCTestCase {
         let sizes: [(String, CGSize, Bool)] = [("phone", CGSize(width: 393, height: 852), true), ("pad", CGSize(width: 1180, height: 820), false)]
         for (label, size, compact) in sizes {
             for step in SetupStep.allCases {
-                let view = SetupWizardView(firstRun: true, startStep: step, onFinish: {}).environmentObject(store)
+                let view = SetupWizardView(firstRun: true, startStep: step, onFinish: {}).environment(store)
                 try render("setup-\(label)-\(step)", size, compact: compact, view)
             }
             try render("setup-\(label)-whatsnew", size, compact: compact, WhatsNewView(onRunSetup: {}, onContinue: {}))

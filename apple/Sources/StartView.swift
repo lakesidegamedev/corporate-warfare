@@ -62,7 +62,7 @@ struct ScenarioCard: View {
 /// Names the slot that failed, its week and timestamp, and offers the last-good copy. The damaged
 /// file stays on the device: recovery never overwrites or deletes it.
 struct RecoveryCard: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     let issue: SaveRecoveryIssue
     var onExportDiagnostics: () -> Void
@@ -148,7 +148,7 @@ struct DiagnosticExportView: View {
 }
 
 struct SavesView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var export: DiagnosticExport?
     @State private var confirmDelete: String?
@@ -160,7 +160,7 @@ struct SavesView: View {
                     RecoveryCard(issue: issue) {
                         export = store.makeDiagnostics()
                     }
-                    .environmentObject(store)
+                    .environment(store)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                 }

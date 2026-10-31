@@ -3,7 +3,7 @@ import SwiftUI
 /// Groups, transfer prices, reputation, bonds, joint ventures and activists in one dense column.
 /// Set once; the engine alerts only when a decision is needed.
 struct StructureSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var settings: [String: Double] = [:]
     @State private var rejection: CommandRejection?
 

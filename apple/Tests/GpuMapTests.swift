@@ -130,7 +130,7 @@ final class GpuMapTests: XCTestCase {
         var previous: GpuMapSession? = session
         for (name, size, compact) in [("phone", CGSize(width: 393, height: 852), true), ("pad", CGSize(width: 1180, height: 820), false)] {
             let window = makeWindow(size)
-            let root = MapHomeView().environmentObject(store)
+            let root = MapHomeView().environment(store)
                 .environment(\.horizontalSizeClass, compact ? .compact : .regular)
                 .preferredColorScheme(.dark)
                 .frame(width: size.width, height: size.height)

@@ -4,7 +4,7 @@ import SwiftUI
 /// plants and labour. Opened from the map, the CEO Office or the company page. The numbers come
 /// from the engine; the controls reuse the commands the rest of the game already sends.
 struct DivisionDetailSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let division: DivisionDto
     @State private var detail: DivisionDetailDto?
@@ -83,7 +83,7 @@ struct DivisionDetailSheet: View {
         }
         .sheet(item: $posture) { line in
             PostureSheet(line: line)
-                .environmentObject(store)
+                .environment(store)
                 .presentationDetents([.medium, .large])
                 .presentationBackground(Theme.panel)
         }

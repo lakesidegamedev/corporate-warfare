@@ -1,53 +1,56 @@
-import Combine
 import Foundation
+import Observation
 import SwiftUI
 
+/// The app's live state. It uses the Observation framework, so a screen redraws only for the
+/// fields its body reads, not for every change anywhere in the store.
 @MainActor
-final class AppStore: ObservableObject {
-    @Published var sessionReady = false
-    @Published var overview: OverviewDto?
-    @Published var firms: [FirmDto] = []
-    @Published var regions: [RegionDto] = []
+@Observable
+final class AppStore {
+    var sessionReady = false
+    var overview: OverviewDto?
+    var firms: [FirmDto] = []
+    var regions: [RegionDto] = []
     /// Every region's board (conditions, room to build, sector cells), every plant, the player's
     /// divisions for the map, the strategy catalogue and the selected firm's focus and logistics.
-    @Published var boards: [RegionBoardDto] = []
-    @Published var mapPlants: [MapPlantDto] = []
-    @Published var mapDivisions: [MapDivisionDto] = []
-    @Published var divisions: [DivisionDto] = []
+    var boards: [RegionBoardDto] = []
+    var mapPlants: [MapPlantDto] = []
+    var mapDivisions: [MapDivisionDto] = []
+    var divisions: [DivisionDto] = []
     /// The division whose detail sheet is open, from the map, a region board, the CEO Office or the company page.
-    @Published var openDivision: DivisionDto?
+    var openDivision: DivisionDto?
     /// Goods the selected company holds back from sale, with any open buy orders.
-    @Published var held: [HeldStockDto] = []
+    var held: [HeldStockDto] = []
     /// Freight lanes this week, lane contracts, and the corridor's freight at a glance.
-    @Published var lanes: [LaneDto] = []
-    @Published var laneContracts: [LaneContractDto] = []
+    var lanes: [LaneDto] = []
+    var laneContracts: [LaneContractDto] = []
     /// Groups, transfer prices, reputation, bonds, ventures and activists.
-    @Published var structure: StructureViewDto?
-    @Published var freight: FreightSummaryDto?
-    @Published var raidTargets: [RaidOptionDto] = []
-    @Published var recentRaids: [RaidRecordDto] = []
-    @Published var rivals: [RivalSummaryDto] = []
-    @Published var rivalFeed: [RivalMoveFeedDto] = []
+    var structure: StructureViewDto?
+    var freight: FreightSummaryDto?
+    var raidTargets: [RaidOptionDto] = []
+    var recentRaids: [RaidRecordDto] = []
+    var rivals: [RivalSummaryDto] = []
+    var rivalFeed: [RivalMoveFeedDto] = []
     /// The board's quarterly goal for the primary company and its recent results.
-    @Published var objective: ObjectiveDto?
-    @Published var objectiveHistory: [ObjectiveResultDto] = []
+    var objective: ObjectiveDto?
+    var objectiveHistory: [ObjectiveResultDto] = []
     /// This career's chapters, board goals and achievements. Read when the Hall page is open, right
     /// after a choice, and when the week changes with time paused or at 1x; never at 2x or 4x.
-    @Published var hall: HallDto?
+    var hall: HallDto?
     /// The top headline the ticker last read, for the CEO Office's newspaper.
-    @Published var headline: String?
+    var headline: String?
     /// The weekly brief for the selected company. Read only while the CEO Office shows it, and at
     /// 2x or 4x no more than once a week.
-    @Published var brief: BriefDto?
+    var brief: BriefDto?
     var briefOpen = false
     /// The selected company's executives and the people it could hire. Read only while the CEO
     /// Office shows them.
-    @Published var executives: ExecutivesDto?
+    var executives: ExecutivesDto?
     /// The chief executive chosen at the new-game screen, read with the executives.
-    @Published var playerChief: PlayerChiefDto?
+    var playerChief: PlayerChiefDto?
     var executivesOpen = false
     /// Races, polls, laws and tenders. Read only while the Politics section is on screen.
-    @Published var politics: PoliticsDto?
+    var politics: PoliticsDto?
     var politicsOpen = false
     private var briefWeek: UInt32?
     private var briefRevision: UInt64?
@@ -57,68 +60,67 @@ final class AppStore: ObservableObject {
     /// The last chapter whose result the player has been shown.
     private var resultSeen: UInt32 = 0
     private var resultSeenReady = false
-    @Published var strategyCatalogue: [StrategyDto] = []
+    var strategyCatalogue: [StrategyDto] = []
     /// Products with the reference prices of the career's own scenario.
-    @Published var productCatalogue: [ProductDto] = []
+    var productCatalogue: [ProductDto] = []
     /// The scenario the catalogues above were loaded for.
     private var catalogueScenario = ""
-    @Published var firmOps: FirmOpsDto?
-    @Published var facilities: [FacilityDto] = []
-    @Published var finance: FinanceDto?
-    @Published var productLines: [ProductLineDto] = []
-    @Published var commodities: [CommodityDto] = []
-    @Published var stocks: [StockDto] = []
-    @Published var ownership: OwnershipDto?
+    var firmOps: FirmOpsDto?
+    var facilities: [FacilityDto] = []
+    var finance: FinanceDto?
+    var productLines: [ProductLineDto] = []
+    var commodities: [CommodityDto] = []
+    var stocks: [StockDto] = []
+    var ownership: OwnershipDto?
     /// The selected company's four-week results, loaded when the stats screen opens.
-    @Published var history: [PeriodDto] = []
-    @Published var contracts: [ContractDto] = []
-    @Published var loans: [LoanDto] = []
-    @Published var insurance: [InsuranceDto] = []
-    @Published var deals: [DealDto] = []
-    @Published var events: [EventDto] = []
+    var history: [PeriodDto] = []
+    var contracts: [ContractDto] = []
+    var loans: [LoanDto] = []
+    var insurance: [InsuranceDto] = []
+    var deals: [DealDto] = []
+    var events: [EventDto] = []
     /// The Inbox's letters: the last eight weeks, decisions pinned on top. Read with the rest of the week.
-    @Published var letters: [LetterDto] = []
+    var letters: [LetterDto] = []
     /// The Inbox badge: unread letters plus decisions already read but still due.
     var inboxBadge: Int { letters.filter { !$0.read || $0.mandatory }.count }
     /// The economy, central bank and government, for the Markets economy card and the status bar.
-    @Published var economy: EconomyDto?
+    var economy: EconomyDto?
     /// A back issue of the paper to open on the next visit, set by the History card.
-    @Published var paperWeek: UInt32?
+    var paperWeek: UInt32?
     /// The selected company's technology position.
-    @Published var research: ResearchDto?
+    var research: ResearchDto?
     /// What the CFO says is costing the selected company money. Empty when it is not losing money.
-    @Published var cfoAdvice: [CfoAdviceDto] = []
-    @Published var groupTree: [GroupNodeDto] = []
-    @Published var boardVotes: [BoardVoteDto] = []
-    @Published var institutions: [InstitutionDto] = []
-    @Published var labour: LabourDto?
-    @Published var policyState: PolicyStateDto?
-    @Published var recovery: RecoveryDto?
-    @Published var fundingBuyers: [BuyerDto] = []
-    @Published var recipeOptions: [RecipeDto] = []
-    @Published var lastErrorDetail: String?
-    @Published var selectedFirm: UInt64?
-    @Published var selectedRegionCode: String?
-    @Published var errorMessage: String?
-    @Published var statusLine: String = ""
-    @Published var isBusy = false
-    @Published var runSpeed: Double = 0
-    @Published var saves: [StoredSave] = []
-    @Published var marketRows: [MarketRow] = []
-    @Published var score: ScoreDto?
-    @Published var showOnboarding = false
+    var cfoAdvice: [CfoAdviceDto] = []
+    var groupTree: [GroupNodeDto] = []
+    var boardVotes: [BoardVoteDto] = []
+    var institutions: [InstitutionDto] = []
+    var labour: LabourDto?
+    var policyState: PolicyStateDto?
+    var recovery: RecoveryDto?
+    var fundingBuyers: [BuyerDto] = []
+    var recipeOptions: [RecipeDto] = []
+    var lastErrorDetail: String?
+    var selectedFirm: UInt64?
+    var selectedRegionCode: String?
+    var errorMessage: String?
+    var statusLine: String = ""
+    var isBusy = false
+    var runSpeed: Double = 0
+    var saves: [StoredSave] = []
+    var marketRows: [MarketRow] = []
+    var score: ScoreDto?
+    var showOnboarding = false
     /// Set from Settings (Set up again): shows the first-run setup over the app.
-    @Published var showSetup = false
+    var showSetup = false
     /// Set when a slot failed to import. Drives the recovery screen.
-    @Published var recoveryIssue: SaveRecoveryIssue?
+    var recoveryIssue: SaveRecoveryIssue?
     /// Set after a last-good save was accepted, so the next screen can say so once.
-    @Published var recoveryNotice: String?
+    var recoveryNotice: String?
     /// Last engine or save error key, recorded for the diagnostics bundle only.
-    @Published var lastErrorKey: String?
+    var lastErrorKey: String?
 
-    /// Tutorial progress. Its changes republish through the store so every screen redraws.
+    /// Tutorial progress; it is observable itself, so screens that read it redraw with it.
     let tutorial = TutorialModel()
-    private var tutorialSink: AnyCancellable?
     private let engine = Engine()
     private let saveManager: SaveManager
     private var runTask: Task<Void, Never>?
@@ -128,9 +130,6 @@ final class AppStore: ObservableObject {
 
     init(saveManager: SaveManager = .shared) {
         self.saveManager = saveManager
-        tutorialSink = tutorial.objectWillChange.sink { [weak self] _ in
-            self?.objectWillChange.send()
-        }
     }
 
     struct MarketRow: Identifiable, Equatable {
@@ -168,6 +167,7 @@ final class AppStore: ObservableObject {
         _ = await pendingWrite?.value
         saves = saveManager.list()
         sessionReady = false
+        GpuMapSession.discardParked()
         statusLine = ""
     }
 
@@ -254,7 +254,6 @@ final class AppStore: ObservableObject {
 
     func dismissChapterResult() {
         resultSeen = hall?.chapters.map(\.number).max() ?? resultSeen
-        objectWillChange.send()
     }
 
     /// Take the board's goal in position `pick` (0 to 2) for `firm`.
@@ -280,6 +279,7 @@ final class AppStore: ObservableObject {
         await perform {
             do {
                 let overview = try await self.engine.start(seed: seed, guided: guided, fiveYear: fiveYear)
+                await self.prepareMap()
                 self.apply(overview)
                 await self.reload()
                 await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
@@ -296,6 +296,7 @@ final class AppStore: ObservableObject {
             do {
                 let overview = try await self.engine.start(options: options)
                 self.tutorial.beginCareer()
+                await self.prepareMap()
                 self.apply(overview)
                 await self.reload()
                 await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
@@ -312,6 +313,7 @@ final class AppStore: ObservableObject {
             do {
                 let overview = try await self.engine.startCustom(scenario, guided: guided, seed: seed, fiveYear: fiveYear)
                 self.tutorial.beginCareer()
+                await self.prepareMap()
                 self.apply(overview)
                 await self.reload()
                 await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
@@ -327,6 +329,7 @@ final class AppStore: ObservableObject {
         do {
             let data = try saveManager.load(save)
             let overview = try await engine.loadSave(data)
+            await prepareMap()
             apply(overview)
             recoveryIssue = nil
             await reload()
@@ -351,6 +354,7 @@ final class AppStore: ObservableObject {
         do {
             let candidate = try saveManager.recover(slot: slot)
             let overview = try await engine.loadSave(candidate.data)
+            await prepareMap()
             apply(overview)
             recoveryIssue = nil
             errorMessage = nil
@@ -1121,6 +1125,14 @@ final class AppStore: ObservableObject {
             if receipt?.accepted == true, let done { self.statusLine = done }
             await self.reload()
         }
+    }
+
+    /// Builds the career's map off the main thread before the career screens open, so the first map
+    /// view does not build it while the player waits with a frozen screen.
+    private func prepareMap() async {
+        let id = await WorldMap.prepare(scenario: await engine.scenarioId())
+        // The GPU map (when it is switched on) builds its scene now too, so the map tab opens at once.
+        GpuMapSession.prewarm(scenario: id)
     }
 
     private func apply(_ overview: OverviewDto) {

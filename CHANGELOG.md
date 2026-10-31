@@ -433,6 +433,16 @@ heading.
   redrawn, a new week no longer rebuilds the interstates, and the room's pixel art loads faster.
 - Desktop: the launcher loads the engine, the world map and the icons at the same time, so the game
   reaches the main menu sooner, and the phone's regional market list is only read while it is open.
+- iPhone and iPad start faster and stall less. The world map is read in the background while the
+  app opens, so the main menu no longer waits for it (the globe fades in as soon as it is ready).
+  Opening a career builds its map in the background too, and the CEO Office's room art and portraits
+  are prepared behind the menu, so the first visit to the office does not freeze. With the new GPU
+  map switched on, its scene is built as soon as the career opens, and the map tab keeps it between
+  visits, so opening the map is immediate instead of a few seconds of waiting each time.
+- On iPhone and iPad, screens now redraw only when something they actually show has changed. Before,
+  any change anywhere in the game (a price tick, a new letter, the clock) made every open screen
+  rebuild itself, which cost frames while time ran fast. This should make scrolling and fast-forward
+  feel smoother.
 - Android: the game starts and opens its first map faster. The app now ships a startup profile, so the
   phone prepares the game's code when it installs the app instead of working it out on first launch,
   and the world map and picture files are read in the background while the main menu comes up, so the

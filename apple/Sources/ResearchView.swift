@@ -3,7 +3,7 @@ import SwiftUI
 /// Technology: the level ladder, progress to the next level, what the next level buys and the
 /// weekly research and marketing budgets.
 struct ResearchView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var researchBudget: Double = 0
     @State private var marketingBudget: Double = 0
     @State private var rejection: CommandRejection?

@@ -153,6 +153,39 @@ final class GpuMapSession: @unchecked Sendable {
     var buildings: [GpuBuilding] { locked { _buildings } }
     /// Frames presented since the map opened.
     var framesPresented: Int { locked { _frames } }
+    /// A session built ahead of the map tab, or kept from the last visit, so the tab opens at once
+    /// instead of waiting for the scene and shaders. At most one, for the open career's scenario.
+    @MainActor private static var parked: GpuMapSession?
+
+    /// Starts building the scene for a career in the background while the GPU map is switched on.
+    @MainActor static func prewarm(scenario: String?) {
+        guard UserDefaults.standard.bool(forKey: GraphicsKeys.newMap), let scenario, !scenario.isEmpty else { return }
+        if let kept = parked, kept.scenario == scenario, kept.failure == nil { return }
+        parked?.close()
+        parked = GpuMapSession(scenario: scenario)
+    }
+
+    /// The parked session for this scenario, handed to the map view that is opening.
+    @MainActor static func adopt(scenario: String) -> GpuMapSession? {
+        guard let kept = parked else { return nil }
+        parked = nil
+        guard kept.scenario == scenario, kept.failure == nil else { kept.close(); return nil }
+        // Draw once more for the view that now shows it.
+        kept.locked { kept.wantedGeneration += 1; kept.cond.broadcast() }
+        return kept
+    }
+
+    /// Keeps a session for the next visit to the map instead of freeing it.
+    @MainActor static func park(_ session: GpuMapSession) {
+        session.onChange = nil
+        if session.failure == nil, parked == nil { parked = session } else { session.close() }
+    }
+
+    @MainActor static func discardParked() {
+        parked?.close()
+        parked = nil
+    }
+
     /// The most recently opened session, for tests.
     static weak var lastOpened: GpuMapSession?
     var framesPerSecond: Double {

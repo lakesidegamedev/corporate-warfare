@@ -11,7 +11,7 @@ enum MarketSection: String, CaseIterable, Identifiable {
 
 /// Markets: the corridor's stock exchange, its commodity board, and each region's own board.
 struct MarketsView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var section: MarketSection
 
@@ -106,7 +106,7 @@ private enum StockSort: String, CaseIterable, Identifiable {
 
 /// Every operating company's shares: a corridor index, then one line per stock.
 struct StocksSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var sort: StockSort = .movers
     @State private var selected: StockDto?
 
@@ -183,7 +183,7 @@ struct StocksSection: View {
         }
         .sheet(item: $selected) { stock in
             StockSheet(stock: stock)
-                .environmentObject(store)
+                .environment(store)
                 .presentationDetents([.large])
                 .presentationBackground(Theme.panel)
         }
@@ -233,7 +233,7 @@ private struct StockRow: View {
 
 /// One stock: its chart, its valuation and your position, and an order ticket.
 struct StockSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let stock: StockDto
     var showPage = true
@@ -383,7 +383,7 @@ struct StockSheet: View {
 
 /// Every traded good across the corridor: its price, how it moved, and supply against demand.
 struct CommoditiesSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var selected: CommodityDto?
 
     private var groups: [(sector: String, rows: [CommodityDto])] {
@@ -419,7 +419,7 @@ struct CommoditiesSection: View {
         }
         .sheet(item: $selected) { line in
             CommoditySheet(line: line)
-                .environmentObject(store)
+                .environment(store)
                 .presentationDetents([.medium, .large])
                 .presentationBackground(Theme.panel)
         }
@@ -466,7 +466,7 @@ private struct CommodityRow: View {
 }
 
 private struct CommoditySheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let line: CommodityDto
     @State private var pricing: ProductLineDto?
@@ -513,7 +513,7 @@ private struct CommoditySheet: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
             .sheet(item: $pricing) { mine in
                 PostureSheet(line: mine)
-                    .environmentObject(store)
+                    .environment(store)
                     .presentationDetents([.medium, .large])
                     .presentationBackground(Theme.panel)
             }

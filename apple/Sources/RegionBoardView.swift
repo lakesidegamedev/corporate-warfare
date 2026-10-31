@@ -4,7 +4,7 @@ import SwiftUI
 /// imports, its conditions and the plants there. Build opens the build flow in this region;
 /// a rival division you share a cell with can be raided from here.
 struct RegionBoardView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let board: RegionBoardDto
     let onBuild: () -> Void
     let onClose: () -> Void
@@ -206,10 +206,10 @@ struct RegionBoardView: View {
         }
         .background(Theme.panel)
         .sheet(item: $raiding) { option in
-            RaidSheet(option: option, regionName: board.name).environmentObject(store)
+            RaidSheet(option: option, regionName: board.name).environment(store)
         }
         .sheet(item: $detail) { division in
-            DivisionDetailSheet(division: division).environmentObject(store)
+            DivisionDetailSheet(division: division).environment(store)
         }
     }
 
@@ -320,7 +320,7 @@ struct SectorCellRow: View {
 
 /// Choose a campaign size against a rival division and launch the raid.
 struct RaidSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let option: RaidOptionDto
     let regionName: String

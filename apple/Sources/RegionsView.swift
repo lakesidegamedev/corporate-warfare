@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct RegionsView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var compare: Set<String> = []
     @State private var showingBuild = false
@@ -55,7 +55,7 @@ struct RegionsView: View {
             }
             .background(Theme.background(for: scheme))
             .navigationTitle("Regions")
-            .sheet(isPresented: $showingBuild) { BuildSheet().environmentObject(store) }
+            .sheet(isPresented: $showingBuild) { BuildSheet().environment(store) }
         }
     }
 }
