@@ -35,7 +35,7 @@ import kotlin.math.sqrt
  * While the camera moves, a set is baked at a reduced size so a fresh one lands quickly; once the camera has rested for
  * a moment a full size set replaces it. The first frame, and a resized view, draw every layer directly.
  */
-internal class MapLayerSet(private val scope: CoroutineScope) {
+internal class MapLayerSet(private val scope: CoroutineScope, private val carryKey: Any? = null) {
     enum class Layer { Ground, Traffic, Clouds, Structures, Effects }
 
     /** One baked layer: everything but the camera that it depends on ([key], compared by equality) and how to paint it. */
@@ -64,8 +64,11 @@ internal class MapLayerSet(private val scope: CoroutineScope) {
     /** Projection cache for the bake thread only. */
     val geometry = MapGeometryCache()
 
-    @Volatile var baked: Baked? = null
+    @Volatile var baked: Baked? = carryKey?.let { k -> Carried.take(k) }
         private set
+
+    /** The set on show came from the last visit to this map: it stands in for the first frame, which would otherwise be drawn directly. */
+    private var carriedOver = baked != null
     @Volatile var lastReport: Report? = null
         private set
     private var version by mutableIntStateOf(0)
@@ -178,7 +181,7 @@ internal class MapLayerSet(private val scope: CoroutineScope) {
                 var scale = 1f
                 if (!sameView) {
                     // A moving camera gets a small, quick set; the first set for a view is full size, nothing is on screen yet.
-                    if (cur != null && cur.size == w.size) scale = movingScaleOverride ?: movingScaleFor(w.size.width.toDouble() * w.size.height)
+                    if (cur != null && cur.size == w.size && !carriedOver) scale = movingScaleOverride ?: movingScaleFor(w.size.width.toDouble() * w.size.height)
                     for (i in 0 until PARTS) todo[i] = w.parts[i] != null
                 } else {
                     cur!!
@@ -208,7 +211,7 @@ internal class MapLayerSet(private val scope: CoroutineScope) {
                 if (!take) continue
                 val started = System.nanoTime()
                 val result = runCatching { bakeOnce(w, todo, scale, cur.takeIf { sameView && scale >= 1f && it!!.scale >= 1f }) }
-                result.onSuccess { baked = it; failures = 0; version++; onBake?.invoke(scale, (System.nanoTime() - started) / 1e6) }
+                result.onSuccess { baked = it; carriedOver = false; carryKey?.let { k -> Carried.put(k, it) }; failures = 0; version++; onBake?.invoke(scale, (System.nanoTime() - started) / 1e6) }
                 result.onFailure { failures++ }
                 // A failed bake is not retried until a draw asks again.
                 if (result.isFailure) synchronized(lock) { if (wanted == null) { job = null; return } }
@@ -258,6 +261,15 @@ internal class MapLayerSet(private val scope: CoroutineScope) {
             lastBaked[i] = System.nanoTime()
         }
         return Baked(images, keys, w.cam, w.pitch, w.size, scale)
+    }
+
+    /** The newest full size set of the map last on screen, so coming back to the map starts from a picture, not a blank bake. */
+    private object Carried {
+        private var key: Any? = null
+        private var set: Baked? = null
+
+        @Synchronized fun put(k: Any, b: Baked) { if (b.scale >= 1f) { key = k; set = b } }
+        @Synchronized fun take(k: Any): Baked? = set.takeIf { key == k }
     }
 
     companion object {

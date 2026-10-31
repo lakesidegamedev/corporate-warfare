@@ -422,10 +422,23 @@ heading.
 
 ### Changed
 
+- Desktop: a paused game no longer redraws the map sixty times a second. The map's clock now rests
+  with the game, so a paused map costs nothing and a fan stays quiet; it starts again the moment you
+  press play.
+- Desktop: the CEO Office is much lighter. The window onto the map is painted once when the week turns
+  instead of on every frame, so the room at rest went from about 200 ms of drawing per frame to about
+  27 ms on the test machine's software drawing, and a new week lands in the Office in about a quarter
+  of the time.
+- Desktop: coming back to the map shows the last picture at once instead of stalling while it is
+  redrawn, a new week no longer rebuilds the interstates, and the room's pixel art loads faster.
+- Desktop: the launcher loads the engine, the world map and the icons at the same time, so the game
+  reaches the main menu sooner, and the phone's regional market list is only read while it is open.
 - Android: the game starts and opens its first map faster. The app now ships a startup profile, so the
   phone prepares the game's code when it installs the app instead of working it out on first launch,
   and the world map and picture files are read in the background while the main menu comes up, so the
   map no longer stops to load them when a career opens.
+- Tooling: the Android and desktop builds now share a dependency cache and retry a download that Maven Central or Google rate-limited, so a 403 from a repository no longer fails a build that would pass a minute later. The Apple build keeps its Rust dependencies between runs, which removes most of its longest step, and no longer builds the extra size-report engine on pull requests.
+- Tooling: the first-map-draw timing test on iPhone warms up SwiftUI's own one-time startup on a blank canvas before measuring, so a cold test runner no longer fails a budget meant for the map's layers.
 - Weeks play faster and saves are quicker. On a large map a week now takes roughly a fifth to a
   quarter less time, the rivals think through their moves with far fewer repeated lookups, and
   saving and loading a five-year career takes about half as long. Results are unchanged: the same
@@ -473,6 +486,10 @@ heading.
 
 ### Fixed
 
+- No button is out of reach any more. Every pop-up window in the game (the game menu, pricing, the board's offer, a news story, giving to a candidate, bidding on a contract, dismissing an executive and the rest) now scrolls its body on a short window or a phone, with its buttons always in view. A test draws the pop-ups at a short desktop size and at phone size, and another fails the build if a new pop-up is added without a scrolling body.
+- Every action now answers. When a command is accepted, a short message appears at the bottom of the screen saying what happened (for example that a wage offer is set and staff respond when the week closes, or that a gift will be disclosed in the paper next week). Before, a success was shown only in Settings. The research and marketing budget sliders also now say when they are refused instead of failing silently.
+- Refusals now explain themselves in plain words. A rejected action used to be able to show the engine's internal text; it now always says what is wrong and what to do about it, the same wording as the iPhone and Mac app.
+- The Stats screen now closes with Escape or the Android back button, like every other screen.
 - Zoomed far out, the new map no longer shows broken land at the world's edge. Beyond the scenario
   the world now follows the real coastlines, with smooth shores, flat land in the same colours as the
   terrain, and detail that fades with distance, instead of coarse slabs, long streaks and stair-step
@@ -480,7 +497,6 @@ heading.
 - On the classic map, plants no longer stand in lakes or the sea. A plant whose usual spot beside its
   region's hub is over water is moved along the way to the hub, and round it, to the nearest dry spot
   inside the region, the same one every time.
-
 - On the new map, plants are now a believable size. A plant stands a few hundred metres to about two
   kilometres across and is never taller than it is wide, so a city's plants no longer dwarf the
   counties around them. They never stand on lakes or the sea: a plant whose spot is water slides along

@@ -43,6 +43,14 @@ final class FirstMapDrawTests: XCTestCase {
         let look = MapLook(detail: 2, tilt: GraphicsSettings.pitch(forTilt: 1), extrude: true, lighting: 2, dayNight: false,
                            cityLights: true, clouds: 0, traffic: 1, buildings: 2, frameRate: 60, animations: false,
                            showFps: false, ultra: false, earth: true)
+        // SwiftUI's own one-time cost (the first ImageRenderer and Metal drawing group of the process) is not the app's:
+        // pay it on a blank canvas, so the budget below judges the map's layers and not the test runner's cold start.
+        let blank = Canvas { context, canvas in context.fill(Path(CGRect(origin: .zero, size: canvas)), with: .color(.black)) }
+            .drawingGroup()
+            .frame(width: 64, height: 64)
+        let primer = ImageRenderer(content: blank)
+        primer.scale = UIScreen.main.scale
+        _ = primer.cgImage
         MainStalls.reset()
         MainStalls.enabled = true
         defer { MainStalls.enabled = false }

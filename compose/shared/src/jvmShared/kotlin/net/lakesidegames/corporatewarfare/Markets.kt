@@ -61,6 +61,12 @@ fun MarketsScreen(store: GameStore) {
     var stock by remember { mutableStateOf<StockDto?>(null) }
     var commodity by remember { mutableStateOf<CommodityDto?>(null) }
     var pickingRegion by remember { mutableStateOf(false) }
+    // The regions' rows are read from the engine only while that list is showing.
+    androidx.compose.runtime.DisposableEffect(store, section == Section.Regions) {
+        store.marketsOpen = section == Section.Regions
+        if (store.marketsOpen) store.refreshMarkets()
+        onDispose { store.marketsOpen = false }
+    }
     TabList {
         item { ScreenHeader("Markets", store.overview?.weekLabel) }
         item { EconomyCard(store, collapsible = true) }
