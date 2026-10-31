@@ -422,6 +422,17 @@ heading.
 
 ### Changed
 
+- Desktop: a paused game no longer redraws the map sixty times a second. The map's clock now rests
+  with the game, so a paused map costs nothing and a fan stays quiet; it starts again the moment you
+  press play.
+- Desktop: the CEO Office is much lighter. The window onto the map is painted once when the week turns
+  instead of on every frame, so the room at rest went from about 200 ms of drawing per frame to about
+  27 ms on the test machine's software drawing, and a new week lands in the Office in about a quarter
+  of the time.
+- Desktop: coming back to the map shows the last picture at once instead of stalling while it is
+  redrawn, a new week no longer rebuilds the interstates, and the room's pixel art loads faster.
+- Desktop: the launcher loads the engine, the world map and the icons at the same time, so the game
+  reaches the main menu sooner, and the phone's regional market list is only read while it is open.
 - Android: the game starts and opens its first map faster. The app now ships a startup profile, so the
   phone prepares the game's code when it installs the app instead of working it out on first launch,
   and the world map and picture files are read in the background while the main menu comes up, so the

@@ -157,6 +157,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var score by mutableStateOf<uniffi.cw_ffi.ScoreDto?>(null); private set
     /** The Hall of Careers page is open, so the chapter data is kept current even at speed. */
     var hallOpen: Boolean = false
+    /** The phone's Regions market list is on screen, so its rows are kept current (the desktop never shows them). */
+    var marketsOpen: Boolean = false
     private var hallStale = false
     /** The last chapter whose result the player has already been shown. */
     private var resultSeen = 0
@@ -379,8 +381,11 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     fun selectRegion(code: String) = perform {
         marketRegion = code
-        loadMarkets()
+        loadMarkets(force = true)
     }
+
+    /** Read the phone's Regions list now, for when it opens. */
+    fun refreshMarkets() { scope.launch { loadMarkets(force = true) } }
 
     /** Opening a letter marks it read; the engine keeps the flag, the list updates in place. */
     fun markRead(ids: List<String>) {
@@ -877,7 +882,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         submit(CommandJson.command("GiveGuidance", "firm" to firm, "low_cents" to lowCents, "high_cents" to highCents), "Guidance given.")
     }
 
-    private suspend fun loadMarkets() {
+    private suspend fun loadMarkets(force: Boolean = false) {
+        if (!force && !marketsOpen) return
         val handle = session ?: return
         val code = marketRegion
             ?: selectedFirmDto?.let { firm -> boards.firstOrNull { it.name == firm.region }?.code }

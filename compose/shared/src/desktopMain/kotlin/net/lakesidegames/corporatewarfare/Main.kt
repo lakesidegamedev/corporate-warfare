@@ -34,6 +34,8 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import java.awt.Desktop
 import java.io.File
@@ -146,19 +148,19 @@ private fun game() = application {
             Splash(progress, stage)
             LaunchedEffect(Unit) {
                 StartupTimeline.mark("launcher window shown")
+                // The three loads do not depend on each other, so they run side by side; the bar counts them as they finish.
                 withContext(Dispatchers.Default) {
-                    stage = "Starting the engine"
-                    runCatching { uniffi.cw_ffi.engineInfo() }
-                    StartupTimeline.mark("engine loaded")
-                    progress = 0.35f
-                    stage = "Loading the world map"
-                    WorldMap.shared
-                    StartupTimeline.mark("world map loaded")
-                    progress = 0.85f
-                    stage = "Drawing the icons"
-                    SectorIcons.all
-                    PixelLogo.file
-                    StartupTimeline.mark("icons loaded")
+                    val done = java.util.concurrent.atomic.AtomicInteger()
+                    fun finished(step: String) {
+                        StartupTimeline.mark(step)
+                        progress = done.incrementAndGet() / 3f
+                    }
+                    stage = "Starting the engine and loading the world"
+                    listOf(
+                        async { runCatching { uniffi.cw_ffi.engineInfo() }; finished("engine loaded") },
+                        async { WorldMap.shared; finished("world map loaded") },
+                        async { SectorIcons.all; PixelLogo.file; finished("icons loaded") },
+                    ).awaitAll()
                     progress = 1f
                 }
                 loaded = true
