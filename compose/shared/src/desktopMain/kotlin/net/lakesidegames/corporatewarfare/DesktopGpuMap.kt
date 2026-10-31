@@ -45,14 +45,16 @@ private fun gpuAssetFolder(scenario: String): File {
     val names = listOf(
         "world-map.json", "voxel-models.json", "earth-$scenario.jpg", "clouds-$scenario.webp",
         "heightmap-$scenario.cwh", "urban-$scenario.json",
+        // The whole world's picture and land outline, for the horizon beyond the terrain.
+        "earth.jpg", "earth-land.png", "earth-land-$scenario.png",
     )
     val loader = Thread.currentThread().contextClassLoader ?: GpuMapHost::class.java.classLoader
     for (name in names) {
         val target = File(dir, name)
         val bytes = loader.getResourceAsStream(name)?.use { it.readBytes() }
         if (bytes == null) {
-            // The city outlines are optional; any other file missing means this build cannot draw the map.
-            if (name.startsWith("urban-")) continue
+            // The city outlines and the scenario's finer land outline are optional; any other file missing means this build cannot draw the map.
+            if (name.startsWith("urban-") || name.startsWith("earth-land-")) continue
             throw IllegalStateException("the map file $name is missing")
         }
         if (!target.exists() || target.length() != bytes.size.toLong()) target.writeBytes(bytes)

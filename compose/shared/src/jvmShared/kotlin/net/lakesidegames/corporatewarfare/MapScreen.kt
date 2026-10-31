@@ -1180,7 +1180,7 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
             val u = unit(WorldScale.PLAYER_VOXEL_M)
             buildingsValue = divisionSlots(divisions).mapNotNull { (region, sector, plants) ->
                 val anchor = map.anchor(region) ?: return@mapNotNull null
-                val (east, north) = WorldScale.playerLot(sector)
+                val (east, north) = LotLand.dry(map, region, WorldScale.playerLot(sector), LotLand.PLAYER_RADIUS_M)
                 val ground = lot(anchor.lon[0], anchor.lat[0], east, north)
                 if (!ground.isSpecified) return@mapNotNull null
                 val floor = regionLift(region, heights)
@@ -1260,7 +1260,7 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
                     val slots = WorldScale.rivalSlots(top.map { "${it.first.first}/${it.first.second}/${it.first.third}" })
                     top.mapNotNull { (key, blocks) ->
                         val id = "${key.first}/${key.second}/${key.third}"
-                        val (east, north) = WorldScale.rivalLot(slots.getValue(id))
+                        val (east, north) = LotLand.dry(map, region, WorldScale.rivalLot(slots.getValue(id)), LotLand.RIVAL_RADIUS_M)
                         val ground = lot(anchor.lon[0], anchor.lat[0], east, north)
                         if (!ground.isSpecified) return@mapNotNull null
                         val floor = regionLift(region, heights)
