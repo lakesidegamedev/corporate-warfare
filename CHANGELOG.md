@@ -422,6 +422,7 @@ heading.
 
 ### Changed
 
+- Pull requests now build on Linux runners only. Windows and Mac packaging moved to a nightly run on main (only when main changed) and to manual runs; the Mac app build runs on pull requests that change the app or carry the "ci:apple" label. This keeps the shared build pool free for the live game.
 - Desktop: a paused game no longer redraws the map sixty times a second. The map's clock now rests
   with the game, so a paused map costs nothing and a fan stays quiet; it starts again the moment you
   press play.
