@@ -794,21 +794,19 @@ pub fn corridor_price(world: &World, dataset: &Dataset, product: u16) -> i64 {
             FirmStatus::Operating | FirmStatus::PastDue { .. } | FirmStatus::Restructuring { .. }
         )
     }) {
+        // Most firms never priced this good, so the cheap lookup goes before the plant scan.
+        let Some(ask) = entity.policies.prices.get(&product).copied() else {
+            continue;
+        };
         let makes = entity.facilities.iter().any(|plant| {
             world
                 .facilities
                 .get(*plant)
                 .is_some_and(|plant| dataset.recipes[plant.recipe as usize].makes(id))
         });
-        let Some(ask) = entity
-            .policies
-            .prices
-            .get(&product)
-            .copied()
-            .filter(|_| makes)
-        else {
+        if !makes {
             continue;
-        };
+        }
         let lots = weekly_sold(world, handle, product) as i128 + 1;
         total += ask as i128 * lots;
         weight += lots;

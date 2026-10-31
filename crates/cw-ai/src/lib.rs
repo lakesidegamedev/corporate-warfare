@@ -732,7 +732,11 @@ fn speculate(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         // The state reserve competes for the same goods: it sells into a spike, so a rival
         // releases its own store first, and it buys in a bust, which puts a floor under the
         // price that makes buying beside it safe.
-        let reserve_phase = cw_sim::economy::reserve::phase(world, dataset, product);
+        let reserve_phase = Memo::read(
+            |m| &mut m.reserve_phase,
+            product,
+            || cw_sim::economy::reserve::phase(world, dataset, product),
+        );
         if held.0 > 0
             && (level >= 10_500
                 || (trend <= -500 && level > 10_000)
@@ -989,7 +993,12 @@ fn best_carrier_build(
     let entity = world.firms.get(firm)?;
     let logistics = cw_sim::economy::operations::industry_index("logistics")?;
     let mut best: Option<(i64, u16, u8)> = None;
-    for hot in lg::hot_lanes(world, dataset).into_iter().take(8) {
+    let hot_lanes = Memo::read(
+        |m| &mut m.hot_lanes,
+        (),
+        || lg::hot_lanes(world, dataset).into_iter().take(8).collect(),
+    );
+    for hot in hot_lanes {
         let def = &dataset.logistics.modes[hot.key.mode as usize];
         for region in [hot.key.a, hot.key.b] {
             // A division runs one strategy; a firm with another logistics strategy here skips it.
@@ -1202,10 +1211,14 @@ fn pipeline_build(
         }
         for region in [hot.key.a, hot.key.b] {
             let own = liquid_output_lots(world, dataset, region, Some(firm));
-            let all = liquid_output_lots(world, dataset, region, None);
             if own <= 0 {
                 continue;
             }
+            let all = Memo::read(
+                |m| &mut m.liquid_all,
+                region,
+                || liquid_output_lots(world, dataset, region, None),
+            );
             // The firm must ship on the lane today: a pipeline replaces freight it pays for.
             let mine = group_shipped(world, firm, hot.key);
             if lg::shipped_last_week(world, firm, hot.key) <= 0
@@ -1984,7 +1997,18 @@ struct Memo {
     public_price: BTreeMap<(u16, u8), i64>,
     import_netback: BTreeMap<(u16, u8), Option<i64>>,
     /// Holders of each (region, industry) cell with their shares.
-    cells: BTreeMap<(u8, u8), Vec<(Handle, i64)>>,
+    cells: BTreeMap<(u8, u8), cw_sim::economy::sectors::Cell>,
+    /// Imports against home output per good (`pricing::import_dependence_bps`).
+    import_dependence: BTreeMap<u16, Option<i64>>,
+    /// A block's contribution by home region, strategy and plant region; it reads the firm only
+    /// through its home region.
+    block_contribution: BTreeMap<(u8, u16, u8), i64>,
+    /// Lanes short of capacity, one list for the pass (the key is unit).
+    hot_lanes: BTreeMap<(), Vec<cw_sim::economy::logistics::HotLane>>,
+    /// All liquid output of a region, whoever makes it.
+    liquid_all: BTreeMap<u8, i64>,
+    /// The state reserve's stance on each good, which reads the whole corridor's price.
+    reserve_phase: BTreeMap<u16, cw_sim::economy::reserve::Phase>,
 }
 
 thread_local! {
@@ -2030,10 +2054,19 @@ impl Drop for MemoPass {
 
 /// The holders of a cell and their shares (`cw_sim::economy::sectors::cell`).
 fn cell_holders(world: &World, dataset: &Dataset, region: u8, sector: u8) -> Vec<(Handle, i64)> {
+    cell_read(world, dataset, region, sector).0
+}
+
+fn cell_read(
+    world: &World,
+    dataset: &Dataset,
+    region: u8,
+    sector: u8,
+) -> cw_sim::economy::sectors::Cell {
     Memo::read(
         |m| &mut m.cells,
         (region, sector),
-        || cw_sim::economy::sectors::cell(world, dataset, region, sector).0,
+        || cw_sim::economy::sectors::cell(world, dataset, region, sector),
     )
 }
 
@@ -2176,6 +2209,31 @@ fn block_contribution(
     let Some(entity) = world.firms.get(firm) else {
         return 0;
     };
+    Memo::read(
+        |m| &mut m.block_contribution,
+        (entity.region, recipe, region),
+        || block_contribution_now(world, dataset, firm, recipe, region),
+    )
+}
+
+fn import_dependence(world: &World, dataset: &Dataset, product: u16) -> Option<i64> {
+    Memo::read(
+        |m| &mut m.import_dependence,
+        product,
+        || cw_sim::economy::pricing::import_dependence_bps(world, dataset, product),
+    )
+}
+
+fn block_contribution_now(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    recipe: u16,
+    region: u8,
+) -> i64 {
+    let Some(entity) = world.firms.get(firm) else {
+        return 0;
+    };
     let template = &dataset.recipes[recipe as usize];
     if !dataset.product_index.contains_key(&template.output) {
         return 0;
@@ -2278,9 +2336,16 @@ fn best_expansion(
             // Three years of contribution, less the real build cost (entry fee, founding
             // discount, dominance) and three years of financing at the policy rate
             // (docs/rules/FINANCE-LABOUR-AI.md, build candidate).
-            let cost =
-                cw_sim::economy::sectors::build_cost(world, dataset, firm, region, index as u16, 1)
-                    .total_cents();
+            let cost = cw_sim::economy::sectors::build_cost_in(
+                world,
+                dataset,
+                firm,
+                region,
+                index as u16,
+                1,
+                &cell_read(world, dataset, region, sector),
+            )
+            .total_cents();
             let financing = cost * world.macro_state.policy_rate_bps as i64 * 3 / 10_000;
             // A good is sold where it is imported: value the output at what it nets there after
             // freight instead of at this state's own quote, so plants go near the demand.
@@ -2315,7 +2380,7 @@ fn best_expansion(
             // win back: home sellers already ask near the import, so a plant that replaces imports
             // is worth a quarter more than the same plant in a market the corridor supplies.
             if npv > 0
-                && cw_sim::economy::pricing::import_dependence_bps(world, dataset, output)
+                && import_dependence(world, dataset, output)
                     .is_some_and(|bps| bps >= cw_sim::economy::pricing::IMPORT_DEPENDENT_BPS)
             {
                 npv += npv / 4;
@@ -2648,9 +2713,21 @@ fn storage_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut
             {
                 continue;
             }
-            let cost =
-                cw_sim::economy::sectors::build_cost(world, dataset, firm, region, index as u16, 1)
-                    .total_cents();
+            let cost = cw_sim::economy::sectors::build_cost_in(
+                world,
+                dataset,
+                firm,
+                region,
+                index as u16,
+                1,
+                &cell_read(
+                    world,
+                    dataset,
+                    region,
+                    cw_sim::economy::sectors::recipe_industry(dataset, index as u16),
+                ),
+            )
+            .total_cents();
             if cash < reserve * 2 + cost {
                 continue;
             }

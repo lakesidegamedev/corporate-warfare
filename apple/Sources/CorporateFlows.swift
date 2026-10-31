@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Deals
 
 struct DealsView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var showingStart = false
     @State private var remedyDeal: DealDto?
@@ -55,12 +55,12 @@ struct DealsView: View {
         }
         .background(Theme.background(for: scheme))
         .navigationTitle("Deals")
-        .sheet(isPresented: $showingStart) { StartDiligenceSheet().environmentObject(store) }
+        .sheet(isPresented: $showingStart) { StartDiligenceSheet().environment(store) }
         .sheet(item: $remedyDeal) { deal in
-            RemedySheet(deal: deal).environmentObject(store)
+            RemedySheet(deal: deal).environment(store)
         }
         .sheet(item: $confirm) { request in
-            ConfirmCommandSheet(request: request).environmentObject(store)
+            ConfirmCommandSheet(request: request).environment(store)
         }
     }
 
@@ -127,7 +127,7 @@ struct DealsView: View {
 // MARK: - Banking
 
 struct BankingView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var showingDeposit = false
     @State private var showingWithdraw = false
@@ -197,20 +197,20 @@ struct BankingView: View {
         .background(Theme.background(for: scheme))
         .navigationTitle("Banking")
         .sheet(isPresented: $showingDeposit) {
-            DepositSheet(mode: .deposit, bank: controlledBank ?? banks.first).environmentObject(store)
+            DepositSheet(mode: .deposit, bank: controlledBank ?? banks.first).environment(store)
         }
         .sheet(isPresented: $showingWithdraw) {
-            DepositSheet(mode: .withdraw, bank: controlledBank ?? banks.first).environmentObject(store)
+            DepositSheet(mode: .withdraw, bank: controlledBank ?? banks.first).environment(store)
         }
-        .sheet(isPresented: $showingApprove) { ApproveLoanSheet().environmentObject(store) }
-        .sheet(isPresented: $showingRate) { DepositRateSheet().environmentObject(store) }
+        .sheet(isPresented: $showingApprove) { ApproveLoanSheet().environment(store) }
+        .sheet(isPresented: $showingRate) { DepositRateSheet().environment(store) }
     }
 }
 
 // MARK: - Insurance
 
 struct InsuranceView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var showingQuote = false
     @State private var confirm: ConfirmRequest?
@@ -303,9 +303,9 @@ struct InsuranceView: View {
         }
         .background(Theme.background(for: scheme))
         .navigationTitle("Insurance")
-        .sheet(isPresented: $showingQuote) { QuoteBindSheet().environmentObject(store) }
+        .sheet(isPresented: $showingQuote) { QuoteBindSheet().environment(store) }
         .sheet(item: $confirm) { request in
-            ConfirmCommandSheet(request: request).environmentObject(store)
+            ConfirmCommandSheet(request: request).environment(store)
         }
     }
 }
@@ -313,7 +313,7 @@ struct InsuranceView: View {
 // MARK: - Labour
 
 struct LabourView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var showingCounter = false
     @State private var showingSettlement = false
@@ -388,10 +388,10 @@ struct LabourView: View {
         }
         .background(Theme.background(for: scheme))
         .navigationTitle("Labour")
-        .sheet(isPresented: $showingCounter) { BargainCounterSheet().environmentObject(store) }
-        .sheet(isPresented: $showingSettlement) { SettlementSheet().environmentObject(store) }
+        .sheet(isPresented: $showingCounter) { BargainCounterSheet().environment(store) }
+        .sheet(isPresented: $showingSettlement) { SettlementSheet().environment(store) }
         .sheet(item: $confirm) { request in
-            ConfirmCommandSheet(request: request).environmentObject(store)
+            ConfirmCommandSheet(request: request).environment(store)
         }
     }
 }
@@ -399,7 +399,7 @@ struct LabourView: View {
 // MARK: - Policy
 
 struct PolicyView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var showingRequest = false
 
@@ -464,14 +464,14 @@ struct PolicyView: View {
         }
         .background(Theme.background(for: scheme))
         .navigationTitle("Policy")
-        .sheet(isPresented: $showingRequest) { LobbySheet().environmentObject(store) }
+        .sheet(isPresented: $showingRequest) { LobbySheet().environment(store) }
     }
 }
 
 // MARK: - Recovery
 
 struct RecoveryView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var showingFound = false
     @State private var confirm: ConfirmRequest?
@@ -528,9 +528,9 @@ struct RecoveryView: View {
         }
         .background(Theme.background(for: scheme))
         .navigationTitle("Recovery")
-        .sheet(isPresented: $showingFound) { FoundFirmSheet().environmentObject(store) }
+        .sheet(isPresented: $showingFound) { FoundFirmSheet().environment(store) }
         .sheet(item: $confirm) { request in
-            ConfirmCommandSheet(request: request).environmentObject(store)
+            ConfirmCommandSheet(request: request).environment(store)
         }
     }
 

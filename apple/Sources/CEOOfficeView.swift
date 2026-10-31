@@ -4,7 +4,7 @@ import SwiftUI
 /// matter this week, sector focus and logistics, and every division (a sector type in a region) with
 /// its strategy, size and utilisation. Deeper corporate controls stay one tap away.
 struct CEOOfficeView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var retooling: FacilityDto?
     @State private var editingFocus = false
     @State private var rejection: CommandRejection?
@@ -20,7 +20,7 @@ struct CEOOfficeView: View {
                 figures(firm)
                 RivalsCard()
                 NavigationLink {
-                    StatsView().environmentObject(store)
+                    StatsView().environment(store)
                 } label: {
                     HStack {
                         PixelLabel("Stats: results, balance sheet, shares, owners", icon: "stats")
@@ -33,7 +33,7 @@ struct CEOOfficeView: View {
                 }
                 .tint(Theme.gold)
                 NavigationLink {
-                    ResearchView().environmentObject(store)
+                    ResearchView().environment(store)
                 } label: {
                     HStack {
                         PixelLabel("Research: technology and budgets", icon: "research")
@@ -46,7 +46,7 @@ struct CEOOfficeView: View {
                 }
                 .tint(Theme.gold)
                 NavigationLink {
-                    CommandCenterView().environmentObject(store)
+                    CommandCenterView().environment(store)
                 } label: {
                     HStack {
                         PixelLabel("Actions: search every action in the game", icon: "command")
@@ -79,7 +79,7 @@ struct CEOOfficeView: View {
                     Text(rejection.message).font(.callout).foregroundStyle(Theme.negative)
                 }
                 NavigationLink {
-                    CompanyView().environmentObject(store)
+                    CompanyView().environment(store)
                 } label: {
                     HStack {
                         PixelLabel("Finance, shares, board and deals", icon: "bank")
@@ -104,13 +104,13 @@ struct CEOOfficeView: View {
         }
         .sheet(item: $retooling) { plant in
             RetoolSheet(plant: plant) { result in rejection = result }
-                .environmentObject(store)
+                .environment(store)
                 .presentationDetents([.medium, .large])
                 .presentationBackground(Theme.panel)
         }
         .sheet(isPresented: $editingFocus) {
             FocusSheet { result in rejection = result }
-                .environmentObject(store)
+                .environment(store)
                 .presentationDetents([.medium])
                 .presentationBackground(Theme.panel)
         }
@@ -238,7 +238,7 @@ struct CEOOfficeView: View {
     /// The way into the Hall of Careers (the offer and the goal in force sit at the top).
     @ViewBuilder private var boardPanel: some View {
         NavigationLink {
-            HallView().environmentObject(store)
+            HallView().environment(store)
         } label: {
             HStack {
                 PixelLabel("Hall of Careers: chapters and achievements", icon: "star")
@@ -358,7 +358,7 @@ struct CEOOfficeView: View {
 /// Switch a division to another strategy of its sector: every plant moves together, for a
 /// quarter of the new capex per block and a third of its build time, at least four weeks.
 struct RetoolSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let plant: FacilityDto
     let done: (CommandRejection?) -> Void
@@ -405,7 +405,7 @@ struct RetoolSheet: View {
 
 /// Choose a primary and optional secondary sector type.
 struct FocusSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let done: (CommandRejection?) -> Void
     @State private var primary = "agriculture"

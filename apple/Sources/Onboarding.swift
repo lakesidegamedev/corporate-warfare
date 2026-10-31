@@ -16,7 +16,7 @@ struct GuidedStep: Identifiable {
 /// Seven-step guided start. Every number comes from the live session DTOs and every action goes
 /// through the same AppStore method a normal screen uses; nothing here is tutorial-only state.
 struct OnboardingView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -156,11 +156,11 @@ struct OnboardingView: View {
             }
             .sheet(isPresented: $showingBridge) {
                 CashBridgeView()
-                    .environmentObject(store)
+                    .environment(store)
             }
             .sheet(isPresented: $showingBuild) {
                 BuildSheet()
-                    .environmentObject(store)
+                    .environment(store)
             }
         }
     }

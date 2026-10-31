@@ -235,7 +235,7 @@ enum FreightArcs {
 
 /// Corridor freight at a glance, then the lanes, then a simple panel for the lane tapped.
 struct FreightPanelView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let focus: String?
     @Binding var picked: String?
 
@@ -303,7 +303,7 @@ extension AppStore {
 }
 
 struct LaneDetail: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let lane: LaneDto
     @State private var lots: Double
     @State private var weeks: Double
@@ -439,7 +439,7 @@ extension BuildHandoff: Equatable {
 /// A division's Shipping panel: its freight bill in plain words, then the route policy picker.
 /// Pass nil for the whole company (the CEO Office).
 struct DivisionShipping: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let division: DivisionDto?
     @State private var summary: ShippingSummaryDto?
     @State private var rejection: CommandRejection?
@@ -481,7 +481,7 @@ struct DivisionShipping: View {
                     recipe: handoff.suggestion.recipe,
                     blocks: UInt32(clamping: handoff.suggestion.lots)
                 )
-                .environmentObject(store)
+                .environment(store)
             }
         }
     }

@@ -1,4 +1,4 @@
-//! cw-render: the 1.9 stylized GPU map renderer, offscreen only.
+//! cw-render: the 1.9 stylized GPU map renderer, offscreen or straight into a native window.
 //!
 //! This is the style and performance spike for gate G0. It depends on no UI crate, is not
 //! linked into the FFI or the apps, reads no engine state and cannot change a save or a hash.
@@ -25,7 +25,9 @@ pub use data::{
 pub use game::{PlantSite, SiteStatus, layout_plants, plant_size_km, ramp_by_name, region_tints};
 pub use palette::{COLOURS as PALETTE_COLOURS, Palette};
 pub use pick::{pick_ground, project};
-pub use renderer::{AdapterSummary, CloudLevel, Frame, FrameStats, NoAdapter, Renderer, Style};
+pub use renderer::{
+    AdapterSummary, CloudLevel, Frame, FrameStats, NoAdapter, Renderer, Style, SurfaceTarget,
+};
 
 pub use ground::snow_cover;
 pub use mesh::{

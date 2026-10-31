@@ -124,6 +124,7 @@ fun main() {
 private fun game() = application {
     Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
     GpuMapHost.opener = ::openDesktopGpuMap
+    installDirectSurface()
     MeshCanvas.draw = desktopMeshDraw
     MapBake.enabled = true
     // The one-pass cloud shader is measured slower than the meshes while the layers are baked on the CPU, so it is opt-in.

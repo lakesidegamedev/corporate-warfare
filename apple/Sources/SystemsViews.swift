@@ -172,7 +172,7 @@ private func shareTable(_ rows: [ShareRowDto]) -> [[String]] {
 
 /// Load from the engine every time the week or a command moves, then show it.
 struct EngineSection<T, Content: View>: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let key: String
     let load: (SessionHandle) -> T?
     @ViewBuilder let content: (T) -> Content
@@ -350,7 +350,7 @@ struct StockHistorySection: View {
 // MARK: - 2. Region dossier
 
 struct RegionDossierSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let region: UInt32
 
     var body: some View {
@@ -457,7 +457,7 @@ struct RegionDossierView: View {
 // MARK: - 3. Division operations
 
 struct DivisionOpsSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let division: DivisionDto
 
     var body: some View {
@@ -554,7 +554,7 @@ struct DivisionOpsView: View {
 // MARK: - 4. Logistics
 
 struct LogisticsStatsSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
 
     var body: some View {
         if let firm = store.selectedFirm ?? store.overview?.primaryFirm {
@@ -647,7 +647,7 @@ struct RivalCompare {
 
 /// The rivals board as a sheet: loads the board, then the comparison for the picked rival.
 struct RivalsBoardSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [RivalRowDto]?
     @State private var picked: UInt64?

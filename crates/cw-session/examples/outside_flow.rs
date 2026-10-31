@@ -45,7 +45,7 @@ fn main() {
                 .sum::<i64>();
             for p in world.outside.gateway_book.journal() {
                 if p.txn > seen && p.account == cw_core::ledger::Account::Cash {
-                    *flows.entry(p.memo.clone()).or_default() += p.delta;
+                    *flows.entry(p.memo.to_string()).or_default() += p.delta;
                 }
             }
             if let Some(p) = world.outside.gateway_book.journal().last() {

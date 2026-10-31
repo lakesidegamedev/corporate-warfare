@@ -13,6 +13,7 @@ heading.
 
 ### Added
 
+- On Windows, the new map now draws straight to the screen inside the game window, once for every refresh of your display, for exactly the view you are looking at. Dragging, zooming out and turning no longer warp an old picture, so buildings stay put instead of swimming and zooming out never shows bare edges while a new picture loads. Names, badges, buttons and panels still draw over the map. If your machine cannot do this, the map keeps working the way it did before. If the direct map ever stalls (no picture within two seconds of opening, ten slow frames in a row, or a map window that stays blank), the game switches to the copied map by itself for the rest of the session and says so in the frame counter. Settings, under Graphics, has a new choice, "Draw the new map": Direct (fastest) or Copied (compatible). It starts on Direct on Windows with Direct3D and on Copied everywhere else.
 - Escape on desktop opens a game menu that pauses time: Resume, Save, Settings, Save and return to main menu, and Save and quit. Escape also closes Settings and other open screens. The sidebar keeps Save, Settings, Game menu and Main menu in view on a short window, and its pages scroll.
 - A rival that is the target of a takeover now gets help from friends. Once a raider's stake in a
   rival company is public (5 percent of the votes), one friendly rival with cash to spare steps in: it
@@ -434,12 +435,26 @@ heading.
   redrawn, a new week no longer rebuilds the interstates, and the room's pixel art loads faster.
 - Desktop: the launcher loads the engine, the world map and the icons at the same time, so the game
   reaches the main menu sooner, and the phone's regional market list is only read while it is open.
+- iPhone and iPad start faster and stall less. The world map is read in the background while the
+  app opens, so the main menu no longer waits for it (the globe fades in as soon as it is ready).
+  Opening a career builds its map in the background too, and the CEO Office's room art and portraits
+  are prepared behind the menu, so the first visit to the office does not freeze. With the new GPU
+  map switched on, its scene is built as soon as the career opens, and the map tab keeps it between
+  visits, so opening the map is immediate instead of a few seconds of waiting each time.
+- On iPhone and iPad, screens now redraw only when something they actually show has changed. Before,
+  any change anywhere in the game (a price tick, a new letter, the clock) made every open screen
+  rebuild itself, which cost frames while time ran fast. This should make scrolling and fast-forward
+  feel smoother.
 - Android: the game starts and opens its first map faster. The app now ships a startup profile, so the
   phone prepares the game's code when it installs the app instead of working it out on first launch,
   and the world map and picture files are read in the background while the main menu comes up, so the
   map no longer stops to load them when a career opens.
 - Tooling: the Android and desktop builds now share a dependency cache and retry a download that Maven Central or Google rate-limited, so a 403 from a repository no longer fails a build that would pass a minute later. The Apple build keeps its Rust dependencies between runs, which removes most of its longest step, and no longer builds the extra size-report engine on pull requests.
 - Tooling: the first-map-draw timing test on iPhone warms up SwiftUI's own one-time startup on a blank canvas before measuring, so a cold test runner no longer fails a budget meant for the map's layers.
+- Weeks play faster and saves are quicker. On a large map a week now takes roughly a fifth to a
+  quarter less time, the rivals think through their moves with far fewer repeated lookups, and
+  saving and loading a five-year career takes about half as long. Results are unchanged: the same
+  start and seed still play out exactly the same.
 - Tooling: every change to the Android app now starts the trimmed release build on an emulator in
   CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
   so a trimming mistake fails the check and not a phone.

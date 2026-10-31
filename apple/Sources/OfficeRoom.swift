@@ -450,7 +450,7 @@ struct OfficeScene: View {
 
 /// The room wired to the store, with the screens and sections it opens.
 struct OfficeRoomHost: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var screen: GamePage?
     @State private var section: OfficeSection?
 
@@ -478,7 +478,7 @@ struct OfficeRoomHost: View {
                 default: EmptyView()
                 }
             }
-            .environmentObject(store)
+            .environment(store)
         }
         .sheet(item: $section) { part in
             ScrollView {
@@ -496,7 +496,7 @@ struct OfficeRoomHost: View {
                 }
                 .padding(16)
             }
-            .environmentObject(store)
+            .environment(store)
             .presentationDetents([.medium, .large])
             .presentationBackground(Theme.panel)
         }

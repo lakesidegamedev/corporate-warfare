@@ -108,6 +108,64 @@ impl Style {
     }
 }
 
+/// Where a surface renderer presents: a native window the host owns.
+#[derive(Clone, Copy, Debug)]
+pub enum SurfaceTarget {
+    /// A `CAMetalLayer` (Apple).
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    MetalLayer(*mut std::ffi::c_void),
+    /// A Windows window handle (`HWND`).
+    Win32(isize),
+    /// An X11 window id and the `Display*` it belongs to.
+    #[cfg(unix)]
+    Xlib {
+        window: u64,
+        display: *mut std::ffi::c_void,
+    },
+}
+
+impl SurfaceTarget {
+    fn into_wgpu(self) -> Result<wgpu::SurfaceTargetUnsafe, NoAdapter> {
+        use raw_window_handle::{
+            RawDisplayHandle, RawWindowHandle, Win32WindowHandle, WindowsDisplayHandle,
+        };
+        #[cfg(unix)]
+        use raw_window_handle::{XlibDisplayHandle, XlibWindowHandle};
+        let bad = |what: &str| NoAdapter(format!("no {what} to draw into"));
+        Ok(match self {
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            SurfaceTarget::MetalLayer(layer) => {
+                wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(layer)
+            }
+            SurfaceTarget::Win32(hwnd) => {
+                let hwnd = std::num::NonZeroIsize::new(hwnd).ok_or_else(|| bad("window"))?;
+                wgpu::SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle: Some(
+                        RawDisplayHandle::Windows(WindowsDisplayHandle::new()),
+                    ),
+                    raw_window_handle: RawWindowHandle::Win32(Win32WindowHandle::new(hwnd)),
+                }
+            }
+            #[cfg(unix)]
+            SurfaceTarget::Xlib { window, display } => {
+                let display = std::ptr::NonNull::new(display).ok_or_else(|| bad("display"))?;
+                if window == 0 {
+                    return Err(bad("window"));
+                }
+                wgpu::SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle: Some(RawDisplayHandle::Xlib(XlibDisplayHandle::new(
+                        Some(display),
+                        0,
+                    ))),
+                    raw_window_handle: RawWindowHandle::Xlib(XlibWindowHandle::new(
+                        window as std::ffi::c_ulong,
+                    )),
+                }
+            }
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct NoAdapter(pub String);
 
@@ -137,6 +195,10 @@ pub struct FrameStats {
     pub draw_calls: u32,
     pub gpu_wait: Duration,
     pub readback: Duration,
+    /// Surface frames: time waiting for the window to hand over its next image (the display's
+    /// refresh, when frames are queued) and time in the present call.
+    pub acquire: Duration,
+    pub present: Duration,
     /// A surface frame that was not drawn because the window could not take one (hidden,
     /// minimised, timed out). Always false for offscreen renders.
     pub skipped: bool,
@@ -229,7 +291,40 @@ struct SurfaceState {
     surface: wgpu::Surface<'static>,
     format: wgpu::TextureFormat,
     alpha: wgpu::CompositeAlphaMode,
+    present_mode: wgpu::PresentMode,
+    /// What the display offered and what was chosen, for diagnostics.
+    summary: String,
     size: Option<(u32, u32)>,
+}
+
+/// The present mode to use: `CW_PRESENT_MODE` (fifo, mailbox, immediate) when it is offered, else
+/// vsync (Fifo), except on a software adapter, which has no display to wait for: there Fifo can
+/// stall for a second a frame, so Mailbox or Immediate is preferred.
+fn choose_present_mode(offered: &[wgpu::PresentMode], software: bool) -> wgpu::PresentMode {
+    use wgpu::PresentMode::*;
+    let forced = match std::env::var("CW_PRESENT_MODE")
+        .unwrap_or_default()
+        .to_lowercase()
+        .as_str()
+    {
+        "fifo" => Some(Fifo),
+        "mailbox" => Some(Mailbox),
+        "immediate" => Some(Immediate),
+        _ => None,
+    };
+    if let Some(m) = forced.filter(|m| offered.contains(m)) {
+        return m;
+    }
+    let order: &[wgpu::PresentMode] = if software {
+        &[Mailbox, Immediate, Fifo]
+    } else {
+        &[Fifo]
+    };
+    order
+        .iter()
+        .copied()
+        .find(|m| offered.contains(m))
+        .unwrap_or(Fifo)
 }
 
 /// Render targets kept between frames: a frame allocates nothing while the size stays.
@@ -286,23 +381,27 @@ impl Renderer {
     /// `layer` must be a valid `CAMetalLayer` that outlives the renderer.
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub unsafe fn for_metal_layer(layer: *mut std::ffi::c_void) -> Result<Renderer, NoAdapter> {
-        Self::create(Some(layer))
+        Self::create(Some(SurfaceTarget::MetalLayer(layer)))
     }
 
-    fn create(layer: Option<*mut std::ffi::c_void>) -> Result<Renderer, NoAdapter> {
+    /// A renderer that draws straight into a native desktop window (a Windows `HWND` or an X11
+    /// window) and presents each frame at the display's rate, with no readback. Use
+    /// [`Renderer::render_to_surface`].
+    ///
+    /// # Safety
+    /// The window (and the X display) must stay valid until the renderer is dropped.
+    pub unsafe fn for_window(target: SurfaceTarget) -> Result<Renderer, NoAdapter> {
+        Self::create(Some(target))
+    }
+
+    fn create(target: Option<SurfaceTarget>) -> Result<Renderer, NoAdapter> {
         let instance = wgpu::Instance::default();
-        let surface: Option<wgpu::Surface<'static>> = match layer {
+        let surface: Option<wgpu::Surface<'static>> = match target {
             None => None,
-            #[cfg(any(target_os = "macos", target_os = "ios"))]
-            Some(layer) => Some(
-                unsafe {
-                    instance
-                        .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(layer))
-                }
-                .map_err(|e| NoAdapter(e.to_string()))?,
+            Some(target) => Some(
+                unsafe { instance.create_surface_unsafe(target.into_wgpu()?) }
+                    .map_err(|e| NoAdapter(e.to_string()))?,
             ),
-            #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-            Some(_) => return Err(NoAdapter("window surfaces are Apple only".into())),
         };
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
@@ -324,14 +423,23 @@ impl Renderer {
                 .into_iter()
                 .find(|f| caps.formats.contains(f))
                 .ok_or_else(|| NoAdapter("the display has no linear colour format".into()))?;
+                let software = adapter.get_info().device_type == wgpu::DeviceType::Cpu;
+                let present_mode = choose_present_mode(&caps.present_modes, software);
+                let alpha = caps
+                    .alpha_modes
+                    .first()
+                    .copied()
+                    .unwrap_or(wgpu::CompositeAlphaMode::Auto);
+                let summary = format!(
+                    "present {:?} of {:?}, alpha {:?} of {:?}, format {:?}",
+                    present_mode, caps.present_modes, alpha, caps.alpha_modes, format
+                );
                 Some(SurfaceState {
                     surface,
                     format,
-                    alpha: caps
-                        .alpha_modes
-                        .first()
-                        .copied()
-                        .unwrap_or(wgpu::CompositeAlphaMode::Auto),
+                    alpha,
+                    present_mode,
+                    summary,
                     size: None,
                 })
             }
@@ -558,6 +666,14 @@ impl Renderer {
             targets: None,
             surface,
         })
+    }
+
+    /// The window surface's chosen present mode, alpha mode and format, or empty offscreen.
+    pub fn surface_summary(&self) -> String {
+        self.surface
+            .as_ref()
+            .map(|s| s.summary.clone())
+            .unwrap_or_default()
     }
 
     pub fn adapter(&self) -> &AdapterSummary {
@@ -862,8 +978,12 @@ impl Renderer {
             style.pixel_scale.max(1)
         };
         let (rw, rh) = ((width / ps).max(1), (height / ps).max(1));
+        let mut acquire_time = Duration::ZERO;
         let surface_frame = if to_surface {
-            match self.acquire(rw, rh) {
+            let ta = Instant::now();
+            let got = self.acquire(rw, rh);
+            acquire_time = ta.elapsed();
+            match got {
                 Some(f) => Some(f),
                 None => {
                     return FrameStats {
@@ -1206,7 +1326,10 @@ impl Renderer {
         let Some(finish) = finish else {
             self.queue.submit([enc.finish()]);
             if let Some(frame) = surface_frame {
+                let tp = Instant::now();
                 self.queue.present(frame);
+                stats.present = tp.elapsed();
+                stats.acquire = acquire_time;
             }
             stats.gpu_wait = t0.elapsed();
             return stats;
@@ -1268,7 +1391,7 @@ impl Renderer {
                     width: w,
                     height: h,
                     desired_maximum_frame_latency: 2,
-                    present_mode: wgpu::PresentMode::Fifo,
+                    present_mode: s.present_mode,
                     alpha_mode: s.alpha,
                     view_formats: vec![],
                 },

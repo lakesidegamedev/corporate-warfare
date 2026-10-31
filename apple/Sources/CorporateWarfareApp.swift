@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct CorporateWarfareApp: App {
-    @StateObject private var store: AppStore
+    @State private var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(SetupKeys.state) private var setupState = SetupKeys.done
 
@@ -21,13 +21,17 @@ struct CorporateWarfareApp: App {
         _ = MapClock.now
         // Read in the background now, so the first map draw never waits for the models.
         VoxelModels.preload()
+        // The world map decodes off the main thread; the menu shows its globe once it is ready.
+        WorldMap.prewarm()
+        // The office's art and portraits too, so the first visit to the office is not a stall.
+        UiWarmup.start()
         if Self.isUITesting {
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("CorporateWarfareUITests", isDirectory: true)
             try? FileManager.default.removeItem(at: directory)
-            _store = StateObject(wrappedValue: AppStore(saveManager: SaveManager(directory: directory)))
+            _store = State(initialValue: AppStore(saveManager: SaveManager(directory: directory)))
         } else {
-            _store = StateObject(wrappedValue: AppStore())
+            _store = State(initialValue: AppStore())
         }
     }
 
@@ -36,7 +40,7 @@ struct CorporateWarfareApp: App {
             Group {
                 if setupState == SetupKeys.fresh {
                     SetupWizardView(firstRun: true, onFinish: { setupState = SetupKeys.done })
-                        .environmentObject(store)
+                        .environment(store)
                 } else if setupState == SetupKeys.upgrade {
                     WhatsNewView(
                         onRunSetup: { setupState = SetupKeys.done; store.showSetup = true },
@@ -44,10 +48,10 @@ struct CorporateWarfareApp: App {
                     )
                 } else if store.sessionReady {
                     RootView()
-                        .environmentObject(store)
+                        .environment(store)
                 } else {
                     StartView()
-                        .environmentObject(store)
+                        .environment(store)
                 }
             }
             .tint(Theme.gold)
@@ -59,19 +63,23 @@ struct CorporateWarfareApp: App {
                 try? await Task.sleep(nanoseconds: 400_000_000)
                 RenderWarmup.run()
             }
+            .onChange(of: store.sessionReady) { _, ready in
+                // Back at the menu: free the map scene kept for the next visit to the map tab.
+                if !ready { GpuMapSession.discardParked() }
+            }
             .onChange(of: scenePhase) { _, phase in
                 // Background asks for one bounded stop-and-save. Foreground never replays an
                 // accepted command; it only re-reads the live session.
                 Task { await store.handleScenePhase(phase) }
             }
-            .fullScreenCover(isPresented: $store.showSetup) {
+            .fullScreenCover(isPresented: Binding(get: { store.showSetup }, set: { store.showSetup = $0 })) {
                 SetupWizardView(firstRun: false, onFinish: { store.showSetup = false })
-                    .environmentObject(store)
+                    .environment(store)
                     .preferredColorScheme(.dark)
             }
-            .sheet(isPresented: $store.showOnboarding) {
+            .sheet(isPresented: Binding(get: { store.showOnboarding }, set: { store.showOnboarding = $0 })) {
                 OnboardingView()
-                    .environmentObject(store)
+                    .environment(store)
             }
         }
     }

@@ -41,7 +41,7 @@ private func bonusText(_ chapter: ChapterDto) -> String {
 
 /// The board's offer: the chapter, the goals, and a Choose button on each. Not a pause.
 struct BoardOfferCard: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let chapter: ChapterDto
     @State private var rejection: CommandRejection?
 
@@ -106,7 +106,7 @@ struct BoardOfferCard: View {
 
 /// The goal in force: what it is, a progress bar, the number and a sentence, weeks left.
 struct MandateStrip: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let chapter: ChapterDto
     let mandate: MandateDto
 
@@ -168,7 +168,7 @@ struct ChapterResultPanel: View {
 
 /// The offer, the goal in force, or a chapter result, whichever applies, for the top of the CEO Office.
 struct ChapterBlock: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -302,7 +302,7 @@ struct CareerLine: View {
 /// The Hall of Careers for the open career: chapters in order, achievements as badges, the
 /// five-year score, then earlier careers.
 struct HallView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var earlier = CareerSummary.load()
 
     var body: some View {

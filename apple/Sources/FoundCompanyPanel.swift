@@ -8,7 +8,7 @@ private let suggestedNames = [
 /// Found a company: name, headquarters, first strategy, capital. Shown wherever a screen needs a
 /// company and the player has none yet.
 struct FoundCompanyPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var name = ""
     @State private var region: UInt32?
     @State private var sector = ""

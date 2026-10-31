@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -57,6 +58,16 @@ interface GpuMapSession {
     val renderMs: Double
     val copyMs: Double
 
+    /**
+     * True when frames go straight to a native window inside the game window, every display frame, with no pixels copied
+     * back: [frame], [shown] and [frameCamera] are then empty and the UI draws only its own layers (names, badges, controls)
+     * over the window, for the live camera it requested.
+     */
+    val direct: Boolean get() = false
+
+    /** Set when a direct session is not keeping up (no frame soon after opening, or many slow presents in a row): why. The map then switches to copied frames. */
+    val trouble: String? get() = null
+
     /** Changes with every finished frame, so a canvas that reads it redraws. */
     val version: Long
 
@@ -89,12 +100,40 @@ interface GpuMapSession {
     fun close()
 }
 
+/**
+ * A mouse event the native surface received itself (a native window gets the pointer before the UI over it can see it on some
+ * systems), in map pixels. The map handles these exactly like its own pointer input.
+ */
+class SurfaceMouse(val kind: Kind, val x: Float, val y: Float, val button: Int = 0, val wheel: Float = 0f, val clicks: Int = 0) {
+    enum class Kind { Press, Release, Drag, Move, Wheel, Exit }
+}
+
 object GpuMapHost {
     /** Opens the map for a scenario; null on Android. Throws with the reason when the card or the files fail. */
     @Volatile var opener: ((scenario: String) -> GpuMapSession)? = null
 
+    /**
+     * The desktop's way to draw the map straight into a native window: [surfaceHost] puts a native surface in the map area
+     * (behind the UI, which draws over it) and hands its component back through the callback; [surfaceOpener] then opens
+     * the map on it. Both are null where the platform cannot do this, and the map keeps using [opener] with copied frames.
+     */
+    @Volatile var surfaceHost: (@Composable (Modifier, (Any) -> Unit, (SurfaceMouse) -> Unit) -> Unit)? = null
+    @Volatile var surfaceOpener: ((scenario: String, surface: Any) -> GpuMapSession)? = null
+
+    /** Whether this machine can show the map in a native surface now (checked when the map opens, not at start). */
+    @Volatile var surfaceUsable: () -> Boolean = { false }
+
     /** Why the last attempt fell back to the classic map, for the frame counter. */
     @Volatile var failure: String? = null
+
+    /** Whether the player's choice defaults to Direct on this machine (Windows with Direct3D, or forced for testing). */
+    @Volatile var directDefault: () -> Boolean = { false }
+
+    /** Set when the direct map stalled and the game switched to copied frames for the rest of this run: why. */
+    @Volatile var directFellBack: String? = null
+
+    /** Why the native surface could not be used (the map then draws copied frames), for the frame counter. */
+    @Volatile var surfaceNote: String? = null
 }
 
 /**
@@ -103,14 +142,26 @@ object GpuMapHost {
  * adapter, a driver fault, missing files) leaves it null for good and says why in [GpuMapHost.failure].
  */
 @Composable
-internal fun rememberGpuMap(enabled: Boolean, scenario: String?): GpuMapSession? {
+internal fun rememberGpuMap(enabled: Boolean, scenario: String?, surface: Any? = null, wantSurface: Boolean = false, surfaceFailed: () -> Unit = {}): GpuMapSession? {
     val open = GpuMapHost.opener
     if (!enabled || open == null || scenario == null) return null
-    val session by produceState<GpuMapSession?>(null, scenario) {
+    val openSurface = GpuMapHost.surfaceOpener
+    val wantSurface = wantSurface && openSurface != null
+    // A native surface needs its window to exist first, so the map waits for it; a failure falls back to copied frames.
+    if (wantSurface && surface == null) return null
+    val session by produceState<GpuMapSession?>(null, scenario, surface) {
         value = withContext(Dispatchers.Default) {
             try {
                 GpuMapHost.failure = null
-                open(scenario)
+                if (wantSurface && surface != null) {
+                    try {
+                        openSurface!!(scenario, surface)
+                    } catch (e: Throwable) {
+                        surfaceFailed()
+                        GpuMapHost.surfaceNote = (e.message ?: e.javaClass.simpleName).take(80)
+                        open(scenario)
+                    }
+                } else open(scenario)
             } catch (e: Throwable) {
                 GpuMapHost.failure = (e.message ?: e.javaClass.simpleName).take(80)
                 null
@@ -125,10 +176,12 @@ internal fun rememberGpuMap(enabled: Boolean, scenario: String?): GpuMapSession?
 /** The frame counter line for the map: what is drawing it and what it costs. */
 internal fun gpuMapLine(enabled: Boolean, session: GpuMapSession?): String? = when {
     !enabled || GpuMapHost.opener == null -> null
+    session != null && !session.direct && GpuMapHost.directFellBack != null -> "map: copied, direct map fell back: ${GpuMapHost.directFellBack}"
     session != null -> {
         val soft = if (session.software) " (software)" else ""
         val size = session.frame?.let { " ${it.width}x${it.height}" } ?: ""
-        "map: GPU ${session.adapter}$soft,$size ${"%.1f".format(session.renderMs)} ms render + ${"%.1f".format(session.copyMs)} ms copy"
+        if (session.direct) "map: GPU ${session.adapter}$soft, straight to the screen, ${"%.1f".format(session.renderMs)} ms render + ${"%.1f".format(session.copyMs)} ms present"
+        else "map: GPU ${session.adapter}$soft,$size ${"%.1f".format(session.renderMs)} ms render + ${"%.1f".format(session.copyMs)} ms copy"
     }
     GpuMapHost.failure != null -> "map: classic, no GPU"
     else -> "map: classic, GPU map loading"

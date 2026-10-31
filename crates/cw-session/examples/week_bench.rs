@@ -1,21 +1,29 @@
 //! Weekly tick timing per scenario.
 //!
-//! cargo run --release -p cw-session --example week_bench -- [scenario-id ...] [--weeks N]
+//! Prints one table row per scenario: week median and worst, save and load time, save size.
+//! Add `--features phase-timing` for the per-phase breakdown. The id `default` is the plain
+//! guided start with no scenario file.
+//!
+//! cargo run --release -p cw-session --example week_bench -- [scenario-id ...] [--weeks N] [--io-repeat N]
 use std::time::Instant;
 
 fn main() {
-    let mut weeks: u32 = 104;
+    let mut weeks: u32 = 260;
+    let mut io_repeat: u32 = 5;
     let mut scenarios: Vec<String> = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         if arg == "--weeks" {
-            weeks = args.next().and_then(|v| v.parse().ok()).unwrap_or(104);
+            weeks = args.next().and_then(|v| v.parse().ok()).unwrap_or(260);
+        } else if arg == "--io-repeat" {
+            io_repeat = args.next().and_then(|v| v.parse().ok()).unwrap_or(5).max(1);
         } else {
             scenarios.push(arg);
         }
     }
     if scenarios.is_empty() {
         scenarios = [
+            "default",
             "great-lakes-2000",
             "texas-1981",
             "silicon-valley-1995",
@@ -34,7 +42,11 @@ fn main() {
             economy_start: Default::default(),
             starting_capital_cents: None,
             prices: cw_session::PriceSetup {
-                scenario_id: scenario.clone(),
+                scenario_id: if scenario == "default" {
+                    String::new()
+                } else {
+                    scenario.clone()
+                },
                 path: None,
                 ..Default::default()
             },
@@ -56,15 +68,28 @@ fn main() {
             }
         }
         let phases = cw_sim::prof::take();
+        // Best of several: one save or load is short enough for the machine's noise to show.
+        let (mut save_ms, mut load_ms) = (f64::MAX, f64::MAX);
+        let mut bytes = Vec::new();
+        for _ in 0..io_repeat {
+            let t = Instant::now();
+            bytes = session.export_save().unwrap();
+            save_ms = save_ms.min(t.elapsed().as_secs_f64() * 1000.0);
+            let t = Instant::now();
+            let loaded = cw_session::Session::import_save(&bytes).unwrap();
+            load_ms = load_ms.min(t.elapsed().as_secs_f64() * 1000.0);
+            assert_eq!(loaded.canonical_hash(), session.canonical_hash());
+        }
         let total: f64 = times.iter().sum();
         let mut sorted = times.clone();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
         println!(
-            "{scenario}: create {create_ms:.0} ms, {weeks} weeks total {total:.0} ms, mean {:.2} ms, p50 {:.2}, p95 {:.2}, max {:.2}; hash {}",
+            "{scenario}: create {create_ms:.0} ms, {weeks} weeks total {total:.0} ms, mean {:.2} ms, p50 {:.2}, p95 {:.2}, max {:.2}; save {save_ms:.1} ms, load {load_ms:.1} ms, {} KiB; hash {}",
             total / weeks as f64,
             sorted[sorted.len() / 2],
             sorted[sorted.len() * 95 / 100],
             sorted[sorted.len() - 1],
+            bytes.len() / 1024,
             session.canonical_hash()
         );
         let mut phases = phases;

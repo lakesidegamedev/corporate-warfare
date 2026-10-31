@@ -39,7 +39,7 @@ private struct PaperRule: View {
 /// The weekly paper as a front page: masthead, date line, a lead story, briefs, a markets column
 /// and classifieds. Wide screens put the briefs in columns beside the markets; phones stack.
 struct PaperView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var picked: UInt32?
     @State private var paper: PaperDto?
     @State private var archive: [UInt32] = []
@@ -101,7 +101,7 @@ struct PaperView: View {
             store.paperWeek = nil
         }
         .sheet(item: $target) { target in
-            PaperTargetSheet(target: target).environmentObject(store)
+            PaperTargetSheet(target: target).environment(store)
         }
     }
 
@@ -303,7 +303,7 @@ struct PaperView: View {
 /// The thing a story is about: a company page, a market, a region board, the company a deal is
 /// aimed at, or the event's own text.
 struct PaperTargetSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let target: PaperTarget
     @State private var dealTarget: UInt64?
@@ -358,7 +358,7 @@ struct PaperTargetSheet: View {
 /// seconds; paused it holds the first; with animations off or Reduce Motion on it never cycles.
 /// Tapping opens the paper. It reads the engine only when paused or at 1x.
 struct NewsTicker: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(GraphicsKeys.animations) private var animations = true
     let onOpen: () -> Void

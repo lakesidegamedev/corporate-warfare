@@ -83,7 +83,7 @@ struct EarningsSection: View {
 
 /// Tell the analysts what to expect: a low and a high end, prefilled around the estimate.
 struct GuidanceSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let firm: UInt64
     let earnings: EarningsDto
