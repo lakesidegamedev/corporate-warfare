@@ -161,6 +161,15 @@ compose.desktop {
 // the template in that folder and runs jpackage again with Compose's own saved arguments, so every
 // other installer setting stays exactly as Compose made it. That rerun reads Compose's working
 // folder, which compose.preserve.working.dir in gradle.properties keeps.
+// A failing test says why in the CI log (the assertion message), not only which line failed.
+tasks.withType<Test>().configureEach {
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showCauses = true
+    }
+}
+
 tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>().configureEach {
     if (targetFormat != org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi) return@configureEach
     val template = project.file("packaging/windows")

@@ -21,6 +21,13 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          # Every job used to resolve every dependency from scratch, so a Maven Central rate limit failed whichever
+          # job asked last. One shared cache, keyed on the build files, means a job downloads only what changed.
+          cache: gradle
+          cache-dependency-path: |
+            compose/**/*.gradle*
+            compose/gradle/libs.versions.toml
+            compose/gradle/wrapper/gradle-wrapper.properties
       - run: rustup show
       - name: Engine for the desktop (host) and the bindings
         run: bash compose/scripts/build-engine.sh desktop
@@ -31,7 +38,7 @@ jobs:
         run: bash compose/scripts/build-engine.sh android
       - name: Debug APK
         working-directory: compose
-        run: ./gradlew --no-daemon :androidApp:assembleDebug
+        run: scripts/retry.sh 3 ./gradlew --no-daemon :androidApp:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: corporate-warfare-android-debug
@@ -43,8 +50,8 @@ jobs:
         working-directory: compose
         # AGP cannot build per-ABI APKs and a bundle in one run, so they are two runs.
         run: |
-          ./gradlew --no-daemon :androidApp:bundleRelease
-          ./gradlew --no-daemon :androidApp:assembleRelease -Pcw.splitAbi=true
+          scripts/retry.sh 3 ./gradlew --no-daemon :androidApp:bundleRelease
+          scripts/retry.sh 3 ./gradlew --no-daemon :androidApp:assembleRelease -Pcw.splitAbi=true
       - name: Shrinking kept the engine bindings
         working-directory: compose
         run: |
@@ -70,12 +77,19 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          # Every job used to resolve every dependency from scratch, so a Maven Central rate limit failed whichever
+          # job asked last. One shared cache, keyed on the build files, means a job downloads only what changed.
+          cache: gradle
+          cache-dependency-path: |
+            compose/**/*.gradle*
+            compose/gradle/libs.versions.toml
+            compose/gradle/wrapper/gradle-wrapper.properties
       - run: rustup show
       - name: Engine for Android (arm64-v8a, x86_64)
         run: bash compose/scripts/build-engine.sh android
       - name: Shrunk release build (debug key, smoke keep rules; never shipped)
         working-directory: compose
-        run: ./gradlew --no-daemon :androidApp:assembleRelease :androidApp:assembleReleaseAndroidTest -Pcw.smoke=true
+        run: scripts/retry.sh 3 ./gradlew --no-daemon :androidApp:assembleRelease :androidApp:assembleReleaseAndroidTest -Pcw.smoke=true
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -122,6 +136,13 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          # Every job used to resolve every dependency from scratch, so a Maven Central rate limit failed whichever
+          # job asked last. One shared cache, keyed on the build files, means a job downloads only what changed.
+          cache: gradle
+          cache-dependency-path: |
+            compose/**/*.gradle*
+            compose/gradle/libs.versions.toml
+            compose/gradle/wrapper/gradle-wrapper.properties
       - run: rustup show
         shell: bash
       - name: Engine for this OS and the bindings
@@ -129,7 +150,7 @@ jobs:
         shell: bash
       - name: Package
         working-directory: compose
-        run: ./gradlew --no-daemon :shared:${{ matrix.package }}
+        run: scripts/retry.sh 3 ./gradlew --no-daemon :shared:${{ matrix.package }}
         shell: bash
       - uses: actions/upload-artifact@v4
         with:

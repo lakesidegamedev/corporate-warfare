@@ -2,6 +2,7 @@ package net.lakesidegames.corporatewarfare
 
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.focus.onFocusChanged
@@ -42,6 +43,13 @@ object TextEntryFocus {
     val active: Boolean get() = holders.isNotEmpty()
     internal fun set(holder: Any, focused: Boolean) { if (focused) holders += holder else holders -= holder }
 }
+
+/**
+ * The body of every dialog scrolls, so on a short window the action buttons stay on screen and the body scrolls under
+ * them. The M3 dialog gives the body whatever room the title and buttons leave.
+ */
+@androidx.compose.runtime.Composable
+fun Modifier.dialogScroll(): Modifier = this.verticalScroll(androidx.compose.foundation.rememberScrollState())
 
 /** Marks a text field: while it has focus, the plain-key shortcuts leave every key to it. */
 fun Modifier.textEntry(): Modifier = composed {
