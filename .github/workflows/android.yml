@@ -1,15 +1,16 @@
 name: Android and desktop
 on:
+  # Pull requests run Linux jobs only. Windows packaging lives in desktop.yml (manual, nightly).
   pull_request:
-    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
+    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml", "!**/*.md", "!docs/**"]
   push:
     branches: [main]
-    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml"]
+    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml", "!**/*.md", "!docs/**"]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: android-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   compose:
@@ -36,40 +37,4 @@ jobs:
         with:
           name: corporate-warfare-android-debug
           path: compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk
-          retention-days: 14
-
-  desktop:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            package: packageDeb
-            artifact: corporate-warfare-linux-deb
-            path: compose/shared/build/compose/binaries/main/deb/*.deb
-          - os: windows-latest
-            package: packageMsi
-            artifact: corporate-warfare-windows-msi
-            path: compose/shared/build/compose/binaries/main/msi/*.msi
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - run: rustup show
-        shell: bash
-      - name: Engine for this OS and the bindings
-        run: bash compose/scripts/build-engine.sh desktop
-        shell: bash
-      - name: Package
-        working-directory: compose
-        run: ./gradlew --no-daemon :shared:${{ matrix.package }}
-        shell: bash
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.path }}
           retention-days: 14

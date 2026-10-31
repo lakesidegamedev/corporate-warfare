@@ -1,0 +1,75 @@
+name: Desktop packaging
+# Windows and Linux release packaging with launch checks. Off pull requests and main pushes on purpose: the org shares a
+# small GitHub Actions pool with the live game, and a Windows runner per pull request starved it. Previews and releases
+# package through preview.yml and release-others.yml (a release trigger here would package every preview and release
+# twice); this runs on demand and nightly on main when main has moved.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 7 * * *"
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  # A nightly run only does the work when main moved since the last successful nightly of this workflow.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          WORKFLOW: ${{ github.workflow }}
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          last=$(gh run list -R "$REPO" --workflow "$WORKFLOW" --event schedule --status success -L 1 --json headSha -q '.[0].headSha // ""')
+          if [ "$last" = "${{ github.sha }}" ]; then
+            echo "main has not moved since the last successful nightly ($last); skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  desktop:
+    needs: gate
+    if: ${{ needs.gate.outputs.run == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            package: packageDeb
+            artifact: corporate-warfare-linux-deb
+            path: compose/shared/build/compose/binaries/main/deb/*.deb
+          - os: windows-latest
+            package: packageMsi
+            artifact: corporate-warfare-windows-msi
+            path: compose/shared/build/compose/binaries/main/msi/*.msi
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: rustup show
+        shell: bash
+      - name: Engine for this OS and the bindings
+        run: bash compose/scripts/build-engine.sh desktop
+        shell: bash
+      - name: Package
+        working-directory: compose
+        run: ./gradlew --no-daemon :shared:${{ matrix.package }}
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}
+          retention-days: 14
