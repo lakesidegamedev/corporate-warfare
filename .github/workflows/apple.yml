@@ -1,18 +1,64 @@
 name: Apple smoke
 on:
+  # Pull requests run the Mac job only when they touch the app (apple/**) or this workflow, or carry the "ci:apple"
+  # label. Rust core changes reach macOS through the nightly run on main and on demand. The changes job decides on
+  # an ubuntu runner, so a pull request that does not need macOS never holds one.
   pull_request:
-    paths: ["apple/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/apple.yml"]
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
-    paths: ["apple/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/apple.yml"]
+    paths: ["apple/**", ".github/workflows/apple.yml"]
+  schedule:
+    - cron: "40 7 * * *"
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 concurrency:
-  group: apple-${{ github.ref }}
+  # Adding an unrelated label must not cancel a Mac run that is under way, so such events get their own group.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ (github.event.action == 'labeled' && github.event.label.name != 'ci:apple') && 'label' || 'run' }}
   cancel-in-progress: true
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          WORKFLOW: ${{ github.workflow }}
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
+          PR: ${{ github.event.pull_request.number }}
+          HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:apple') }}
+        run: |
+          decide() { echo "run=$1" >> "$GITHUB_OUTPUT"; echo "$2"; exit 0; }
+          case "$EVENT" in
+            push|workflow_dispatch) decide true "$EVENT" ;;
+            schedule)
+              last=$(gh run list -R "$REPO" --workflow "$WORKFLOW" --event schedule --status success -L 1 --json headSha -q '.[0].headSha // ""')
+              [ "$last" = "${{ github.sha }}" ] && decide false "main has not moved since the last successful nightly"
+              decide true "main moved since the last successful nightly" ;;
+            pull_request)
+              if [ "$ACTION" = "labeled" ]; then
+                [ "$LABEL" = "ci:apple" ] && decide true "ci:apple label added"
+                decide false "an unrelated label was added"
+              fi
+              [ "$HAS_LABEL" = "true" ] && decide true "the pull request carries ci:apple"
+              files=$(gh api "repos/$REPO/pulls/$PR/files" --paginate -q '.[].filename')
+              echo "$files" | grep -qE '^(apple/|\.github/workflows/apple\.yml$)' && decide true "the pull request touches the app"
+              decide false "no app files changed; add the ci:apple label to run it" ;;
+          esac
+          decide false "unknown event"
+
   unsigned-apple:
+    needs: changes
+    if: ${{ needs.changes.outputs.run == 'true' }}
     runs-on: macos-26
     timeout-minutes: 35
     steps:

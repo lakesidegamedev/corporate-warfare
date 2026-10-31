@@ -11,6 +11,10 @@ heading.
 
 ## [Unreleased]
 
+### Changed
+
+- Pull requests now build on Linux runners only. Windows packaging moved to a nightly run on main (only when main changed) and to manual runs; the Mac app build runs on pull requests that change the app or carry the "ci:apple" label. This keeps the shared build pool free for the live game.
+
 ## [1.8.0] - 2026-10-29
 
 A living map and a deeper company: true 3D voxel buildings and vehicles on the real Earth with seasons and satellite clouds, trucks and trains on real interstates and railways, a clean Freight mode, more map modes, full company financials with customizable charts, deeper views of markets, regions, divisions, freight, rivals and the economy, markets that respond to stock, spare capacity, imports and inflation, choose previews or full releases and install any version from 1.8 on, one copy of the game at a time, faster weeks, and an 8-bit interface. Careers saved in 1.7.1 and the 1.8 previews load in 1.8.0 and carry on.

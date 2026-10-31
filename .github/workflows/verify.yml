@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: verify-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   rust-and-plan:
