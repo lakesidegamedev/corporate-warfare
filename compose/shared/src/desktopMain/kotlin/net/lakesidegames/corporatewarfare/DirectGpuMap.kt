@@ -164,7 +164,10 @@ internal class DirectGpuSession(
                 val seen = HashMap<Int, Int>()
                 for (gy in 1..12) for (gx in 1..12) seen.merge(img.getRGB(gx * w / 13, gy * h / 13), 1, Int::plus)
                 if ((seen.values.maxOrNull() ?: 0) < 144 * 85 / 100) return@thread
-                if (System.nanoTime() - firstFrameAt > 12_000_000_000L) { slowWhy = "the map window stayed blank for 12 seconds"; return@thread }
+                // A real card shows a presented frame within a frame or two, so 5 s of blank means the window is hidden; a software
+                // adapter's compositor can take several seconds to show one, so it gets 12.
+                val blankLimit = if (software) 12 else 5
+                if (System.nanoTime() - firstFrameAt > blankLimit * 1_000_000_000L) { slowWhy = "the map window stayed blank for $blankLimit seconds"; return@thread }
             }
         } catch (_: Throwable) { }
     }
