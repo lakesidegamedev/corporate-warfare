@@ -1,3 +1,4 @@
+// CI demonstration only: this pull request is closed without merging.
 //! Corporate Warfare engine core.
 //!
 //! Stable identities, checked fixed-point units, the double-entry ledger, deterministic
