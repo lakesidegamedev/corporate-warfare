@@ -173,15 +173,38 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                 onMainMenu = { closeGameMenu(resume = false); store.exitToMenu() },
                 onQuit = onQuit?.let { quit -> { closeGameMenu(resume = false); store.saveAndThen(quit) } },
             )
+            if (store.ready) ActionToast(store)
             store.error?.let { message ->
                 AlertDialog(
                     onDismissRequest = { store.error = null },
                     confirmButton = { TextButton(onClick = { store.error = null }) { Text("OK") } },
                     title = { Text("Not done") },
-                    text = { Text(message) },
+                    text = { Column(Modifier.dialogScroll()) { Text(message) } },
                     containerColor = Palette.panel,
                 )
             }
+            }
+        }
+    }
+}
+
+/**
+ * What an accepted action or a save said, shown for a moment at the bottom of the screen. Rejections are the "Not done"
+ * dialog; this is the other half, so no command ever leaves the player guessing whether it took.
+ */
+@Composable
+internal fun ActionToast(store: GameStore) {
+    var shown by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(store.statusSerial) {
+        if (store.status.isEmpty()) return@LaunchedEffect
+        shown = store.status
+        kotlinx.coroutines.delay(3_000)
+        shown = null
+    }
+    shown?.let { text ->
+        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(bottom = 72.dp), contentAlignment = Alignment.BottomCenter) {
+            Box(Modifier.clip(Pixel.shape).background(Palette.panelRaised).border(1.dp, Palette.gold, Pixel.shape).padding(horizontal = 14.dp, vertical = 8.dp)) {
+                Text(text, color = Palette.primaryText, fontSize = 13.sp)
             }
         }
     }
@@ -314,7 +337,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
             containerColor = Palette.panel,
             title = { Text("Menu") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.dialogScroll(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     GoldButton("Resume", Modifier.fillMaxWidth()) { menu = false }
                     OutlinedButton(onClick = { store.saveNow(); menu = false }, modifier = Modifier.fillMaxWidth()) { Text("Save now", color = Palette.primaryText) }
                     OutlinedButton(onClick = { menu = false; onSettings() }, modifier = Modifier.fillMaxWidth()) { Text("Settings", color = Palette.primaryText) }
@@ -562,7 +585,7 @@ internal fun PostureDialog(store: GameStore, line: ProductLineDto, presetBps: In
         containerColor = Palette.panel,
         title = { Text(line.name) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.dialogScroll(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     "Your price ${Format.money(line.priceCents)} · market ${Format.money(line.marketCents)} · your cost " +
                         (if (line.unitCostCents > 0) Format.money(line.unitCostCents) else "n/a"),
@@ -661,7 +684,7 @@ fun PauseBanner(store: GameStore, modifier: Modifier = Modifier) {
             onDismissRequest = { card = null },
             containerColor = Palette.panel,
             title = { Text(open.title, color = Palette.primaryText) },
-            text = { DecisionCard(store, open) },
+            text = { Column(Modifier.dialogScroll()) { DecisionCard(store, open) } },
             confirmButton = {},
             dismissButton = { TextButton(onClick = { card = null }) { Text("Later") } },
         )
@@ -846,7 +869,7 @@ internal fun GameMenuDialog(onResume: () -> Unit, onSave: () -> Unit, onSettings
         containerColor = Palette.panel,
         title = { Text("Paused") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.widthIn(min = 280.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.widthIn(min = 280.dp).dialogScroll()) {
                 GoldButton("Resume", modifier = Modifier.fillMaxWidth()) { onResume() }
                 OutlinedButton(onClick = { onSave(); saved = true }, modifier = Modifier.fillMaxWidth()) { Text(if (saved) "Saved" else "Save", color = Palette.primaryText) }
                 OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("Settings", color = Palette.primaryText) }
