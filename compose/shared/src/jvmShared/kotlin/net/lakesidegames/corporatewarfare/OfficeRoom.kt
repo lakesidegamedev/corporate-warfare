@@ -46,7 +46,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.onSizeChanged
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.math.floor
@@ -527,15 +530,35 @@ internal fun OfficeWindowMap(store: GameStore, modifier: Modifier) {
     val measurer = androidx.compose.ui.text.rememberTextMeasurer(cacheSize = 32)
     val geometry = remember(map) { MapGeometryCache() }
     val graphics = remember { GraphicsConfig.Default.copy(earth = false, clouds = 0, traffic = 0, animations = false, dayNight = false, showFps = false, labels = 0, lighting = 1, countryside = false) }
-    Canvas(modifier) {
-        if (map == null) return@Canvas
-        val anchor = code?.let { map.anchor(it) }
-        val base = MapCamera.scenario(size, map)
-        val camera = if (anchor != null) base.copy(lon = Math.toDegrees(anchor.lon[0]), lat = Math.toDegrees(anchor.lat[0]), zoom = base.zoom * 2.4) else base
-        drawWorldMap(
-            map, camera, scenarioTint(map.scenarioId.orEmpty()), emptyMap(), code, store.mapDivisions, measurer,
-            space = false, geometry = geometry, graphics = graphics, pitch = 0.0, plants = store.mapPlants,
-            week = store.overview?.tick?.toInt() ?: 28,
-        )
+    // The picture only changes when the week turns, so it is painted into a bitmap on a background thread and the room
+    // shows the newest one; the UI thread never walks the map's vector drawing. The measurer and the geometry are used
+    // by that one thread only, one bake at a time.
+    var size by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var picture by remember { mutableStateOf<ImageBitmap?>(null) }
+    val divisions = store.mapDivisions
+    val plants = store.mapPlants
+    val week = store.overview?.tick?.toInt() ?: 28
+    val bakeLock = remember { kotlinx.coroutines.sync.Mutex() }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    LaunchedEffect(map, code, size, divisions, plants, week) {
+        if (map == null || size.width < 1 || size.height < 1) return@LaunchedEffect
+        val baked = withContext(MapBake.dispatcher) {
+            bakeLock.withLock {
+                val view = Size(size.width.toFloat(), size.height.toFloat())
+                val anchor = code?.let { map.anchor(it) }
+                val base = MapCamera.scenario(view, map)
+                val camera = if (anchor != null) base.copy(lon = Math.toDegrees(anchor.lon[0]), lat = Math.toDegrees(anchor.lat[0]), zoom = base.zoom * 2.4) else base
+                val bitmap = ImageBitmap(size.width, size.height)
+                androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(density, androidx.compose.ui.unit.LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(bitmap), view) {
+                    drawWorldMap(
+                        map, camera, scenarioTint(map.scenarioId.orEmpty()), emptyMap(), code, divisions, measurer,
+                        space = false, geometry = geometry, graphics = graphics, pitch = 0.0, plants = plants, week = week,
+                    )
+                }
+                bitmap
+            }
+        }
+        picture = baked
     }
+    Canvas(modifier.onSizeChanged { size = it }) { picture?.let { drawImage(it) } }
 }

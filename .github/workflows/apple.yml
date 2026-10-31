@@ -19,11 +19,25 @@ jobs:
       - uses: actions/checkout@v4
       - run: xcodebuild -version && xcrun --sdk iphoneos --show-sdk-version
       - run: rustup show
+      # The four device and Catalyst engine builds took about 15 of the 42 minutes, all from scratch. Dependencies
+      # (wgpu and the rest) are restored from the last run on the same lockfile; only this repo's own crates rebuild.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: apple-cargo-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          # One entry per lockfile: the dependencies are what is slow to build, and a changed lockfile starts the next entry.
+          restore-keys: apple-cargo-
       - name: Privacy audit
         run: python3 apple/scripts/privacy_audit.py
       - run: brew install xcodegen
       - run: bash apple/scripts/build-engine.sh
+      # A report, not a gate, and it builds a whole extra engine (2 to 3 minutes): not on every pull request.
       - name: Engine library size, with and without the GPU map
+        if: github.event_name != 'pull_request'
         continue-on-error: true
         run: |
           ls -l target/aarch64-apple-ios/release/libcw_ffi.a target/aarch64-apple-ios-sim/release/libcw_ffi.a target/maccatalyst/libcw_ffi.a

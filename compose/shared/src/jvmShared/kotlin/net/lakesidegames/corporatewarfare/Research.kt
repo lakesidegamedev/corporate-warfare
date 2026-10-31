@@ -121,7 +121,7 @@ fun ResearchScreen(store: GameStore) {
                             "About $weeks weeks to the next threshold at this rate."
                         }
                     },
-                    onCommit = { v -> store.act(CommandJson.command("SetResearchBudget", "firm" to firm.handle, "amount_cents" to (v * 100).toLong())) { _, _ -> } },
+                    onCommit = { v -> store.submit(CommandJson.command("SetResearchBudget", "firm" to firm.handle, "amount_cents" to (v * 100).toLong()), "Research budget set.") },
                 )
             }
             Panel {
@@ -131,7 +131,7 @@ fun ResearchScreen(store: GameStore) {
                     budget, { budget = it }, 0.0..2_000_000.0, 5_000.0,
                     label = { if (it == 0.0) "None" else Format.money((it * 100).toLong()) + " a week" },
                     detail = { "Brand spend lifts demand for your goods in the regions you sell in." },
-                    onCommit = { v -> store.act(CommandJson.command("SetMarketingBudget", "firm" to firm.handle, "amount_cents" to (v * 100).toLong())) { _, _ -> } },
+                    onCommit = { v -> store.submit(CommandJson.command("SetMarketingBudget", "firm" to firm.handle, "amount_cents" to (v * 100).toLong()), "Marketing budget set.") },
                 )
             }
         }

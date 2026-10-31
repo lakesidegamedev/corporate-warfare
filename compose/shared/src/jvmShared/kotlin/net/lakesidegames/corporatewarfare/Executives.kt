@@ -77,10 +77,10 @@ internal fun ExecutivesPanel(store: GameStore, currency: String) {
             containerColor = Palette.panel,
             title = { Text("Dismiss ${holder.name}?") },
             text = {
-                Text(
+                Column(Modifier.dialogScroll()) { Text(
                     "Severance is ${Format.compact(holder.severanceCents, currency)}, paid now from company cash. The ${post.title.lowercase()} post is open at once and you lose: ${holder.effect.replaceFirstChar { it.lowercase() }}.",
                     color = Palette.secondary, fontSize = 13.sp,
-                )
+                ) }
             },
             confirmButton = {
                 GoldButton("Dismiss") {

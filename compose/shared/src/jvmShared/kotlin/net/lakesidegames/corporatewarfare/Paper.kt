@@ -318,7 +318,7 @@ internal fun PaperTarget(store: GameStore, link: PaperLinkDto, story: StoryDto?,
         "event" -> AlertDialog(
             onDismissRequest = onClose, containerColor = Palette.panel,
             title = { Text(story?.headline ?: "News") },
-            text = { Text(story?.body.orEmpty(), color = Palette.primaryText) },
+            text = { Column(Modifier.dialogScroll()) { Text(story?.body.orEmpty(), color = Palette.primaryText) } },
             confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
         )
         else -> onClose()

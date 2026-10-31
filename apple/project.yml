@@ -31,6 +31,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.lakesidegames.corporatewarfare
+        # Keep PNGs as plain PNG: the GPU map's engine reads earth-land*.png itself, and Xcode's default
+        # iOS PNG compression rewrites them into Apple's CgBI variant, which only UIKit can read.
+        COMPRESS_PNG_FILES: NO
+        STRIP_PNG_TEXT: NO
         # The C interface of the GPU map (cw_gpu_*), next to the UniFFI one.
         SWIFT_OBJC_BRIDGING_HEADER: Sources/CwGpu-Bridging-Header.h
         # Merged with the generated Info.plist: the Silkscreen pixel font, and the classic

@@ -174,7 +174,7 @@ internal fun BriefReview(store: GameStore, move: BriefMoveDto, onClose: () -> Un
                 containerColor = Palette.panel,
                 title = { Text(move.headline) },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.dialogScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(move.detail, color = Palette.secondary, fontSize = 12.sp)
                         if (lane != null) ReserveLane(store, lane, initialLots = t.lots.toInt(), initialWeeks = t.weeks.toInt())
                     }
@@ -189,8 +189,10 @@ internal fun BriefReview(store: GameStore, move: BriefMoveDto, onClose: () -> Un
                 containerColor = Palette.panel,
                 title = { Text("The board's offer") },
                 text = {
-                    if (offer != null) BoardOfferCard(store, offer)
-                    else Text("The offer has lapsed or been taken.", color = Palette.secondary)
+                    Column(Modifier.dialogScroll()) {
+                        if (offer != null) BoardOfferCard(store, offer)
+                        else Text("The offer has lapsed or been taken.", color = Palette.secondary)
+                    }
                 },
                 confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
             )
@@ -204,7 +206,7 @@ internal fun BriefReview(store: GameStore, move: BriefMoveDto, onClose: () -> Un
             onDismissRequest = onClose,
             containerColor = Palette.panel,
             title = { Text(move.headline) },
-            text = { Text(move.detail, color = Palette.secondary, fontSize = 13.sp) },
+            text = { Column(Modifier.dialogScroll()) { Text(move.detail, color = Palette.secondary, fontSize = 13.sp) } },
             confirmButton = {
                 GoldButton(move.actionLabel) {
                     move.commands.forEach { store.submit(it) }
@@ -244,7 +246,7 @@ internal fun BriefWeeklyHost(store: GameStore) {
             title = { Text("This week's brief") },
             text = {
                 if (brief == null) Text("Reading the week...", color = Palette.secondary)
-                else Column(Modifier.width(520.dp)) { BriefBody(brief, currency) { review = it } }
+                else Column(Modifier.width(520.dp).dialogScroll()) { BriefBody(brief, currency) { review = it } }
             },
             confirmButton = { TextButton(onClick = { open = false; store.briefOpen = false }) { Text("Close") } },
         )

@@ -62,7 +62,7 @@ android() {
     export "AR_${env_triple}=$bin/llvm-ar"
     cargo build --locked -p cw-ffi --profile small --target "$triple"
     mkdir -p "$OUT/jniLibs/$abi"
-    cp "target/$triple/small/libcw_ffi.so" "$OUT/jniLibs/$abi/"
+    cp "${CARGO_TARGET_DIR:-target}/$triple/small/libcw_ffi.so" "$OUT/jniLibs/$abi/"
   done
   bindings libcw_ffi.so
 }
@@ -81,7 +81,7 @@ desktop() {
   esac
   # JNA finds a library on the classpath under its platform folder.
   mkdir -p "$OUT/desktop/$platform"
-  cp "target/small/$lib" "$OUT/desktop/$platform/"
+  cp "${CARGO_TARGET_DIR:-target}/small/$lib" "$OUT/desktop/$platform/"
   bindings "$lib"
 }
 
@@ -90,7 +90,7 @@ desktop() {
 bindings() {
   cargo build --locked -p cw-ffi
   rm -rf "$OUT/kotlin"
-  cargo run --locked -p cw-bindgen -- generate "target/debug/$1" --language kotlin --no-format --out-dir "$OUT/kotlin"
+  cargo run --locked -p cw-bindgen -- generate "${CARGO_TARGET_DIR:-target}/debug/$1" --language kotlin --no-format --out-dir "$OUT/kotlin"
 }
 
 case "${1:-android}" in
