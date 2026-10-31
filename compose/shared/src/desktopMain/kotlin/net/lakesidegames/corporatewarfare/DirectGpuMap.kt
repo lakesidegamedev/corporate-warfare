@@ -142,6 +142,32 @@ internal class DirectGpuSession(
 
     private val worker = thread(name = "cw-gpu-surface", isDaemon = true) { loop() }
 
+    /**
+     * Frames can be presented and still not be on screen (the window behind another layer, a compositor that does not show the
+     * swap chain). Once a frame is presented, look at the window now and then: if it still shows a single colour after 12 s, that
+     * is trouble. Where the screen cannot be captured, the check quietly ends.
+     */
+    private val screenWatch = thread(name = "cw-gpu-screen-watch", isDaemon = true) {
+        try {
+            val robot = java.awt.Robot()
+            var firstFrameAt = 0L
+            while (!closed && slowWhy == null) {
+                Thread.sleep(1000)
+                if (presented.get() == 0L || !canvas.isShowing) continue
+                if (firstFrameAt == 0L) firstFrameAt = System.nanoTime()
+                val at = canvas.locationOnScreen
+                val k = (canvas as? MapSurfaceCanvas)?.pixelScale ?: 1.0
+                val w = (canvas.width * k).toInt(); val h = (canvas.height * k).toInt()
+                if (w < 16 || h < 16) continue
+                val img = robot.createScreenCapture(java.awt.Rectangle(at.x, at.y, w, h))
+                val seen = HashSet<Int>()
+                for (gy in 1..12) for (gx in 1..12) seen += img.getRGB(gx * w / 13, gy * h / 13)
+                if (seen.size > 1) return@thread
+                if (System.nanoTime() - firstFrameAt > 12_000_000_000L) { slowWhy = "the map window stayed blank for 12 seconds"; return@thread }
+            }
+        } catch (_: Throwable) { }
+    }
+
     private val redraw = Runnable { lock.withLock { dirty = true; wake.signalAll() } }
     private val resized = object : ComponentAdapter() {
         override fun componentResized(e: ComponentEvent?) = redraw.run()

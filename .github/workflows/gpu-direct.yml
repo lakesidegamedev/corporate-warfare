@@ -35,14 +35,14 @@ jobs:
         working-directory: compose
         run: ./gradlew --no-daemon :shared:desktopTest --tests "*GpuMapDirectTest" --tests "*GpuMapBlendTest" -i
         shell: bash
-      - name: Direct map tests with vsync (comparison only)
+      - name: Blend test with Compose blending off (comparison only)
         if: always()
         working-directory: compose
         continue-on-error: true
         env:
-          CW_PRESENT_MODE: fifo
-          CW_DIRECT_OUT: ${{ github.workspace }}/direct-out-fifo
-        run: ./gradlew --no-daemon :shared:desktopTest --rerun --tests "*GpuMapDirectTest" --tests "*GpuMapBlendTest" -i
+          CW_BLEND_MODE: noblend
+          CW_DIRECT_OUT: ${{ github.workspace }}/direct-out-noblend
+        run: ./gradlew --no-daemon :shared:desktopTest --rerun --tests "*GpuMapBlendTest" -i
         shell: bash
       - uses: actions/upload-artifact@v4
         if: always()
@@ -50,5 +50,5 @@ jobs:
           name: direct-map-windows
           path: |
             direct-out
-            direct-out-fifo
+            direct-out-noblend
           if-no-files-found: ignore
