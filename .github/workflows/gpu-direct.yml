@@ -2,20 +2,19 @@ name: Direct map
 # The desktop map draws straight into a native window. This proves it on a Windows machine (wgpu over DirectX 12, software
 # adapter): a window opens, frames present, a drag and zoom out keeps every frame on the live camera, and Compose draws over it.
 on:
+  # Windows runners are scarce in the org's shared pool, so this runs on demand, or on a pull request that carries the
+  # "ci:windows" label (added when the direct map or its Windows host changes).
   pull_request:
-    paths:
-      - "crates/cw-render/**"
-      - "crates/cw-ffi/**"
-      - "compose/**"
-      - ".github/workflows/gpu-direct.yml"
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: gpu-direct-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ (github.event.action == 'labeled' && github.event.label.name != 'ci:windows') && 'label' || 'run' }}
   cancel-in-progress: true
 jobs:
   windows:
+    if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.pull_request.labels.*.name, 'ci:windows') && (github.event.action != 'labeled' || github.event.label.name == 'ci:windows')) }}
     runs-on: windows-latest
     timeout-minutes: 50
     env:
