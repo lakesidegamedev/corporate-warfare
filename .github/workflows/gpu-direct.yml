@@ -1,0 +1,53 @@
+name: Direct map
+# The desktop map draws straight into a native window. This proves it on a Windows machine (wgpu over DirectX 12, software
+# adapter): a window opens, frames present, a drag and zoom out keeps every frame on the live camera, and Compose draws over it.
+on:
+  # Windows runners are scarce in the org's shared pool, so this runs on demand, or on a pull request that carries the
+  # "ci:windows" label (added when the direct map or its Windows host changes).
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ (github.event.action == 'labeled' && github.event.label.name != 'ci:windows') && 'label' || 'run' }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.pull_request.labels.*.name, 'ci:windows') && (github.event.action != 'labeled' || github.event.label.name == 'ci:windows')) }}
+    runs-on: windows-latest
+    timeout-minutes: 50
+    env:
+      CW_DIRECT_OUT: ${{ github.workspace }}/direct-out
+      CW_BLEND_TEST: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: rustup show
+        shell: bash
+      - run: bash compose/scripts/build-engine.sh desktop
+        shell: bash
+      - name: Direct map tests
+        working-directory: compose
+        run: ./gradlew --no-daemon :shared:desktopTest --tests "*GpuMapDirectTest" --tests "*GpuMapBlendTest" -i
+        shell: bash
+      - name: Blend test with Compose blending off (comparison only)
+        if: always()
+        working-directory: compose
+        continue-on-error: true
+        env:
+          CW_BLEND_MODE: noblend
+          CW_DIRECT_OUT: ${{ github.workspace }}/direct-out-noblend
+        run: ./gradlew --no-daemon :shared:desktopTest --rerun --tests "*GpuMapBlendTest" -i
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: direct-map-windows
+          path: |
+            direct-out
+            direct-out-noblend
+          if-no-files-found: ignore

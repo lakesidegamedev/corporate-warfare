@@ -178,6 +178,7 @@ class AppSettings(private val file: File) {
             props.setProperty("seasons", g.seasons.toString())
             props.setProperty("labels", g.labels.toString())
             props.setProperty("newMap", g.newMap.toString())
+            g.directMap?.let { props.setProperty("directMap", it.toString()) }
         }
         setupFlag?.let { props.setProperty("setupDone", it) }
         props.setProperty("careers", CareerSummary.encode(careers))
@@ -227,6 +228,7 @@ class AppSettings(private val file: File) {
             seasons = bool("seasons", base.seasons),
             labels = int("labels", base.labels, 0..2),
             newMap = bool("newMap", base.newMap),
+            directMap = props.getProperty("directMap")?.toBooleanStrictOrNull() ?: base.directMap,
         )
     }
 
@@ -387,7 +389,7 @@ private fun GraphicsChoices(settings: AppSettings) {
         if (g.preset == null) "Custom: your own mix of the options below." else "Picking a preset sets every option below. Change any of them to make your own mix.",
         color = Palette.secondary, fontSize = 12.sp,
     )
-    graphicsOptions.filter { !it.gpuOnly || GpuMapHost.opener != null }.forEach { option ->
+    graphicsOptions.filter { (!it.gpuOnly || GpuMapHost.opener != null) && (!it.surfaceOnly || GpuMapHost.surfaceHost != null) }.forEach { option ->
         Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(option.title, color = Palette.primaryText)
             Choices(option.choices.indices.toList(), option.get(g), { option.choices[it] }) { settings.chooseGraphics(option.set(g, it)) }

@@ -23,6 +23,8 @@ import kotlin.concurrent.withLock
 @Suppress("FunctionName")
 internal interface CwGpu : Library {
     fun cw_gpu_open(assets: String, scenario: String): Long
+    fun cw_gpu_open_surface(assets: String, scenario: String, kind: Int, window: Long, display: com.sun.jna.Pointer?): Long
+    fun cw_gpu_render_surface(id: Long, cam: DoubleArray, width: Int, height: Int, timing: DoubleArray): Int
     fun cw_gpu_last_error(buf: ByteArray, len: Long): Int
     fun cw_gpu_info(id: Long, buf: ByteArray, len: Long): Int
     fun cw_gpu_update(id: Long, json: String): Int
@@ -39,7 +41,7 @@ internal interface CwGpu : Library {
 }
 
 /** Files the renderer reads by name, copied once from the app's resources into a folder it can open. */
-private fun gpuAssetFolder(scenario: String): File {
+internal fun gpuAssetFolder(scenario: String): File {
     val dir = File(System.getProperty("java.io.tmpdir"), "cw-gpu-map-${BuildInfo.VERSION}")
     dir.mkdirs()
     val names = listOf(
@@ -62,7 +64,7 @@ private fun gpuAssetFolder(scenario: String): File {
     return dir
 }
 
-private fun CwGpu.text(call: (ByteArray) -> Int): String? {
+internal fun CwGpu.text(call: (ByteArray) -> Int): String? {
     var buf = ByteArray(256)
     var n = call(buf)
     if (n < 0 && -n > buf.size) { buf = ByteArray(-n); n = call(buf) }
@@ -78,51 +80,20 @@ internal fun openDesktopGpuMap(scenario: String): GpuMapSession {
     return DesktopGpuSession(lib, id, info.getOrElse(0) { "unknown" }, info.getOrElse(2) { "0" } == "1")
 }
 
-/**
- * One open map. A dedicated thread draws the newest requested view on the graphics card and reads it back into one of two
- * reusable buffers; a second thread turns the previous buffer into the picture the UI draws, so that copy never holds up the next
- * frame. Every frame is the view plus an overscan margin on each side (so a pan or a small zoom out shows real map), at the view's
- * real pixel size when the camera is still and at three quarters of it (or full size on small views) while it moves; the full-size
- * frame follows within [SETTLE_NANOS] of the last change. The UI warps whichever frame is newest to the live camera.
- */
-private class DesktopGpuSession(
-    private val lib: CwGpu,
-    private val id: Long,
-    override val adapter: String,
-    override val software: Boolean,
+/** The parts of a session that are plain calls into the engine: game state, building boxes, projection and picking. */
+internal abstract class FfiGpuSession(
+    protected val lib: CwGpu,
+    protected val id: Long,
+    final override val adapter: String,
+    final override val software: Boolean,
 ) : GpuMapSession {
-    private class Request(val camera: GpuCamera, val width: Int, val height: Int)
-
-    private val lock = ReentrantLock()
-    private val wake = lock.newCondition()
-    private var wanted: Request? = null
-    private var rendered: Request? = null
-    private var renderedFactor = 0f
-    private var lastChange = 0L
-    private var dirty = false
-    private var closed = false
-    private val buffers = arrayOf(ByteArray(0), ByteArray(0))
-    private val pending = arrayOfNulls<java.util.concurrent.Future<*>>(2)
-    private val uploader = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "cw-gpu-upload").apply { isDaemon = true } }
-
-    @Volatile override var renderMs = 0.0
-    @Volatile override var copyMs = 0.0
-    @Volatile private var latest: GpuShown? = null
-    override val frame: ImageBitmap? get() = latest?.image
-    override val frameCamera: GpuCamera? get() = latest?.camera
-    override val shown: GpuShown? get() = latest
-    override var version by mutableLongStateOf(0L)
-        private set
-
-    private val worker = thread(name = "cw-gpu-map", isDaemon = true) { loop() }
-
     @Volatile private var placed: List<GpuBuilding> = emptyList()
 
-    override fun update(json: String) {
-        val code = lib.cw_gpu_update(id, json)
-        if (code < 0) return
+    /** Sends the update to the engine and refreshes the building list; false when the engine refused it. */
+    protected fun push(json: String): Boolean {
+        if (lib.cw_gpu_update(id, json) < 0) return false
         placed = readBuildings()
-        lock.withLock { dirty = true; wake.signalAll() }
+        return true
     }
 
     override fun buildings(): List<GpuBuilding> = placed
@@ -148,18 +119,6 @@ private class DesktopGpuSession(
         }.getOrDefault(emptyList())
     }
 
-    override fun request(camera: GpuCamera, width: Int, height: Int, moving: Boolean) {
-        if (width <= 0 || height <= 0) return
-        lock.withLock {
-            val old = wanted
-            if (old == null || old.camera != camera || old.width != width || old.height != height) {
-                wanted = Request(camera, width, height)
-                lastChange = System.nanoTime()
-                wake.signalAll()
-            }
-        }
-    }
-
     override fun project(camera: GpuCamera, width: Int, height: Int, lonLat: DoubleArray): FloatArray {
         val out = FloatArray(lonLat.size)
         lib.cw_gpu_project(id, cam(camera), width.toFloat(), height.toFloat(), lonLat, (lonLat.size / 2).toLong(), out)
@@ -172,14 +131,71 @@ private class DesktopGpuSession(
         return if (n > 0) String(buf, 0, n, Charsets.UTF_8) else null
     }
 
+    protected fun cam(c: GpuCamera) = doubleArrayOf(c.lon, c.lat, c.widthKm, c.tiltDeg, c.headingDeg, c.fovDeg)
+
+}
+
+/**
+ * One open map. A dedicated thread draws the newest requested view on the graphics card and reads it back into one of two
+ * reusable buffers; a second thread turns the previous buffer into the picture the UI draws, so that copy never holds up the next
+ * frame. Every frame is the view plus an overscan margin on each side (so a pan or a small zoom out shows real map), at the view's
+ * real pixel size when the camera is still and at three quarters of it (or full size on small views) while it moves; the full-size
+ * frame follows within [SETTLE_NANOS] of the last change. The UI warps whichever frame is newest to the live camera.
+ */
+private class DesktopGpuSession(
+    lib: CwGpu,
+    id: Long,
+    adapter: String,
+    software: Boolean,
+) : FfiGpuSession(lib, id, adapter, software) {
+    private class Request(val camera: GpuCamera, val width: Int, val height: Int)
+
+    private val lock = ReentrantLock()
+    private val wake = lock.newCondition()
+    private var wanted: Request? = null
+    private var rendered: Request? = null
+    private var renderedFactor = 0f
+    private var lastChange = 0L
+    private var dirty = false
+    private var closed = false
+    private val buffers = arrayOf(ByteArray(0), ByteArray(0))
+    private val pending = arrayOfNulls<java.util.concurrent.Future<*>>(2)
+    private val uploader = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "cw-gpu-upload").apply { isDaemon = true } }
+
+    @Volatile override var renderMs = 0.0
+    @Volatile override var copyMs = 0.0
+    @Volatile private var latest: GpuShown? = null
+    override val frame: ImageBitmap? get() = latest?.image
+    override val frameCamera: GpuCamera? get() = latest?.camera
+    override val shown: GpuShown? get() = latest
+    override var version by mutableLongStateOf(0L)
+        private set
+
+    private val worker = thread(name = "cw-gpu-map", isDaemon = true) { loop() }
+
+    override fun update(json: String) {
+        if (!push(json)) return
+        lock.withLock { dirty = true; wake.signalAll() }
+    }
+
+    override fun request(camera: GpuCamera, width: Int, height: Int, moving: Boolean) {
+        if (width <= 0 || height <= 0) return
+        lock.withLock {
+            val old = wanted
+            if (old == null || old.camera != camera || old.width != width || old.height != height) {
+                wanted = Request(camera, width, height)
+                lastChange = System.nanoTime()
+                wake.signalAll()
+            }
+        }
+    }
+
     override fun close() {
         lock.withLock { closed = true; wake.signalAll() }
         worker.join(2000)
         uploader.shutdown()
         lib.cw_gpu_close(id)
     }
-
-    private fun cam(c: GpuCamera) = doubleArrayOf(c.lon, c.lat, c.widthKm, c.tiltDeg, c.headingDeg, c.fovDeg)
 
     /** Image pixels per view pixel: full size when settled or when the view is small, three quarters while it moves. */
     private fun factorFor(r: Request, settled: Boolean) = if (settled || r.width.toLong() * r.height <= SMALL_VIEW) 1f else MOVING_FACTOR
