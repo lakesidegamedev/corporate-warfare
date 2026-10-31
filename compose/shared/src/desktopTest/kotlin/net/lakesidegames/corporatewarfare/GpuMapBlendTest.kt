@@ -17,6 +17,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import java.awt.Robot
 import java.awt.event.InputEvent
+import java.awt.image.BufferedImage
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import javax.imageio.ImageIO
@@ -86,22 +87,21 @@ class GpuMapBlendTest {
                 Thread.sleep(500)
                 val robot = Robot()
                 val at = window.locationOnScreen
-                val shot = robot.createScreenCapture(java.awt.Rectangle(at.x, at.y, window.width, window.height))
-                out?.let { ImageIO.write(shot, "png", File(it, "blend.png")) }
                 val inset = window.insets
+                fun capture() = robot.createScreenCapture(java.awt.Rectangle(at.x, at.y, window.width, window.height))
                 // A point inside the red box and a spread of points over the open map.
-                val red = shot.getRGB(inset.left + 60, inset.top + 60)
-                // Where the canvas really is, from its own position, for the diagnostics.
-                run {
-                    val cp = canvas.locationOnScreen
-                    val inside = robot.createScreenCapture(java.awt.Rectangle(cp.x, cp.y, canvas.width, canvas.height))
-                    val colours = HashMap<Int, Int>()
-                    for (y in 0 until canvas.height step 5) for (x in 0 until canvas.width step 5) colours.merge(inside.getRGB(x, y), 1, Int::plus)
-                    println("blend: canvas capture: ${colours.size} colours, commonest " + colours.entries.sortedByDescending { it.value }.take(4).joinToString { "${Integer.toHexString(it.key)}x${it.value}" } + "; frames now ${frames.get()}")
-                    out?.let { ImageIO.write(inside, "png", File(it, "blend-canvas.png")) }
-                }
-                val mapColours = (0 until 12).flatMap { gy -> (0 until 12).map { gx -> shot.getRGB(inset.left + 300 + gx * 40, inset.top + 150 + gy * 25) } }.toSet()
-                println("blend: frames=${frames.get()} red box pixel=${Integer.toHexString(red)} distinct map colours=${mapColours.size}")
+                fun reds(img: BufferedImage) = img.getRGB(inset.left + 60, inset.top + 60)
+                fun colours(img: BufferedImage) = (0 until 12).flatMap { gy -> (0 until 12).map { gx -> img.getRGB(inset.left + 300 + gx * 40, inset.top + 150 + gy * 25) } }.toSet()
+                // A presented frame reaches the screen a moment later (on a software adapter without a display, seconds later):
+                // capture until the map shows through, and say how long that took.
+                val shownBy = System.currentTimeMillis() + 30_000
+                val began = System.currentTimeMillis()
+                var shot = capture()
+                while (colours(shot).size <= 6 && System.currentTimeMillis() < shownBy) { Thread.sleep(500); shot = capture() }
+                println("blend: the map was on screen after ${System.currentTimeMillis() - began} ms (${colours(shot).size} colours), frames ${frames.get()}")
+                out?.let { ImageIO.write(shot, "png", File(it, "blend.png")) }
+                val red = reds(shot)
+                val mapColours = colours(shot)
                 // Pointer events: a click on the red box, then moves and a drag over the open map.
                 fun at(x: Int, y: Int) = robot.mouseMove(at.x + inset.left + x, at.y + inset.top + y)
                 at(60, 60); Thread.sleep(100); robot.mousePress(InputEvent.BUTTON1_DOWN_MASK); robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK); Thread.sleep(200)
