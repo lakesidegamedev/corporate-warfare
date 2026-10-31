@@ -13,6 +13,9 @@ on:
         required: true
 permissions:
   contents: write
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: true
 env:
   TAG: ${{ github.event.release.tag_name || inputs.tag }}
 jobs:

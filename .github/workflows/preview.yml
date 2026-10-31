@@ -16,6 +16,11 @@ on:
         required: true
 permissions:
   contents: write
+concurrency:
+  # Per branch and preview number: a re-run of the same preview replaces the old one; a different preview from the
+  # same branch does not cancel it.
+  group: ${{ github.workflow }}-${{ inputs.ref }}-${{ inputs.preview }}
+  cancel-in-progress: true
 env:
   PROPS: -Pcw.channel=preview -Pcw.preview=${{ inputs.preview }} -Pcw.version=${{ inputs.version }}
   TAG: v${{ inputs.version }}-preview.${{ inputs.preview }}
@@ -123,6 +128,7 @@ jobs:
   publish:
     needs: [desktop, android]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
