@@ -137,12 +137,23 @@ lots they import and export each week and keep a smoothed import average; that a
 the "room to build" shown on a state's board and used by rival expansion. No local
 back-to-back transaction can profit from the bid/ask spread.
 
-The outside economy settles through one finite account opened with $500 million: imports
-pay into it, and exports and background public works are paid from it. Each week it may
+The outside economy settles through one finite account: imports
+pay into it, and exports and background public works are paid from it. It opens with the larger of
+$500 million and 450 weeks (about nine years) of the scenario's opening trade surplus. The surplus
+is what the opening plants make of each traded good beyond what the opening plants and the
+households use, valued at the gateway bid (85 percent of reference), so a scenario built on
+exporting heavy industry (Ruhr and Rhine, where almost half of what the plants make leaves through
+a gateway) has an outside world that can pay for it, and Great Lakes keeps exactly $500 million. Each week it may
 draw at most one percent of its opening cash, net of that week's import receipts, so a
 corridor running a sustained trade surplus sees exports taper toward balance rather than
 stop at once. It buys only what it can pay for in full; a seller never hands over goods
-for part of their price. Nothing is minted. Re-export
+for part of their price. Nothing is minted. The account is a trader, not a vault: each week it
+sells on a thirteenth of the stock on its books (what it bought from the corridor) to the rest of
+the world, at cost, so cash plus stock never changes and no profit is booked. Without the resale
+the goods sat on its books forever while its cash only fell, and every export-heavy scenario ran the
+account dry within a few years (Texas $855 million to $360 million in four, Great Lakes $463 million
+to $201 million in five); with it the account is flat to rising over thirty years in all four
+scenarios and exports are never limited by its cash. Re-export
 still pays freight and transit, and cannot use a shipment before arrival.
 
 Goods use moving-average cost inventory, not free market-value write-ups. Each receipt
@@ -262,6 +273,16 @@ timber, rare earths, building materials); the products table in `content/price-p
 maps a product id to its family, and ids missing from the current content are ignored, so a
 new product joins a family with one line. Products with no family keep their opening gateway
 prices apart from inflation.
+
+A family index is relative to the general price level, not a nominal price: the engine inflates
+every gateway price with the period's inflation on top of it, so 10,000 holds a good's real
+price and 8,000 is a fall of a fifth against everything else (wages included). Authoring a path
+therefore needs no allowance for the period's inflation. Farm goods carry the lesson: wages
+follow inflation, and 77 to 86 percent of Silicon Valley and Texas farm output sells at the
+gateway bid, so a path that sank to 55 to 75 percent of day one took farm margins from about 12
+percent to nothing in five years. The grain and fertilizer paths of those two scenarios now fall
+no lower than 88 percent, and a test holds the real grain bid within 15 percent of day one over
+five years in both.
 
 Each family has an index, 10,000 basis points on day one, recomputed every week before the
 business cycle runs. Both of a gateway's prices are scaled by the ratio of this week's index to
@@ -514,7 +535,15 @@ fell from 69 to 49 percent and the outside share rose. With this rule fill was 7
 
 **Rivals** set policies (own carriers first when they own any), build a carrier on the lane with
 the most outside overflow when they earn and have cash (a terminal first where the lane has none),
-and aggressive rivals reserve part of a busy lane they own a fifth of and ship on.
+and aggressive rivals reserve part of a busy lane they own a fifth of and ship on. The overflow a
+rival builds for is net of carrier plants of that mode, at either end of the lane, that are being
+built or opened in the last thirteen weeks, because every rival reads the same hot lane in the same
+quarter. A carrier plant (not a terminal) that has run half a year, moved under a quarter of its
+capacity in lot-km in the week just closed, and belongs to a firm that lost money over its last
+thirteen weeks is mothballed, so the firm stops paying a crew and upkeep for freight that is not
+there; it is reopened when a lane at its end runs with at least half its capacity overflowing to
+outside carriers and the restart leaves the cash reserve intact. The player has the same
+Mothball and Reopen commands.
 
 **Sprawl** no longer has a threshold. Overhead is 0.18 percent of revenue times the square of the
 division count over 100 (10 divisions 0.18 percent, 20 0.72, 30 1.6), doubled with a secondary
@@ -558,3 +587,76 @@ the reserve sells instead when the price is over 120% of the average, or over 11
 and buy beside it when the reserve buys.
 
 Systemic events, state rescue and vertical review: see EVENTS.md and CORPORATE.md.
+
+## Elections, state laws and public tenders (1.9)
+
+All of this lives in `economy::civics` (save trailer `POLI`, see INTERFACE.md) and runs the same
+in every scenario; scenarios only supply the states, the regions and the cast.
+
+**Races.** Every state has a governor race and the country has a leader race, each between two
+people, one for each party, drawn from the cast (free governor or leader capable people) or, when
+none is free, a generated face. A candidate states two or three positions: corporate tax (a state
+adjustment of 100 to 300 points, or the national programme's rate), right to work, environmental
+rules, and for the leader race common carrier and merger review. State terms are four years; state
+`i` votes in week `45 + 52 * (i mod 4)` and every 208 weeks after, the leader race in the existing
+election week. Gifts and the campaign are open for the last 26 weeks.
+
+**Poll.** The business candidate's share, 0 to 10,000. State: the sitting governor's target is
+`5000 + mood + gift swing`, clamped 1,500 to 8,500, and the poll closes an eighth of the gap each
+week. Mood is `(600 - unemployment)/2 + wage change/2 - price change/2` in basis points, clamped
+to plus or minus 1,500, where wage and price change are measured against references that follow
+the present over 52 weeks. National: the poll is the governing party's hold chance,
+`approval + 300 + gift swing`, the same chance the election always used, so with no gifts the
+national result is unchanged. A candidate's gift bonus is `600 * F / (F + $200,000)` basis points
+for total funds `F`, so it never reaches 6 points.
+
+**Results.** State: the business candidate wins with chance equal to the poll (clamped 5 to 95
+percent), drawn once from a stream of the week and state. The winner becomes governor and their
+positions become the state's laws 13 weeks later (the same delay as national laws), keeping any
+law they did not speak to. The leader race result still sets the national programme through
+`politics::programme` after 13 weeks.
+
+**State laws.** Right to work weakens union law by one step for firms headquartered in the state
+(union drift in `unions.rs`). The corporate tax adjustment is added to the national rate in both
+the quarterly accrual and the dividend/tax estimate. Environmental rules change the build cost
+and lead time of heavy industry (extraction, energy, chemicals, manufacturing): lax 95 percent
+cost and 90 percent time, standard 100, strict 108 percent cost and 115 percent time. The gift cap
+(default $250,000 per firm per race; $1,000,000 nationally) is a state law too.
+
+**Campaign gifts.** `GiveToCandidate`: cash leaves the firm as an expense and lands in the outside
+advocacy sector (like a lobbying fee), so no money is made or lost. Refused outside the campaign
+window, below $1,000, over the cap, or without cash beyond reserves. The next week the paper
+discloses it and the other side holds it against the giver (reputation down by a quarter of the
+gift's weight, weight being 1 bp per $2,000 up to 100). After the vote donors to the winner gain
+half the weight and donors to the loser lose a quarter. Reputation feeds lobbying odds
+(`policy::success_bps`). Rivals give once a month by temperament (cautious never, financier 20,
+builder and integrator 40, speculator 60, raider 90 percent of the cap) to the side whose positions
+help them: heavy plants, carrier ownership (national race) and large payrolls lean business.
+
+**Tenders.** Every 13 weeks (every 6 when the treasury holds more than one and a half reserves, none
+when it holds under half of one, see FINANCE-LABOUR-AI.md, Treasury response), if the treasury's
+weekly procurement budget is positive and open and
+unfinished tenders commit less than 40 weeks of it, the state opens a tender for a road upgrade
+(6 weeks of the budget, 8 to 26 weeks), power line (8 weeks, 10 to 30) or port expansion (10
+weeks, 13 to 39) in the region of a state taken in turn with the least of that kind of works (a place
+that drew no bid last time goes to the back of the line). The ceiling is scaled by the region's land
+index (0.8 to 1.3).
+Bids close after 4 weeks. A bid is a price (at most the budget) and a delivery time; the lowest
+`price + weeks * budget / 100` wins, skipping bidders that are not operating, hold three works already, or lack a month of the work
+in cash (cost times four over the weeks promised). A contractor in another money is paid, and pays,
+converted at the week's rate. The estimate is 70 percent of the
+ceiling scaled by the region's land index, plus up to 12 percent for hurrying; the bill the winner
+meets is that estimate plus an overrun of 0 to 8 percent that nobody sees until the award (one figure
+per tender from the world seed), so the lowest bidder is the one most likely to have been too hopeful
+(the winner's curse). A rival reads the cost with its own error of up to 3 percent either way and adds
+a margin of 8 (raider, speculator), 9 (others) or 11 (cautious, financier) percent; any firm with a
+plant bids, up to two works at once. Measured over four scenarios the winner's price is 102 to 103
+percent of its real bill, against 112 to 115 before, with 5 to 17 bids per award. Each week it pays
+cost/promised weeks as construction bought from contractors in the region (the existing construction
+service path), adds steel demand in the region, and the treasury pays the price in step with the cost spent (no quarterly lumps, which the share
+valuation read as a year of profit), never more than half the week's procurement budget or the treasury's cash. A finish
+after the promised time forfeits a tenth of the price per week late, at most half. A failed
+contractor lapses the tender. Finished works add 10 percent lane capacity on trucks to and from the
+region (cap 40), 15 percent on sea lanes and sea terminal access (cap 45), or 5 points of power grid
+score (cap 15, never above 100 percent). Defence procurement and the strategic reserve are
+untouched and draw on the same treasury.

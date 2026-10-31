@@ -118,9 +118,28 @@ private enum StartPricePath: String, CaseIterable, WizardOption {
     }
 }
 
+private enum StartHistory: String, CaseIterable, WizardOption {
+    case historical, off, shuffled
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .historical: return "Historical"
+        case .off: return "Off"
+        case .shuffled: return "Shuffled"
+        }
+    }
+    var note: String {
+        switch self {
+        case .historical: return "Real events from the period happen on their real dates."
+        case .off: return "No dated events. Only the business cycle and your rivals move the world."
+        case .shuffled: return "The same events happen, but on different dates, up to half a year either side."
+        }
+    }
+}
+
 /// Scenario, then the career's terms, then start.
 struct NewGameView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     var onBack: () -> Void
 
     private let catalogue = ScenarioCatalogue.all
@@ -135,7 +154,11 @@ struct NewGameView: View {
     @State private var economy = StartEconomy.historic
     /// Nil means the scenario's own default.
     @State private var pricePathPick: StartPricePath?
+    @State private var history = StartHistory.historical
     @State private var capital: Double = StartLevel.standard.capital
+    @State private var chiefs: [PersonDto] = chiefChoices()
+    @State private var chiefPick = 0
+    @State private var chiefName = ""
 
     private var chosen: ScenarioDto? {
         if let chosenID, let hit = catalogue.first(where: { $0.id == chosenID }) { return hit }
@@ -168,7 +191,7 @@ struct NewGameView: View {
             ),
             onDismiss: { customs = customScenarioList(dir: ScenarioEditorView.directory) }
         ) {
-            ScenarioEditorView(baseId: customizing, existing: editingCustom).environmentObject(store)
+            ScenarioEditorView(baseId: customizing, existing: editingCustom).environment(store)
         }
     }
 
@@ -337,6 +360,12 @@ struct NewGameView: View {
                     .foregroundStyle(Theme.secondary)
             }
         }
+        section("Scenario history") {
+            OptionGrid(items: StartHistory.allCases, selected: history) { history = $0 }
+        }
+        section("Your chief executive") {
+            chiefPicker
+        }
         section("Starting capital") {
             ValueSlider(
                 value: $capital,
@@ -350,6 +379,29 @@ struct NewGameView: View {
             )
             .frame(maxWidth: 760)
         }
+        }
+    }
+
+    /// A few chief executives from the generated kit, one for each temperament, and an optional name.
+    @ViewBuilder private var chiefPicker: some View {
+        if !chiefs.isEmpty {
+            let current = chiefs[min(chiefPick, chiefs.count - 1)]
+            HStack(spacing: 8) {
+                ForEach(Array(chiefs.enumerated()), id: \.offset) { i, c in
+                    PixelPortrait(person: c.id, size: 52)
+                        .padding(3)
+                        .overlay(Rectangle().stroke(i == chiefPick ? Theme.gold : Theme.panelRaised, lineWidth: 2))
+                        .onTapGesture { chiefPick = i }
+                        .accessibilityLabel("\(c.name), \(temperamentLabel(c.temperament))")
+                }
+            }
+            Text("\(temperamentLabel(current.temperament)): \(temperamentNote(current.temperament))")
+                .font(.footnote)
+                .foregroundStyle(Theme.secondary)
+            TextField("Name (blank keeps \(current.name))", text: $chiefName)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 360)
+                .onChange(of: chiefName) { _, v in if v.count > 40 { chiefName = String(v.prefix(40)) } }
         }
     }
 
@@ -418,7 +470,11 @@ struct NewGameView: View {
             difficulty: level.rawValue,
             economy: economy.rawValue,
             startingCapitalCents: Int64((capital * 100).rounded()),
-            pricePath: pricePathPick?.rawValue ?? ""
+            pricePath: pricePathPick?.rawValue ?? "",
+            timeline: history.rawValue,
+            chiefName: chiefName.trimmingCharacters(in: .whitespaces),
+            chiefPortrait: chiefs.indices.contains(chiefPick) ? chiefs[chiefPick].id : "",
+            chiefTemperament: chiefs.indices.contains(chiefPick) ? chiefs[chiefPick].temperament : ""
         )
         Task { await store.startCareer(options) }
     }

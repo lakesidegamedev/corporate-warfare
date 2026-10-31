@@ -228,17 +228,54 @@ final class WorldMap {
     private static let file: WorldMapFile? = Bundle.main.url(forResource: "world-map", withExtension: "json")
         .flatMap { try? Data(contentsOf: $0) }
         .flatMap { try? JSONDecoder().decode(WorldMapFile.self, from: $0) }
+    /// Guards `built`, held only for a lookup or an insert so the main thread never waits on a build.
     private static let lock = NSLock()
+    /// Serialises builds, so the background warm-up and a view asking for the same map build it once.
+    private static let buildLock = NSLock()
     private static var built: [String: WorldMap] = [:]
+    private static var defaultMap: WorldMap?
+
+    /// The default scenario's map if it is already built, else nil. Never waits for a build, so the
+    /// main menu can draw its globe the moment the background warm-up finishes and not block before.
+    static var sharedIfReady: WorldMap? {
+        lock.lock()
+        defer { lock.unlock() }
+        return defaultMap
+    }
+
+    /// Decodes the 3.4 MB world file and builds the default map on a background thread, at launch.
+    static func prewarm() {
+        Task.detached(priority: .utility) { _ = WorldMap.shared }
+    }
+
+    /// Builds a scenario's map off the main thread, so opening a career does not stall on it.
+    /// Returns the built map's scenario id, which the GPU map is opened for.
+    @discardableResult
+    static func prepare(scenario id: String?) async -> String? {
+        await Task.detached(priority: .userInitiated) { () -> String? in
+            let known = id.flatMap { id in file?.scenarios?.contains { $0.id == id } } ?? false
+            return WorldMap.forScenario(known ? id : nil).scenarioId
+        }.value
+    }
 
     /// One scenario's map, built once. nil is the default scenario, the first in the file.
     static func forScenario(_ id: String?) -> WorldMap {
         let key = id ?? file?.scenarios?.first?.id ?? ""
         lock.lock()
-        defer { lock.unlock() }
-        if let map = built[key] { return map }
+        let existing = built[key]
+        lock.unlock()
+        if let existing { return existing }
+        buildLock.lock()
+        defer { buildLock.unlock() }
+        lock.lock()
+        let again = built[key]
+        lock.unlock()
+        if let again { return again }
         let map = WorldMap(file: file, scenario: key.isEmpty ? nil : key)
+        lock.lock()
         built[key] = map
+        if key == (file?.scenarios?.first?.id ?? "") { defaultMap = map }
+        lock.unlock()
         return map
     }
 

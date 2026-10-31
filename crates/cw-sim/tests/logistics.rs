@@ -1051,3 +1051,52 @@ fn a_carrier_trims_toward_85_percent_only_while_its_lanes_keep_their_freight() {
     // 95 percent full with heavy overflow raises.
     assert_eq!(target(&mut w, 95, 50, 50), 9_500);
 }
+
+#[test]
+fn a_logistics_chief_cuts_what_outside_carriers_charge_by_the_stated_share() {
+    use cw_sim::economy::executives as ex;
+    let (mut w, dataset) = world(2);
+    let (shipper, _) = two_firms(&w);
+    let (a, b) = (region(&dataset, "KY-EAS"), region(&dataset, "WV-NOR"));
+    let route = |w: &mut World| {
+        lg::plan_route(
+            w,
+            &dataset,
+            shipper,
+            ShipPolicy::default(),
+            steel(&dataset),
+            a,
+            b,
+            MilliLots::from_lots(30),
+        )
+        .expect("goods never stop")
+        .cents
+    };
+    let plain = route(&mut w);
+    ex::weekly(&mut w, &dataset);
+    let id = ex::candidates(&w, ex::Post::Logistics)[0].id;
+    w.executives
+        .people
+        .iter_mut()
+        .find(|c| c.id == id)
+        .unwrap()
+        .level = 5;
+    w.executives.posts.push(ex::Executive {
+        firm: shipper,
+        post: ex::Post::Logistics,
+        person: id,
+        since: 0,
+        expires: 104,
+        pay_cents: 1,
+    });
+    let cut = route(&mut w);
+    // Only the premium over the owners' empty-lane rate shrinks, by 25 percent at level 5.
+    let l = &dataset.logistics;
+    let reference =
+        cw_sim::economy::freight::freight_cost(&dataset, a, b, MilliLots::from_lots(30));
+    let expected = reference
+        * (l.empty_lane_bps + (l.outside_premium_bps - l.empty_lane_bps) * 75 / 100)
+        / 10_000;
+    assert!(plain > cut);
+    assert!((cut - expected).abs() <= 1, "{cut} vs {expected}");
+}

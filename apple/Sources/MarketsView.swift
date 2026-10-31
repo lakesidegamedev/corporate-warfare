@@ -5,7 +5,7 @@ import SwiftUI
 /// demand relation in plain terms underneath, and the detail one tap away. The Regions section
 /// of Markets.
 struct RegionMarketsSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var filter: MarketFilter = .all
     @State private var expanded: UInt32?
     @State private var pricing: PriceTarget?
@@ -103,11 +103,11 @@ struct RegionMarketsSection: View {
         .sheet(item: $pricing) { target in
             if let line = store.productLines.first(where: { $0.product == target.product }) {
                 PostureSheet(line: line)
-                    .environmentObject(store)
+                    .environment(store)
                     .presentationDetents([.medium, .large])
                     .presentationBackground(Theme.panel)
             } else {
-                PriceSheet(initialProduct: target.product).environmentObject(store)
+                PriceSheet(initialProduct: target.product).environment(store)
             }
         }
     }

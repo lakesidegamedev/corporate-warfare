@@ -147,7 +147,9 @@ pub fn condition_terms(
     let industry = dataset.recipes[plant.recipe as usize].industry.as_str();
     let mut delta = 0;
     if !utility {
-        delta -= (9_500 - conditions.power_grid_bps).max(0) * 400 / 1_000;
+        // Power lines the state has had built raise the region's grid score.
+        let grid = crate::economy::civics::grid_bps(world, conditions.power_grid_bps, plant.region);
+        delta -= (9_500 - grid).max(0) * 400 / 1_000;
     }
     if SKILLED.contains(&industry) {
         delta += ((conditions.skill_bps - 5_000) * 400 / 5_000).clamp(-400, 400);

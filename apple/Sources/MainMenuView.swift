@@ -15,6 +15,22 @@ private func scenarioTint(_ id: String) -> Color {
 /// the map, so the two always look alike.
 struct GlobeBackdrop: View {
     var offsetX: CGFloat = 0.22
+    var menuEdge: CGFloat = 0
+    /// The world file is read in the background at launch; the globe appears when it is ready.
+    @State private var map = WorldMap.sharedIfReady
+
+    var body: some View {
+        if let map {
+            GlobeScene(map: map, offsetX: offsetX, menuEdge: menuEdge)
+        } else {
+            Color.clear.task { map = await Task.detached(priority: .userInitiated) { WorldMap.shared }.value }
+        }
+    }
+}
+
+private struct GlobeScene: View {
+    let map: WorldMap
+    var offsetX: CGFloat = 0.22
     /// Where the menu column ends, in points from the left. Scenario names never show under it,
     /// where they would read through the gaps between the buttons.
     var menuEdge: CGFloat = 0
@@ -28,8 +44,6 @@ struct GlobeBackdrop: View {
     @AppStorage(GraphicsKeys.clouds) private var clouds = 1
     @AppStorage(GraphicsKeys.frameRate) private var frameRate = 60
     @State private var geometry = MapGeometryCache()
-
-    private let map = WorldMap.shared
 
     private static let names: [String: String] = {
         var result: [String: String] = [:]
@@ -445,11 +459,12 @@ private struct MenuButton: View {
 struct StartView: View {
     private enum Screen { case menu, newGame }
 
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var screen = Screen.menu
     @State private var showingSettings = false
     @State private var showingSaves = false
     @State private var showingEditor = false
+    @State private var showingCareers = false
     @State private var export: DiagnosticExport?
 
     private var version: String {
@@ -467,13 +482,16 @@ struct StartView: View {
             }
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsView().environmentObject(store)
+            SettingsView().environment(store)
         }
         .sheet(isPresented: $showingEditor) {
-            ScenarioEditorView().environmentObject(store)
+            ScenarioEditorView().environment(store)
+        }
+        .sheet(isPresented: $showingCareers) {
+            CareerListView()
         }
         .sheet(isPresented: $showingSaves) {
-            SavesView().environmentObject(store)
+            SavesView().environment(store)
         }
         .sheet(item: $export) { item in
             DiagnosticExportView(export: item)
@@ -516,11 +534,14 @@ struct StartView: View {
                         if !store.saves.isEmpty {
                             MenuButton(title: "Load game") { showingSaves = true }
                         }
+                        if !CareerSummary.load().isEmpty {
+                            MenuButton(title: "Hall of Careers") { showingCareers = true }
+                        }
                         MenuButton(title: "Scenario editor") { showingEditor = true }
                         MenuButton(title: "Settings") { showingSettings = true }
                         if let issue = store.recoveryIssue {
                             RecoveryCard(issue: issue) { export = store.makeDiagnostics() }
-                                .environmentObject(store)
+                                .environment(store)
                         }
                         if let error = store.errorMessage {
                             Text(error).font(.footnote).foregroundStyle(Theme.negative)

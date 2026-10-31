@@ -5,7 +5,7 @@ import SwiftUI
 /// first plant of a sector type in a region opens a division; later plants join it and run
 /// its strategy.
 struct BuildFlowView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let regionCode: String
 

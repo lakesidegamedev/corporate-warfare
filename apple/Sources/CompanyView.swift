@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 struct CompanyView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -110,7 +110,7 @@ struct CompanyView: View {
 }
 
 struct PriceSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var priceText = ""
     @State private var product: UInt32 = 0
     /// Opens on this product when set, as from a market row.
@@ -184,7 +184,7 @@ struct PriceSheet: View {
 }
 
 struct WageSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var tier: UInt32 = 0
     @State private var wageText = ""
     @State private var preview: PreviewDto?
@@ -276,7 +276,7 @@ struct WageSheet: View {
 }
 
 struct BuildSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var region: UInt32
     @State private var recipe: UInt32
     @State private var blocks: UInt32
@@ -361,7 +361,7 @@ struct BuildSheet: View {
 }
 
 struct DividendSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var amountText = ""
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?

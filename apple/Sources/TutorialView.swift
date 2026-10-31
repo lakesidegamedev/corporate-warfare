@@ -1,9 +1,10 @@
+import Observation
 import SwiftUI
 
 /// Every screen the app can open, shared by the phone tabs, the desktop sidebar and the tutorial's
 /// Show me button.
 enum GamePage: String, CaseIterable, Identifiable {
-    case map, office, research, stats, markets, actions, inbox, portfolio
+    case map, office, research, stats, markets, actions, inbox, portfolio, paper
 
     var id: String { rawValue }
 
@@ -17,6 +18,7 @@ enum GamePage: String, CaseIterable, Identifiable {
         case .actions: return "Actions"
         case .inbox: return "Inbox"
         case .portfolio: return "Portfolio"
+        case .paper: return "Paper"
         }
     }
 
@@ -30,6 +32,7 @@ enum GamePage: String, CaseIterable, Identifiable {
         case .actions: return "command"
         case .inbox: return "inbox"
         case .portfolio: return "portfolio"
+        case .paper: return "doc"
         }
     }
 
@@ -37,7 +40,7 @@ enum GamePage: String, CaseIterable, Identifiable {
         switch self {
         case .map: return "Play"
         case .office, .research, .stats: return "Company"
-        case .markets, .actions, .inbox: return "World"
+        case .markets, .actions, .inbox, .paper: return "World"
         case .portfolio: return "You"
         }
     }
@@ -60,7 +63,8 @@ struct TutorialStep: Identifiable {
 /// The guided tutorial: eight steps that tick off when the player actually does them. Screens
 /// report visits, the store reports every accepted command and every settled week.
 @MainActor
-final class TutorialModel: ObservableObject {
+@Observable
+final class TutorialModel {
     static let steps: [TutorialStep] = [
         TutorialStep(
             id: "office", title: "Meet your company",
@@ -117,10 +121,10 @@ final class TutorialModel: ObservableObject {
         static let hidden = "cw.tutorial.hidden"
     }
 
-    @Published private(set) var done: Set<String>
-    @Published var hidden: Bool
+    private(set) var done: Set<String>
+    var hidden: Bool
     /// Set by Show me; the shell opens the page and clears it.
-    @Published var requestedPage: GamePage?
+    var requestedPage: GamePage?
     private var startTick: UInt32?
 
     init() {
@@ -167,6 +171,11 @@ final class TutorialModel: ObservableObject {
         startTick = nil
     }
 
+    func setHidden(_ value: Bool) {
+        hidden = value
+        persist()
+    }
+
     func hide() {
         hidden = true
         persist()
@@ -182,7 +191,7 @@ final class TutorialModel: ObservableObject {
 
 /// The current step: docked in a corner on iPad and Mac, a slim bar on iPhone.
 struct TutorialPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     var compact: Bool
 
     /// A weekly research budget sized to the company: about 1 in 2,000 of its cash, in steps of

@@ -474,8 +474,17 @@ mod tests {
             + a.cast.governors.len()
             + a.firms.iter().filter(|(_, f)| f.ceo.is_some()).count();
         assert_eq!(held.len(), posts, "nobody holds two posts");
-        let ceos = a.firms.iter().filter(|(_, f)| f.ceo.is_some()).count();
-        assert_eq!(ceos, ds.cast.len() - 1 - 2 - GOVERNORS - RESERVE);
+        // Rivals take chief-capable people until only the reserve is left; nobody without the
+        // chief executive role (journalists, analysts, union leaders, hires) runs a company.
+        assert_eq!(free_people(&a, &ds, Role::Ceo).len(), RESERVE);
+        for (_, f) in a.firms.iter() {
+            if let Some(p) = f.ceo {
+                assert!(
+                    ds.cast[p as usize].can(Role::Ceo),
+                    "a chief must hold the chief role"
+                );
+            }
+        }
     }
 
     #[test]

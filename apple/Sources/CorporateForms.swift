@@ -4,7 +4,7 @@ import SwiftUI
 // MARK: - Equity
 
 struct IssueSharesSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var quantityText = ""
     @State private var priceText = ""
     @State private var buyer: UInt32 = 0
@@ -81,7 +81,7 @@ struct IssueSharesSheet: View {
 }
 
 struct RepurchaseSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var quantityText = ""
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
@@ -133,7 +133,7 @@ struct RepurchaseSheet: View {
 }
 
 struct RetireTreasurySheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var quantityText = ""
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
@@ -188,7 +188,7 @@ struct RetireTreasurySheet: View {
 }
 
 struct IPOSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var sharesText = ""
     @State private var priceText = ""
     @State private var preview: PreviewDto?
@@ -254,7 +254,7 @@ struct IPOSheet: View {
 // MARK: - Credit
 
 struct LoanSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var amountText = ""
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
@@ -308,7 +308,7 @@ struct LoanSheet: View {
 }
 
 struct TrainingBudgetSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var amountText = ""
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
@@ -363,7 +363,7 @@ struct TrainingBudgetSheet: View {
 }
 
 struct QualityBudgetSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var product: UInt32 = 0
     @State private var amountText = ""
     @State private var preview: PreviewDto?
@@ -430,7 +430,7 @@ struct QualityBudgetSheet: View {
 }
 
 struct BondSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var principalText = ""
     @State private var couponText = "700"
     @State private var weeksText = "260"
@@ -505,7 +505,7 @@ struct BondSheet: View {
 // MARK: - Governance
 
 struct NominateCEOSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var appointSelf = true
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
@@ -558,7 +558,7 @@ struct NominateCEOSheet: View {
 }
 
 struct BoardActionSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var subject = "merger_authority"
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
@@ -628,7 +628,7 @@ struct BoardActionSheet: View {
 }
 
 struct ShareOrderSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var buy = true
     @State private var quantityText = ""
     @State private var limitText = ""
@@ -637,10 +637,12 @@ struct ShareOrderSheet: View {
 
     private var firm: FirmDto? { store.selectedFirmDto }
     private var quantity: Int64? { parseCount(quantityText) }
-    private var limit: Int64? { parseDollarsToCents(limitText) }
 
     private func json() -> String? {
-        guard let firm, let quantity, let limit else { return nil }
+        guard let firm, let quantity else { return nil }
+        // Blank means no limit; a typed limit must be a price.
+        let limit = limitText.trimmingCharacters(in: .whitespaces).isEmpty ? Int64(0) : parseDollarsToCents(limitText)
+        guard let limit else { return nil }
         return CommandJSON.command("PlaceShareOrder", [
             "investor": true,
             "firm": firm.handle,
@@ -654,8 +656,8 @@ struct ShareOrderSheet: View {
         CommandSheet(
             title: "Share order",
             actorName: "You, the investor",
-            actorDetail: "Trades your personal holding in \(firm?.name ?? "the selected firm"). Cash or shares are reserved until the next week boundary.",
-            submitTitle: buy ? "Place buy order" : "Place sell order",
+            actorDetail: "Trades your personal holding in \(firm?.name ?? "the selected firm") against the public float, at once. Your own trading moves the price as it goes.",
+            submitTitle: buy ? "Buy now" : "Sell now",
             preview: preview,
             rejection: rejection,
             isBusy: store.isBusy,
@@ -674,18 +676,13 @@ struct ShareOrderSheet: View {
                 TextField("Shares", text: $quantityText)
                     .keyboardType(.numberPad)
                     .accessibilityLabel("Number of shares")
-                TextField("Limit price per share in dollars", text: $limitText)
+                TextField("Limit price per share in dollars (optional)", text: $limitText)
                     .keyboardType(.decimalPad)
                     .accessibilityLabel("Limit price per share in dollars")
                 if let firm {
                     DetailRow(title: "Traded mark", value: Format.money(firm.markCents, currency: Format.numeraire))
                     DetailRow(title: "Your votes", value: Format.percentBps(firm.investorVotesBps))
                 }
-            }
-        }
-        .onAppear {
-            if limitText.isEmpty, let firm {
-                limitText = String(format: "%.2f", Double(firm.markCents) / 100.0)
             }
         }
         .task { await refresh() }
@@ -705,7 +702,7 @@ struct ShareOrderSheet: View {
 
 struct CastVoteSheet: View {
     let vote: BoardVoteDto
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var approve = true
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
@@ -765,7 +762,7 @@ struct CastVoteSheet: View {
 // MARK: - Deals
 
 struct StartDiligenceSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var target: UInt64 = 0
     @State private var kind = "SharePurchase"
     @State private var priceText = ""
@@ -863,7 +860,7 @@ struct StartDiligenceSheet: View {
 
 struct RemedySheet: View {
     let deal: DealDto
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var divestBps: Int32 = 500
     @State private var divestPercent: Double = 5
     @State private var preview: PreviewDto?
@@ -925,7 +922,7 @@ enum BankTransferMode: Equatable {
 struct DepositSheet: View {
     let mode: BankTransferMode
     let bank: InstitutionDto?
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var bankHandle: UInt64 = 0
     @State private var amountText = ""
     @State private var preview: PreviewDto?
@@ -1009,7 +1006,7 @@ struct DepositSheet: View {
 }
 
 struct ApproveLoanSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var bankHandle: UInt64 = 0
     @State private var borrower: UInt64 = 0
     @State private var amountText = ""
@@ -1098,7 +1095,7 @@ struct ApproveLoanSheet: View {
 }
 
 struct DepositRateSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var rateText = "200"
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
@@ -1156,7 +1153,7 @@ struct DepositRateSheet: View {
 // MARK: - Insurance
 
 struct QuoteBindSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var insurer: UInt64 = 0
     @State private var facility: UInt64 = 0
@@ -1279,7 +1276,7 @@ struct QuoteBindSheet: View {
 // MARK: - Labour and policy
 
 struct BargainCounterSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var offerText = ""
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
@@ -1344,7 +1341,7 @@ struct BargainCounterSheet: View {
 }
 
 struct SettlementSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var amountText = ""
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
@@ -1400,7 +1397,7 @@ struct SettlementSheet: View {
 }
 
 struct LobbySheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var region: UInt32 = 0
     @State private var kind = "PermitAcceleration"
     @State private var preview: PreviewDto?
@@ -1493,7 +1490,7 @@ struct LobbySheet: View {
 // MARK: - Founding
 
 struct FoundFirmSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var name = ""
     @State private var region: UInt32 = 0
     @State private var capitalText = "3000000"
@@ -1612,7 +1609,7 @@ struct FoundFirmSheet: View {
 /// A weekly budget on a slider, kept in step with the typed amount beside it. The range runs to a
 /// tenth of the company's weekly revenue, at least $20,000; type a figure for anything larger.
 struct BudgetSlider: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Binding var amountText: String
     @State private var dollars: Double = 0
 

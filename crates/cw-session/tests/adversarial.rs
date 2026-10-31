@@ -911,8 +911,9 @@ fn corrupt_truncated_mis_sized_and_future_saves_are_typed_rejections() {
     }
 
     // None of the failures above damaged the live session, and the untouched bytes still import.
+    // The full export is used: the chapter trailer is part of the hash (1.9), the cut is not.
     assert_eq!(session.canonical_hash(), live_hash);
-    let restored = Session::import_save(&bytes).expect("the undamaged save still imports");
+    let restored = Session::import_save(&exported).expect("the undamaged save still imports");
     assert_eq!(restored.canonical_hash(), live_hash);
 }
 
@@ -922,9 +923,10 @@ fn an_unreleased_schema_is_rejected_rather_than_guessed() {
     // build has no migration for it. The documented rule is to accept only schemas the engine
     // can read and to migrate older released ones explicitly; with the first release at schema
     // 1, anything below 1 is an unknown format and is rejected instead of being parsed as v1.
-    // Schema 2 (1.8 preview 3) migrates schema 1 saves; see tests/save_compat.rs.
+    // Schema 2 (1.8 preview 3) migrates schema 1 saves and schema 3 (1.9) migrates schema 2; see
+    // tests/save_compat.rs.
     assert_eq!(MIN_SCHEMA_VERSION, 1);
-    assert_eq!(SCHEMA_VERSION, 2);
+    assert_eq!(SCHEMA_VERSION, 3);
 
     let mut session = session(0x5C4E_0001, ScenarioKind::Founder);
     session.advance(2);

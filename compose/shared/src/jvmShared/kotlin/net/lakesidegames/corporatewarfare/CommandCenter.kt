@@ -90,7 +90,7 @@ fun CommandCenterScreen(store: GameStore, initialQuery: String = "", onClose: ((
                     query, { query = it },
                     placeholder = { Text("Search: IPO, loan, build, price, research…", color = Palette.secondary) },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    modifier = Modifier.textEntry().fillMaxWidth().padding(horizontal = 12.dp),
                     colors = fieldColors(),
                 )
                 FlowRow(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -312,7 +312,7 @@ private fun FieldControl(store: GameStore, field: FieldDto, values: MutableMap<S
                 field.choices.forEach { option -> Chip(option.label, raw == option.value) { values[field.key] = option.value } }
             }
             "text" -> OutlinedTextField(
-                raw, { values[field.key] = it }, singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors(),
+                raw, { values[field.key] = it }, singleLine = true, modifier = Modifier.textEntry().fillMaxWidth(), colors = fieldColors(),
                 placeholder = { Text(if (field.key == "name") "Your company's name" else "", color = Palette.secondary) },
             )
             "money", "lots", "shares", "weeks", "count", "bps" -> NumberControl(store, field, raw) { values[field.key] = it }
@@ -377,7 +377,7 @@ private fun NumberControl(store: GameStore, field: FieldDto, raw: String, onValu
                 onValue((number * if (field.kind == "money" || field.kind == "bps") 100 else 1).toLong().toString())
             },
             singleLine = true,
-            modifier = Modifier.width(140.dp),
+            modifier = Modifier.textEntry().width(140.dp),
             colors = fieldColors(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             prefix = if (field.kind == "money") ({ Text("$", color = Palette.secondary) }) else null,

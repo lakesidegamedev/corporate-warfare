@@ -22,6 +22,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,24 +36,56 @@ import kotlinx.serialization.json.Json
 import uniffi.cw_ffi.DossierDto
 import uniffi.cw_ffi.PersonDto
 
-/** The character cast's 16 by 16 pixel portraits, shared with the Apple apps (cast-portraits.json). */
+/**
+ * The character cast's portraits, shared with the Apple apps (cast-portraits.json): a 32 by 32 bust
+ * with three moods (neutral, pleased, displeased) and its 16 by 16 reduction for every person, named
+ * or generated, and a 64 by 64 office portrait for the named chiefs.
+ */
 object CastPortraits {
-    @Serializable private data class File(val size: Int = 16, val portraits: Map<String, PixelIcons.Icon>)
+    @Serializable class Bust(val palette: Map<String, String>, val expressions: Map<String, List<String>>, val small: Map<String, List<String>>)
+    @Serializable class Office(val palette: Map<String, String>, val rows: List<String>)
+    @Serializable private class File(val portraits: Map<String, Bust>, val office: Map<String, Office> = emptyMap())
 
     private val file: File? by lazy {
         val stream = CastPortraits::class.java.getResourceAsStream("/cast-portraits.json") ?: return@lazy null
         Json { ignoreUnknownKeys = true }.decodeFromString(File.serializer(), stream.bufferedReader().readText())
     }
 
-    val all: Map<String, PixelIcons.Icon> get() = file?.portraits ?: emptyMap()
+    val all: Map<String, Bust> get() = file?.portraits ?: emptyMap()
+    val office: Map<String, Office> get() = file?.office ?: emptyMap()
+
+    /** The mood to draw: the atlas has neutral, pleased and displeased, and anything else reads neutral. */
+    fun mood(key: String): String = if (key == "pleased" || key == "displeased") key else "neutral"
 }
 
-/** One cast member's portrait as exact pixels. */
+/** Portraits narrower than this draw the 16 by 16 bust, the rest the 32 by 32 one. */
+private val SmallBelow = 32.dp
+
+private fun bustBitmap(person: String, mood: String, small: Boolean): ImageBitmap? {
+    val art = CastPortraits.all[person] ?: return null
+    val m = CastPortraits.mood(mood)
+    val rows = (if (small) art.small[m] else art.expressions[m]) ?: return null
+    return PixelBitmaps.of("cast:$person:$m:${if (small) 16 else 32}", rows) { ch -> art.palette[ch.toString()]?.let { SectorIcons.color(it) } }
+}
+
+private fun officeBitmap(person: String): ImageBitmap? {
+    val art = CastPortraits.office[person] ?: return null
+    return PixelBitmaps.of("cast:$person:office", art.rows) { ch -> art.palette[ch.toString()]?.let { SectorIcons.color(it) } }
+}
+
+/**
+ * One cast member's portrait as exact pixels. [mood] is neutral, pleased or displeased. Below 32 dp it
+ * is the 16 by 16 bust for rows and chips; with [office] set and a 64 by 64 office portrait on file
+ * (chiefs on company pages, dossiers and the CEO Office) that is drawn instead.
+ */
 @Composable
-fun PixelPortrait(person: String, modifier: Modifier = Modifier, size: Dp = 40.dp) {
-    val art = CastPortraits.all[person]
+fun PixelPortrait(person: String, modifier: Modifier = Modifier, size: Dp = 40.dp, mood: String = "neutral", office: Boolean = false, forceSmall: Boolean = false) {
+    val bitmap = (if (office) officeBitmap(person) else null) ?: bustBitmap(person, mood, forceSmall || size < SmallBelow)
     Canvas(modifier.size(size).clip(Pixel.small).background(Palette.panelRaised)) {
-        if (art != null) drawPixelIcon(art, null)
+        if (bitmap != null) {
+            val side = minOf(this.size.width, this.size.height).roundToInt()
+            drawPixelBitmap(bitmap, width = side, height = side)
+        }
     }
 }
 
@@ -79,7 +113,7 @@ internal fun temperamentNote(key: String): String = when (key) {
 @Composable
 fun PersonLine(person: PersonDto, role: String, portrait: Dp = 36.dp) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        PixelPortrait(person.id, size = portrait)
+        PixelPortrait(person.id, size = portrait, mood = person.mood)
         Column {
             Text(person.name, color = Palette.primaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
             Text("$role · ${person.home}", color = Palette.secondary, fontSize = 11.sp, maxLines = 1)
@@ -89,14 +123,14 @@ fun PersonLine(person: PersonDto, role: String, portrait: Dp = 36.dp) {
 
 /** A rival's chief executive, their style, background and what the firm has done lately. */
 @Composable
-fun DossierBody(d: DossierDto) {
+fun DossierBody(d: DossierDto, currency: String = "") {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val ceo = d.ceo
         if (ceo == null) {
             Text("${d.firmName} is run by its management. Style: ${d.style}.", color = Palette.secondary, fontSize = 12.sp)
         } else {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PixelPortrait(ceo.id, size = 64.dp)
+                PixelPortrait(ceo.id, size = 72.dp, mood = ceo.mood, office = ceo.officePortrait)
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(ceo.name, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Text("${ceo.age} · ${ceo.home}", color = Palette.secondary, fontSize = 12.sp)
@@ -110,6 +144,9 @@ fun DossierBody(d: DossierDto) {
             Text(temperamentNote(ceo.temperament), color = Palette.primaryText, fontSize = 12.sp)
             Text(ceo.background, color = Palette.secondary, fontSize = 12.sp)
         }
+        RivalExecutives(d.executives, currency)
+        LikelyNextMove(d.likelyNext)
+        DisclosedStakes(d.stakes)
         d.grudges.forEach { line ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 PixelIcon("target", size = 12.dp, tint = Palette.negative)
@@ -139,7 +176,7 @@ fun DossierSection(store: GameStore, firm: ULong) {
     dossier?.let { d ->
         if (d.ceo != null || d.moves.isNotEmpty() || d.grudges.isNotEmpty() || d.allies.isNotEmpty()) {
             Eyebrow("Who runs it")
-            DossierBody(d)
+            DossierBody(d, store.firms.firstOrNull { it.handle == firm }?.currency ?: store.selectedFirmDto?.currency.orEmpty())
         }
     }
     RaidMarketsList(store, firm)

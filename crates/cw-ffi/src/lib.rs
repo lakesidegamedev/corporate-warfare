@@ -16,16 +16,29 @@ use cw_session::{Query, Session};
 
 uniffi::setup_scaffolding!();
 
+mod brief;
 mod cast;
 mod catalogue;
+mod chapters;
 mod company;
 mod custom;
+mod executives;
+#[cfg(feature = "gpu-map")]
+pub mod gpu_map;
+mod letters;
+mod paper;
+mod plans;
+mod politics;
 mod statements;
 mod systems;
 pub use cast::{
-    DossierDto, MoveDto, PersonDto, PostDto, RivalMoveFeedDto, RivalSummaryDto, RivalTagDto,
+    DossierDto, MoveDto, PersonDto, PlayerChiefDto, PostDto, RivalMoveFeedDto, RivalSummaryDto,
+    RivalTagDto,
 };
 pub use catalogue::{ActionDto, FieldDto, OptionDto, action_catalogue};
+pub use paper::{
+    ClassifiedDto, GoodMoveDto, MarketsDto, PaperDto, PaperLinkDto, ShareMoveDto, StoryDto,
+};
 pub use statements::{DivisionPeriodDto, PricePointDto, StatementDto};
 
 #[derive(uniffi::Record)]
@@ -182,6 +195,37 @@ pub struct StockDto {
     pub your_shares: i64,
     pub float_bps: i64,
     pub controlled_by_you: bool,
+    pub earnings: EarningsDto,
+}
+
+/// Earnings season for one company: the analyst's estimate, the last results against it, the
+/// rating and any guidance. Empty (`covered` false) for a company no analyst covers.
+#[derive(uniffi::Record)]
+pub struct EarningsDto {
+    pub covered: bool,
+    /// buy, hold or sell.
+    pub rating: String,
+    pub has_estimate: bool,
+    pub estimate_cents: i64,
+    /// Weeks to results day.
+    pub weeks_to_results: u32,
+    /// The company reports within the coming week: the stock board marks it.
+    pub reports_this_week: bool,
+    pub has_guidance: bool,
+    pub guide_low_cents: i64,
+    pub guide_high_cents: i64,
+    /// How far the market trusts management's numbers, 0 to 10,000.
+    pub credibility_bps: i32,
+    /// The player can give guidance now (send `GiveGuidance`).
+    pub can_guide: bool,
+    pub has_last: bool,
+    pub last_week: u32,
+    pub last_actual_cents: i64,
+    pub last_estimate_cents: i64,
+    /// The share price move on the last results day, basis points.
+    pub last_move_bps: i32,
+    pub last_guidance_met: Option<bool>,
+    pub streak: i32,
 }
 
 /// One good the firm makes, for the pricing panel.
@@ -702,6 +746,25 @@ pub struct PreviewDto {
     pub blocked_detail: Option<String>,
 }
 
+/// What buying or selling shares from the public float would do right now, changing nothing.
+#[derive(uniffi::Record)]
+pub struct ShareQuoteDto {
+    /// Shares that would change hands.
+    pub qty: i64,
+    pub average_cents: i64,
+    /// What a buy costs or a sale pays.
+    pub total_cents: i64,
+    /// The price once the trade is done.
+    pub final_cents: i64,
+    pub mark_cents: i64,
+    /// Shares the public holds.
+    pub float_qty: i64,
+    /// Most you could buy (cash and float) or sell (your holding).
+    pub max_qty: i64,
+    /// Your stake after the trade, in basis points of the votes.
+    pub stake_after_bps: i32,
+}
+
 #[derive(uniffi::Record)]
 pub struct LabourDto {
     pub firm: u64,
@@ -871,6 +934,10 @@ pub struct RegionBoardDto {
     pub crime_bps: i32,
     pub cost_of_living_bps: i32,
     pub organisation_bps: i32,
+    /// Net people who moved into the region over the last 52 weeks (negative: moved out).
+    pub net_migration_year: i64,
+    /// That net movement as basis points of the region's people now, for the map's houses.
+    pub migration_bps: i32,
     pub room: Vec<RoomDto>,
     /// Every sector type with operators or unmet imports here.
     pub sectors: Vec<SectorCellDto>,
@@ -1527,6 +1594,30 @@ fn stock_dto(line: cw_session::dto::StockLine) -> StockDto {
         your_shares: line.your_shares,
         float_bps: line.float_bps,
         controlled_by_you: line.controlled_by_you,
+        earnings: earnings_dto(line.earnings),
+    }
+}
+
+fn earnings_dto(e: cw_session::dto::EarningsLine) -> EarningsDto {
+    EarningsDto {
+        covered: e.covered,
+        rating: e.rating,
+        has_estimate: e.has_estimate,
+        estimate_cents: e.estimate_cents,
+        weeks_to_results: e.weeks_to_results,
+        reports_this_week: e.reports_this_week,
+        has_guidance: e.has_guidance,
+        guide_low_cents: e.guide_low_cents,
+        guide_high_cents: e.guide_high_cents,
+        credibility_bps: e.credibility_bps,
+        can_guide: e.can_guide,
+        has_last: e.has_last,
+        last_week: e.last_week,
+        last_actual_cents: e.last_actual_cents,
+        last_estimate_cents: e.last_estimate_cents,
+        last_move_bps: e.last_move_bps,
+        last_guidance_met: e.last_guidance_met,
+        streak: e.streak,
     }
 }
 
@@ -1668,6 +1759,12 @@ pub struct ScenarioDto {
 }
 
 /// The scenarios a new career can start in, in display order.
+/// Chief executives the new-game screen offers the player, one for each temperament.
+#[uniffi::export]
+pub fn chief_choices() -> Vec<cast::PersonDto> {
+    cast::chief_choices()
+}
+
 #[uniffi::export]
 pub fn scenarios() -> Vec<ScenarioDto> {
     cw_data::scenarios()
@@ -1777,49 +1874,6 @@ fn recipe_dtos(dataset: &cw_data::Dataset) -> Vec<RecipeDto> {
 }
 
 /// The full strategy catalogue with inputs and reference margins.
-/// Player-facing title and detail for an objective.
-fn objective_copy(
-    dataset: &cw_data::Dataset,
-    kind: &cw_sim::economy::objectives::ObjectiveKind,
-) -> (String, String) {
-    use cw_sim::economy::objectives::ObjectiveKind;
-    let money = |cents: i64| {
-        let dollars = cents / 100;
-        if dollars.abs() >= 1_000 {
-            format!("${}K", dollars / 1_000)
-        } else {
-            format!("${dollars}")
-        }
-    };
-    match kind {
-        ObjectiveKind::NewRegion { .. } => (
-            "Enter a new region".to_owned(),
-            "Open a division in a region where the company does not operate yet.".to_owned(),
-        ),
-        ObjectiveKind::NewState { .. } => (
-            "Expand into another state".to_owned(),
-            "Open a division in a state where the company does not operate yet.".to_owned(),
-        ),
-        ObjectiveKind::WeeklyEbit { target_cents } => (
-            format!("Lift operating profit to {} a week", money(*target_cents)),
-            "Average weekly operating profit over the last four weeks.".to_owned(),
-        ),
-        ObjectiveKind::MarketShare {
-            region,
-            industry,
-            target_bps,
-        } => (
-            format!(
-                "Take {}% of {} in {}",
-                target_bps / 100,
-                cw_sim::state::INDUSTRY_NAMES[*industry as usize].replace('_', " "),
-                dataset.regions[*region as usize].name
-            ),
-            "Capacity share of the market, counting unmet imports.".to_owned(),
-        ),
-    }
-}
-
 fn pct_text(bps: i64) -> String {
     format!("{}.{:02}%", bps / 100, (bps % 100).abs())
 }
@@ -2126,13 +2180,47 @@ pub struct QuotaDto {
 #[derive(uniffi::Record)]
 pub struct IncidentDto {
     pub week: u32,
-    /// spill, port_strike, refinery_fire, lane_outage or harvest_failure.
+    /// spill, port_strike, refinery_fire, lane_outage, harvest_failure or timeline.
     pub kind: String,
     pub text: String,
     /// Weeks left until it is over.
     pub weeks_left: u32,
     /// One of your companies is touched.
     pub touches_you: bool,
+}
+
+/// A dated event from the scenario's history the player has been told is coming.
+#[derive(uniffi::Record)]
+pub struct TimelineUpcomingDto {
+    pub id: String,
+    pub title: String,
+    pub summary: String,
+    pub year: i32,
+    /// 1 to 52.
+    pub week_of_year: u32,
+    /// The game week it happens in.
+    pub week: u32,
+    pub weeks_away: u32,
+}
+
+/// A dated event from the scenario's history that has happened.
+#[derive(uniffi::Record)]
+pub struct TimelinePastDto {
+    pub id: String,
+    pub title: String,
+    pub summary: String,
+    pub year: i32,
+    pub week_of_year: u32,
+    pub week: u32,
+}
+
+/// The scenario timeline as the player may see it. Events not yet announced are never listed.
+#[derive(uniffi::Record)]
+pub struct TimelineDto {
+    /// "off", "historical" or "shuffled".
+    pub mode: String,
+    pub upcoming: Vec<TimelineUpcomingDto>,
+    pub past: Vec<TimelinePastDto>,
 }
 
 /// The economy, the central bank and the government, for the Markets economy card.
@@ -2349,6 +2437,19 @@ pub struct NewGameDto {
     /// How world commodity prices move: "historical", "historical_variance" or "random".
     /// Empty takes the scenario's default.
     pub price_path: String,
+    /// Whether the scenario's dated history plays: "historical", "off" or "shuffled". Empty
+    /// takes historical.
+    #[uniffi(default = "")]
+    pub timeline: String,
+    /// The player's own chief executive (1.9): a name (blank takes the portrait's), a portrait id
+    /// from `chief_choices` (blank takes the first) and a temperament key (blank takes the
+    /// portrait's). Presentation only.
+    #[uniffi(default = "")]
+    pub chief_name: String,
+    #[uniffi(default = "")]
+    pub chief_portrait: String,
+    #[uniffi(default = "")]
+    pub chief_temperament: String,
 }
 
 #[uniffi::export]
@@ -2375,9 +2476,17 @@ impl SessionHandle {
             prices: cw_session::PriceSetup {
                 scenario_id: options.scenario_id.clone(),
                 path: cw_data::PricePath::from_key(&options.price_path),
+                timeline: cw_sim::economy::timeline::TimelineMode::from_key(&options.timeline),
             },
         };
-        let session = Session::create(config)?;
+        let mut session = Session::create(config)?;
+        if !options.chief_name.is_empty() || !options.chief_portrait.is_empty() {
+            session.set_player_chief(
+                &options.chief_name,
+                &options.chief_portrait,
+                &options.chief_temperament,
+            );
+        }
         Ok(Arc::new(SessionHandle {
             inner: Mutex::new(session),
         }))
@@ -2486,6 +2595,38 @@ impl SessionHandle {
             assisted: score.assisted,
             personal_net_worth_cents: score.personal_net_worth_cents,
         })
+    }
+
+    /// The scenario's dated history: announced events still ahead, and events that happened.
+    pub fn timeline(&self) -> TimelineDto {
+        let session = self.lock();
+        let world = &session.world;
+        TimelineDto {
+            mode: world.systemic.timeline.mode.key().to_owned(),
+            upcoming: cw_sim::economy::timeline::upcoming(world)
+                .into_iter()
+                .map(|e| TimelineUpcomingDto {
+                    id: e.id,
+                    title: e.title,
+                    summary: e.summary,
+                    year: e.year,
+                    week_of_year: e.week_of_year,
+                    week: e.tick,
+                    weeks_away: e.weeks_away,
+                })
+                .collect(),
+            past: cw_sim::economy::timeline::past(world)
+                .into_iter()
+                .map(|e| TimelinePastDto {
+                    id: e.id,
+                    title: e.title,
+                    summary: e.summary,
+                    year: e.year,
+                    week_of_year: e.week_of_year,
+                    week: e.tick,
+                })
+                .collect(),
+        }
     }
 
     pub fn canonical_hash(&self) -> String {
@@ -2605,6 +2746,18 @@ impl SessionHandle {
                 }
                 let state = dataset.state_of(index as u8);
                 let c = region.conditions;
+                let net_migration_year = world.plans.migration.net_over(index, 52);
+                let people: i64 = world
+                    .regions
+                    .get(index)
+                    .map(|r| r.labour.iter().map(|t| t.population).sum())
+                    .unwrap_or(0);
+                let migration_bps = if people > 0 {
+                    (net_migration_year as i128 * 10_000 / people as i128).clamp(-10_000, 10_000)
+                        as i32
+                } else {
+                    0
+                };
                 RegionBoardDto {
                     index: index as u32,
                     code: region.code.clone(),
@@ -2628,6 +2781,8 @@ impl SessionHandle {
                         .get(index)
                         .map(|r| r.organisation_bps)
                         .unwrap_or(region.opening_organisation_bps),
+                    net_migration_year,
+                    migration_bps,
                     room,
                     sectors: cells,
                     storage: own
@@ -3593,36 +3748,44 @@ impl SessionHandle {
         }
     }
 
-    /// The board's current objective, if one is open.
+    /// The board's mandate in force for the player's primary company, if one was taken. The
+    /// 1.2 quarterly objective this call used to return is now the chapter mandate; the full
+    /// record is `hall_of_careers`.
     pub fn objective(&self) -> Option<ObjectiveDto> {
         let session = self.lock();
         let world = &session.world;
         let dataset = &session.dataset;
-        let objective = world.objective.as_ref()?;
-        let (title, detail) = objective_copy(dataset, &objective.kind);
+        let mandate = world.chapters.active.get(&world.investor.primary_group?)?;
+        let (title, detail) = chapters::mandate_copy(dataset, &mandate.kind);
+        let progress = cw_sim::economy::chapters::progress(world, dataset, mandate);
         Some(ObjectiveDto {
             title,
             detail,
-            progress_bps: cw_sim::economy::objectives::progress_bps(world, dataset, objective)
-                as i32,
-            due_week: objective.due,
-            weeks_left: objective.due.saturating_sub(world.tick.0),
+            progress_bps: progress.bps as i32,
+            due_week: mandate.due,
+            weeks_left: mandate.due.saturating_sub(world.tick.0),
         })
     }
 
-    /// Closed objectives, newest first.
+    /// Closed mandates of the player's chapters, newest first.
     pub fn objective_history(&self) -> Vec<ObjectiveResultDto> {
+        use cw_sim::economy::chapters::Outcome;
         let session = self.lock();
         session
             .world
-            .objective_history
+            .chapters
+            .log
             .iter()
             .rev()
-            .map(|result| ObjectiveResultDto {
-                title: objective_copy(&session.dataset, &result.objective.kind).0,
-                met: result.met,
-                closed_week: result.closed,
-                bonus_cents: result.bonus_cents,
+            .filter(|c| matches!(c.outcome, Some(Outcome::Met | Outcome::Missed)))
+            .filter_map(|c| {
+                let kind = c.offered.get(c.chosen? as usize)?;
+                Some(ObjectiveResultDto {
+                    title: chapters::mandate_copy(&session.dataset, kind).0,
+                    met: c.outcome == Some(Outcome::Met),
+                    closed_week: c.closed,
+                    bonus_cents: c.bonus_cents,
+                })
             })
             .collect()
     }
@@ -4517,6 +4680,47 @@ impl SessionHandle {
         preview_dto(session.preview(cw_sim::commands::INVESTOR_ACTOR, &intent))
     }
 
+    /// Live quote for the buy and sell dialogs. `as_firm` is the company trading, or 0 for the
+    /// investor's own account; `limit_cents` of 0 means no limit.
+    pub fn quote_shares(
+        &self,
+        firm: u64,
+        buy: bool,
+        qty: i64,
+        limit_cents: i64,
+        as_firm: u64,
+    ) -> ShareQuoteDto {
+        let session = self.lock();
+        let holder = if as_firm == 0 {
+            cw_sim::state::HolderId::Investor
+        } else {
+            cw_sim::state::HolderId::Firm(cw_core::ids::Handle(as_firm))
+        };
+        let side = if buy {
+            cw_sim::state::OrderSide::Buy
+        } else {
+            cw_sim::state::OrderSide::Sell
+        };
+        let q = cw_sim::economy::equity::quote_shares(
+            &session.world,
+            holder,
+            cw_core::ids::Handle(firm),
+            side,
+            qty,
+            limit_cents,
+        );
+        ShareQuoteDto {
+            qty: q.qty,
+            average_cents: q.average_cents,
+            total_cents: q.total_cents,
+            final_cents: q.final_cents,
+            mark_cents: q.mark_cents,
+            float_qty: q.float_qty,
+            max_qty: q.max_qty,
+            stake_after_bps: q.stake_after_bps,
+        }
+    }
+
     /// Typed dilution preview used by the issuance sheet.
     pub fn preview_issue(&self, firm: u64, qty: i64, price_cents: i64) -> PreviewDto {
         let session = self.lock();
@@ -4891,6 +5095,49 @@ impl SessionHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_paper_and_ticker_cross_the_boundary() {
+        let career = SessionHandle::start(NewGameDto {
+            seed: 9,
+            scenario_id: "texas-1981".to_owned(),
+            guided: true,
+            five_year: false,
+            difficulty: "standard".to_owned(),
+            economy: "historic".to_owned(),
+            starting_capital_cents: None,
+            price_path: String::new(),
+            timeline: String::new(),
+            chief_name: String::new(),
+            chief_portrait: String::new(),
+            chief_temperament: String::new(),
+        })
+        .unwrap();
+        let mut left = 20;
+        while career.overview().tick < 20 && left > 0 {
+            career.advance(4);
+            career.dismiss_pause();
+            left -= 1;
+        }
+        let now = career.overview().tick;
+        let paper = career.paper(now);
+        assert_eq!(paper.masthead, "The Gulf Ledger");
+        assert_eq!(paper.week, now);
+        assert!(paper.markets.open);
+        let ticker = career.ticker();
+        assert!(ticker.len() <= 3);
+        assert_eq!(
+            ticker.len(),
+            paper.lead.iter().chain(&paper.briefs).take(3).count()
+        );
+        let archive = career.paper_archive();
+        assert_eq!(archive.first(), Some(&now));
+        assert_eq!(
+            career.paper(archive[archive.len() - 1]).week,
+            archive[archive.len() - 1]
+        );
+        assert_eq!(career.paper(now + 50).week, now, "a future week is today");
+    }
 
     #[test]
     fn a_real_session_round_trips_through_the_boundary() {
@@ -5287,6 +5534,10 @@ mod tests {
             economy: "historic".to_owned(),
             starting_capital_cents: None,
             price_path: String::new(),
+            timeline: String::new(),
+            chief_name: String::new(),
+            chief_portrait: String::new(),
+            chief_temperament: String::new(),
         })
         .unwrap();
         assert_eq!(career.scenario_id(), "texas-1981");
@@ -5294,6 +5545,76 @@ mod tests {
             price(&career.products(), "Crude oil"),
             price(&texas, "Crude oil")
         );
+    }
+
+    /// The timeline DTO lists announced events ahead and events that happened, and never an
+    /// event that has not been announced.
+    #[test]
+    fn the_timeline_lists_only_announced_events_ahead_and_the_past_with_dates() {
+        let start = |timeline: &str| {
+            SessionHandle::start(NewGameDto {
+                seed: 3,
+                scenario_id: "texas-1981".to_owned(),
+                guided: true,
+                five_year: false,
+                difficulty: "standard".to_owned(),
+                economy: "historic".to_owned(),
+                starting_capital_cents: None,
+                price_path: String::new(),
+                timeline: timeline.to_owned(),
+                chief_name: String::new(),
+                chief_portrait: String::new(),
+                chief_temperament: String::new(),
+            })
+            .unwrap()
+        };
+        let off = start("off");
+        let on = start("");
+        assert_eq!(off.timeline().mode, "off");
+        assert_eq!(on.timeline().mode, "historical");
+        // Texas: tight money in 1981 week 30, noticed 6 weeks ahead from week 24.
+        let step = |handle: &SessionHandle, until: u32| {
+            while handle.lock().world.tick.0 < until {
+                handle.advance(1);
+                let mut session = handle.lock();
+                for event in session.world.events.pending.iter_mut() {
+                    event.resolved = true;
+                }
+                session.dismiss_pause();
+            }
+        };
+        step(&on, 23);
+        let t = on.timeline();
+        assert!(
+            t.upcoming.is_empty() && t.past.is_empty(),
+            "nothing is announced yet"
+        );
+        step(&on, 24);
+        let t = on.timeline();
+        assert_eq!(t.upcoming.len(), 1);
+        assert_eq!(t.upcoming[0].id, "tx-tight-money");
+        assert_eq!(
+            (
+                t.upcoming[0].year,
+                t.upcoming[0].week_of_year,
+                t.upcoming[0].weeks_away
+            ),
+            (1981, 30, 6)
+        );
+        step(&on, 30);
+        let t = on.timeline();
+        assert!(t.upcoming.is_empty());
+        assert_eq!(
+            (
+                t.past[0].id.as_str(),
+                t.past[0].year,
+                t.past[0].week_of_year
+            ),
+            ("tx-tight-money", 1981, 30)
+        );
+        step(&off, 30);
+        let t = off.timeline();
+        assert!(t.upcoming.is_empty() && t.past.is_empty());
     }
 
     /// Every firm has a face, a name and a logo, and a page shows only what the investor may know.
@@ -5309,6 +5630,10 @@ mod tests {
                 economy: "historic".to_owned(),
                 starting_capital_cents: None,
                 price_path: String::new(),
+                timeline: String::new(),
+                chief_name: String::new(),
+                chief_portrait: String::new(),
+                chief_temperament: String::new(),
             })
             .unwrap();
             session.advance(3);

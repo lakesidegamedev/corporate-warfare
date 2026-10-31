@@ -76,6 +76,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         region.paid_named_wages_cents = 0;
     }
     crate::ph!(
+        "migration::weekly",
+        crate::economy::migration::weekly(world, dataset)
+    );
+    crate::ph!(
         "labour::clear",
         crate::economy::labour::clear(world, dataset)
     );
@@ -152,6 +156,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     );
     crate::ph!("rivalry::weekly", crate::economy::rivalry::weekly(world));
     crate::ph!(
+        "timeline::weekly",
+        crate::economy::timeline::weekly(world, dataset)
+    );
+    crate::ph!(
         "world_prices::weekly",
         crate::economy::world_prices::weekly(world)
     );
@@ -169,6 +177,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         crate::economy::politics::weekly(world, dataset)
     );
     crate::ph!("cast::weekly", crate::economy::cast::weekly(world, dataset));
+    crate::ph!(
+        "civics::weekly",
+        crate::economy::civics::weekly(world, dataset)
+    );
     crate::ph!(
         "rescue::weekly",
         crate::economy::rescue::weekly(world, dataset)
@@ -240,6 +252,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         world.pending_pause = pause_reason(world);
     }
     crate::ph!(
+        "earnings::weekly",
+        crate::economy::earnings::weekly(world, dataset)
+    );
+    crate::ph!(
         "pricing::weekly",
         crate::economy::pricing::weekly(world, dataset)
     );
@@ -260,8 +276,16 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         crate::economy::systems::record(world, dataset)
     );
     crate::ph!(
-        "objectives::weekly",
-        crate::economy::objectives::weekly(world, dataset)
+        "chapters::weekly",
+        crate::economy::chapters::weekly(world, dataset)
+    );
+    crate::ph!(
+        "executives::weekly",
+        crate::economy::executives::weekly(world, dataset)
+    );
+    crate::ph!(
+        "plans::weekly",
+        crate::economy::plans::weekly(world, dataset)
     );
     crate::ph!(
         "score::update",
@@ -543,7 +567,8 @@ fn accrue_tax(world: &mut World, dataset: &Dataset, firm: Handle) {
     } else {
         0
     };
-    let rate = (world.politics.laws.corporate_tax_bps + modifier).clamp(0, 10_000);
+    let state = crate::economy::civics::tax_delta_bps(world, entity.region);
+    let rate = (world.politics.laws.corporate_tax_bps + modifier + state).clamp(0, 10_000);
     let quarterly = round_even_div(taxable as i128 * rate as i128, 10_000) as i64;
     let weekly = quarterly / 13;
     if weekly <= 0 {
@@ -601,6 +626,8 @@ fn accrue_tax(world: &mut World, dataset: &Dataset, firm: Handle) {
 
 fn refresh_household_income(world: &mut World, dataset: &Dataset) {
     world.government.unpaid_transfer_need_cents = 0;
+    let tax_rate =
+        crate::economy::fiscal::labour_tax_bps(crate::economy::fiscal::stance_bps(world));
     for region_index in 0..world.regions.len() {
         let mut income = 0i64;
         for tier in 0..3 {
@@ -613,7 +640,7 @@ fn refresh_household_income(world: &mut World, dataset: &Dataset) {
         // Taxable labour income pays twenty percent to the government. Households spend
         // from what remains; transfer support is not taxable wage income.
         let earned = income;
-        let labour_tax = earned * crate::economy::fiscal::LABOUR_TAX_BPS / 10_000;
+        let labour_tax = earned * tax_rate / 10_000;
         if labour_tax > 0 {
             let receipt = crate::economy::fx::region_to_numeraire(
                 world,

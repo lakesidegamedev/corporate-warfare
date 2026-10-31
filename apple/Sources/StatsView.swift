@@ -103,7 +103,7 @@ struct StatementRow: Identifiable {
 /// The selected company's numbers in depth: results by week, period or year, the income
 /// statement, the balance sheet over time, the share price and market value, and who owns it.
 struct StatsView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var period: StatsPeriod = .month
 
     private var firm: FirmDto? { store.selectedFirmDto }

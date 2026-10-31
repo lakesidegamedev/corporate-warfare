@@ -18,6 +18,7 @@ fn config(path: Option<PricePath>, scenario: &str) -> ScenarioConfig {
         prices: PriceSetup {
             scenario_id: scenario.to_owned(),
             path,
+            ..Default::default()
         },
     }
 }
@@ -27,8 +28,16 @@ fn run_to(session: &mut Session, week: u32) {
     while session.world.tick.0 < week {
         let result = session.advance(week - session.world.tick.0);
         session.dismiss_pause();
+        // These runs test prices, not decisions: an event card that stops the clock is let lapse.
+        if result
+            .pause
+            .as_deref()
+            .is_some_and(|p| p.starts_with("event:"))
+        {
+            session.world.pending_pause = None;
+        }
         assert!(
-            result.weeks_advanced > 0,
+            result.weeks_advanced > 0 || result.pause.is_some(),
             "stalled at {}",
             session.world.tick.0
         );

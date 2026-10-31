@@ -154,6 +154,120 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             vec![firm()],
         ),
         a(
+            "ChooseMandate",
+            "Board",
+            "Take a board mandate",
+            "At the start of each chapter the board offers three mandates. Take one in the first four weeks: meet it by the end of the chapter for a management bonus and better standing with the board, miss it and the board loses confidence.",
+            "chapter mandate board goal objective",
+            vec![
+                firm(),
+                f("pick", "Mandate", "choice").choices(
+                    "number",
+                    &[("0", "First offer"), ("1", "Second offer"), ("2", "Third offer")],
+                ),
+            ],
+        ),
+        a(
+            "GiveGuidance",
+            "Shares",
+            "Give guidance",
+            "Tell the analysts what operating profit to expect this quarter, a low and a high end. They move their estimate toward the middle. Meet the low end on results day and they trust you more, so a later miss hurts the share price less. Miss it and the company loses reputation and trust, and activist investors take notice.",
+            "guidance earnings results analyst estimate",
+            vec![
+                firm(),
+                money("low_cents", "Low end of operating profit")
+                    .range(-500_000_000, 5_000_000_000, 100_000, 0),
+                money("high_cents", "High end of operating profit")
+                    .range(-500_000_000, 5_000_000_000, 100_000, 0),
+            ],
+        ),
+        a(
+            "GiveToCandidate",
+            "Politics",
+            "Give to a candidate",
+            "Give campaign money to a governor or leader candidate from the company's cash, up to the cap the law sets for that race. Gifts are only allowed in the six months before the vote. The gift is printed in the paper next week with the company's name, raises that candidate's poll by a bounded amount, and the other side holds it against you a little. If your candidate wins, the company earns some favour.",
+            "politics campaign contribution donation governor leader election candidate give",
+            vec![
+                firm(),
+                f("office", "Race (state number, or 255 for the national race)", "number").range(0, 255, 1, 255),
+                f("candidate", "Candidate", "choice").choices(
+                    "number",
+                    &[("0", "Business party candidate"), ("1", "Labour party candidate")],
+                ),
+                money("cents", "Amount").range(100_000, 100_000_000, 100_000, 5_000_000),
+            ],
+        ),
+        a(
+            "BidOnTender",
+            "Politics",
+            "Bid on a public tender",
+            "Bid a price and a delivery time on a road, port or power works the state has put out to tender. The best bid wins: the lowest price, with each week of delivery counted as a hundredth of the state's budget. The winner builds it, paying for contractors and materials as it goes, and is paid in four stages from the state's budget. A late finish forfeits a tenth of the price for every week late, and when it is finished the region has more road or port capacity, or a stronger power grid.",
+            "tender public works road port power line bid state contract",
+            vec![
+                firm(),
+                f("tender", "Tender number", "number").range(0, 1_000_000, 1, 0),
+                money("price_cents", "Your price").range(1_000_000, 100_000_000_000, 100_000, 100_000_000),
+                f("weeks", "Delivery in weeks", "number").range(8, 39, 1, 16),
+            ],
+        ),
+        a(
+            "HireExecutive",
+            "Board",
+            "Hire an executive",
+            "Fill an empty post (chief financial officer, chief operating officer or logistics chief) with a person from the candidate list. You pay four weeks of their pay up front, then their weekly pay on a two-year contract. Each moves one real number: the cost of borrowing, build time and plant ceiling, or what outside carriers charge.",
+            "executive hire cfo coo logistics chief officer",
+            vec![
+                firm(),
+                f("post", "Post", "choice").choices(
+                    "number",
+                    &[
+                        ("0", "Chief financial officer"),
+                        ("1", "Chief operating officer"),
+                        ("2", "Logistics chief"),
+                    ],
+                ),
+                f("person", "Candidate number", "integer"),
+            ],
+        ),
+        a(
+            "DismissExecutive",
+            "Board",
+            "Dismiss an executive",
+            "Let an executive go. You pay severance, a quarter of the pay left on the contract (at least four and at most twenty-six weeks of pay). The post is open at once.",
+            "executive dismiss fire severance cfo coo logistics",
+            vec![
+                firm(),
+                f("post", "Post", "choice").choices(
+                    "number",
+                    &[
+                        ("0", "Chief financial officer"),
+                        ("1", "Chief operating officer"),
+                        ("2", "Logistics chief"),
+                    ],
+                ),
+            ],
+        ),
+        a(
+            "PoachExecutive",
+            "Board",
+            "Poach a rival's executive",
+            "Offer a rival's executive a weekly pay to move to you. They accept only if the offer beats their pay by enough for their temperament; a cautious person wants far more than a speculator. Their old boss will not forget it.",
+            "executive poach offer raise rival cfo coo logistics",
+            vec![
+                firm(),
+                f("from", "Rival company", "firm"),
+                f("post", "Post", "choice").choices(
+                    "number",
+                    &[
+                        ("0", "Chief financial officer"),
+                        ("1", "Chief operating officer"),
+                        ("2", "Logistics chief"),
+                    ],
+                ),
+                money("offer_cents", "Weekly pay offered").range(100_000, 0, 10_000, 5_000_000),
+            ],
+        ),
+        a(
             "SetSectorFocus",
             "Company",
             "Change sector focus",

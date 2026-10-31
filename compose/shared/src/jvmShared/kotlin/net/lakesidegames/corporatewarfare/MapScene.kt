@@ -107,6 +107,7 @@ internal object Sprites {
     private val filters = HashMap<Color, ColorFilter>()
 
     /** A cached tint so a frame allocates nothing. */
+    @Synchronized
     fun tint(color: Color): ColorFilter = filters.getOrPut(color) { ColorFilter.tint(color, BlendMode.Modulate) }
 }
 
@@ -542,6 +543,8 @@ internal class LaneTrack(
     val water: BooleanArray? = null,
     /** The route on the ground (offsets from the view centre) when the lane follows a real road or railway; null for a straight line. */
     val xs: FloatArray? = null, val ys: FloatArray? = null,
+    /** Who moves the goods: the player's gold, a rival's sector colour, or the outside carriers' grey. */
+    val owner: Color = FreightLook.outside,
 ) {
     /** Distance along the route as a fraction of its length at each point. */
     private val along: FloatArray? = xs?.let { x ->
@@ -660,8 +663,10 @@ internal fun DrawScope.drawMapOverlay(
             // Outside the Freight mode, trucks and trains run only where a real road or railway
             // carries them; a lane with no route shows nothing rather than a line across country.
             if (!freightLayer && lane.mode != "sea" && !lane.routed) return@forEach
-            val count = 1 + (lane.weight * per).toInt()
-            val color = ModeColors[lane.mode] ?: Color(0xFFE8E8E8)
+            // Up close a lane holds only as many vehicles as keep two vehicle lengths between neighbours.
+            val vehicleLength = o.vehicleScale * when (lane.mode) { "rail" -> 21f; "sea" -> 12f; else -> 7f }
+            val count = if (vehicles != null) minOf(1 + (lane.weight * per).toInt(), maxPerLane(lane.length, vehicleLength)) else 1 + (lane.weight * per).toInt()
+            val color = lane.owner
             // Kilometres a second of game time, so freight keeps its pace at any zoom.
             val speed = ModeSpeed[lane.mode] ?: 40f
             for (k in 0 until count) {
@@ -688,9 +693,10 @@ internal fun DrawScope.drawMapOverlay(
     if (traffic && g.traffic > 0 && g.detail == MapDetail.High && zoom > 9 && o.roads.isNotEmpty() && !freightLayer) {
         // Spacing and speed are on the ground, in degrees, so cars hold their pace and places
         // while the camera moves; closer in they simply look further apart and faster.
-        val spacing = if (vehicles != null) (if (g.traffic >= 2) 0.12f else 0.24f) else if (g.traffic >= 2) 0.035f else 0.07f
-        val pace = 0.012f
         val pxPerDegree = (p.r * PI / 180).toFloat().coerceAtLeast(1e-3f)
+        // Close in, never nearer than two car lengths (a car is four voxels long) however far in the camera is.
+        val spacing = if (vehicles != null) maxOf(if (g.traffic >= 2) 0.12f else 0.24f, 8f * o.vehicleScale / pxPerDegree) else if (g.traffic >= 2) 0.035f else 0.07f
+        val pace = 0.012f
         var cars = 0
         val fade = (detailFade * ((zoom - 9) / 3).coerceIn(0.0, 1.0).toFloat())
         val head = Color(0xFFFFF4D8).copy(alpha = 0.95f * fade)
@@ -715,7 +721,7 @@ internal fun DrawScope.drawMapOverlay(
                         val gAhead = road.groundAt((d + if (forward) step else -step).coerceIn(0f, road.length))
                         val gd = gAhead - gAt
                         val gl = gd.getDistance().coerceAtLeast(1e-3f)
-                        vehicles += VehicleSpot("car", false, gAt + Offset(-gd.y / gl, gd.x / gl) * (2.4f * if (forward) 1f else -1f), gd)
+                        vehicles += VehicleSpot("car", false, gAt + Offset(-gd.y / gl, gd.x / gl) * (2.4f * if (forward) 1f else -1f), gd, tone = FreightLook.tone(FreightLook.outside))
                     }
                 } else {
                     drawCircle(head, 1.2f, ahead + side)
@@ -821,6 +827,7 @@ private fun DrawScope.drawRailTrack(lane: LaneTrack, p: MapProjection, plinth: D
 
 /** The vehicles for one load on a lane at fraction [f]: a truck, a ship, or a train of a locomotive and two wagons. */
 private fun laneVehicles(lane: LaneTrack, f: Float, forward: Boolean, unit: Float, out: MutableList<VehicleSpot>) {
+    val tone = if (lane.mine) null else FreightLook.tone(lane.owner)
     val sign = if (forward) 1f else -1f
     val step = 2f / lane.length.coerceAtLeast(1f)
     val at = lane.at(f)
@@ -834,17 +841,17 @@ private fun laneVehicles(lane: LaneTrack, f: Float, forward: Boolean, unit: Floa
         "rail" -> if (!wet) {
             // Wagons trail the locomotive along the track, spaced by a vehicle's length on the ground.
             val gap = 7f * unit / lane.length.coerceAtLeast(1f)
-            out += VehicleSpot("loco", lane.mine, at, dir)
+            out += VehicleSpot("loco", lane.mine, at, dir, tone = tone)
             for (w in 1..2) {
                 val t = f - sign * gap * w
-                if (t in 0f..1f) out += VehicleSpot("wagon", lane.mine, lane.at(t), dir)
+                if (t in 0f..1f) out += VehicleSpot("wagon", lane.mine, lane.at(t), dir, tone = tone)
             }
         }
         // Ships keep to their own side of the channel.
         "sea" -> if (lane.water?.get((f * (WaterSamples - 1)).roundToInt()) != false) {
-            out += VehicleSpot("ship", lane.mine, at + right * (4f * unit), dir)
+            out += VehicleSpot("ship", lane.mine, at + right * (4f * unit), dir, tone = tone)
         }
-        else -> if (!wet) out += VehicleSpot("truck", lane.mine, at + right * (2.2f * unit), dir)
+        else -> if (!wet) out += VehicleSpot("truck", lane.mine, at + right * (2.2f * unit), dir, tone = tone)
     }
 }
 
@@ -855,7 +862,10 @@ private fun DrawScope.drawVehicle3d(v: VehicleSpot, o: OverlayGeometry) {
     val n = p.north
     // The ground direction in world east and north, so the model heads along the road whatever the camera.
     val heading = atan2((v.dir.x * n.x + v.dir.y * n.y).toDouble(), (v.dir.x * e.x + v.dir.y * e.y).toDouble())
-    with(VoxelModels) { drawModel("${v.type}/${if (v.mine) "player" else "neutral"}", p, v.g.x, v.g.y, o.plinth + v.height, o.vehicleScale, heading) }
+    val name = "${v.type}/${if (v.mine) "player" else "neutral"}"
+    // On the ground it is one blit of a ready picture; planes and any vehicle whose picture is not ready yet are drawn as models.
+    if (v.height == 0.0 && with(VehicleSprites) { drawSprite(name, p, v.g.x, v.g.y, o.plinth, o.vehicleScale, heading, v.tone) }) return
+    with(VoxelModels) { drawModel(name, p, v.g.x, v.g.y, o.plinth + v.height, o.vehicleScale, heading, tone = v.tone) }
 }
 
 /** A cargo plane up close: the voxel plane high over the map, its shadow on the ground and a short faint contrail. */
@@ -902,7 +912,7 @@ private fun GeoRing.overlaps(box: DoubleArray): Boolean =
     size >= 3 && lon.max() >= box[0] && lon.min() <= box[1] && lat.max() >= box[2] && lat.min() <= box[3]
 
 /** Even-odd test of a place against one ring, on longitude and latitude. */
-private fun geoInside(ring: GeoRing, lon: Double, lat: Double): Boolean {
+internal fun geoInside(ring: GeoRing, lon: Double, lat: Double): Boolean {
     if (ring.size < 3) return false
     var inside = false
     var j = ring.size - 1
@@ -915,7 +925,7 @@ private fun geoInside(ring: GeoRing, lon: Double, lat: Double): Boolean {
 }
 
 /** Seeds per lane so particles never line up between lanes. */
-internal fun laneTracks(map: WorldMap, p: MapProjection, lanes: List<LaneDto>, count: Int): List<LaneTrack> {
+internal fun laneTracks(map: WorldMap, p: MapProjection, lanes: List<LaneDto>, count: Int, firmSector: Map<ULong, String> = emptyMap()): List<LaneTrack> {
     val busiest = lanes.sortedByDescending { it.capacityLots + it.outsideLots }.take(count)
     val top = busiest.maxOfOrNull { it.capacityLots + it.outsideLots }?.coerceAtLeast(1) ?: return emptyList()
     return busiest.mapNotNull { lane ->
@@ -943,7 +953,7 @@ internal fun laneTracks(map: WorldMap, p: MapProjection, lanes: List<LaneDto>, c
         }
         LaneTrack(
             a, b, lane.modeId, (lane.capacityLots + lane.outsideLots).toFloat() / top, routeLength.coerceAtLeast(8f), (stableHash(lane.a + lane.b) % 1000) / 1000f,
-            lane.km.toFloat().coerceAtLeast(20f), laneIsMine(lane), waterAlong(map, lane.a, lane.b), xs, ys,
+            lane.km.toFloat().coerceAtLeast(20f), laneIsMine(lane), waterAlong(map, lane.a, lane.b), xs, ys, FreightLook.ownerColor(lane, firmSector),
         )
     }
 }
@@ -954,6 +964,19 @@ internal fun divisionSlots(divisions: List<MapDivisionDto>): List<Triple<String,
     return divisions.groupBy { it.region to it.industry }
         .map { (key, items) -> Triple(key.first, key.second, items.sumOf { it.blocks.toInt() }) }
         .sortedWith(compareBy({ it.first }, { order.indexOf(it.second).let { i -> if (i < 0) 99 else i } }))
+}
+
+/** Which Skia backend draws the window; set by the desktop shell, absent on Android. */
+internal object RenderInfo {
+    @Volatile var backend: String? = null
+
+    /** Software drawing: the map is much slower than on Direct3D, OpenGL or Metal. */
+    val software: Boolean get() = backend?.startsWith("SOFTWARE") == true
+
+    /** The backend as a short name for the frame counter. */
+    fun label(): String? = backend?.let {
+        when (it) { "DIRECT3D" -> "Direct3D"; "OPENGL" -> "OpenGL"; "METAL" -> "Metal"; "VULKAN" -> "Vulkan"; "ANGLE" -> "ANGLE"; "UNKNOWN" -> null; else -> "Software" }
+    }
 }
 
 /** Rolling frames-a-second for the optional counter. */

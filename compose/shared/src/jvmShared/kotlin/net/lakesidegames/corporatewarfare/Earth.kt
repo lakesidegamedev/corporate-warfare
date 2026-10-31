@@ -26,9 +26,12 @@ import kotlin.math.min
  * the south.
  */
 internal object Earth {
-    private val mesh = Mesh()
+    // The map draws on a bake thread and the menu on the UI thread: each has its own scratch mesh.
+    private val meshes = ThreadLocal.withInitial { Mesh() }
+    private val mesh: Mesh get() = meshes.get()
     private val paints = HashMap<ImageBitmap, Paint>()
 
+    @Synchronized
     private fun paint(image: ImageBitmap, repeatX: Boolean): Paint = paints.getOrPut(image) {
         Paint().apply {
             shader = MeshCanvas.shader?.invoke(image, repeatX)

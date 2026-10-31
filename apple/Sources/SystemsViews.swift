@@ -172,7 +172,7 @@ private func shareTable(_ rows: [ShareRowDto]) -> [[String]] {
 
 /// Load from the engine every time the week or a command moves, then show it.
 struct EngineSection<T, Content: View>: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let key: String
     let load: (SessionHandle) -> T?
     @ViewBuilder let content: (T) -> Content
@@ -350,7 +350,7 @@ struct StockHistorySection: View {
 // MARK: - 2. Region dossier
 
 struct RegionDossierSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let region: UInt32
 
     var body: some View {
@@ -362,6 +362,10 @@ struct RegionDossierSection: View {
             }
         }
     }
+}
+
+private func signedCount(_ n: Int64) -> String {
+    (n > 0 ? "+" : n < 0 ? "-" : "") + Figures.count(abs(n))
 }
 
 struct RegionDossierView: View {
@@ -379,6 +383,8 @@ struct RegionDossierView: View {
                 Stat(label: "Land price", value: "\(d.landIndexBps / 100)%", note: "of the corridor"),
                 Stat(label: "Demand index", value: "\(d.demandIndexBps / 100)%"),
                 Stat(label: "Spend / wk", value: Format.moneyCompact(d.spendCents), note: "households"),
+                Stat(label: "Net migration / yr", value: signedCount(d.netMigrationYear), note: "workers moving in or out",
+                     tone: d.netMigrationYear > 0 ? Theme.positive : d.netMigrationYear < 0 ? Theme.negative : Theme.primaryText),
             ])
             SystemsSplit {
                 Eyebrow(text: "Labour pool")
@@ -424,6 +430,8 @@ struct RegionDossierView: View {
             ], format: { Figures.count($0) }, scale: .level),
             ChartSpec(title: "Average wage", series: [PlotSeries(name: "Wage", color: Theme.gold, points: s.of("wage"))],
                       format: { Format.money($0) }, scale: .level),
+            ChartSpec(title: "Workers moving in or out each week", series: [PlotSeries(name: "Net movers", color: PlotColors.violet, points: s.of("migration"))],
+                      kind: .bar, format: { signedCount($0) }, scale: .level),
             ChartSpec(title: "Land price (100 is the corridor)", series: [PlotSeries(name: "Land", color: Theme.warning, points: s.of("land_index"))],
                       format: { String(format: "%.0f", Double($0) / 100) }, scale: .level),
             ChartSpec(title: "Household spending per week", series: [PlotSeries(name: "Spend", color: PlotColors.violet, points: s.of("spend"))], kind: .bar),
@@ -449,7 +457,7 @@ struct RegionDossierView: View {
 // MARK: - 3. Division operations
 
 struct DivisionOpsSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let division: DivisionDto
 
     var body: some View {
@@ -546,7 +554,7 @@ struct DivisionOpsView: View {
 // MARK: - 4. Logistics
 
 struct LogisticsStatsSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
 
     var body: some View {
         if let firm = store.selectedFirm ?? store.overview?.primaryFirm {
@@ -639,7 +647,7 @@ struct RivalCompare {
 
 /// The rivals board as a sheet: loads the board, then the comparison for the picked rival.
 struct RivalsBoardSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [RivalRowDto]?
     @State private var picked: UInt64?

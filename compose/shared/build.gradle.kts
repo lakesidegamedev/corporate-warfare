@@ -66,7 +66,6 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material3)
                 implementation(compose.ui)
-                implementation(compose.materialIconsExtended)
                 implementation("${libs.jna.get()}@aar")
                 implementation(libs.kotlinx.serialization.json)
             }
@@ -80,7 +79,6 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material3)
                 implementation(compose.ui)
-                implementation(compose.materialIconsExtended)
                 implementation(libs.jna)
                 implementation(libs.kotlinx.serialization.json)
                 // Skia's native renderer for the OS building the package (each OS packages its own).
@@ -113,6 +111,16 @@ android {
 compose.desktop {
     application {
         mainClass = "net.lakesidegames.corporatewarfare.MainKt"
+        // The release build (createReleaseDistributable, packageReleaseMsi, packageReleaseDeb) runs ProGuard
+        // to drop the Compose, Material and Kotlin classes the game never calls. Names are not obfuscated
+        // (so crash reports stay readable) and code is not rewritten, only removed. The keep rules for
+        // the engine bindings, JNA and Skia are in desktop-rules.pro.
+        buildTypes.release.proguard {
+            isEnabled.set(true)
+            obfuscate.set(false)
+            optimize.set(false)
+            configurationFiles.from(project.file("desktop-rules.pro"))
+        }
         nativeDistributions {
             targetFormats(
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
@@ -120,6 +128,11 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg,
             )
             packageName = "Corporate Warfare"
+            // Only the Java modules the game uses go into the bundled runtime (find them with
+            // :shared:suggestRuntimeModules): drawing and windows, the management beans the startup
+            // timeline reads, logging, the HTTPS the updater and telemetry use (certificate name checks
+            // need java.naming, elliptic curves need jdk.crypto.ec), and the unsafe access Skiko needs.
+            modules("java.desktop", "java.instrument", "java.logging", "java.management", "java.naming", "jdk.crypto.ec", "jdk.unsupported")
             packageVersion = installerVersion
             vendor = "Lakeside Games"
             description = "Corporate Warfare: an economic strategy game"
@@ -148,6 +161,15 @@ compose.desktop {
 // the template in that folder and runs jpackage again with Compose's own saved arguments, so every
 // other installer setting stays exactly as Compose made it. That rerun reads Compose's working
 // folder, which compose.preserve.working.dir in gradle.properties keeps.
+// A failing test says why in the CI log (the assertion message), not only which line failed.
+tasks.withType<Test>().configureEach {
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showCauses = true
+    }
+}
+
 tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>().configureEach {
     if (targetFormat != org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi) return@configureEach
     val template = project.file("packaging/windows")
@@ -174,4 +196,38 @@ tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageT
         logger.lifecycle(log)
         check(code == 0) { "jpackage with packaging/windows/main.wxs failed with exit code $code; arguments:\n${args.readText()}" }
     }
+}
+
+// The branded Windows setup program (packaging/windows/setup.iss, Inno Setup 6) wraps the same
+// app image Compose builds for the MSI. `:shared:packageWindowsSetup` builds the image, then the
+// setup program, into build/compose/binaries/main-release/setup/CorporateWarfare-<version>-setup.exe.
+// Windows only; CI installs Inno Setup when the runner lacks it.
+val windowsHost = System.getProperty("os.name").lowercase().contains("win")
+tasks.register<Exec>("packageWindowsSetup") {
+    group = "distribution"
+    description = "Builds CorporateWarfare-<version>-setup.exe with Inno Setup (Windows only)."
+    dependsOn("createReleaseDistributable")
+    onlyIf { windowsHost }
+    val packaging = project.file("packaging/windows")
+    val image = layout.buildDirectory.dir("compose/binaries/main-release/app/Corporate Warfare")
+    val out = layout.buildDirectory.dir("compose/binaries/main-release/setup")
+    inputs.dir(packaging)
+    inputs.dir(image)
+    outputs.dir(out)
+    commandLine(
+        "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", File(packaging, "build-setup.ps1").path,
+        "-DisplayVersion", displayVersion,
+        "-NumericVersion", installerVersion,
+        "-AppImage", image.get().asFile.path,
+        "-OutDir", out.get().asFile.path,
+    )
+}
+
+// Compose draws over a native panel only with interop blending on (Direct3D and Metal); the direct-map tests check it.
+// The window tests need a display: on a Linux runner without one (no DISPLAY), AWT must stay headless so every other
+// desktop test still runs and the direct-map tests skip themselves.
+tasks.withType<Test>().configureEach {
+    systemProperty("compose.interop.blending", "true")
+    val linux = System.getProperty("os.name").lowercase().contains("linux")
+    if (!linux || System.getenv("DISPLAY") != null) systemProperty("java.awt.headless", "false")
 }

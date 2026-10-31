@@ -1,7 +1,8 @@
 //! The character cast for the apps: people, the posts they hold, and a rival's dossier.
 
+use crate::SessionHandle;
 use cw_core::ids::Handle;
-use cw_data::{Dataset, Person, Role};
+use cw_data::{Dataset, Mood, Person, Role};
 use cw_session::Session;
 use cw_sim::state::World;
 
@@ -15,10 +16,15 @@ pub struct PersonDto {
     pub background: String,
     /// integrator, raider, financier, speculator, builder or cautious.
     pub temperament: String,
-    /// What they can be asked to do: ceo, chair, governor, leader.
+    /// What they can be asked to do: ceo, chair, governor, leader, union_leader, journalist,
+    /// analyst, cfo, coo or logistics.
     pub roles: Vec<String>,
     /// Central bank stance, dovish negative to hawkish positive, for chair-capable people.
     pub stance: Option<i32>,
+    /// neutral, pleased or displeased: which face of the portrait to draw this time.
+    pub mood: String,
+    /// Whether the person has a 64 by 64 office portrait for large views.
+    pub office_portrait: bool,
 }
 
 /// A post someone holds: chair, country leader, party leader or governor.
@@ -54,13 +60,19 @@ pub struct DossierDto {
     pub grudges: Vec<String>,
     /// Who the firm is friendly with, strongest first, in plain words.
     pub allies: Vec<String>,
+    /// The executives it has hired, with the pay a rival would need to offer to move each.
+    pub executives: Vec<crate::executives::ExecutivePostDto>,
+    /// Holdings of 5 percent or more in this company, as filed, with their history.
+    pub stakes: Vec<crate::plans::StakeDto>,
+    /// What this rival is likely to do next, from its filed stakes and the public record only.
+    pub likely_next: Option<String>,
 }
 
 pub fn person_dto(ds: &Dataset, p: u8) -> Option<PersonDto> {
     ds.cast.get(p as usize).map(person)
 }
 
-fn person(p: &Person) -> PersonDto {
+pub(crate) fn person(p: &Person) -> PersonDto {
     PersonDto {
         id: p.id.clone(),
         name: p.name.clone(),
@@ -68,20 +80,10 @@ fn person(p: &Person) -> PersonDto {
         home: p.home.clone(),
         background: p.background.clone(),
         temperament: p.temperament.key().to_owned(),
-        roles: p
-            .roles
-            .iter()
-            .map(|r| {
-                match r {
-                    Role::Ceo => "ceo",
-                    Role::Chair => "chair",
-                    Role::Governor => "governor",
-                    Role::Leader => "leader",
-                }
-                .to_owned()
-            })
-            .collect(),
+        roles: p.roles.iter().map(|r: &Role| r.key().to_owned()).collect(),
         stance: p.stance,
+        mood: Mood::Neutral.key().to_owned(),
+        office_portrait: p.office_portrait,
     }
 }
 
@@ -171,6 +173,17 @@ fn ally_reason(cause: cw_sim::economy::rivalry::Cause) -> &'static str {
     }
 }
 
+/// Newest first, with the same move in the same week shown once. A move's text names its kind
+/// and its good or place, so two moves with the same week and text are the same move (a rival
+/// that starts buying fuel for storage in two of its plants in one week reads as one line).
+pub(crate) fn recent_moves(mut moves: Vec<MoveDto>, keep: usize) -> Vec<MoveDto> {
+    moves.sort_by_key(|m| std::cmp::Reverse(m.week));
+    let mut seen: std::collections::HashSet<(u32, String)> = std::collections::HashSet::new();
+    moves.retain(|m| seen.insert((m.week, m.text.clone())));
+    moves.truncate(keep);
+    moves
+}
+
 pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
     let world = &session.world;
     let handle = Handle(firm);
@@ -197,11 +210,24 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
             text: m.text.clone(),
         });
     }
+    // The chief's look follows their latest raid: pleased after taking plants or holding them,
+    // displeased after losing plants or a failed raid; otherwise friendly or bitter ties decide.
+    let mut mood = (0u32, Mood::Neutral);
     for raid in world
         .raids
         .iter()
         .filter(|r| r.attacker == handle || r.defender == handle)
     {
+        if raid.tick >= mood.0 {
+            mood = (
+                raid.tick,
+                if (raid.attacker == handle) == raid.success {
+                    Mood::Pleased
+                } else {
+                    Mood::Displeased
+                },
+            );
+        }
         let industry = cw_sim::state::INDUSTRY_NAMES
             .get(raid.industry as usize)
             .copied()
@@ -236,8 +262,7 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
             text,
         });
     }
-    moves.sort_by_key(|m| std::cmp::Reverse(m.week));
-    moves.truncate(8);
+    let moves = recent_moves(moves, 8);
     let style = entity
         .archetype
         .map(|a| a.key().replace('_', " "))
@@ -247,7 +272,7 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
         s if s >= 3_000 => "strong",
         _ => "mild",
     };
-    let grudges = cw_sim::economy::rivalry::grudges_of(world, handle)
+    let grudges: Vec<String> = cw_sim::economy::rivalry::grudges_of(world, handle)
         .into_iter()
         .map(|(holder, m)| {
             format!(
@@ -259,7 +284,7 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
         })
         .take(3)
         .collect();
-    let allies = cw_sim::economy::rivalry::allies_of(world, handle)
+    let allies: Vec<String> = cw_sim::economy::rivalry::allies_of(world, handle)
         .into_iter()
         .map(|(holder, m)| {
             format!(
@@ -270,10 +295,27 @@ pub fn dossier(session: &Session, firm: u64) -> Option<DossierDto> {
         })
         .take(3)
         .collect();
+    let ceo = ceo.map(|mut p| {
+        p.mood = if mood.1 != Mood::Neutral {
+            mood.1
+        } else if !grudges.is_empty() {
+            Mood::Displeased
+        } else if !allies.is_empty() {
+            Mood::Pleased
+        } else {
+            Mood::Neutral
+        }
+        .key()
+        .to_owned();
+        p
+    });
     Some(DossierDto {
         firm,
         grudges,
         allies,
+        executives: crate::executives::posts(world, handle, true),
+        stakes: crate::plans::stakes(world, handle),
+        likely_next: crate::plans::likely_next(world, handle),
         firm_name: entity.name.clone(),
         ceo_weeks: if ceo.is_some() {
             world.tick.0.saturating_sub(since)
@@ -437,4 +479,102 @@ pub fn rival_feed(world: &World, ds: &Dataset, limit: usize) -> Vec<RivalMoveFee
             }
         })
         .collect()
+}
+
+/// The chief executive the player chose at the start of the career.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct PlayerChiefDto {
+    pub name: String,
+    /// A portrait id from the generated kit, drawn like any cast portrait.
+    pub portrait: String,
+    pub temperament: String,
+}
+
+pub(crate) fn player_chief_dto(world: &World) -> Option<PlayerChiefDto> {
+    world.player_chief.as_ref().map(|c| PlayerChiefDto {
+        name: c.name.clone(),
+        portrait: c.portrait.clone(),
+        temperament: c.temperament.clone(),
+    })
+}
+
+/// A few chief executives to choose from at the new-game screen, spread over the six
+/// temperaments (the first of each in the generated kit), in a fixed order.
+pub(crate) fn chief_choices() -> Vec<PersonDto> {
+    let kit = cw_data::cast::extras();
+    let mut seen: Vec<cw_data::Temperament> = Vec::new();
+    let mut out = Vec::new();
+    for e in kit {
+        if !seen.contains(&e.temperament) {
+            seen.push(e.temperament);
+            let p = e.person();
+            out.push(PersonDto {
+                id: p.id,
+                name: p.name,
+                age: p.age,
+                home: p.home,
+                background: p.background,
+                temperament: p.temperament.key().to_owned(),
+                roles: Vec::new(),
+                stance: None,
+                mood: Mood::Neutral.key().to_owned(),
+                office_portrait: false,
+            });
+        }
+    }
+    out
+}
+
+#[uniffi::export]
+impl SessionHandle {
+    /// The chief executive the player chose at the new-game screen, if they chose one.
+    pub fn player_chief(&self) -> Option<PlayerChiefDto> {
+        player_chief_dto(&self.lock().world)
+    }
+}
+
+#[cfg(test)]
+mod dossier_move_tests {
+    use super::*;
+
+    fn mv(week: u32, text: &str) -> MoveDto {
+        MoveDto {
+            week,
+            text: text.to_owned(),
+        }
+    }
+
+    #[test]
+    fn the_same_move_in_the_same_week_shows_once() {
+        let moves = vec![
+            mv(10, "Started buying fuel for storage."),
+            mv(10, "Started buying fuel for storage."),
+            mv(10, "Started buying steel for storage."),
+            mv(9, "Started buying fuel for storage."),
+            mv(12, "Issued bonds."),
+        ];
+        let shown = recent_moves(moves, 8);
+        let lines: Vec<(u32, &str)> = shown.iter().map(|m| (m.week, m.text.as_str())).collect();
+        assert_eq!(
+            lines,
+            vec![
+                (12, "Issued bonds."),
+                (10, "Started buying fuel for storage."),
+                (10, "Started buying steel for storage."),
+                (9, "Started buying fuel for storage."),
+            ]
+        );
+    }
+
+    #[test]
+    fn repeats_do_not_use_up_the_limit() {
+        let mut moves: Vec<MoveDto> = (0..6)
+            .map(|_| mv(5, "Started buying fuel for storage."))
+            .collect();
+        moves.push(mv(4, "Issued bonds."));
+        moves.push(mv(3, "Floated a subsidiary."));
+        let shown = recent_moves(moves, 3);
+        assert_eq!(shown.len(), 3);
+        assert_eq!(shown[2].text, "Floated a subsidiary.");
+    }
 }

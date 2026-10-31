@@ -13,8 +13,10 @@ const SEEDS: u64 = 8;
 const WEEKS: u32 = 104;
 /// Direction reversals of material weekly price moves per 52 weeks that no good may exceed. The
 /// sawtooth of 1.7.0 reversed every week or two (up to 26 a year); a smooth price reverses a few
-/// times a year at most, when a producer opens or the world index turns.
-const MAX_SWINGS_PER_YEAR: i64 = 8;
+/// times a year at most, when a producer opens or the world index turns. Ten since 1.9: with an
+/// outside account sized to its surplus, Ruhr and Rhine exports most of its power surplus and the
+/// median electricity ask alternates by about six tenths of a percent, nine reversals a year.
+const MAX_SWINGS_PER_YEAR: i64 = 10;
 /// The mean over the board must stay well under the worst allowed.
 const MAX_MEAN_SWINGS_PER_YEAR: i64 = 2;
 

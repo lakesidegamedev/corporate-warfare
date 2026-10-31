@@ -6,13 +6,14 @@ members = [
     "crates/cw-ai",
     "crates/cw-session",
     "crates/cw-cli",
+    "crates/cw-render",
     "crates/cw-ffi",
     "tools/cw-bindgen",
 ]
 resolver = "3"
 
 [workspace.package]
-version = "1.8.0"
+version = "1.9.0"
 edition = "2024"
 rust-version = "1.96"
 license = "LicenseRef-Proprietary"
@@ -34,6 +35,18 @@ uniffi = "=0.32.0"
 overflow-checks = true
 lto = "thin"
 
+# The Android and desktop libraries: whole-program link-time optimisation in one code generation
+# unit, and no symbol tables. Same code and the same checks as release (overflow checks stay on,
+# panics still unwind because the FFI layer turns them into errors), so results do not change.
+# A separate profile because the iPhone build reads the UniFFI metadata from the release library
+# and strip would remove it from a shared library; compose/scripts/build-engine.sh reads the
+# metadata from a debug build instead.
+[profile.small]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+strip = true
+
 # The market health test plays 4 scenarios x 8 seeds x 104 weeks; unoptimised that is minutes.
 # Optimising the engine crates keeps every simulation test fast without touching release builds.
 [profile.dev.package.cw-core]
@@ -45,4 +58,7 @@ opt-level = 2
 [profile.dev.package.cw-ai]
 opt-level = 2
 [profile.dev.package.cw-session]
+opt-level = 2
+# Scene rasterising and mesh building in the render spike are slow unoptimised.
+[profile.dev.package.cw-render]
 opt-level = 2

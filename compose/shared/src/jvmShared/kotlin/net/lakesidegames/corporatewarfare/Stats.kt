@@ -100,6 +100,7 @@ object ResultBuckets {
  */
 @Composable
 fun StatsScreen(store: GameStore, onBack: () -> Unit) {
+    BackAction(onBack = onBack)
     val firm = store.selectedFirmDto
     var period by remember { mutableStateOf(StatsPeriod.Month) }
     val buckets = ResultBuckets.make(period, store.finance?.recentWeeks ?: emptyList(), store.history)
@@ -157,6 +158,7 @@ fun StatsScreen(store: GameStore, onBack: () -> Unit) {
                                 Palette.positive to buckets.map { it.equity ?: 0 },
                                 Palette.negative to buckets.map { it.liabilities ?: 0 },
                             ),
+                            listOf("Cash", "Equity", "Liabilities"),
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                             Legend(Palette.gold, "Cash")
@@ -220,7 +222,8 @@ internal fun Legend(color: Color, text: String) {
 @Composable
 internal fun ResultsChart(buckets: List<ResultBucket>) {
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
-    Canvas(Modifier.fillMaxWidth().height(200.dp)) {
+    val summary = chartSummary("Revenue", buckets.map { it.revenue }) + " " + chartSummary("Net income", buckets.map { it.netIncome })
+    Canvas(Modifier.fillMaxWidth().height(200.dp).described("Revenue and net income by period. $summary", androidx.compose.ui.semantics.Role.Image)) {
         val top = buckets.maxOf { max(it.revenue, it.netIncome) }.coerceAtLeast(1)
         val bottom = buckets.minOf { minOf(it.netIncome, 0) }
         val span = (top - bottom).toFloat()
@@ -251,8 +254,9 @@ internal fun ResultsChart(buckets: List<ResultBucket>) {
 
 /** One or more series on shared axes. */
 @Composable
-internal fun LineChart(series: List<Pair<Color, List<Long>>>) {
-    Canvas(Modifier.fillMaxWidth().height(160.dp)) {
+internal fun LineChart(series: List<Pair<Color, List<Long>>>, names: List<String> = emptyList()) {
+    val summary = series.mapIndexed { i, s -> chartSummary(names.getOrNull(i) ?: "Line ${i + 1}", s.second) }.joinToString(" ")
+    Canvas(Modifier.fillMaxWidth().height(160.dp).described("Chart. $summary", androidx.compose.ui.semantics.Role.Image)) {
         val all = series.flatMap { it.second }
         if (all.isEmpty()) return@Canvas
         val top = all.max()

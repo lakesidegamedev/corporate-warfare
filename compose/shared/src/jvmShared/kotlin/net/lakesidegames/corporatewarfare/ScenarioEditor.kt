@@ -138,7 +138,7 @@ internal fun ScenarioEditorScreen(store: GameStore, baseId: String?, existing: C
                         Panel {
                             Eyebrow("Name")
                             OutlinedTextField(
-                                d.name, { draft = d.copy(name = it.take(ranges.nameMax.toInt())) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                                d.name, { draft = d.copy(name = it.take(ranges.nameMax.toInt())) }, singleLine = true, modifier = Modifier.textEntry().fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = Palette.primaryText, unfocusedTextColor = Palette.primaryText,
                                     focusedBorderColor = Palette.gold, unfocusedBorderColor = Palette.stroke, cursorColor = Palette.gold,
@@ -307,7 +307,7 @@ internal fun ScenarioEditorScreen(store: GameStore, baseId: String?, existing: C
                         },
                         dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Keep it") } },
                         title = { Text("Delete ${d.name}?") },
-                        text = { Text("The saved scenario is removed. Games already started from it are not affected.") },
+                        text = { Column(Modifier.dialogScroll()) { Text("The saved scenario is removed. Games already started from it are not affected.") } },
                         containerColor = Palette.panel,
                     )
                 }

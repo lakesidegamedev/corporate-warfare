@@ -44,13 +44,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            package: packageDeb
+            package: packageReleaseDeb
             artifact: corporate-warfare-linux-deb
-            path: compose/shared/build/compose/binaries/main/deb/*.deb
+            path: compose/shared/build/compose/binaries/main-release/deb/*.deb
           - os: windows-latest
-            package: packageMsi
+            package: packageReleaseMsi
             artifact: corporate-warfare-windows-msi
-            path: compose/shared/build/compose/binaries/main/msi/*.msi
+            path: compose/shared/build/compose/binaries/main-release/msi/*.msi
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -59,6 +59,13 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          # Every job used to resolve every dependency from scratch, so a Maven Central rate limit failed whichever
+          # job asked last. One shared cache, keyed on the build files, means a job downloads only what changed.
+          cache: gradle
+          cache-dependency-path: |
+            compose/**/*.gradle*
+            compose/gradle/libs.versions.toml
+            compose/gradle/wrapper/gradle-wrapper.properties
       - run: rustup show
         shell: bash
       - name: Engine for this OS and the bindings
@@ -66,10 +73,103 @@ jobs:
         shell: bash
       - name: Package
         working-directory: compose
-        run: ./gradlew --no-daemon :shared:${{ matrix.package }}
+        run: scripts/retry.sh 3 ./gradlew --no-daemon :shared:${{ matrix.package }}
         shell: bash
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.path }}
+          retention-days: 14
+      # The AppImage wraps the same release app image the .deb is made from.
+      - name: AppImage (Linux)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          mkdir -p appimage-out
+          # packageReleaseDeb does not leave the app image folder behind, so build it.
+          (cd compose && ./gradlew --no-daemon :shared:createReleaseDistributable)
+          bash compose/shared/packaging/linux/build-appimage.sh "$(ls -d compose/shared/build/compose/binaries/main-release/app/*/ | head -1)" "appimage-out/CorporateWarfare-linux.AppImage"
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        with:
+          name: corporate-warfare-linux-appimage
+          path: appimage-out/*.AppImage
+          retention-days: 14
+      - name: Setup program (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        working-directory: compose
+        run: ./gradlew --no-daemon :shared:packageWindowsSetup
+        shell: bash
+      - name: Setup program install, downgrade and uninstall check (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem compose/shared/build/compose/binaries/main-release/setup -Filter '*-setup.exe').FullName
+          ./compose/shared/packaging/windows/test-setup.ps1 -Setup $setup `
+            -AppImage "$PWD/compose/shared/build/compose/binaries/main-release/app/Corporate Warfare" `
+            -Work "$env:RUNNER_TEMP/cw-setup-test"
+      # Starts the release app image and waits for the main menu (CW_STARTUP_TIMELINE=exit quits there).
+      # The setup wizard is skipped with a settings file that says it is done. Software drawing, so
+      # the time is a relative number, not a player's. Reported, not gating: a runner without a
+      # display must not block a build, but a menu that never shows is visible in the log.
+      - name: Launch to the main menu (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:RUNNER_TEMP 'cw-launch'
+          New-Item -ItemType Directory -Force (Join-Path $data 'Corporate Warfare') | Out-Null
+          "setupDone=true`nanalytics=false`nautoUpdate=false" | Set-Content (Join-Path $data 'Corporate Warfare\settings.properties')
+          $env:APPDATA = $data
+          $env:CW_STARTUP_TIMELINE = 'exit'
+          $env:SKIKO_RENDER_API = 'SOFTWARE_FAST'
+          $err = Join-Path $data 'timeline.txt'
+          $exe = "$PWD\compose\shared\build\compose\binaries\main-release\app\Corporate Warfare\Corporate Warfare.exe"
+          $p = Start-Process $exe -PassThru -RedirectStandardError $err
+          if (-not $p.WaitForExit(120000)) { $p.Kill() }
+          if (Test-Path $err) { Get-Content $err }
+          if (-not ((Test-Path $err) -and (Select-String -Path $err -Pattern 'main menu shown' -Quiet))) { throw 'The main menu did not show within 120 seconds' }
+      # The new GPU map (an opt-in preview) must start in the packaged release app: it opens the map,
+      # draws a frame and prints the frame counter line (CW_GPU_PROBE). The runner has no graphics
+      # card, so Direct3D 12 uses WARP, the software adapter; the milliseconds are a relative number,
+      # not a player's. Reported, not gating.
+      - name: New GPU map probe (Windows, WARP)
+        if: ${{ matrix.os == 'windows-latest' }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:RUNNER_TEMP 'cw-gpu'
+          New-Item -ItemType Directory -Force $data | Out-Null
+          $env:CW_GPU_PROBE = '1'
+          $err = Join-Path $data 'probe.txt'
+          $exe = "$PWD\compose\shared\build\compose\binaries\main-release\app\Corporate Warfare\Corporate Warfare.exe"
+          $p = Start-Process $exe -PassThru -RedirectStandardError $err
+          if (-not $p.WaitForExit(180000)) { $p.Kill() }
+          if (Test-Path $err) { Get-Content $err }
+          if (-not ((Test-Path $err) -and (Select-String -Path $err -Pattern '^map: GPU' -Quiet))) { throw 'The new map did not draw a frame' }
+      - name: Launch to the main menu (Linux)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        continue-on-error: true
+        working-directory: compose
+        run: |
+          ./gradlew --no-daemon :shared:createReleaseDistributable
+          export XDG_DATA_HOME="$RUNNER_TEMP/cw-launch"
+          mkdir -p "$XDG_DATA_HOME/corporate-warfare"
+          printf 'setupDone=true\nanalytics=false\nautoUpdate=false\n' > "$XDG_DATA_HOME/corporate-warfare/settings.properties"
+          export CW_STARTUP_TIMELINE=exit SKIKO_RENDER_API=SOFTWARE_FAST
+          timeout 120 xvfb-run -a "shared/build/compose/binaries/main-release/app/Corporate Warfare/bin/Corporate Warfare" 2>&1 | tee "$RUNNER_TEMP/timeline.txt"
+          grep -q "main menu shown" "$RUNNER_TEMP/timeline.txt"
+      - name: New GPU map probe (Linux, software Vulkan)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        continue-on-error: true
+        working-directory: compose
+        run: |
+          sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
+          export CW_GPU_PROBE=1 SKIKO_RENDER_API=SOFTWARE_FAST
+          timeout 180 xvfb-run -a "shared/build/compose/binaries/main-release/app/Corporate Warfare/bin/Corporate Warfare" 2>&1 | tee "$RUNNER_TEMP/gpu-probe.txt"
+          grep -q "^map: GPU" "$RUNNER_TEMP/gpu-probe.txt"
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.os == 'windows-latest' }}
+        with:
+          name: corporate-warfare-windows-setup
+          path: compose/shared/build/compose/binaries/main-release/setup/*-setup.exe
           retention-days: 14

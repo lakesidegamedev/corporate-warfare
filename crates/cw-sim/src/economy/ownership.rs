@@ -46,11 +46,9 @@ pub fn controlled_group(world: &World, root: Handle) -> Vec<Handle> {
 /// The ultimate controller above a firm, walking immediate firm controllers to the top.
 pub fn ultimate_controller(world: &World, firm: Handle) -> Option<HolderId> {
     let mut current = firm;
-    let mut seen = BTreeSet::new();
-    loop {
-        if !seen.insert(current) {
-            return None;
-        }
+    // A chain of distinct firms is never longer than the firm count, so a longer walk is a cycle.
+    // Counting steps avoids building a set of visited firms on every call.
+    for _ in 0..=world.firms.len() {
         let controller = world.firms.get(current)?.shares.controller()?;
         match controller {
             HolderId::Firm(parent) if parent != current => current = parent,
@@ -58,6 +56,7 @@ pub fn ultimate_controller(world: &World, firm: Handle) -> Option<HolderId> {
             other => return Some(other),
         }
     }
+    None
 }
 
 /// True when two firms share the same ultimate controller. The investor's controlled firms are
@@ -95,12 +94,11 @@ pub fn would_create_cycle(world: &World, buyer: Handle, target: Handle) -> bool 
         if current == buyer {
             return true;
         }
-        let Some(firm) = world.firms.get(current) else {
-            continue;
-        };
-        for (holder, _) in firm.shares.holders.iter() {
-            if let HolderId::Firm(child) = holder {
-                stack.push(*child);
+        // The firms `current` holds shares in. A buyer that already holds shares of the target
+        // is no cycle; the target holding shares of the buyer, however deep, is.
+        for (child, firm) in world.firms.iter() {
+            if firm.shares.holders.contains_key(&HolderId::Firm(current)) {
+                stack.push(child);
             }
         }
     }

@@ -1,11 +1,11 @@
 name: Android and desktop
 on:
-  # Pull requests run Linux jobs only. Windows packaging lives in desktop.yml (manual, nightly).
+  # Pull requests run Linux jobs only. Windows and Mac packaging lives in desktop.yml (manual, release, nightly).
   pull_request:
-    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml", "!**/*.md", "!docs/**"]
+    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "tools/installer_art.py", "tools/dmg_art.py", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml", "!**/*.md", "!docs/**"]
   push:
     branches: [main]
-    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml", "!**/*.md", "!docs/**"]
+    paths: ["compose/**", "crates/**", "tools/cw-bindgen/**", "tools/installer_art.py", "tools/dmg_art.py", "Cargo.*", "rust-toolchain.toml", ".github/workflows/android.yml", "!**/*.md", "!docs/**"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,6 +22,13 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          # Every job used to resolve every dependency from scratch, so a Maven Central rate limit failed whichever
+          # job asked last. One shared cache, keyed on the build files, means a job downloads only what changed.
+          cache: gradle
+          cache-dependency-path: |
+            compose/**/*.gradle*
+            compose/gradle/libs.versions.toml
+            compose/gradle/wrapper/gradle-wrapper.properties
       - run: rustup show
       - name: Engine for the desktop (host) and the bindings
         run: bash compose/scripts/build-engine.sh desktop
@@ -32,9 +39,79 @@ jobs:
         run: bash compose/scripts/build-engine.sh android
       - name: Debug APK
         working-directory: compose
-        run: ./gradlew --no-daemon :androidApp:assembleDebug
+        run: scripts/retry.sh 3 ./gradlew --no-daemon :androidApp:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: corporate-warfare-android-debug
           path: compose/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+          retention-days: 14
+      # The shrunk release build must still start the engine, so it is built (unsigned) on every run.
+      # One APK per ABI: arm64-v8a is the direct download, x86_64 is for emulators.
+      - name: Release APKs and bundle (unsigned, shrunk)
+        working-directory: compose
+        # AGP cannot build per-ABI APKs and a bundle in one run, so they are two runs.
+        run: |
+          scripts/retry.sh 3 ./gradlew --no-daemon :androidApp:bundleRelease
+          scripts/retry.sh 3 ./gradlew --no-daemon :androidApp:assembleRelease -Pcw.splitAbi=true
+      - name: Shrinking kept the engine bindings
+        working-directory: compose
+        run: |
+          # JNA finds the engine's classes by name, so R8 must not rename or remove them.
+          grep -q "^uniffi.cw_ffi.UniffiLib -> uniffi.cw_ffi.UniffiLib:" androidApp/build/outputs/mapping/release/mapping.txt
+          grep -q "^com.sun.jna.Native -> com.sun.jna.Native:" androidApp/build/outputs/mapping/release/mapping.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corporate-warfare-android-release-unsigned
+          path: |
+            compose/androidApp/build/outputs/apk/release/*.apk
+            compose/androidApp/build/outputs/bundle/release/*.aab
+          retention-days: 14
+
+  # The shrunk release build, started for real: an x86_64 emulator launches it and an instrumented
+  # test plays a career on it, so a keep rule R8 got wrong fails here and not on a phone.
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          # Every job used to resolve every dependency from scratch, so a Maven Central rate limit failed whichever
+          # job asked last. One shared cache, keyed on the build files, means a job downloads only what changed.
+          cache: gradle
+          cache-dependency-path: |
+            compose/**/*.gradle*
+            compose/gradle/libs.versions.toml
+            compose/gradle/wrapper/gradle-wrapper.properties
+      - run: rustup show
+      - name: Engine for Android (arm64-v8a, x86_64)
+        run: bash compose/scripts/build-engine.sh android
+      - name: Shrunk release build (debug key, smoke keep rules; never shipped)
+        working-directory: compose
+        run: scripts/retry.sh 3 ./gradlew --no-daemon :androidApp:assembleRelease :androidApp:assembleReleaseAndroidTest -Pcw.smoke=true
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Launch and play on an emulator
+        timeout-minutes: 30
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash compose/scripts/android-smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: corporate-warfare-android-smoke-logcat
+          path: |
+            compose/build/smoke/
+            compose/androidApp/build/reports/androidTests/
           retention-days: 14

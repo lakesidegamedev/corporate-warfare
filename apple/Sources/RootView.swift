@@ -5,7 +5,7 @@ enum AppTab: Hashable {
 }
 
 struct RootView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var tab: AppTab
     /// A screen that has no tab on iPhone (research, actions, stats), opened by the tutorial.
@@ -30,6 +30,7 @@ struct RootView: View {
             }
             PauseBanner()
             TutorialPanel(compact: true)
+            NewsTicker { presented = .paper }
             TabView(selection: $tab) {
                 MapHomeView()
                     .tabItem {
@@ -57,7 +58,7 @@ struct RootView: View {
                         PixelIcons.tabImage("inbox")
                         Text("INBOX")
                     }
-                    .badge(store.events.filter { $0.mandatory }.count)
+                    .badge(store.inboxBadge)
                     .tag(AppTab.inbox)
                 OverviewView()
                     .safeAreaInset(edge: .top, spacing: 0) { TimeStrip() }
@@ -69,8 +70,8 @@ struct RootView: View {
             }
             .tint(Theme.gold)
         }
-        .sheet(item: $store.openDivision) { division in
-            DivisionDetailSheet(division: division).environmentObject(store)
+        .sheet(item: Binding(get: { store.openDivision }, set: { store.openDivision = $0 })) { division in
+            DivisionDetailSheet(division: division).environment(store)
         }
         .onAppear { store.tutorial.visited(tab.page) }
         .onChange(of: tab) { _, next in store.tutorial.visited(next.page) }
@@ -85,6 +86,7 @@ struct RootView: View {
                     switch page {
                     case .research: ResearchView()
                     case .stats: StatsView()
+                    case .paper: PaperView()
                     default: CommandCenterView(onClose: { presented = nil })
                     }
                 }
@@ -94,7 +96,7 @@ struct RootView: View {
                     }
                 }
             }
-            .environmentObject(store)
+            .environment(store)
             .presentationBackground(Theme.ink)
         }
     }
@@ -106,7 +108,7 @@ struct RootView: View {
         case .markets: tab = .markets
         case .inbox: tab = .inbox
         case .portfolio: tab = .portfolio
-        case .research, .stats, .actions: presented = page
+        case .research, .stats, .actions, .paper: presented = page
         }
     }
 }
@@ -126,7 +128,7 @@ extension AppTab {
 /// One-time notice after a career was restored from a last-good copy. The player is told which
 /// slot and week are now live, and can dismiss it.
 struct RecoveryNoticeBanner: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     let text: String
 
@@ -155,7 +157,7 @@ struct RecoveryNoticeBanner: View {
 }
 
 struct ContextChip: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -181,7 +183,7 @@ struct ContextChip: View {
 }
 
 struct RunControls: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
 
     var body: some View {
         HStack(spacing: 10) {
@@ -203,7 +205,7 @@ struct RunControls: View {
 
 /// Pause, 1x, 2x, 4x. One tick is one week; 1x is a week a second.
 struct SpeedControl: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     var compact = false
 
     private let speeds: [(Double, String)] = [(0, "pause"), (1, "speed1"), (2, "speed2"), (4, "speed3")]

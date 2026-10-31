@@ -4,8 +4,11 @@
 //! weekly advances. It exposes immutable read models, a versioned save envelope and a replay log.
 //! Swift keeps file I/O and lifecycle; it never computes a financial identity.
 
+pub mod brief;
 pub mod cfo;
 pub mod dto;
+pub mod letters;
+pub mod paper;
 pub mod save;
 pub mod telemetry;
 
@@ -57,6 +60,9 @@ pub struct PriceSetup {
     pub scenario_id: String,
     /// None takes the scenario's default mode.
     pub path: Option<cw_data::PricePath>,
+    /// Whether the scenario's dated history plays. None takes the default, Historical.
+    #[serde(default)]
+    pub timeline: Option<cw_sim::economy::timeline::TimelineMode>,
 }
 
 #[derive(Clone, Debug)]
@@ -184,6 +190,7 @@ impl Session {
         config.prices = PriceSetup {
             scenario_id: custom.base_scenario_id.clone(),
             path: Some(custom.price_path),
+            timeline: config.prices.timeline,
         };
         Self::create_with(config, Some(custom)).map_err(|e| format!("{e:?}"))
     }
@@ -243,6 +250,18 @@ impl Session {
             );
         }
         if !config.prices.scenario_id.is_empty() {
+            cw_sim::economy::timeline::init(
+                &mut world,
+                &dataset,
+                &config.prices.scenario_id,
+                config
+                    .prices
+                    .timeline
+                    .unwrap_or(cw_sim::economy::timeline::TimelineMode::Historical),
+                config.seed,
+            );
+        }
+        if !config.prices.scenario_id.is_empty() {
             // The scenario's own people take the posts they fit.
             cw_sim::economy::cast::assign(&mut world, &dataset, &config.prices.scenario_id);
         }
@@ -280,6 +299,12 @@ impl Session {
 
     pub fn dataset_hash(&self) -> &str {
         &self.dataset.hash
+    }
+
+    /// Seat the chief executive the player chose at the new-game screen. Presentation only. A
+    /// portrait outside the kit, a blank name or an unknown temperament take the kit's own.
+    pub fn set_player_chief(&mut self, name: &str, portrait: &str, temperament: &str) {
+        self.world.player_chief = cw_sim::state::PlayerChief::choose(name, portrait, temperament);
     }
 
     /// Continue past a pause that is not a card waiting for an answer. A card pause is cleared
@@ -822,28 +847,50 @@ impl Session {
                     .get(*firm)
                     .map(|entity| entity.name.clone())
                     .unwrap_or_default();
-                let reserved = if *buy {
-                    qty.saturating_mul(*limit_price_cents).saturating_neg()
+                let holder = if *investor {
+                    cw_sim::state::HolderId::Investor
                 } else {
-                    qty.saturating_mul(*limit_price_cents)
+                    cw_sim::state::HolderId::Firm(Handle(actor))
+                };
+                let side = if *buy {
+                    cw_sim::state::OrderSide::Buy
+                } else {
+                    cw_sim::state::OrderSide::Sell
+                };
+                let quote = cw_sim::economy::equity::quote_shares(
+                    &self.world,
+                    holder,
+                    *firm,
+                    side,
+                    *qty,
+                    *limit_price_cents,
+                );
+                let cash = if *buy {
+                    quote.total_cents.saturating_neg()
+                } else {
+                    quote.total_cents
                 };
                 cash_preview(
                     revision,
-                    reserved,
+                    cash,
                     vec![
-                        format!("{qty} shares of {name} at a {limit_price_cents} cent limit"),
                         format!(
-                            "reserved from {}",
+                            "{} of {qty} shares of {name} at about {} cents each",
+                            quote.qty, quote.average_cents
+                        ),
+                        format!(
+                            "settles at once {} {}",
+                            if *buy { "from" } else { "into" },
                             if *investor {
                                 "your personal account"
                             } else {
                                 "the firm's account"
                             }
                         ),
-                        "price impact is 10 percent of quantity over weekly float, capped at 25 percent"
-                            .to_owned(),
-                        "the quote expires at the next boundary and revalidates cash and ownership"
-                            .to_owned(),
+                        format!(
+                            "the price moves from {} to {} cents as you trade",
+                            quote.mark_cents, quote.final_cents
+                        ),
                     ],
                 )
             }
@@ -2144,7 +2191,18 @@ mod tests {
         // carriers cut below 60 percent lane fill, so week-two asking prices differ. It moved
         // again from 1b265292... in the same preview when facilities gained a cut record,
         // households gained wanted and unmet demand and policies a production lock (new
-        // encoded fields), and refineries began shifting their cut. The Swift
+        // encoded fields), and refineries began shifting their cut. In 1.9 it moved from
+        // dd84b0b3... when scenarios began opening with the inflation, policy rate and expected
+        // inflation of their own period (Great Lakes 2000: 3.4 percent and 6.5 percent, not 3 and 6),
+        // which changes the opening loans, wages and rates from the first week. In 1.9 it moved
+        // from 1bf6e771... when the world gained its executive state (the pool of people who can
+        // be hired is drawn in the first week and is hashed, like the chapter state), with no
+        // change to any rule this fixture exercises. In 1.9 it moved from 28f7d351... when the cast grew from twelve to forty and the generated
+        // people were redrawn (the same first-week pool now picks from a new list of extras, with
+        // different names, ages and temperaments), with no change to any rule this fixture exercises. The Swift
+        // In 1.9 it moved from de25d78b... when the world gained its rival plan and migration state
+        // (the migration references are taken in week one and hashed), with no change to any
+        // other rule this fixture exercises. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2170,7 +2228,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "fddf778e8fe5e78f4379bf5c7688e45bf4dffa3c1449a89aa6c4e73cf8834a56"
+            "a08ddca23a2e702a0eb02692ddc605c60c4f5ddf3c33085889c0cfdcb9efce1b"
         );
     }
 

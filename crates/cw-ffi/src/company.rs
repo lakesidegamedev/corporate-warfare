@@ -6,7 +6,6 @@
 //! investor's own firms show everything.
 
 use cw_core::ids::Handle;
-use cw_data::cast::extras;
 use cw_session::{Detail, Query, Session};
 use cw_sim::state::{HolderId, World};
 
@@ -66,6 +65,8 @@ pub struct CompanyPageDto {
     pub finance: Option<FinanceDto>,
     pub divisions: Vec<DivisionLineDto>,
     pub holders: Vec<HolderDto>,
+    /// Holdings of 5 percent or more, as filed, with their history.
+    pub stakes: Vec<crate::plans::StakeDto>,
     pub controller: Option<String>,
     pub parent: Option<LinkedFirmDto>,
     pub subsidiaries: Vec<LinkedFirmDto>,
@@ -97,78 +98,12 @@ pub fn firm_logo(name: String) -> LogoDto {
     }
 }
 
-fn fnv(text: &str) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in text.as_bytes() {
-        h ^= u64::from(*b);
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    h
-}
-
 /// The chief executive of a firm, named: a cast member if the engine appointed one, else a
 /// generated chief executive picked from the name and the firm's style. Generated ones are
-/// spread so no two firms in a world share one. The investor's own firms have none.
+/// spread so no two firms in a world share one. The investor's own firms have none. Letters
+/// pick their senders the same way (`cw_session::letters::chief`).
 pub(crate) fn resolved_ceo(session: &Session, firm: Handle) -> Option<PersonDto> {
-    let world = &session.world;
-    let entity = world.firms.get(firm)?;
-    if let Some(person) = entity.ceo {
-        return crate::cast::person_dto(&session.dataset, person);
-    }
-    if cw_sim::economy::events_engine::player_side(world, firm) {
-        return None;
-    }
-    let pool = extras();
-    if pool.is_empty() {
-        return None;
-    }
-    let mut taken: Vec<usize> = Vec::new();
-    let mut pick = None;
-    for handle in world.firms.handles_sorted() {
-        let Some(f) = world.firms.get(handle) else {
-            continue;
-        };
-        if f.ceo.is_some() || cw_sim::economy::events_engine::player_side(world, handle) {
-            continue;
-        }
-        let best = f
-            .archetype
-            .map(|a| {
-                pool.iter()
-                    .map(|e| cw_sim::economy::cast::temperament_match(a, e.temperament))
-                    .max()
-                    .unwrap_or(0)
-            })
-            .unwrap_or(0);
-        let fits: Vec<usize> = (0..pool.len())
-            .filter(|i| {
-                f.archetype.is_none_or(|a| {
-                    cw_sim::economy::cast::temperament_match(a, pool[*i].temperament) == best
-                })
-            })
-            .collect();
-        let mut at = (fnv(&f.name.to_lowercase()) % fits.len() as u64) as usize;
-        let mut chosen = fits[at];
-        let mut tries = 0;
-        while taken.contains(&chosen) && tries < fits.len() {
-            at = (at + 1) % fits.len();
-            chosen = fits[at];
-            tries += 1;
-        }
-        if taken.contains(&chosen) {
-            // The matching ones are all in use: take the next free one overall.
-            chosen = (0..pool.len())
-                .find(|i| !taken.contains(i))
-                .unwrap_or(chosen);
-        }
-        taken.push(chosen);
-        if handle == firm {
-            pick = Some(chosen);
-            break;
-        }
-    }
-    let e = &pool[pick?];
-    let p = e.person();
+    let p = cw_session::letters::chief(&session.world, &session.dataset, firm)?;
     Some(PersonDto {
         id: p.id,
         name: p.name,
@@ -176,8 +111,10 @@ pub(crate) fn resolved_ceo(session: &Session, firm: Handle) -> Option<PersonDto>
         home: p.home,
         background: p.background,
         temperament: p.temperament.key().to_owned(),
-        roles: vec!["ceo".to_owned()],
-        stance: None,
+        roles: p.roles.iter().map(|r| r.key().to_owned()).collect(),
+        stance: p.stance,
+        mood: cw_data::Mood::Neutral.key().to_owned(),
+        office_portrait: p.office_portrait,
     })
 }
 
@@ -369,6 +306,7 @@ pub(crate) fn page(session: &Session, firm: u64) -> Option<CompanyPageDto> {
             Vec::new()
         },
         holders,
+        stakes: crate::plans::stakes(world, handle),
         controller,
         parent,
         subsidiaries,

@@ -60,15 +60,36 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.run == 'true' }}
     runs-on: macos-26
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - run: xcodebuild -version && xcrun --sdk iphoneos --show-sdk-version
       - run: rustup show
+      # The four device and Catalyst engine builds took about 15 of the 42 minutes, all from scratch. Dependencies
+      # (wgpu and the rest) are restored from the last run on the same lockfile; only this repo's own crates rebuild.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: apple-cargo-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          # One entry per lockfile: the dependencies are what is slow to build, and a changed lockfile starts the next entry.
+          restore-keys: apple-cargo-
       - name: Privacy audit
         run: python3 apple/scripts/privacy_audit.py
       - run: brew install xcodegen
       - run: bash apple/scripts/build-engine.sh
+      # A report, not a gate, and it builds a whole extra engine (2 to 3 minutes): not on every pull request.
+      - name: Engine library size, with and without the GPU map
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        run: |
+          ls -l target/aarch64-apple-ios/release/libcw_ffi.a target/aarch64-apple-ios-sim/release/libcw_ffi.a target/maccatalyst/libcw_ffi.a
+          CARGO_TARGET_DIR=target-nogpu cargo build --locked -p cw-ffi --release --target aarch64-apple-ios
+          ls -l target-nogpu/aarch64-apple-ios/release/libcw_ffi.a
+          rm -rf target-nogpu
       - run: xcodegen generate --spec apple/project.yml --project apple
       - name: Simulator compile
         run: xcodebuild -project apple/CorporateWarfare.xcodeproj -scheme CorporateWarfare -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
@@ -83,6 +104,16 @@ jobs:
         with:
           name: corporate-warfare-mac-unsigned
           path: apple/build/CorporateWarfare-mac.zip
+          retention-days: 14
+      # The release's Mac download: a disk image with the branded background and the drag arrow.
+      - name: Mac disk image
+        run: |
+          app=$(find apple/build/catalyst -path '*Release-maccatalyst/*.app' -maxdepth 6 -type d | head -1)
+          bash apple/scripts/make-dmg.sh "$app" apple/build/CorporateWarfare-mac.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corporate-warfare-mac-dmg
+          path: apple/build/CorporateWarfare-mac.dmg
           retention-days: 14
       - name: Execute Rust bridge in simulator
         run: bash apple/scripts/test-simulator.sh
@@ -108,6 +139,9 @@ jobs:
           retention-days: 14
       - name: Device archive
         run: xcodebuild -project apple/CorporateWarfare.xcodeproj -scheme CorporateWarfare -configuration Release -destination 'generic/platform=iOS' -archivePath apple/build/CorporateWarfare.xcarchive CODE_SIGNING_ALLOWED=NO archive
+      - name: App binary size
+        if: success()
+        run: ls -l apple/build/CorporateWarfare.xcarchive/Products/Applications/CorporateWarfare.app/CorporateWarfare
       - uses: actions/upload-artifact@v4
         if: success()
         with:

@@ -1,5 +1,7 @@
 package net.lakesidegames.corporatewarfare
 
+import kotlinx.coroutines.launch
+import uniffi.cw_ffi.LetterDto
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -37,6 +39,13 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -72,14 +81,33 @@ val LocalAppSettings = androidx.compose.runtime.staticCompositionLocalOf<AppSett
  * desktop, where the menu offers Quit and the settings page offers the window options.
  */
 @Composable
-fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Updater? = null, onQuit: (() -> Unit)? = null) {
+fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Updater? = null, onQuit: (() -> Unit)? = null, saveFolder: String? = null) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     var showSettings by remember { mutableStateOf(false) }
+    // Set up again, or the wizard a 1.8 player chose from What's new.
+    var rerunSetup by remember { mutableStateOf(false) }
+    // The desktop game menu (Escape): pauses time while open and resumes it at the same speed after.
+    var gameMenu by remember { mutableStateOf(false) }
+    var resumeSpeed by remember { mutableStateOf(0) }
+    val rootFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    fun openGameMenu() {
+        resumeSpeed = if (store.running) store.speed else 0
+        if (store.running) store.playAt(0)
+        gameMenu = true
+    }
+    fun closeGameMenu(resume: Boolean) {
+        gameMenu = false
+        if (resume && resumeSpeed > 0) store.playAt(resumeSpeed)
+        resumeSpeed = 0
+    }
     val analytics = settings.analytics
     androidx.compose.runtime.SideEffect {
         store.preferredCurrency = settings.reportingCurrency
         store.pauseOnWarnings = settings.pauseOnWarnings
+        store.briefCollapsed = settings.briefCollapsed
+        store.onBriefCollapsed = { settings.chooseBriefCollapsed(it) }
         store.onCurrencyChosen = { settings.chooseReportingCurrency(it) }
+        store.onCareerEnded = { settings.recordCareer(it) }
         val installId = settings.installId
         store.snapshotSink = if (analytics) {
             { json -> Telemetry.post(Telemetry.envelope(installId, BuildInfo.VERSION, BuildInfo.CHANNEL, json)) }
@@ -99,31 +127,84 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
         androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density * settings.uiScale, density.fontScale),
     ) {
         CorporateWarfareTheme {
-            Box(Modifier.fillMaxSize().background(Palette.ink)) {
+            androidx.compose.runtime.LaunchedEffect(showSettings, store.ready) { runCatching { rootFocus.requestFocus() } }
+            Box(
+                Modifier.fillMaxSize().background(Palette.ink)
+                    .focusRequester(rootFocus).focusable()
+                    // Escape on desktop: close the deepest open screen (settings, an overlay); with nothing open in a
+                    // career, open or close the game menu. Runs on the way back up, so a focused field or dialog acts first.
+                    .onKeyEvent { event ->
+                        if (onQuit == null || event.type != KeyEventType.KeyDown || event.key != Key.Escape) return@onKeyEvent false
+                        when {
+                            gameMenu -> { closeGameMenu(resume = true); true }
+                            showSettings -> { showSettings = false; true }
+                            Back.press() -> true
+                            store.ready -> { openGameMenu(); true }
+                            else -> false
+                        }
+                    },
+            ) {
                 when {
+                    rerunSetup || settings.setupState == SetupState.Fresh ->
+                        SetupWizard(settings, updater, saveFolder, firstRun = settings.setupState == SetupState.Fresh && !rerunSetup, onDone = { rerunSetup = false })
+                    settings.setupState == SetupState.Upgrade ->
+                        WhatsNewScreen(onRunSetup = { rerunSetup = true }, onContinue = { settings.finishSetup() })
                     showSettings -> Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), contentAlignment = Alignment.TopCenter) {
                         BackAction { showSettings = false }
                         Box(Modifier.widthIn(max = 820.dp)) {
-                            SettingsScreen(store, settings, desktop = onQuit != null, updater = updater) { showSettings = false }
+                            SettingsScreen(store, settings, desktop = onQuit != null, updater = updater, onSetupAgain = { showSettings = false; rerunSetup = true }) { showSettings = false }
                         }
                     }
                     store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         if (maxWidth >= DesktopBreakpoint) {
-                            Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) { DesktopShell(store, onSettings = { showSettings = true }) }
+                            Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                                DesktopShell(store, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
+                                if (settings.showBriefEachWeek) BriefWeeklyHost(store)
+                            }
                         }
                         else MainScreen(store, onSettings = { showSettings = true })
                     }
                     else -> StartScreen(store, updater, onSettings = { showSettings = true }, onQuit = onQuit)
                 }
+            if (gameMenu && store.ready) GameMenuDialog(
+                onResume = { closeGameMenu(resume = true) },
+                onSave = { store.saveNow() },
+                onSettings = { closeGameMenu(resume = false); showSettings = true },
+                onMainMenu = { closeGameMenu(resume = false); store.exitToMenu() },
+                onQuit = onQuit?.let { quit -> { closeGameMenu(resume = false); store.saveAndThen(quit) } },
+            )
+            if (store.ready) ActionToast(store)
             store.error?.let { message ->
                 AlertDialog(
                     onDismissRequest = { store.error = null },
                     confirmButton = { TextButton(onClick = { store.error = null }) { Text("OK") } },
                     title = { Text("Not done") },
-                    text = { Text(message) },
+                    text = { Column(Modifier.dialogScroll()) { Text(message) } },
                     containerColor = Palette.panel,
                 )
             }
+            }
+        }
+    }
+}
+
+/**
+ * What an accepted action or a save said, shown for a moment at the bottom of the screen. Rejections are the "Not done"
+ * dialog; this is the other half, so no command ever leaves the player guessing whether it took.
+ */
+@Composable
+internal fun ActionToast(store: GameStore) {
+    var shown by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(store.statusSerial) {
+        if (store.status.isEmpty()) return@LaunchedEffect
+        shown = store.status
+        kotlinx.coroutines.delay(3_000)
+        shown = null
+    }
+    shown?.let { text ->
+        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(bottom = 72.dp), contentAlignment = Alignment.BottomCenter) {
+            Box(Modifier.clip(Pixel.shape).background(Palette.panelRaised).border(1.dp, Palette.gold, Pixel.shape).padding(horizontal = 14.dp, vertical = 8.dp)) {
+                Text(text, color = Palette.primaryText, fontSize = 13.sp)
             }
         }
     }
@@ -181,10 +262,13 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
             Row(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { overlay = null }) { BackLabel("Back", Palette.gold) }
             }
+            if (page != "paper") TickerBar(store) { overlay = "paper" }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (page) {
                     "actions" -> CommandCenterScreen(store)
                     "research" -> ResearchScreen(store)
+                    "paper" -> PaperScreen(store)
+                    "hall" -> HallScreen(store)
                     else -> StatsScreen(store) { overlay = null }
                 }
             }
@@ -200,14 +284,14 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
                         selected = tab == item,
                         onClick = { open(item.name.lowercase()) },
                         icon = {
-                            val due = store.events.count { it.mandatory }
+                            val due = store.inboxBadge
                             if (item == Tab.Inbox && due > 0) {
                                 BadgedBox(badge = { Badge { Text("$due") } }) { PixelIcon(item.icon, size = 24.dp) }
                             } else {
                                 PixelIcon(item.icon, size = 24.dp)
                             }
                         },
-                        label = { Text(item.title, fontSize = 11.sp) },
+                        label = { NavLabel(item.title) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Palette.gold,
                             selectedTextColor = Palette.gold,
@@ -221,7 +305,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
                     selected = false,
                     onClick = { menu = true },
                     icon = { PixelIcon("menu", size = 24.dp) },
-                    label = { Text("Menu", fontSize = 11.sp) },
+                    label = { NavLabel("Menu") },
                     colors = NavigationBarItemDefaults.colors(unselectedIconColor = Palette.secondary, unselectedTextColor = Palette.secondary),
                 )
             }
@@ -233,13 +317,14 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
             // The map has its own time controls; every other tab gets the strip, so time can be
             // paused or slowed from anywhere.
             if (tab != Tab.Map) TimeStrip(store)
+            TickerBar(store) { open("paper") }
             TutorialPanel(compact = true, modifier = Modifier.fillMaxWidth(), researchHint = store.research?.let { r -> store.selectedFirmDto?.let { Tutorial.researchHint(it.cashCents, r) } })
             Box(Modifier.weight(1f)) {
             when (tab) {
                 Tab.Map -> MapScreen(store)
                 Tab.Office -> OfficeScreen(store, ::open)
                 Tab.Markets -> MarketsScreen(store)
-                Tab.Inbox -> InboxScreen(store)
+                Tab.Inbox -> InboxScreen(store, ::open)
                 Tab.Portfolio -> PortfolioScreen(store, onSettings)
             }
             }
@@ -252,7 +337,7 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
             containerColor = Palette.panel,
             title = { Text("Menu") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.dialogScroll(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     GoldButton("Resume", Modifier.fillMaxWidth()) { menu = false }
                     OutlinedButton(onClick = { store.saveNow(); menu = false }, modifier = Modifier.fillMaxWidth()) { Text("Save now", color = Palette.primaryText) }
                     OutlinedButton(onClick = { menu = false; onSettings() }, modifier = Modifier.fillMaxWidth()) { Text("Settings", color = Palette.primaryText) }
@@ -265,9 +350,10 @@ private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
 }
 
 @Composable
-internal fun TabList(content: LazyListScope.() -> Unit) {
+internal fun TabList(state: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(), content: LazyListScope.() -> Unit) {
     LazyColumn(
         Modifier.fillMaxSize(),
+        state = state,
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         content = content,
@@ -277,7 +363,7 @@ internal fun TabList(content: LazyListScope.() -> Unit) {
 // MARK: CEO Office
 
 @Composable
-private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
+internal fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
     val firm = store.selectedFirmDto
     var editing by remember { mutableStateOf<ProductLineDto?>(null) }
     var stats by remember { mutableStateOf(false) }
@@ -285,13 +371,22 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
         StatsScreen(store) { stats = false }
         return
     }
-    TabList {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // Where each section sits in the list below the room: the header and the room come first.
+    val sectionAt = remember { mutableMapOf<OfficeSection, Int>() }
+    fun route(r: OfficeRoute) {
+        when (r) {
+            is OfficeRoute.Screen -> onOpen(r.id)
+            is OfficeRoute.Section -> scope.launch { sectionAt[r.section]?.let { listState.animateScrollToItem(it) } }
+        }
+    }
+    TabList(listState) {
         item {
             ScreenHeader("CEO Office", store.overview?.weekLabel) {
                 if (firm != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedButton(onClick = { onOpen("research") }) { Text("Research", color = Palette.primaryText, fontSize = 12.sp) }
-                        OutlinedButton(onClick = { onOpen("stats") }) { Text("Stats", color = Palette.primaryText, fontSize = 12.sp) }
+                        // Research, Stats and the Hall are the door, the wall chart and the board table in the room below.
                         GoldButton("Actions") { onOpen("actions") }
                     }
                 }
@@ -301,6 +396,15 @@ private fun OfficeScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
             item { FoundCompanyPanel(store, scroll = false) }
             return@TabList
         }
+        item { OfficeRoomHost(store, ::route) }
+        sectionAt[OfficeSection.Brief] = 2
+        item { BriefPanel(store, firm.currency) }
+        sectionAt[OfficeSection.Goal] = 3
+        chapterItems(store)
+        val inChapter = if (store.boardOffer != null || store.activeMandate != null || store.chapterResult != null) 1 else 0
+        sectionAt[OfficeSection.Executives] = 3 + inChapter
+        item { ExecutivesPanel(store, firm.currency) }
+        sectionAt[OfficeSection.Figures] = 4 + inChapter
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectorBadge(firm.industry, 40)
@@ -403,7 +507,9 @@ internal fun CfoPanel(store: GameStore, currency: String) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(item.headline, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    Text("-${Format.compact(item.weeklyCents, currency)} a week", color = Palette.negative, fontSize = 12.sp)
+                    Explain("What this costs you every week, worked out by your CFO. ${item.detail}") {
+                        Text("-${Format.compact(item.weeklyCents, currency)} a week", color = Palette.negative, fontSize = 12.sp)
+                    }
                 }
                 Text(item.detail, color = Palette.secondary, fontSize = 12.sp)
                 OutlinedButton(onClick = { store.applyAdvice(item) }) { Text(item.actionLabel, color = Palette.primaryText) }
@@ -473,13 +579,13 @@ internal fun PricingRow(line: ProductLineDto, onClick: () -> Unit) {
 
 /** Automatic pricing, a step against the market, or a markup over the company's own cost. */
 @Composable
-internal fun PostureDialog(store: GameStore, line: ProductLineDto, onDismiss: () -> Unit) {
+internal fun PostureDialog(store: GameStore, line: ProductLineDto, presetBps: Int? = null, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Palette.panel,
         title = { Text(line.name) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.dialogScroll(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     "Your price ${Format.money(line.priceCents)} · market ${Format.money(line.marketCents)} · your cost " +
                         (if (line.unitCostCents > 0) Format.money(line.unitCostCents) else "n/a"),
@@ -487,6 +593,12 @@ internal fun PostureDialog(store: GameStore, line: ProductLineDto, onDismiss: ()
                     fontSize = 13.sp,
                 )
                 Text("Buyers take the cheapest offer first. Undercut to sell out; price above the market for margin and risk unsold stock.", color = Palette.secondary, fontSize = 12.sp)
+                presetBps?.let { bps ->
+                    GoldButton("Apply the suggested price: %+.0f%% against the market".format(bps / 100.0)) {
+                        store.setPosture(line.product, 1, bps)
+                        onDismiss()
+                    }
+                }
                 OutlinedButton(onClick = { store.setPosture(line.product, 0, 0); onDismiss() }) {
                     Text(if (line.mode == "auto") "Automatic (on)" else "Automatic", color = Palette.primaryText)
                 }
@@ -572,7 +684,7 @@ fun PauseBanner(store: GameStore, modifier: Modifier = Modifier) {
             onDismissRequest = { card = null },
             containerColor = Palette.panel,
             title = { Text(open.title, color = Palette.primaryText) },
-            text = { DecisionCard(store, open) },
+            text = { Column(Modifier.dialogScroll()) { DecisionCard(store, open) } },
             confirmButton = {},
             dismissButton = { TextButton(onClick = { card = null }) { Text("Later") } },
         )
@@ -581,14 +693,31 @@ fun PauseBanner(store: GameStore, modifier: Modifier = Modifier) {
 
 // MARK: Inbox
 
+/**
+ * The Inbox is correspondence: a stack of letters, decisions pinned on top, one open at a time.
+ * Rival moves stay below as a compact feed: most of them (a plant, a wind-down) involve no one
+ * writing to you, so a letter for each would be invented.
+ */
 @Composable
-private fun InboxScreen(store: GameStore) {
+private fun InboxScreen(store: GameStore, onOpen: (String) -> Unit = {}) {
+    var openId by remember { mutableStateOf<String?>(null) }
+    var picked by remember { mutableStateOf<LetterDto?>(null) }
+    // A letter stays open after it leaves the Inbox window (the archive); a answered card is gone.
+    val letter = store.letters.firstOrNull { it.id == openId } ?: picked?.takeIf { it.id == openId && it.event == null }
     TabList {
-        item { ScreenHeader("Inbox", listOfNotNull(store.selectedFirmDto?.name, store.overview?.weekLabel).joinToString(" · ")) }
+        item {
+            ScreenHeader("Inbox", listOfNotNull(store.selectedFirmDto?.name, store.overview?.weekLabel).joinToString(" · ")) {
+                OutlinedButton(onClick = { onOpen("paper") }) { Text("The paper", color = Palette.primaryText, fontSize = 12.sp) }
+            }
+        }
+        if (letter != null) {
+            item { TextButton(onClick = { openId = null; picked = null }) { Text("Back to letters", color = Palette.gold) } }
+            item { LetterPaper(store, store.letters.firstOrNull { it.id == letter.id } ?: letter) }
+            return@TabList
+        }
         val due = store.events.count { it.mandatory }
         if (due > 0) item { Callout("$due decision${if (due == 1) "" else "s"} needed before time can advance.", Palette.warning) }
-        if (store.events.isEmpty() && store.rivalFeed.isEmpty()) item { Callout("Quiet week. Decisions show up here when they happen.", Palette.secondary) }
-        items(store.events.size) { index -> DecisionCard(store, store.events[index]) }
+        item { LetterStack(store, openId) { openId = it.id; picked = it } }
         if (store.rivalFeed.isNotEmpty()) {
             item {
                 Panel {
@@ -720,3 +849,35 @@ fun SpeedControl(store: GameStore) {
     }
 }
 
+
+/**
+ * A bottom bar label. Six tabs share the width, so a label that grows with the system font past
+ * 115 percent would wrap mid-word ("Portfoli o") at 130. It grows up to that and holds there, on one line.
+ */
+@Composable
+private fun NavLabel(text: String) {
+    Text(text, fontSize = chromeSp(11f), maxLines = 1, softWrap = false)
+}
+
+
+/** The desktop game menu Escape opens: time is paused while it shows. */
+@Composable
+internal fun GameMenuDialog(onResume: () -> Unit, onSave: () -> Unit, onSettings: () -> Unit, onMainMenu: () -> Unit, onQuit: (() -> Unit)?) {
+    var saved by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onResume,
+        containerColor = Palette.panel,
+        title = { Text("Paused") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.widthIn(min = 280.dp).dialogScroll()) {
+                GoldButton("Resume", modifier = Modifier.fillMaxWidth()) { onResume() }
+                OutlinedButton(onClick = { onSave(); saved = true }, modifier = Modifier.fillMaxWidth()) { Text(if (saved) "Saved" else "Save", color = Palette.primaryText) }
+                OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("Settings", color = Palette.primaryText) }
+                OutlinedButton(onClick = onMainMenu, modifier = Modifier.fillMaxWidth()) { Text("Save and return to main menu", color = Palette.primaryText) }
+                if (onQuit != null) OutlinedButton(onClick = onQuit, modifier = Modifier.fillMaxWidth()) { Text("Save and quit to desktop", color = Palette.primaryText) }
+                Text("Esc resumes.", color = Palette.secondary, fontSize = 11.sp)
+            }
+        },
+        confirmButton = {},
+    )
+}

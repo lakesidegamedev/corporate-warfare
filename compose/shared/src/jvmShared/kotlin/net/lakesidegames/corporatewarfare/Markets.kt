@@ -1,5 +1,6 @@
 package net.lakesidegames.corporatewarfare
 
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
@@ -28,6 +29,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +61,12 @@ fun MarketsScreen(store: GameStore) {
     var stock by remember { mutableStateOf<StockDto?>(null) }
     var commodity by remember { mutableStateOf<CommodityDto?>(null) }
     var pickingRegion by remember { mutableStateOf(false) }
+    // The regions' rows are read from the engine only while that list is showing.
+    androidx.compose.runtime.DisposableEffect(store, section == Section.Regions) {
+        store.marketsOpen = section == Section.Regions
+        if (store.marketsOpen) store.refreshMarkets()
+        onDispose { store.marketsOpen = false }
+    }
     TabList {
         item { ScreenHeader("Markets", store.overview?.weekLabel) }
         item { EconomyCard(store, collapsible = true) }
@@ -69,7 +77,8 @@ fun MarketsScreen(store: GameStore) {
                         selected = section == option,
                         onClick = { section = option },
                         shape = SegmentedButtonDefaults.itemShape(index, Section.entries.size),
-                    ) { Text(option.title, fontSize = 13.sp) }
+                        icon = {},
+                    ) { Text(if (option == Section.Commodities && androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f) "Goods" else option.title, fontSize = chromeSp(12f), maxLines = 1, softWrap = false) }
                 }
             }
         }
@@ -90,8 +99,8 @@ internal fun changeTint(bps: Long) = if (bps > 0) Palette.positive else if (bps 
 
 /** A small line of closing prices, scaled to its own range. */
 @Composable
-fun Sparkline(values: List<Long>, tint: Color, modifier: Modifier) {
-    Canvas(modifier) {
+fun Sparkline(values: List<Long>, tint: Color, modifier: Modifier, name: String = "Price", format: (Long) -> String = { Format.price(it) }) {
+    Canvas(modifier.described("$name trend. ${chartSummary(name, values, format)}", androidx.compose.ui.semantics.Role.Image)) {
         if (values.size < 2) return@Canvas
         val low = values.min()
         val span = maxOf(values.max() - low, 1L).toFloat()
@@ -126,7 +135,7 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
                         Text(Format.count(last), color = Palette.primaryText, fontSize = 26.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
                         Text("${changeText(week)} this week · ${store.stocks.size} companies", color = changeTint(week), fontSize = 12.sp)
                     }
-                    Sparkline(index, changeTint(last - index.first()), Modifier.width(140.dp).height(44.dp))
+                    Sparkline(index, changeTint(last - index.first()), Modifier.width(140.dp).height(44.dp), name = "Corridor index", format = { Format.count(it) })
                 }
             }
         }
@@ -160,7 +169,10 @@ private fun LazyListScope.stocks(store: GameStore, sort: StockSort, onSort: (Sto
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(line.name + if (line.controlledByYou) " ★" else "", color = Palette.primaryText, fontWeight = FontWeight.Medium, maxLines = 1)
-                        Text("${Sectors.name(line.industry)} · cap ${Format.compact(line.marketCapCents)}", color = Palette.secondary, fontSize = 11.sp, maxLines = 1)
+                        // Non-breaking space keeps "cap" with its figure; large text wraps to a second line instead of dropping it.
+                        Text("${Sectors.name(line.industry)} · cap\u00A0${Format.compact(line.marketCapCents)}", color = Palette.secondary, fontSize = 11.sp, maxLines = 2)
+                        // Companies reporting results this week are marked on the board.
+                        if (line.earnings.reportsThisWeek) Text("Reports this week · analysts: ${ratingText(line.earnings.rating)}", color = Palette.gold, fontSize = 11.sp, maxLines = 1)
                     }
                     Sparkline(line.historyCents, changeTint(line.changeQuarterBps), Modifier.width(54.dp).height(22.dp))
                     Spacer(Modifier.width(8.dp))
@@ -287,13 +299,32 @@ internal fun RegionPicker(store: GameStore, onClose: () -> Unit) {
     )
 }
 
+/** The live quote line under the order ticket. */
+internal fun quoteText(q: uniffi.cw_ffi.ShareQuoteDto?, buy: Boolean): String {
+    if (q == null) return "Enter a number of shares to see the price."
+    if (q.qty <= 0L) return if (buy) "Nothing to buy at that limit, or the public holds none." else "Nothing would sell at that limit, or no buyer has the money."
+    return "${Format.count(q.qty)} shares at about ${Format.price(q.averageCents)} each, ${Format.money(q.totalCents)} in all; " +
+        "the price ends at ${Format.price(q.finalCents)}; you would own %.1f%%.".format(q.stakeAfterBps / 100.0)
+}
+
+internal fun doneText(name: String, q: uniffi.cw_ffi.ShareQuoteDto, buy: Boolean): String =
+    "${if (buy) "Bought" else "Sold"} ${Format.count(q.qty)} shares of $name for ${Format.money(q.totalCents)}. The price is now ${Format.price(q.finalCents)}."
+
 /** One stock: valuation, your position, and an order ticket. */
 @Composable
-internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = true, onClose: () -> Unit) {
+internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = true, startQuantity: String = "1000", onClose: () -> Unit) {
     var page by remember { mutableStateOf(false) }
     var buy by remember { mutableStateOf(true) }
-    var quantity by remember { mutableStateOf("1000") }
+    var quantity by remember { mutableStateOf(startQuantity) }
     var limit by remember { mutableStateOf("") }
+    var quote by remember { mutableStateOf<uniffi.cw_ffi.ShareQuoteDto?>(null) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val limitCents = limit.toDoubleOrNull()?.let { (it * 100).toLong() } ?: 0L
+    LaunchedEffect(buy, quantity, limit, line.firm) {
+        val shares = quantity.toLongOrNull() ?: 0L
+        // Asked and assigned in this effect's own coroutine, so the line and Buy now update with every keystroke.
+        quote = if (shares > 0) store.quoteShares(line.firm, buy, shares, limitCents) else null
+    }
     val annual = if (line.earningsWeeks > 0u) line.earningsCents * 52 / line.earningsWeeks.toLong() else 0L
     val pe = if (annual <= 0) "Loss" else (line.marketCapCents.toDouble() / annual).let { if (it > 200) "n/m" else "%.1f".format(it) }
     AlertDialog(
@@ -306,7 +337,9 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Scrolls, so the history and the dossier never push the trade off a short window; the trade sits
+            // right under the price, where it is seen without scrolling.
+            Column(Modifier.heightIn(max = 640.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatGroup(
                     Stat("Share price", Format.price(line.priceCents), note = "${changeText(line.changeWeekBps)} this week"),
                     listOf(
@@ -318,27 +351,32 @@ internal fun StockDialog(store: GameStore, line: StockDto, showPage: Boolean = t
                         Stat("You hold", Format.count(line.yourShares), note = Format.compact(line.yourShares * line.priceCents)),
                     ),
                 )
-                StockHistoryChart(store, line.firm)
-                DossierSection(store, line.firm)
-                if (showPage) TextButton(onClick = { page = true }) { Text("Open company page") }
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     SegmentedButton(selected = buy, onClick = { buy = true }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Buy") }
                     SegmentedButton(selected = !buy, onClick = { buy = false }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Sell") }
                 }
                 OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Shares") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
-                OutlinedTextField(limit, { limit = it }, label = { Text("Limit per share ($), default %.2f".format(line.priceCents / 100.0)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                Text("Orders fill at the weekly close, best price first, up to 2% of the freely held shares a week.", color = Palette.secondary, fontSize = 11.sp)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.textEntry())
+                OutlinedTextField(limit, { limit = it }, label = { Text("Limit per share ($), optional") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.textEntry())
+                TextButton(onClick = {
+                    scope.launch { store.quoteShares(line.firm, buy, Long.MAX_VALUE, limitCents)?.let { q -> quantity = q.maxQty.toString() } }
+                }) { Text(if (buy) "Max: all I can afford or the public holds" else "Max: all I hold") }
+                Text(quoteText(quote, buy), color = Palette.primaryText, fontSize = 13.sp)
+                StockHistoryChart(store, line.firm)
+                EarningsSection(line.earnings, null)
+                DossierSection(store, line.firm)
+                if (showPage) TextButton(onClick = { page = true }) { Text("Open company page") }
             }
         },
         confirmButton = {
             val shares = quantity.toLongOrNull() ?: 0
-            GoldButton(if (buy) "Place buy order" else "Place sell order", enabled = shares > 0 && !store.busy) {
-                // Default limits sit two percent through the price so the order is marketable.
-                val cents = limit.toDoubleOrNull()?.let { (it * 100).toLong() }
-                    ?: if (buy) line.priceCents * 102 / 100 else line.priceCents * 98 / 100
-                store.orderShares(line.firm, buy, shares, maxOf(cents, 1))
+            // The quote is a guide; the engine checks cash and shares itself and says why when it refuses, so the
+            // button never waits on the quote (a quote that is slow or missing must not leave the trade dead).
+            val nothing = quote?.let { it.qty <= 0 } == true
+            GoldButton(if (buy) "Buy now" else "Sell now", enabled = shares > 0 && !nothing && !store.busy) {
+                val q = quote
+                store.orderShares(line.firm, buy, shares, limitCents, q?.let { doneText(line.name, it, buy) } ?: "Accepted.")
                 onClose()
             }
         },

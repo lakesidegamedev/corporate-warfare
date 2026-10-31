@@ -4,7 +4,7 @@ import SwiftUI
 /// matter this week, sector focus and logistics, and every division (a sector type in a region) with
 /// its strategy, size and utilisation. Deeper corporate controls stay one tap away.
 struct CEOOfficeView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var retooling: FacilityDto?
     @State private var editingFocus = false
     @State private var rejection: CommandRejection?
@@ -14,11 +14,13 @@ struct CEOOfficeView: View {
     var body: some View {
         TabScreen(title: "CEO Office", subtitle: store.overview?.weekLabel) {
             if let firm {
+                OfficeRoomHost()
                 masthead(firm)
+                ChapterBlock()
                 figures(firm)
                 RivalsCard()
                 NavigationLink {
-                    StatsView().environmentObject(store)
+                    StatsView().environment(store)
                 } label: {
                     HStack {
                         PixelLabel("Stats: results, balance sheet, shares, owners", icon: "stats")
@@ -31,7 +33,7 @@ struct CEOOfficeView: View {
                 }
                 .tint(Theme.gold)
                 NavigationLink {
-                    ResearchView().environmentObject(store)
+                    ResearchView().environment(store)
                 } label: {
                     HStack {
                         PixelLabel("Research: technology and budgets", icon: "research")
@@ -44,7 +46,7 @@ struct CEOOfficeView: View {
                 }
                 .tint(Theme.gold)
                 NavigationLink {
-                    CommandCenterView().environmentObject(store)
+                    CommandCenterView().environment(store)
                 } label: {
                     HStack {
                         PixelLabel("Actions: search every action in the game", icon: "command")
@@ -56,6 +58,8 @@ struct CEOOfficeView: View {
                     .background(Theme.panel, in: Pixel.shape)
                 }
                 .tint(Theme.gold)
+                BriefPanel(currency: firm.currency, firmName: firm.name)
+                ExecutivesPanel(currency: firm.currency)
                 if !store.cfoAdvice.isEmpty {
                     CfoPanel(currency: firm.currency, rejection: $rejection)
                 }
@@ -75,7 +79,7 @@ struct CEOOfficeView: View {
                     Text(rejection.message).font(.callout).foregroundStyle(Theme.negative)
                 }
                 NavigationLink {
-                    CompanyView().environmentObject(store)
+                    CompanyView().environment(store)
                 } label: {
                     HStack {
                         PixelLabel("Finance, shares, board and deals", icon: "bank")
@@ -100,13 +104,13 @@ struct CEOOfficeView: View {
         }
         .sheet(item: $retooling) { plant in
             RetoolSheet(plant: plant) { result in rejection = result }
-                .environmentObject(store)
+                .environment(store)
                 .presentationDetents([.medium, .large])
                 .presentationBackground(Theme.panel)
         }
         .sheet(isPresented: $editingFocus) {
             FocusSheet { result in rejection = result }
-                .environmentObject(store)
+                .environment(store)
                 .presentationDetents([.medium])
                 .presentationBackground(Theme.panel)
         }
@@ -231,40 +235,21 @@ struct CEOOfficeView: View {
         }
     }
 
-    /// The board's quarterly goal and how the last ones went.
+    /// The way into the Hall of Careers (the offer and the goal in force sit at the top).
     @ViewBuilder private var boardPanel: some View {
-        if store.objective != nil || !store.objectiveHistory.isEmpty {
-            Panel {
-                VStack(alignment: .leading, spacing: 10) {
-                    Eyebrow(text: "Board objective")
-                    if let objective = store.objective {
-                        Text(objective.title).font(.headline).foregroundStyle(Theme.primaryText)
-                        Text(objective.detail).font(.caption).foregroundStyle(Theme.secondary)
-                        HStack(spacing: 10) {
-                            ProgressView(value: Double(objective.progressBps) / 10_000)
-                                .tint(objective.progressBps >= 10_000 ? Theme.positive : Theme.gold)
-                            Text(objective.progressBps >= 10_000 ? "Met" : objective.progressBps == 0 ? "Not started" : "\(objective.progressBps / 100)%")
-                                .font(.caption.weight(.semibold).monospacedDigit())
-                                .foregroundStyle(objective.progressBps >= 10_000 ? Theme.positive : Theme.primaryText)
-                        }
-                        Text("\(objective.weeksLeft) weeks left (week \(objective.dueWeek)) · pays you a management bonus")
-                            .font(.caption2).foregroundStyle(Theme.secondary)
-                    }
-                    ForEach(Array(store.objectiveHistory.prefix(3).enumerated()), id: \.offset) { _, result in
-                        HStack {
-                            PixelIcon(result.met ? "check_circle" : "close")
-                                .foregroundStyle(result.met ? Theme.positive : Theme.secondary)
-                            Text(result.title).font(.caption).foregroundStyle(Theme.primaryText).lineLimit(1)
-                            Spacer()
-                            Text(result.met ? Format.moneyCompact(result.bonusCents) : "Missed")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(result.met ? Theme.gold : Theme.secondary)
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-                }
+        NavigationLink {
+            HallView().environment(store)
+        } label: {
+            HStack {
+                PixelLabel("Hall of Careers: chapters and achievements", icon: "star")
+                    .font(.callout.weight(.semibold))
+                Spacer()
+                PixelIcon("chevron_right", size: 12)
             }
+            .padding(12)
+            .background(Theme.panel, in: Pixel.shape)
         }
+        .tint(Theme.gold)
     }
 
     private var plantsPanel: some View {
@@ -373,7 +358,7 @@ struct CEOOfficeView: View {
 /// Switch a division to another strategy of its sector: every plant moves together, for a
 /// quarter of the new capex per block and a third of its build time, at least four weeks.
 struct RetoolSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let plant: FacilityDto
     let done: (CommandRejection?) -> Void
@@ -420,7 +405,7 @@ struct RetoolSheet: View {
 
 /// Choose a primary and optional secondary sector type.
 struct FocusSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let done: (CommandRejection?) -> Void
     @State private var primary = "agriculture"

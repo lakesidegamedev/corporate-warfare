@@ -1,6 +1,7 @@
 package net.lakesidegames.corporatewarfare
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.io.File
@@ -90,7 +91,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var running by mutableStateOf(false); private set
     /** Weeks a second while running: 1, 2 or 4. */
     var speed by mutableStateOf(1); private set
-    var status by mutableStateOf(""); private set
+    private var statusText by mutableStateOf("")
+    /** What the last accepted action or save said; [statusSerial] counts every new message, so the same words twice still show. */
+    var status: String
+        get() = statusText
+        private set(value) { statusText = value; if (value.isNotEmpty()) statusSerial++ }
+    var statusSerial by mutableIntStateOf(0); private set
     var error by mutableStateOf<String?>(null)
 
     var overview by mutableStateOf<OverviewDto?>(null); private set
@@ -112,8 +118,53 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     var recentRaids by mutableStateOf<List<RaidRecordDto>>(emptyList()); private set
     /** Every rival group with a plant, threats first, for the CEO Office card. */
     var rivals by mutableStateOf<List<RivalSummaryDto>>(emptyList()); private set
+    /** The chief executive chosen at the new-game screen, read with the executives. */
+    var playerChief by mutableStateOf<uniffi.cw_ffi.PlayerChiefDto?>(null); private set
     /** The latest rival moves anywhere, newest first, naming the chief behind each. */
     var rivalFeed by mutableStateOf<List<RivalMoveFeedDto>>(emptyList()); private set
+    /** The Inbox's letters: the last eight weeks, decisions pinned on top. Read with the rest of the week. */
+    var letters by mutableStateOf<List<uniffi.cw_ffi.LetterDto>>(emptyList()); private set
+    /** The top headline the ticker last read, for the CEO Office's newspaper. Null until the ticker has read one. */
+    var headline by mutableStateOf<String?>(null)
+    /** Unread letters in the Inbox window, for the badge. */
+    val unreadLetters: Int get() = letters.count { !it.read }
+    /** The Inbox badge: unread letters plus decisions already read but still due. */
+    val inboxBadge: Int get() = letters.count { !it.read || it.mandatory }
+    /** This career's chapters, board goals and achievements. Read only when it can be seen (see [loadHall]). */
+    var hall by mutableStateOf<uniffi.cw_ffi.HallDto?>(null); private set
+    /**
+     * The weekly brief for the selected company. Read only while the CEO Office (or the weekly
+     * pop-up) is showing it, and at 2x or 4x no more than once a week (see [loadBrief]).
+     */
+    var brief by mutableStateOf<uniffi.cw_ffi.BriefDto?>(null); private set
+    /** The brief is on screen, so it is kept current. */
+    var briefOpen: Boolean = false
+    /** The panel is folded away; kept in the settings file. */
+    var briefCollapsed by mutableStateOf(false)
+    var onBriefCollapsed: (Boolean) -> Unit = {}
+    private var briefWeek = -1
+    private var briefRevision = 0uL
+    private var briefFirm: ULong? = null
+    /** The selected company's executives and the people it could hire. Read only while the section is on screen. */
+    var executives by mutableStateOf<uniffi.cw_ffi.ExecutivesDto?>(null); private set
+    var executivesOpen: Boolean = false
+    /** Races, polls, laws and tenders. Read only while the Politics section is on screen. */
+    var politics by mutableStateOf<uniffi.cw_ffi.PoliticsDto?>(null); private set
+    var politicsOpen: Boolean = false
+    private var politicsRevision = -1L
+    private var executivesRevision = -1L
+    /** The five-year score, when the career is scored. */
+    var score by mutableStateOf<uniffi.cw_ffi.ScoreDto?>(null); private set
+    /** The Hall of Careers page is open, so the chapter data is kept current even at speed. */
+    var hallOpen: Boolean = false
+    /** The phone's Regions market list is on screen, so its rows are kept current (the desktop never shows them). */
+    var marketsOpen: Boolean = false
+    private var hallStale = false
+    /** The last chapter whose result the player has already been shown. */
+    private var resultSeen = 0
+    private var resultSeenFor: SessionHandle? = null
+    /** Called when a career is left, with its summary, so the main menu can list it. */
+    var onCareerEnded: (CareerSummary) -> Unit = {}
     /** Every plant in the world, so a rival's markets can be listed with a Raid button. */
     var mapPlants by mutableStateOf<List<MapPlantDto>>(emptyList()); private set
     var commodities by mutableStateOf<List<CommodityDto>>(emptyList()); private set
@@ -133,6 +184,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     val actions: List<uniffi.cw_ffi.ActionDto> by lazy { uniffi.cw_ffi.actionCatalogue() }
     var productCatalogue by mutableStateOf<List<ProductDto>>(emptyList()); private set
     private var catalogueOf: SessionHandle? = null
+    /** A back issue of the paper to open on the next visit, set by the History card. */
+    var paperWeek by mutableStateOf<Int?>(null)
+
     /** The economy, central bank and government. */
     var economy by mutableStateOf<uniffi.cw_ffi.EconomyDto?>(null); private set
     /** The selected company's research position. */
@@ -227,17 +281,46 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     fun advance() = perform { step() }
 
+    /** Read everything again from the engine, for tests that drive the engine handle directly. */
+    fun refresh() = perform { reload() }
+
     /** Save, stop time and close the career; the main menu offers it again under Continue. */
     fun exitToMenu() = perform {
         runJob?.cancel()
         runJob = null
         running = false
         save(wait = true)
+        loadHall(force = true)
+        val scenario = session?.let { h -> withContext(engine) { h.scenarioId() } }.orEmpty()
+        hall?.let { h -> overview?.let { o -> if (h.weeks > 0u) onCareerEnded(CareerSummary.of(o.primaryName, scenarioName(scenario), h)) } }
         session = null
+        hall = null
+        brief = null
+        briefWeek = -1
+        score = null
+        resultSeenFor = null
         ready = false
         overview = null
         selectedFirm = null
         status = ""
+    }
+
+    /**
+     * Stop time, write the autosave and wait for the disk, then run [then] (quitting the app from the game
+     * menu or the window's close button). [then] always runs, even if the save fails, so the app can close.
+     */
+    fun saveAndThen(then: () -> Unit) {
+        scope.launch {
+            try {
+                runJob?.cancel()
+                runJob = null
+                running = false
+                if (session != null) save(wait = true)
+            } catch (_: Exception) {
+            } finally {
+                then()
+            }
+        }
     }
 
     fun toggleRun() = playAt(if (runJob == null) 1 else 0)
@@ -252,6 +335,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
             runJob?.cancel()
             runJob = null
             running = false
+            scope.launch { loadHall(force = true) }
             return
         }
         speed = weeksPerSecond
@@ -297,21 +381,32 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     fun selectRegion(code: String) = perform {
         marketRegion = code
-        loadMarkets()
+        loadMarkets(force = true)
+    }
+
+    /** Read the phone's Regions list now, for when it opens. */
+    fun refreshMarkets() { scope.launch { loadMarkets(force = true) } }
+
+    /** Opening a letter marks it read; the engine keeps the flag, the list updates in place. */
+    fun markRead(ids: List<String>) {
+        val handle = session ?: return
+        if (ids.isEmpty()) return
+        letters = letters.map { if (it.id in ids) it.copy(read = true) else it }
+        scope.launch { withContext(engine) { handle.markLettersRead(ids) } }
     }
 
     fun respond(event: ULong, choice: String) =
-        submit(CommandJson.command("RespondEvent", "event" to event, "choice" to choice))
+        submit(CommandJson.command("RespondEvent", "event" to event, "choice" to choice), "Decision made.")
 
     fun setPosture(product: UInt, mode: Int, bps: Int) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("SetPricePosture", "firm" to firm, "product" to product, "mode" to mode, "bps" to bps))
+        submit(CommandJson.command("SetPricePosture", "firm" to firm, "product" to product, "mode" to mode, "bps" to bps), "Pricing updated.")
     }
 
     /** Every plant of the selected company runs at [bps] of full capacity, 0 to 10,000. */
     fun setTarget(bps: Int) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("SetProductionTarget", "firm" to firm, "target_bps" to bps))
+        submit(CommandJson.command("SetProductionTarget", "firm" to firm, "target_bps" to bps), "Production target set. Plants change output when the week closes.")
     }
 
     /** Every plant in [plants] keeps [weeks] of inputs on hand (zero is the company default). */
@@ -347,12 +442,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     /** A supplying division's transfer price to the rest of its group, 0 at cost, 10,000 at market. */
     fun setTransferPrice(detail: DivisionDetailDto, bps: Int) =
-        submit(CommandJson.command("SetTransferPrice", "firm" to detail.firm, "region" to detail.regionIndex, "industry" to detail.industryIndex, "bps" to bps))
+        submit(CommandJson.command("SetTransferPrice", "firm" to detail.firm, "region" to detail.regionIndex, "industry" to detail.industryIndex, "bps" to bps), "Transfer price set. It applies when the week closes.")
 
     /** The weekly wage the selected company offers in one tier, 0 low to 2 high. */
     fun setWageOffer(tier: Int, wageCents: Long) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("SetWageOffer", "firm" to firm, "tier" to tier, "wage_cents" to wageCents))
+        submit(CommandJson.command("SetWageOffer", "firm" to firm, "tier" to tier, "wage_cents" to wageCents), "Wage offer set. Staff respond when the week closes.")
     }
 
     /** Index of a region in the engine's region list, for commands that take one. */
@@ -361,20 +456,20 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     /** Buy [lots] of a good into storage in a region, paying up to [limitBps] of its reference price. */
     fun buyToStore(product: UInt, region: UInt, lots: Long, limitBps: Int) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("BuyToStore", "firm" to firm, "product" to product, "region" to region, "lots" to lots, "limit_bps" to limitBps))
+        submit(CommandJson.command("BuyToStore", "firm" to firm, "product" to product, "region" to region, "lots" to lots, "limit_bps" to limitBps), "Buy order placed. It fills at the weekly market, when the week closes.")
     }
 
     /** Release stored goods for sale; zero lots releases everything held there. */
     fun releaseStored(product: UInt, region: UInt, lots: Long) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("SellFromStore", "firm" to firm, "product" to product, "region" to region, "lots" to lots))
+        submit(CommandJson.command("SellFromStore", "firm" to firm, "product" to product, "region" to region, "lots" to lots), "Sale placed from storage.")
     }
 
     /** A division's shipping policy: 0 cheapest, 1 fastest, 2 own carriers first, 3 most reliable, and an optional preferred mode. */
     fun setShippingPolicy(plant: ULong, kind: Int, mode: Int?) {
         val fields = mutableListOf<Pair<String, Any>>("facility" to plant, "kind" to kind)
         if (mode != null) fields.add("mode" to mode)
-        submit(CommandJson.command("SetShippingPolicy", *fields.toTypedArray()))
+        submit(CommandJson.command("SetShippingPolicy", *fields.toTypedArray()), "Shipping policy set.")
     }
 
     /** One division's (or, with [facility] zero, the whole company's) freight for the week just closed, with policies priced. */
@@ -392,7 +487,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     /** Reserve [lots] a week on a lane for [weeks] at the lane's rate, locked for the term. */
     fun reserveLane(from: String, to: String, mode: UInt, lots: Int, weeks: Int) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("ReserveLane", "firm" to firm, "from" to regionIndex(from), "to" to regionIndex(to), "mode" to mode, "lots" to lots, "weeks" to weeks))
+        submit(CommandJson.command("ReserveLane", "firm" to firm, "from" to regionIndex(from), "to" to regionIndex(to), "mode" to mode, "lots" to lots, "weeks" to weeks), "Lane reserved.")
     }
 
     /** What a build would cost, computed by the engine without changing anything. */
@@ -448,17 +543,29 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     /** Launch a market raid; the outcome lands in [recentRaids]. */
     fun raid(option: RaidOptionDto, budgetCents: Long) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("RaidMarket", "firm" to firm, "target" to option.target, "region" to option.regionIndex, "industry" to option.industryIndex, "budget_cents" to budgetCents))
+        submit(CommandJson.command("RaidMarket", "firm" to firm, "target" to option.target, "region" to option.regionIndex, "industry" to option.industryIndex, "budget_cents" to budgetCents), "Raid launched.")
     }
 
     fun build(region: UInt, recipe: UInt, blocks: UInt) {
         val firm = selectedFirm ?: return
-        submit(CommandJson.command("BuildFacility", "firm" to firm, "region" to region, "recipe" to recipe, "blocks" to blocks))
+        submit(CommandJson.command("BuildFacility", "firm" to firm, "region" to region, "recipe" to recipe, "blocks" to blocks), "Construction started. It takes weeks to finish.")
     }
 
-    /** A personal share order, filled at the weekly close. */
-    fun orderShares(firm: ULong, buy: Boolean, quantity: Long, limitCents: Long) =
-        submit(CommandJson.command("PlaceShareOrder", "investor" to true, "firm" to firm, "buy" to buy, "qty" to quantity, "limit_price_cents" to limitCents))
+    /** A personal trade against the public float, settled at once; `done` is the confirmation shown on success. */
+    fun orderShares(firm: ULong, buy: Boolean, quantity: Long, limitCents: Long, done: String = "Accepted.") =
+        submit(CommandJson.command("PlaceShareOrder", "investor" to true, "firm" to firm, "buy" to buy, "qty" to quantity, "limit_price_cents" to limitCents), done)
+
+    /** What a float trade would do right now (limit 0 for none), computed without changing anything. */
+    /** The engine's quote for a share trade, worked out on the engine thread and returned to the caller's coroutine. */
+    suspend fun quoteShares(firm: ULong, buy: Boolean, quantity: Long, limitCents: Long): uniffi.cw_ffi.ShareQuoteDto? {
+        val handle = session ?: return null
+        return withContext(engine) { runCatching { handle.quoteShares(firm, buy, quantity, limitCents, 0uL) }.getOrNull() }
+    }
+
+    fun shareQuote(firm: ULong, buy: Boolean, quantity: Long, limitCents: Long, onResult: (uniffi.cw_ffi.ShareQuoteDto?) -> Unit) {
+        val handle = session ?: return onResult(null)
+        scope.launch { onResult(withContext(engine) { handle.quoteShares(firm, buy, quantity, limitCents, 0uL) }) }
+    }
 
     /** What an action would do, computed without changing anything. */
     fun preview(json: String, onResult: (uniffi.cw_ffi.PreviewDto?) -> Unit) {
@@ -522,12 +629,12 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         reload()
     }
 
-    fun submit(json: String) = perform {
+    fun submit(json: String, done: String = "Accepted.") = perform {
         val handle = session ?: return@perform
         val receipt = withContext(engine) { handle.submitJson(json) }
         if (receipt.accepted) {
             error = null
-            status = "Accepted."
+            status = done
             Tutorial.sent(json.substringAfter("{\"").substringBefore("\""))
         } else {
             error = Messages.rejection(receipt.errorKey ?: "error.internal_fault", receipt.errorDetail ?: "")
@@ -601,6 +708,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 handle.rivalFeed(12u),
                 handle.mapPlants(),
                 firm?.let { handle.cfoAdvice(it) } ?: emptyList<uniffi.cw_ffi.CfoAdviceDto>(),
+                handle.letters(if (overviewNow.tick > 8u) overviewNow.tick - 8u else 1u),
             )
         }.let { parts ->
             @Suppress("UNCHECKED_CAST")
@@ -635,12 +743,147 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                 rivalFeed = parts[23] as List<RivalMoveFeedDto>
                 mapPlants = parts[24] as List<MapPlantDto>
                 cfoAdvice = parts[25] as List<uniffi.cw_ffi.CfoAdviceDto>
+                letters = parts[26] as List<uniffi.cw_ffi.LetterDto>
             }
         }
         loadMarkets()
+        loadHall()
+        loadBrief()
+        loadExecutives()
+        loadPolitics()
     }
 
-    private suspend fun loadMarkets() {
+    /**
+     * The brief is read only when it can be seen. It is read again after a command changes the
+     * world, but at 2x and 4x never more than once a week; closed or folded away it costs nothing.
+     */
+    private suspend fun loadBrief(force: Boolean = false) {
+        val handle = session ?: return
+        val firm = selectedFirm
+        val now = overview ?: return
+        if (firm == null) { brief = null; return }
+        val tick = now.tick.toInt()
+        val fast = running && speed > 1
+        val due = force || (briefOpen && !briefCollapsed &&
+            (briefWeek != tick || briefFirm != firm || (briefRevision != now.revision && !fast)))
+        if (!due) return
+        briefWeek = tick
+        briefRevision = now.revision
+        briefFirm = firm
+        val dto = withContext(engine) { handle.weeklyBrief(firm) }
+        if (session === handle) brief = dto
+    }
+
+    private suspend fun loadExecutives(force: Boolean = false) {
+        val handle = session ?: return
+        val firm = selectedFirm
+        val now = overview ?: return
+        // The chief is cheap and shows in letters, the paper and the company page, so it loads whichever screen is open.
+        if (playerChief == null) withContext(engine) { handle.playerChief() }?.let { if (session === handle) playerChief = it }
+        if (firm == null) { executives = null; return }
+        val stamp = now.revision.toLong() * 7 + now.tick.toLong()
+        if (!force && (!executivesOpen || stamp == executivesRevision)) return
+        executivesRevision = stamp
+        val dto = withContext(engine) { handle.executives(firm) }
+        val chief = withContext(engine) { handle.playerChief() }
+        if (session === handle) { executives = dto; playerChief = chief }
+    }
+
+    fun refreshExecutives() { scope.launch { loadExecutives(force = true) } }
+
+    private suspend fun loadPolitics(force: Boolean = false) {
+        val handle = session ?: return
+        val now = overview ?: return
+        val stamp = now.revision.toLong() * 7 + now.tick.toLong()
+        if (!force && (!politicsOpen || stamp == politicsRevision)) return
+        politicsRevision = stamp
+        val firm = selectedFirm
+        val dto = withContext(engine) { handle.politics(firm) }
+        if (session === handle) politics = dto
+    }
+
+    fun refreshPolitics() { scope.launch { loadPolitics(force = true) } }
+
+    fun giveToCandidate(firm: ULong, office: Int, candidate: Int, cents: Long) =
+        submit(CommandJson.command("GiveToCandidate", "firm" to firm, "office" to office, "candidate" to candidate, "cents" to cents), "Gift made. It is disclosed in the paper next week.")
+
+    fun bidOnTender(firm: ULong, tender: Int, priceCents: Long, weeks: Int) =
+        submit(CommandJson.command("BidOnTender", "firm" to firm, "tender" to tender, "price_cents" to priceCents, "weeks" to weeks), "Bid submitted.")
+
+    fun hireExecutive(firm: ULong, post: Int, person: Int) =
+        submit(CommandJson.command("HireExecutive", "firm" to firm, "post" to post, "person" to person), "Executive hired.")
+
+    fun dismissExecutive(firm: ULong, post: Int) =
+        submit(CommandJson.command("DismissExecutive", "firm" to firm, "post" to post), "Executive dismissed.")
+
+    fun poachExecutive(firm: ULong, from: ULong, post: Int, offerCents: Long) =
+        submit(CommandJson.command("PoachExecutive", "firm" to firm, "from" to from, "post" to post, "offer_cents" to offerCents), "Offer made to the executive.")
+
+    /** Read the brief now, for the panel when it opens or the weekly pop-up. */
+    fun refreshBrief() { scope.launch { loadBrief(force = true) } }
+
+    fun foldBrief(value: Boolean) {
+        briefCollapsed = value
+        onBriefCollapsed(value)
+        if (!value) refreshBrief()
+    }
+
+    /**
+     * The chapter data is read when the Hall page is open, right after a choice, and when the week
+     * changes with time paused or at 1x. At 2x and 4x the week is too short to spend a call on it;
+     * pausing reads it once.
+     */
+    private suspend fun loadHall(force: Boolean = false) {
+        val handle = session ?: return
+        if (!force && !hallOpen && !hallStale && running && speed > 1) return
+        hallStale = false
+        val (dto, scoreNow) = withContext(engine) { handle.hallOfCareers() to runCatching { handle.score() }.getOrNull() }
+        if (session !== handle) return
+        if (resultSeenFor !== handle) {
+            // A result that was already waiting when the career opened is not news.
+            resultSeen = dto.chapters.lastOrNull { it.outcome == "met" || it.outcome == "missed" }?.number?.toInt() ?: 0
+            resultSeenFor = handle
+        }
+        hall = dto
+        score = scoreNow
+    }
+
+    /** Read the chapter data now, for the Hall page when it opens or the week moves. */
+    fun refreshHall() { scope.launch { loadHall(force = true) } }
+
+    /** The board's offer for the player's current chapter, if one can still be taken. */
+    val boardOffer: uniffi.cw_ffi.ChapterDto?
+        get() = hall?.chapters?.lastOrNull { it.status == "current" && it.chosen == null && it.offerWeeksLeft > 0u && it.offered.isNotEmpty() }
+
+    /** The goal in force for the current chapter. */
+    val activeMandate: Pair<uniffi.cw_ffi.ChapterDto, uniffi.cw_ffi.MandateDto>?
+        get() = hall?.chapters?.lastOrNull { it.status == "current" }?.let { chapter ->
+            val picked = chapter.chosen?.let { chapter.offered.getOrNull(it.toInt()) }
+            if (picked != null && chapter.outcome == "open") chapter to picked else null
+        }
+
+    /** A chapter that closed met or missed and has not been shown yet. */
+    val chapterResult: uniffi.cw_ffi.ChapterDto?
+        get() = hall?.chapters?.lastOrNull { (it.outcome == "met" || it.outcome == "missed") && it.number.toInt() > resultSeen }
+
+    fun dismissChapterResult() {
+        resultSeen = hall?.chapters?.maxOfOrNull { it.number.toInt() } ?: resultSeen
+        hall = hall
+    }
+
+    /** Take the board's goal in position [pick] (0 to 2) for [firm]. */
+    fun chooseMandate(firm: ULong, pick: Int) {
+        hallStale = true
+        submit(CommandJson.command("ChooseMandate", "firm" to firm, "pick" to pick), "Mandate chosen.")
+    }
+
+    /** Tell the analysts what operating profit to expect this quarter, in cents. */
+    fun giveGuidance(firm: ULong, lowCents: Long, highCents: Long) {
+        submit(CommandJson.command("GiveGuidance", "firm" to firm, "low_cents" to lowCents, "high_cents" to highCents), "Guidance given.")
+    }
+
+    private suspend fun loadMarkets(force: Boolean = false) {
+        if (!force && !marketsOpen) return
         val handle = session ?: return
         val code = marketRegion
             ?: selectedFirmDto?.let { firm -> boards.firstOrNull { it.name == firm.region }?.code }
@@ -682,13 +925,40 @@ object CommandJson {
         "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 }
 
-/** Player-facing copy for engine rejections; the key is stable, the words live here. */
+/**
+ * Player-facing copy for engine rejections; the key is stable, the words live here. The engine's own detail is a
+ * developer dump (`InvalidEntity { .. }`), so it is never shown: a refusal says what is wrong and what to do.
+ */
 object Messages {
-    fun rejection(key: String, detail: String): String = when (key) {
-        "error.insufficient_cash" -> "Not enough cash for that."
-        "error.no_authority" -> "You do not have the authority for that."
-        "error.wrong_phase" -> "That cannot be done right now."
-        "error.arithmetic" -> "That amount is out of range."
-        else -> if (detail.isNotEmpty()) detail else key
+    fun rejection(key: String, detail: String): String {
+        phase(detail)?.let { return it }
+        return when (key) {
+            "error.insufficient_cash" -> "Not enough cash for that. This spends the company's own free cash: lower the amount, or fund the company first."
+            "error.insufficient_stock" -> "You hold fewer shares or lots than that needs. Reduce the quantity."
+            "error.no_authority" -> "You do not have the authority for that. You need control of the company acting: more than half the votes, or the CEO seat with three board seats."
+            "error.wrong_phase" -> "That cannot be done right now. It is in a different state than this action allows."
+            "error.arithmetic" -> "That amount is out of range. Check the units and that quantities are positive."
+            "error.stale_revision" -> "The world moved on while you were deciding. Try again."
+            "error.invalid_entity" -> "That company, facility or policy no longer exists. Go back and choose a current one."
+            "error.capacity_unavailable" -> "There is not enough physical capacity. Add workers, inputs or another facility first."
+            "error.solvency_restriction" -> "A payout, credit or capital rule blocks this. Check the cash buffer and credit standing."
+            "error.ownership_cycle" -> "That would make a company own part of itself. Choose a target outside your group."
+            "error.quote_expired" -> "The quote expired at the week close. Confirm again."
+            "error.legal_review_required" -> "A competition review is still running. Wait for its deadline."
+            "error.duplicate_command" -> "That was already done."
+            "error.resource_limit" -> "The world limit was reached."
+            "error.malformed_command" -> "The app could not build that action. Nothing changed."
+            else -> "That could not be done. Nothing changed."
+        }
+    }
+
+    /** Wrong-phase refusals that name a specific division or raid rule. */
+    private fun phase(detail: String): String? = when {
+        detail.contains("division_strategy") -> "Your division runs another strategy. Build that strategy here, or retool the division first."
+        detail.contains("own_division") -> "You can only raid a market you serve. Build a plant of this sector in the region first."
+        detail.contains("rival_division") -> "The rival needs at least two plants here: a raid never takes its last one."
+        detail.contains("raid_cooldown") -> "You can raid the same market once every thirteen weeks."
+        detail.contains("rival_firm") -> "Raids target rivals outside the group you control."
+        else -> null
     }
 }

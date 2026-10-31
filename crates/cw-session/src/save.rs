@@ -10,6 +10,7 @@ use cw_core::RULES_VERSION;
 use cw_core::error::{DomainError, SaveFault};
 use cw_core::hash::{DOMAIN_SAVE, digest};
 use cw_sim::state::World;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub const MAGIC: &[u8; 4] = b"CWSV";
 /// The schema is the layout of the postcard world payload (`cw_sim::legacy`). Postcard is not
@@ -38,6 +39,44 @@ const ARCHIVE_MAGIC: &[u8; 4] = b"HIST";
 /// Marks the systems history trailer, last: the weekly market, region, division, freight and
 /// economy figures. Outside the hashed world; a save without it loads with empty history.
 const SYSTEMS_MAGIC: &[u8; 4] = b"SYST";
+/// Marks the chapters trailer, last: the board mandates on offer and in force, the player's
+/// chapter log and the achievements earned (1.9). Unlike HIST and SYST it is future-affecting, so
+/// `canonical_hash` folds it in; it stays outside the postcard payload so the save schema does not
+/// move. A save without it loads with no chapter state and opens the current chapter fresh.
+const CHAPTERS_MAGIC: &[u8; 4] = b"CHAP";
+/// Marks the earnings trailer (1.9): analyst estimates, guidance, credibility and the results log.
+/// Future-affecting, so `canonical_hash` folds it in; outside the postcard payload, so the save
+/// schema does not move. A save without it loads with it empty and the first estimates are
+/// written at the next quarter's close. Read in any order with the chapters and letters trailers.
+const EARNINGS_MAGIC: &[u8; 4] = b"EARN";
+/// Marks the read-letters trailer, after the chapters trailer: which letters are opened. Outside
+/// the hashed world; a save without it loads with every letter unread. The reader accepts the
+/// chapters and letters trailers in either order.
+const MAIL_MAGIC: &[u8; 4] = b"MAIL";
+/// Marks the player's chief executive trailer (1.9): the name, portrait and temperament chosen at
+/// the new-game screen. Presentation only, folded into the hash while set, outside the postcard
+/// payload so the schema does not move. A save without it has no chosen chief.
+const CHIEF_MAGIC: &[u8; 4] = b"CHIE";
+/// Marks the executives trailer: the people who can be hired and the posts they hold (1.9).
+/// Future-affecting, so `canonical_hash` folds it in while it is not empty; outside the postcard
+/// payload so the schema does not move. A save without it loads with no executives and the pool
+/// is drawn again on the next week. The reader accepts it in any order after the systems trailer.
+const EXEC_MAGIC: &[u8; 4] = b"EXEC";
+/// Marks the politics trailer (1.9): races with candidates, campaign gifts, state laws and public
+/// tenders. Future-affecting, so `canonical_hash` folds it in while it is not empty; outside the
+/// postcard payload so the schema does not move. A save without it loads with it empty and the
+/// races are drawn on the next week. The reader accepts it in any order after the systems trailer.
+const POLITICS_MAGIC: &[u8; 4] = b"POLI";
+/// Marks the rival plans and workforce migration trailer (1.9): the campaigns rivals run against a
+/// target's shares, their public stake history, and the migration references, carries and weekly
+/// net movers. Future-affecting, so `canonical_hash` folds it in while it is not empty; outside the
+/// postcard payload so the schema does not move. A save without it loads with it empty: no plan is
+/// running and the migration references are taken on the next week. The reader accepts it in any
+/// order after the systems trailer.
+const PLANS_MAGIC: &[u8; 4] = b"PLAN";
+
+/// Payload size of the most recent save in this process.
+static LAST_PAYLOAD: AtomicUsize = AtomicUsize::new(0);
 
 pub fn encode(world: &World, career_id: u64) -> Result<Vec<u8>, DomainError> {
     encode_with(world, career_id, None)
@@ -50,9 +89,16 @@ pub fn encode_with(
     career_id: u64,
     custom: Option<&cw_data::CustomScenario>,
 ) -> Result<Vec<u8>, DomainError> {
-    let payload = postcard::to_allocvec(world).map_err(|_| DomainError::InvalidSave {
+    // Start the buffer at the size of the last save, so the payload is not copied again each time
+    // the buffer doubles. Only the capacity depends on it, never the bytes.
+    let payload = postcard::to_extend(
+        world,
+        Vec::with_capacity(LAST_PAYLOAD.load(Ordering::Relaxed) + 4096),
+    )
+    .map_err(|_| DomainError::InvalidSave {
         detail: SaveFault::MalformedPayload,
     })?;
+    LAST_PAYLOAD.store(payload.len(), Ordering::Relaxed);
     if payload.len() > MAX_BYTES {
         return Err(DomainError::InvalidSave {
             detail: SaveFault::Oversize,
@@ -125,6 +171,107 @@ pub fn encode_with(
             });
         }
         out.extend_from_slice(SYSTEMS_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.chapters.is_empty() {
+        let bytes =
+            postcard::to_allocvec(&world.chapters).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(CHAPTERS_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.earnings.is_empty() {
+        let bytes =
+            postcard::to_allocvec(&world.earnings).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(EARNINGS_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.executives.is_empty() {
+        let bytes =
+            postcard::to_allocvec(&world.executives).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(EXEC_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.plans.is_empty() {
+        let bytes = postcard::to_allocvec(&world.plans).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(PLANS_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.civics.is_empty() {
+        let bytes = postcard::to_allocvec(&world.civics).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(POLITICS_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if let Some(chief) = &world.player_chief {
+        let bytes = postcard::to_allocvec(chief).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(CHIEF_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.mail.is_empty() {
+        let bytes = postcard::to_allocvec(&world.mail).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(MAIL_MAGIC);
         out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
         out.extend_from_slice(&bytes);
@@ -202,9 +349,11 @@ pub fn decode_with(
         let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
         let mut sum = [0u8; 32];
         sum.copy_from_slice(&rest[8..40]);
-        let json = rest.get(40..40 + length).ok_or(DomainError::InvalidSave {
-            detail: SaveFault::Truncated,
-        })?;
+        let json =
+            rest.get(40..40usize.saturating_add(length))
+                .ok_or(DomainError::InvalidSave {
+                    detail: SaveFault::Truncated,
+                })?;
         if digest(DOMAIN_SAVE, json) != sum {
             return Err(DomainError::InvalidSave {
                 detail: SaveFault::Checksum,
@@ -224,9 +373,11 @@ pub fn decode_with(
         let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
         let mut sum = [0u8; 32];
         sum.copy_from_slice(&rest[8..40]);
-        let body = rest.get(40..40 + length).ok_or(DomainError::InvalidSave {
-            detail: SaveFault::Truncated,
-        })?;
+        let body =
+            rest.get(40..40usize.saturating_add(length))
+                .ok_or(DomainError::InvalidSave {
+                    detail: SaveFault::Truncated,
+                })?;
         if digest(DOMAIN_SAVE, body) != sum {
             return Err(DomainError::InvalidSave {
                 detail: SaveFault::Checksum,
@@ -246,9 +397,11 @@ pub fn decode_with(
         let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
         let mut sum = [0u8; 32];
         sum.copy_from_slice(&rest[8..40]);
-        let body = rest.get(40..40 + length).ok_or(DomainError::InvalidSave {
-            detail: SaveFault::Truncated,
-        })?;
+        let body =
+            rest.get(40..40usize.saturating_add(length))
+                .ok_or(DomainError::InvalidSave {
+                    detail: SaveFault::Truncated,
+                })?;
         if digest(DOMAIN_SAVE, body) != sum {
             return Err(DomainError::InvalidSave {
                 detail: SaveFault::Checksum,
@@ -272,6 +425,60 @@ pub fn decode_with(
         world.systems = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
             detail: SaveFault::MalformedPayload,
         })?;
+        rest = &rest[40 + body.len()..];
+    }
+    // Chapters and letters trailers, in either order (1.9 previews wrote them in both orders).
+    while rest.len() >= 4 {
+        let magic = &rest[..4];
+        if magic == CHAPTERS_MAGIC {
+            let body = trailer_body(rest)?;
+            world.chapters = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+            rest = &rest[40 + body.len()..];
+        } else if magic == EARNINGS_MAGIC {
+            let body = trailer_body(rest)?;
+            world.earnings = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+            rest = &rest[40 + body.len()..];
+        } else if magic == EXEC_MAGIC {
+            let body = trailer_body(rest)?;
+            world.executives =
+                postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                    detail: SaveFault::MalformedPayload,
+                })?;
+            rest = &rest[40 + body.len()..];
+        } else if magic == PLANS_MAGIC {
+            let body = trailer_body(rest)?;
+            world.plans = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+            rest = &rest[40 + body.len()..];
+        } else if magic == POLITICS_MAGIC {
+            let body = trailer_body(rest)?;
+            world.civics = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+            rest = &rest[40 + body.len()..];
+        } else if magic == CHIEF_MAGIC {
+            let body = trailer_body(rest)?;
+            world.player_chief =
+                Some(
+                    postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                        detail: SaveFault::MalformedPayload,
+                    })?,
+                );
+            rest = &rest[40 + body.len()..];
+        } else if magic == MAIL_MAGIC {
+            let body = trailer_body(rest)?;
+            world.mail = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+            rest = &rest[40 + body.len()..];
+        } else {
+            break;
+        }
     }
     Ok((world, career_id, custom))
 }
@@ -286,9 +493,11 @@ fn trailer_body(rest: &[u8]) -> Result<&[u8], DomainError> {
     let length = u32::from_le_bytes(rest[4..8].try_into().unwrap()) as usize;
     let mut sum = [0u8; 32];
     sum.copy_from_slice(&rest[8..40]);
-    let body = rest.get(40..40 + length).ok_or(DomainError::InvalidSave {
-        detail: SaveFault::Truncated,
-    })?;
+    let body = rest
+        .get(40..40usize.saturating_add(length))
+        .ok_or(DomainError::InvalidSave {
+            detail: SaveFault::Truncated,
+        })?;
     if digest(DOMAIN_SAVE, body) != sum {
         return Err(DomainError::InvalidSave {
             detail: SaveFault::Checksum,
@@ -360,6 +569,59 @@ mod tests {
     }
 
     #[test]
+    fn chapters_and_letters_trailers_load_together_in_either_order() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = world();
+        for _ in 0..10 {
+            world.pending_pause = None;
+            cw_sim::tick::advance(&mut world, &dataset);
+        }
+        assert!(
+            !world.chapters.is_empty(),
+            "a running career has chapter state"
+        );
+        world.mail.mark("letter-a", 5, 10);
+        let hash = cw_sim::state::canonical_hash(&world);
+        let bytes = encode(&world, 9).unwrap();
+        let (restored, _) = decode(&bytes).unwrap();
+        assert_eq!(restored.chapters, world.chapters);
+        assert!(restored.mail.is_read("letter-a"));
+        assert_eq!(cw_sim::state::canonical_hash(&restored), hash);
+        // Swap the two trailers: CHAP then MAIL becomes MAIL then CHAP.
+        let chap = bytes.windows(4).rposition(|w| w == CHAPTERS_MAGIC).unwrap();
+        let mail = bytes.windows(4).rposition(|w| w == MAIL_MAGIC).unwrap();
+        assert!(chap < mail);
+        let mut swapped = bytes[..chap].to_vec();
+        swapped.extend_from_slice(&bytes[mail..]);
+        swapped.extend_from_slice(&bytes[chap..mail]);
+        let (again, _) = decode(&swapped).unwrap();
+        assert_eq!(again.chapters, world.chapters);
+        assert!(again.mail.is_read("letter-a"));
+        assert_eq!(cw_sim::state::canonical_hash(&again), hash);
+    }
+
+    #[test]
+    fn the_players_chief_survives_a_save_and_moves_the_hash() {
+        let mut world = world();
+        let plain = cw_sim::state::canonical_hash(&world);
+        world.player_chief = cw_sim::state::PlayerChief::choose("Ada Marsh", "", "raider");
+        let chief = world.player_chief.clone().expect("the kit has a portrait");
+        assert_eq!(chief.name, "Ada Marsh");
+        assert_eq!(chief.temperament, "raider");
+        let hash = cw_sim::state::canonical_hash(&world);
+        assert_ne!(hash, plain, "the chosen chief is part of the state");
+        let bytes = encode(&world, 9).unwrap();
+        let (restored, _) = decode(&bytes).unwrap();
+        assert_eq!(restored.player_chief, Some(chief));
+        assert_eq!(cw_sim::state::canonical_hash(&restored), hash);
+        // A save from before the choice has none and loads as it always did.
+        world.player_chief = None;
+        let (old, _) = decode(&encode(&world, 9).unwrap()).unwrap();
+        assert_eq!(old.player_chief, None);
+        assert_eq!(cw_sim::state::canonical_hash(&old), plain);
+    }
+
+    #[test]
     fn round_trip_preserves_the_canonical_hash() {
         let world = world();
         let bytes = encode(&world, 9).unwrap();
@@ -424,6 +686,36 @@ mod tests {
         // A save written before the archive existed loads with it empty.
         let old = encode(&bare, 4).unwrap();
         assert!(decode(&old).unwrap().0.archive.is_empty());
+    }
+
+    #[test]
+    fn read_letters_survive_a_save_without_moving_the_hash() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = world();
+        for _ in 0..6 {
+            world.pending_pause = None;
+            cw_sim::tick::advance(&mut world, &dataset);
+        }
+        let hash = cw_sim::state::canonical_hash(&world);
+        world.mail.mark("raid:3:1:2", 3, 6);
+        world.mail.mark("card:9", 5, 6);
+        assert_eq!(
+            cw_sim::state::canonical_hash(&world),
+            hash,
+            "read flags are not hashed"
+        );
+        let bytes = encode(&world, 4).unwrap();
+        let (restored, _) = decode(&bytes).unwrap();
+        assert_eq!(restored.mail, world.mail);
+        assert_eq!(restored.systems, world.systems);
+        assert_eq!(cw_sim::state::canonical_hash(&restored), hash);
+        for cut in 1..=8 {
+            assert!(decode(&bytes[..bytes.len() - cut]).is_err(), "cut {cut}");
+        }
+        // A save from before letters loads with every letter unread.
+        world.mail = Default::default();
+        let old = encode(&world, 4).unwrap();
+        assert!(decode(&old).unwrap().0.mail.is_empty());
     }
 
     #[test]

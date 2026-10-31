@@ -17,8 +17,8 @@ cp apple/Resources/scenarios/*.png "$OUT/resources/"
 cp apple/Resources/scenarios/*.png "$OUT/desktop/"
 cp apple/Resources/clouds*.webp "$OUT/resources/"
 cp apple/Resources/clouds*.webp "$OUT/desktop/"
-cp apple/Resources/earth*.jpg apple/Resources/earth-land.png "$OUT/resources/"
-cp apple/Resources/earth*.jpg apple/Resources/earth-land.png "$OUT/desktop/"
+cp apple/Resources/earth*.jpg apple/Resources/earth-land*.png "$OUT/resources/"
+cp apple/Resources/earth*.jpg apple/Resources/earth-land*.png "$OUT/desktop/"
 cp apple/Resources/Silkscreen-*.ttf "$OUT/resources/"
 cp apple/Resources/Silkscreen-*.ttf "$OUT/desktop/"
 cp apple/Resources/voxels*.png apple/Resources/voxels.json "$OUT/resources/"
@@ -35,6 +35,10 @@ cp apple/Resources/pixel-icons.json "$OUT/resources/"
 cp apple/Resources/pixel-icons.json "$OUT/desktop/"
 cp apple/Resources/cast-portraits.json "$OUT/resources/"
 cp apple/Resources/cast-portraits.json "$OUT/desktop/"
+cp apple/Resources/office-room.json "$OUT/resources/"
+cp apple/Resources/office-room.json "$OUT/desktop/"
+# The desktop GPU map reads its baked terrain and city outlines from the same folder.
+cp crates/cw-render/assets/*.cwh crates/cw-render/assets/urban-*.json "$OUT/desktop/"
 
 android() {
   local ndk="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"
@@ -56,15 +60,16 @@ android() {
     export "CARGO_TARGET_${upper}_LINKER=$bin/${triple}26-clang"
     export "CC_${env_triple}=$bin/${triple}26-clang"
     export "AR_${env_triple}=$bin/llvm-ar"
-    cargo build --locked -p cw-ffi --release --target "$triple"
+    cargo build --locked -p cw-ffi --profile small --target "$triple"
     mkdir -p "$OUT/jniLibs/$abi"
-    cp "target/$triple/release/libcw_ffi.so" "$OUT/jniLibs/$abi/"
+    cp "${CARGO_TARGET_DIR:-target}/$triple/small/libcw_ffi.so" "$OUT/jniLibs/$abi/"
   done
-  bindings "target/aarch64-linux-android/release/libcw_ffi.so"
+  bindings libcw_ffi.so
 }
 
 desktop() {
-  cargo build --locked -p cw-ffi --release
+  # The desktop library also carries the GPU map (wgpu: Direct3D 12 and Vulkan, no extra installs).
+  cargo build --locked -p cw-ffi --profile small --features gpu-map
   local lib platform
   case "$(uname -s)-$(uname -m)" in
     Linux-x86_64) lib=libcw_ffi.so; platform=linux-x86-64 ;;
@@ -76,13 +81,16 @@ desktop() {
   esac
   # JNA finds a library on the classpath under its platform folder.
   mkdir -p "$OUT/desktop/$platform"
-  cp "target/release/$lib" "$OUT/desktop/$platform/"
-  bindings "target/release/$lib"
+  cp "${CARGO_TARGET_DIR:-target}/small/$lib" "$OUT/desktop/$platform/"
+  bindings "$lib"
 }
 
+# The shipped libraries are stripped, which removes the metadata the generator reads, so the
+# bindings come from a debug build of the same code (a host library; the metadata is the same).
 bindings() {
+  cargo build --locked -p cw-ffi
   rm -rf "$OUT/kotlin"
-  cargo run --locked -p cw-bindgen -- generate "$1" --language kotlin --no-format --out-dir "$OUT/kotlin"
+  cargo run --locked -p cw-bindgen -- generate "${CARGO_TARGET_DIR:-target}/debug/$1" --language kotlin --no-format --out-dir "$OUT/kotlin"
 }
 
 case "${1:-android}" in

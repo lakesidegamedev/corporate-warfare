@@ -494,6 +494,53 @@ pub enum CommandIntent {
     WindDown {
         firm: Handle,
     },
+    /// Take one of the three mandates the board offered at the start of the chapter, by its
+    /// position in the offer. Also last in the list, for the same reason.
+    ChooseMandate {
+        firm: Handle,
+        pick: u8,
+    },
+    /// Hire a candidate into a vacant executive post (0 chief financial officer, 1 chief
+    /// operating officer, 2 logistics chief). Last in the list, like the commands before it.
+    HireExecutive {
+        firm: Handle,
+        post: u8,
+        person: u16,
+    },
+    /// Let an executive go and pay severance.
+    DismissExecutive {
+        firm: Handle,
+        post: u8,
+    },
+    /// Offer a rival's executive a weekly pay to move to this company.
+    PoachExecutive {
+        firm: Handle,
+        from: Handle,
+        post: u8,
+        offer_cents: i64,
+    },
+    /// Tell the analysts what operating profit to expect for the quarter: a low and a high end,
+    /// in cents. Last in the list so older command logs keep their variant numbers.
+    GiveGuidance {
+        firm: Handle,
+        low_cents: i64,
+        high_cents: i64,
+    },
+    /// Give campaign money to a candidate: `office` is a state index or 255 for the national
+    /// race, `candidate` is 0 (business) or 1 (labour). Disclosed in the paper next week.
+    GiveToCandidate {
+        firm: Handle,
+        office: u8,
+        candidate: u8,
+        cents: i64,
+    },
+    /// Bid on a public tender: a price in cents and a delivery time in weeks.
+    BidOnTender {
+        firm: Handle,
+        tender: u32,
+        price_cents: i64,
+        weeks: u32,
+    },
 }
 
 fn yes() -> bool {
@@ -579,6 +626,10 @@ impl CommandIntent {
             CommandIntent::RaidMarket { .. } => "raid_market",
             CommandIntent::FileLobbyRequest { .. } => "file_lobby_request",
             CommandIntent::RespondEvent { .. } => "respond_event",
+            CommandIntent::ChooseMandate { .. } => "choose_mandate",
+            CommandIntent::GiveGuidance { .. } => "give_guidance",
+            CommandIntent::GiveToCandidate { .. } => "give_to_candidate",
+            CommandIntent::BidOnTender { .. } => "bid_on_tender",
             CommandIntent::SetTransferPrice { .. } => "set_transfer_price",
             CommandIntent::CarveOutDivision { .. } => "carve_out_division",
             CommandIntent::ListSubsidiary { .. } => "list_subsidiary",
@@ -589,6 +640,9 @@ impl CommandIntent {
             CommandIntent::SellBond { .. } => "sell_bond",
             CommandIntent::RespondActivist { .. } => "respond_activist",
             CommandIntent::WindDown { .. } => "wind_down",
+            CommandIntent::HireExecutive { .. } => "hire_executive",
+            CommandIntent::DismissExecutive { .. } => "dismiss_executive",
+            CommandIntent::PoachExecutive { .. } => "poach_executive",
         }
     }
 }
@@ -1065,7 +1119,14 @@ fn apply_intent(
             let cost = sectors::build_cost(world, dataset, owner, region, recipe_index, *blocks)
                 .capex_cents;
             let (excess, capacity) = sectors::construction_excess(world, owner, *blocks);
-            let lead = sectors::stretched_weeks(recipe.build_weeks, excess, capacity);
+            let (_, lead_bps) =
+                crate::economy::civics::build_factors(world, region, recipe.industry.as_str());
+            let lead = crate::economy::executives::build_weeks(
+                world,
+                owner,
+                sectors::stretched_weeks(recipe.build_weeks, excess, capacity),
+            );
+            let lead = ((lead as u64 * lead_bps as u64 / 10_000) as u32).max(1);
             let debt = firm_ref(world, owner)?.book.debt();
             if governance::approval_required(world, owner, debt, cost)
                 && !governance::large_action_authorised(world, owner)
@@ -1854,7 +1915,7 @@ fn apply_intent(
                     reason: AuthorityReason::NotOwner,
                 });
             }
-            equity::place_order(
+            equity::trade_float(
                 world,
                 holder,
                 *firm,
@@ -2014,7 +2075,7 @@ fn apply_intent(
             let grade = firm_ref(world, *firm)?.grade;
             let rate = world.macro_state.policy_rate_bps
                 + crate::economy::macro_cycle::lending_premium_bps(world)
-                + grade.spread_bps();
+                + crate::economy::executives::spread_after_cut(world, *firm, grade.spread_bps());
             // The outside lenders hold the numeraire and lend it in the borrower's money.
             let amount_numeraire =
                 crate::economy::fx::firm_to_numeraire_world(world, *firm, *amount_cents);
@@ -2067,7 +2128,11 @@ fn apply_intent(
             }
             let quoted = world.macro_state.policy_rate_bps
                 + crate::economy::macro_cycle::lending_premium_bps(world)
-                + firm_ref(world, *firm)?.grade.spread_bps();
+                + crate::economy::executives::spread_after_cut(
+                    world,
+                    *firm,
+                    firm_ref(world, *firm)?.grade.spread_bps(),
+                );
             if *rate_bps < quoted {
                 return Err(DomainError::SolvencyRestriction {
                     entity: firm.0,
@@ -2186,7 +2251,12 @@ fn apply_intent(
                 });
             }
             let debt = firm_ref(world, *firm)?.book.debt();
-            insolvency::restructure_for_owner(world, *firm, debt);
+            if !insolvency::restructure_for_owner(world, dataset, *firm, debt) {
+                return Err(DomainError::WrongPhase {
+                    expected: "a plant that pays its way",
+                    actual: "every plant loses money",
+                });
+            }
             Ok(())
         }
         CommandIntent::StartDiligence {
@@ -2887,6 +2957,84 @@ fn apply_intent(
             crate::economy::insolvency::wind_down(world, *firm, dataset);
             Ok(())
         }
+        CommandIntent::ChooseMandate { firm, pick } => {
+            require_control(world, actor, *firm)?;
+            crate::economy::chapters::choose(world, *firm, *pick)
+        }
+        CommandIntent::HireExecutive { firm, post, person } => {
+            require_control(world, actor, *firm)?;
+            let post = executive_post(*post)?;
+            crate::economy::executives::hire(world, *firm, post, *person)
+        }
+        CommandIntent::DismissExecutive { firm, post } => {
+            require_control(world, actor, *firm)?;
+            let post = executive_post(*post)?;
+            crate::economy::executives::dismiss(world, *firm, post).map(|_| ())
+        }
+        CommandIntent::PoachExecutive {
+            firm,
+            from,
+            post,
+            offer_cents,
+        } => {
+            require_control(world, actor, *firm)?;
+            let post = executive_post(*post)?;
+            crate::economy::executives::poach(world, *firm, *from, post, *offer_cents)
+        }
+        CommandIntent::GiveGuidance {
+            firm,
+            low_cents,
+            high_cents,
+        } => {
+            require_control(world, actor, *firm)?;
+            crate::economy::earnings::give_guidance(world, *firm, *low_cents, *high_cents)
+        }
+        CommandIntent::GiveToCandidate {
+            firm,
+            office,
+            candidate,
+            cents,
+        } => {
+            require_control(world, actor, *firm)?;
+            crate::economy::civics::give(world, *firm, *office, *candidate, *cents).map_err(
+                |reason| match reason {
+                    "insufficient_cash" => DomainError::InsufficientCash {
+                        entity: firm.0,
+                        required: *cents,
+                        available: firm_ref(world, *firm)
+                            .map(|f| f.book.cash().max(0))
+                            .unwrap_or(0),
+                    },
+                    "no_race" | "no_candidate" => DomainError::InvalidEntity {
+                        handle: *office as u64,
+                        kind: EntityKind::Region,
+                    },
+                    _ => DomainError::WrongPhase {
+                        expected: "open_campaign_within_cap",
+                        actual: reason,
+                    },
+                },
+            )
+        }
+        CommandIntent::BidOnTender {
+            firm,
+            tender,
+            price_cents,
+            weeks,
+        } => {
+            require_control(world, actor, *firm)?;
+            crate::economy::civics::bid(world, dataset, *firm, *tender, *price_cents, *weeks)
+                .map_err(|reason| match reason {
+                    "no_tender" => DomainError::InvalidEntity {
+                        handle: *tender as u64,
+                        kind: EntityKind::Region,
+                    },
+                    _ => DomainError::WrongPhase {
+                        expected: "open_tender_within_limits",
+                        actual: reason,
+                    },
+                })
+        }
         CommandIntent::BuyOutVenture { venture, firm } => {
             require_control(world, actor, *firm)?;
             structure::buyout_jv(world, *venture, *firm)
@@ -2898,9 +3046,15 @@ fn apply_intent(
     }
 }
 
+fn executive_post(code: u8) -> DomainResult<crate::economy::executives::Post> {
+    crate::economy::executives::Post::from_code(code).ok_or(DomainError::Arithmetic {
+        detail: ArithmeticFault::OutOfRange,
+    })
+}
+
 /// Pay a construction bill to named contractors in the region, or to the finite outside
 /// construction sector when none can supply.
-fn pay_construction_service(
+pub(crate) fn pay_construction_service(
     world: &mut World,
     dataset: &Dataset,
     payer: Handle,
@@ -3150,7 +3304,11 @@ fn start_facility(
 ) -> Facility {
     let template = &dataset.recipes[recipe as usize];
     let (excess, capacity) = sectors::construction_excess(world, firm, blocks);
-    let mut weeks = sectors::stretched_weeks(template.build_weeks, excess, capacity);
+    let mut weeks = crate::economy::executives::build_weeks(
+        world,
+        firm,
+        sectors::stretched_weeks(template.build_weeks, excess, capacity),
+    );
     if world.regions[region as usize]
         .policy
         .permit_bonus_until
@@ -3159,6 +3317,12 @@ fn start_facility(
     {
         weeks = (weeks * 75 / 100).max(1);
     }
+    let (_, lead_bps) = crate::economy::civics::build_factors(
+        world,
+        region,
+        sectors::industry_name(dataset, recipe),
+    );
+    weeks = ((weeks as u64 * lead_bps as u64 / 10_000) as u32).max(1);
     Facility {
         firm,
         region,

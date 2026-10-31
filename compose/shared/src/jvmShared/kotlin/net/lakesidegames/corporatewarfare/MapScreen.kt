@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -63,6 +64,7 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -73,9 +75,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import uniffi.cw_ffi.MapDivisionDto
 import uniffi.cw_ffi.RegionBoardDto
 import kotlin.math.exp
@@ -135,7 +139,8 @@ internal class WorldClock {
     private var seconds = 0.0
 
     fun advance(wall: Double, running: Boolean, speed: Int): Double {
-        if (!last.isNaN() && running) seconds += (wall - last).coerceIn(0.0, 0.5) * when (speed) { 1 -> 1.0; 2 -> 2.0; else -> 4.0 }
+        // A gap over half a second is a pause or a stalled frame, not time the world lived through.
+        if (!last.isNaN() && running && wall - last <= 0.5) seconds += (wall - last).coerceAtLeast(0.0) * when (speed) { 1 -> 1.0; 2 -> 2.0; else -> 4.0 }
         last = wall
         return seconds
     }
@@ -183,6 +188,9 @@ fun WorldMapView(
     var flight by remember { mutableStateOf<Job?>(null) }
     // Big enough for every label on screen, so a moving camera never lays text out again.
     val measurer = rememberTextMeasurer(cacheSize = 160)
+    // The structures' own measurer and label planner: they are painted on a background thread, so nothing else touches them.
+    val labelMeasurer = rememberTextMeasurer(cacheSize = 256)
+    val labelPlanner = remember { LabelPlanner() }
     val graphics = LocalAppSettings.current?.graphics ?: GraphicsConfig.Default
     var tilted by remember { mutableStateOf(true) }
     var pitch by remember { mutableDoubleStateOf(graphics.pitch) }
@@ -201,24 +209,73 @@ fun WorldMapView(
         }
     }
     val geometry = remember(map) { MapGeometryCache() }
+    // Ground, clouds and structures are baked together for one camera and swapped in as a set; traffic and effects ride the same warp.
+    val layers = remember { MapLayerSet(scope, carryKey = map?.scenarioId) }
+    DisposableEffect(layers) { onDispose { layers.close() } }
+    val firmSector = remember(store.mapPlants) { firmSectors(store.mapPlants) }
     val shaded = remember(layer, store.boards, store.mapDivisions) { shading(store, layer) }
     val heights = animatedHeights(if (layer == MapLayer.Freight) emptyMap() else shaded, graphics.animations)
-    val clock = rememberFrameSeconds(graphics.moves || graphics.showFps, graphics.frameRate)
+    // Everything that moves follows the game's clock, which stands still while the game is paused, so a paused map
+    // draws nothing new and the frame clock rests too (the GPU map keeps its own pace and the frame counter needs it).
+    val clock = rememberFrameSeconds((graphics.moves && (store.running || graphics.newMap)) || graphics.showFps, graphics.frameRate)
     // The world's own clock: traffic, planes, clouds and the sun stop when the game is paused and
     // run faster at higher speeds. Only interface feedback (the selection glow) uses the wall clock.
     val world = remember { WorldClock() }
     val gameSeconds by remember { derivedStateOf { world.advance(clock.value, store.running, store.speed) } }
     val sunStep by remember(graphics.dayNight) { derivedStateOf { if (graphics.dayNight) floor(gameSeconds * 3) else 0.0 } }
     val cloudTick by remember { derivedStateOf { floor(gameSeconds * 8) / 8 } }
-    val week = store.overview?.weekLabel
-    var rippleAt by remember { mutableDoubleStateOf(-10.0) }
-    LaunchedEffect(week) { if (week != null) rippleAt = MapClock.now() }
     val fps = remember { FpsMeter() }
     // Divisions the player has just taken over carry a flag for six weeks: a plant that was a
     // rival's last week and is the player's now.
     val takeovers = remember { TakeoverLog() }
     val acquired = remember(store.mapPlants, store.overview?.tick) { takeovers.update(store.mapPlants, store.overview?.tick?.toInt() ?: 0) }
     val heightsNow by rememberUpdatedState(heights)
+    // The new GPU map (desktop preview): drawn instead of the classic ground, clouds, traffic and buildings while the
+    // camera is flat; the globe, the Freight mode and any failure keep the classic map.
+    // On a desktop that can do it, the map is drawn by the graphics card straight into a native surface behind the UI.
+    var surface by remember { mutableStateOf<Any?>(null) }
+    var surfaceBad by remember { mutableStateOf(false) }
+    val surfaceHost = GpuMapHost.surfaceHost
+    val useSurface = surfaceHost != null && graphics.newMap && graphics.direct && !surfaceBad && GpuMapHost.directFellBack == null && GpuMapHost.surfaceUsable()
+    val gpu = rememberGpuMap(graphics.newMap, map?.scenarioId, surface.takeIf { useSurface }, useSurface) { surfaceBad = true }
+    // The watchdog: a direct map that stalls (no frame soon after opening, or many slow presents in a row) is closed and the
+    // copied-frame map takes over for the rest of this run.
+    LaunchedEffect(gpu) {
+        val session = gpu?.takeIf { it.direct } ?: return@LaunchedEffect
+        while (true) {
+            delay(250)
+            val why = session.trouble
+            if (why != null) { GpuMapHost.directFellBack = why; surfaceBad = true; break }
+        }
+    }
+    val gpuOn by remember(gpu, layer) { derivedStateOf { gpu != null && layer != MapLayer.Freight && (camera?.zoom ?: MapCamera.FLAT_END) >= MapCamera.FLAT_END } }
+    // The native surface shows through (the map's own background and ground are not drawn over it) while it is what draws the map.
+    val surfaceShows = gpuOn && gpu?.direct == true
+    // Once the native surface has received a mouse event itself it is the source of pointer input over the map.
+    var surfaceMouse by remember { mutableStateOf(false) }
+    val gpuNight by remember(map, graphics.dayNight) {
+        derivedStateOf {
+            val b = map?.playBounds
+            graphics.dayNight && b != null && Sun.moving(sunStep / 3.0).facing(Math.toRadians((b[0] + b[2]) / 2), Math.toRadians((b[1] + b[3]) / 2)) < 0
+        }
+    }
+    val gpuWeek = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28
+    LaunchedEffect(gpu, store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds, gpuWeek) {
+        val session = gpu ?: return@LaunchedEffect
+        val json = gpuUpdateJson(store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds, gpuWeek)
+        withContext(Dispatchers.Default) { runCatching { session.update(json) } }
+    }
+
+    // The plant under the mouse (GPU map, desktop), and the rival firm whose dossier a click on its plant opened.
+    var hover by remember { mutableStateOf<Offset?>(null) }
+    var rivalFirm by remember { mutableStateOf<ULong?>(null) }
+    val gpuHover by rememberUpdatedState(gpu != null && gpuOn)
+    fun openPlant(b: GpuBuilding): Boolean {
+        gpuPlantDivision(b, store.divisions)?.let { store.showDivision(it); return true }
+        val firm = b.firm ?: return false
+        rivalFirm = firm.toULong()
+        return true
+    }
 
     fun current(): MapCamera? = camera ?: map?.let { if (viewSize.width > 0) MapCamera.scenario(viewSize, it) else null }
     fun fly(target: MapCamera) {
@@ -242,7 +299,62 @@ fun WorldMapView(
         fly(if (now.zoom > MapCamera.FLAT_START) now.copy(zoom = 1.0) else MapCamera.scenario(viewSize, map ?: return))
     }
 
-    Box(modifier.clipToBounds().background(Palette.ink)) {
+    fun mapTap(tap: Offset) {
+        val map = map ?: return
+        val now = current() ?: return
+        if (gpu != null && gpuOn) {
+            // The GPU map picks from its own geometry: a plant under the tap opens its division (or its firm),
+            // else the region under it is the one drawn there. Both use the camera the picture is shown for.
+            val gc = gpuCamera(now, viewSize.width, viewSize.height, pitch)
+            val plant = gpuBuildingAt(gpu, gc, viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
+            if (plant != null && openPlant(plant)) return
+            val code = gpu.pick(gc, viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
+            onSelect(code.takeIf { it != selected })
+            return
+        }
+        val g = geometry.of(map, now, viewSize, graphics.detail, pitch)
+        val projection = g.p
+        if (layer == MapLayer.Freight && onLane != null) {
+            val lane = laneAt(map, projection, store.lanes, tap)
+            if (lane != null) {
+                onLane(if (laneKey(lane) == pickedLane) null else laneKey(lane))
+                return
+            }
+            onLane(null)
+        }
+        onSelect(regionAt(map, g, graphics, heightsNow, tap).takeIf { it != selected })
+    }
+
+    // Pointer input from the native surface (see SurfaceMouse): the same drag, turn, zoom, tap and hover as the map's own input.
+    var press by remember { mutableStateOf<SurfaceMouse?>(null) }
+    var dragged by remember { mutableStateOf(false) }
+    var last by remember { mutableStateOf(Offset.Zero) }
+    fun onSurfaceMouse(e: SurfaceMouse) {
+        val at = Offset(e.x, e.y)
+        when (e.kind) {
+            SurfaceMouse.Kind.Press -> { press = e; dragged = false; last = at; hover = null }
+            SurfaceMouse.Kind.Drag -> {
+                val p = press ?: return
+                val now = current() ?: return
+                val d = at - last
+                last = at
+                if ((at - Offset(p.x, p.y)).getDistance() > 4f) dragged = true
+                flight?.cancel()
+                camera = if (p.button == 3) now.rotated(d.x * 0.4) else now.panned(d, viewSize, pitch)
+            }
+            SurfaceMouse.Kind.Release -> {
+                val p = press
+                press = null
+                if (p != null && p.button == 1 && !dragged) { if (e.clicks >= 2) toggleGlobe() else mapTap(at) }
+            }
+            SurfaceMouse.Kind.Move -> if (gpuHover) hover = at
+            SurfaceMouse.Kind.Exit -> hover = null
+            SurfaceMouse.Kind.Wheel -> current()?.let { flight?.cancel(); camera = it.zoomed(exp(-e.wheel.toDouble() * 0.15)) }
+        }
+    }
+
+    Box(modifier.clipToBounds().then(if (surfaceShows) Modifier else Modifier.background(Palette.ink))) {
+        if (useSurface && map != null) surfaceHost?.invoke(Modifier.fillMaxSize(), { surface = it }) { e -> surfaceMouse = true; onSurfaceMouse(e) }
         if (map == null) {
             Text("The map file is missing from this build.", color = Palette.secondary, modifier = Modifier.padding(24.dp))
         } else {
@@ -252,6 +364,7 @@ fun WorldMapView(
                     .onSizeChanged { viewSize = Size(it.width.toFloat(), it.height.toFloat()) }
                     .pointerInput(Unit) {
                         detectTransformGestures { _, panChange, zoomChange, rotationChange ->
+                            if (surfaceMouse) return@detectTransformGestures
                             flight?.cancel()
                             val now = current() ?: return@detectTransformGestures
                             // A two-finger twist turns the map; drags go any way, almost to the poles.
@@ -262,6 +375,10 @@ fun WorldMapView(
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent()
+                                if (surfaceMouse) continue
+                                if (gpuHover && event.type == PointerEventType.Move && !event.buttons.isPrimaryPressed && !event.buttons.isSecondaryPressed) {
+                                    hover = event.changes.firstOrNull()?.position
+                                } else if (event.type == PointerEventType.Exit || event.buttons.isPrimaryPressed) hover = null
                                 // On desktop, dragging with the right button turns the map.
                                 if (event.type == PointerEventType.Move && event.buttons.isSecondaryPressed) {
                                     val dx = event.changes.firstOrNull()?.let { it.position.x - it.previousPosition.x } ?: 0f
@@ -284,90 +401,121 @@ fun WorldMapView(
                             }
                         }
                     }
-                    .pointerInput(layer, pickedLane, selected, pitch) {
+                    .pointerInput(layer, pickedLane, selected, pitch, gpu, gpuOn) {
                         detectTapGestures(
-                            onDoubleTap = { toggleGlobe() },
-                            onTap = { tap ->
-                                val now = current() ?: return@detectTapGestures
-                                val g = geometry.of(map, now, viewSize, graphics.detail, pitch)
-                                val projection = g.p
-                                if (layer == MapLayer.Freight && onLane != null) {
-                                    val lane = laneAt(map, projection, store.lanes, tap)
-                                    if (lane != null) {
-                                        onLane(if (laneKey(lane) == pickedLane) null else laneKey(lane))
-                                        return@detectTapGestures
-                                    }
-                                    onLane(null)
-                                }
-                                onSelect(regionAt(map, g, graphics, heightsNow, tap).takeIf { it != selected })
-                            },
+                            onDoubleTap = { if (!surfaceMouse) toggleGlobe() },
+                            onTap = { tap -> if (!surfaceMouse) mapTap(tap) },
                         )
                     },
             ) {
-                drawWorldMap(
-                    map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shaded, selected, store.mapDivisions, measurer,
-                    lanes = store.lanes, freightLayer = layer == MapLayer.Freight, pickedLane = pickedLane,
-                    geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Ground,
-                    week = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28,
-                )
-            }
-            // Layers, bottom to top: the ground, traffic on it, clouds, buildings and labels, then
-            // effects. Traffic runs under the buildings; buildings stand clear of the clouds.
-            if (graphics.moves) {
-                Canvas(Modifier.fillMaxSize()) {
-                    val cam = camera ?: MapCamera.scenario(size, map)
-                    val g = geometry.of(map, cam, size, graphics.detail, pitch)
-                    val o = g.overlay(store.lanes, store.mapDivisions, selected, heights, graphics, layer == MapLayer.Freight, density)
-                    val detailFade = if (graphics.detail != MapDetail.High) 0f else ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
-                    drawMapOverlay(
-                        o, graphics, gameSeconds, layer == MapLayer.Freight, sun ?: Sun.fixed(g.p), map.playBounds, cam.zoom,
-                        clock.value - rippleAt, detailFade, map.scenarioId, part = OverlayPart.Traffic,
+                val cam = camera ?: MapCamera.scenario(size, map)
+                if (gpu != null && gpuOn) {
+                    val gc = gpuCamera(cam, size.width, size.height, pitch)
+                    gpu.request(gc, size.width.toInt(), size.height.toInt(), true)
+                    // The newest frame carried to this camera, so the ground, names, badges and building boxes all agree.
+                    // On a native surface the card has drawn this very camera already, so there is nothing to carry or warp.
+                    val shown = if (gpu.direct) gc else drawGpuFrame(gpu, gc) ?: gc
+                    // Names and division badges, projected by the camera of the frame on screen so nothing slides.
+                    gpu.version
+                    drawGpuLabels(gpu, shown, map, store.mapPlants, store.mapDivisions, graphics, shown.widthKm, labelMeasurer, labelPlanner)
+                    hover?.let { at ->
+                        val b = gpuBuildingAt(gpu, shown, size.width.toInt(), size.height.toInt(), at.x, at.y) ?: return@let
+                        val firmName = store.mapPlants.firstOrNull { it.firm.toLong() == b.firm }?.firmName ?: "A company"
+                        val industry = (b.industry ?: b.kind).replace('_', ' ').replaceFirstChar { it.uppercase() }
+                        val count = if (b.plants == 1) "1 plant" else "${b.plants} plants"
+                        val tip = measurer.measure("$firmName\n$industry, $count", TextStyle(color = Palette.primaryText, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                        val left = (at.x + 14f).coerceAtMost(size.width - tip.size.width - 14f).coerceAtLeast(2f)
+                        val top = (at.y + 16f).coerceAtMost(size.height - tip.size.height - 10f).coerceAtLeast(2f)
+                        drawRect(Palette.ink.copy(alpha = 0.9f), Offset(left - 6f, top - 4f), Size(tip.size.width + 12f, tip.size.height + 8f))
+                        drawRect(Palette.gold, Offset(left - 6f, top - 4f), Size(tip.size.width + 12f, tip.size.height + 8f), style = Stroke(1f))
+                        drawText(tip, topLeft = Offset(left, top))
+                    }
+                    if (graphics.showFps) {
+                        val rate = fps.tick(System.nanoTime())
+                        val tag = RenderInfo.label()?.let { " · $it" } ?: ""
+                        val mapLine = gpuMapLine(graphics.newMap, gpu)?.let { "\n$it" } ?: ""
+                        val label = measurer.measure(
+                            "${rate.toInt()} fps$tag · ${size.width.toInt()}x${size.height.toInt()}$mapLine",
+                            TextStyle(color = if (RenderInfo.software) Palette.warning else Palette.positive, fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                        )
+                        drawRect(Color.Black.copy(alpha = 0.55f), Offset(6f, size.height - label.size.height - 14f), Size(label.size.width + 12f, label.size.height + 8f))
+                        drawText(label, topLeft = Offset(12f, size.height - label.size.height - 10f))
+                    }
+                    return@Canvas
+                }
+                val tint = layerTint(layer)
+                val lanes = store.lanes
+                val freight = layer == MapLayer.Freight
+                val week = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28
+                val economy = store.economy?.phase
+                val settlement = store.boards.associate { it.code to it.migrationBps }
+                val plants = store.mapPlants
+                val seconds = cloudTick
+                val flat = graphics.copy(showFps = false)
+                val paintGround: DrawScope.(MapGeometryCache) -> Unit = { geo ->
+                    drawWorldMap(
+                        map, cam, tint, shaded, selected, store.mapDivisions, measurer, lanes = lanes, freightLayer = freight, pickedLane = pickedLane,
+                        geometry = geo, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Ground, week = week, economyPhase = economy, settlement = settlement,
                     )
                 }
-            }
-            // Clouds drift a fraction of a degree a second, so their layer is redrawn eight times a
-            // second rather than every frame.
-            if (graphics.clouds > 0 && layer != MapLayer.Freight) {
-                Canvas(Modifier.fillMaxSize().graphicsLayer()) {
-                    val seconds = cloudTick
-                    val cam = camera ?: MapCamera.scenario(size, map)
-                    val g = geometry.of(map, cam, size, graphics.detail, pitch)
+                val paintClouds: DrawScope.(MapGeometryCache) -> Unit = { geo ->
+                    val g = geo.of(map, cam, size, graphics.detail, pitch)
                     with(Weather) {
                         drawWeather(g.p, sun ?: Sun.fixed(g.p), seconds, graphics.clouds, map.playBounds, 46.0 * g.scale * g.p.t, cam.zoom, graphics.lighting > 0, map.scenarioId)
                     }
                 }
-            }
-            Canvas(Modifier.fillMaxSize().graphicsLayer()) {
-                drawWorldMap(
-                    map, camera ?: MapCamera.scenario(size, map), layerTint(layer), shaded, selected, store.mapDivisions, measurer,
-                    lanes = store.lanes, freightLayer = layer == MapLayer.Freight, pickedLane = pickedLane,
-                    geometry = geometry, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Structures,
-                    plants = store.mapPlants, economyPhase = store.economy?.phase, acquired = acquired,
-                    week = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28,
-                )
-            }
-            Canvas(Modifier.fillMaxSize()) {
-                val cam = camera ?: MapCamera.scenario(size, map)
-                val g = geometry.of(map, cam, size, graphics.detail, pitch)
-                if (graphics.moves) {
-                    val o = g.overlay(store.lanes, store.mapDivisions, selected, heights, graphics, layer == MapLayer.Freight, density)
-                    val detailFade = if (graphics.detail != MapDetail.High) 0f else ((cam.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
-                    drawMapOverlay(
-                        o, graphics, gameSeconds, layer == MapLayer.Freight, sun ?: Sun.fixed(g.p), map.playBounds, cam.zoom,
-                        clock.value - rippleAt, detailFade, map.scenarioId, part = OverlayPart.Effects, wallSeconds = clock.value,
+                val paintStructures: DrawScope.(MapGeometryCache) -> Unit = { geo ->
+                    drawWorldMap(
+                        map, cam, tint, shaded, selected, store.mapDivisions, labelMeasurer,
+                        lanes = lanes, freightLayer = freight, pickedLane = pickedLane,
+                        geometry = geo, graphics = graphics, pitch = pitch, sun = sun, heights = heights, phase = MapPhase.Structures,
+                        plants = plants, economyPhase = economy, acquired = acquired, week = week, labels = labelPlanner,
                     )
-                } else {
-                    g.overlay(store.lanes, store.mapDivisions, selected, heights, graphics, layer == MapLayer.Freight, density).selectedTop?.let {
-                        drawPath(it, Palette.gold, style = Stroke(2.5f))
-                    }
                 }
+                // The world's moving parts are drawn for whatever camera the baked set was made for, and carried with it.
+                val traffic: (DrawScope.(MapCamera, Double) -> Unit)? = if (!graphics.moves) null else { c, pt ->
+                    val g = geometry.of(map, c, size, graphics.detail, pt)
+                    val o = g.overlay(store.lanes, store.mapDivisions, selected, heights, graphics, freight, density, firmSector)
+                    val detailFade = if (graphics.detail != MapDetail.High) 0f else ((c.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
+                    drawMapOverlay(
+                        o, graphics, gameSeconds, freight, sun ?: Sun.fixed(g.p), map.playBounds, c.zoom,
+                        0.0, detailFade, map.scenarioId, part = OverlayPart.Traffic,
+                    )
+                }
+                val effects: DrawScope.(MapCamera, Double) -> Unit = { c, pt ->
+                    val g = geometry.of(map, c, size, graphics.detail, pt)
+                    val o = g.overlay(store.lanes, store.mapDivisions, selected, heights, graphics, freight, density, firmSector)
+                    if (graphics.moves) {
+                        val detailFade = if (graphics.detail != MapDetail.High) 0f else ((c.zoom - 7) / 5).coerceIn(0.0, 1.0).toFloat()
+                        drawMapOverlay(
+                            o, graphics, gameSeconds, freight, sun ?: Sun.fixed(g.p), map.playBounds, c.zoom,
+                            0.0, detailFade, map.scenarioId, part = OverlayPart.Effects,
+                        )
+                    } else o.selectedTop?.let { drawPath(it, Palette.gold, style = Stroke(2.5f)) }
+                }
+                // Slow clocks (the sun, the week) wait out a gap before a rebake; a change of camera never waits.
+                val frame = MapLayerSet.Frame(
+                    ground = MapLayerSet.PartSpec(listOf(tint, shaded, selected, lanes, freight, pickedLane, flat, sun, heights, week, economy, settlement), 400, paintGround),
+                    clouds = if (graphics.clouds > 0 && !freight) MapLayerSet.PartSpec(listOf(seconds, graphics.clouds, graphics.lighting > 0, sun), 500, paintClouds) else null,
+                    structures = MapLayerSet.PartSpec(listOf(layer, shaded, selected, store.mapDivisions, plants, economy, acquired, flat, sun, heights, week), 400, paintStructures),
+                    traffic = traffic, effects = effects,
+                )
+                layers.draw(this, cam, pitch, frame, geometry, Color(0xFF05090E))
                 if (graphics.showFps) {
                     val rate = fps.tick(System.nanoTime())
-                    val label = measurer.measure("${rate.toInt()} fps", TextStyle(color = Palette.positive, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                    // The backend and the map's pixel size sit beside the rate; software drawing is flagged.
+                    val tag = RenderInfo.label()?.let { " · $it" } ?: ""
+                    val warn = RenderInfo.software
+                    val mapLine = gpuMapLine(graphics.newMap, gpu)?.let { "\n$it" } ?: ""
+                    val label = measurer.measure(
+                        "${rate.toInt()} fps$tag · ${size.width.toInt()}x${size.height.toInt()}$mapLine",
+                        TextStyle(color = if (warn) Palette.warning else Palette.positive, fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                    )
                     drawRect(Color.Black.copy(alpha = 0.55f), Offset(6f, size.height - label.size.height - 14f), Size(label.size.width + 12f, label.size.height + 8f))
                     drawText(label, topLeft = Offset(12f, size.height - label.size.height - 10f))
                 }
             }
+            rivalFirm?.let { firm -> DossierDialog(store, firm) { rivalFirm = null } }
             // What the colours mean for the active mode.
             if (layer == MapLayer.Freight) {
                 FreightLegend(store.lanes, Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 24.dp))
@@ -382,14 +530,15 @@ fun WorldMapView(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val zoomedIn = (current()?.zoom ?: 1.0) > MapCamera.FLAT_START
-                MapButton("zoom_in") { current()?.let { fly(it.zoomed(1.8)) } }
-                MapButton("zoom_out") { current()?.let { fly(it.zoomed(1 / 1.8)) } }
-                MapButton(if (zoomedIn) "globe" else "scope") { toggleGlobe() }
+                MapButton("zoom_in", "Zoom in") { current()?.let { fly(it.zoomed(1.8)) } }
+                MapButton("zoom_out", "Zoom out") { current()?.let { fly(it.zoomed(1 / 1.8)) } }
+                MapButton(if (zoomedIn) "globe" else "scope", if (zoomedIn) "Show the globe" else "Zoom to the map") { toggleGlobe() }
                 // Clouds in one tap: heavy, light, thin, off, and round again.
                 val settings = LocalAppSettings.current
                 if (settings != null) {
                     Box(
-                        Modifier.size(40.dp).clickable { settings.chooseGraphics(graphics.copy(clouds = (graphics.clouds + 3) % 4)) },
+                        Modifier.size(40.dp).clickable { settings.chooseGraphics(graphics.copy(clouds = (graphics.clouds + 3) % 4)) }
+                            .described("Clouds: ${listOf("off", "thin", "light", "heavy")[graphics.clouds.coerceIn(0, 3)]}. Tap to change.", androidx.compose.ui.semantics.Role.Button),
                         contentAlignment = Alignment.Center,
                     ) {
                         PixelIcon(if (graphics.clouds == 0) "cloud_off" else "cloud", size = 22.dp, tint = if (graphics.clouds == 0) null else Palette.primaryText.copy(alpha = 0.4f + 0.2f * graphics.clouds))
@@ -403,7 +552,7 @@ fun WorldMapView(
                     }
                 }
                 if (graphics.tilt > 0) {
-                    Box(Modifier.size(40.dp).clickable { tilted = !tilted }, contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(40.dp).clickable { tilted = !tilted }.described(if (tilted) "Tilted view on. Tap to look straight down." else "Looking straight down. Tap to tilt the map.", androidx.compose.ui.semantics.Role.Button), contentAlignment = Alignment.Center) {
                         Text("3D", color = if (tilted) Palette.gold else Palette.secondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -496,7 +645,9 @@ internal fun DrawScope.drawWorldMap(
     plants: List<uniffi.cw_ffi.MapPlantDto> = emptyList(),
     week: Int = 28,
     economyPhase: String? = null,
+    settlement: Map<String, Int> = emptyMap(),
     acquired: Set<String> = emptySet(),
+    labels: LabelPlanner = LabelPlanner(),
 ) {
     MapProfiler.start()
     val detailLevel = graphics.detail
@@ -577,6 +728,27 @@ internal fun DrawScope.drawWorldMap(
             drawPath(g.lakes, water)
         }
         MapProfiler.mark("regions")
+        // Railways and interstates. Each raised tile carries the roads that cross it at its own height; flat, they share one offset.
+        val roadLayer: DrawScope.() -> Unit = {
+            // The real railways once close, so trains have track to run on: rails over dark
+            // sleepers cut on the ground.
+            if (g.closeUp && t > 0.5 && graphics.traffic > 0) {
+                drawPath(g.sleepers, Color(0xFF3A3028).copy(alpha = 0.9f), style = Stroke(3f, cap = StrokeCap.Butt))
+                drawPath(g.railroads, Color(0xFF9AA1A8).copy(alpha = 0.85f), style = Stroke(1f))
+        }
+        // Interstates over the regions and their shading, under the traffic and the buildings:
+        // an 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line
+        // whose dashes are cut on the ground: a screen dash pattern crawled as the camera moved.
+        val highways = if (detailLevel == MapDetail.Low) 0f else smoothstep(0.85, 1.2, g.zoomRatio).toFloat()
+        if (graphics.interstates && highways > 0f && t > 0.5) {
+            val wide = (1.6f + 1.2f * g.scale.coerceAtMost(2.5f))
+            drawPath(g.interstates, Color(0xFF1C2228).copy(alpha = 0.9f * highways), style = Stroke(wide + 2f, cap = StrokeCap.Square))
+            drawPath(g.interstates, Color(0xFF6E757D).copy(alpha = highways), style = Stroke(wide, cap = StrokeCap.Square))
+            if (g.closeUp) {
+                drawPath(g.centreLines, Palette.gold.copy(alpha = 0.85f * highways), style = Stroke(1f, cap = StrokeCap.Butt))
+            }
+        }
+        }
         translate(top = up) {
             if (detail > 0) {
                 drawPath(g.rivers, water.copy(alpha = 0.9f * detail), style = Stroke(1.4f))
@@ -592,23 +764,13 @@ internal fun DrawScope.drawWorldMap(
                 if (lit && t > 0.5) drawPath(it, Color(0xFF8EC5FF).copy(alpha = 0.10f), style = Stroke(4f))
                 drawPath(it, Color(0xFFD2DEEA).copy(alpha = 0.85f), style = Stroke(if (cam.zoom > 3) 2f else 1f))
             }
-            // The real railways once close, so trains have track to run on: rails over dark
-            // sleepers cut on the ground.
-            if (g.closeUp && t > 0.5 && graphics.traffic > 0) {
-                drawPath(g.sleepers, Color(0xFF3A3028).copy(alpha = 0.9f), style = Stroke(3f, cap = StrokeCap.Butt))
-                drawPath(g.railroads, Color(0xFF9AA1A8).copy(alpha = 0.85f), style = Stroke(1f))
-            }
-            // Interstates over the regions and their shading, under the traffic and the buildings:
-            // an 8-bit road with a dark edge, grey asphalt and, up close, a dashed gold centre line
-            // whose dashes are cut on the ground: a screen dash pattern crawled as the camera moved.
-            val highways = if (detailLevel == MapDetail.Low) 0f else smoothstep(0.85, 1.2, g.zoomRatio).toFloat()
-            if (graphics.interstates && highways > 0f && t > 0.5) {
-                val wide = (1.6f + 1.2f * g.scale.coerceAtMost(2.5f))
-                drawPath(g.interstates, Color(0xFF1C2228).copy(alpha = 0.9f * highways), style = Stroke(wide + 2f, cap = StrokeCap.Square))
-                drawPath(g.interstates, Color(0xFF6E757D).copy(alpha = highways), style = Stroke(wide, cap = StrokeCap.Square))
-                if (g.closeUp) {
-                    drawPath(g.centreLines, Palette.gold.copy(alpha = 0.85f * highways), style = Stroke(1f, cap = StrokeCap.Butt))
-                }
+            if (!raised) roadLayer()
+        }
+        if (raised) {
+            val view = Rect(Offset.Zero, size)
+            g.raised(heights).forEach { solid ->
+                if (!solid.bounds.overlaps(view)) return@forEach
+                clipPath(solid.top) { translate(top = -solid.lift.toFloat()) { roadLayer() } }
             }
         }
         // Night falls on the globe whenever it is lit, and on the flat map with day and night on.
@@ -640,6 +802,12 @@ internal fun DrawScope.drawWorldMap(
                 drawLanes(map, p, lanes, selected, pickedLane)
             }
         }
+        // The diorama up close: trees, fields, barns, rocks and the houses round each city. It lies on the ground, so it is
+        // painted with the ground, which is baked, and not with the buildings that stand on it.
+        if (cam.zoom > 3 && graphics.countryside && graphics.buildings >= 2 && graphics.earth && g.closeUp && t > 0.5) {
+            val unit = (1.2f * g.scale * density).coerceIn(1.4f, 7f)
+            with(Countryside) { drawCountryside(p, map, week, unit * 0.6f, { plinth }, economyPhase, settlement = settlement) }
+        }
     }
     MapProfiler.mark("lanes")
     // The structures: buildings, skylines and labels, drawn in their own layer over the traffic.
@@ -647,107 +815,157 @@ internal fun DrawScope.drawWorldMap(
     if (cam.zoom > 3) {
         val close = cam.zoom > 14
         val nightNow = sun != null
-        // City skylines, then the player's divisions as buildings, nearest drawn last.
-        val cityTops = HashMap<String, Float>()
         // Voxels in true 3D: pixels a voxel for the player's buildings, a step down for the rest.
-        val unit = (1.2f * g.scale * density).coerceIn(1.4f, 7f)
+        val unit = g.unit(WorldScale.PLAYER_VOXEL_M)
+        val cityUnit = g.unit(WorldScale.CITY_VOXEL_M)
+        val rivalUnit = g.unit(WorldScale.RIVAL_VOXEL_M)
         val e = p.east
-        // The diorama up close: trees, fields, barns, rocks and the houses round each city.
-        if (graphics.countryside && graphics.buildings >= 2 && graphics.earth && g.closeUp && t > 0.5) {
-            with(Countryside) { drawCountryside(p, map, week, unit * 0.6f, { plinth }, economyPhase) }
-        }
-        if (graphics.buildings >= 2 && g.closeUp && t > 0.5) {
-            // Each big city on screen is a voxel city block sized by its population, smaller than
-            // the player's buildings so those stay the stars.
-            // The economy shows in the cities: cranes rise in a boom, lights go out in a recession.
-            val dim = if (economyPhase == "recession" || economyPhase == "slowdown") VoxelModels.dark else null
-            g.cityBlocks(ground).forEachIndexed { i, block ->
-                val top = with(VoxelModels) { drawModel(VoxelModels.sized("city", block.plants), p, block.gx, block.gy, block.floor, unit * 0.75f, tone = dim) }
-                if (top != null) cityTops[block.name] = top
-                if ((economyPhase == "boom" || economyPhase == "expansion" && i % 3 == 0) && i < 12) {
-                    val k = 9f * unit * 0.75f
-                    with(VoxelModels) { drawModel(VoxelModels.sized("crane", if (economyPhase == "boom") 8 else 2), p, block.gx + e.x * k, block.gy + e.y * k, block.floor, unit * 0.75f) }
-                }
-            }
-        }
-        if (graphics.buildings > 0 && g.closeUp && t > 0.5) {
-            // Rivals' plants first, smaller and greyed, so the player's own stand over them.
-            val rivalStatuses = plantStatuses(plants.filter { !it.player }, byFirm = true)
-            if (graphics.rivals) g.rivalBuildings(plants, ground).forEach { b ->
-                val (name, tone) = when (rivalStatuses[b.key]) {
-                    PlantState.Site -> VoxelModels.sized("site", b.plants) to VoxelModels.muted
-                    PlantState.Mothballed -> VoxelModels.sized(b.sector, b.plants) to VoxelModels.dark
-                    else -> VoxelModels.sized(b.sector, b.plants) to VoxelModels.muted
-                }
-                with(VoxelModels) { drawModel(name, p, b.gx, b.gy, b.floor, unit * 0.75f, tone = tone) }
-            }
-            val statuses = plantStatuses(plants.filter { it.player })
-            g.buildings(divisions, ground).forEach { b ->
-                // Each division is a voxel building for its industry, shown as it stands: a building
-                // site while its plants go up, a crane beside it while one is added or retooled, dark
-                // when mothballed, a gold flag when just taken over. A plain box if the model is missing.
-                val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
-                val state = statuses[b.key] ?: PlantState.Running
-                val spriteTop = with(VoxelModels) {
-                    when (state) {
-                        PlantState.Site -> drawModel(VoxelModels.sized("site", b.plants), p, b.gx, b.gy, b.floor, unit)
-                        PlantState.Mothballed -> drawModel(VoxelModels.sized(b.sector, b.plants), p, b.gx, b.gy, b.floor, unit, tone = VoxelModels.dark)
-                        else -> drawModel(VoxelModels.sized(b.sector, b.plants), p, b.gx, b.gy, b.floor, unit)
+        val box = VoxelModels.Bounds()
+        val cityBox = HashMap<String, Rect>()
+        // Labels and badges are planned over one frame under a lock: the planner remembers last frame's choices.
+        labels.frame {
+            // Priority runs division badge, city, region: buildings and badges are reserved first, so a label that
+            // would cross one is the label that goes. A rival's plant is a step smaller than a city, a city a step
+            // smaller than the player's buildings.
+            fun reserved() { if (box.valid) reserve(box.l, box.t, box.r, box.b) }
+            if (graphics.buildings >= 2 && g.closeUp && t > 0.5) {
+                // Each big city on screen is a voxel city block sized by its population and shaped by what the city is
+                // known for (a port, a steel town, a car town), smaller than the player's buildings so those stay the stars.
+                // The economy shows in the cities: cranes rise in a boom, lights go out in a recession.
+                val dim = if (economyPhase == "recession" || economyPhase == "slowdown") VoxelModels.dark else null
+                g.cityBlocks(ground).forEachIndexed { i, block ->
+                    val kind = CityKinds.of(block.name).let { k -> if (VoxelModels.has(VoxelModels.sized(k, block.plants))) k else "city" }
+                    box.reset()
+                    with(VoxelModels) { drawModel(VoxelModels.sized(kind, block.plants), p, block.gx, block.gy, block.floor, cityUnit, tone = dim, bounds = box) }
+                    if (box.valid) cityBox[block.name] = Rect(box.l, box.t, box.r, box.b)
+                    reserved()
+                    if ((economyPhase == "boom" || economyPhase == "expansion" && i % 3 == 0) && i < 12) {
+                        val k = 9f * cityUnit
+                        box.reset()
+                        with(VoxelModels) { drawModel(VoxelModels.sized("crane", if (economyPhase == "boom") 8 else 2), p, block.gx + e.x * k, block.gy + e.y * k, block.floor, cityUnit, bounds = box) }
+                        reserved()
                     }
                 }
-                if (state == PlantState.Growing) {
-                    val k = 9f * unit
-                    with(VoxelModels) { drawModel("crane/0", p, b.gx + e.x * k, b.gy + e.y * k, b.floor, unit) }
-                }
-                if (b.key in acquired && spriteTop != null) drawFlag(Offset(base.x + 4f * unit, spriteTop - 2f), unit.toInt().coerceAtLeast(1))
-                val topAt = if (spriteTop != null) Offset(base.x, spriteTop) else {
-                    val windows = if (nightNow && light.facing(b.lon, b.lat) < 0) 0.85f else if (graphics.lighting == 2) 0.30f else 0f
-                    drawBox(p, b.gx, b.gy, b.half, b.floor, b.top, Sectors.color(b.sector), windows, Palette.gold.copy(alpha = 0.9f))
-                    p.lift(b.gx.toDouble(), b.gy.toDouble(), b.top)
-                }
-                val label = measurer.measure("${b.plants}", TextStyle(color = Palette.ink, fontSize = 10.sp, fontWeight = FontWeight.Bold))
-                val badge = topAt - Offset(0f, 12f)
-                drawCircle(Palette.gold, radius = max(label.size.width, label.size.height) / 2f + 3f, center = badge)
-                drawText(label, topLeft = badge - Offset(label.size.width / 2f, label.size.height / 2f))
             }
-        } else if (t > 0.9 && g.zoomRatio >= 0.7) {
-            // Around the scenario's framing: a small badge per division. Further out, nothing.
-            val grouped = divisions.groupBy { it.region to it.industry }
-            val perRegion = mutableMapOf<String, Int>()
-            grouped.forEach { (key, items) ->
-                val anchor = map.anchor(key.first)?.let { p.project(it, plinth) } ?: return@forEach
-                val index = perRegion.merge(key.first, 1, Int::plus)!! - 1
-                val dot = anchor + Offset(index * 26f, 19f)
-                drawCircle(Sectors.color(key.second), radius = 11f, center = dot)
-                drawCircle(Palette.ink, radius = 11f, center = dot, style = Stroke(2f))
-                val plants = items.sumOf { it.blocks.toInt() }
-                val label = measurer.measure("$plants", TextStyle(color = Palette.ink, fontSize = 10.sp, fontWeight = FontWeight.Bold))
-                drawText(label, topLeft = dot - Offset(label.size.width / 2f, label.size.height / 2f))
+            if (graphics.buildings > 0 && g.closeUp && t > 0.5) {
+                // Rivals' plants first, in their sector's colour with a dark roof and about 60 percent of the
+                // player's size, so the player's own stand over them.
+                val rivalStatuses = plantStatuses(plants.filter { !it.player }, byFirm = true)
+                if (graphics.rivals) g.rivalBuildings(plants, ground).forEach { b ->
+                    val state = rivalStatuses[b.key]
+                    val name = if (state == PlantState.Site) VoxelModels.sized("site", b.plants) else VoxelModels.sized(b.sector, b.plants)
+                    val tone = when (state) {
+                        PlantState.Site -> VoxelModels.muted
+                        PlantState.Mothballed -> VoxelModels.dark
+                        else -> sectorTone(b.sector)
+                    }
+                    box.reset()
+                    with(VoxelModels) { drawModel(name, p, b.gx, b.gy, b.floor, rivalUnit, tone = tone, roof = if (state == PlantState.Mothballed || state == PlantState.Site) null else RivalRoof, bounds = box) }
+                    reserved()
+                }
+                val statuses = plantStatuses(plants.filter { it.player })
+                g.buildings(divisions, ground).forEach { b ->
+                    // Each division is a voxel building for its industry, shown as it stands: a building
+                    // site while its plants go up, a crane beside it while one is added or retooled, dark
+                    // when mothballed, a gold flag when just taken over. A plain box if the model is missing.
+                    val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
+                    val state = statuses[b.key] ?: PlantState.Running
+                    box.reset()
+                    val spriteTop = with(VoxelModels) {
+                        when (state) {
+                            PlantState.Site -> drawModel(VoxelModels.sized("site", b.plants), p, b.gx, b.gy, b.floor, unit, bounds = box)
+                            PlantState.Mothballed -> drawModel(VoxelModels.sized(b.sector, b.plants), p, b.gx, b.gy, b.floor, unit, tone = VoxelModels.dark, bounds = box)
+                            else -> drawModel(VoxelModels.sized(b.sector, b.plants), p, b.gx, b.gy, b.floor, unit, roof = Palette.gold, bounds = box)
+                        }
+                    }
+                    reserved()
+                    if (state == PlantState.Growing) {
+                        val k = 9f * unit
+                        box.reset()
+                        with(VoxelModels) { drawModel("crane/0", p, b.gx + e.x * k, b.gy + e.y * k, b.floor, unit, bounds = box) }
+                        reserved()
+                    }
+                    if (b.key in acquired && spriteTop != null) drawFlag(Offset(base.x + 4f * unit, spriteTop - 2f), unit.toInt().coerceAtLeast(1))
+                    val topAt = if (spriteTop != null) Offset(base.x, spriteTop) else {
+                        val windows = if (nightNow && light.facing(b.lon, b.lat) < 0) 0.85f else if (graphics.lighting == 2) 0.30f else 0f
+                        drawBox(p, b.gx, b.gy, b.half, b.floor, b.top, Sectors.color(b.sector), windows, Palette.gold.copy(alpha = 0.9f))
+                        p.lift(b.gx.toDouble(), b.gy.toDouble(), b.top)
+                    }
+                    val label = LabelText.measure(measurer, "${b.plants}", BadgeStyle, "badge")
+                    val badge = topAt - Offset(0f, 12f)
+                    val r = max(label.size.width, label.size.height) / 2f + 3f
+                    drawCircle(Palette.gold, radius = r, center = badge)
+                    synchronized(LabelText.guard) { drawText(label, topLeft = badge - Offset(label.size.width / 2f, label.size.height / 2f)) }
+                    reserve(badge.x - r, badge.y - r, badge.x + r, badge.y + r)
+                }
+            } else if (t > 0.9 && g.zoomRatio >= 0.7) {
+                // Around the scenario's framing: a small badge per division. Further out, nothing.
+                val grouped = divisions.groupBy { it.region to it.industry }
+                val perRegion = mutableMapOf<String, Int>()
+                grouped.forEach { (key, items) ->
+                    val anchor = map.anchor(key.first)?.let { p.project(it, plinth) } ?: return@forEach
+                    val index = perRegion.merge(key.first, 1, Int::plus)!! - 1
+                    val dot = anchor + Offset(index * 26f, 19f)
+                    drawCircle(Sectors.color(key.second), radius = 11f, center = dot)
+                    drawCircle(Palette.ink, radius = 11f, center = dot, style = Stroke(2f))
+                    val plants = items.sumOf { it.blocks.toInt() }
+                    val label = LabelText.measure(measurer, "$plants", BadgeStyle, "badge")
+                    synchronized(LabelText.guard) { drawText(label, topLeft = dot - Offset(label.size.width / 2f, label.size.height / 2f)) }
+                    reserve(dot.x - 11f, dot.y - 11f, dot.x + 11f, dot.y + 11f)
+                }
+            }
+            // City names, over every building. Sentence case, one weight. A name sits beside its block (right, left,
+            // above, below); one that fits nowhere is dropped, and the biggest cities choose first.
+            // A city above the town size always keeps its name while its block is on screen: it chooses before the
+            // smaller ones, tries further slots with a leader line, and is never dropped for a region name.
+            if (graphics.labels >= 1) {
+                val listed = map.cities.take(if (close) 40 else 14)
+                val named = (listed + map.cities.filter { (c, _) -> c.population >= TOWN_POPULATION && cityBox.containsKey(c.name) && listed.none { it.first.name == c.name } })
+                    .sortedByDescending { it.first.population }
+                named.forEach { (city, point) ->
+                    if (!close && city.country != "USA") return@forEach
+                    val floor = g.cityFloor(city.name, ground)
+                    val at = p.project(point, floor) ?: return@forEach
+                    drawCircle(Palette.primaryText.copy(alpha = 0.85f), radius = 2.5f, center = at)
+                    val label = LabelText.measure(measurer, city.name, CityStyle, "city")
+                    val w = label.size.width.toFloat(); val h = label.size.height.toFloat()
+                    val block = cityBox[city.name]
+                    val slots = if (block != null) {
+                        val mid = (block.top + block.bottom) / 2f - h / 2f
+                        val cx = (block.left + block.right) / 2f - w / 2f
+                        floatArrayOf(block.right + 3f, mid, block.left - 3f - w, mid, cx, block.top - 3f - h, cx, block.bottom + 3f)
+                    } else floatArrayOf(at.x + 6f, at.y - h / 2f, at.x - 6f - w, at.y - h / 2f, at.x - w / 2f, at.y - h - 5f, at.x - w / 2f, at.y + 5f)
+                    if (city.population >= TOWN_POPULATION && block != null) {
+                        val cx = (block.left + block.right) / 2f; val cy = (block.top + block.bottom) / 2f
+                        val reach = max(block.width, block.height) / 2f + 6f
+                        val put = placeCity("c:${city.name}", w, h, slots, cx, cy, reach, size.width, size.height)
+                        if (put.leader) {
+                            // One pixel line from the name's nearest edge to the block it belongs to.
+                            val lx = cx.coerceIn(put.x, put.x + w); val ly = cy.coerceIn(put.y, put.y + h)
+                            drawLine(Palette.primaryText.copy(alpha = 0.7f), Offset(lx, ly), Offset(cx, cy), strokeWidth = 1f)
+                        }
+                        synchronized(LabelText.guard) { drawText(label, topLeft = Offset(put.x, put.y)) }
+                    } else {
+                        val slot = place("c:${city.name}", w, h, slots)
+                        if (slot >= 0) synchronized(LabelText.guard) { drawText(label, topLeft = Offset(slots[2 * slot], slots[2 * slot + 1])) }
+                    }
+                }
+            }
+            if (graphics.cityLights && lit && (sun != null || t < 1)) drawCityLights(map.cities, p, light, plinth, 1f)
+            // Region names last and lowest in priority: small caps with tracking, and only these.
+            if (cam.zoom > 14 && graphics.labels >= 2) {
+                map.regions.forEach { region ->
+                    val at = map.anchor(region.code)?.let { p.project(it, g.regionLift(region.code, ground)) } ?: return@forEach
+                    val label = LabelText.measure(measurer, region.name.uppercase(), RegionStyle, "region")
+                    val w = label.size.width.toFloat(); val h = label.size.height.toFloat()
+                    val slots = floatArrayOf(at.x - w / 2f, at.y + 30f, at.x - w / 2f, at.y - 30f - h, at.x - w / 2f, at.y + 30f + h + 4f)
+                    val slot = place("r:${region.code}", w, h, slots)
+                    if (slot >= 0) synchronized(LabelText.guard) { drawText(label, topLeft = Offset(slots[2 * slot], slots[2 * slot + 1])) }
+                }
             }
         }
-        // City names last, so no building ever covers them.
-        val cityLift = plinth
-        if (graphics.labels >= 1) map.cities.take(if (close) 40 else 14).forEach { (city, point) ->
-            if (!close && city.country != "USA") return@forEach
-            val floor = g.cityFloor(city.name, ground)
-            val at = p.project(point, floor) ?: return@forEach
-            val above = cityTops[city.name]?.let { Offset(at.x, it) }
-            drawCircle(Palette.primaryText.copy(alpha = 0.85f), radius = 2.5f, center = at)
-            val label = measurer.measure(city.name, TextStyle(color = Palette.primaryText.copy(alpha = 0.9f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, shadow = LabelShadow))
-            val anchorY = above?.y?.let { min(it, at.y) } ?: at.y
-            drawText(label, topLeft = Offset(at.x + 6f, anchorY - label.size.height / 2f))
-        }
-        if (graphics.cityLights && lit && (sun != null || t < 1)) drawCityLights(map.cities, p, light, cityLift, 1f)
     } else if (graphics.cityLights && lit && t < 1) {
         drawCityLights(map.cities, p, light, 0.0, 0.7f)
-    }
-    MapProfiler.mark("cities+buildings")
-    if (cam.zoom > 14 && graphics.labels >= 2) {
-        map.regions.forEach { region ->
-            val at = map.anchor(region.code)?.let { p.project(it, g.regionLift(region.code, ground)) } ?: return@forEach
-            val label = measurer.measure(region.name.uppercase(), TextStyle(color = Palette.secondary.copy(alpha = 0.8f), fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp, shadow = LabelShadow))
-            drawText(label, topLeft = at + Offset(-label.size.width / 2f, 30f))
-        }
     }
     MapProfiler.mark("labels+vignette")
 }
@@ -836,6 +1054,16 @@ internal object MapProfiler {
 }
 
 private val LabelShadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(0f, 1f), 3f)
+/** One weight for every map label; only region names are tracked small caps. */
+internal val CityStyle = TextStyle(color = Palette.primaryText.copy(alpha = 0.9f), fontSize = 10.sp, fontWeight = FontWeight.Medium, shadow = LabelShadow)
+internal val RegionStyle = TextStyle(color = Palette.secondary.copy(alpha = 0.8f), fontSize = 9.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.8.sp, shadow = LabelShadow)
+internal val BadgeStyle = TextStyle(color = Palette.ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+private val RivalRoof = Color(0xFF2A2F36)
+private val sectorTones = HashMap<String, (Color) -> Color>()
+/** A rival's building drawn in its sector's colour: the model's own colours pulled towards the sector palette. */
+private fun sectorTone(sector: String): (Color) -> Color = synchronized(sectorTones) {
+    sectorTones.getOrPut(sector) { val c = Sectors.color(sector); { m -> lerp(m, c, 0.4f) } }
+}
 private val RegionLand = Color(0xFF33475A)
 private val SkylineColor = Color(0xFF4A5A6C)
 
@@ -844,10 +1072,46 @@ internal class RegionSolid(val code: String, val ground: Path, val top: Path, va
     val bounds: Rect = top.getBounds()
 }
 
-/** A building standing on the map: ground offsets from the view centre, floor and top in pixels. */
+/**
+ * How big things stand on the ground, in metres. A voxel is this wide on every model, so a building covers the same
+ * ground at every zoom; only [MIN_UNIT] keeps one from shrinking to nothing when the map is far out.
+ */
+internal object WorldScale {
+    const val EARTH_RADIUS_M = 6_371_000.0
+    const val PLAYER_VOXEL_M = 2600f
+    const val CITY_VOXEL_M = 1950f
+    const val RIVAL_VOXEL_M = 1560f
+    /** The smallest a voxel is drawn, in pixels. */
+    const val MIN_UNIT = 1.0f
+
+    /** A division's lot beside its region's hub, east and north in metres, fixed by its industry's place in the sector list. */
+    fun playerLot(sector: String): Pair<Double, Double> {
+        val i = Sectors.order.indexOf(sector).let { if (it < 0) Sectors.order.size else it }
+        return ((i % 5 - 2) * 60_000.0) to -(35_000.0 + (i / 5) * 55_000.0)
+    }
+
+    /** A rival's lot north of the hub: [slot] is 0 to 7, four to a row. */
+    fun rivalLot(slot: Int): Pair<Double, Double> = ((slot % 4 - 1.5) * 50_000.0) to (35_000.0 + (slot / 4) * 35_000.0)
+
+    /** Rival slots by stable hash of each key, a taken slot giving way to the next free one. */
+    fun rivalSlots(keys: List<String>): Map<String, Int> {
+        val taken = BooleanArray(8)
+        val out = HashMap<String, Int>()
+        keys.sortedBy { stableHash(it) }.forEach { k ->
+            var slot = stableHash(k) % 8
+            var tries = 0
+            while (taken[slot] && tries < 8) { slot = (slot + 1) % 8; tries++ }
+            taken[slot] = true
+            out[k] = slot
+        }
+        return out
+    }
+}
+
+/** A building standing on the map: ground offsets from the view centre, floor and top in pixels, and its size in pixels per voxel. */
 internal class Building(
     val sector: String, val plants: Int, val gx: Float, val gy: Float, val half: Float, val floor: Double, val top: Double,
-    val lon: Double, val lat: Double, val key: String,
+    val lon: Double, val lat: Double, val key: String, val unit: Float = 1f,
 )
 
 internal class TopPoint(val x: Float, val y: Float, val h: Double)
@@ -872,6 +1136,19 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
 
     /** The zoom against the scenario's framing, unclamped: 1 at the framing, under 1 further out. */
     val zoomRatio: Double = cam.zoom / MapCamera.scenario(size, map).zoom
+
+    /** Pixels one metre of ground covers at this camera. */
+    val pxPerMetre: Double = p.r / WorldScale.EARTH_RADIUS_M
+
+    /** Pixels a voxel of [metres] covers on the ground, never under the minimum that keeps a building visible. */
+    fun unit(metres: Float): Float = max((metres * pxPerMetre).toFloat(), WorldScale.MIN_UNIT)
+
+    /** The ground offset of a spot [east] and [north] metres from a hub at radians ([lon], [lat]); the same spot at every camera. */
+    fun lot(lon: Double, lat: Double, east: Double, north: Double): Offset {
+        val dLat = north / WorldScale.EARTH_RADIUS_M
+        val dLon = east / (WorldScale.EARTH_RADIUS_M * kotlin.math.cos(lat))
+        return p.ground(lon + dLon, lat + dLat)
+    }
 
     /** The height of the scenario's base in pixels. */
     val plinth: Double get() = 8.0 * scale * p.t
@@ -954,17 +1231,15 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
     fun buildings(divisions: List<MapDivisionDto>, heights: Map<String, Double>): List<Building> {
         val key = divisions to heights
         if (buildingsKey?.first !== divisions || buildingsKey?.second !== heights) {
-            val perRegion = HashMap<String, Int>()
+            val u = unit(WorldScale.PLAYER_VOXEL_M)
             buildingsValue = divisionSlots(divisions).mapNotNull { (region, sector, plants) ->
                 val anchor = map.anchor(region) ?: return@mapNotNull null
-                val ground = p.ground(anchor.lon[0], anchor.lat[0])
+                val (east, north) = LotLand.dry(map, region, WorldScale.playerLot(sector), LotLand.PLAYER_RADIUS_M)
+                val ground = lot(anchor.lon[0], anchor.lat[0], east, north)
                 if (!ground.isSpecified) return@mapNotNull null
-                val i = perRegion.merge(region, 1, Int::plus)!! - 1
-                val gx = ground.x + (i % 3 - 1) * 34f * scale
-                val gy = ground.y + (18f + (i / 3) * 30f) * scale
                 val floor = regionLift(region, heights)
-                val h = (12 + 7 * sqrt(plants.toDouble())) * scale
-                Building(sector, plants, gx, gy, 7.5f * scale, floor, floor + h, anchor.lon[0], anchor.lat[0], "$region/$sector")
+                val h = (10 + 6 * sqrt(plants.toDouble())) * u
+                Building(sector, plants, ground.x, ground.y, 4f * u, floor, floor + h, anchor.lon[0], anchor.lat[0], "$region/$sector", u)
             }.sortedBy { it.gy }
             buildingsKey = key
         }
@@ -1028,19 +1303,22 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
      */
     fun rivalBuildings(plants: List<uniffi.cw_ffi.MapPlantDto>, heights: Map<String, Double>): List<Building> {
         if (rivalsKey?.first !== plants || rivalsKey?.second !== heights) {
+            val u = unit(WorldScale.RIVAL_VOXEL_M)
             rivalsValue = plants.filter { !it.player }
                 .groupBy { Triple(it.region, it.industry, it.firm) }
                 .map { (key, items) -> key to items.sumOf { it.blocks.toInt() } }
                 .groupBy { it.first.first }
                 .flatMap { (region, firms) ->
                     val anchor = map.anchor(region) ?: return@flatMap emptyList()
-                    val ground = p.ground(anchor.lon[0], anchor.lat[0])
-                    if (!ground.isSpecified) return@flatMap emptyList()
-                    firms.sortedByDescending { it.second }.take(4).mapIndexed { i, (key, blocks) ->
-                        val gx = ground.x + (i - 1.5f) * 26f * scale
-                        val gy = ground.y - (14f + (i % 2) * 10f) * scale
+                    val top = firms.sortedByDescending { it.second }.take(4)
+                    val slots = WorldScale.rivalSlots(top.map { "${it.first.first}/${it.first.second}/${it.first.third}" })
+                    top.mapNotNull { (key, blocks) ->
+                        val id = "${key.first}/${key.second}/${key.third}"
+                        val (east, north) = LotLand.dry(map, region, WorldScale.rivalLot(slots.getValue(id)), LotLand.RIVAL_RADIUS_M)
+                        val ground = lot(anchor.lon[0], anchor.lat[0], east, north)
+                        if (!ground.isSpecified) return@mapNotNull null
                         val floor = regionLift(region, heights)
-                        Building(key.second, blocks, gx, gy, 6f * scale, floor, floor + 10 * scale, anchor.lon[0], anchor.lat[0], "$region/${key.second}/${key.third}")
+                        Building(key.second, blocks, ground.x, ground.y, 3f * u, floor, floor + 10 * u, anchor.lon[0], anchor.lat[0], id, u)
                     }
                 }
                 .sortedBy { it.gy }
@@ -1080,25 +1358,37 @@ internal class MapGeometry(val map: WorldMap, val cam: MapCamera, val size: Size
 
     private var overlayKey: List<Any?>? = null
     private var overlayValue: OverlayGeometry? = null
+    private var roadKey: Pair<Boolean, Boolean>? = null
+    private var roadValue: List<Polyline> = emptyList()
+
+    /** The interstates as screen polylines depend only on this camera, not on the week's lanes, so a new week reuses them. */
+    private fun roadLinesFor(wanted: Boolean, raised: Boolean): List<Polyline> {
+        if (!wanted) return emptyList()
+        if (roadKey != wanted to raised) {
+            roadValue = buildPolylines(p, map.interstates, if (raised) plinth else 0.0, size)
+            roadKey = wanted to raised
+        }
+        return roadValue
+    }
 
     /** What the moving layer needs, rebuilt only when the camera or the data under it changes. */
     fun overlay(
         lanes: List<uniffi.cw_ffi.LaneDto>, divisions: List<MapDivisionDto>, selected: String?, heights: Map<String, Double>,
-        graphics: GraphicsConfig, freightLayer: Boolean, density: Float = 1f,
+        graphics: GraphicsConfig, freightLayer: Boolean, density: Float = 1f, firmSector: Map<ULong, String> = emptyMap(),
     ): OverlayGeometry {
-        val key = listOf(lanes, divisions, selected, heights, graphics, freightLayer, density)
+        val key = listOf(lanes, divisions, selected, heights, graphics, freightLayer, density, firmSector)
         val held = overlayValue
         if (held != null && overlayKey?.let { k -> k.size == key.size && k.indices.all { k[it] === key[it] || k[it] == key[it] } } == true) return held
         val raised = graphics.extrude && p.t > 0.05 && !graphics.earth
         val ground = if (raised) heights else FlatGround
         val laneCount = if (graphics.traffic >= 2 || freightLayer) 120 else if (graphics.traffic == 1) 60 else 0
-        val tracks = if (p.t > 0.5 && laneCount > 0) laneTracks(map, p, lanes, laneCount) else emptyList()
-        val roadLines = if (graphics.traffic > 0 && detailLevel == MapDetail.High && cam.zoom > 9) buildPolylines(p, map.interstates, if (raised) plinth else 0.0, size) else emptyList()
+        val tracks = if (p.t > 0.5 && laneCount > 0) laneTracks(map, p, lanes, laneCount, firmSector) else emptyList()
+        val roadLines = roadLinesFor(graphics.traffic > 0 && detailLevel == MapDetail.High && cam.zoom > 9, raised)
         val spots = if (graphics.buildings > 0 && closeUp && p.t > 0.5) buildings(divisions, ground).map { b ->
             val base = p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor)
             // The rooftop light and smoke sit on the model's top.
             val name = VoxelModels.sized(b.sector, b.plants)
-            val unit = (1.2f * scale * density).coerceIn(1.4f, 7f)
+            val unit = b.unit
             val top = if (VoxelModels.has(name)) p.lift(b.gx.toDouble(), b.gy.toDouble(), b.floor + VoxelModels.lift(name, unit)) else p.lift(b.gx.toDouble(), b.gy.toDouble(), b.top)
             BuildingSpot(base, top, Sectors.color(b.sector), smokes(b.sector), (stableHash(b.key) % 1000) / 1000f)
         } else emptyList()
@@ -1187,9 +1477,9 @@ private fun MapLegend(layer: MapLayer, modifier: Modifier) {
 }
 
 @Composable
-private fun MapButton(symbol: String, onClick: () -> Unit) {
+private fun MapButton(symbol: String, description: String, onClick: () -> Unit) {
     Box(Modifier.size(40.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        PixelIcon(symbol, size = 22.dp, tint = Palette.primaryText)
+        PixelIcon(symbol, size = 22.dp, tint = Palette.primaryText, description = description)
     }
 }
 
@@ -1351,6 +1641,7 @@ fun TimeBar(store: GameStore) {
         }
         Row(
             Modifier.clip(Pixel.small).background(Palette.panelRaised).clickable { open = !open }
+                .described(if (open) "Time controls, open. Tap to fold." else "Time controls. Tap to open.", androidx.compose.ui.semantics.Role.Button)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),

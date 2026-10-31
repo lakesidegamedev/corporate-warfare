@@ -9,6 +9,7 @@
 
 pub mod balance;
 pub mod cast;
+pub mod chapters;
 pub mod currency;
 pub mod custom;
 pub mod events;
@@ -16,21 +17,27 @@ pub mod firms;
 pub mod geography;
 pub mod logistics;
 pub mod logo;
+pub mod opening_macro;
 pub mod price_paths;
+pub mod timeline;
 
 use std::collections::BTreeMap;
 
 use cw_core::hash::{CanonicalHasher, DOMAIN_STATE};
 use serde::{Deserialize, Serialize};
 
+/// People in the cast before 1.9; see `Dataset::legacy_hash`.
+const CAST_BEFORE_1_9: usize = 12;
+
 pub use balance::{Balance, BalanceOverlay, Product, ProductKind, Recipe, StorageClass};
-pub use cast::{Person, Role, Temperament};
+pub use cast::{Mood, Person, Role, Temperament};
 pub use currency::{CountryDef, CurrencyDef, CurrencySet, PegDef};
 pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetting};
 pub use events::EventCard;
 pub use firms::{Archetype, ExtraPlant, SeedFirm};
 pub use geography::{Conditions, Geography, Lane, Region, StateInfo};
 pub use logistics::{GatewayLink, LogisticsData, LogisticsOverlay, ModeDef, SeaSystem};
+pub use opening_macro::OpeningMacro;
 
 pub const BALANCE_JSON: &str = include_str!("../../../content/initial-balance.json");
 pub const GEOGRAPHY_JSON: &str = include_str!("../../../content/geography/regions.json");
@@ -56,6 +63,8 @@ pub struct ScenarioContent {
     pub balance_json: Option<&'static str>,
     /// Countries and currencies, for a scenario that spans more than one money.
     pub currencies_json: Option<&'static str>,
+    /// Inflation and interest rates of the period the scenario opens in.
+    pub macro_json: &'static str,
     /// The region a guided career's opening company is in, and the strategy it runs there.
     pub player_region: &'static str,
     pub player_recipe: &'static str,
@@ -70,6 +79,7 @@ pub const SCENARIO_CONTENT: [ScenarioContent; 4] = [
         logistics_json: None,
         balance_json: None,
         currencies_json: None,
+        macro_json: include_str!("../../../content/scenarios/great-lakes-2000/macro.json"),
         player_region: "OH-CEN",
         player_recipe: "farm",
     },
@@ -84,6 +94,7 @@ pub const SCENARIO_CONTENT: [ScenarioContent; 4] = [
             "../../../content/scenarios/texas-1981/balance.json"
         )),
         currencies_json: None,
+        macro_json: include_str!("../../../content/scenarios/texas-1981/macro.json"),
         player_region: "TX-PMB",
         player_recipe: "oil_wells",
     },
@@ -98,6 +109,7 @@ pub const SCENARIO_CONTENT: [ScenarioContent; 4] = [
             "../../../content/scenarios/silicon-valley-1995/balance.json"
         )),
         currencies_json: None,
+        macro_json: include_str!("../../../content/scenarios/silicon-valley-1995/macro.json"),
         player_region: "CA-SJC",
         player_recipe: "hardware_maker",
     },
@@ -114,6 +126,7 @@ pub const SCENARIO_CONTENT: [ScenarioContent; 4] = [
         currencies_json: Some(include_str!(
             "../../../content/scenarios/ruhr-rhine-1991/currencies.json"
         )),
+        macro_json: include_str!("../../../content/scenarios/ruhr-rhine-1991/macro.json"),
         player_region: "DE-RUH",
         player_recipe: "steel_mill",
     },
@@ -230,6 +243,8 @@ pub struct Dataset {
     pub currencies: Option<CurrencySet>,
     /// The currency index of every region, parallel to `regions`; empty with one money.
     pub region_currency: Vec<u8>,
+    /// The inflation and interest rates the scenario opens with.
+    pub opening_macro: OpeningMacro,
     pub hash: String,
 }
 
@@ -262,7 +277,15 @@ impl Dataset {
         SCENARIO_CONTENT
             .iter()
             .filter_map(|content| Dataset::load_scenario(content.id).ok())
-            .find(|dataset| dataset.hash == hash)
+            .find(|dataset| dataset.hash == hash || dataset.legacy_hash() == hash)
+    }
+
+    /// The hash this dataset had before the 1.9 cast grew from twelve people to forty: the same
+    /// content with only the first twelve people folded in. People are appended to the cast and
+    /// never change, so a save written before the growth names this hash and still loads (the
+    /// people are content, not part of a save).
+    pub fn legacy_hash(&self) -> String {
+        self.hash_with_cast(CAST_BEFORE_1_9)
     }
 
     /// Load one scenario's pinned in-repo dataset and validate it. A scenario with no content
@@ -363,6 +386,8 @@ impl Dataset {
                 region_currency.push(index as u8);
             }
         }
+        let opening_macro = OpeningMacro::parse(content.macro_json)
+            .map_err(|error| vec![format!("{} {error}", content.id)])?;
         let public_rail = flags(&logistics.public_rail);
         let public_ports = flags(&logistics.public_ports);
         let dataset = Dataset {
@@ -391,6 +416,7 @@ impl Dataset {
             public_ports,
             currencies,
             region_currency,
+            opening_macro,
             hash: String::new(),
         };
         let errors = dataset.validate();
@@ -885,6 +911,10 @@ impl Dataset {
     }
 
     pub fn compute_hash(&self) -> String {
+        self.hash_with_cast(self.cast.len())
+    }
+
+    fn hash_with_cast(&self, cast_people: usize) -> String {
         let mut hasher = CanonicalHasher::new(DOMAIN_STATE);
         hasher.string("cw-dataset-v1");
         for product in &self.products {
@@ -993,7 +1023,7 @@ impl Dataset {
                 }
             }
         }
-        for person in &self.cast {
+        for person in self.cast.iter().take(cast_people) {
             hasher
                 .string(&person.id)
                 .string(&person.scenario)
@@ -1028,6 +1058,9 @@ impl Dataset {
                 hasher.u8(*region);
             }
         }
+        // The opening macro data is deliberately outside the hash: it only sets where the cycle
+        // starts and how opening wages fade, never a row a save indexes into, so saves written
+        // before it keep loading.
         hasher.finish_hex()
     }
 }
@@ -1147,6 +1180,18 @@ mod tests {
             dataset.lane_km("OH-CEN", "MI-DET"),
             dataset.lane_km("MI-DET", "OH-CEN")
         );
+    }
+
+    #[test]
+    fn a_save_naming_the_twelve_person_hash_still_finds_its_dataset() {
+        let dataset = Dataset::load().unwrap();
+        assert!(dataset.cast.len() > CAST_BEFORE_1_9);
+        let legacy = dataset.legacy_hash();
+        assert_ne!(legacy, dataset.hash, "the grown cast moves the hash");
+        let found = Dataset::for_hash(&legacy).expect("the old hash resolves");
+        assert_eq!(found.hash, dataset.hash, "and loads the current content");
+        assert!(Dataset::for_hash(&dataset.hash).is_some());
+        assert!(Dataset::for_hash("not a hash").is_none());
     }
 
     #[test]

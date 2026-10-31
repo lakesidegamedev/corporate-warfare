@@ -235,7 +235,7 @@ enum FreightArcs {
 
 /// Corridor freight at a glance, then the lanes, then a simple panel for the lane tapped.
 struct FreightPanelView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let focus: String?
     @Binding var picked: String?
 
@@ -302,13 +302,20 @@ extension AppStore {
     func freightCompact(_ cents: Int64) -> String { Format.moneyCompact(cents, currency: selectedFirmDto?.currency ?? "") }
 }
 
-private struct LaneDetail: View {
-    @EnvironmentObject private var store: AppStore
+struct LaneDetail: View {
+    @Environment(AppStore.self) private var store
     let lane: LaneDto
-    @State private var lots: Double = 100
-    @State private var weeks: Double = 13
+    @State private var lots: Double
+    @State private var weeks: Double
     @State private var quote: ReserveQuoteDto?
     @State private var rejection: CommandRejection?
+
+    /// The brief opens a lane with the reservation it suggests already set.
+    init(lane: LaneDto, initialLots: Double = 100, initialWeeks: Double = 13) {
+        self.lane = lane
+        _lots = State(initialValue: initialLots)
+        _weeks = State(initialValue: initialWeeks)
+    }
 
     private var mine: [LaneContractDto] {
         store.laneContracts.filter { $0.mine && $0.a == lane.a && $0.b == lane.b && $0.mode == lane.mode }
@@ -432,7 +439,7 @@ extension BuildHandoff: Equatable {
 /// A division's Shipping panel: its freight bill in plain words, then the route policy picker.
 /// Pass nil for the whole company (the CEO Office).
 struct DivisionShipping: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let division: DivisionDto?
     @State private var summary: ShippingSummaryDto?
     @State private var rejection: CommandRejection?
@@ -474,7 +481,7 @@ struct DivisionShipping: View {
                     recipe: handoff.suggestion.recipe,
                     blocks: UInt32(clamping: handoff.suggestion.lots)
                 )
-                .environmentObject(store)
+                .environment(store)
             }
         }
     }

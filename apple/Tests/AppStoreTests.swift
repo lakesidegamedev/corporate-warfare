@@ -54,4 +54,20 @@ final class AppStoreTests: XCTestCase {
         await store.advance(weeks: 1)
         XCTAssertEqual(store.overview?.tick, 1, "the session remains usable after rejection")
     }
+
+    func testChoosingTheBoardsGoalSendsChooseMandate() async throws {
+        let store = AppStore(saveManager: SaveManager(directory: directory))
+        await store.newCareer(guided: true, fiveYear: false, seed: 7)
+        await store.advance(weeks: 2)
+        await store.continueCareer()
+        await store.refreshHall()
+        let offer = try XCTUnwrap(store.boardOffer, "the board offers goals in the first weeks")
+        XCTAssertEqual(CommandJSON.command("ChooseMandate", ["firm": UInt64(42), "pick": 1]).contains("\"ChooseMandate\""), true)
+        let rejection = await store.chooseMandate(firm: offer.firm, pick: 1)
+        XCTAssertNil(rejection)
+        await store.refreshHall()
+        let active = try XCTUnwrap(store.activeMandate)
+        XCTAssertEqual(active.mandate.key, offer.offered[1].key)
+        XCTAssertNil(store.boardOffer)
+    }
 }

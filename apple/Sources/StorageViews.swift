@@ -32,7 +32,7 @@ struct StorageLines: View {
 /// The stock target of one division: weeks of inputs to keep, one slider. Zero keeps the company
 /// default. Applies to every plant of the division.
 struct DivisionStockTarget: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let division: DivisionDto
     @State private var weeks: Double
     @State private var rejection: CommandRejection?
@@ -78,7 +78,7 @@ struct DivisionStockTarget: View {
 
 /// Buy a good on the exchange into storage, and release what is held, from the good's market card.
 struct StoreGoodPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let line: CommodityDto
     @State private var regionCode: String?
     @State private var lots: Double = 100

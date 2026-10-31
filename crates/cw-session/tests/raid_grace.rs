@@ -18,6 +18,7 @@ fn raids_on_player(scenario: &str, seed: u64, weeks: u32) -> usize {
         prices: PriceSetup {
             scenario_id: scenario.to_owned(),
             path: None,
+            ..Default::default()
         },
     })
     .unwrap();

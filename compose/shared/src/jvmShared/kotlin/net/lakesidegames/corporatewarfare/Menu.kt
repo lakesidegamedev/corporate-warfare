@@ -57,6 +57,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.drawText
 import uniffi.cw_ffi.NewGameDto
+import uniffi.cw_ffi.chiefChoices
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.size
 import uniffi.cw_ffi.ScenarioDto
 import uniffi.cw_ffi.scenarios
 
@@ -65,6 +68,7 @@ object Images {
     var decode: (ByteArray) -> ImageBitmap? = { null }
     private val cache = mutableMapOf<String, ImageBitmap?>()
 
+    @Synchronized
     fun load(name: String): ImageBitmap? = cache.getOrPut(name) {
         val bytes = Images::class.java.getResourceAsStream(if ('.' in name) "/$name" else "/$name.png")?.use { it.readBytes() } ?: return@getOrPut null
         runCatching { decode(bytes) }.getOrNull()
@@ -77,6 +81,13 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
     var setup by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
+    var careers by remember { mutableStateOf(false) }
+    val settings = LocalAppSettings.current
+    if (careers) {
+        BackAction { careers = false }
+        CareerListScreen(settings?.careers.orEmpty()) { careers = false }
+        return
+    }
     if (editing) {
         ScenarioEditorScreen(store, baseId = null, existing = null, onBack = { editing = false })
         return
@@ -89,6 +100,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
         NewGameScreen(store, onBack = { setup = false })
         return
     }
+    LaunchedEffect(Unit) { StartupTimeline.menuShown() }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF05090E))) {
         val wide = maxWidth >= 900.dp
         GlobeBackdrop(Modifier.fillMaxSize(), offsetX = if (wide) 0.22f else 0f)
@@ -116,6 +128,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
             }
             MenuButton("New game", primary = !store.hasAutosave) { setup = true }
             if (store.hasAutosave) MenuButton("Load game") { loading = true }
+            if (settings?.careers?.isNotEmpty() == true) MenuButton("Hall of Careers") { careers = true }
             MenuButton("Scenario editor") { editing = true }
             MenuButton("Settings", onClick = onSettings)
             if (onQuit != null) MenuButton("Quit", onClick = onQuit)
@@ -286,7 +299,11 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
     var economy by remember { mutableStateOf(Economy.Historic) }
     // Null means the scenario's own default.
     var pricePathPick by remember { mutableStateOf<PricePath?>(null) }
+    var history by remember { mutableStateOf(ScenarioHistory.Historical) }
     var capital by remember { mutableStateOf(capitalOf(Level.Standard)) }
+    val chiefs = remember { chiefChoices() }
+    var chiefPick by remember { mutableStateOf(0) }
+    var chiefName by remember { mutableStateOf("") }
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -391,6 +408,12 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                             val picked = pricePathPick ?: fallback
                             Options(PricePath.entries, picked, { it.title + if (it == fallback) " (scenario default)" else "" }, { it.note }, wide) { pricePathPick = it }
                         }
+                        Section("Scenario history") {
+                            Options(ScenarioHistory.entries, history, { it.title }, { it.note }, wide) { history = it }
+                        }
+                        Section("Your chief executive") {
+                            ChiefPicker(chiefs, chiefPick, chiefName, { chiefPick = it }, { chiefName = it.take(40) })
+                        }
                         Section("Starting capital") {
                             ValueSlider(
                                 capital, { capital = it }, 1_000_000.0..20_000_000.0, 250_000.0,
@@ -436,6 +459,10 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                                 economy = economy.key,
                                 startingCapitalCents = (capital * 100).toLong(),
                                 pricePath = pricePathPick?.key ?: "",
+                                timeline = history.key,
+                                chiefName = chiefName.trim(),
+                                chiefPortrait = chiefs.getOrNull(chiefPick)?.id ?: "",
+                                chiefTemperament = chiefs.getOrNull(chiefPick)?.temperament ?: "",
                             ),
                         )
                     }
@@ -553,3 +580,34 @@ private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Mod
     }
 }
 
+
+/** The new-game screen's chief executive: a few portraits from the generated kit, one for each
+ *  temperament, an optional name, and the temperament as a line of flavour. */
+@Composable
+internal fun ChiefPicker(
+    choices: List<uniffi.cw_ffi.PersonDto>,
+    picked: Int,
+    name: String,
+    onPick: (Int) -> Unit,
+    onName: (String) -> Unit,
+) {
+    if (choices.isEmpty()) return
+    val current = choices[picked.coerceIn(0, choices.lastIndex)]
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        choices.forEachIndexed { i, c ->
+            Box(
+                Modifier.clip(Pixel.small)
+                    .border(2.dp, if (i == picked) Palette.gold else Palette.panelRaised, Pixel.small)
+                    .clickable { onPick(i) }
+                    .padding(3.dp),
+            ) { PixelPortrait(c.id, size = 52.dp) }
+        }
+    }
+    Text("${temperamentLabel(current.temperament)}: ${temperamentNote(current.temperament)}", color = Palette.secondary, fontSize = 12.sp)
+    OutlinedTextField(
+        name, onName,
+        label = { Text("Name (blank keeps ${current.name})") },
+        singleLine = true,
+        modifier = Modifier.textEntry().widthIn(max = 360.dp),
+    )
+}

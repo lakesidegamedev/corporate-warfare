@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -174,8 +175,9 @@ fun TutorialPanel(compact: Boolean, modifier: Modifier = Modifier, researchHint:
             modifier.background(Palette.panelRaised).padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(20.dp).clip(Pixel.small).background(Palette.gold), contentAlignment = Alignment.Center) {
-                Text("$number", color = Palette.ink, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            // Grows with large text instead of clipping the number.
+            Box(Modifier.sizeIn(minWidth = 20.dp, minHeight = 20.dp).clip(Pixel.small).background(Palette.gold).padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
+                Text("$number", color = Palette.ink, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
             }
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {

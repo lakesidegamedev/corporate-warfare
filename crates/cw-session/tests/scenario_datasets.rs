@@ -17,6 +17,7 @@ fn config(seed: u64, kind: ScenarioKind, scenario: &str) -> ScenarioConfig {
         prices: PriceSetup {
             scenario_id: scenario.to_owned(),
             path: Some(PricePath::HistoricalVariance),
+            ..Default::default()
         },
     }
 }
@@ -58,27 +59,46 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// states, carved-out divisions began taking their contracts, and contracts began shipping from
 /// where the seller makes the good, and again when freight rates and service references began
 /// following the price index, rivals began sizing pipelines on their own lane shipments, and
-/// carve-outs began ending purchases nothing in the state uses.
+/// carve-outs began ending purchases nothing in the state uses, and in 1.9 when save schema 3
+/// added the scenario timeline cursor (four empty bytes in every world) and Great Lakes began
+/// playing its dated history by default (inside the first 52 weeks: the technology bust in week 15
+/// and the notice of the 2001 recession), and in 1.9 when rival raid campaigns began to be paid
+/// out of earnings and rivals stopped building for imports that a plant under construction
+/// already covers (the fixture path pinned below does not move: neither rule bites in 26 weeks),
+/// and in 1.9 when scenarios began opening with the rates and inflation of their own period (Great
+/// Lakes 2000: inflation 3.4 percent not 3, policy rate 6.5 percent not 6, expected inflation and
+/// opening loan rates to match; this moves the fixture path too, from the first week), and in 1.9
+/// when companies gained executives (rivals hire a chief financial, operating or logistics officer
+/// when it pays, which changes their loans, builds and freight inside the first year, and the pool
+/// of people to hire is drawn in week one and hashed), and in 1.9 when the outside account began
+/// selling on its stock to the rest of the world a thirteenth a week (from week two, so the
+/// fixture path moves), rivals began closing idle carriers and netting carrier builds, and a
+/// restructuring began mothballing plants that lose money and lasting its full year, and in 1.9
+/// when rivals began long plans against a target's shares and workers began to move between
+/// regions (the migration references are taken in week one and hashed, and the exchange now trades
+/// against real holders), so the fixture path moves from the first week. In 1.9 float trades also
+/// settle at once along a price curve (rival long plans buy this way from week one of a plan), which
+/// moves the great-lakes seeds 1 to 4 pins; the fixture path of seed 5 and the Swift pin are unchanged.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
     assert_eq!(data.scenario_id, "great-lakes-2000");
     assert_eq!(
         data.hash,
-        "51e3b2ad8be01df2f07096fbd80e476005521df50f1352704f1db3a7b901d68e"
+        "91550bd7d13a66e567db06957429a6dc33e85e9902bc43fdedd50473d45fc29e"
     );
     let pins = [
         (
             1u64,
-            "96caa3b55f5c31dea62d8be95f59c459bfe344e54ba14a9bad65e57cd73b58a8",
+            "9e2ff9a758bf1fcdaea02b2fad118c91f1e752d8870f812e868fea13e35cf007",
         ),
         (
             2,
-            "303114467d7ee303b6bc9a9dd22f5d526f1221b978cabd7384a870f36cd06b19",
+            "86e1fd48466e8018124ab5662f53e0e31ff6376a5f568888f9d6e2062dd338d9",
         ),
         (
             3,
-            "c61a032134fe759337168523a48638fc017a6163a6c18f44e5332304d60a8ebb",
+            "2ed035714f65fd3f1442c4cc345990f0e067b4cac207362ccd39011cbb477e2d",
         ),
     ];
     for (seed, hash) in pins {
@@ -90,12 +110,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "92a86ddc2aba951647022fb15ddb73aa4f56531f0c8bd97b06f881c8be63c637"
+        "0903cef2c5aec63802a01bdad265aa1f89c9e207020aea1d3200c03bcc28fe66"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "b581d47a341d75a104f32a5fef47e6a518b693d0d2d1ba0f811ef4863c9ed1a0"
+        "ad658f44de7b5e19362029eb7996a204c533a4a4ad7c19a882019007701bd204"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();

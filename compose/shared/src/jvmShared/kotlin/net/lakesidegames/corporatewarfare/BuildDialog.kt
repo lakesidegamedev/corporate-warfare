@@ -100,9 +100,9 @@ fun BuildDialog(store: GameStore, board: RegionBoardDto, initialRecipe: Int? = n
                         item {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Plants", color = Palette.secondary, modifier = Modifier.weight(1f))
-                                OutlinedButton(onClick = { if (blocks > 1) blocks-- }) { PixelIcon("minus", size = 16.dp, tint = Palette.primaryText) }
+                                OutlinedButton(onClick = { if (blocks > 1) blocks-- }) { PixelIcon("minus", size = 16.dp, tint = Palette.primaryText, description = "Fewer plants") }
                                 Text("  $blocks  ", color = Palette.primaryText, fontWeight = FontWeight.SemiBold)
-                                OutlinedButton(onClick = { if (blocks < 20) blocks++ }) { PixelIcon("plus", size = 16.dp, tint = Palette.primaryText) }
+                                OutlinedButton(onClick = { if (blocks < 20) blocks++ }) { PixelIcon("plus", size = 16.dp, tint = Palette.primaryText, description = "More plants") }
                             }
                         }
                         val current = quote

@@ -73,10 +73,12 @@ fun StatGroup(headline: Stat?, stats: List<Stat>) {
         stats.chunked(3).forEach { row ->
             Row(Modifier.fillMaxWidth()) {
                 row.forEach { stat ->
-                    Column(Modifier.weight(1f)) {
-                        Text(stat.label, color = Palette.secondary, fontSize = 11.sp, maxLines = 1)
-                        Text(stat.value, color = stat.tone, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                        stat.note?.let { Text(it, color = Palette.secondary, fontSize = 11.sp, maxLines = 1) }
+                    Explain(Words.about(stat.label), Modifier.weight(1f).padding(end = 6.dp)) {
+                        Column {
+                            Text(stat.label, color = Palette.secondary, fontSize = 11.sp, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(stat.value, color = stat.tone, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            stat.note?.let { Text(it, color = Palette.secondary, fontSize = 11.sp, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
+                        }
                     }
                 }
                 repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
@@ -132,7 +134,7 @@ fun SectorBadge(sector: String, size: Int = 26) {
 @Composable
 fun BarRow(name: String, cents: Long, scale: Double, tint: Color) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Text(name, color = Palette.primaryText, fontSize = 12.sp, modifier = Modifier.width(112.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Explain(Words.about(name), Modifier.width(112.dp)) { Text(name, color = Palette.primaryText, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         Box(Modifier.weight(1f).height(8.dp)) {
             val share = (kotlin.math.abs(cents.toDouble()) / scale).coerceIn(0.0, 1.0).toFloat()
             Box(Modifier.fillMaxWidth(share.coerceAtLeast(0.01f)).height(8.dp).clip(Pixel.small).background(tint))

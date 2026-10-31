@@ -53,12 +53,23 @@ Tie means status quo. Public minority holders can vote against a controller's co
 
 ## Shares, payouts and values
 
-Weekly exchange uses external float plus explicit holder orders. Outstanding treasury
-shares have zero votes/dividends. Quotes: fair value/share +/-2 percent spread; external
-weekly executable float is 2 percent of freely held shares. Price impact = 10 percent
-of requested quantity / weekly float, capped at 25 percent. Quote reserves cash/shares,
-expires next boundary and revalidates solvency/ownership. Same beneficial owner cannot
-match itself. Selling below a prior cost is a realised investor loss, not company expense.
+Trading against the public float settles at once, when the command runs (`PlaceShareOrder`,
+the same command and rules for the player and for rivals). The float is the shares outside
+investors hold. Shares come from, and go to, real outside holders (a buy takes the largest lot
+first; a sale goes to the outside investor with the most money), never invented, and cash moves
+once, with no reserve. Treasury shares have zero votes/dividends. With `F` the shares the public
+holds and `m` the mark, the marginal price after `x` shares have traded is `m x (1 + x / F)` for
+a buy and `m x (1 - x / 2F)` for a sale, never under half the mark. The trade pays the area under
+that line (the average along the curve), within a cent a share. A buy is capped at `F`; a sale at
+the seller's holding and at what the buyers can pay. An optional limit price (0 for none) stops the
+walk where the next share would pass it, so the order fills in part. The mark then moves to the
+final marginal price and relaxes toward fair value through the weekly valuation (one eighth a
+week). `quote_shares` (FFI `quote_shares`) gives the same numbers without trading: shares,
+average price, total, final price, the most the holder could trade and the stake afterwards. A
+buy checks cash, numeraire holder and the ownership cycle; stakes, disclosure lines and control
+follow from the holdings. Resting orders from older saves are still cleared at the weekly close
+(company against company, then the float at two percent a week) and expire after a week. Selling
+below a prior cost is a realised investor loss, not company expense.
 
 Issue shares at >=90 percent of fair price with a funding buyer, board authority and
 100 percent paid cash at settlement. Show exact dilution before acceptance. IPO costs
@@ -119,7 +130,14 @@ permits asset sale, equity raise or approved rescheduling. After grace, enter re
 secured claims paid from collateral, administrative/payroll claims next, unsecured
 including deposits/bonds proportionately next, equity residual last. No assets distributed
 before claim resolution. Restructuring offers creditors 50 percent principal repayment
-with four-quarter schedule; accept only if estimated liquidation recovery is lower.
+with four-quarter schedule; accept only if estimated liquidation recovery is lower, and only
+against a plan: every operating plant that does not pay its way at reference prices is mothballed
+(output sold less inputs, payroll at the firm's own wages, upkeep and land; a carrier plant is
+judged on whether it moves a quarter of its capacity, a terminal is not judged alone), so the firm
+returns after its year with a smaller cost base. A firm whose judged plants all lose money has no
+plan and is liquidated; the player's request to restructure is refused for the same reason. The
+firm stays in restructuring for its full 52 weeks: a bill it defers meanwhile joins its overdue
+payables and does not turn the plan back into a four-week grace and a second haircut.
 Otherwise liquidate assets at 40 percent carrying value through finite outside buyer
 funds. Insufficient buyers delay sale, never mint cash. Parent guarantee shortfalls become
 claims against guarantor up to the contracted cap. No implied guarantee for siblings.
@@ -177,16 +195,148 @@ pays the defender half their book value. A group cannot raid itself. The 1.7 rai
 rules below replace the one-plant floor and the cooldown. Rival AI raids when the
 chance-weighted three-year contribution of the captured plants exceeds the campaign and price.
 
-## Board objectives (1.2.0)
+## Board objectives (1.2.0), replaced in 1.9
 
-Implemented in `crates/cw-sim/src/economy/objectives.rs`. In the first week of each quarter the
-board of the player's primary company sets one goal, rotating: enter a new region; lift average
-weekly operating profit over four weeks to a quarter above the current level (at least $5,000
-more); take ten points more of the home division's market (at most 95 percent); expand into
-another state. A goal met before its thirteen weeks run out pays a management bonus moved from
-the company to the investor: two percent of the company's quarter of operating profit, at
-least $25,000, never more than its cash.
+The 1.2.0 quarterly objectives (`crates/cw-sim/src/economy/objectives.rs`) are retired. Their
+goals live on as mandate kinds below, so there is one goal system, not two. The old types remain
+in the file only because `World.objective` and `World.objective_history` are part of the save
+layout; nothing writes them, and a goal an older save still carries is cleared, unpaid and
+unpenalised, on the first week played. The FFI calls `objective()` and `objective_history()` keep
+their shape and now report the mandate in force and the closed mandates.
 
+## Chapters and mandates (1.9)
+
+Implemented in `crates/cw-sim/src/economy/chapters.rs` and `achievements.rs`; numbers in
+`content/mandates.json`; names in `content/scenarios/<id>/chapters.json`.
+
+**Chapters.** Every 52 weeks of a career is a chapter: chapter `n` runs from week `52(n-1)+1` to
+week `52n`. Its name is "Chapter n: " plus the era name of the first timeline event that plays in
+it (the event's date, as moved by Shuffled mode), else the next generic name from the scenario's
+list. Eras and generic names are fictional and plain; a scenario with no file uses a neutral list.
+
+**Offers.** In the first week of a chapter the board of every operating company that runs plants
+and is not a state firm offers three mandates. The player's board is the primary company's; a
+company the player controls but did not make primary gets none. The offer is a pure function of the
+world: kinds are tried in a fixed rotation (offset by chapter and company handle) and the first
+three that the company can be asked for are offered. A kind the company cannot be asked for is
+skipped (a market it already holds nine tenths of, debt it does not have, a record too short to
+measure). A young company with no profit record is asked to turn a profit from zero.
+
+| Kind | Asked when | Target (small, medium, large band) | Met when |
+|---|---|---|---|
+| Market share | the largest division holds under 90% | share now plus 8, 6 or 4 points, at most 95% | at chapter end the share is at or above the target |
+| Profit growth | always | average weekly operating profit over the last 13 weeks, raised by 15, 10 or 7% (at least $5,000, $15,000 or $50,000 a week) | at chapter end the last-13-week average is at or above the target |
+| Integrate | an input is bought that no plant of the company makes and some recipe makes it | the input bought in the largest volume | an operating plant of the company makes it |
+| Cash cover | cash is already 10% above the line | 6, 8 or 10 weeks of weekly costs | cash is at or above the line in every week; one miss loses it |
+| Debt to equity | debt to equity is over 0.25 | the ratio cut by 25, 20 or 15%, at least 0.20 | at chapter end the ratio is at or below the target |
+| Win a raid | the company has a division | none | a raid it launched succeeds in the chapter |
+| List a subsidiary | a group member is unlisted | none | more group members are listed than at the start |
+
+The band is the company's total plant blocks at chapter start (4 or fewer, 12 or fewer, more).
+Difficulty multiplies the stretch (the share step, profit rise, cover weeks and debt cut): Easy 80%,
+Standard 100%, Hard 125%. Event kinds latch (once true they stay true); share, profit and debt are
+tested only at chapter end; cash cover is tested every week.
+
+**Choosing.** `ChooseMandate { firm, pick }` takes the offer in position `pick` (0 to 2). It goes
+through the ordinary command path: the actor must run the company (`NoAuthority` otherwise), the
+company must have an open offer inside its four-week window (`WrongPhase`), and `pick` must be one
+of the offered (`Arithmetic`, out of range). An offer not taken inside the window lapses with no
+penalty. Rivals' boards pick through the same command, proposed by `cw-ai`: the offer already
+furthest along, the first on a tie.
+
+**Results.** At chapter end a met mandate pays the same management bonus as the old objectives,
+now on a year: 2% of the company's operating profit over a year (the last 13 weeks, four times),
+at least $50,000, never more than the company's free cash, moved from the company to the
+investor, never minted. Player side only: a rival has no personal purse. Reputation moves for any
+company: +150 basis points for a met mandate, -100 for a missed one, kept between -2,000 and
++5,000 (or where it already stood, if outside). "Board confidence" has no separate counter in the
+engine: a miss costs reputation, and **two missed mandates in a row** in the player's primary
+company is the `MissedGoals` trigger for an activist campaign (`structure.rs`), the same
+governance path the two missed quarterly goals used. A chapter with no pick, or whose company
+stopped operating, does not count as a miss.
+
+**State and saves.** Chapter state is `World.chapters` (`#[serde(skip)]`), written in the `CHAP`
+trailer after `SYST` and folded into `canonical_hash` when not empty, so a game reloaded
+mid-chapter plays on identically. It is outside the postcard payload, so the save schema stays 3
+(see INTERFACE.md). A save without the trailer loads with no chapter state and opens the current
+chapter at once if it is inside its first four weeks, otherwise at the next one.
+
+**Achievements.** Twenty fixed milestones (`achievements::LIST`), checked once a week from facts
+the engine keeps, each earned once and dated by its first week: a chapter closed, a first mandate
+met, five met, three in a row, a raid won, the main company listed, a subsidiary listed, a merger
+completed, ten companies controlled, three states, five divisions, the largest capacity in a
+market (checked every fourth week), a thousand workers, net worth doubled and tenfold, no debt
+after the first year, a hostile bid survived, a bank rescued by the state, every event of the
+scenario's timeline played, and a thirty year career (week 1,560). They are the player's: a career
+with no primary company earns none.
+
+**Size of the reward.** One bonus a year at most, at the old 2% rate on a year of profit, where the old objectives could pay four a year on a quarter each. The reputation steps are the size of the lobbying penalties already in the rules (100 to 250 basis points).
+
+## Executives (1.9)
+
+Every company has three executive posts: chief financial officer, chief operating officer and
+logistics chief. Each post holds one person at a time, with a level from 1 to 5 and a temperament,
+and each level moves one real number for that company only:
+
+| Post | What it moves | Per level | At level 5 |
+|---|---|---|---|
+| Chief financial officer | Credit spread on loan and bond quotes (the quote, the rate floor a loan must meet, and the bank loan rate) | 15 basis points off, never below 25 | 0.75 points off |
+| | Interest earned on cash, paid by the outside world | 4 basis points a year | 0.20 points |
+| Chief operating officer | Build lead time (new plants and expansions), rounded down, at least 1 week | 4 percent shorter | 20 percent shorter |
+| | Ceiling for a plant that is fully staffed, powered and rated at full output (not utilities) | 80 basis points above rating | 4 points above rating |
+| Logistics chief | What outside carriers charge over the owners' empty-lane rate, for the shipper's own shipments | 5 percent of that premium | 25 percent of that premium |
+| | Fee for reserving lane capacity | 100 basis points off | 5 percent off |
+
+**Candidates.** A pool is drawn in a world's first week. The scenario's own named people for hire
+(roles `cfo`, `coo`, `logistics` in `content/cast.json`, two per scenario) come first, then eight
+generated people for each post from the extras with their temperaments and portraits. A candidate
+holds a hire index: below 1000 it is an extra, from 1000 up it is the nth named person for hire, so
+saves keep working as people are added. A world with no scenario id draws generated people only. Levels
+weighted 30, 28, 22, 14 and 6 percent for levels 1 to 5, nobody twice. A post with fewer than three
+people available gets two more every thirteen weeks. A person who leaves a post is away for 26 weeks.
+
+**Pay and contract.** Weekly pay is `level rate x sqrt(total assets in dollars) x 10 cents`, with
+the level rate 3, 5, 8, 12 and 18 tenths of a dollar for levels 1 to 5, so pay grows with level and
+with the square root of company size. A temperament adds to the ask: raider and speculator 8
+percent, financier 3 percent, builder and integrator nothing, cautious 4 percent less. The company
+pays four weeks of pay when it signs and must keep another 26 weeks of pay in cash after it.
+A contract runs 104 weeks. At the end the person renews at the current ask if the effect is worth
+at least half a year of the new pay, 85 percent of the time (a draw named by the world seed, the
+company and the week); otherwise they leave. Pay is a cash cost paid to the outside world; a
+company that cannot pay a week of it loses the executive. Dismissal costs severance of a quarter of
+the pay left on the contract, at least 4 and at most 26 weeks of pay.
+
+**Commands.** `HireExecutive { firm, post, person }`, `DismissExecutive { firm, post }` and
+`PoachExecutive { firm, from, post, offer_cents }` are validated the same for player and rival: the
+company must be operating, the post empty for a hire or a poach, and the cash covered.
+
+**Poaching.** An offer is accepted when it is at least the executive's current pay plus the
+temperament's hurdle: speculator 8, raider 10, financier 15, builder 20, integrator 25 and cautious
+35 percent. A refused offer still counts as the company's attempt. The poacher pays eight weeks of
+the new pay on signing. The move is one story in the paper, and the old boss writes to the player
+when the player took their executive.
+
+**Rivals.** Every fourth week a rival with a vacant post hires the candidate whose yearly effect, at
+the rival's own figures, exceeds a year of their pay by the most, provided the effect is at least 1.5
+times a year of pay and the company holds the fee plus 26 weeks of pay. Effect values: the CFO is
+debt times the spread cut plus cash times the yield; the COO is half of a year of last week's
+revenue times the ceiling bonus plus 5 percent of a plant's cost per week of lead time saved per
+plant being built; the logistics chief is the outside premium share of last week's outside carrier
+spend times the cut plus the lane fees times the fee cut. A raider or speculator led rival may
+instead offer a level 3 or better executive of another company the price that moves them, at most
+once every 26 weeks, when the effect is at least 1.5 times a year of that pay.
+
+**The board and the player's chief.** When the player's primary company has missed two board
+mandates in a row (lapsed offers do not count), the board names a chief executive from the free
+cast people at the close of the second missed chapter, with a letter from the board chair. The
+count of misses starts again after that chapter, so an activist is not drawn by the same record.
+
+**Brief.** The weekly brief suggests a hire when the effect, less the pay, pays back the signing
+fee inside 104 weeks and the company can afford it.
+
+**Save.** Executives and the candidate pool are saved state that affects play: they travel in the
+`EXEC` trailer outside the postcard payload and `canonical_hash` folds them in while they are not
+empty (see INTERFACE.md). No schema bump is needed.
 
 ## State rescue, nationalisation and privatisation (1.7)
 
@@ -334,6 +484,155 @@ the case's justification, plus up to 20 percent for its stake, a fifth of the ou
 30 percent of the controller's holding (5 to 90 percent). A win means the full demand plus damages
 of 0.4 percent of equity; a loss costs 0.15 percent in legal fees.
 
+**Earnings season (1.9).** A listed firm is one that is operating, has shares in issue and has at
+least 1 percent of them held outside (not state owned). Each reports once a quarter, on the
+quarter's close (weeks 13, 26, 39 and so on), and the week it reports the analyst writes the
+estimate for the next. The estimate is the quarter just closed (operating profit, EBIT of the
+thirteen closed weeks) plus an eighth of the change from the quarter before (the sim's quarters are
+noisy, so the trend counts for little; at most a quarter of the estimate's scale either way), plus a quarter of the average change of the listed firms in the same
+industry (at most 10 percent of the scale), plus noise of up to 10 percent of the scale drawn from
+the world seed (a stream of its own per firm and week). The scale is the larger of the estimate's
+size and four percent of the firm's market value (about a healthy firm's quarterly operating
+profit), so a near-zero estimate cannot make a huge surprise out of nothing. A firm needs one full quarter of results before it has an estimate.
+
+On results day the surprise is actual less estimate over the scale, bounded to plus or minus 100
+percent. The share price moves 10 percent of itself per 100 percent of surprise. A run of
+quarters surprising the same way adds 15 percent to the move per quarter in the run (up to four,
+and not on a reversal). A miss is damped by management's credibility, up to 40 percent at full
+credibility (10,000). The move is capped at 12 percent either way. It changes the share mark
+only: no cash, share, account or ownership moves, so no money is created or destroyed, and the
+usual price formation then pulls the mark back toward fair value an eighth a week.
+
+**Guidance.** `GiveGuidance(firm, low, high)` (player and rivals, same checks) states a range for the
+quarter's operating profit, once a quarter, before results day. The range must sit within half the
+estimate's scale of the analyst's own number. The estimate moves toward the middle of the range by
+20 percent plus 60 percent of credibility (at most 80), but never by more than 15 percent of the
+scale. On results day, actual at or above the low end meets it: credibility rises by 1,500 (starting
+at 3,000, ceiling 10,000), unless the low end was more than 10 percent of the scale under the
+analyst's own number, which is sandbagging and earns nothing. Under the low end misses it:
+credibility halves, reputation falls by 150 plus a fortieth of the shortfall in basis points (at
+most 400). One small miss is forgiven; a second miss in a row, or one that falls 50 percent of the
+scale or more under the low end, gives the firm a grievance for a quarter that the activists can act on
+(`Reason::MissedGuidance`, justification 5,000 plus 1,500 per miss in a row, at most 9,000), which
+opens a campaign by the usual scan and cooldown. Rival firms guide on their own: the week after their estimate, every fourth
+listed firm in turn, a range of plus or minus 15 percent of the scale around the analyst's number,
+unless profit fell last quarter.
+
+**Ratings and short campaigns.** The analyst rates every listed firm from valuation against price:
+buy when fair value is at least 120 percent of the price, sell when it is at most 83.33 percent
+(the price 20 percent over value), otherwise hold. A firm whose fair value is half the price or
+less (the price twice its value, about one listed firm in a hundred) draws an activist short
+campaign (`Reason::Overvalued`, justification 1.5 times the gap, at most 9,000) through the ordinary
+quarterly scan, player's firm included. The campaign knocks 3 to 8 percent off the mark when it
+opens (prices only), then runs as any other activist campaign.
+
 **Temperament.** Rival decisions here read `structure::temperament`, a table of weights (tax
 shifting, leverage, listing, partnering, resistance) derived from the archetype today. The
 character AI replaces that one function.
+
+## Opening share prices (1.9 balance pass 4)
+
+A seed firm opens at the value of its plants' standard earnings at reference prices and baseline
+wages, times a share of them it is assumed to realise (`valuation::OPENING_REALISATION_BPS`). The
+share was a fifth, measured on the 1.8 seed firms. After the era, farm and restructuring passes the
+realised share is about 43 percent in every scenario (the sum of trailing EBITDA at weeks 26 to 52
+over the standard figure), so the shares opened at about half of where a quarter of real earnings
+put them and rose by 80 to 130 percent in the first year, which the index showed as a doubling in
+every scenario. The share is now 43 percent. Year-one index (equal weight, 6 seeds, 100 at start)
+before then after: Great Lakes 227 to 110, Ruhr and Rhine 196 to 103, Silicon Valley 177 to 99,
+Texas 195 to 107. Prices still follow earnings after that (year five 155 to 236), and the investor's
+holdings start higher, so percentage net worth growth over five years reads lower than before for the
+same dollars.
+
+## Rival long plans (1.9)
+
+A rival whose chief is a raider, financier or integrator can run one campaign at a time against a
+listed company, the player's or another rival's. It uses the commands and the information a
+player has; the plan only decides what to send and when. Implemented in
+`crates/cw-sim/src/economy/plans.rs`; the AI sends its moves in `cw_ai::propose`.
+
+**Opening.** From week 26, each rival looks once every 13 weeks (by its handle's slot). There is
+room for one plan for every 8 companies in the world, a rival runs one at a time, and a rival
+waits 104 weeks after a plan ends. The target must be listed, not state owned, not in the rival's
+group, free of any holder with a majority, with at least half of its votes in outside hands (twice the
+goal), and no other rival already after it. The rival
+must hold cash over eight weeks of mandatory outflow, and the campaign (the stake, then the
+escrow of the bid) may cost no more than twice that spare cash, since earnings keep arriving. The
+score is the discount of the traded mark to the fair estimate (capped), plus a quarter of the
+grudge strength the rival holds against the target. A raider needs a discount of at least 5
+percent, a financier 10 percent, an integrator a vertical link to the target (a supplier or
+customer) and gets 20 points for it. Nothing in the opening draws from a random stream.
+
+**Building.** Each week the rival bids with `PlaceShareOrder` for at most half of the week's
+executable float (2 percent of the shares outside investors hold, so one percent of them), at no
+more than 2 percent over the mark. The step settles at once along the price curve above, which
+moves the price one percent for each percent of the outside holdings a step takes, and the limit
+stops the walk if the price would pass it. It
+never buys past a quarter of the votes (the goal) or into its cash reserve.
+
+**Disclosure.** At 5 percent of the votes the stake is public: the stake and the week are filed
+(`disclosed_stakes`), a paper story runs, the target gets a letter when it is the player's company,
+and from then on the weekly stake is recorded as the stake history. Another story and letter follow
+each time the stake passes another five points. Nothing before the line is visible: not the plan, its
+stage, or its history. A stake that is an ordinary holding (a parent's, for example) is listed too
+but has no history.
+
+**Tender.** At a quarter of the votes the plan is in its tender stage and the rival starts an
+ordinary takeover bid (`StartDiligence`, share purchase, 25 percent over the mark, for the shares
+that take it past half, escrow and diligence as for any bid) once its cash covers the escrow, the
+fee and its reserve. From there the deal follows the M&A state machine above. A settled deal is a
+win. A deal that expires, is withdrawn or rejected turns the plan to selling out.
+
+**Giving up.** A plan turns to selling out when: the target's traded mark runs more than 30 percent
+(financier), 40 (integrator) or 50 percent (raider) over where it was when the plan opened, with no
+bid yet; 78 weeks pass; the rival's cash falls under half its reserve; the tender cannot start in 13
+weeks; another holder takes a majority (a white knight, whose friendly deal moves control away from
+the rival); or the target stops trading. The rival then sells with `PlaceShareOrder` sell orders, at most half the float a
+week, at no less than 2 percent under the mark, and the plan ends when the stake is gone (or after 52 weeks).
+Selling below cost is a realised loss as for any holder.
+
+**What the target can do.** Buy shares back (`RepurchaseShares`: fewer shares in the float, a higher price,
+a lower pace for the rival; a rival target does it on its own once a stake reaches 10 percent, every
+fourth week, one percent of the votes at a time, only with cash over its reserve and never if the
+buyback would push the rival's share of the remaining votes to 40 percent), take a friendly buyer
+(a deal for control moves control away and ends the plan), issue shares at 90 percent of fair or
+more to a funded buyer (which dilutes the rival's share), and raise guidance (a higher fair estimate
+raises the mark, which can push the price past the rival's limit). **There is no poison pill.** The
+board has no rule that blocks or dilutes one holder: it seats five by vote share and approves large
+issues and mergers, nothing more. Adding one is left for a later pass.
+
+**White knight.** Once a rival's stake in an AI company has crossed the 5 percent line (so it is
+public) and the plan is not selling out, one friendly AI firm may step in. A friend is a firm in the
+target's group, or one with an alliance with it of at least 1,000 that is stronger than its tie to the
+raider, no live grudge against the target, not in the raider's group, with no plan of its own, and
+with cash over its reserve. Of the friends, the same group comes first, then the strongest tie, then
+the lowest handle: no random draw, and only that firm acts. It uses commands any firm has. If its spare
+cash covers escrow and the diligence fee for a majority, it opens a friendly deal (`StartDiligence`,
+a share purchase at 130 percent of the higher of mark and fair estimate, so it is not hostile) and
+waits for the answer; it tries again no sooner than 26 weeks after that offer started. Otherwise it
+buys a blocking stake on the exchange (`PlaceShareOrder`, at most half the weekly float a step, bid at
+most 2 percent over the mark) up to 5 points above the raider's stake, never above 35 percent. If a
+friendly deal settles, the knight holds a majority and the plan ends as above (another holder takes
+control). It never acts for the player's company: the player answers for it. The knight leaves no
+saved field of its own; it is read from the plans, the alliances and the books each week.
+
+**What others see.** A rival's dossier shows "Likely next move", from what is filed and public:
+an open bid, a stake on file and the way it moved over 13 weeks, or a campaign that just ended;
+never the plan's stage or the rival's reasons. The weekly brief says when a disclosed stake in your
+company grew over four weeks. The company page and the target's dossier list every stake of 5
+percent or more with the stake history as a small line.
+
+**Saved state.** `World.plans` (plans, finished campaigns, events, counts, and the migration state
+from FINANCE-LABOUR-AI.md) is saved in the `PLAN` trailer and folded into the canonical hash while
+not empty. Public history is kept for 156 weeks and 40 finished campaigns.
+
+**Exchange fixes that came with this.** The exchange used to make up shares when outside
+investors sold into it (the trade always named the first outside investor, whether or not it held the
+company) and to give an outside buyer's cash from nowhere; trades with the outside now run against
+real holders, the largest lot selling first and the investor with the most capital buying, and a
+trade is cut to what they hold or can pay. A company's unused order reserve now returns to its cash
+(it used to move into restricted cash a second time), the surplus when a buy fills under its limit
+comes back at once, and a company selling shares reads its cost basis from the company's own share
+book. The ownership cycle check now follows the shares a company holds, as its comment always said; a
+buyer that already holds some of a target is no cycle.
+

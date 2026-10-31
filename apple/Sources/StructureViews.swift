@@ -3,7 +3,7 @@ import SwiftUI
 /// Groups, transfer prices, reputation, bonds, joint ventures and activists in one dense column.
 /// Set once; the engine alerts only when a decision is needed.
 struct StructureSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var settings: [String: Double] = [:]
     @State private var rejection: CommandRejection?
 
@@ -13,6 +13,8 @@ struct StructureSection: View {
         switch key {
         case "falling_price": return "the share price has fallen a long way from its peak"
         case "missed_goals": return "the board missed its goals twice running"
+        case "missed_guidance": return "management missed the profit range it gave the analysts"
+        case "overvalued": return "the share price is far above what the business is worth"
         case "squeeze": return "pricing inside the group is taking value from minority holders"
         case "dividend_cut": return "the dividend stopped while the company can afford it"
         default: return key

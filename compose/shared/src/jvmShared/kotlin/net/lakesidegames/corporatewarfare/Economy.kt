@@ -68,8 +68,11 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
             Eyebrow("Economy")
             Spacer(Modifier.width(8.dp))
             PhasePill(e.phase)
-            Spacer(Modifier.weight(1f))
-            Text("Rate ${pct(e.policyRateBps, 2)} · inflation ${pct(e.inflationBps)}", color = Palette.secondary, fontSize = 12.sp)
+            // The summary takes the room left and wraps inside it, so large text never pushes the pill aside.
+            Text(
+                "Rate ${pct(e.policyRateBps, 2)} · inflation ${pct(e.inflationBps)}", color = Palette.secondary, fontSize = 12.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(1f).padding(start = 8.dp),
+            )
             if (collapsible) PixelIcon(if (open) "chevron_up" else "chevron_down", size = 12.dp, tint = Palette.secondary, modifier = Modifier.padding(start = 6.dp))
         }
         if (!open) return@Panel
@@ -91,6 +94,7 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
             Key(Palette.gold, "Central bank rate")
         }
         EconomyDashboardSection(store)
+        TimelineSection(store)
         val credit = when {
             e.creditBps >= 800 -> "Credit is badly stretched: a bust could come at any time." to Palette.negative
             e.creditBps >= 450 -> "Borrowing is running high: the risk of a bust is rising." to Palette.warning
@@ -164,6 +168,7 @@ fun EconomyCard(store: GameStore, collapsible: Boolean) {
         LawsTable(e.laws, null)
         e.pendingLaws?.let { LawsTable(it, "From ${ResultBuckets.weekLabel(e.pendingEffectiveWeek.toInt())}") }
         MarketRules(e)
+        PoliticsPanel(store, store.selectedFirmDto?.currency ?: "")
         if (e.news.isNotEmpty()) {
             Eyebrow("News")
             e.news.take(5).forEach { n ->
@@ -247,7 +252,7 @@ private fun pegStatus(c: CurrencyDto): Pair<String, Color> {
 /** A 52 week line of one rate, scaled to its own range. */
 @Composable
 private fun Sparkline(values: List<Long>, color: Color) {
-    Canvas(Modifier.width(96.dp).height(30.dp)) {
+    Canvas(Modifier.width(96.dp).height(30.dp).described("Rate over 52 weeks. ${chartSummary("Rate", values) { pct(it.toInt(), 2) }}", androidx.compose.ui.semantics.Role.Image)) {
         val low = values.min()
         val span = (values.max() - low).coerceAtLeast(1L).toFloat()
         val step = size.width / (values.size - 1)

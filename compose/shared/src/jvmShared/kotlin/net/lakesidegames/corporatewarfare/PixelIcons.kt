@@ -54,13 +54,20 @@ internal object PixelBitmaps {
         val bitmap = ImageBitmap(width.coerceAtLeast(1), rows.size.coerceAtLeast(1))
         val canvas = Canvas(bitmap)
         val paint = Paint()
+        // A run of one letter along a row is one rectangle, so a big room costs thousands of draw calls, not tens of thousands.
+        val colors = HashMap<Char, Color?>()
         rows.forEachIndexed { y, row ->
-            row.forEachIndexed { x, ch ->
-                val color = if (ch == '.') null else colorOf(ch)
+            var x = 0
+            while (x < row.length) {
+                val ch = row[x]
+                var end = x + 1
+                while (end < row.length && row[end] == ch) end++
+                val color = if (ch == '.') null else colors.getOrPut(ch) { colorOf(ch) }
                 if (color != null) {
                     paint.color = color
-                    canvas.drawRect(x.toFloat(), y.toFloat(), x + 1f, y + 1f, paint)
+                    canvas.drawRect(x.toFloat(), y.toFloat(), end.toFloat(), y + 1f, paint)
                 }
+                x = end
             }
         }
         bitmap
@@ -95,9 +102,10 @@ fun DrawScope.drawPixelIcon(icon: PixelIcons.Icon, tint: Color?) {
 
 /** A pixel icon by name. Pass [tint] for one-colour use in menus, buttons and bars; omit it for the full palette. */
 @Composable
-fun PixelIcon(name: String, modifier: Modifier = Modifier, size: Dp = 18.dp, tint: Color? = null) {
+fun PixelIcon(name: String, modifier: Modifier = Modifier, size: Dp = 18.dp, tint: Color? = null, description: String? = null) {
     val icon = PixelIcons.all[name]
-    Canvas(modifier.size(size)) { if (icon != null) drawPixelIcon(icon, tint) }
+    // An icon that stands alone as a button says what it does; one beside a label stays silent.
+    Canvas((if (description != null) modifier.described(description, androidx.compose.ui.semantics.Role.Image) else modifier).size(size)) { if (icon != null) drawPixelIcon(icon, tint) }
 }
 
 /** The content of a Back style text button: pixel arrow then the label. */

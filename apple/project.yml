@@ -8,11 +8,12 @@ settings:
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
-    MARKETING_VERSION: "1.8.0"
+    MARKETING_VERSION: "1.9.0"
     CURRENT_PROJECT_VERSION: "1"
     GENERATE_INFOPLIST_FILE: YES
     TARGETED_DEVICE_FAMILY: "1,2"
-    OTHER_LDFLAGS: ["$(inherited)", "-lc++"]
+    # The GPU map links Metal through the engine's static library, which carries no link flags.
+    OTHER_LDFLAGS: ["$(inherited)", "-lc++", "-framework", "Metal", "-framework", "QuartzCore", "-framework", "IOSurface"]
 targets:
   CorporateWarfare:
     type: application
@@ -23,9 +24,19 @@ targets:
       - path: Assets.xcassets
       - path: Resources
         buildPhase: resources
+      # The GPU map reads its baked terrain and city outlines from the app bundle.
+      - path: ../crates/cw-render/assets
+        includes: ["*.cwh", "urban-*.json"]
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.lakesidegames.corporatewarfare
+        # Keep PNGs as plain PNG: the GPU map's engine reads earth-land*.png itself, and Xcode's default
+        # iOS PNG compression rewrites them into Apple's CgBI variant, which only UIKit can read.
+        COMPRESS_PNG_FILES: NO
+        STRIP_PNG_TEXT: NO
+        # The C interface of the GPU map (cw_gpu_*), next to the UniFFI one.
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/CwGpu-Bridging-Header.h
         # Merged with the generated Info.plist: the Silkscreen pixel font, and the classic
         # system controls instead of iOS 26 Liquid Glass (the app draws its own solid pixel UI).
         INFOPLIST_FILE: Info.plist

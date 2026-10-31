@@ -842,6 +842,53 @@ pub struct RegionState {
     pub paid_named_wages_cents: i64,
 }
 
+/// The player's own chief executive, chosen at the start of a career.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerChief {
+    pub name: String,
+    /// A portrait id from the generated kit (`cw_data::cast::extras`).
+    pub portrait: String,
+    /// The temperament key, shown as a one-line flavour; no rule reads it.
+    pub temperament: String,
+}
+
+impl PlayerChief {
+    pub const NAME_MAX: usize = 40;
+
+    /// A chief from the new-game choices. The portrait must be one of the kit's; a blank or
+    /// unknown name takes the portrait's own name, and a temperament that is not one of the six
+    /// takes the portrait's. Anything unknown falls back to the first of the kit.
+    pub fn choose(name: &str, portrait: &str, temperament: &str) -> Option<PlayerChief> {
+        let kit = cw_data::cast::extras();
+        let pick = kit
+            .iter()
+            .find(|e| e.id == portrait)
+            .or_else(|| kit.first())?;
+        let clean: String = name
+            .chars()
+            .filter(|c| !c.is_control())
+            .collect::<String>()
+            .trim()
+            .chars()
+            .take(Self::NAME_MAX)
+            .collect();
+        let temper = cw_data::Temperament::ALL
+            .iter()
+            .find(|t| t.key() == temperament)
+            .copied()
+            .unwrap_or(pick.temperament);
+        Some(PlayerChief {
+            name: if clean.is_empty() {
+                pick.name.clone()
+            } else {
+                clean
+            },
+            portrait: pick.id.clone(),
+            temperament: temper.key().to_owned(),
+        })
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Government {
     pub book: Ledger,
@@ -1278,11 +1325,18 @@ pub struct RateDecision {
 }
 
 impl Cycle {
-    /// The opening cycle for a chosen starting economy.
-    pub fn for_start(start: EconomyStart, policy_rate_bps: i32) -> (Cycle, i32, i32) {
+    /// The opening cycle for a chosen starting economy. A historic start opens at the inflation,
+    /// expectations, policy rate and neutral rate of the scenario's own period; the other
+    /// starts are the same generic economy in every scenario.
+    pub fn for_start(start: EconomyStart, period: &cw_data::OpeningMacro) -> (Cycle, i32, i32) {
         let mut c = Cycle::default();
         let (rate, inflation) = match start {
-            EconomyStart::Historic => (policy_rate_bps, 300),
+            EconomyStart::Historic => {
+                c.expected_inflation_bps = period.expected_inflation_bps;
+                c.target_inflation_bps = period.target_inflation_bps;
+                c.neutral_real_bps = period.neutral_real_bps;
+                (period.policy_rate_bps, period.inflation_bps)
+            }
             EconomyStart::Calm => {
                 c.output_gap_bps = 0;
                 c.credit_bps = 150;
@@ -1590,6 +1644,47 @@ pub struct World {
     /// `economy::systems`.
     #[serde(skip)]
     pub systems: crate::economy::systems::SystemsHistory,
+    /// Chapters, board mandates and achievements (1.9). Outside the postcard encoding so no
+    /// schema moves; it is future-affecting, so `canonical_hash` folds it in, and it is saved in
+    /// its own `CHAP` trailer. A save without the trailer loads with it empty. See
+    /// `economy::chapters`.
+    #[serde(skip)]
+    pub chapters: crate::economy::chapters::ChapterState,
+    /// Analyst estimates, guidance, credibility and results (1.9). Outside the postcard encoding
+    /// so no schema moves; future-affecting, so `canonical_hash` folds it in while it is not
+    /// empty, and it is saved in its own `EARN` trailer. A save without it loads with it empty
+    /// and the first estimates are written at the next quarter's close. See `economy::earnings`.
+    #[serde(skip)]
+    pub earnings: crate::economy::earnings::EarningsState,
+    /// Elections with candidates, campaign gifts, state laws and public tenders (1.9). Outside
+    /// the postcard encoding like the chapter state, folded into the hash while not empty, saved
+    /// in its own `POLI` trailer. A save without it loads with it empty and the races are drawn
+    /// on the next week. See `economy::civics`.
+    #[serde(skip)]
+    pub civics: crate::economy::civics::CivicState,
+    /// Executives and the pool of people who can be hired (1.9). Outside the postcard encoding
+    /// like the chapter state, folded into the hash while not empty, saved in its own `EXEC`
+    /// trailer. A save without the trailer loads with it empty and the pool is drawn on the
+    /// next week. See `economy::executives`.
+    #[serde(skip)]
+    pub executives: crate::economy::executives::ExecState,
+    /// Rival long plans against a target's shares and workforce migration between regions (1.9).
+    /// Outside the postcard encoding like the chapter state, folded into the hash while not
+    /// empty, saved in its own `PLAN` trailer. A save without it loads with it empty: no plan is
+    /// running and the migration references are taken at the next week, never invented history.
+    /// See `economy::plans` and `economy::migration`.
+    #[serde(skip)]
+    pub plans: crate::economy::plans::PlanState,
+    /// Which letters the player has read. Outside the encoding and the hash, in its own save
+    /// trailer; no rule reads it. See `economy::mail`.
+    #[serde(skip)]
+    pub mail: crate::economy::mail::MailState,
+    /// The chief executive the player chose at the start of the career (1.9): a name, a portrait
+    /// from the generated kit and a temperament shown as a flavour line. Presentation only, no
+    /// rule reads it. Outside the postcard encoding, folded into the hash while set, saved in its
+    /// own `CHIE` trailer; a save without it has none and the office seats a default.
+    #[serde(skip)]
+    pub player_chief: Option<PlayerChief>,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.
@@ -1976,6 +2071,42 @@ pub fn canonical_hash(world: &World) -> String {
             if world.fx.active {
                 match postcard::to_allocvec(&world.fx) {
                     Ok(fx) => bytes.extend_from_slice(&fx),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.chapters.is_empty() {
+                match postcard::to_allocvec(&world.chapters) {
+                    Ok(chapters) => bytes.extend_from_slice(&chapters),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.earnings.is_empty() {
+                match postcard::to_allocvec(&world.earnings) {
+                    Ok(earnings) => bytes.extend_from_slice(&earnings),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.civics.is_empty() {
+                match postcard::to_allocvec(&world.civics) {
+                    Ok(civics) => bytes.extend_from_slice(&civics),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.executives.is_empty() {
+                match postcard::to_allocvec(&world.executives) {
+                    Ok(executives) => bytes.extend_from_slice(&executives),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.plans.is_empty() {
+                match postcard::to_allocvec(&world.plans) {
+                    Ok(plans) => bytes.extend_from_slice(&plans),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if let Some(chief) = &world.player_chief {
+                match postcard::to_allocvec(chief) {
+                    Ok(chief) => bytes.extend_from_slice(&chief),
                     Err(_) => return String::from("unhashable"),
                 }
             }

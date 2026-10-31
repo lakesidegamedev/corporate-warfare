@@ -305,7 +305,7 @@ pub fn weekly(world: &mut World) {
         world.macro_state.cycle.output_gap_bps - state.baseline_gap_bps - state.shadow_gap_bps;
     let mut before = Vec::with_capacity(state.families.len());
     let (mut weighted, mut weights) = (0i64, 0i64);
-    for family in &mut state.families {
+    for (index, family) in state.families.iter_mut().enumerate() {
         before.push(family.index_bps);
         family.raw_bps = match family.mode {
             PriceMode::Historical => interpolate_bps(&family.anchors, week),
@@ -328,12 +328,17 @@ pub fn weekly(world: &mut World) {
                     .clamp(RANDOM_BAND_BPS.0, RANDOM_BAND_BPS.1)
             }
         };
+        // A timeline shock is a world price move like any other: it feeds the cycle with the
+        // path and is tilted with it, but is never written into the path itself.
+        let shock = crate::economy::timeline::price_shock_bps(world, index as u16) as i64;
         if family.mode.follows_history() {
-            weighted += family.raw_bps as i64 * family.weight as i64;
+            weighted += family.raw_bps as i64 * (BASE_BPS as i64 + shock).max(1) / BASE_BPS as i64
+                * family.weight as i64;
             weights += family.weight as i64;
         }
         let tilt = unexplained_gap as i64 * TILT_PCT / 100 * family.cyclical_pct as i64 / 100;
-        family.index_bps = (family.raw_bps as i64 * (BASE_BPS as i64 + tilt) / BASE_BPS as i64)
+        family.index_bps = (family.raw_bps as i64 * (BASE_BPS as i64 + tilt + shock)
+            / BASE_BPS as i64)
             .clamp(INDEX_FLOOR_BPS as i64, INDEX_CEIL_BPS as i64) as i32;
         family.recent.push(family.index_bps);
         let excess = family.recent.len().saturating_sub(TREND_WEEKS + 1);
@@ -627,5 +632,50 @@ mod tests {
         let low = oil.iter().copied().min().unwrap();
         assert!((3_000..=4_500).contains(&low), "trough {low}");
         assert!(oil[0] == 10_000);
+    }
+
+    #[test]
+    fn farm_gateway_bids_keep_pace_with_inflation_in_the_scenarios_with_a_farm_slide() {
+        // The path is relative to the general price level and the engine inflates every
+        // gateway price, so a farm's real bid may sag but must not fall far behind the wages
+        // that follow inflation. Over five years the grain and fertilizer bids stay within
+        // 15 percent of their day-one real level.
+        for scenario in ["texas-1981", "silicon-valley-1995"] {
+            let dataset = cw_data::Dataset::load_scenario(scenario).unwrap();
+            let mut world = seed::build(&dataset, 3, ScenarioKind::Guided, ScenarioMode::Sandbox);
+            init(
+                &mut world,
+                &dataset,
+                &PricePathFile::load(),
+                scenario,
+                PricePath::Historical,
+                3,
+            );
+            let grain = dataset.product_index["grain"];
+            let start = world
+                .gateways
+                .iter()
+                .find(|g| g.product == grain)
+                .unwrap()
+                .buy_price_cents;
+            let mut worst = i64::MAX;
+            for week in 1..=260u32 {
+                world.tick = Tick(week);
+                weekly(&mut world);
+                crate::economy::macro_cycle::weekly(&mut world, &dataset);
+                let bid = world
+                    .gateways
+                    .iter()
+                    .find(|g| g.product == grain)
+                    .unwrap()
+                    .buy_price_cents;
+                let real = bid * 10_000 / world.macro_state.price_index_bps.max(1);
+                worst = worst.min(real * 100 / start);
+            }
+            assert!(
+                worst >= 85,
+                "{scenario}: the real grain bid fell to {worst} percent of day one"
+            );
+        }
     }
 }

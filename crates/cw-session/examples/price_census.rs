@@ -72,6 +72,7 @@ fn main() {
                 prices: PriceSetup {
                     scenario_id: scenario.to_owned(),
                     path: Some(PricePath::HistoricalVariance),
+                    ..Default::default()
                 },
             })
             .unwrap();

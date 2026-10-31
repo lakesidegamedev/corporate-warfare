@@ -23,6 +23,7 @@ fn main() {
             prices: cw_session::PriceSetup {
                 scenario_id: "great-lakes-2000".to_owned(),
                 path: Some(cw_data::PricePath::HistoricalVariance),
+                ..Default::default()
             },
         };
         let mut session = cw_session::Session::create(config).unwrap();

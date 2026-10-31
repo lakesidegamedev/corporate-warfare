@@ -6,7 +6,7 @@ import SwiftUI
 
 /// The company's four-weekly revenue and profit bars, as on the desktop CEO Office.
 struct FourWeeklyResultsPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
 
     var body: some View {
         let periods = ResultBuckets.make(.month, weeks: [], history: store.history)
@@ -45,7 +45,7 @@ struct FourWeeklyResultsPanel: View {
 
 /// Shares held outside the companies you control, with stake, value and the quarter's move.
 struct ShareholdingsPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
 
     private var held: [StockDto] {
         store.stocks

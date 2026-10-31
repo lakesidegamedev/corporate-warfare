@@ -407,7 +407,9 @@ struct TabScreen<Trailing: View, Content: View>: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                // Lazy, so a tab builds the panels on screen when it opens and the ones below
+                // (with their engine reads) only as they are scrolled to.
+                LazyVStack(alignment: .leading, spacing: 12) {
                     ScreenHeader(title: title, subtitle: subtitle, trailing: trailing)
                     content()
                 }
@@ -666,7 +668,7 @@ struct ProfitDrivers: View {
 /// The CFO: up to three reasons profit is down, each with one button. Shown only when the
 /// company is losing money; the engine decides what matters.
 struct CfoPanel: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let currency: String
     @Binding var rejection: CommandRejection?
 

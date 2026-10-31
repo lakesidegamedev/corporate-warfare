@@ -58,6 +58,7 @@ struct CompanyPageBody: View {
     var onTrade: (() -> Void)? = nil
     /// Set for your own company: a division row opens its detail.
     var onOpenDivision: ((DivisionLineDto) -> Void)? = nil
+    @State private var guiding = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -71,7 +72,7 @@ struct CompanyPageBody: View {
             }
             if let ceo = page.ceo {
                 HStack(alignment: .top, spacing: 10) {
-                    PixelPortrait(person: ceo.id, size: 64)
+                    PixelPortrait(person: ceo.id, size: 72, mood: ceo.mood, office: ceo.officePortrait)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ceo.name).font(.callout.weight(.bold)).foregroundStyle(Theme.primaryText)
                         Text("\(ceo.age) · \(ceo.home)").font(.caption).foregroundStyle(Theme.secondary)
@@ -100,6 +101,8 @@ struct CompanyPageBody: View {
                     ]
                 )
                 StockHistorySection(firm: page.firm)
+                EarningsSection(earnings: s.earnings, onGiveGuidance: page.kind == "yours" ? { guiding = true } : nil)
+                    .sheet(isPresented: $guiding) { GuidanceSheet(firm: page.firm, earnings: s.earnings) }
                 if let onTrade {
                     Button("Buy or sell shares", action: onTrade).buttonStyle(PixelButtonStyle())
                 }
@@ -159,6 +162,7 @@ struct CompanyPageBody: View {
                         .font(.caption).foregroundStyle(Theme.secondary)
                 }
             }
+            DisclosedStakes(stakes: page.stakes)
             linked("Parent", page.parent.map { [$0] } ?? [])
             linked("Subsidiaries", page.subsidiaries)
             linked("Joint ventures", page.ventures)
@@ -218,7 +222,7 @@ struct CompanyPageBody: View {
 
 /// The full company page for any firm, opened from the stock list, a dialog, a dossier, a region board or the news.
 struct CompanyPageSheet: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State var firm: UInt64
     @State private var page: CompanyPageDto?
@@ -246,9 +250,9 @@ struct CompanyPageSheet: View {
             .navigationTitle(page?.name ?? "Company")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .sheet(item: $trading) { stock in StockSheet(stock: stock, showPage: false) }
-            .sheet(item: $opening) { division in DivisionDetailSheet(division: division).environmentObject(store) }
+            .sheet(item: $opening) { division in DivisionDetailSheet(division: division).environment(store) }
         }
-        .environmentObject(store)
+        .environment(store)
         .task(id: firm) { page = await store.companyPage(firm) }
     }
 }

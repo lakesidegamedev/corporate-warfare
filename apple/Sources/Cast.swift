@@ -1,32 +1,67 @@
 import SwiftUI
 
-/// The character cast's 16 by 16 pixel portraits, shared with every platform (Resources/cast-portraits.json).
+/// The character cast's portraits, shared with every platform (Resources/cast-portraits.json): a
+/// 32 by 32 bust with three moods (neutral, pleased, displeased) and its 16 by 16 reduction for every
+/// person, named or generated, and a 64 by 64 office portrait for the named chiefs.
 enum CastPortraits {
+    struct Bust: Decodable {
+        let palette: [String: String]
+        let expressions: [String: [String]]
+        let small: [String: [String]]
+    }
+
+    struct Office: Decodable {
+        let palette: [String: String]
+        let rows: [String]
+    }
+
     private struct File: Decodable {
-        let size: Int
-        let portraits: [String: PixelIcons.Icon]
+        let portraits: [String: Bust]
+        let office: [String: Office]?
     }
 
     private static let file: File? = Bundle.main.url(forResource: "cast-portraits", withExtension: "json")
         .flatMap { try? Data(contentsOf: $0) }
         .flatMap { try? JSONDecoder().decode(File.self, from: $0) }
 
-    static let size: Int = file?.size ?? 16
-    static let all: [String: PixelIcons.Icon] = file?.portraits ?? [:]
+    static let all: [String: Bust] = file?.portraits ?? [:]
+    static let office: [String: Office] = file?.office ?? [:]
+
+    /// The mood to draw: the atlas has neutral, pleased and displeased, and anything else reads neutral.
+    static func mood(_ key: String) -> String {
+        key == "pleased" || key == "displeased" ? key : "neutral"
+    }
 }
 
-/// One cast member's portrait as exact pixels.
+/// One cast member's portrait as exact pixels. `mood` is neutral, pleased or displeased. Below 32
+/// points it is the 16 by 16 bust for rows and chips; with `office` set and a 64 by 64 office
+/// portrait on file (chiefs on company pages and dossiers) that is drawn instead.
 struct PixelPortrait: View {
     let person: String
     var size: CGFloat = 40
+    var mood: String = "neutral"
+    var office = false
+    /// Draws the 16 by 16 bust at any size, for a row of small busts in the CEO Office.
+    var forceSmall = false
 
     var body: some View {
         Canvas { context, area in
-            guard let art = CastPortraits.all[person] else { return }
             var context = context
+            let rect = CGRect(origin: .zero, size: area)
+            if office, let art = CastPortraits.office[person] {
+                PixelIcons.draw(
+                    rows: art.rows, palette: art.palette, gridSize: art.rows.count,
+                    in: &context, rect: rect, tint: nil, key: "portrait|\(person)|office"
+                )
+                return
+            }
+            guard let art = CastPortraits.all[person] else { return }
+            let m = CastPortraits.mood(mood)
+            let small = forceSmall || size < 32
+            guard let rows = small ? art.small[m] : art.expressions[m] else { return }
             PixelIcons.draw(
-                rows: art.rows, palette: art.palette, gridSize: CastPortraits.size,
-                in: &context, rect: CGRect(origin: .zero, size: area), tint: nil, key: "portrait|\(person)"
+                rows: rows, palette: art.palette, gridSize: rows.count,
+                in: &context, rect: rect, tint: nil, key: "portrait|\(person)|\(m)|\(small ? 16 : 32)"
             )
         }
         .frame(width: size, height: size)
@@ -59,7 +94,7 @@ struct PersonLine: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            PixelPortrait(person: person.id, size: 36)
+            PixelPortrait(person: person.id, size: 36, mood: person.mood)
             VStack(alignment: .leading, spacing: 1) {
                 Text(person.name).font(.footnote.weight(.semibold)).foregroundStyle(Theme.primaryText).lineLimit(1)
                 Text("\(role) · \(person.home)").font(.caption2).foregroundStyle(Theme.secondary).lineLimit(1)
@@ -72,12 +107,13 @@ struct PersonLine: View {
 /// A rival's chief executive, their style, background and what the firm has done lately.
 struct DossierBody: View {
     let dossier: DossierDto
+    var currency: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let ceo = dossier.ceo {
                 HStack(alignment: .top, spacing: 10) {
-                    PixelPortrait(person: ceo.id, size: 64)
+                    PixelPortrait(person: ceo.id, size: 72, mood: ceo.mood, office: ceo.officePortrait)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ceo.name).font(.callout.weight(.bold)).foregroundStyle(Theme.primaryText)
                         Text("\(ceo.age) · \(ceo.home)").font(.caption).foregroundStyle(Theme.secondary)
@@ -104,6 +140,9 @@ struct DossierBody: View {
                     Text(line).font(.caption).foregroundStyle(Theme.primaryText)
                 }
             }
+            RivalExecutivesList(posts: dossier.executives, currency: currency)
+            LikelyNextMove(text: dossier.likelyNext)
+            DisclosedStakes(stakes: dossier.stakes)
             RaidMarketsList(firm: dossier.firm)
             if !dossier.moves.isEmpty {
                 Eyebrow(text: "Recent moves")
@@ -119,7 +158,7 @@ struct DossierBody: View {
 
 /// The dossier of one company, loaded from the engine.
 struct DossierSection: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let firm: UInt64
     @State private var dossier: DossierDto?
 
@@ -129,7 +168,7 @@ struct DossierSection: View {
                 Panel(padding: 12) {
                     VStack(alignment: .leading, spacing: 8) {
                         Eyebrow(text: "Who runs it")
-                        DossierBody(dossier: dossier)
+                        DossierBody(dossier: dossier, currency: store.firms.first { $0.handle == firm }?.currency ?? store.selectedFirmDto?.currency ?? "")
                     }
                 }
             }
@@ -140,7 +179,7 @@ struct DossierSection: View {
 
 /// A rival line that opens its dossier, with a Raid button when the line names a market.
 struct RivalLeaderRow: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let name: String
     let firm: UInt64
     let detail: String

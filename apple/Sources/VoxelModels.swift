@@ -20,57 +20,94 @@ enum VoxelModels {
         let d: Double
         let h: Double
         let boxes: [Box]
+        /// The top of the main roof: the highest broad box, so chimneys and cranes are left alone.
+        let roofZ: Double
     }
 
-    private struct File: Decodable {
-        let models: [String: ModelFile]
-    }
+    /// The screen rectangle a model covered, filled by `draw` when asked.
+    final class Bounds {
+        private(set) var minX = CGFloat.greatestFiniteMagnitude
+        private(set) var minY = CGFloat.greatestFiniteMagnitude
+        private(set) var maxX = -CGFloat.greatestFiniteMagnitude
+        private(set) var maxY = -CGFloat.greatestFiniteMagnitude
 
-    private struct ModelFile: Decodable {
-        let w: Double
-        let d: Double
-        let h: Double
-        let boxes: [[BoxValue]]
-    }
+        var rect: CGRect? { minX <= maxX && minY <= maxY ? CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY) : nil }
 
-    /// A box is six numbers and a colour in one array.
-    private enum BoxValue: Decodable {
-        case number(Double)
-        case text(String)
-
-        init(from decoder: Decoder) throws {
-            let value = try decoder.singleValueContainer()
-            if let number = try? value.decode(Double.self) {
-                self = .number(number)
-            } else {
-                self = .text(try value.decode(String.self))
-            }
+        func reset() {
+            minX = .greatestFiniteMagnitude; minY = .greatestFiniteMagnitude
+            maxX = -CGFloat.greatestFiniteMagnitude; maxY = -CGFloat.greatestFiniteMagnitude
         }
 
-        var number: Double {
-            if case let .number(n) = self { return n }
-            return 0
-        }
-
-        var text: String {
-            if case let .text(t) = self { return t }
-            return ""
+        func add(_ x: CGFloat, _ y: CGFloat) {
+            minX = min(minX, x); maxX = max(maxX, x)
+            minY = min(minY, y); maxY = max(maxY, y)
         }
     }
 
-    static let models: [String: Model] = {
+    static let ready = Notification.Name("VoxelModels.ready")
+    private static var loaded: [String: Model]?
+    private static var loading = false
+    private static let lock = NSLock()
+
+    /// The models, or nothing while they are read in the background: a building is drawn as a
+    /// plain box until they arrive, and the map redraws when they do. Cheap to call every frame.
+    static var models: [String: Model] {
+        lock.lock()
+        if let loaded {
+            lock.unlock()
+            return loaded
+        }
+        lock.unlock()
+        preload()
+        return [:]
+    }
+
+    /// Starts reading the models off the main thread, once. Called at launch so the first map
+    /// draw never waits for them.
+    static func preload() {
+        lock.lock()
+        if loaded != nil || loading {
+            lock.unlock()
+            return
+        }
+        loading = true
+        lock.unlock()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let models = read()
+            lock.lock()
+            loaded = models
+            loading = false
+            lock.unlock()
+            DispatchQueue.main.async { NotificationCenter.default.post(name: ready, object: nil) }
+        }
+    }
+
+    /// Reads the models now, for tests.
+    static func loadNow() {
+        let models = read()
+        lock.lock()
+        loaded = models
+        lock.unlock()
+    }
+
+    /// The file is `{"models": {name: {w, d, h, boxes: [[x0, y0, z0, x1, y1, z1, "#rrggbb"]]}}}`.
+    private static func read() -> [String: Model] {
         guard let url = Bundle.main.url(forResource: "voxel-models", withExtension: "json"),
               let data = try? Data(contentsOf: url),
-              let file = try? JSONDecoder().decode(File.self, from: data) else { return [:] }
-        return file.models.mapValues { m in
-            Model(w: m.w, d: m.d, h: m.h, boxes: m.boxes.compactMap { b in
-                guard b.count >= 7 else { return nil }
-                let hex = UInt32(b[6].text.replacingOccurrences(of: "#", with: ""), radix: 16) ?? 0x808080
-                return Box(x0: b[0].number, y0: b[1].number, z0: b[2].number, x1: b[3].number, y1: b[4].number,
-                           z1: b[5].number, color: RGB(hex: hex))
-            })
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let files = root["models"] as? [String: [String: Any]] else { return [:] }
+        return files.mapValues { m in
+            let boxes = (m["boxes"] as? [[Any]] ?? []).compactMap { b -> Box? in
+                guard b.count >= 7, let hex = b[6] as? String else { return nil }
+                let n = b.prefix(6).map { ($0 as? NSNumber)?.doubleValue ?? 0 }
+                return Box(x0: n[0], y0: n[1], z0: n[2], x1: n[3], y1: n[4], z1: n[5],
+                           color: RGB(hex: UInt32(hex.replacingOccurrences(of: "#", with: ""), radix: 16) ?? 0x808080))
+            }
+            let roofZ = boxes.filter { ($0.x1 - $0.x0) * ($0.y1 - $0.y0) >= 6 }.map(\.z1).max() ?? -1
+            return Model(w: (m["w"] as? NSNumber)?.doubleValue ?? 0, d: (m["d"] as? NSNumber)?.doubleValue ?? 0,
+                         h: (m["h"] as? NSNumber)?.doubleValue ?? 0, boxes: boxes, roofZ: roofZ)
         }
-    }()
+    }
 
     static func has(_ name: String) -> Bool { models[name] != nil }
 
@@ -100,11 +137,20 @@ enum VoxelModels {
     /// How a model is coloured: as made, greyed for rivals, dark for closures.
     enum Tone {
         case plain, muted, dark
+        /// A rival's building: the model's colours pulled towards its sector's colour.
+        case sector(RGB)
+        /// A vehicle with the neutral livery swapped for its owner's colour.
+        case livery(RGB)
+
+        /// The baked neutral liveries of the trucks, cars, locomotives and ships.
+        private static let neutralLivery = [RGB(hex: 0x4F7FAF), RGB(hex: 0xC24A40), RGB(hex: 0xE5D04A), RGB(hex: 0x2E4A66)]
 
         func apply(_ c: RGB) -> RGB {
             let g = (c.r + c.g + c.b) / 3
             switch self {
             case .plain: return c
+            case .sector(let sector): return c.mixed(with: sector, 0.4)
+            case .livery(let owner): return Tone.neutralLivery.contains(c) ? owner : c
             case .muted: return RGB((g + (c.r - g) * 0.25) * 0.8, (g + (c.g - g) * 0.25) * 0.82, (g + (c.b - g) * 0.25) * 0.88)
             case .dark: return RGB((g + (c.r - g) * 0.15) * 0.5, (g + (c.g - g) * 0.15) * 0.52, (g + (c.b - g) * 0.15) * 0.58)
             }
@@ -117,6 +163,7 @@ enum VoxelModels {
     @discardableResult
     static func draw(_ name: String, projection p: MapProjection, ground: CGPoint, floor: Double, unit: Double,
                      heading: Double = 0, tone: Tone = .plain, ink: Bool = true, alpha: Double = 1,
+                     roof: RGB? = nil, bounds: Bounds? = nil,
                      in context: inout GraphicsContext) -> CGFloat? {
         guard let model = models[name] else { return nil }
         let e = p.east
@@ -179,12 +226,14 @@ enum VoxelModels {
             corner(6, b.x1, b.y1, b.z1)
             corner(7, b.x0, b.y1, b.z1)
             let base = tone.apply(b.color)
+            if let bounds { for i in 0..<8 { bounds.add(xs[i], ys[i]) } }
+            let isRoof = roof != nil && (b.x1 - b.x0) * (b.y1 - b.y0) >= 6 && b.z1 >= model.roofZ - 0.01
             // South, east, north, west sides, then the top: corners anticlockwise seen from outside.
             _ = face(0, 1, 5, 4, side(0, -1), base)
             _ = face(1, 2, 6, 5, side(1, 0), base)
             _ = face(2, 3, 7, 6, side(0, 1), base)
             _ = face(3, 0, 4, 7, side(-1, 0), base)
-            if face(4, 5, 6, 7, 1, base) { top = min(top, min(min(ys[4], ys[5]), min(ys[6], ys[7]))) }
+            if face(4, 5, 6, 7, 1, isRoof ? roof! : base) { top = min(top, min(min(ys[4], ys[5]), min(ys[6], ys[7]))) }
         }
         return top == .greatestFiniteMagnitude ? nil : top
     }

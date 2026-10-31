@@ -61,10 +61,173 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
         if player_controlled(world, handle) || !firm.operative() {
             continue;
         }
+        // The board's chapter mandate, taken through the same command a player uses.
+        if let Some(pick) = cw_sim::economy::chapters::rival_pick(world, dataset, handle) {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::ChooseMandate { firm: handle, pick },
+            });
+        }
+        // Management guidance, through the same command and checks as the player's.
+        if let Some((low_cents, high_cents)) =
+            cw_sim::economy::earnings::rival_guidance(world, handle)
+        {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::GiveGuidance {
+                    firm: handle,
+                    low_cents,
+                    high_cents,
+                },
+            });
+        }
+        // Campaign money and public tenders, through the same commands and limits as the player.
+        if let Some((office, candidate, cents)) =
+            cw_sim::economy::civics::rival_gift(world, dataset, handle)
+        {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::GiveToCandidate {
+                    firm: handle,
+                    office,
+                    candidate,
+                    cents,
+                },
+            });
+        }
+        if let Some((tender, price_cents, weeks)) =
+            cw_sim::economy::civics::rival_bid(world, dataset, handle)
+        {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::BidOnTender {
+                    firm: handle,
+                    tender,
+                    price_cents,
+                    weeks,
+                },
+            });
+        }
+        // Executives for hire, taken through the same commands a player uses: only when the
+        // effect pays and the firm can carry the pay.
+        if let Some((post, person)) =
+            cw_sim::economy::executives::rival_pick(world, dataset, handle)
+        {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::HireExecutive {
+                    firm: handle,
+                    post: post.code(),
+                    person,
+                },
+            });
+        } else if let Some((from, post, offer_cents)) = cw_sim::economy::executives::rival_poach(
+            world,
+            dataset,
+            handle,
+            cw_sim::economy::cast::temperament(world, dataset, handle),
+        ) {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::PoachExecutive {
+                    firm: handle,
+                    from,
+                    post: post.code(),
+                    offer_cents,
+                },
+            });
+        }
+        // A long plan against a target's shares and a target's answer to one, as ordinary orders
+        // and offers: the same commands, checks and information a player has.
+        match cw_sim::economy::plans::rival_action(world, dataset, handle) {
+            Some(cw_sim::economy::plans::Action::Buy {
+                target,
+                qty,
+                limit_cents,
+            }) => proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::PlaceShareOrder {
+                    investor: false,
+                    firm: target,
+                    buy: true,
+                    qty,
+                    limit_price_cents: limit_cents,
+                },
+            }),
+            Some(cw_sim::economy::plans::Action::Sell {
+                target,
+                qty,
+                limit_cents,
+            }) => proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::PlaceShareOrder {
+                    investor: false,
+                    firm: target,
+                    buy: false,
+                    qty,
+                    limit_price_cents: limit_cents,
+                },
+            }),
+            Some(cw_sim::economy::plans::Action::Tender {
+                target,
+                price_cents,
+                shares,
+            }) => proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::StartDiligence {
+                    buyer: handle,
+                    target,
+                    kind: cw_sim::state::DealKind::SharePurchase,
+                    price_cents,
+                    max_shares: shares,
+                },
+            }),
+            None => {}
+        }
+        // A friendly firm steps in for a target once a raider's stake in it is public.
+        match cw_sim::economy::plans::white_knight(world, handle) {
+            Some(cw_sim::economy::plans::Action::Buy {
+                target,
+                qty,
+                limit_cents,
+            }) => proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::PlaceShareOrder {
+                    investor: false,
+                    firm: target,
+                    buy: true,
+                    qty,
+                    limit_price_cents: limit_cents,
+                },
+            }),
+            Some(cw_sim::economy::plans::Action::Tender {
+                target,
+                price_cents,
+                shares,
+            }) => proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::StartDiligence {
+                    buyer: handle,
+                    target,
+                    kind: cw_sim::state::DealKind::SharePurchase,
+                    price_cents,
+                    max_shares: shares,
+                },
+            }),
+            _ => {}
+        }
+        if let Some(qty) = cw_sim::economy::plans::rival_defence(world, handle) {
+            proposals.push(Proposal {
+                actor: handle.0,
+                intent: CommandIntent::RepurchaseShares { firm: handle, qty },
+            });
+        }
         cw_sim::ph!("ai::urgent", urgent(world, dataset, handle, &mut proposals));
         // Production follows sell-through plant by plant in the weekly tick, the same planner
         // as the player's automatic production (cw_sim::economy::pricing::plan).
         cw_sim::ph!("ai::reopen", reopen(world, dataset, handle, &mut proposals));
+        idle_carrier(world, dataset, handle, &mut proposals);
+        reopen_carrier(world, dataset, handle, &mut proposals);
         if wind_down(world, handle, &mut proposals) {
             continue;
         }
@@ -569,7 +732,11 @@ fn speculate(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
         // The state reserve competes for the same goods: it sells into a spike, so a rival
         // releases its own store first, and it buys in a bust, which puts a floor under the
         // price that makes buying beside it safe.
-        let reserve_phase = cw_sim::economy::reserve::phase(world, dataset, product);
+        let reserve_phase = Memo::read(
+            |m| &mut m.reserve_phase,
+            product,
+            || cw_sim::economy::reserve::phase(world, dataset, product),
+        );
         if held.0 > 0
             && (level >= 10_500
                 || (trend <= -500 && level > 10_000)
@@ -826,7 +993,12 @@ fn best_carrier_build(
     let entity = world.firms.get(firm)?;
     let logistics = cw_sim::economy::operations::industry_index("logistics")?;
     let mut best: Option<(i64, u16, u8)> = None;
-    for hot in lg::hot_lanes(world, dataset).into_iter().take(8) {
+    let hot_lanes = Memo::read(
+        |m| &mut m.hot_lanes,
+        (),
+        || lg::hot_lanes(world, dataset).into_iter().take(8).collect(),
+    );
+    for hot in hot_lanes {
         let def = &dataset.logistics.modes[hot.key.mode as usize];
         for region in [hot.key.a, hot.key.b] {
             // A division runs one strategy; a firm with another logistics strategy here skips it.
@@ -866,7 +1038,16 @@ fn best_carrier_build(
                 if entity.book.cash() < reserve * 2 + cost {
                     continue;
                 }
-                let lots = hot.outside.min(recipe.weekly_output_lots as i32) as i64;
+                // Carrier plants of this mode being built, or opened within a quarter, are not yet
+                // in the lane's overflow: every rival reads the same hot lane and would each
+                // build for all of it, so the overflow is net of what is on its way.
+                let coming = coming_carrier_lots(world, dataset, hot.key, hot.key.mode);
+                let lots = (hot.outside as i64 - coming)
+                    .max(0)
+                    .min(recipe.weekly_output_lots);
+                if lots <= 0 {
+                    continue;
+                }
                 // A third of the lane rate on the lots it can take over, three years of it.
                 let take = if recipe.terminal { lots / 2 } else { lots };
                 let npv = take * hot.rate_cents * 33 / 100 * 156
@@ -879,6 +1060,134 @@ fn best_carrier_build(
         }
     }
     best.map(|(_, recipe, region)| (recipe, region))
+}
+
+/// Weekly lots of carrier plants of one mode that serve either end of a lane and are still being
+/// built or opened in the last thirteen weeks.
+fn coming_carrier_lots(
+    world: &World,
+    dataset: &Dataset,
+    key: cw_sim::economy::logistics::LaneKey,
+    mode: u8,
+) -> i64 {
+    let now = world.tick.0;
+    world
+        .facilities
+        .iter()
+        .filter(|(_, plant)| plant.region == key.a || plant.region == key.b)
+        .filter(|(_, plant)| {
+            let recent = match plant.status {
+                FacilityStatus::Building => true,
+                // Plants that open with the scenario have completion week 0 and are not new.
+                FacilityStatus::Operating => {
+                    plant.completes.0 > 0 && now.saturating_sub(plant.completes.0) < 13
+                }
+                _ => false,
+            };
+            let recipe = &dataset.recipes[plant.recipe as usize];
+            recent
+                && !recipe.terminal
+                && recipe
+                    .transport_mode
+                    .as_deref()
+                    .and_then(|id| dataset.logistics.mode_index(id))
+                    == Some(mode)
+        })
+        .map(|(_, plant)| {
+            dataset.recipes[plant.recipe as usize].weekly_output_lots * plant.blocks as i64
+        })
+        .sum()
+}
+
+/// A carrier plant that has run for half a year, moves under a quarter of its capacity, and whose
+/// owner lost money over the last quarter is idle capacity: it is mothballed, so the firm stops
+/// paying a crew and upkeep for freight that is not there. It returns when its lanes run hot.
+fn idle_carrier(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
+    use cw_sim::economy::logistics as lg;
+    let Some(entity) = world.firms.get(firm) else {
+        return;
+    };
+    if !matches!(entity.status, FirmStatus::Operating) {
+        return;
+    }
+    let weeks = entity.book.recent_weeks();
+    if weeks.len() < 13 || weeks.iter().map(|w| w.net_income).sum::<i64>() >= 0 {
+        return;
+    }
+    let now = world.tick.0;
+    for handle in &entity.facilities {
+        let Some(plant) = world.facilities.get(*handle) else {
+            continue;
+        };
+        let recipe = &dataset.recipes[plant.recipe as usize];
+        if recipe.transport_mode.is_none()
+            || recipe.terminal
+            || plant.status != FacilityStatus::Operating
+            || now.saturating_sub(plant.completes.0) < 26
+        {
+            continue;
+        }
+        if lg::carrier_fill_bps(world, *handle).is_some_and(|fill| fill < lg::CARRIER_MIN_FILL_BPS)
+        {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::MothballFacility { facility: *handle },
+            });
+            return;
+        }
+    }
+}
+
+/// Bring a mothballed carrier back when a lane at either end of it runs hot, with at least half
+/// its capacity overflowing to outside carriers, and the restart leaves the cash reserve intact.
+fn reopen_carrier(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
+    use cw_sim::economy::logistics as lg;
+    let Some(entity) = world.firms.get(firm) else {
+        return;
+    };
+    if !matches!(entity.status, FirmStatus::Operating) {
+        return;
+    }
+    if !entity.facilities.iter().any(|h| {
+        world
+            .facilities
+            .get(*h)
+            .is_some_and(|p| p.status == FacilityStatus::Mothballed)
+    }) {
+        return;
+    }
+    let hot = lg::hot_lanes(world, dataset);
+    for handle in &entity.facilities {
+        let Some(plant) = world.facilities.get(*handle) else {
+            continue;
+        };
+        let recipe = &dataset.recipes[plant.recipe as usize];
+        let Some(mode) = recipe
+            .transport_mode
+            .as_deref()
+            .and_then(|id| dataset.logistics.mode_index(id))
+        else {
+            continue;
+        };
+        if recipe.terminal || plant.status != FacilityStatus::Mothballed {
+            continue;
+        }
+        let size = recipe.weekly_output_lots * plant.blocks as i64;
+        let overflow: i64 = hot
+            .iter()
+            .filter(|h| h.key.mode == mode && (h.key.a == plant.region || h.key.b == plant.region))
+            .map(|h| h.outside as i64)
+            .sum();
+        let cost = cw_sim::economy::operations::reopen_cost(plant);
+        if overflow * 2 >= size && entity.book.cash() - cost >= reserve_target(world, dataset, firm)
+        {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::ReopenFacility { facility: *handle },
+            });
+            return;
+        }
+    }
 }
 
 /// A pipeline for a producer of liquids or gas whose goods crowd a truck or rail lane. The
@@ -902,10 +1211,14 @@ fn pipeline_build(
         }
         for region in [hot.key.a, hot.key.b] {
             let own = liquid_output_lots(world, dataset, region, Some(firm));
-            let all = liquid_output_lots(world, dataset, region, None);
             if own <= 0 {
                 continue;
             }
+            let all = Memo::read(
+                |m| &mut m.liquid_all,
+                region,
+                || liquid_output_lots(world, dataset, region, None),
+            );
             // The firm must ship on the lane today: a pipeline replaces freight it pays for.
             let mine = group_shipped(world, firm, hot.key);
             if lg::shipped_last_week(world, firm, hot.key) <= 0
@@ -1518,6 +1831,11 @@ fn acquisition_bid(
     let price = mark + mark * 25 / 100;
     let eligible = entity.shares.eligible_votes();
     let held = entity.shares.qty(HolderId::Firm(buyer));
+    // A rival that already holds part of a company tops up only as the last step of its own
+    // long plan (which launches its bid itself); a stray second bid is not a plan.
+    if held > 0 {
+        return None;
+    }
     let wanted = (eligible / 2 + 1 - held).max(0);
     if wanted == 0 {
         return None;
@@ -1679,7 +1997,18 @@ struct Memo {
     public_price: BTreeMap<(u16, u8), i64>,
     import_netback: BTreeMap<(u16, u8), Option<i64>>,
     /// Holders of each (region, industry) cell with their shares.
-    cells: BTreeMap<(u8, u8), Vec<(Handle, i64)>>,
+    cells: BTreeMap<(u8, u8), cw_sim::economy::sectors::Cell>,
+    /// Imports against home output per good (`pricing::import_dependence_bps`).
+    import_dependence: BTreeMap<u16, Option<i64>>,
+    /// A block's contribution by home region, strategy and plant region; it reads the firm only
+    /// through its home region.
+    block_contribution: BTreeMap<(u8, u16, u8), i64>,
+    /// Lanes short of capacity, one list for the pass (the key is unit).
+    hot_lanes: BTreeMap<(), Vec<cw_sim::economy::logistics::HotLane>>,
+    /// All liquid output of a region, whoever makes it.
+    liquid_all: BTreeMap<u8, i64>,
+    /// The state reserve's stance on each good, which reads the whole corridor's price.
+    reserve_phase: BTreeMap<u16, cw_sim::economy::reserve::Phase>,
 }
 
 thread_local! {
@@ -1725,10 +2054,19 @@ impl Drop for MemoPass {
 
 /// The holders of a cell and their shares (`cw_sim::economy::sectors::cell`).
 fn cell_holders(world: &World, dataset: &Dataset, region: u8, sector: u8) -> Vec<(Handle, i64)> {
+    cell_read(world, dataset, region, sector).0
+}
+
+fn cell_read(
+    world: &World,
+    dataset: &Dataset,
+    region: u8,
+    sector: u8,
+) -> cw_sim::economy::sectors::Cell {
     Memo::read(
         |m| &mut m.cells,
         (region, sector),
-        || cw_sim::economy::sectors::cell(world, dataset, region, sector).0,
+        || cw_sim::economy::sectors::cell(world, dataset, region, sector),
     )
 }
 
@@ -1786,18 +2124,44 @@ fn room(world: &World, dataset: &Dataset, product: u16, region: u8) -> i64 {
     Memo::read(
         |m| &mut m.room,
         key,
-        || room_now(world, product, region, corridor),
+        || room_now(world, dataset, product, region, corridor),
     )
 }
 
-fn room_now(world: &World, product: u16, region: u8, corridor: bool) -> i64 {
-    world
+fn room_now(world: &World, dataset: &Dataset, product: u16, region: u8, corridor: bool) -> i64 {
+    let imports: i64 = world
         .gateways
         .iter()
         .filter(|g| g.product == product && (corridor || g.region == region))
         .map(|g| g.smoothed_import_lots)
-        .sum()
+        .sum();
+    // Imports lag: a plant under construction, or opened in the last eight weeks, has not yet
+    // shown up in the smoothed average. Room it will fill is not room for the next builder,
+    // or every rival that sees the same imports builds for them in the same quarter.
+    let coming: i64 = world
+        .facilities
+        .iter()
+        .filter(|(_, plant)| {
+            (corridor || plant.region == region)
+                && match plant.status {
+                    FacilityStatus::Building => true,
+                    FacilityStatus::Operating => plant.completes.0 + ROOM_LAG_WEEKS > world.tick.0,
+                    _ => false,
+                }
+        })
+        .map(|(_, plant)| plant)
+        .filter(|plant| {
+            dataset.recipes[plant.recipe as usize].output == dataset.products[product as usize].id
+        })
+        .map(|plant| {
+            dataset.recipes[plant.recipe as usize].weekly_output_lots * plant.blocks as i64
+        })
+        .sum();
+    (imports - coming).max(0)
 }
+
+/// Weeks after a plant opens that the smoothed import signal still understates what it supplies.
+const ROOM_LAG_WEEKS: u32 = 8;
 
 /// Whether imports leave room for a block of a strategy: imports of what it makes cover at least
 /// `fifths` fifths of its primary output. By-products do not enter the test: a by-product with no
@@ -1836,6 +2200,31 @@ fn block_revenue(world: &World, dataset: &Dataset, template: &cw_data::Recipe, r
 /// Weekly contribution of one block of a strategy in a state at public prices and the firm's
 /// own wage offers, after maintenance and land.
 fn block_contribution(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    recipe: u16,
+    region: u8,
+) -> i64 {
+    let Some(entity) = world.firms.get(firm) else {
+        return 0;
+    };
+    Memo::read(
+        |m| &mut m.block_contribution,
+        (entity.region, recipe, region),
+        || block_contribution_now(world, dataset, firm, recipe, region),
+    )
+}
+
+fn import_dependence(world: &World, dataset: &Dataset, product: u16) -> Option<i64> {
+    Memo::read(
+        |m| &mut m.import_dependence,
+        product,
+        || cw_sim::economy::pricing::import_dependence_bps(world, dataset, product),
+    )
+}
+
+fn block_contribution_now(
     world: &World,
     dataset: &Dataset,
     firm: Handle,
@@ -1947,9 +2336,16 @@ fn best_expansion(
             // Three years of contribution, less the real build cost (entry fee, founding
             // discount, dominance) and three years of financing at the policy rate
             // (docs/rules/FINANCE-LABOUR-AI.md, build candidate).
-            let cost =
-                cw_sim::economy::sectors::build_cost(world, dataset, firm, region, index as u16, 1)
-                    .total_cents();
+            let cost = cw_sim::economy::sectors::build_cost_in(
+                world,
+                dataset,
+                firm,
+                region,
+                index as u16,
+                1,
+                &cell_read(world, dataset, region, sector),
+            )
+            .total_cents();
             let financing = cost * world.macro_state.policy_rate_bps as i64 * 3 / 10_000;
             // A good is sold where it is imported: value the output at what it nets there after
             // freight instead of at this state's own quote, so plants go near the demand.
@@ -1984,7 +2380,7 @@ fn best_expansion(
             // win back: home sellers already ask near the import, so a plant that replaces imports
             // is worth a quarter more than the same plant in a market the corridor supplies.
             if npv > 0
-                && cw_sim::economy::pricing::import_dependence_bps(world, dataset, output)
+                && import_dependence(world, dataset, output)
                     .is_some_and(|bps| bps >= cw_sim::economy::pricing::IMPORT_DEPENDENT_BPS)
             {
                 npv += npv / 4;
@@ -2021,6 +2417,23 @@ fn best_expansion(
     best.map(|(npv, recipe, region)| (recipe, region, npv))
 }
 
+/// What a firm made over its last thirteen weeks, net of everything.
+fn earned_last_quarter(world: &World, firm: Handle) -> i64 {
+    world
+        .firms
+        .get(firm)
+        .map(|f| f.book.recent_weeks().iter().map(|w| w.net_income).sum())
+        .unwrap_or(0)
+}
+
+/// A campaign is paid for out of earnings: its budget and surcharge may not exceed half of what
+/// the firm made over its last thirteen weeks. The spend is booked as a cost in the week it is
+/// paid, so a campaign sized to the rival's defence and not to the raider's profit turned a
+/// profitable quarter into a loss quarter for about one raider in four.
+fn campaign_paid_from_earnings(earned: i64, budget: i64, surcharge: i64) -> bool {
+    earned > 0 && (budget + surcharge) * 2 <= earned
+}
+
 /// The best market raid for a firm: a rival division in a cell it shares, aiming for a
 /// two-to-one campaign, with a positive expected value after the campaign and purchase price.
 fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, u8, u8, i64, i64)> {
@@ -2035,6 +2448,8 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
         return None;
     }
     let reserve = reserve_target(world, dataset, firm);
+    // A campaign is paid out of earnings: what the firm made over its last thirteen weeks.
+    let earned = earned_last_quarter(world, firm);
     let mut best: Option<(i64, Handle, u8, u8, i64)> = None;
     for division in sectors::divisions_of(world, dataset, firm) {
         let firms = cell_holders(world, dataset, division.region, division.industry);
@@ -2081,6 +2496,7 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
             );
             if quote.blocks_at_stake == 0
                 || entity.book.cash() < reserve + budget + quote.price_cents + quote.surcharge_cents
+                || !campaign_paid_from_earnings(earned, budget, quote.surcharge_cents)
             {
                 continue;
             }
@@ -2297,9 +2713,21 @@ fn storage_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut
             {
                 continue;
             }
-            let cost =
-                cw_sim::economy::sectors::build_cost(world, dataset, firm, region, index as u16, 1)
-                    .total_cents();
+            let cost = cw_sim::economy::sectors::build_cost_in(
+                world,
+                dataset,
+                firm,
+                region,
+                index as u16,
+                1,
+                &cell_read(
+                    world,
+                    dataset,
+                    region,
+                    cw_sim::economy::sectors::recipe_industry(dataset, index as u16),
+                ),
+            )
+            .total_cents();
             if cash < reserve * 2 + cost {
                 continue;
             }
@@ -2681,7 +3109,9 @@ mod tests {
             cw_sim::tick::advance(&mut world, &dataset);
         }
         let bytes = postcard::to_allocvec(&world).unwrap();
-        let reloaded: World = postcard::from_bytes(&bytes).unwrap();
+        let mut reloaded: World = postcard::from_bytes(&bytes).unwrap();
+        // The politics state travels in its own save trailer, outside the payload.
+        reloaded.civics = world.civics.clone();
         let first: Vec<String> = propose(&world, &dataset)
             .iter()
             .map(|p| format!("{p:?}"))
@@ -3058,6 +3488,230 @@ mod tests {
         }
         assert!(room_covers(&world, &dataset, template, region, 4));
         assert!(room_covers(&world, &dataset, template, region, 5));
+    }
+
+    #[test]
+    fn a_campaign_is_paid_for_out_of_earnings_never_more_than_half_a_quarters_profit() {
+        // The campaign and its legal surcharge together, against thirteen weeks of net income.
+        assert!(campaign_paid_from_earnings(400_000, 150_000, 50_000));
+        assert!(!campaign_paid_from_earnings(399_999, 150_000, 50_000));
+        // A firm that lost money, or has no history, never raids, however much cash it holds.
+        assert!(!campaign_paid_from_earnings(0, 1, 0));
+        assert!(!campaign_paid_from_earnings(-5_000_000, 1, 0));
+        // The same sum is read off a firm's own closed weeks: thirteen weeks of 100,000 profit.
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 9, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let firm = world
+            .firms
+            .handles_sorted()
+            .into_iter()
+            .find(|h| !player_controlled(&world, *h))
+            .unwrap();
+        assert_eq!(earned_last_quarter(&world, firm), 0);
+        for week in 1..=13u32 {
+            use cw_core::ledger::{Account, Txn};
+            let tick = cw_core::calendar::Tick(week);
+            world.tick = tick;
+            let book = &mut world.firms.get_mut(firm).unwrap().book;
+            let _ = book.commit(
+                tick,
+                Txn::new().debit(Account::Cash, 100_000, "test").credit(
+                    Account::Revenue,
+                    100_000,
+                    "test",
+                ),
+            );
+            book.close_week(tick);
+        }
+        assert_eq!(earned_last_quarter(&world, firm), 1_300_000);
+    }
+
+    /// A Ruhr firm with two pipelines, 100 lots of capacity each, and a fake week of freight on
+    /// them: lot-km moved over lot-km of capacity (100 lots x 400 km = 40,000).
+    fn pipeline_firm(
+        profit_per_week: i64,
+        used: [i64; 2],
+    ) -> (World, Dataset, Handle, [Handle; 2]) {
+        use cw_core::ledger::{Account, Txn};
+        let dataset = Dataset::load_scenario("ruhr-rhine-1991").unwrap();
+        let mut world = seed::build(&dataset, 5, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        let (firm, plants) = world
+            .firms
+            .iter()
+            .find_map(|(h, f)| {
+                let pipes: Vec<Handle> = f
+                    .facilities
+                    .iter()
+                    .copied()
+                    .filter(|p| {
+                        let r = &dataset.recipes[world.facilities.get(*p).unwrap().recipe as usize];
+                        r.transport_mode.as_deref() == Some("pipeline") && !r.terminal
+                    })
+                    .collect();
+                (pipes.len() == 2).then(|| (h, [pipes[0], pipes[1]]))
+            })
+            .unwrap();
+        world.logistics.carriers.clear();
+        for (plant, used_lot_km) in plants.iter().zip(used) {
+            let facility = world.facilities.get(*plant).unwrap();
+            world
+                .logistics
+                .carriers
+                .push(cw_sim::economy::logistics::Carrier {
+                    firm,
+                    facility: *plant,
+                    region: facility.region,
+                    mode: 0,
+                    cap: 100,
+                    used_lot_km,
+                });
+        }
+        for week in 1..=13u32 {
+            let tick = cw_core::calendar::Tick(week + 100);
+            world.tick = tick;
+            let book = &mut world.firms.get_mut(firm).unwrap().book;
+            let txn = if profit_per_week >= 0 {
+                Txn::new()
+                    .debit(Account::Cash, profit_per_week, "test")
+                    .credit(Account::Revenue, profit_per_week, "test")
+            } else {
+                Txn::new()
+                    .credit(Account::Cash, -profit_per_week, "test")
+                    .debit(Account::OperatingExpense, -profit_per_week, "test")
+            };
+            let _ = book.commit(tick, txn);
+            book.close_week(tick);
+        }
+        (world, dataset, firm, plants)
+    }
+
+    #[test]
+    fn a_losing_firm_mothballs_the_carrier_under_a_quarter_full_and_only_that_one() {
+        // Worked by hand: 9,999 of 40,000 lot-km is 2,499 basis points, one under the line;
+        // 10,000 is exactly 2,500 and stays.
+        let (world, dataset, firm, plants) = pipeline_firm(-1_000, [9_999, 10_000]);
+        let mut proposals = Vec::new();
+        idle_carrier(&world, &dataset, firm, &mut proposals);
+        assert_eq!(proposals.len(), 1);
+        assert!(matches!(
+            proposals[0].intent,
+            CommandIntent::MothballFacility { facility } if facility == plants[0]
+        ));
+        // A firm that is making money keeps its idle carrier: the loss is what idles it.
+        let (world, dataset, firm, _) = pipeline_firm(1_000, [0, 0]);
+        let mut proposals = Vec::new();
+        idle_carrier(&world, &dataset, firm, &mut proposals);
+        assert!(proposals.is_empty());
+        // So does a carrier younger than half a year, however empty.
+        let (mut world, dataset, firm, plants) = pipeline_firm(-1_000, [0, 0]);
+        for p in plants {
+            world.facilities.get_mut(p).unwrap().completes = cw_core::calendar::Tick(100);
+        }
+        world.tick = cw_core::calendar::Tick(120);
+        let mut proposals = Vec::new();
+        idle_carrier(&world, &dataset, firm, &mut proposals);
+        assert!(proposals.is_empty());
+    }
+
+    #[test]
+    fn carrier_plants_on_their_way_are_taken_off_the_overflow_a_rival_builds_for() {
+        let (mut world, dataset, _, plants) = pipeline_firm(0, [0, 0]);
+        world.tick = cw_core::calendar::Tick(200);
+        let region = world.facilities.get(plants[0]).unwrap().region;
+        let key = cw_sim::economy::logistics::LaneKey::new(region, region, 0);
+        let pipeline = dataset.logistics.mode_index("pipeline").unwrap();
+        let size = |w: &World, p: Handle| {
+            let plant = w.facilities.get(p).unwrap();
+            dataset.recipes[plant.recipe as usize].weekly_output_lots * plant.blocks as i64
+        };
+        for p in plants {
+            world.facilities.get_mut(p).unwrap().completes = cw_core::calendar::Tick(0);
+        }
+        assert_eq!(coming_carrier_lots(&world, &dataset, key, pipeline), 0);
+        // One still being built counts in full; one opened ten weeks ago too; one opened
+        // twenty weeks ago does not.
+        world.facilities.get_mut(plants[0]).unwrap().status = FacilityStatus::Building;
+        assert_eq!(
+            coming_carrier_lots(&world, &dataset, key, pipeline),
+            size(&world, plants[0])
+        );
+        world.facilities.get_mut(plants[0]).unwrap().status = FacilityStatus::Operating;
+        world.facilities.get_mut(plants[0]).unwrap().completes = cw_core::calendar::Tick(190);
+        assert_eq!(
+            coming_carrier_lots(&world, &dataset, key, pipeline),
+            size(&world, plants[0])
+        );
+        world.facilities.get_mut(plants[0]).unwrap().completes = cw_core::calendar::Tick(180);
+        assert_eq!(coming_carrier_lots(&world, &dataset, key, pipeline), 0);
+    }
+
+    #[test]
+    fn room_to_build_is_net_of_plants_coming_or_just_opened() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = seed::build(&dataset, 12, ScenarioKind::Guided, ScenarioMode::Sandbox);
+        world.tick = cw_core::calendar::Tick(100);
+        let handle = world
+            .facilities
+            .iter()
+            .find(|(_, p)| {
+                p.status == FacilityStatus::Operating
+                    && dataset
+                        .product_index
+                        .contains_key(&dataset.recipes[p.recipe as usize].output)
+                    && dataset.products
+                        [dataset.product_index[&dataset.recipes[p.recipe as usize].output] as usize]
+                        .kind
+                        == cw_data::ProductKind::Goods
+            })
+            .map(|(h, _)| h)
+            .unwrap();
+        let (recipe, region, blocks) = {
+            let p = world.facilities.get(handle).unwrap();
+            (p.recipe, p.region, p.blocks as i64)
+        };
+        let template = &dataset.recipes[recipe as usize];
+        let product = dataset.product_index[&template.output];
+        for gateway in &mut world.gateways {
+            gateway.smoothed_import_lots = 0;
+        }
+        // Every plant of this good in the world, for the oracle.
+        let all_blocks: i64 = world
+            .facilities
+            .iter()
+            .filter(|(_, p)| dataset.recipes[p.recipe as usize].output == template.output)
+            .map(|(_, p)| dataset.recipes[p.recipe as usize].weekly_output_lots * p.blocks as i64)
+            .sum();
+        let one = template.weekly_output_lots * blocks;
+        let big = all_blocks * 10;
+        world
+            .gateways
+            .iter_mut()
+            .find(|g| g.product == product)
+            .unwrap()
+            .smoothed_import_lots = big;
+        // Long-running plants take nothing off the room.
+        for (_, p) in world.facilities.iter_mut() {
+            p.completes = cw_core::calendar::Tick(0);
+        }
+        assert_eq!(room_now(&world, &dataset, product, region, true), big);
+        // A plant still being built does.
+        world.facilities.get_mut(handle).unwrap().status = FacilityStatus::Building;
+        assert_eq!(room_now(&world, &dataset, product, region, true), big - one);
+        // So does one that opened three weeks ago, but not one that opened twenty weeks ago.
+        {
+            let p = world.facilities.get_mut(handle).unwrap();
+            p.status = FacilityStatus::Operating;
+            p.completes = cw_core::calendar::Tick(97);
+        }
+        assert_eq!(room_now(&world, &dataset, product, region, true), big - one);
+        world.facilities.get_mut(handle).unwrap().completes = cw_core::calendar::Tick(80);
+        assert_eq!(room_now(&world, &dataset, product, region, true), big);
+        // Room never goes below zero.
+        world.facilities.get_mut(handle).unwrap().status = FacilityStatus::Building;
+        for gateway in &mut world.gateways {
+            gateway.smoothed_import_lots = 0;
+        }
+        assert_eq!(room_now(&world, &dataset, product, region, true), 0);
     }
 
     #[test]

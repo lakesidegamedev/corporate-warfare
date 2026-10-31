@@ -3,6 +3,7 @@ package net.lakesidegames.corporatewarfare
 import androidx.compose.foundation.horizontalScroll
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -19,9 +20,20 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.foundation.border
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -42,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,7 +84,9 @@ private enum class Page(val id: String, val title: String, val icon: String, val
     Markets("markets", "Markets", "markets", "World", "F5"),
     Actions("actions", "Actions", "command", "World", "Ctrl K"),
     Inbox("inbox", "Inbox", "inbox", "World", "F6"),
+    Paper("paper", "Paper", "doc", "World", "F8"),
     Portfolio("portfolio", "Portfolio", "portfolio", "You", "F7"),
+    Hall("hall", "Hall of Careers", "star", "You", "F9"),
 }
 
 /**
@@ -79,10 +94,23 @@ private enum class Page(val id: String, val title: String, val icon: String, val
  * the time controls always in view, keyboard shortcuts, and dense multi-pane screens.
  */
 @Composable
-fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
+fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0, onMenu: () -> Unit = {}) {
     var page by remember { mutableStateOf(Page.entries[startPage]) }
     var query by remember { mutableStateOf("") }
     val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    // The map docked beside a page: the share of the width it takes, per page. Kept in the settings when there are any.
+    val settings = LocalAppSettings.current
+    val localDocks = remember { mutableStateMapOf<String, Float>() }
+    val docks = settings?.docks ?: localDocks
+    fun setDock(id: String, share: Float?) {
+        if (settings != null) settings.chooseDock(id, share)
+        else if (share == null) localDocks.remove(id) else localDocks[id] = share
+    }
+    fun toggleDock(current: Page) {
+        if (current != Page.Map) setDock(current.id, if (docks[current.id] == null) DOCK_DEFAULT else null)
+    }
+    var dockLayer by remember { mutableStateOf(MapLayer.Presence) }
+    var dockSelected by remember { mutableStateOf<String?>(null) }
     fun open(next: Page) {
         page = next
         Tutorial.visited(next.id)
@@ -101,11 +129,7 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when {
                     event.isCtrlPressed && event.key == Key.K -> { open(Page.Actions); true }
-                    event.key == Key.Spacebar && page != Page.Actions -> { store.playAt(if (store.running) 0 else store.speed.coerceAtLeast(1)); true }
-                    event.key == Key.N && page != Page.Actions -> { if (!store.busy && !store.running) store.advance(); true }
-                    event.key == Key.One && page != Page.Actions -> { store.playAt(1); true }
-                    event.key == Key.Two && page != Page.Actions -> { store.playAt(2); true }
-                    event.key == Key.Three && page != Page.Actions -> { store.playAt(4); true }
+                    event.isCtrlPressed && event.key == Key.M -> { toggleDock(page); true }
                     event.key == Key.F1 -> { open(Page.Map); true }
                     event.key == Key.F2 -> { open(Page.Office); true }
                     event.key == Key.F3 -> { open(Page.Research); true }
@@ -113,31 +137,59 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
                     event.key == Key.F5 -> { open(Page.Markets); true }
                     event.key == Key.F6 -> { open(Page.Inbox); true }
                     event.key == Key.F7 -> { open(Page.Portfolio); true }
+                    event.key == Key.F8 -> { open(Page.Paper); true }
+                    event.key == Key.F9 -> { open(Page.Hall); true }
                     else -> false
+                }
+            }
+            // Plain keys run on the way back up, so a text field or a focused button gets its keys first.
+            .plainShortcuts(enabled = page != Page.Actions) { shortcut ->
+                when (shortcut) {
+                    PlainShortcut.PlayPause -> store.playAt(if (store.running) 0 else store.speed.coerceAtLeast(1))
+                    PlainShortcut.AdvanceWeek -> if (!store.busy && !store.running) store.advance()
+                    PlainShortcut.Speed1 -> store.playAt(1)
+                    PlainShortcut.Speed2 -> store.playAt(2)
+                    PlainShortcut.Speed3 -> store.playAt(4)
                 }
             },
     ) {
         DivisionDetailHost(store)
-        Row(Modifier.fillMaxSize()) {
-            Sidebar(store, page, ::open, onSettings)
+        Row(Modifier.fillMaxSize().focusGroup()) {
+            Sidebar(store, page, ::open, onSettings, onMenu, docks[page.id] != null) { toggleDock(page) }
             Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.stroke))
-            Column(Modifier.weight(1f).fillMaxHeight()) {
+            Column(Modifier.weight(1f).fillMaxHeight().focusGroup()) {
                 StatusBar(store) { text ->
                     query = text
                     open(Page.Actions)
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
+                TickerBar(store) { open(Page.Paper) }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
                 PauseBanner(store, Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp))
                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                    when (page) {
-                        Page.Map -> DesktopMap(store)
-                        Page.Office -> DesktopOffice(store) { open(it) }
-                        Page.Research -> Box(Modifier.fillMaxSize().padding(10.dp)) { ResearchScreen(store) }
-                        Page.Markets -> DesktopMarkets(store)
-                        Page.Actions -> key(query) { CommandCenterScreen(store, initialQuery = query) }
-                        Page.Stats -> DesktopStats(store)
-                        Page.Inbox -> DesktopInbox(store)
-                        Page.Portfolio -> DesktopPortfolio(store)
+                    val pageContent: @Composable () -> Unit = {
+                        when (page) {
+                            Page.Map -> DesktopMap(store)
+                            Page.Office -> DesktopOffice(store) { open(it) }
+                            Page.Research -> Box(Modifier.fillMaxSize().padding(10.dp)) { ResearchScreen(store) }
+                            Page.Markets -> DesktopMarkets(store)
+                            Page.Actions -> key(query) { CommandCenterScreen(store, initialQuery = query) }
+                            Page.Stats -> DesktopStats(store)
+                            Page.Inbox -> DesktopInbox(store)
+                            Page.Portfolio -> DesktopPortfolio(store)
+                            Page.Paper -> PaperScreen(store)
+                            Page.Hall -> HallScreen(store)
+                        }
+                    }
+                    val share = docks[page.id]
+                    if (page != Page.Map && share != null) {
+                        DockedSplit(
+                            share, { setDock(page.id, it) },
+                            map = { DockedMap(store, dockLayer, { dockLayer = it }, dockSelected, { dockSelected = it }) { open(Page.Map) } },
+                            page = pageContent,
+                        )
+                    } else {
+                        pageContent()
                     }
                 }
             }
@@ -147,8 +199,10 @@ fun DesktopShell(store: GameStore, onSettings: () -> Unit, startPage: Int = 0) {
 }
 
 @Composable
-private fun Sidebar(store: GameStore, page: Page, onPage: (Page) -> Unit, onSettings: () -> Unit) {
-    Column(Modifier.width(206.dp).fillMaxHeight().background(Palette.panel).padding(vertical = 14.dp)) {
+private fun Sidebar(store: GameStore, page: Page, onPage: (Page) -> Unit, onSettings: () -> Unit, onMenu: () -> Unit, docked: Boolean, onDock: () -> Unit) {
+    Column(Modifier.width(206.dp).fillMaxHeight().background(Palette.panel).padding(vertical = 14.dp).focusGroup()) {
+        // The pages scroll on a short window; the game controls at the bottom always stay in view.
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
         Box(Modifier.fillMaxWidth().padding(bottom = 10.dp), contentAlignment = Alignment.Center) { LogoArt(Modifier.width(112.dp)) }
         CompanySwitcher(store)
         var group = ""
@@ -160,12 +214,15 @@ private fun Sidebar(store: GameStore, page: Page, onPage: (Page) -> Unit, onSett
                     letterSpacing = 1.sp, modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp),
                 )
             }
-            val due = if (item == Page.Inbox) store.events.count { it.mandatory } else 0
+            val due = if (item == Page.Inbox) store.inboxBadge else 0
             SidebarItem(item.icon, item.title, item.key, page == item, badge = due) { onPage(item) }
         }
-        Spacer(Modifier.weight(1f))
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
+        if (page != Page.Map) SidebarItem("map", if (docked) "Undock map" else "Dock map", "Ctrl M", docked, onClick = onDock)
         SidebarItem("save", "Save", "", false) { store.saveNow() }
         SidebarItem("settings", "Settings", "", false, onClick = onSettings)
+        SidebarItem("menu", "Game menu", "Esc", false, onClick = onMenu)
         SidebarItem("quit", "Main menu", "", false) { store.exitToMenu() }
     }
 }
@@ -270,7 +327,7 @@ private fun StatusBar(store: GameStore, onSearch: (String) -> Unit) {
             cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.gold),
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { onSearch(text) }),
-            modifier = Modifier.width(220.dp).onPreviewKeyEvent { e ->
+            modifier = Modifier.textEntry().width(220.dp).onPreviewKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown && e.key == Key.Enter) { onSearch(text); true } else false
             },
             decorationBox = { inner ->
@@ -296,25 +353,29 @@ private fun StatusBar(store: GameStore, onSearch: (String) -> Unit) {
 
 @Composable
 private fun Figure(label: String, value: String, tone: Color = Palette.primaryText) {
-    Column {
+    Explain(Words.about(label)) {
+      Column {
         Text(label.uppercase(), color = Palette.secondary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
         Text(value, color = tone, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+      }
     }
 }
 
 // MARK: Table pieces
 
 /** A column: header text, share of the row's width, and alignment. */
-data class Col(val title: String, val weight: Float, val end: Boolean = false)
+data class Col(val title: String, val weight: Float, val end: Boolean = false, val tip: String? = null)
 
 @Composable
 private fun TableHeader(cols: List<Col>) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp)) {
         cols.forEach { col ->
-            Text(
-                col.title.uppercase(), color = Palette.secondary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp,
-                textAlign = if (col.end) TextAlign.End else TextAlign.Start, modifier = Modifier.weight(col.weight).padding(horizontal = 4.dp), maxLines = 1,
-            )
+            Explain(col.tip ?: Words.about(col.title), Modifier.weight(col.weight)) {
+                Text(
+                    col.title.uppercase(), color = Palette.secondary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp,
+                    textAlign = if (col.end) TextAlign.End else TextAlign.Start, modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), maxLines = 1,
+                )
+            }
         }
     }
     HorizontalDivider(color = Palette.stroke)
@@ -366,6 +427,85 @@ private fun Chips(options: List<String>, selected: String, onPick: (String) -> U
                 option, color = if (option == selected) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontFamily = Pixel.font, maxLines = 1, softWrap = false,
                 modifier = Modifier.clip(Pixel.small).background(if (option == selected) Palette.gold else Palette.panelRaised)
                     .clickable { onPick(option) }.padding(horizontal = 10.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+// MARK: Docked map
+
+private val DOCK_PAGE_MIN = 760.dp
+
+/**
+ * The map on the left and the current page on the right, with a handle between them to resize.
+ * The share is the map's part of the width; it is saved when the drag ends or a key moves it.
+ */
+@Composable
+private fun DockedSplit(share: Float, onShare: (Float) -> Unit, map: @Composable () -> Unit, page: @Composable () -> Unit) {
+    var width by remember { mutableStateOf(1f) }
+    var live by remember(share) { mutableStateOf(share) }
+    Row(Modifier.fillMaxSize().onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }) {
+        Box(Modifier.weight(live).fillMaxHeight().padding(start = 10.dp, top = 10.dp, bottom = 10.dp)) { map() }
+        val hover = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+        val hovered by hover.collectIsHoveredAsState()
+        Box(
+            Modifier.width(14.dp).fillMaxHeight().hoverable(hover).pointerHoverIcon(PointerIcon.Hand)
+                .semantics { contentDescription = "Resize the map. Use the left and right arrow keys, or drag." }
+                .onKeyEvent { e ->
+                    if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                    val step = when (e.key) { Key.DirectionLeft -> -0.03f; Key.DirectionRight -> 0.03f; else -> return@onKeyEvent false }
+                    live = (live + step).coerceIn(DOCK_MIN, DOCK_MAX)
+                    onShare(live)
+                    true
+                }
+                .focusable()
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = { onShare(live) },
+                        onDragCancel = { onShare(live) },
+                    ) { change, dx ->
+                        change.consume()
+                        live = (live + dx / width).coerceIn(DOCK_MIN, DOCK_MAX)
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.width(if (hovered) 4.dp else 2.dp).fillMaxHeight().padding(vertical = 10.dp).background(if (hovered) Palette.gold else Palette.stroke))
+            Box(Modifier.width(6.dp).height(36.dp).clip(Pixel.small).background(if (hovered) Palette.gold else Palette.secondary.copy(alpha = 0.6f)))
+        }
+        // A page needs room for its columns: narrower than this it scrolls sideways instead of squeezing.
+        BoxWithConstraints(Modifier.weight(1f - live).fillMaxHeight()) {
+            if (maxWidth >= DOCK_PAGE_MIN) page()
+            else Box(Modifier.fillMaxSize().horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
+                Box(Modifier.width(DOCK_PAGE_MIN).fillMaxHeight()) { page() }
+            }
+        }
+    }
+}
+
+/** The world map for a split: the same map as the Map page with its modes in one scrolling line. */
+@Composable
+private fun DockedMap(
+    store: GameStore, layer: MapLayer, onLayer: (MapLayer) -> Unit, selected: String?, onSelect: (String?) -> Unit, onFullMap: () -> Unit,
+) {
+    var pickedLane by remember { mutableStateOf<String?>(null) }
+    Box(Modifier.fillMaxSize().clip(Pixel.shape).border(1.dp, Palette.stroke, Pixel.shape)) {
+        WorldMapView(store, layer, selected, onSelect, Modifier.fillMaxSize(), pickedLane, { pickedLane = it }, controlsAtTop = true)
+        Row(
+            Modifier.align(Alignment.TopStart).fillMaxWidth().padding(start = 10.dp, top = 10.dp, end = 64.dp)
+                .horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+        ) {
+            Chips(MapLayer.entries.map { it.title }, layer.title) { title -> onLayer(MapLayer.entries.first { it.title == title }) }
+        }
+        Row(
+            Modifier.align(Alignment.BottomEnd).padding(10.dp).clip(Pixel.shape).background(Palette.panel.copy(alpha = 0.92f)).padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            val region = selected?.let { code -> store.boards.firstOrNull { it.code == code }?.name }
+            Text(region ?: "Tap a region", color = Palette.primaryText, fontSize = 12.sp)
+            Text(
+                "FULL MAP", color = Palette.gold, fontFamily = Pixel.font, fontSize = 11.sp,
+                modifier = Modifier.clip(Pixel.small).clickable(onClick = onFullMap).semantics { contentDescription = "Open the full map page" }.padding(4.dp),
             )
         }
     }
@@ -461,7 +601,7 @@ private fun DesktopMap(store: GameStore) {
         val board = selected?.let { code -> store.boards.firstOrNull { it.code == code } }
         if (board != null) {
             Pane(board.name, Modifier.width(320.dp).fillMaxHeight(), trailing = {
-                PixelIcon("close", size = 14.dp, tint = Palette.secondary, modifier = Modifier.clickable { selected = null }.padding(6.dp))
+                PixelIcon("close", size = 14.dp, tint = Palette.secondary, modifier = Modifier.clickable { selected = null }.padding(6.dp), description = "Close the region details")
             }) {
                 RegionBoardDetail(store, board)
                 GoldButton("Build here", Modifier.fillMaxWidth().padding(12.dp), enabled = store.selectedFirm != null) { building = board }
@@ -475,7 +615,7 @@ private fun DesktopMap(store: GameStore) {
 private fun RegionBoardDetail(store: GameStore, board: RegionBoardDto) {
     Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("${board.stateName} · hub ${board.hubCity}", color = Palette.secondary, fontSize = 12.sp)
-        val cols = listOf(Col("Wages", 1f, true), Col("Skill", 1f, true), Col("Roads", 1f, true), Col("Power", 1f, true))
+        val cols = listOf(Col("Wages", 1f, true, "Pay in this region compared with the country's average. 100 percent is average."), Col("Skill", 1f, true, Words.about("skill")), Col("Roads", 1f, true, Words.about("roads")), Col("Power", 1f, true, Words.about("power")))
         TableHeader(cols)
         TableRow(0) {
             Cell("${board.wageIndexBps / 100}%", cols[0]); Cell("${board.skillBps / 100}", cols[1])
@@ -550,14 +690,68 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
             Spacer(Modifier.weight(1f))
             OutlinedButton(onClick = { onOpen(Page.Research) }) { Text("Research", color = Palette.primaryText) }
             OutlinedButton(onClick = { onOpen(Page.Stats) }) { Text("Stats", color = Palette.primaryText) }
+            OutlinedButton(onClick = { onOpen(Page.Hall) }) { Text("Hall", color = Palette.primaryText) }
             GoldButton("Actions") { onOpen(Page.Actions) }
         }
+        val scroll = rememberScrollState()
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        val anchors = remember { mutableMapOf<OfficeSection, Int>() }
+        fun Modifier.anchor(section: OfficeSection) = onGloballyPositioned { anchors[section] = it.positionInParent().y.roundToInt() }
+        fun route(r: OfficeRoute) {
+            when (r) {
+                is OfficeRoute.Screen -> Page.entries.firstOrNull { it.id == r.id }?.let(onOpen)
+                is OfficeRoute.Section -> scope.launch { anchors[r.section]?.let { scroll.animateScrollTo(it) } }
+            }
+        }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Column(Modifier.weight(0.9f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+            // The room on the left with the pricing and division tables under it; the details on the right.
+            Column(Modifier.weight(1.1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OfficeRoomHost(store, ::route)
+                val pc = listOf(Col("Product", 1.5f), Col("Price", 0.8f, true), Col("Posture", 1f), Col("Cost", 0.8f, true), Col("Margin", 0.8f, true), Col("Made", 0.6f, true), Col("Sold", 0.6f, true), Col("Stock", 0.75f, true))
+                Pane("Pricing: click a product to change its posture", Modifier.fillMaxWidth().height(300.dp)) {
+                    TableHeader(pc)
+                    store.productLines.forEachIndexed { i, line ->
+                        val margin = line.priceCents - line.unitCostCents
+                        val sold = if (line.madeLastWeekLots > 0) (line.soldLastWeekLots * 100 / line.madeLastWeekLots) else null
+                        TableRow(i, onClick = { editing = line }) {
+                            Cell(line.name, pc[0], bold = true)
+                            Cell(Format.money(line.priceCents), pc[1])
+                            Cell(postureLabel(line), pc[2], Palette.secondary)
+                            Cell(if (line.unitCostCents > 0) Format.money(line.unitCostCents) else "n/a", pc[3])
+                            Cell(if (line.unitCostCents > 0) Format.signed(margin) else "", pc[4], if (margin >= 0) Palette.positive else Palette.negative)
+                            Cell(Format.count(line.madeLastWeekLots), pc[5])
+                            Cell(sold?.let { "$it%" } ?: "", pc[6], when { sold == null -> Palette.secondary; sold >= 95 -> Palette.positive; sold >= 70 -> Palette.gold; else -> Palette.negative })
+                            Cell(Format.count(line.stockLots), pc[7])
+                        }
+                    }
+                }
+                val dc = listOf(Col("Division", 1.6f), Col("Strategy", 1.2f), Col("Plants", 0.6f, true), Col("Share", 0.6f, true))
+                Pane("Divisions", Modifier.fillMaxWidth().height(260.dp)) {
+                    TableHeader(dc)
+                    store.divisions.forEachIndexed { i, d ->
+                        TableRow(i, onClick = { store.showDivision(d) }) {
+                            Cell("${Sectors.name(d.industry)} · ${d.regionName}", dc[0], bold = true)
+                            Cell(d.strategyName + if (d.retooling) " (retooling)" else "", dc[1], Palette.secondary)
+                            Cell("${d.blocks}", dc[2])
+                            Cell("${d.shareBps / 100}%", dc[3], Palette.gold)
+                        }
+                    }
+                }
+
+            }
+            Column(Modifier.weight(0.9f).fillMaxHeight().verticalScroll(scroll)) {
+                Box(Modifier.anchor(OfficeSection.Brief)) { BriefPanel(store, firm.currency) }
+                Spacer(Modifier.height(10.dp))
+                if (store.boardOffer != null || store.activeMandate != null || store.chapterResult != null) {
+                    Box(Modifier.anchor(OfficeSection.Goal)) { ChapterBlock(store) }
+                    Spacer(Modifier.height(10.dp))
+                }
                 if (store.cfoAdvice.isNotEmpty()) {
                     CfoPanel(store, firm.currency)
                     Spacer(Modifier.height(10.dp))
                 }
+                Box(Modifier.anchor(OfficeSection.Executives)) { ExecutivesPanel(store, firm.currency) }
+                Spacer(Modifier.height(10.dp))
                 RivalsCard(store)
                 Spacer(Modifier.height(10.dp))
                 store.finance?.takeIf { it.firm == firm.handle && it.recentWeeks.isNotEmpty() }?.let { ProfitDrivers(it.recentWeeks) }
@@ -574,36 +768,6 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
                     Panel {
                         Eyebrow("Four-weekly results")
                         ResultsChart(periods)
-                    }
-                }
-            }
-            val pc = listOf(Col("Product", 1.5f), Col("Price", 0.8f, true), Col("Posture", 1f), Col("Cost", 0.8f, true), Col("Margin", 0.8f, true), Col("Made", 0.6f, true), Col("Sold", 0.6f, true), Col("Stock", 0.75f, true))
-            Pane("Pricing: click a product to change its posture", Modifier.weight(1.4f).fillMaxHeight()) {
-                TableHeader(pc)
-                store.productLines.forEachIndexed { i, line ->
-                    val margin = line.priceCents - line.unitCostCents
-                    val sold = if (line.madeLastWeekLots > 0) (line.soldLastWeekLots * 100 / line.madeLastWeekLots) else null
-                    TableRow(i, onClick = { editing = line }) {
-                        Cell(line.name, pc[0], bold = true)
-                        Cell(Format.money(line.priceCents), pc[1])
-                        Cell(postureLabel(line), pc[2], Palette.secondary)
-                        Cell(if (line.unitCostCents > 0) Format.money(line.unitCostCents) else "n/a", pc[3])
-                        Cell(if (line.unitCostCents > 0) Format.signed(margin) else "", pc[4], if (margin >= 0) Palette.positive else Palette.negative)
-                        Cell(Format.count(line.madeLastWeekLots), pc[5])
-                        Cell(sold?.let { "$it%" } ?: "", pc[6], when { sold == null -> Palette.secondary; sold >= 95 -> Palette.positive; sold >= 70 -> Palette.gold; else -> Palette.negative })
-                        Cell(Format.count(line.stockLots), pc[7])
-                    }
-                }
-            }
-            val dc = listOf(Col("Division", 1.6f), Col("Strategy", 1.2f), Col("Plants", 0.6f, true), Col("Share", 0.6f, true))
-            Pane("Divisions", Modifier.weight(1.1f).fillMaxHeight()) {
-                TableHeader(dc)
-                store.divisions.forEachIndexed { i, d ->
-                    TableRow(i, onClick = { store.showDivision(d) }) {
-                        Cell("${Sectors.name(d.industry)} · ${d.regionName}", dc[0], bold = true)
-                        Cell(d.strategyName + if (d.retooling) " (retooling)" else "", dc[1], Palette.secondary)
-                        Cell("${d.blocks}", dc[2])
-                        Cell("${d.shareBps / 100}%", dc[3], Palette.gold)
                     }
                 }
             }
@@ -625,7 +789,7 @@ private fun DesktopMarkets(store: GameStore) {
       Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Chips(listOf("Stocks", "Commodities", "Structure"), board) { board = it }
         val index = corridorIndex(store.stocks)
-        val sc = listOf(Col("Company", 1.7f), Col("Sector", 1f), Col("Price", 0.8f, true), Col("Week", 0.6f, true), Col("Quarter", 0.7f, true), Col("Market cap", 0.9f, true), Col("Float", 0.55f, true), Col("You hold", 0.75f, true))
+        val sc = listOf(Col("Company", 1.7f), Col("Sector", 1f), Col("Price", 0.8f, true, "The price of one share on the exchange now."), Col("Week", 0.6f, true), Col("Quarter", 0.7f, true), Col("Market cap", 0.9f, true), Col("Float", 0.55f, true), Col("You hold", 0.75f, true))
         val title = if (index.isNotEmpty()) "Stocks · index ${Format.count(index.last())}" else "Stocks"
         if (board == "Stocks") Pane(title, Modifier.fillMaxWidth().weight(1f), trailing = { Chips(listOf("Top movers", "Largest", "Yours"), sort) { sort = it } }) {
             TableHeader(sc)
@@ -648,7 +812,7 @@ private fun DesktopMarkets(store: GameStore) {
             }
         }
         if (board == "Structure") Pane("Corporate structure", Modifier.fillMaxWidth().weight(1f)) { StructureColumn(store) }
-        val cc = listOf(Col("Good", 1.5f), Col("Price", 0.8f, true), Col("Week", 0.6f, true), Col("Made", 0.7f, true), Col("Sold", 0.7f, true), Col("Imported", 0.75f, true), Col("Exported", 0.75f, true))
+        val cc = listOf(Col("Good", 1.5f), Col("Price", 0.8f, true, "What one lot of this good costs on the market now."), Col("Week", 0.6f, true), Col("Made", 0.7f, true), Col("Sold", 0.7f, true), Col("Imported", 0.75f, true), Col("Exported", 0.75f, true))
         if (board == "Commodities") Pane("Commodities, per lot", Modifier.fillMaxWidth().weight(1f)) {
             TableHeader(cc)
             val ordered = store.commodities.sortedWith(compareBy({ (Sectors.order + "other").indexOf(it.sector).let { i -> if (i < 0) 99 else i } }, { it.name }))
@@ -704,7 +868,7 @@ private fun DesktopStats(store: GameStore) {
                 if (period != StatsPeriod.Week && buckets.any { it.cash != null }) {
                     Panel {
                         Eyebrow("Balance sheet at each close")
-                        LineChart(listOf(Palette.gold to buckets.map { it.cash ?: 0 }, Palette.positive to buckets.map { it.equity ?: 0 }, Palette.negative to buckets.map { it.liabilities ?: 0 }))
+                        LineChart(listOf(Palette.gold to buckets.map { it.cash ?: 0 }, Palette.positive to buckets.map { it.equity ?: 0 }, Palette.negative to buckets.map { it.liabilities ?: 0 }), listOf("Cash", "Equity", "Liabilities"))
                         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                             Legend(Palette.gold, "Cash"); Legend(Palette.positive, "Equity"); Legend(Palette.negative, "Liabilities")
                         }
@@ -747,33 +911,26 @@ private fun DesktopStats(store: GameStore) {
 
 // MARK: Inbox
 
-/** Decisions listed on the left, the open one on the right. */
+/** The letter stack on the left, the open letter on paper on the right. */
 @Composable
-private fun DesktopInbox(store: GameStore) {
-    var open by remember { mutableStateOf<ULong?>(null) }
-    val events = store.events
-    val current: EventDto? = events.firstOrNull { it.id == open } ?: events.firstOrNull()
+internal fun DesktopInbox(store: GameStore, initial: String? = null) {
+    var open by remember { mutableStateOf(initial) }
+    var picked by remember { mutableStateOf<uniffi.cw_ffi.LetterDto?>(null) }
+    val current = store.letters.firstOrNull { it.id == open } ?: picked?.takeIf { it.id == open && it.event == null }
+        ?: store.letters.firstOrNull()
     Row(Modifier.fillMaxSize().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        val ec = listOf(Col("Decision", 2f), Col("Due", 0.6f, true))
-        Pane("Inbox · ${events.size}", Modifier.width(420.dp).fillMaxHeight()) {
-            TableHeader(ec)
-            if (events.isEmpty()) Text("Quiet week. Decisions show up here when they happen.", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
-            events.forEachIndexed { i, e ->
-                TableRow(i, selected = e.id == current?.id, onClick = { open = e.id }) {
-                    Cell(e.title, ec[0], bold = e.mandatory)
-                    Cell(if (e.mandatory) "W${e.deadline}" else "", ec[1], Palette.warning)
-                }
-            }
+        Pane("Inbox · ${store.unreadLetters} unread", Modifier.width(440.dp).fillMaxHeight()) {
+            Column(Modifier.padding(8.dp)) { LetterStack(store, current?.id) { open = it.id; picked = it } }
         }
         Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (current != null) LetterPaper(store, current)
+            else Callout("When something happens a letter arrives here. Decisions are pinned on top and stop time when they are due.", Palette.secondary)
             if (store.rivalFeed.isNotEmpty()) {
                 Panel {
                     Eyebrow("Rival moves")
                     store.rivalFeed.take(8).forEach { RivalMoveRow(it) }
                 }
             }
-            if (current != null) DecisionCard(store, current)
-            else Callout("When a decision arrives it opens here with its choices. Time stops for any decision that is due.", Palette.secondary)
         }
     }
 }

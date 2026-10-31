@@ -134,7 +134,7 @@ pub fn divisions_of(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Divis
 
 /// Weekly output value at reference price of a plant's rated capacity, counting plants under
 /// construction: they are the capacity the cell will have.
-fn capacity_value(dataset: &Dataset, recipe: u16, blocks: u8) -> i64 {
+pub fn capacity_value(dataset: &Dataset, recipe: u16, blocks: u8) -> i64 {
     let template = &dataset.recipes[recipe as usize];
     template.output_value(|id| {
         dataset
@@ -225,7 +225,7 @@ pub struct ShareCache {
 }
 
 /// Each firm's capacity value in a cell, and the cell's import headroom.
-type Cell = (Vec<(Handle, i64)>, i64);
+pub type Cell = (Vec<(Handle, i64)>, i64);
 
 impl ShareCache {
     /// `share_bps` with no added capacity.
@@ -257,8 +257,13 @@ pub fn dominance_bps(
     industry: u8,
     added_value: i64,
 ) -> i64 {
-    let share = share_bps(world, dataset, firm, region, industry, added_value);
-    let (firms, _) = cell(world, dataset, region, industry);
+    dominance_in(&cell(world, dataset, region, industry), firm, added_value)
+}
+
+/// `dominance_bps` for a cell already read.
+fn dominance_in(cell: &Cell, firm: Handle, added_value: i64) -> i64 {
+    let (firms, headroom) = cell;
+    let share = share_of(firms, *headroom, firm, added_value);
     let rivals = firms.iter().filter(|(handle, _)| *handle != firm).count();
     dominance_multiplier_bps(share, rivals)
 }
@@ -362,6 +367,29 @@ pub fn build_cost(
     blocks: u8,
 ) -> BuildCost {
     let industry = recipe_industry(dataset, recipe);
+    build_cost_in(
+        world,
+        dataset,
+        firm,
+        region,
+        recipe,
+        blocks,
+        &cell(world, dataset, region, industry),
+    )
+}
+
+/// `build_cost` with the (region, sector type) cell already read from this same world, for
+/// callers that price many builds against one unchanged world.
+pub fn build_cost_in(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    region: u8,
+    recipe: u16,
+    blocks: u8,
+    cell: &Cell,
+) -> BuildCost {
+    let industry = recipe_industry(dataset, recipe);
     let opens = division_plants(world, dataset, firm, region, industry).is_empty();
     let capex = dataset.recipes[recipe as usize].capex_cents;
     let mut base = capex * blocks as i64;
@@ -374,17 +402,22 @@ pub fn build_cost(
     let dominance = if opens {
         10_000
     } else {
-        dominance_bps(world, dataset, firm, region, industry, added)
+        dominance_in(cell, firm, added)
     };
     let (excess, capacity) = construction_excess(world, firm, blocks);
     let rush = rush_bps(excess, capacity);
+    // The state's environmental rules change what heavy industry pays to build.
+    let (rules_bps, _) =
+        crate::economy::civics::build_factors(world, region, industry_name(dataset, recipe));
     BuildCost {
-        capex_cents: (base as i128 * dominance as i128 / 10_000 * rush as i128 / 10_000) as i64,
+        capex_cents: (base as i128 * dominance as i128 / 10_000 * rush as i128 / 10_000
+            * rules_bps as i128
+            / 10_000) as i64,
         rush_bps: rush,
         entry_fee_cents: if opens { ENTRY_FEE_CENTS } else { 0 },
         opens_division: opens,
         dominance_bps: dominance,
-        share_after_bps: share_bps(world, dataset, firm, region, industry, added),
+        share_after_bps: share_of(&cell.0, cell.1, firm, added),
     }
 }
 
@@ -722,4 +755,9 @@ fn take_blocks(
         }
     }
     (taken, capex, depreciation)
+}
+
+/// The recipe's industry as the content names it.
+pub fn industry_name(dataset: &Dataset, recipe: u16) -> &str {
+    dataset.recipes[recipe as usize].industry.as_str()
 }

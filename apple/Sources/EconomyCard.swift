@@ -35,7 +35,7 @@ struct PhasePill: View {
 /// The economy, the central bank and the government. On iPhone it is a one-line header that opens
 /// on tap; on iPad and Mac it is the full card.
 struct EconomyCard: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     var collapsible: Bool
     @State private var open: Bool
 
@@ -53,6 +53,7 @@ struct EconomyCard: View {
                         figures(e)
                         history(e)
                         EconomyHistorySection()
+                        TimelineSection()
                         credit(e)
                         if let fx = e.fx { FxSection(fx: fx) }
                         if !e.worldPrices.isEmpty { worldPrices(e) }
@@ -292,6 +293,7 @@ struct EconomyCard: View {
                 lawsTable(pending, heading: "From \(ResultBuckets.weekLabel(e.pendingEffectiveWeek))")
             }
             marketRules(e)
+            PoliticsPanel(currency: store.selectedFirmDto?.currency ?? "")
         }
     }
 
@@ -400,7 +402,7 @@ struct EconomyCard: View {
 
 /// One chip per currency of the scenario; picking one re-quotes the investor's figures.
 struct CurrencyPicker: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let fx: FxDto
 
     var body: some View {

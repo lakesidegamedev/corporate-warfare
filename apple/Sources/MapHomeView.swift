@@ -3,7 +3,7 @@ import SwiftUI
 /// The home screen: the world map, framed on the scenario, with the company HUD over it. Tap a region to
 /// open its board; build or raid from there. On iPad the board docks beside the map.
 struct MapHomeView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// True inside the iPad and Mac shell, where the status bar replaces the HUD and an outliner
@@ -25,7 +25,7 @@ struct MapHomeView: View {
                         .background(Theme.panel)
                         .overlay(alignment: .trailing) { Rectangle().fill(Theme.stroke).frame(width: 1) }
                 }
-                WorldMapView(shading: shading, layer: layer, divisions: divisionMarkers, lanes: store.lanes, pickedLane: pickedLane, onLane: { pickedLane = $0 }, regionCodes: store.boards.map(\.code), week: store.overview?.tick ?? 0, weekLabel: store.overview?.weekLabel, plants: store.mapPlants, economyPhase: store.economy?.phase, controlsAtTop: embedded, gameSpeed: store.runSpeed, selected: $selected)
+                WorldMapView(shading: shading, layer: layer, divisions: divisionMarkers, lanes: store.lanes, pickedLane: pickedLane, onLane: { pickedLane = $0 }, regionCodes: store.boards.map(\.code), week: store.overview?.tick ?? 0, weekLabel: store.overview?.weekLabel, plants: store.mapPlants, economyPhase: store.economy?.phase, settlement: Dictionary(store.boards.map { ($0.code, Int($0.migrationBps)) }, uniquingKeysWith: { first, _ in first }), controlsAtTop: embedded, gameSpeed: store.runSpeed, selected: $selected)
                     .ignoresSafeArea(edges: .bottom)
                 if wide, let code = selected, let board = store.boards.first(where: { $0.code == code }) {
                     RegionBoardView(board: board, onBuild: { building = code }, onClose: { selected = nil })
@@ -70,7 +70,7 @@ struct MapHomeView: View {
         }
         .sheet(item: buildSelection) { item in
             BuildFlowView(regionCode: item.id)
-                .environmentObject(store)
+                .environment(store)
                 .presentationBackground(Theme.panel)
         }
     }
@@ -159,7 +159,7 @@ struct MapHomeView: View {
 
 /// Company name, cash, forecast and the clock, always visible over the map.
 struct CompanyHUD: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
 
     var body: some View {
         // One row where it fits; on a phone the name keeps its own line above the figures. The
@@ -229,7 +229,7 @@ struct CompanyHUD: View {
 /// The time controls in one slim bar, over every phone screen that is not the map
 /// (the map has its own in the HUD), so time can always be paused or slowed where you are.
 struct TimeStrip: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
 
     var body: some View {
         HStack(spacing: 8) {
@@ -248,7 +248,7 @@ struct TimeStrip: View {
 /// Time controls folded into one pill: the speed it is running at, tap to open Next week and the
 /// speed buttons, tap again to fold.
 struct TimeBar: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var open = false
 
     var body: some View {
@@ -370,7 +370,7 @@ struct GoalLine: View {
 
 /// The in-game menu: save, settings, and back to the main menu.
 struct GameMenuButton: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var showingSettings = false
 
     var body: some View {
@@ -399,7 +399,7 @@ struct GameMenuButton: View {
         }
         .accessibilityLabel("Menu")
         .sheet(isPresented: $showingSettings) {
-            SettingsView().environmentObject(store)
+            SettingsView().environment(store)
         }
     }
 }
@@ -407,7 +407,7 @@ struct GameMenuButton: View {
 /// The desktop map's left column: what needs attention, the board's goal, your divisions and
 /// what rivals did lately.
 struct MapOutliner: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
 
     var body: some View {
         ScrollView {

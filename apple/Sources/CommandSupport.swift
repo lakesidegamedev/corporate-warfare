@@ -235,7 +235,7 @@ struct CommandSheet<Fields: View>: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var submitting = false
 
     var body: some View {
@@ -371,7 +371,7 @@ struct ConfirmRequest: Identifiable {
 
 struct ConfirmCommandSheet: View {
     let request: ConfirmRequest
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var preview: PreviewDto?
     @State private var rejection: CommandRejection?
 

@@ -33,6 +33,9 @@ pub const REFINERY_FIRE: u8 = 2;
 pub const LANE_OUTAGE: u8 = 3;
 pub const HARVEST_FAILURE: u8 = 4;
 pub const KINDS: usize = 5;
+/// A dated event from the scenario's timeline. Not one of the five random kinds, so it has no
+/// slot in the counts.
+pub const TIMELINE: u8 = 5;
 
 /// Weekly chance, in hundredths of a basis point, per exposed pipeline lane, port, plant, lane
 /// and farming region (harvest quarter only, in basis points of a year).
@@ -48,6 +51,7 @@ pub fn kind_key(kind: u8) -> &'static str {
         PORT_STRIKE => "port_strike",
         REFINERY_FIRE => "refinery_fire",
         LANE_OUTAGE => "lane_outage",
+        TIMELINE => "timeline",
         _ => "harvest_failure",
     }
 }
@@ -65,10 +69,16 @@ pub struct Incident {
     pub text: String,
 }
 
+/// Part of the save layout: a field change bumps `legacy::LAYOUT` (see `crate::legacy`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(remote = "Self")]
 pub struct SystemicState {
     pub incidents: Vec<Incident>,
     pub counts: [u32; KINDS],
+    /// The scenario timeline's cursor (layout 3). It lives here because incidents and timeline
+    /// events share one log; see `economy::timeline`.
+    #[serde(default)]
+    pub timeline: crate::economy::timeline::TimelineState,
 }
 
 fn city(ds: &Dataset, region: u8) -> String {
@@ -105,6 +115,13 @@ fn lane_firms(world: &World, key: LaneKey) -> Vec<Handle> {
     firms.sort_unstable();
     firms.dedup();
     firms
+}
+
+/// Record a timeline event: an incident and a news line, outside the random kinds' counts.
+pub fn record_timeline(world: &mut World, incident: Incident) {
+    world.systemic.incidents.push(incident);
+    let excess = world.systemic.incidents.len().saturating_sub(KEPT);
+    world.systemic.incidents.drain(..excess);
 }
 
 fn record(world: &mut World, incident: Incident) {
@@ -219,6 +236,84 @@ pub fn weekly(world: &mut World, ds: &Dataset) {
             let loss = rng.uniform_inclusive(2_500, 4_000) as i32;
             harvest(world, ds, region, loss, farms);
         }
+    }
+}
+
+/// Make one systemic event happen now, at the first place it can, for a timeline. Returns whether
+/// anything was struck. Durations are the middle of each kind's usual range, and the event is
+/// recorded like a random one. The news line is the timeline event's own, so this adds none.
+pub fn force(world: &mut World, ds: &Dataset, event: &str) -> bool {
+    let pipeline = ds.logistics.mode_index("pipeline");
+    let sea = ds.logistics.mode_index("sea");
+    match event {
+        "spill" | "lane_outage" => {
+            let key = world
+                .logistics
+                .lanes
+                .iter()
+                .filter(|(key, lane)| {
+                    lane.cap() > 0
+                        && !closed(world, **key)
+                        && if event == "spill" {
+                            Some(key.mode) == pipeline
+                        } else {
+                            Some(key.mode) != pipeline && Some(key.mode) != sea
+                        }
+                })
+                .map(|(key, _)| *key)
+                .next();
+            let Some(key) = key else { return false };
+            if event == "spill" {
+                spill(world, ds, key, 5);
+            } else {
+                outage(world, ds, key, 2, 0);
+            }
+            true
+        }
+        "port_strike" => {
+            let Some(sea) = sea else { return false };
+            let port = (0..ds.regions.len() as u8).find(|r| {
+                world
+                    .logistics
+                    .access
+                    .get(sea as usize)
+                    .and_then(|row| row.get(*r as usize))
+                    .copied()
+                    .unwrap_or(false)
+                    && !closed(world, LaneKey::new(*r, *r, sea))
+            });
+            let Some(port) = port else { return false };
+            strike(world, ds, port, sea, 3);
+            true
+        }
+        "refinery_fire" => {
+            let week = world.tick.0;
+            let plant = world
+                .facilities
+                .iter()
+                .find(|(_, plant)| {
+                    let recipe = &ds.recipes[plant.recipe as usize];
+                    plant.status == FacilityStatus::Operating
+                        && !recipe.by_products.is_empty()
+                        && recipe.industry != "extraction"
+                        && plant.outage.is_none_or(|(_, until)| until.0 <= week)
+                })
+                .map(|(handle, _)| handle);
+            let Some(plant) = plant else { return false };
+            fire(world, ds, plant, 12);
+            true
+        }
+        "harvest_failure" => {
+            let found = (0..world.regions.len() as u8)
+                .map(|region| (region, farm_firms(world, ds, region)))
+                .find(|(_, farms)| !farms.is_empty());
+            let Some((region, farms)) = found else {
+                return false;
+            };
+            harvest(world, ds, region, 3_000, farms);
+            true
+        }
+        _ => false,
     }
 }
 

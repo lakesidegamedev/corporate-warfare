@@ -100,7 +100,7 @@ struct ChoiceChip: View {
 /// Every action in the game, searchable. Pick one to get its form: pickers, sliders and switches
 /// generated from the engine's catalogue, a live preview of what it would do, and Submit.
 struct CommandCenterView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
     var initialQuery = ""
     var onClose: (() -> Void)?
@@ -265,7 +265,7 @@ private struct Pick: Identifiable {
 
 /// The generated form for one action.
 struct ActionFormView: View {
-    @EnvironmentObject private var store: AppStore
+    @Environment(AppStore.self) private var store
     let action: ActionDto
     var onBack: (() -> Void)?
 
