@@ -224,7 +224,10 @@ tasks.register<Exec>("packageWindowsSetup") {
 }
 
 // Compose draws over a native panel only with interop blending on (Direct3D and Metal); the direct-map tests check it.
+// The window tests need a display: on a Linux runner without one (no DISPLAY), AWT must stay headless so every other
+// desktop test still runs and the direct-map tests skip themselves.
 tasks.withType<Test>().configureEach {
     systemProperty("compose.interop.blending", "true")
-    systemProperty("java.awt.headless", "false")
+    val linux = System.getProperty("os.name").lowercase().contains("linux")
+    if (!linux || System.getenv("DISPLAY") != null) systemProperty("java.awt.headless", "false")
 }
