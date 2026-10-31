@@ -449,6 +449,10 @@ heading.
   map no longer stops to load them when a career opens.
 - Tooling: the Android and desktop builds now share a dependency cache and retry a download that Maven Central or Google rate-limited, so a 403 from a repository no longer fails a build that would pass a minute later. The Apple build keeps its Rust dependencies between runs, which removes most of its longest step, and no longer builds the extra size-report engine on pull requests.
 - Tooling: the first-map-draw timing test on iPhone warms up SwiftUI's own one-time startup on a blank canvas before measuring, so a cold test runner no longer fails a budget meant for the map's layers.
+- Weeks play faster and saves are quicker. On a large map a week now takes roughly a fifth to a
+  quarter less time, the rivals think through their moves with far fewer repeated lookups, and
+  saving and loading a five-year career takes about half as long. Results are unchanged: the same
+  start and seed still play out exactly the same.
 - Tooling: every change to the Android app now starts the trimmed release build on an emulator in
   CI, launches it, watches the log for crashes, and plays five weeks of a Great Lakes career on it,
   so a trimming mistake fails the check and not a phone.

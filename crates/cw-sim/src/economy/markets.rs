@@ -491,8 +491,19 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
         .iter()
         .map(|gateway| (gateway.region, gateway.product))
         .collect();
+    // Who holds stock of each good in each region, read once instead of by a scan of every firm
+    // per gateway. A sale only moves stock of its own good and region, so the list holds.
+    let mut holders: BTreeMap<(u16, u8), Vec<Handle>> = BTreeMap::new();
+    for (handle, firm) in world.firms.iter().filter(|(_, firm)| firm.operative()) {
+        for ((product, region), lot) in &firm.inventory {
+            if lot.qty.0 > 0 {
+                holders.entry((*product, *region)).or_default().push(handle);
+            }
+        }
+    }
     for (region, product) in gateways {
-        sell_surplus_to_gateway(world, dataset, region, product);
+        let sellers = holders.get(&(product, region)).cloned().unwrap_or_default();
+        sell_surplus_to_gateway_from(world, dataset, region, product, sellers);
     }
 }
 
@@ -926,7 +937,27 @@ pub fn coproduct_room(world: &World, dataset: &Dataset, region: u8, product: u16
         .fold(0i64, |sum, lots| sum.saturating_add(lots))
 }
 
+#[cfg(test)]
 fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, product: u16) {
+    let sellers: Vec<Handle> = world
+        .firms
+        .iter()
+        .filter(|(_, firm)| firm.operative())
+        .filter(|(_, firm)| firm.stock(product, region).0 > 0)
+        .map(|(handle, _)| handle)
+        .collect();
+    sell_surplus_to_gateway_from(world, dataset, region, product, sellers);
+}
+
+/// `sell_surplus_to_gateway` for sellers already found: the operative firms holding any of the
+/// good in the region, in firm order.
+fn sell_surplus_to_gateway_from(
+    world: &mut World,
+    dataset: &Dataset,
+    region: u8,
+    product: u16,
+    sellers: Vec<Handle>,
+) {
     let Some(index) = world
         .gateways
         .iter()
@@ -946,13 +977,6 @@ fn sell_surplus_to_gateway(world: &mut World, dataset: &Dataset, region: u8, pro
     if remaining.0 <= 0 {
         return;
     }
-    let sellers: Vec<Handle> = world
-        .firms
-        .iter()
-        .filter(|(_, firm)| firm.operative())
-        .filter(|(_, firm)| firm.stock(product, region).0 > 0)
-        .map(|(handle, _)| handle)
-        .collect();
     for seller in sellers {
         if remaining.0 <= 0 {
             break;

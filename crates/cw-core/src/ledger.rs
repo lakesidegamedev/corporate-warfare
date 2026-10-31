@@ -113,20 +113,117 @@ impl Account {
     }
 }
 
+/// A posting's memo. Nearly all are short, so they live inline and a posting costs no heap
+/// allocation to make or to free. It is written and read as a plain string, so saves and hashes
+/// are the same as with a `String`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Memo(MemoRepr);
+
+#[derive(Clone, PartialEq, Eq)]
+enum MemoRepr {
+    Inline { len: u8, bytes: [u8; Memo::INLINE] },
+    Heap(Box<str>),
+}
+
+impl Memo {
+    const INLINE: usize = 22;
+
+    pub fn as_str(&self) -> &str {
+        match &self.0 {
+            MemoRepr::Inline { len, bytes } => {
+                let used = &bytes[..*len as usize];
+                debug_assert!(std::str::from_utf8(used).is_ok());
+                // SAFETY: `From<&str>` is the only way to build the inline form and it copies
+                // one whole `&str`, so these bytes are valid UTF-8 as copied.
+                unsafe { std::str::from_utf8_unchecked(used) }
+            }
+            MemoRepr::Heap(text) => text,
+        }
+    }
+}
+
+impl From<&str> for Memo {
+    fn from(text: &str) -> Self {
+        if text.len() <= Memo::INLINE {
+            let mut bytes = [0u8; Memo::INLINE];
+            bytes[..text.len()].copy_from_slice(text.as_bytes());
+            Memo(MemoRepr::Inline {
+                len: text.len() as u8,
+                bytes,
+            })
+        } else {
+            Memo(MemoRepr::Heap(text.into()))
+        }
+    }
+}
+
+impl std::ops::Deref for Memo {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl std::fmt::Display for Memo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::fmt::Debug for Memo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
+impl PartialEq<str> for Memo {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl PartialEq<&str> for Memo {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl Serialize for Memo {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for Memo {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Text;
+        impl serde::de::Visitor<'_> for Text {
+            type Value = Memo;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Memo, E> {
+                Ok(Memo::from(value))
+            }
+        }
+        deserializer.deserialize_str(Text)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Posting {
     pub week: Tick,
     pub txn: u64,
     pub account: Account,
     pub delta: i64,
-    pub memo: String,
+    pub memo: Memo,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TxnLine {
     pub account: Account,
     pub delta: i64,
-    pub memo: String,
+    pub memo: Memo,
 }
 
 /// A staged balanced transaction.
@@ -148,7 +245,7 @@ impl Txn {
             self.lines.push(TxnLine {
                 account,
                 delta: amount,
-                memo: memo.to_owned(),
+                memo: Memo::from(memo),
             });
         }
         self
@@ -160,7 +257,7 @@ impl Txn {
             self.lines.push(TxnLine {
                 account,
                 delta: -amount,
-                memo: memo.to_owned(),
+                memo: Memo::from(memo),
             });
         }
         self
@@ -176,7 +273,7 @@ impl Txn {
             self.lines.push(TxnLine {
                 account,
                 delta,
-                memo: memo.to_owned(),
+                memo: Memo::from(memo),
             });
         }
         self
@@ -470,16 +567,19 @@ impl Ledger {
         if cutoff == 0 {
             return;
         }
-        // Postings are appended in week order, so what falls out of the window is a prefix.
-        let split = self
+        // Postings are appended in week order, so what falls out of the window is a prefix. The
+        // slow path below gives the same journal and hash for any order; this is only the fast
+        // one, taken when the weeks never go backwards.
+        let ordered = self
             .journal
-            .partition_point(|posting| posting.week.0 < cutoff);
-        let ordered = self.journal[..split]
-            .iter()
-            .all(|posting| posting.week.0 < cutoff)
-            && self.journal[split..]
-                .iter()
-                .all(|posting| posting.week.0 >= cutoff);
+            .windows(2)
+            .all(|pair| pair[0].week.0 <= pair[1].week.0);
+        let split = if ordered {
+            self.journal
+                .partition_point(|posting| posting.week.0 < cutoff)
+        } else {
+            0
+        };
         let mut hasher = CanonicalHasher::new(DOMAIN_STATE);
         let mut pruned = 0u64;
         let fold = |posting: &Posting, hasher: &mut CanonicalHasher| {
@@ -541,6 +641,29 @@ impl Ledger {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_memo_is_written_and_read_like_a_string() {
+        for text in [
+            "",
+            "wages",
+            "twenty-two chars here!",
+            "twenty-three chars here",
+            "a much longer memo that cannot sit inline in the posting",
+            "caf\u{e9} \u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}",
+        ] {
+            let memo = Memo::from(text);
+            assert_eq!(memo.as_str(), text);
+            let wire = postcard::to_allocvec(&memo).unwrap();
+            assert_eq!(wire, postcard::to_allocvec(&text.to_owned()).unwrap());
+            let back: Memo = postcard::from_bytes(&wire).unwrap();
+            assert_eq!(back, memo);
+            assert_eq!(
+                serde_json::to_string(&memo).unwrap(),
+                serde_json::to_string(text).unwrap()
+            );
+        }
+    }
 
     fn week(n: u32) -> Tick {
         Tick(n)
