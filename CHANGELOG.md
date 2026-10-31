@@ -11,6 +11,8 @@ heading.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-31
+
 ### Added
 
 - On Windows, the new map now draws straight to the screen inside the game window, once for every refresh of your display, for exactly the view you are looking at. Dragging, zooming out and turning no longer warp an old picture, so buildings stay put instead of swimming and zooming out never shows bare edges while a new picture loads. Names, badges, buttons and panels still draw over the map. If your machine cannot do this, the map keeps working the way it did before. If the direct map ever stalls (no picture within two seconds of opening, ten slow frames in a row, or a map window that stays blank), the game switches to the copied map by itself for the rest of the session and says so in the frame counter. Settings, under Graphics, has a new choice, "Draw the new map": Direct (fastest) or Copied (compatible). It starts on Direct on Windows with Direct3D and on Copied everywhere else.
@@ -1847,7 +1849,9 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.8.0...v1.9.0
+[1.8.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.6.0...v1.6.1
