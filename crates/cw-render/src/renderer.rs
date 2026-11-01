@@ -1138,6 +1138,12 @@ impl Renderer {
         };
         let gb = scene.ground.bounds;
         let clock = anim::clock(style.time_s, style.animate);
+        let cloud_drift = anim::cloud_drift_uv(
+            style.time_s,
+            style.animate,
+            [em.east - em.west, em.north - em.south],
+            [km_lon, crate::data::KM_PER_DEG_LAT],
+        );
         let globals = Globals {
             view_proj: view.view_proj.to_cols_array_2d(),
             light_vp: light_vp.to_cols_array_2d(),
@@ -1184,7 +1190,7 @@ impl Renderer {
             ],
             palette: palette.flat(),
             day: Palette::day().flat(),
-            anim: [clock, 0.0, 0.0, 0.0],
+            anim: [clock, cloud_drift[0], cloud_drift[1], 0.0],
         };
         self.queue
             .write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&globals));

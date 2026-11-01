@@ -1042,7 +1042,15 @@ mod tests {
 
     /// The scenario folder, assembled the way the desktop build does: the shared images and models
     /// from the Apple resources, the baked terrain from the renderer's assets.
+    /// The map's asset files copied into one folder, once per test run. Tests run in parallel
+    /// threads, and copying in every test let one test read a heightmap while another was
+    /// rewriting it (a flaky "heightmap size mismatch").
     fn assets() -> std::path::PathBuf {
+        static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+        DIR.get_or_init(copy_assets).clone()
+    }
+
+    fn copy_assets() -> std::path::PathBuf {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let dir = std::env::temp_dir().join(format!("cw-gpu-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

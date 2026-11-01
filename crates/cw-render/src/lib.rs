@@ -34,7 +34,8 @@ pub use renderer::{
 };
 
 pub use anim::{
-    ANIM_MAX_KM, CLOCK_WRAP_S, WIND, clock as anim_clock, route_counts, scene_animates,
+    ANIM_MAX_KM, CLOCK_WRAP_S, CLOUD_SPEED_KM_S, WIND, clock as anim_clock, cloud_drift_uv,
+    route_counts, scene_animates,
 };
 pub use ground::{G_CORE, G_URBAN, snow_cover};
 pub use mesh::{
