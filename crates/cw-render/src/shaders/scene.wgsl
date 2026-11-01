@@ -614,6 +614,9 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
             else if (flo.z < 0.34) { out_c = pal(RAMP_INK, 2 - select(0, 1, sh < 0.5)); }
         }
     }
+    // Countryside props (trees, farms, houses) are small and many: flat steps and hard shadows
+    // carry them, with no ink outline.
+    if (in.kind == 8u) { return vec4<f32>(out_c, 1.0); }
     // A face under four and a half pixels across keeps no outline along that axis, so a distant
     // downtown block stays a lit shape instead of a black blot; the neighbouring faces still
     // carry the silhouette.

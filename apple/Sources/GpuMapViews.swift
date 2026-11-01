@@ -22,7 +22,7 @@ struct GpuMapSurface: UIViewRepresentable {
 /// Game state as the GPU map's update JSON: the same fields the desktop shell sends.
 enum GpuMapUpdate {
     static func json(plants: [MapPlantDto], divisions: [DivisionMarker], layer: MapLayer, shading: [String: Double],
-                     night: Bool, clouds: Int, week: Int) -> String {
+                     night: Bool, clouds: Int, week: Int, settlement: [String: Int] = [:]) -> String {
         var object: [String: Any] = [:]
         object["plants"] = plants.map { p -> [String: Any] in
             ["region": p.region, "industry": p.industry, "firm": p.firm, "blocks": p.blocks,
@@ -40,6 +40,8 @@ enum GpuMapUpdate {
         object["night"] = night
         object["clouds"] = min(max(clouds, 0), 3)
         object["week"] = week
+        // Net migration by region (basis points of its people): the suburban houses follow it.
+        object["migration"] = settlement
         let data = (try? JSONSerialization.data(withJSONObject: object)) ?? Data("{}".utf8)
         return String(decoding: data, as: UTF8.self)
     }

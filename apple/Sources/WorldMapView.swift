@@ -2065,12 +2065,14 @@ struct WorldMapView: View {
         var shading: [String: Double]
         var clouds: Int
         var week: Int
+        var settlement: [String: Int]
     }
 
     private var gpuReady: Bool { gpuTick >= 0 && (gpu?.isReady ?? false) }
 
     private var gpuInputs: GpuInputs {
-        GpuInputs(plants: plants, divisions: divisions, layer: layer, shading: shading, clouds: clouds, week: seasonWeek)
+        GpuInputs(plants: plants, divisions: divisions, layer: layer, shading: shading, clouds: clouds, week: seasonWeek,
+                  settlement: settlement)
     }
 
     /// Opens the GPU map for the scenario while the setting is on, closes it when it is not.
@@ -2107,7 +2109,7 @@ struct WorldMapView: View {
         guard let gpu else { return }
         let night = gpuNight()
         gpu.update(GpuMapUpdate.json(plants: plants, divisions: divisions, layer: layer, shading: shading,
-                                     night: night, clouds: clouds, week: seasonWeek))
+                                     night: night, clouds: clouds, week: seasonWeek, settlement: settlement))
     }
 
     private func gpuLine(on: Bool) -> String {
