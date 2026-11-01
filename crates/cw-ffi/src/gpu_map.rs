@@ -297,8 +297,9 @@ impl GpuMap {
         self.animate.store(animate, Ordering::Relaxed);
         let scene = self.scene.read().unwrap();
         let t = cw_render::anim_clock(seconds, animate);
-        (animate && width_km <= cw_render::ANIM_MAX_KM as f64 * 1.3 && cw_render::scene_animates(&scene, t))
-            as i32
+        (animate
+            && width_km <= cw_render::ANIM_MAX_KM as f64 * 1.3
+            && cw_render::scene_animates(&scene, t)) as i32
     }
 
     fn clock(&self) -> (f64, bool) {
@@ -315,7 +316,14 @@ impl GpuMap {
         let (seconds, animate) = self.clock();
         let seeded = self.seeded.swap(true, Ordering::Relaxed);
         let now = cw_render::anim_clock(seconds, true);
-        let key = |p: &Placement| (p.model.clone(), p.lon.to_bits(), p.lat.to_bits(), p.owner as u8);
+        let key = |p: &Placement| {
+            (
+                p.model.clone(),
+                p.lon.to_bits(),
+                p.lat.to_bits(),
+                p.owner as u8,
+            )
+        };
         let before: HashMap<_, _> = scene
             .buildings
             .iter()

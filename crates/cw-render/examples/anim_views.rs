@@ -164,6 +164,13 @@ fn main() {
             .unwrap()
             .1;
         populate(scene, v.lon, v.lat);
+        if mode == "still" {
+            println!(
+                "{}: truck, train, ship routes {:?}",
+                v.name,
+                cw_render::route_counts(scene)
+            );
+        }
         let cam = Camera {
             lon: v.lon,
             lat: v.lat,

@@ -30,7 +30,9 @@ pub use renderer::{
     AdapterSummary, CloudLevel, Frame, FrameStats, NoAdapter, Renderer, Style, SurfaceTarget,
 };
 
-pub use anim::{ANIM_MAX_KM, CLOCK_WRAP_S, WIND, clock as anim_clock, scene_animates};
+pub use anim::{
+    ANIM_MAX_KM, CLOCK_WRAP_S, WIND, clock as anim_clock, route_counts, scene_animates,
+};
 pub use ground::snow_cover;
 pub use mesh::{
     BuildingBox, ROAD_BANDS, RoadPoint, apron_extent_km, apron_land_boxes, apron_seam_steps,

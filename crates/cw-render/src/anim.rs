@@ -373,12 +373,21 @@ fn routes_for(scene: &Scene) -> Vec<Route> {
             industry_of(&p.model),
             "energy" | "extraction" | "logistics" | "chemical_industries" | "agriculture"
         ) && let Some(path) = sea_lane(scene, (cx, cy))
-            && let Some(r) = Route::new(Kind::Ship, path, 1, seed + 2)
+            && let Some(r) = Route::new(Kind::Ship, path, 2, seed + 2)
         {
             out.push(r);
         }
     }
     out
+}
+
+/// How many truck, train and ship routes the scene's buildings get (for diagnostics and tests).
+pub fn route_counts(scene: &Scene) -> [usize; 3] {
+    let mut n = [0; 3];
+    for r in routes_for(scene) {
+        n[r.kind as usize] += 1;
+    }
+    n
 }
 
 fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
@@ -469,7 +478,7 @@ fn sea_lane(scene: &Scene, from: (f32, f32)) -> Option<Vec<[f32; 3]>> {
             continue;
         };
         let mut end = start;
-        while end < 70.0 && {
+        while end < start + 30.0 && {
             let (x, y) = at(end + 1.0);
             water(x, y)
         } {
@@ -482,7 +491,7 @@ fn sea_lane(scene: &Scene, from: (f32, f32)) -> Option<Vec<[f32; 3]>> {
     let (a, dir, b) = best?;
     let pt = |d: f32| {
         let (x, y) = (from.0 + dir[0] * d, from.1 + dir[1] * d);
-        [x, y, mesh::ground_z(scene, x, y) + 0.002]
+        [x, y, mesh::ground_z(scene, x, y) + 0.012]
     };
     Some(vec![pt(a), pt(b)])
 }
@@ -520,7 +529,7 @@ pub fn frame_mesh(scene: &Scene, plan: &Plan, v: &FrameView) -> Mesh {
         };
         let vx = scene.voxel_km * p.scale;
         match p.activity.status {
-            Some(SiteStatus::Site) => construction(&mut m, p, model, frame, vx, v.px_km, v.t, bi),
+            Some(SiteStatus::Site) => construction(&mut m, p, model, frame, vx, v, bi),
             _ => {
                 if let Some(g) = growth(p, v.t).filter(|g| *g < 1.0) {
                     grow(&mut m, scene, bi, [cx, cy, z_top], g);
@@ -557,7 +566,7 @@ pub fn frame_mesh(scene: &Scene, plan: &Plan, v: &FrameView) -> Mesh {
         }
         // Beacons.
         if v.night {
-            let size = (0.9 * vx).max(3.0 * v.px_km);
+            let size = (0.9 * vx).max(4.5 * v.px_km);
             let mut spots: Vec<Spot> = plan.towers.get(bi).copied().flatten().into_iter().collect();
             if p.activity.status == Some(SiteStatus::Running)
                 && let Some(s) = plan.stacks.get(bi).and_then(|s| s.first())
@@ -631,10 +640,10 @@ fn construction(
     model: &VoxelModel,
     frame: [f32; 4],
     vx: f32,
-    px_km: f32,
-    t: f32,
+    v: &FrameView,
     bi: usize,
 ) {
+    let (px_km, t) = (v.px_km, v.t);
     let [cx, cy, z_top, z_low] = frame;
     let (hx, hy) = (model.footprint[0] / 2.0 * vx, model.footprint[1] / 2.0 * vx);
     let progress = p.activity.progress.clamp(0.0, 1.0);
@@ -788,8 +797,8 @@ fn grow(m: &mut Mesh, scene: &Scene, index: usize, base: [f32; 3], g: f32) {
     let one = mesh::buildings_where(scene, |i, _| i == index);
     let first = m.vertices.len() as u32;
     for mut v in one.vertices {
-        for k in 0..3 {
-            v.pos[k] = base[k] + (v.pos[k] - base[k]) * g;
+        for (pos, b) in v.pos.iter_mut().zip(base) {
+            *pos = b + (*pos - b) * g;
         }
         m.vertices.push(v);
     }
@@ -827,7 +836,7 @@ fn vehicle(
         } * v.px_km,
     );
     let white = colour(ramp::CLOUD, 3);
-    let dark = colour(ramp::INK, 3);
+    let dark = colour(ramp::ROCK, 1);
     let red = colour(ramp::BRICK, 2);
     match r.kind {
         Kind::Truck => {
@@ -869,7 +878,7 @@ fn vehicle(
                     m,
                     p,
                     y,
-                    [-1.0 * u, -0.7 * u, 0.1 * u],
+                    [-u, -0.7 * u, 0.1 * u],
                     [1.0 * u, 0.7 * u, 1.3 * u],
                     rgb,
                 );
