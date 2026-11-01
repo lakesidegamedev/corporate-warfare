@@ -226,7 +226,11 @@ fn main() {
             .find(|(id, _)| *id == v.scenario)
             .unwrap()
             .1;
-        populate(scene, v.lon, v.lat);
+        if v.name.contains("barges") {
+            populate(scene, 6.76, 51.43);
+        } else {
+            populate(scene, v.lon, v.lat);
+        }
         let t0 = std::time::Instant::now();
         let (routes, harbours) = cw_render::fleet_summary(scene);
         println!(
