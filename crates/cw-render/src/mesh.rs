@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::data::{Owner, Scene, VoxelModel, WATER_LAKE};
+use crate::data::{Owner, Placement, Scene, VoxelModel, WATER_LAKE};
 
 /// Vertex kinds, carried in the colour alpha byte.
 pub const KIND_TOP: u8 = 0;
@@ -469,7 +469,7 @@ pub fn terrain(scene: &Scene) -> Mesh {
     m
 }
 
-fn box_faces(
+pub(crate) fn box_faces(
     m: &mut Mesh,
     tf: &dyn Fn([f32; 3]) -> [f32; 3],
     rot: &dyn Fn([f32; 3]) -> [f32; 3],
@@ -553,9 +553,19 @@ fn box_faces(
 }
 
 /// Voxel buildings standing on the terrain, each on a plinth down to the lowest ground under it.
+#[allow(dead_code)]
 pub fn buildings(scene: &Scene) -> Mesh {
+    buildings_where(scene, |_, _| true)
+}
+
+/// The same, for the buildings `keep` accepts (index and placement). The animated layer draws
+/// the others itself.
+pub fn buildings_where(scene: &Scene, keep: impl Fn(usize, &Placement) -> bool) -> Mesh {
     let mut m = Mesh::default();
-    for p in &scene.buildings {
+    for (index, p) in scene.buildings.iter().enumerate() {
+        if !keep(index, p) {
+            continue;
+        }
         let Some(model) = scene.models.get(&p.model) else {
             continue;
         };
@@ -631,6 +641,15 @@ pub fn buildings(scene: &Scene) -> Mesh {
         }
     }
     m
+}
+
+/// Where a placed building stands: its centre in kilometres, the height of its base and of the
+/// lowest ground under it (the plinth reaches down to it). None when its model is missing.
+pub(crate) fn placement_frame(scene: &Scene, p: &Placement) -> Option<[f32; 4]> {
+    let model = scene.models.get(&p.model)?;
+    let (cx, cy) = scene.projection.to_km(p.lon, p.lat);
+    let (hi, lo) = ground_range(scene, model, p.scale, cx, cy);
+    Some([cx, cy, level_z_km(scene, hi), level_z_km(scene, lo)])
 }
 
 /// Roof colour of the player's own buildings (the palette's gold).

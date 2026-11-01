@@ -186,6 +186,7 @@ fn plants_stand_a_few_hundred_metres_to_two_kilometres_and_never_tower() {
                 } else {
                     SiteStatus::Running
                 },
+                ..Default::default()
             }];
             scene.set_buildings(layout_plants(&scene, &sites));
             let boxes = building_boxes(&scene);
@@ -220,6 +221,7 @@ fn plants_stand_a_few_hundred_metres_to_two_kilometres_and_never_tower() {
             plants: 1 + 3 * i as u32,
             player: i == 0,
             status: SiteStatus::Running,
+            ..Default::default()
         })
         .collect();
     scene.set_buildings(layout_plants(&scene, &sites));
@@ -267,6 +269,7 @@ fn no_building_footprint_touches_water_in_any_scenario() {
                     plants: [1, 5, 12, 3, 9, 2][i],
                     player: i == 0,
                     status: SiteStatus::Running,
+                    ..Default::default()
                 })
             })
             .collect();

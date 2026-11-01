@@ -51,6 +51,7 @@ fn main() {
             plants: *n,
             player: *player,
             status: SiteStatus::Running,
+            ..Default::default()
         })
         .collect();
     sites.push(PlantSite {
@@ -60,6 +61,7 @@ fn main() {
         plants: 1,
         player: false,
         status: SiteStatus::Site,
+        ..Default::default()
     });
     let placed = layout_plants(&scene, &sites);
     let info = scene

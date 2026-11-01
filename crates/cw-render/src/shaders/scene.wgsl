@@ -20,6 +20,7 @@ struct Globals {
     ground_dim: vec4<f32>, // width, height, texels per degree, unused
     palette: array<vec4<f32>, PALETTE_LEN>,
     day: array<vec4<f32>, PALETTE_LEN>,
+    anim: vec4<f32>,       // animation clock in seconds (wrapped), unused, unused, unused
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;
@@ -393,7 +394,10 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         if (abs(n.x) > 0.5) { u = in.local.y; }
         let cell = vec3<f32>(floor(u * 0.5), floor(in.local.z * 0.5), floor(in.local.x + in.local.y));
         let inside = (fract(u * 0.5) < 0.5) && (fract(in.local.z * 0.5) > 0.5);
-        if (inside && hash3(cell) > 0.45) { out_c = pal(RAMP_SIGNAL, 1); }
+        // A window flips now and then (about one in a hundred, for two seconds at a time).
+        let flick = hash3(cell + vec3<f32>(17.0, floor(g.anim.x * 0.5), 3.0)) > 0.992;
+        let lit_now = (hash3(cell) > 0.45) != flick;
+        if (inside && lit_now) { out_c = pal(RAMP_SIGNAL, 1); }
     }
     let ex = min(in.uv.x, 1.0 - in.uv.x) / max(fuv.x, 1e-5);
     let ey = min(in.uv.y, 1.0 - in.uv.y) / max(fuv.y, 1e-5);

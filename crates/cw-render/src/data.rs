@@ -205,8 +205,22 @@ pub enum Owner {
     Rival,
 }
 
+/// What a building is doing, for the animated layer (smoke, construction, growth). Scenery has
+/// no status. All of it is plain data from the game; none of it changes what the building is.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct Activity {
+    pub status: Option<crate::game::SiteStatus>,
+    /// How hard the plant runs, 0 to 1.
+    pub utilisation: f32,
+    /// How far a construction site has got, 0 to 1.
+    pub progress: f32,
+    /// Animation clock (seconds) at which the building appeared, for the growth; None for a
+    /// building that was always there.
+    pub born: Option<f32>,
+}
+
 /// A building placed on the map. `yaw` turns it in degrees (0 faces south).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Placement {
     pub model: String,
     pub lon: f32,
@@ -216,6 +230,7 @@ pub struct Placement {
     /// (`Placement::sized`), so a building is the same size on the ground at every zoom.
     pub scale: f32,
     pub owner: Owner,
+    pub activity: Activity,
 }
 
 impl Placement {
@@ -803,6 +818,7 @@ fn downtown_blocks(
                 yaw: (((seed * 31.0) as usize + i) % 4) as f32 * 90.0,
                 scale: Placement::scale_for_km(voxel_km, model, BLOCK_KM),
                 owner: Owner::Scenery,
+                activity: Activity::default(),
             });
         }
     }
@@ -977,6 +993,7 @@ impl Scene {
                             .get(model)
                             .map_or(1.0, |m| Placement::scale_for_km(VOXEL_KM, m, 1.2)),
                         owner: Owner::Rival,
+                        activity: Activity::default(),
                     }
                 })
                 .filter(|b| {
@@ -1141,6 +1158,7 @@ impl Scene {
                 yaw: 0.0,
                 scale: 1.0,
                 owner: Owner::Rival,
+                activity: Activity::default(),
             }],
             lines: vec![
                 // An interstate across the ridge and its terrace walls, a main road and a railway.

@@ -4,6 +4,7 @@ use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3, Vec4};
 use wgpu::util::DeviceExt;
 
+use crate::anim;
 use crate::camera::Camera;
 use crate::data::Scene;
 use crate::mesh::{self, Mesh, VERTEX_BYTES, Vertex};
@@ -44,6 +45,12 @@ pub struct Style {
     pub cloud_clear_km: (f32, f32),
     /// Palette ramp that map modes (region levels) are painted in.
     pub heat_ramp: usize,
+    /// Animation clock in seconds, wrapped by the renderer to stay precise. Only read when
+    /// `animate` is on.
+    pub time_s: f64,
+    /// Map animations on. Off is the still mode: time frozen at zero, so a frame is the same
+    /// every time it is drawn.
+    pub animate: bool,
 }
 
 /// The 1.8 cloud setting levels. Each is a threshold on the cloud image: a higher one leaves
@@ -86,6 +93,8 @@ impl Default for Style {
             dither: 2.5,
             cloud_clear_km: (600.0, 1800.0),
             heat_ramp: ramp::BRICK,
+            time_s: 0.0,
+            animate: false,
         }
     }
 }
@@ -230,6 +239,7 @@ struct Globals {
     ground_dim: [f32; 4],
     palette: [[f32; 4]; COLOURS],
     day: [[f32; 4]; COLOURS],
+    anim: [f32; 4],
 }
 
 struct GpuMesh {
@@ -262,6 +272,9 @@ struct GpuScene {
     season_rev: u64,
     mask_rev: u64,
     buildings_rev: u64,
+    /// Buildings the static mesh leaves out because the animated layer draws them.
+    skip: Vec<bool>,
+    plan: anim::Plan,
     earth: wgpu::TextureView,
     cloud_tex: wgpu::TextureView,
     mask: wgpu::TextureView,
@@ -763,9 +776,14 @@ impl Renderer {
             && c.id == id
             && (c.cloud_altitude - style.cloud_altitude_km).abs() < 1e-6
         {
-            if c.buildings_rev != scene.buildings_rev {
+            let skip = skip_of(scene, anim::clock(style.time_s, style.animate));
+            if c.buildings_rev != scene.buildings_rev || c.skip != skip {
+                if c.buildings_rev != scene.buildings_rev {
+                    c.plan = anim::Plan::build(scene);
+                }
                 c.buildings_rev = scene.buildings_rev;
-                let m = mesh::buildings(scene);
+                let m = mesh::buildings_where(scene, |i, _| !skip[i]);
+                c.skip = skip;
                 c.buildings = upload(&self.device, &m, "buildings");
             }
             if c.season_rev != scene.season_rev {
@@ -787,11 +805,15 @@ impl Renderer {
             }
             return;
         }
+        let skip = skip_of(scene, anim::clock(style.time_s, style.animate));
         let gpu = GpuScene {
             id,
             terrain: self.upload_mesh(&mesh::terrain(scene), "terrain"),
             apron: self.upload_mesh(&mesh::apron(scene), "apron"),
-            buildings: self.upload_mesh(&mesh::buildings(scene), "buildings"),
+            buildings: self
+                .upload_mesh(&mesh::buildings_where(scene, |i, _| !skip[i]), "buildings"),
+            skip,
+            plan: anim::Plan::build(scene),
             season_rev: scene.season_rev,
             mask_rev: scene.mask_rev,
             buildings_rev: scene.buildings_rev,
@@ -1052,6 +1074,7 @@ impl Renderer {
             0.0
         };
         let gb = scene.ground.bounds;
+        let clock = anim::clock(style.time_s, style.animate);
         let globals = Globals {
             view_proj: view.view_proj.to_cols_array_2d(),
             light_vp: light_vp.to_cols_array_2d(),
@@ -1098,11 +1121,36 @@ impl Renderer {
             ],
             palette: palette.flat(),
             day: Palette::day().flat(),
+            anim: [clock, 0.0, 0.0, 0.0],
         };
         self.queue
             .write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&globals));
 
+        if style.animate
+            && style.buildings
+            && let Some(c) = &mut self.cache
+        {
+            c.plan.build_routes(scene);
+        }
         let gpu = self.cache.as_ref().expect("prepared");
+        // Smoke, construction, growth, beacons and vehicles: built for this clock and camera.
+        let anim_gpu = (style.buildings && gpu.plan.has_motion(scene))
+            .then(|| {
+                anim::frame_mesh(
+                    scene,
+                    &gpu.plan,
+                    &anim::FrameView {
+                        target: (tx, ty),
+                        width_km: camera.width_km,
+                        px_km,
+                        night: style.night,
+                        t: clock,
+                        animated: style.animate,
+                    },
+                )
+            })
+            .filter(|m| !m.vertices.is_empty())
+            .map(|m| upload(&self.device, &m, "anim"));
         // Road tiles in view: their indices are gathered into the band's index buffer.
         let mut visible_road_indices = 0u32;
         if style.roads
@@ -1256,6 +1304,7 @@ impl Renderer {
             if style.buildings {
                 meshes.push(&gpu.buildings);
             }
+            meshes.extend(anim_gpu.as_ref());
             for m in meshes {
                 draw(&mut pass, m, &mut stats, false);
             }
@@ -1303,6 +1352,7 @@ impl Renderer {
             if style.buildings {
                 meshes.push(&gpu.buildings);
             }
+            meshes.extend(anim_gpu.as_ref());
             for m in meshes {
                 draw(&mut pass, m, &mut stats, true);
             }
@@ -1417,6 +1467,15 @@ impl Renderer {
         }
         None
     }
+}
+
+/// Which buildings the animated layer draws at clock `t` (sites, and buildings still growing).
+fn skip_of(scene: &Scene, t: f32) -> Vec<bool> {
+    scene
+        .buildings
+        .iter()
+        .map(|p| anim::drawn_by_anim(p, t))
+        .collect()
 }
 
 /// Empty meshes still get a one-vertex buffer so buffers are never zero sized.

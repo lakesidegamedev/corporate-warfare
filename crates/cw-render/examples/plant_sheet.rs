@@ -79,6 +79,7 @@ fn main() {
                 yaw: 0.0,
                 scale,
                 owner: *owner,
+                ..Default::default()
             }]);
             let cam = Camera {
                 lon,
