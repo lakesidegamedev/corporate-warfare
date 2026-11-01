@@ -234,13 +234,61 @@ fn main() {
             v.name,
             t0.elapsed().as_secs_f32()
         );
+        // Port views sit on the harbour nearest the nominal spot.
+        let (lon, lat) = if v.name.contains("port") || v.name.contains("barges") {
+            let km = scene.projection.km_per_deg_lon();
+            cw_render::harbour_sites(scene)
+                .into_iter()
+                .min_by(|a, b| {
+                    let d = |h: &(f32, f32)| {
+                        ((h.0 - v.lon) * km).powi(2) + ((h.1 - v.lat) * 111.0).powi(2)
+                    };
+                    d(a).total_cmp(&d(b))
+                })
+                .unwrap_or((v.lon, v.lat))
+        } else {
+            (v.lon, v.lat)
+        };
         let cam = Camera {
-            lon: v.lon,
-            lat: v.lat,
+            lon,
+            lat,
             width_km: v.width_km,
             tilt_deg: v.tilt,
             heading_deg: 0.0,
             fov_deg: 28.0,
+        };
+        // The clock value with the most ships lying within a few hundred metres of a harbour
+        // near the view, so the port pictures show ships at the quays.
+        let berth_t = {
+            let km = scene.projection.km_per_deg_lon();
+            let near = |lon: f32, lat: f32| {
+                (((lon - cam.lon) * km).powi(2) + ((lat - cam.lat) * 111.0).powi(2)).sqrt() < 2.0
+            };
+            let harbours: Vec<(f32, f32)> = cw_render::harbour_sites(scene)
+                .into_iter()
+                .filter(|h| near(h.0, h.1))
+                .collect();
+            let mut best = (0usize, 7.3f32);
+            if !harbours.is_empty() {
+                for k in 0..120 {
+                    let t = k as f32 * 5.0;
+                    let n = cw_render::vehicles_at(scene, t)
+                        .iter()
+                        .filter(|a| {
+                            a.0 == 2
+                                && harbours.iter().any(|h| {
+                                    (((a.3 - h.0) * km).powi(2) + ((a.4 - h.1) * 111.0).powi(2))
+                                        .sqrt()
+                                        < 0.35
+                                })
+                        })
+                        .count();
+                    if n > best.0 {
+                        best = (n, t);
+                    }
+                }
+            }
+            best.1 as f64
         };
         let style = |night: bool, t: f64| Style {
             night,
@@ -258,7 +306,8 @@ fn main() {
         match mode.as_str() {
             "still" => {
                 for (tag, night) in [("day", false), ("night", true)] {
-                    let f = renderer.render_to_rgba(scene, &cam, &style(night, 7.3), width, height);
+                    let t = if v.width_km < 8.0 { berth_t } else { 7.3 };
+                    let f = renderer.render_to_rgba(scene, &cam, &style(night, t), width, height);
                     save(
                         &out.join(format!("{}-{tag}.png", v.name)),
                         f.width,
@@ -345,6 +394,12 @@ fn main() {
                     .iter()
                     .position(|b| b.owner == cw_render::Owner::Rival)
                     .expect("a rival building");
+                let cam = Camera {
+                    lon: scene.buildings[first].lon,
+                    lat: scene.buildings[first].lat,
+                    width_km: 3.0,
+                    ..cam
+                };
                 for (tag, hover, selected, t) in [
                     ("hover-player", Some(first), None, 7.3),
                     ("hover-rival", Some(rival), None, 7.3),

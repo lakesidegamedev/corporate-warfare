@@ -34,6 +34,8 @@ data class GpuCamera(val lon: Double, val lat: Double, val widthKm: Double, val 
 class GpuBuilding(
     val lon: Double, val lat: Double, val owner: String, val kind: String, val colour: Int,
     val region: String? = null, val industry: String? = null, val firm: Long? = null, val plants: Int = 0,
+    /** Position in [GpuMapSession.buildings]: the id the renderer outlines when hovered or selected. */
+    val id: Int = -1,
 ) {
     val scenery get() = owner == "scenery"
     val player get() = owner == "player"
@@ -215,6 +217,7 @@ internal fun MapLayer.gpuRamp(): String = when (this) {
 internal fun gpuUpdateJson(
     plants: List<uniffi.cw_ffi.MapPlantDto>, divisions: List<uniffi.cw_ffi.MapDivisionDto>, layer: MapLayer,
     shaded: Map<String, Double>, night: Boolean, clouds: Int, week: Int = 28,
+    lanes: List<uniffi.cw_ffi.LaneDto> = emptyList(),
 ): String {
     fun q(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
     val plantJson = plants.joinToString(",", "[", "]") {
@@ -223,8 +226,15 @@ internal fun gpuUpdateJson(
     val holdings = divisions.map { it.region }.distinct().joinToString(",", "[", "]") { q(it) }
     val heat = if (layer == MapLayer.Presence || layer == MapLayer.Freight) "{}"
     else shaded.entries.joinToString(",", "{", "}") { "${q(it.key)}:${(it.value * 3.999).toInt().coerceIn(0, 3)}" }
-    return """{"plants":$plantJson,"holdings":$holdings,"heat":$heat,"heat_ramp":${q(layer.gpuRamp())},"night":$night,"clouds":$clouds,"week":$week}"""
+    val top = lanes.maxOfOrNull { it.capacityLots + it.outsideLots }?.coerceAtLeast(1) ?: 1
+    val laneJson = lanes.joinToString(",", "[", "]") {
+        """{"from":${q(it.a)},"to":${q(it.b)},"mode":${q(it.modeId)},"volume":${(it.usedLots + it.outsideLots).toFloat() / top}}"""
+    }
+    return """{"plants":$plantJson,"holdings":$holdings,"heat":$heat,"heat_ramp":${q(layer.gpuRamp())},"night":$night,"clouds":$clouds,"week":$week,"lanes":$laneJson}"""
 }
+
+/** The hovered and selected building ids for the renderer's outline (-1 for none). */
+internal fun gpuHighlightJson(hover: Int, selected: Int) = """{"hover":$hover,"selected":$selected}"""
 
 /** The sea of the palette (water ramp, step 2): the ground under the picture, so nothing of the view is ever a void. */
 internal val GpuSea = Color(0xFF1E4772)

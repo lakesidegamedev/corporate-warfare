@@ -266,9 +266,9 @@ fun WorldMapView(
         }
     }
     val gpuWeek = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28
-    LaunchedEffect(gpu, store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds, gpuWeek) {
+    LaunchedEffect(gpu, store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds, gpuWeek, store.lanes) {
         val session = gpu ?: return@LaunchedEffect
-        val json = gpuUpdateJson(store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds, gpuWeek)
+        val json = gpuUpdateJson(store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds, gpuWeek, store.lanes)
         withContext(Dispatchers.Default) { runCatching { session.update(json) } }
     }
 
@@ -276,6 +276,22 @@ fun WorldMapView(
     var hover by remember { mutableStateOf<Offset?>(null) }
     var rivalFirm by remember { mutableStateOf<ULong?>(null) }
     val gpuHover by rememberUpdatedState(gpu != null && gpuOn)
+    // The renderer outlines the plant under the mouse and the one whose report is open.
+    val hoverBox = hover
+    val openDiv = store.openDivision
+    LaunchedEffect(gpu, hoverBox, openDiv, rivalFirm, store.mapDivisions) {
+        val session = gpu ?: return@LaunchedEffect
+        val shownCam = session.shown?.camera ?: session.frameCamera
+        val hovered = if (hoverBox != null && shownCam != null && viewSize.width > 0) gpuBuildingAt(session, shownCam, viewSize.width.toInt(), viewSize.height.toInt(), hoverBox.x, hoverBox.y)?.id ?: -1 else -1
+        val all = session.buildings()
+        val selected = when {
+            openDiv != null -> all.firstOrNull { it.player && it.region == openDiv.region && it.industry == openDiv.industry }?.id ?: -1
+            rivalFirm != null -> all.firstOrNull { it.firm == rivalFirm!!.toLong() && !it.player }?.id ?: -1
+            else -> -1
+        }
+        withContext(Dispatchers.Default) { runCatching { session.update(gpuHighlightJson(hovered, selected)) } }
+        (session.shown?.view ?: session.frameCamera)?.let { session.request(it, viewSize.width.toInt(), viewSize.height.toInt(), false) }
+    }
     fun openPlant(b: GpuBuilding): Boolean {
         gpuPlantDivision(b, store.divisions)?.let { store.showDivision(it); return true }
         val firm = b.firm ?: return false

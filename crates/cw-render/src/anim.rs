@@ -880,4 +880,153 @@ mod tests {
         assert_eq!(stacks_of(&flat, "manufacturing").len(), 2);
         assert!(stacks_of(&flat, "retail").is_empty());
     }
+
+    /// The tiny scene with one 1 km plant of `owner` standing in it.
+    fn plant_scene(owner: crate::data::Owner) -> Scene {
+        let mut scene = Scene::tiny();
+        let model = VoxelModel {
+            boxes: vec![crate::data::VoxelBox {
+                min: [-8.0, -8.0, 0.0],
+                max: [8.0, 8.0, 6.0],
+                colour: [0x7A, 0x7F, 0x86],
+                trim: false,
+                windows: None,
+            }],
+            footprint: [16.0, 16.0],
+        };
+        let scale = Placement::scale_for_km(scene.voxel_km, &model, 1.0);
+        scene.models.insert("energy/1".into(), model);
+        scene.set_buildings(vec![Placement {
+            model: "energy/1".into(),
+            lon: -83.2,
+            lat: 41.0,
+            scale,
+            owner,
+            activity: crate::data::Activity {
+                status: Some(SiteStatus::Mothballed),
+                ..Default::default()
+            },
+            ..Default::default()
+        }]);
+        scene
+    }
+
+    fn view_of(scene: &Scene, hover: Option<usize>, selected: Option<usize>, t: f32) -> FrameView {
+        FrameView {
+            target: scene.projection.to_km(-83.2, 41.0),
+            width_km: 6.0,
+            px_km: 0.005,
+            night: false,
+            t,
+            animated: false,
+            hover,
+            selected,
+        }
+    }
+
+    fn gold_bars(m: &Mesh) -> usize {
+        let gold = colour(ramp::GOLD, 3);
+        let white = colour(ramp::CLOUD, 3);
+        m.vertices
+            .iter()
+            .filter(|v| v.colour[..3] == gold || v.colour[..3] == white)
+            .count()
+    }
+
+    #[test]
+    fn the_outline_is_drawn_only_for_the_given_ids() {
+        let scene = plant_scene(crate::data::Owner::Player);
+        let plan = Plan::build(&scene);
+        let none = frame_mesh(&scene, &plan, &view_of(&scene, None, None, 0.0));
+        assert_eq!(gold_bars(&none), 0);
+        let hovered = frame_mesh(&scene, &plan, &view_of(&scene, Some(0), None, 0.0));
+        assert!(gold_bars(&hovered) > 0, "a hovered plant gets an outline");
+        let selected = frame_mesh(&scene, &plan, &view_of(&scene, None, Some(0), 0.0));
+        assert!(gold_bars(&selected) > 0);
+        // An id that is no building draws nothing, and the scenery is never outlined.
+        let stray = frame_mesh(&scene, &plan, &view_of(&scene, Some(7), Some(9), 0.0));
+        assert_eq!(gold_bars(&stray), 0);
+        let scenery = plant_scene(crate::data::Owner::Scenery);
+        let plan = Plan::build(&scenery);
+        let m = frame_mesh(&scenery, &plan, &view_of(&scenery, Some(0), Some(0), 0.0));
+        assert_eq!(gold_bars(&m), 0);
+    }
+
+    #[test]
+    fn the_outline_is_gold_for_the_player_and_white_for_rivals() {
+        let gold = colour(ramp::GOLD, 3);
+        let white = colour(ramp::CLOUD, 3);
+        for (owner, want, other) in [
+            (crate::data::Owner::Player, gold, white),
+            (crate::data::Owner::Rival, white, gold),
+        ] {
+            let scene = plant_scene(owner);
+            let plan = Plan::build(&scene);
+            let m = frame_mesh(&scene, &plan, &view_of(&scene, Some(0), None, 0.0));
+            assert!(m.vertices.iter().any(|v| v.colour[..3] == want));
+            assert!(m.vertices.iter().all(|v| v.colour[..3] != other));
+        }
+    }
+
+    #[test]
+    fn a_selected_outline_pulses_in_whole_steps_and_a_hovered_one_does_not() {
+        let scene = plant_scene(crate::data::Owner::Player);
+        let plan = Plan::build(&scene);
+        let sel = |t: f32| {
+            let mut v = view_of(&scene, None, Some(0), t);
+            v.animated = true;
+            frame_mesh(&scene, &plan, &v).vertices.len()
+        };
+        let step = period(1.2) / 4.0;
+        let a = sel(0.1);
+        assert_eq!(a, sel(0.1 + step * 0.5), "the same step repeats exactly");
+        let hover = |t: f32| {
+            let mut v = view_of(&scene, Some(0), None, t);
+            v.animated = true;
+            frame_mesh(&scene, &plan, &v).vertices.len()
+        };
+        assert_eq!(hover(0.1), hover(0.1 + step));
+    }
+
+    #[test]
+    fn a_truck_is_the_same_mesh_for_the_same_inputs_and_follows_its_cargo() {
+        let build = |cargo| {
+            let mut m = Mesh::default();
+            fleet::truck(&mut m, [1.0, 2.0, 0.0], 0.7, 0.035, cargo, 5);
+            m
+        };
+        let a = build(Cargo::Tanker);
+        let b = build(Cargo::Tanker);
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&a.vertices),
+            bytemuck::cast_slice::<_, u8>(&b.vertices)
+        );
+        // Each cargo has its own trailer, so the shapes differ.
+        let sizes: Vec<usize> = [Cargo::Tanker, Cargo::Flatbed, Cargo::Box, Cargo::Hopper]
+            .iter()
+            .map(|c| build(*c).vertices.len())
+            .collect();
+        assert!(sizes.iter().any(|n| *n != sizes[0]));
+        assert_eq!(fleet::cargo_of_goods("Crude oil"), Cargo::Tanker);
+        assert_eq!(fleet::cargo_of_goods("steel coils"), Cargo::Flatbed);
+        assert_eq!(fleet::cargo_of_goods("grain"), Cargo::Hopper);
+        assert_eq!(fleet::cargo_of_goods("consumer goods"), Cargo::Box);
+        assert_eq!(fleet::ship_of(Cargo::Box, true), ShipKind::Barge);
+    }
+
+    #[test]
+    fn a_ship_waits_at_its_berth_and_a_truck_never_waits() {
+        let mut r = Route::new(Kind::Ship, vec![[0.0, 0.0, 0.0], [30.0, 0.0, 0.0]], 1, 3).unwrap();
+        r.dwell = 40.0;
+        let lap = period(2.0 * r.length() / r.speed_km_s + 80.0);
+        let mut at_end = 0;
+        for k in 0..200 {
+            let (s, _) = r.state(0, lap * k as f32 / 200.0);
+            assert!((0.0..=r.length()).contains(&s));
+            if (s - r.length()).abs() < 1e-3 {
+                at_end += 1;
+            }
+        }
+        assert!(at_end > 10, "it lies at the far berth for a while");
+    }
 }

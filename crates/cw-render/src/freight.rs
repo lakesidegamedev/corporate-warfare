@@ -177,23 +177,36 @@ fn shore_toward(scene: &Scene, from: (f32, f32), dir: [f32; 2], max: f32) -> Opt
     None
 }
 
-/// The shore nearest `hub` where a harbour can stand: the shore point and the direction from
-/// the land out over the water.
+/// The shore near `hub` where a harbour can stand: the shore point and the direction from the
+/// land out over the water. The nearest shore wins, but a spot with other buildings standing on
+/// it (a downtown) costs as much as a few kilometres, so the quays are not built into towers.
 pub fn coast_near(scene: &Scene, hub: (f32, f32), reach: f32) -> Option<((f32, f32), [f32; 2])> {
     if is_water(scene, hub.0, hub.1) {
         return None;
     }
-    let mut best: Option<(f32, [f32; 2])> = None;
-    for k in 0..32 {
-        let a = k as f32 * std::f32::consts::TAU / 32.0;
+    let crowd = |p: (f32, f32)| {
+        scene
+            .buildings
+            .iter()
+            .filter(|b| {
+                let q = scene.projection.to_km(b.lon, b.lat);
+                dist(q, p) < 1.2
+            })
+            .count() as f32
+    };
+    let mut best: Option<(f32, f32, [f32; 2])> = None;
+    for k in 0..48 {
+        let a = k as f32 * std::f32::consts::TAU / 48.0;
         let dir = [a.cos(), a.sin()];
-        if let Some(d) = shore_toward(scene, hub, dir, reach)
-            && best.is_none_or(|b| d < b.0)
-        {
-            best = Some((d, dir));
+        if let Some(d) = shore_toward(scene, hub, dir, reach) {
+            let at = (hub.0 + dir[0] * d, hub.1 + dir[1] * d);
+            let cost = d + 0.5 * crowd(at).min(40.0);
+            if best.is_none_or(|b| cost < b.0) {
+                best = Some((cost, d, dir));
+            }
         }
     }
-    let (d, dir) = best?;
+    let (_, d, dir) = best?;
     Some(((hub.0 + dir[0] * d, hub.1 + dir[1] * d), dir))
 }
 
@@ -351,6 +364,31 @@ pub fn build(scene: &Scene) -> Fleet {
     fleet
 }
 
+/// The cargo of a lane: from the goods when the game names them, else from the sector of the
+/// plants standing round the lane's start (the most common one).
+fn lane_cargo(scene: &Scene, lane: &Lane, from: (f32, f32)) -> crate::fleet::Cargo {
+    if !lane.goods.is_empty() {
+        return cargo_of_goods(&lane.goods);
+    }
+    let mut votes: HashMap<&str, u32> = HashMap::new();
+    for p in &scene.buildings {
+        if p.owner == Owner::Scenery {
+            continue;
+        }
+        if dist(scene.projection.to_km(p.lon, p.lat), from) < 25.0 {
+            *votes
+                .entry(p.model.split('/').next().unwrap_or(""))
+                .or_default() += 1;
+        }
+    }
+    votes
+        .into_iter()
+        .max_by_key(|(name, n)| (*n, std::cmp::Reverse(*name)))
+        .map_or(crate::fleet::Cargo::Box, |(name, _)| {
+            cargo_of_industry(name)
+        })
+}
+
 fn region_hub(scene: &Scene, code: &str) -> Option<(f32, f32)> {
     scene
         .regions
@@ -433,7 +471,7 @@ fn from_lanes(scene: &Scene) -> Fleet {
             continue;
         }
         let seed = li as u32 * 17 + 3;
-        let cargo = cargo_of_goods(&lane.goods);
+        let cargo = lane_cargo(scene, lane, a);
         let by_net = |net: &Network, reach: f32| -> Option<Vec<[f32; 3]>> {
             let (na, nb) = (net.nearest(a, reach), net.nearest(b, reach));
             if std::env::var("CW_FLEET_DEBUG").is_ok() {

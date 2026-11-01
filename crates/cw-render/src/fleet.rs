@@ -37,7 +37,12 @@ pub enum ShipKind {
 /// The cargo of a freight lane from the name of its goods.
 pub fn cargo_of_goods(goods: &str) -> Cargo {
     let g = goods.to_lowercase();
-    let has = |words: &[&str]| words.iter().any(|w| g.contains(w));
+    let tokens: Vec<&str> = g.split(|c: char| !c.is_alphabetic()).collect();
+    let has = |words: &[&str]| {
+        words
+            .iter()
+            .any(|w| tokens.iter().any(|t| t.starts_with(w)))
+    };
     if has(&[
         "oil", "fuel", "gas", "petrol", "diesel", "chemical", "plastic", "fertil", "acid",
     ]) {

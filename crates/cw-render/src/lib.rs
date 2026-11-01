@@ -23,7 +23,8 @@ pub use data::{
     Activity, AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, KM_PER_DEG_LAT,
     LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, LINE_RIVER, Lane, Line, Look, Mask, Owner, PLANT_MODELS,
     PLAYER_REGIONS, Placement, Projection, RegionInfo, SCENARIOS, ScenarioSpec, Scene,
-    SceneOptions, TINT_HEAT, TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel, downtown_tier,
+    SceneOptions, TINT_HEAT, TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel, WATER_LAKE, WATER_OCEAN,
+    downtown_tier,
 };
 pub use game::{
     PlantSite, SiteStatus, firm_colour, layout_plants, plant_size_km, ramp_by_name, region_tints,

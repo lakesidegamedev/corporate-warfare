@@ -115,13 +115,13 @@ internal abstract class FfiGpuSession(
     private fun readBuildings(): List<GpuBuilding> {
         val text = lib.text { lib.cw_gpu_buildings(id, it, it.size.toLong()) } ?: return emptyList()
         return runCatching {
-            kotlinx.serialization.json.Json.parseToJsonElement(text).let { it as kotlinx.serialization.json.JsonArray }.map { e ->
+            kotlinx.serialization.json.Json.parseToJsonElement(text).let { it as kotlinx.serialization.json.JsonArray }.mapIndexed { index, e ->
                 val o = e as kotlinx.serialization.json.JsonObject
                 fun str(k: String) = (o[k] as kotlinx.serialization.json.JsonPrimitive).content
                 fun opt(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.content
                 GpuBuilding(
                     str("lon").toDouble(), str("lat").toDouble(), str("owner"), str("kind"), (0xFF000000L or str("colour").toLong(16)).toInt(),
-                    region = opt("region"), industry = opt("industry"), firm = opt("firm")?.toLongOrNull(), plants = opt("plants")?.toIntOrNull() ?: 0,
+                    region = opt("region"), industry = opt("industry"), firm = opt("firm")?.toLongOrNull(), plants = opt("plants")?.toIntOrNull() ?: 0, id = index,
                 )
             }
         }.getOrDefault(emptyList())

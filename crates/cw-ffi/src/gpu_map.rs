@@ -43,6 +43,25 @@ pub struct Update {
     pub clouds: Option<u8>,
     /// Week of the year (1 to 52) for the snow, from the game's calendar.
     pub week: Option<u32>,
+    /// This week's freight lanes: vehicles run along them between the regions.
+    pub lanes: Option<Vec<LaneIn>>,
+    /// The building (index into the placed buildings) under the pointer and the selected one;
+    /// a negative number clears it.
+    pub hover: Option<i64>,
+    pub selected: Option<i64>,
+}
+
+/// One freight lane as the shell sends it.
+#[derive(Deserialize, Clone)]
+pub struct LaneIn {
+    pub from: String,
+    pub to: String,
+    pub mode: String,
+    /// How busy the lane is, 0 to 1 of the busiest lane.
+    #[serde(default)]
+    pub volume: f32,
+    #[serde(default)]
+    pub goods: String,
 }
 
 #[derive(Deserialize, Clone)]
@@ -257,6 +276,21 @@ impl GpuMap {
             if let Some(r) = &u.heat_ramp {
                 style.heat_ramp = ramp_by_name(r);
             }
+            if let Some(h) = u.hover {
+                style.hover = usize::try_from(h).ok();
+            }
+            if let Some(s) = u.selected {
+                style.selected = usize::try_from(s).ok();
+            }
+        }
+        // A hover or selection alone only touches the style: never wait for a frame in flight.
+        if u.week.is_none()
+            && u.plants.is_none()
+            && u.lanes.is_none()
+            && u.holdings.is_none()
+            && u.heat.is_none()
+        {
+            return;
         }
         let mut scene = self.scene.write().unwrap();
         if let Some(week) = u.week {
@@ -270,6 +304,20 @@ impl GpuMap {
             *self.sites.lock().unwrap() = identify_sites(&scene, &sites, &placed);
             all.extend(placed);
             scene.set_buildings(all);
+        }
+        if let Some(lanes) = &u.lanes {
+            scene.set_lanes(
+                lanes
+                    .iter()
+                    .map(|l| cw_render::Lane {
+                        from: l.from.clone(),
+                        to: l.to.clone(),
+                        mode: l.mode.clone(),
+                        volume: l.volume,
+                        goods: l.goods.clone(),
+                    })
+                    .collect(),
+            );
         }
         let mut tints_changed = false;
         if let Some(h) = &u.holdings {
