@@ -214,7 +214,7 @@ internal fun MapLayer.gpuRamp(): String = when (this) {
 /** Game state as the GPU map's update JSON. */
 internal fun gpuUpdateJson(
     plants: List<uniffi.cw_ffi.MapPlantDto>, divisions: List<uniffi.cw_ffi.MapDivisionDto>, layer: MapLayer,
-    shaded: Map<String, Double>, night: Boolean, clouds: Int, week: Int = 28,
+    shaded: Map<String, Double>, night: Boolean, clouds: Int, week: Int = 28, migration: Map<String, Int> = emptyMap(),
 ): String {
     fun q(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
     val plantJson = plants.joinToString(",", "[", "]") {
@@ -223,7 +223,8 @@ internal fun gpuUpdateJson(
     val holdings = divisions.map { it.region }.distinct().joinToString(",", "[", "]") { q(it) }
     val heat = if (layer == MapLayer.Presence || layer == MapLayer.Freight) "{}"
     else shaded.entries.joinToString(",", "{", "}") { "${q(it.key)}:${(it.value * 3.999).toInt().coerceIn(0, 3)}" }
-    return """{"plants":$plantJson,"holdings":$holdings,"heat":$heat,"heat_ramp":${q(layer.gpuRamp())},"night":$night,"clouds":$clouds,"week":$week}"""
+    val migrationJson = migration.entries.joinToString(",", "{", "}") { "${q(it.key)}:${it.value}" }
+    return """{"plants":$plantJson,"holdings":$holdings,"heat":$heat,"heat_ramp":${q(layer.gpuRamp())},"night":$night,"clouds":$clouds,"week":$week,"migration":$migrationJson}"""
 }
 
 /** The sea of the palette (water ramp, step 2): the ground under the picture, so nothing of the view is ever a void. */
