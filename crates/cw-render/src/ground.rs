@@ -283,11 +283,14 @@ fn city_zones(scene: &Scene, classes: &[u8], wet: &[bool], w: usize, h: usize, v
             'look: for dy in -2i32..=2 {
                 for dx in -2i32..=2 {
                     let (nx, ny) = (x as i32 + dx, y as i32 + dy);
-                    if nx >= 0 && ny >= 0 && (nx as usize) < w && (ny as usize) < h {
-                        if wet[ny as usize * w + nx as usize] {
-                            port = true;
-                            break 'look;
-                        }
+                    if nx >= 0
+                        && ny >= 0
+                        && (nx as usize) < w
+                        && (ny as usize) < h
+                        && wet[ny as usize * w + nx as usize]
+                    {
+                        port = true;
+                        break 'look;
                     }
                 }
             }

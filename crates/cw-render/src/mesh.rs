@@ -1061,7 +1061,8 @@ pub fn bridge_sites(
     rivers: &[Vec<RoadPoint>],
 ) -> Vec<(u8, [f32; 3], [f32; 2], f32)> {
     const CELL: f32 = 4.0;
-    let mut grid: HashMap<(i32, i32), Vec<(u8, usize, usize)>> = HashMap::new();
+    type Cell = Vec<(u8, usize, usize)>;
+    let mut grid: HashMap<(i32, i32), Cell> = HashMap::new();
     for (ri, (_, pts)) in roads.iter().enumerate() {
         for si in 0..pts.len().saturating_sub(1) {
             let (a, b) = (&pts[si].xyz, &pts[si + 1].xyz);
