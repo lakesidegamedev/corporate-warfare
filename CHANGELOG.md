@@ -11,6 +11,14 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- The new map now lives. Running oil, power, chemical and heavy industry plants give off crisp pixel smoke that rises from their chimneys and leans downwind. A plant that is running hard smokes more, a plant that is mothballed does not smoke at all, and the smoke fades by shrinking, never by blurring. At night the tops of tall towers and chimneys blink red.
+- Construction sites now show how far the build has got: a foundation first, then a steel frame going up floor by floor, then walls rising up the frame, with a tower crane whose arm turns slowly. A new plant (or one that has just finished building) grows up out of the ground over about a second instead of popping in.
+- Trucks run along the roads between your plants and the nearest city, trains run on the railways, and ships sail over the lakes and the sea from coastal plants. Busier plants send more trucks. Vehicles keep a minimum size on screen so they stay visible when you zoom out.
+- A few windows in lit buildings flip on or off now and then at night.
+- While the map is showing and "Animations" is on in Settings under Graphics, the map redraws every refresh of your display when something is moving at the zoom you are at. It rests when you leave the map or turn animations off, and it keeps moving while the game is paused. With animations off the map is a still picture: no smoke, vehicles or blinking lights (construction stages and grown buildings still show).
+
 ### Changed
 
 - Buildings on the new map look much better. Every sector's plant has more to it now: power stations have cooling towers, stacks and pylons, chemical works have fenced tank farms, factories have loading docks with trucks, mines and oil fields have pumpjacks, farms have furrowed fields, barns and silos, warehouses have yards full of trailers and containers, and offices, hospitals and flats have rows of windows. Roofs show vents, skylights and air conditioners, and doors and parked vehicles show how big a building really is. Window rows are dark by day and light up at night. A building is still the same size on the ground at every zoom.

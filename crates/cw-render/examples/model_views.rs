@@ -276,5 +276,6 @@ fn placement(model: String, lon: f32, lat: f32, scale: f32, owner: Owner, i: usi
             firm: (owner == Owner::Rival).then(|| cw_render::firm_colour(i as u64 + 2)),
             idle: i == 6,
         },
+        activity: Default::default(),
     }
 }

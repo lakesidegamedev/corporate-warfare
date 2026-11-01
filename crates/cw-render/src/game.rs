@@ -5,19 +5,20 @@
 use std::collections::HashMap;
 
 use crate::data::{
-    KM_PER_DEG_LAT, Look, Owner, Placement, Scene, TINT_HEAT, TINT_PLAY, TINT_PLAYER,
+    Activity, KM_PER_DEG_LAT, Look, Owner, Placement, Scene, TINT_HEAT, TINT_PLAY, TINT_PLAYER,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum SiteStatus {
     /// Still being built: a construction site.
     Site,
+    #[default]
     Running,
     Mothballed,
 }
 
 /// A firm's plants of one industry in one region, which the map draws as one building.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct PlantSite {
     pub region: String,
     pub industry: String,
@@ -25,6 +26,10 @@ pub struct PlantSite {
     pub plants: u32,
     pub player: bool,
     pub status: SiteStatus,
+    /// Average utilisation of the division's plants, 0 to 1.
+    pub utilisation: f32,
+    /// Average construction progress of a site, 0 to 1.
+    pub progress: f32,
 }
 
 /// Small up to three plants, medium up to eight, large beyond (the classic map's rule).
@@ -253,6 +258,12 @@ pub fn layout_plants(scene: &Scene, sites: &[PlantSite]) -> Vec<Placement> {
                     Owner::Player
                 } else {
                     Owner::Rival
+                },
+                activity: Activity {
+                    status: Some(s.status),
+                    utilisation: s.utilisation.clamp(0.0, 1.0),
+                    progress: s.progress.clamp(0.0, 1.0),
+                    born: None,
                 },
                 look: Look {
                     firm: (!s.player).then(|| firm_colour(s.firm)),

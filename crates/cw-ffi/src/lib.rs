@@ -1338,6 +1338,8 @@ pub struct MapPlantDto {
     pub blocks: u32,
     pub status: String,
     pub utilisation_bps: i32,
+    /// How far a plant under construction has got, in basis points (0 when it is not building).
+    pub progress_bps: i32,
 }
 
 /// A firm's sector focus and logistics position.
@@ -4138,6 +4140,15 @@ impl SessionHandle {
                         .to_lowercase(),
                     utilisation_bps: if capacity > 0 {
                         (plant.last_output.lots() * 10_000 / capacity).clamp(0, 10_000) as i32
+                    } else {
+                        0
+                    },
+                    progress_bps: if plant.status == cw_sim::state::FacilityStatus::Building
+                        && plant.completes.0 > plant.started.0
+                    {
+                        let done = world.tick.0.saturating_sub(plant.started.0) as i64;
+                        let span = (plant.completes.0 - plant.started.0) as i64;
+                        (done * 10_000 / span).clamp(0, 10_000) as i32
                     } else {
                         0
                     },

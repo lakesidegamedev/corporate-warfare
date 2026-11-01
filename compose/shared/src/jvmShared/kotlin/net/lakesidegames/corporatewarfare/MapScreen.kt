@@ -248,7 +248,13 @@ fun WorldMapView(
             if (why != null) { GpuMapHost.directFellBack = why; surfaceBad = true; break }
         }
     }
-    val gpuOn by remember(gpu, layer) { derivedStateOf { gpu != null && layer != MapLayer.Freight && (camera?.zoom ?: MapCamera.FLAT_END) >= MapCamera.FLAT_END } }
+    // Smoke, cranes, beacons and vehicles move while the map is showing and animations are on; leaving the map or turning them off lets it idle.
+    val gpuShown by remember(gpu, layer) { derivedStateOf { gpu != null && layer != MapLayer.Freight && (camera?.zoom ?: MapCamera.FLAT_END) >= MapCamera.FLAT_END } }
+    DisposableEffect(gpu, graphics.animations, gpuShown) {
+        gpu?.setAnimation(graphics.animations && gpuShown)
+        onDispose { gpu?.setAnimation(false) }
+    }
+    val gpuOn = gpuShown
     // The native surface shows through (the map's own background and ground are not drawn over it) while it is what draws the map.
     val surfaceShows = gpuOn && gpu?.direct == true
     // Once the native surface has received a mouse event itself it is the source of pointer input over the map.

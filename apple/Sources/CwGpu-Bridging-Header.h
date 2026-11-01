@@ -8,6 +8,7 @@ uint64_t cw_gpu_open_layer(const char *assets, const char *scenario, void *layer
 int32_t cw_gpu_last_error(char *buf, size_t len);
 int32_t cw_gpu_info(uint64_t id, char *buf, size_t len);
 int32_t cw_gpu_update(uint64_t id, const char *json);
+int32_t cw_gpu_set_clock(uint64_t id, double seconds, int32_t animate, double width_km);
 int32_t cw_gpu_render(uint64_t id, const double *cam, uint32_t width, uint32_t height, uint32_t scale,
                       uint8_t *out, size_t out_len, double *timing);
 int32_t cw_gpu_render_layer(uint64_t id, const double *cam, uint32_t width, uint32_t height, double *timing);

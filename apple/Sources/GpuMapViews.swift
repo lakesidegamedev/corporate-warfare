@@ -8,10 +8,13 @@ struct GpuMapSurface: UIViewRepresentable {
     let size: CGSize
     /// The player's tilt setting, in radians.
     let tilt: Double
+    /// Map animations on (the player's setting, and not reduced motion).
+    var animate: Bool = true
 
     func makeUIView(context: Context) -> GpuMetalView { session.view }
 
     func updateUIView(_ view: GpuMetalView, context: Context) {
+        session.setAnimation(animate)
         session.request(camera: GpuCamera(camera, size: size, tilt: tilt), size: size)
     }
 }
@@ -23,7 +26,8 @@ enum GpuMapUpdate {
         var object: [String: Any] = [:]
         object["plants"] = plants.map { p -> [String: Any] in
             ["region": p.region, "industry": p.industry, "firm": p.firm, "blocks": p.blocks,
-             "player": p.player, "status": p.status.lowercased()]
+             "player": p.player, "status": p.status.lowercased(),
+             "utilisation_bps": p.utilisationBps, "progress_bps": p.progressBps]
         }
         var seen = Set<String>()
         object["holdings"] = divisions.map(\.region).filter { seen.insert($0).inserted }

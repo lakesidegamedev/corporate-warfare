@@ -5,6 +5,7 @@
 //! Headless renders use whatever adapter wgpu finds; on a machine without a GPU that is the
 //! Mesa software Vulkan driver.
 
+mod anim;
 mod camera;
 mod data;
 mod far;
@@ -17,7 +18,7 @@ mod renderer;
 
 pub use camera::Camera;
 pub use data::{
-    AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, KM_PER_DEG_LAT,
+    Activity, AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, KM_PER_DEG_LAT,
     LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, Line, Look, Mask, Owner, PLANT_MODELS, PLAYER_REGIONS,
     Placement, Projection, RegionInfo, SCENARIOS, ScenarioSpec, Scene, SceneOptions, TINT_HEAT,
     TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel, downtown_tier,
@@ -31,6 +32,9 @@ pub use renderer::{
     AdapterSummary, CloudLevel, Frame, FrameStats, NoAdapter, Renderer, Style, SurfaceTarget,
 };
 
+pub use anim::{
+    ANIM_MAX_KM, CLOCK_WRAP_S, WIND, clock as anim_clock, route_counts, scene_animates,
+};
 pub use ground::snow_cover;
 pub use mesh::{
     BuildingBox, ROAD_BANDS, RoadPoint, apron_extent_km, apron_land_boxes, apron_seam_steps,

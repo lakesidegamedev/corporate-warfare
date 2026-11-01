@@ -100,6 +100,7 @@ fn main() {
                     firm: (*owner == Owner::Rival).then(|| firm_colour(row as u64 + 3)),
                     idle: *idle,
                 },
+                ..Default::default()
             }]);
             let cam = Camera {
                 lon,

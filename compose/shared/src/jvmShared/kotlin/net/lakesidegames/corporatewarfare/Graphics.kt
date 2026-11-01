@@ -111,7 +111,7 @@ internal val graphicsOptions = listOf(
     GraphicsOption("Seasons", { "Snow in winter and autumn colours, following the game's calendar." }, listOf("Off", "On"), { it.seasons.int() }, { c, v -> c.copy(seasons = v == 1) }),
     GraphicsOption("Labels", { "Names on the map." }, listOf("Off", "Cities", "All"), { it.labels }, { c, v -> c.copy(labels = v) }),
     GraphicsOption("Frame rate", { "Lower saves battery." }, listOf("30", "60", "Unlimited"), { when (it.frameRate) { 30 -> 0; 60 -> 1; else -> 2 } }, { c, v -> c.copy(frameRate = listOf(30, 60, 0)[v]) }),
-    GraphicsOption("Animations", { "Camera flights, the menu and moving effects." }, listOf("Off", "On"), { it.animations.int() }, { c, v -> c.copy(animations = v == 1) }),
+    GraphicsOption("Animations", { "Camera flights, the menu and moving effects. On the new map: smoke, cranes, blinking lights and vehicles." }, listOf("Off", "On"), { it.animations.int() }, { c, v -> c.copy(animations = v == 1) }),
     GraphicsOption(
         "New map (preview)",
         { "A new look for the map, drawn on your graphics card: terrain, roads, rails and buildings. A preview for testers; the frame rate counter shows what it costs. If your computer has no usable graphics card the game keeps the current map." },
