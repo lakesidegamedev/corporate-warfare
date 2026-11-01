@@ -172,21 +172,95 @@ fn tile_value(t: array<u32, 8>, tx: i32, ty: i32) -> u32 {
     return nib(t[u32(ty & 7)], tx);
 }
 
-// Class texture at a world texel. Field rows run in a direction picked per patch.
+fn ihash(a: i32, b: i32) -> u32 {
+    var h = u32(a) * 0x9E3779B1u ^ u32(b) * 0x85EBCA6Bu;
+    h = h ^ (h >> 15u);
+    h = h * 0x2C1B3C6Du;
+    h = h ^ (h >> 12u);
+    h = h * 0x297A2D39u;
+    return h ^ (h >> 15u);
+}
+
+// A tile value with the tile mirrored and turned per 8x8 block of the world, so one hand drawn
+// tile gives eight looks and the repeat is not visible over kilometres.
+fn tile_oriented(t: array<u32, 8>, tx: i32, ty: i32, h: u32) -> u32 {
+    var lx = tx & 7;
+    var ly = ty & 7;
+    if ((h & 1u) != 0u) { lx = 7 - lx; }
+    if ((h & 2u) != 0u) { ly = 7 - ly; }
+    if ((h & 4u) != 0u) { let t0 = lx; lx = ly; ly = t0; }
+    return nib(t[u32(ly)], lx);
+}
+
+const TILE_FOREST2 = array<u32, 8>(0x00022000u, 0x00022100u, 0x01000110u, 0x02200000u, 0x02210002u, 0x00110022u, 0x00000021u, 0x10000001u);
+const TILE_ROCK2 = array<u32, 8>(0x00000200u, 0x01000000u, 0x00002001u, 0x00000000u, 0x20010000u, 0x00000020u, 0x00100100u, 0x02000000u);
+
+fn imod(a: i32, m: i32) -> i32 {
+    return ((a % m) + m) % m;
+}
+
+// Crop of a field patch this season: 0 green, 1 ripe, 2 ploughed, 3 pasture. The patch's own
+// crop number picks a column, the season a row.
+fn crop_state(variant: u32) -> u32 {
+    let c = (variant >> 2u) & 3u;
+    let season = i32(round(g.ground_dim.w));
+    if (c == 3u) { return 3u; }
+    if (season == 1) { if (c == 2u) { return 2u; } return 0u; }
+    if (season == 2) { if (c == 2u) { return 1u; } return 0u; }
+    if (season == 3) { if (c == 0u) { return 1u; } if (c == 1u) { return 2u; } return 0u; }
+    if (c == 2u) { return 2u; }
+    return 0u;
+}
+
+// Class texture at a world texel: 0 the class colour, -1 one step darker, 1 one step lighter.
+// Every pattern keeps about the same share of dark and light at any texel size, so the mean
+// colour does not jump when the texel doubles as the camera pulls back.
 fn class_texel(cls: u32, variant: u32, tx: i32, ty: i32) -> i32 {
     var v = 0u;
-    if (cls == 0u) { v = tile_value(TILE_FOREST, tx, ty); }
-    else if (cls == 1u) {
-        // Survey grid fields: rows run east-west or north-south by patch, one dark row in six,
-        // and half the patches stay plain. Never diagonal.
-        if (variant == 0u) { if (((ty % 6) + 6) % 6 == 0) { v = 1u; } }
-        else if (variant == 1u) { if (((tx % 6) + 6) % 6 == 0) { v = 1u; } }
+    let h8 = ihash(tx >> 3, ty >> 3);
+    if (cls == 0u) {
+        if (((h8 >> 3u) & 1u) == 1u) { v = tile_oriented(TILE_FOREST2, tx, ty, h8); }
+        else { v = tile_oriented(TILE_FOREST, tx, ty, h8); }
     }
-    else if (cls == 2u) { v = tile_value(TILE_SOIL, tx, ty); }
-    else if (cls == 3u) { v = tile_value(TILE_ROCK, tx, ty); }
-    else if (cls == 4u) { v = tile_value(TILE_SNOW, tx, ty); }
-    else if (cls == 5u) { v = tile_value(TILE_URBAN, tx, ty); }
-    else { v = tile_value(TILE_CORE, tx, ty); }
+    else if (cls == 1u) {
+        // Rows run east-west or north-south by patch (never diagonal), one dark row in four or
+        // five. Pasture is sparse speckle instead.
+        let crop = crop_state(variant);
+        let along = select(ty, tx, (variant & 1u) == 1u);
+        let period = select(4, 5, (variant & 2u) != 0u);
+        if (crop == 3u) {
+            let r = ihash(tx, ty + 311) % 24u;
+            if (r == 0u) { v = 1u; } else if (r == 1u) { v = 2u; }
+        } else if (crop == 2u) {
+            if (imod(along, 3) == 0) { v = 1u; }
+        } else {
+            if (imod(along, period) == 0) { v = 1u; }
+        }
+    }
+    else if (cls == 2u) {
+        // Scrub and desert: bare, with a sparse scatter of darker brush and pale sand.
+        let r = ihash(tx + 57, ty) % 36u;
+        if (r == 0u) { v = 1u; } else if (r == 1u) { v = 2u; }
+    }
+    else if (cls == 3u) {
+        if (((h8 >> 3u) & 1u) == 1u) { v = tile_oriented(TILE_ROCK2, tx, ty, h8); }
+        else { v = tile_oriented(TILE_ROCK, tx, ty, h8); }
+    }
+    else if (cls == 4u) {
+        v = tile_oriented(TILE_SNOW, tx, ty, h8);
+    }
+    else if (cls == 5u) {
+        // Streets every four texels, an avenue two wide every sixteen, blocks lighter or plain.
+        let sx = imod(tx, 16);
+        let sy = imod(ty, 16);
+        if (sx < 2 || sy < 2 || (tx & 3) == 0 || (ty & 3) == 0) { v = 1u; }
+        else if (ihash(tx >> 2, ty >> 2) % 4u == 0u) { v = 2u; }
+    }
+    else {
+        // Downtown: tighter blocks, more of them bright.
+        if (imod(tx, 8) < 2 || imod(ty, 8) < 2 || (tx & 3) == 0 || (ty & 3) == 0) { v = 1u; }
+        else if (ihash(tx >> 2, ty >> 2) % 2u == 0u) { v = 2u; }
+    }
     if (v == 1u) { return -1; }
     if (v == 2u) { return 1; }
     return 0;
@@ -297,17 +371,31 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
             // Shoreline: a one pixel lighter rim where the next pixel is land.
             if (!is_water(mr) || !is_water(md) || !is_water(ml) || !is_water(mu)) { w = 3; }
             else if (g.tex.y > 0.5) {
-                // Wave dashes in world space (static for now, ready to move later), only in
-                // open water away from any shore and only while the camera is close enough
-                // for a texel to be a few pixels wide.
+                // Shallows: the water within two texels of land is one step lighter, tested from
+                // the texel centre so the band's edge is a clean staircase of whole texels.
+                let q = (floor(in.world.xy / g.tex.x) + 0.5) * g.tex.x;
+                let r2 = g.tex.x * 2.0;
+                let shallow = !is_water(mask_at(lonlat(q + vec2<f32>(r2, 0.0))))
+                    || !is_water(mask_at(lonlat(q - vec2<f32>(r2, 0.0))))
+                    || !is_water(mask_at(lonlat(q + vec2<f32>(0.0, r2))))
+                    || !is_water(mask_at(lonlat(q - vec2<f32>(0.0, r2))))
+                    || !is_water(mask_at(lonlat(q + vec2<f32>(r2, r2) * 0.7)))
+                    || !is_water(mask_at(lonlat(q - vec2<f32>(r2, r2) * 0.7)))
+                    || !is_water(mask_at(lonlat(q + vec2<f32>(r2, -r2) * 0.7)))
+                    || !is_water(mask_at(lonlat(q + vec2<f32>(-r2, r2) * 0.7)));
+                if (shallow) { w = min(w + 1, 3); }
+                // Open water: a sparse static scatter of wave texels, each block of rows
+                // shifted so the dashes do not line up. Not in the shallows or near any shore.
                 let tx = i32(floor(in.world.x / g.tex.x));
                 let ty = i32(floor(in.world.y / g.tex.x));
-                let shift = i32(hash3(vec3<f32>(f32(ty >> 3), 3.0, 1.0)) * 8.0);
+                let hb = ihash(tx >> 3, ty >> 3);
+                let shift = i32(hb & 7u);
                 let far = !is_water(mask_at(lonlat(in.world.xy + dpx.xy * 8.0)))
                     || !is_water(mask_at(lonlat(in.world.xy - dpx.xy * 8.0)))
                     || !is_water(mask_at(lonlat(in.world.xy + dpy.xy * 8.0)))
                     || !is_water(mask_at(lonlat(in.world.xy - dpy.xy * 8.0)));
-                if (tile_value(TILE_WAVE, tx + shift, ty) == 2u && !far) { w = min(w + 1, 3); }
+                let wv = tile_value(TILE_WAVE, tx + shift, ty + i32((hb >> 3u) & 3u) * 2);
+                if (wv == 2u && !far && !shallow) { w = min(w + 1, 3); }
             }
             return vec4<f32>(pal(RAMP_WATER, w), 1.0);
         }
@@ -324,6 +412,12 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         if (heat) { ramp = u32(g.cloud2.w); base = clamp(i32(round(m.a)) - 2, 1, 3); }
 
         let tc = vec2<i32>(floor(tcf));
+        if (cls == 1u && !player && !heat && g.tex.y > 0.5 && g.tex.x <= 1.0) {
+            // Crops by the season, only while the texel is small: far out the fields are one green.
+            let crop = crop_state(variant_at(tc));
+            if (crop == 1u) { base = 3; }
+            if (crop == 2u) { ramp = RAMP_SOIL; }
+        }
         if (in.kind == 1u) {
             // Terrace wall: one shade darker than the ground above, with a one pixel highlight
             // along its top edge. Crisp, flat.

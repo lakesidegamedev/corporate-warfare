@@ -44,7 +44,7 @@ pub struct Ground {
     /// ground), kept so a change of season only repaints the snow.
     pub(crate) base: Vec<u8>,
     pub(crate) elev: Vec<i16>,
-    /// Per texel patch variant 0 to 3 (crop row direction), read beside the class.
+    /// Per texel patch variant 0 to 15 (crop row direction and spacing, then crop), read beside the class.
     pub variant: Vec<u8>,
 }
 
@@ -204,7 +204,9 @@ pub fn build(scene: &Scene) -> Ground {
                 .wrapping_add((by as u32).wrapping_mul(0x85EB_CA6B))
                 .rotate_left(13)
                 .wrapping_mul(0xC2B2_AE35);
-            variant[y * w + x] = ((hsh >> 24) & 3) as u8;
+            // Low two bits: row direction and row spacing of the patch. Next two bits: its crop
+            // (the shader turns that into green, ripe, ploughed or pasture by the season).
+            variant[y * w + x] = (((hsh >> 24) & 3) | (((hsh >> 18) & 3) << 2)) as u8;
         }
     }
     for i in 0..w * h {

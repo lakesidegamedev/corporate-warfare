@@ -80,7 +80,7 @@ impl Default for Style {
             buildings: true,
             roads: true,
             road_detail_km: 450.0,
-            texel_km: (0.5, 4.0),
+            texel_km: (0.125, 4.0),
             texel_min_px: 2.0,
             cloud_altitude_km: 18.0,
             dither: 2.5,
@@ -1094,7 +1094,7 @@ impl Renderer {
                 scene.ground.w as f32,
                 scene.ground.h as f32,
                 scene.ground.ppd,
-                0.0,
+                season_of(scene.week),
             ],
             palette: palette.flat(),
             day: Palette::day().flat(),
@@ -1416,6 +1416,16 @@ impl Renderer {
             }
         }
         None
+    }
+}
+
+/// Farming season of a week for the field colours: 0 winter, 1 spring, 2 summer, 3 autumn.
+fn season_of(week: u32) -> f32 {
+    match week {
+        10..=21 => 1.0,
+        22..=36 => 2.0,
+        37..=46 => 3.0,
+        _ => 0.0,
     }
 }
 
