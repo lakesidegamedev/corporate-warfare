@@ -670,6 +670,7 @@ pub fn harbour(m: &mut Mesh, h: &Harbour, px_km: f32, t: f32, animated: bool) {
 /// the ground and at the roof with a post at each corner. A hovered plant gets the bar one pixel
 /// wide in the player's gold or a rival's white. A selected one pulses in whole steps between
 /// two palette colours and one and two pixel bars.
+#[allow(clippy::too_many_arguments)]
 pub fn outline(
     m: &mut Mesh,
     p: &Placement,

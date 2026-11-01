@@ -474,23 +474,6 @@ fn from_lanes(scene: &Scene) -> Fleet {
         let cargo = lane_cargo(scene, lane, a);
         let by_net = |net: &Network, reach: f32| -> Option<Vec<[f32; 3]>> {
             let (na, nb) = (net.nearest(a, reach), net.nearest(b, reach));
-            if std::env::var("CW_FLEET_DEBUG").is_ok() {
-                eprintln!(
-                    "lane {} {} {} straight {straight:.0} near {:?} {:?} path {}",
-                    lane.from,
-                    lane.to,
-                    lane.mode,
-                    na,
-                    nb,
-                    match (na, nb) {
-                        (Some(x), Some(y)) => net
-                            .path(x, y, straight * 2.2 + 30.0)
-                            .map(|p| p.len() as i32)
-                            .unwrap_or(-1),
-                        _ => -2,
-                    }
-                );
-            }
             net.path(na?, nb?, straight * 2.2 + 30.0)
         };
         match lane.mode.as_str() {
