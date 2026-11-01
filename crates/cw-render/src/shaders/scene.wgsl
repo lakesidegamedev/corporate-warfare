@@ -234,6 +234,7 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let tcf = ground_tc(ll);
     let fw = fwidth(tcf);
     let fuv = fwidth(in.uv);
+    let flo = fwidth(in.local);
     let n = normalize(in.normal);
     let sun = normalize(g.sun.xyz);
     let ndl = dot(n, sun);
@@ -396,11 +397,16 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         let inside = (fract(u * 0.5) < 0.5) && (fract(in.local.z * 0.5) > 0.5);
         if (inside) {
             if (night && hash3(cell) > 0.45) { out_c = pal(RAMP_SIGNAL, 1); }
-            else { out_c = pal(RAMP_INK, 2 - select(0, 1, sh < 0.5)); }
+            else if (flo.z < 0.34) { out_c = pal(RAMP_INK, 2 - select(0, 1, sh < 0.5)); }
         }
     }
-    let ex = min(in.uv.x, 1.0 - in.uv.x) / max(fuv.x, 1e-5);
-    let ey = min(in.uv.y, 1.0 - in.uv.y) / max(fuv.y, 1e-5);
+    // A face under four and a half pixels across keeps no outline along that axis, so a distant
+    // downtown block stays a lit shape instead of a black blot; the neighbouring faces still
+    // carry the silhouette.
+    var ex = 9.0;
+    var ey = 9.0;
+    if (1.0 / max(fuv.x, 1e-5) >= 4.5) { ex = min(in.uv.x, 1.0 - in.uv.x) / max(fuv.x, 1e-5); }
+    if (1.0 / max(fuv.y, 1e-5) >= 4.5) { ey = min(in.uv.y, 1.0 - in.uv.y) / max(fuv.y, 1e-5); }
     if (min(ex, ey) < 1.0) { out_c = pal(RAMP_INK, 0); }
     return vec4<f32>(out_c, 1.0);
 }

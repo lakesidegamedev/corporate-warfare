@@ -553,6 +553,53 @@ def city(s):
     return m
 
 
+DOWNTOWN_HEIGHTS = {
+    # Nine lots, south row first. Tier 0 is a small city's low centre, tier 3 a metropolis core.
+    "t0a": [4, 0, 5, 3, 6, 4, 5, 3, 0],
+    "t0b": [5, 3, 4, 0, 5, 3, 4, 6, 3],
+    "t1a": [6, 9, 6, 8, 11, 7, 5, 8, 6],
+    "t1b": [7, 6, 10, 6, 12, 8, 9, 5, 7],
+    "t2a": [9, 14, 10, 13, 18, 12, 8, 15, 9],
+    "t2b": [10, 12, 16, 14, 19, 11, 12, 9, 14],
+    "t3a": [11, 17, 12, 16, 21.5, 15, 12, 18, 10],
+    "t3b": [13, 15, 19, 17, 21, 14, 11, 16, 13],
+}
+LOTS = [(-11.6, -5.4), (-3.1, 3.1), (5.4, 11.6)]
+WALLS = [c("cloud", 2), c("urban", 3), c("water", 3), c("snow", 2), c("urban", 2), c("cloud", 3)]
+
+
+def downtown(key):
+    """A downtown block of nine lots: towers with setbacks and a crown, taller toward the middle.
+    The tier says how big the city is; the block is scenery, nobody's, so nothing is trim."""
+    m = start()
+    heights = DOWNTOWN_HEIGHTS[key]
+    tier = int(key[1])
+    for i, h in enumerate(heights):
+        gy, gx = divmod(i, 3)
+        x0, x1 = LOTS[gx]
+        y0, y1 = LOTS[gy]
+        if h == 0:
+            m.b(x0 + 0.5, y0 + 0.5, PAD_Z, x1 - 0.5, y1 - 0.5, PAD_Z + 0.25, c("forest", 2))  # a park
+            continue
+        wall = WALLS[(i * 5 + tier * 2 + (1 if key.endswith("b") else 0)) % len(WALLS)]
+        roof = c("urban", 1) if wall == c("urban", 2) else c("rock", 2)
+        # Podium under the tall ones, then the tower with a setback.
+        if h >= 12:
+            m.b(x0, y0, PAD_Z, x1, y1, PAD_Z + 2.0, c("urban", 3), win=True)
+            z = PAD_Z + 2.0
+            h -= 2.0
+        else:
+            z = PAD_Z
+        lo = h * 0.62 if h >= 8 else h
+        top = m.tower(x0, y0, x1, y1, lo, wall, roof, trim=False, z0=z, kit=h < 8)
+        if h >= 8:
+            top = m.tower(x0 + 1.2, y0 + 1.2, x1 - 1.2, y1 - 1.2, h - lo, wall, roof, trim=False, z0=top, kit=h < 14)
+        if h >= 14:  # crown: a mast on the roof
+            cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+            m.b(cx - 0.4, cy - 0.4, top, cx + 0.4, cy + 0.4, top + (1.8 if i == 4 and tier == 3 else 1.1), c("rock", 3))
+    return m
+
+
 SECTORS = {
     "energy": energy,
     "chemical_industries": chemical_industries,
@@ -606,6 +653,11 @@ def main():
             boxes = fn(s).done()
             validate(key, boxes)
             models[key] = {"w": 2 * F, "d": 2 * F, "boxes": boxes}
+    for name in DOWNTOWN_HEIGHTS:
+        key = f"downtown/{name}"
+        boxes = downtown(name).done()
+        validate(key, boxes)
+        models[key] = {"w": 2 * F, "d": 2 * F, "boxes": boxes}
     if ERRS:
         raise SystemExit("\n".join(sorted(set(ERRS))))
     OUT.write_text(json.dumps({"note": "GPU map plant models; see tools/plant_models.py", "models": models}, separators=(",", ":")))

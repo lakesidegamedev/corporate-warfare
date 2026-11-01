@@ -60,7 +60,7 @@ struct View {
     grid: bool,
 }
 
-const VIEWS: [View; 6] = [
+const VIEWS: [View; 8] = [
     View {
         name: "columbus",
         scenario: "great-lakes-2000",
@@ -104,6 +104,28 @@ const VIEWS: [View; 6] = [
         heading: 0.0,
         set: 0,
         grid: true,
+    },
+    View {
+        name: "skyline",
+        scenario: "great-lakes-2000",
+        lon: -87.63,
+        lat: 41.86,
+        width_km: 9.0,
+        tilt: 40.0,
+        heading: 20.0,
+        set: 0,
+        grid: false,
+    },
+    View {
+        name: "skyline2",
+        scenario: "great-lakes-2000",
+        lon: -83.05,
+        lat: 42.33,
+        width_km: 9.0,
+        tilt: 40.0,
+        heading: 200.0,
+        set: 0,
+        grid: false,
     },
     View {
         name: "mid",

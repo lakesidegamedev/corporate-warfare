@@ -165,7 +165,18 @@ pub fn layout_plants(scene: &Scene, sites: &[PlantSite]) -> Vec<Placement> {
                 .then(a.firm.cmp(&b.firm))
                 .then(a.industry.cmp(&b.industry))
         });
-        let mut taken: Vec<(f32, f32, f32)> = Vec::new();
+        // The downtown blocks near the hub are taken ground: a plant never hides in a skyline.
+        let mut taken: Vec<(f32, f32, f32)> = scene
+            .buildings
+            .iter()
+            .filter(|b| b.owner == Owner::Scenery)
+            .filter_map(|b| {
+                let m = scene.models.get(&b.model)?;
+                let size = m.footprint[0].max(m.footprint[1]) * scene.voxel_km * b.scale;
+                let at = ((b.lon - hub.0) * kx, (b.lat - hub.1) * KM_PER_DEG_LAT);
+                (at.0.abs() < 40.0 && at.1.abs() < 40.0).then_some((at.0, at.1, size))
+            })
+            .collect();
         for (i, s) in list.into_iter().take(PER_REGION).enumerate() {
             let size = size_of(s.plants);
             let kind = if s.status == SiteStatus::Site {

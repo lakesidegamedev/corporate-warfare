@@ -774,7 +774,18 @@ fn collect_lines(map: &RawMap, scenario: &str, b: &Bounds) -> Vec<Line> {
 }
 
 /// Footprint of one downtown block in kilometres: a real city block cluster, not a district.
-const BLOCK_KM: f32 = 0.55;
+const BLOCK_KM: f32 = 0.6;
+
+/// How tall a city's downtown core stands, 0 (a small city) to 3 (a metropolis): the tallest
+/// towers belong to the biggest cities only.
+pub fn downtown_tier(population: u64) -> usize {
+    match population {
+        0..=799_999 => 0,
+        800_000..=1_499_999 => 1,
+        1_500_000..=2_999_999 => 2,
+        _ => 3,
+    }
+}
 
 /// A few small voxel blocks round the centre of every big city: more blocks for bigger cities,
 /// each picked and turned from the city's own position so the same map always builds the same
@@ -786,22 +797,15 @@ fn downtown_blocks(
     lat: f32,
     voxel_km: f32,
 ) -> Vec<Placement> {
-    const KINDS: [&str; 6] = [
-        "financial/1",
-        "city/1",
-        "real_estate/2",
-        "technology/1",
-        "city/2",
-        "telecommunications/1",
-    ];
     let kx = KM_PER_DEG_LON_EQ * lat.to_radians().cos();
     let mut out = Vec::new();
-    for c in cities.iter().filter(|c| c.population >= 600_000) {
-        let n = (2.0 + (c.population as f32 / 1.0e6).sqrt()).min(7.0) as usize;
+    for c in cities.iter().filter(|c| c.population >= 250_000) {
+        let n = (2.0 + 1.6 * (c.population as f32 / 1.0e6).sqrt()).min(9.0) as usize;
         let reach = 2.0 + 3.2 * (c.population as f32 / 1.0e6).sqrt();
         let seed = ((c.lon * 977.0 + c.lat * 313.0).sin() * 43758.5)
             .fract()
             .abs();
+        let core = downtown_tier(c.population);
         for i in 0..n {
             let a = (seed + i as f32 / n as f32) * std::f32::consts::TAU;
             let ring = if i == 0 {
@@ -809,16 +813,28 @@ fn downtown_blocks(
             } else {
                 reach * (0.3 + 0.12 * ((i * 7) % 5) as f32)
             };
-            let kind = KINDS[((seed * 97.0) as usize + i * 5) % KINDS.len()];
-            let Some(model) = models.get(kind) else {
+            // The tallest block stands at the centre; the blocks round it step down, and the
+            // outermost are suburbs.
+            let tier = match i {
+                0 => core,
+                1 | 2 => core.saturating_sub(1),
+                _ => core.saturating_sub(2),
+            };
+            let variant = if (seed * 97.0) as usize % 2 == (i % 2) {
+                'a'
+            } else {
+                'b'
+            };
+            let kind = format!("downtown/t{tier}{variant}");
+            let Some(model) = models.get(&kind) else {
                 continue;
             };
             out.push(Placement {
-                model: kind.into(),
+                model: kind,
                 lon: c.lon + a.cos() * ring / kx,
                 lat: c.lat + a.sin() * ring / KM_PER_DEG_LAT,
                 yaw: (((seed * 31.0) as usize + i) % 4) as f32 * 90.0,
-                scale: Placement::scale_for_km(voxel_km, model, BLOCK_KM),
+                scale: Placement::scale_for_km(voxel_km, model, BLOCK_KM + 0.06 * tier as f32),
                 owner: Owner::Scenery,
                 look: Look::default(),
             });

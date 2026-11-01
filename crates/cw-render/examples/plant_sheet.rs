@@ -6,11 +6,11 @@
 use std::path::{Path, PathBuf};
 
 use cw_render::{
-    AssetDirs, Camera, Owner, Placement, Renderer, SCENARIOS, Scene, SceneOptions, Style,
-    plant_size_km,
+    AssetDirs, Camera, Look, Owner, Placement, Renderer, SCENARIOS, Scene, SceneOptions, Style,
+    firm_colour, plant_size_km,
 };
 
-const KEYS: [&str; 17] = [
+const KEYS: [&str; 25] = [
     "energy",
     "chemical_industries",
     "manufacturing",
@@ -28,12 +28,21 @@ const KEYS: [&str; 17] = [
     "telecommunications",
     "city",
     "site",
+    "downtown/t0a",
+    "downtown/t0b",
+    "downtown/t1a",
+    "downtown/t1b",
+    "downtown/t2a",
+    "downtown/t2b",
+    "downtown/t3a",
+    "downtown/t3b",
 ];
 
 fn main() {
     let mut args = std::env::args().skip(1);
     let out: PathBuf = args.next().map(PathBuf::from).expect("out dir");
     let size: u32 = args.next().map_or(1, |s| s.parse().unwrap());
+    let night = args.next().is_some_and(|a| a == "night");
     std::fs::create_dir_all(&out).expect("out dir");
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let dirs = AssetDirs {
@@ -50,19 +59,26 @@ fn main() {
     // Flat farmland in central Ohio, away from any city.
     let (lon, lat) = (-83.4, 40.3);
     let (tw, th) = (240u32, 180u32);
-    let views: Vec<(f32, f32, Owner)> = [25.0f32, 55.0]
+    let views: Vec<(f32, f32, Owner, bool)> = [25.0f32, 55.0]
         .iter()
         .flat_map(|t| {
             [0.0f32, 90.0, 180.0, 270.0]
                 .iter()
-                .map(move |h| (*t, *h, Owner::Rival))
+                .map(move |h| (*t, *h, Owner::Rival, false))
         })
-        .chain([(40.0, 30.0, Owner::Player)])
+        .chain([
+            (40.0, 30.0, Owner::Player, false),
+            (40.0, 30.0, Owner::Rival, true),
+        ])
         .collect();
     let cols = views.len() as u32;
     let mut sheet = vec![0u8; (tw * cols * th * KEYS.len() as u32 * 3) as usize];
     for (row, key) in KEYS.iter().enumerate() {
-        let model = format!("{key}/{size}");
+        let model = if key.starts_with("downtown") {
+            key.to_string()
+        } else {
+            format!("{key}/{size}")
+        };
         let m = &scene.models[&model];
         let km = plant_size_km(
             if *key == "city" { "retail" } else { key },
@@ -70,8 +86,9 @@ fn main() {
             *key == "site",
         )
         .max(0.9);
+        let km = if key.starts_with("downtown") { 0.7 } else { km };
         let scale = Placement::scale_for_km(scene.voxel_km, m, km);
-        for (col, (tilt, heading, owner)) in views.iter().enumerate() {
+        for (col, (tilt, heading, owner, idle)) in views.iter().enumerate() {
             scene.set_buildings(vec![Placement {
                 model: model.clone(),
                 lon,
@@ -79,7 +96,10 @@ fn main() {
                 yaw: 0.0,
                 scale,
                 owner: *owner,
-                look: Default::default(),
+                look: Look {
+                    firm: (*owner == Owner::Rival).then(|| firm_colour(row as u64 + 3)),
+                    idle: *idle,
+                },
             }]);
             let cam = Camera {
                 lon,
@@ -94,7 +114,11 @@ fn main() {
                 &cam,
                 &Style {
                     pixel_scale: 1,
-                    ..Style::default()
+                    ..if night {
+                        Style::night()
+                    } else {
+                        Style::default()
+                    }
                 },
                 tw,
                 th,
@@ -111,7 +135,10 @@ fn main() {
     }
     let (w, h) = (tw * cols, th * KEYS.len() as u32);
     image::save_buffer(
-        out.join(format!("plants-size{size}.png")),
+        out.join(format!(
+            "plants-size{size}{}.png",
+            if night { "-night" } else { "" }
+        )),
         &sheet,
         w,
         h,
@@ -132,7 +159,11 @@ fn main() {
         let small = image::imageops::resize(&crop, nw, nh, image::imageops::FilterType::Triangle);
         small
             .save_with_format(
-                out.join(format!("plants-size{size}-phone{}.jpg", n + 1)),
+                out.join(format!(
+                    "plants-size{size}{}-phone{}.jpg",
+                    if night { "-night" } else { "" },
+                    n + 1
+                )),
                 image::ImageFormat::Jpeg,
             )
             .unwrap();
