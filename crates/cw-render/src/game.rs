@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use crate::data::{
-    Activity, KM_PER_DEG_LAT, Owner, Placement, Scene, TINT_HEAT, TINT_PLAY, TINT_PLAYER,
+    Activity, KM_PER_DEG_LAT, Look, Owner, Placement, Scene, TINT_HEAT, TINT_PLAY, TINT_PLAYER,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -39,6 +39,24 @@ fn size_of(plants: u32) -> u32 {
         4..=8 => 1,
         _ => 2,
     }
+}
+
+/// The palette colours a rival firm's roofs and trim can take (never the player's gold). Each
+/// sits on a ramp that only gets darker in shade, so a shadow never turns a roof another hue.
+const FIRM_COLOURS: [[u8; 3]; 8] = [
+    [0xD9, 0x59, 0x4A], // brick 3
+    [0x54, 0x8A, 0x45], // forest 3
+    [0x2D, 0x63, 0x96], // water 3
+    [0xB0, 0xB6, 0x5A], // field 3
+    [0x9D, 0xB2, 0xCC], // snow 1
+    [0xAF, 0x9A, 0x74], // soil 3
+    [0x7F, 0x2B, 0x23], // brick 1
+    [0x1E, 0x47, 0x72], // water 2
+];
+
+/// A rival firm's colour, the same for every one of its buildings.
+pub fn firm_colour(firm: u64) -> [u8; 3] {
+    FIRM_COLOURS[(firm.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 59) as usize % FIRM_COLOURS.len()]
 }
 
 /// At most this many buildings stand at one region's hub: the player's first, then the biggest.
@@ -153,7 +171,18 @@ pub fn layout_plants(scene: &Scene, sites: &[PlantSite]) -> Vec<Placement> {
                 .then(a.firm.cmp(&b.firm))
                 .then(a.industry.cmp(&b.industry))
         });
-        let mut taken: Vec<(f32, f32, f32)> = Vec::new();
+        // The downtown blocks near the hub are taken ground: a plant never hides in a skyline.
+        let mut taken: Vec<(f32, f32, f32)> = scene
+            .buildings
+            .iter()
+            .filter(|b| b.owner == Owner::Scenery)
+            .filter_map(|b| {
+                let m = scene.models.get(&b.model)?;
+                let size = m.footprint[0].max(m.footprint[1]) * scene.voxel_km * b.scale;
+                let at = ((b.lon - hub.0) * kx, (b.lat - hub.1) * KM_PER_DEG_LAT);
+                (at.0.abs() < 40.0 && at.1.abs() < 40.0).then_some((at.0, at.1, size))
+            })
+            .collect();
         for (i, s) in list.into_iter().take(PER_REGION).enumerate() {
             let size = size_of(s.plants);
             let kind = if s.status == SiteStatus::Site {
@@ -235,6 +264,10 @@ pub fn layout_plants(scene: &Scene, sites: &[PlantSite]) -> Vec<Placement> {
                     utilisation: s.utilisation.clamp(0.0, 1.0),
                     progress: s.progress.clamp(0.0, 1.0),
                     born: None,
+                },
+                look: Look {
+                    firm: (!s.player).then(|| firm_colour(s.firm)),
+                    idle: s.status == SiteStatus::Mothballed,
                 },
             });
         }

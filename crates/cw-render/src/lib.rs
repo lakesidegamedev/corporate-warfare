@@ -19,11 +19,13 @@ mod renderer;
 pub use camera::Camera;
 pub use data::{
     Activity, AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, KM_PER_DEG_LAT,
-    LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, Line, Mask, Owner, PLANT_MODELS, PLAYER_REGIONS,
+    LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, Line, Look, Mask, Owner, PLANT_MODELS, PLAYER_REGIONS,
     Placement, Projection, RegionInfo, SCENARIOS, ScenarioSpec, Scene, SceneOptions, TINT_HEAT,
-    TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel,
+    TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel, downtown_tier,
 };
-pub use game::{PlantSite, SiteStatus, layout_plants, plant_size_km, ramp_by_name, region_tints};
+pub use game::{
+    PlantSite, SiteStatus, firm_colour, layout_plants, plant_size_km, ramp_by_name, region_tints,
+};
 pub use palette::{COLOURS as PALETTE_COLOURS, Palette};
 pub use pick::{pick_ground, project};
 pub use renderer::{

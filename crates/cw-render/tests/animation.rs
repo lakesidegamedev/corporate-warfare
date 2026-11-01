@@ -26,12 +26,14 @@ fn scene_with(activity: Activity) -> Scene {
             max: [8.0, 8.0, 5.0],
             colour: [0x7A, 0x7F, 0x86],
             trim: false,
+            windows: None,
         },
         VoxelBox {
             min: [3.0, 3.0, 5.0],
             max: [5.0, 5.0, 14.0],
             colour: [0x56, 0x5B, 0x63],
             trim: false,
+            windows: None,
         },
     ];
     let model = VoxelModel {
@@ -54,6 +56,7 @@ fn scene_with(activity: Activity) -> Scene {
         scale,
         owner: Owner::Player,
         activity,
+        look: Default::default(),
     }]);
     scene
 }

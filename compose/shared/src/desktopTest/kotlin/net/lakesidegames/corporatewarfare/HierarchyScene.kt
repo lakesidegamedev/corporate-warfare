@@ -14,7 +14,7 @@ internal object HierarchyScene {
     val shading = mapOf("OH-CEN" to 1.0, "MI-DET" to 0.8, "PA-WES" to 0.3, "IL-CHI" to 0.5)
 
     private fun plant(handle: Int, firm: ULong, name: String, player: Boolean, region: String, industry: String, blocks: Int, status: String = "Running") =
-        MapPlantDto(handle.toULong(), firm, name, player, region, industry, "balanced", blocks.toUInt(), status, 8000)
+        MapPlantDto(handle.toULong(), firm, name, player, region, industry, "balanced", blocks.toUInt(), status, 8000, 0)
 
     val plants = listOf(
         plant(1, 1uL, "Player", true, "OH-CEN", "manufacturing", 6), plant(2, 1uL, "Player", true, "MI-DET", "energy", 9),

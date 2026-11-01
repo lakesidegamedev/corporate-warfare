@@ -378,7 +378,7 @@ final class GpuMapSession: @unchecked Sendable {
             let height = UInt32(max((job.size.height * job.scale).rounded(), 1))
             let cam = job.camera.values
             let wantsAnimation = locked { animating }
-            let moving = cw_gpu_set_clock(id, ProcessInfo.processInfo.systemUptime, wantsAnimation ? 1 : 0, job.camera.widthKm) == 1
+            let moving = cw_gpu_set_clock(id, Date.timeIntervalSinceReferenceDate, wantsAnimation ? 1 : 0, job.camera.widthKm) == 1
             let code = cw_gpu_render_layer(id, cam, width, height, &timing)
             locked { rendering = false; cond.broadcast() }
             if code < 0 { return fail(Self.lastError() ?? "the graphics card stopped drawing") }

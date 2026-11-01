@@ -235,6 +235,7 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let tcf = ground_tc(ll);
     let fw = fwidth(tcf);
     let fuv = fwidth(in.uv);
+    let flo = fwidth(in.local);
     let n = normalize(in.normal);
     let sun = normalize(g.sun.xyz);
     let ndl = dot(n, sun);
@@ -388,19 +389,28 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let base = nearest_colour(in.colour);
     var step2 = clamp(base.y + shade - 1, 0, 3);
     var out_c = pal(u32(base.x), step2);
-    if (night && in.kind == 2u && abs(n.z) < 0.5) {
-        // Lit windows: a one voxel grid on the side faces, about half of them lit.
+    if (in.kind == 2u && abs(n.z) < 0.5) {
+        // Window rows on the side faces: a one voxel texel in every two by two cells, dark by
+        // day; at night about half of them are lit and the rest stay dark.
         var u = in.local.x;
         if (abs(n.x) > 0.5) { u = in.local.y; }
         let cell = vec3<f32>(floor(u * 0.5), floor(in.local.z * 0.5), floor(in.local.x + in.local.y));
         let inside = (fract(u * 0.5) < 0.5) && (fract(in.local.z * 0.5) > 0.5);
-        // A window flips now and then (about one in a hundred, for two seconds at a time).
-        let flick = hash3(cell + vec3<f32>(17.0, floor(g.anim.x * 0.5), 3.0)) > 0.992;
-        let lit_now = (hash3(cell) > 0.45) != flick;
-        if (inside && lit_now) { out_c = pal(RAMP_SIGNAL, 1); }
+        if (inside) {
+            // A lit window flips now and then (about one in a hundred, for two seconds at a time).
+            let flick = hash3(cell + vec3<f32>(17.0, floor(g.anim.x * 0.5), 3.0)) > 0.992;
+            let lit_now = (hash3(cell) > 0.45) != flick;
+            if (night && lit_now) { out_c = pal(RAMP_SIGNAL, 1); }
+            else if (flo.z < 0.34) { out_c = pal(RAMP_INK, 2 - select(0, 1, sh < 0.5)); }
+        }
     }
-    let ex = min(in.uv.x, 1.0 - in.uv.x) / max(fuv.x, 1e-5);
-    let ey = min(in.uv.y, 1.0 - in.uv.y) / max(fuv.y, 1e-5);
+    // A face under four and a half pixels across keeps no outline along that axis, so a distant
+    // downtown block stays a lit shape instead of a black blot; the neighbouring faces still
+    // carry the silhouette.
+    var ex = 9.0;
+    var ey = 9.0;
+    if (1.0 / max(fuv.x, 1e-5) >= 4.5) { ex = min(in.uv.x, 1.0 - in.uv.x) / max(fuv.x, 1e-5); }
+    if (1.0 / max(fuv.y, 1e-5) >= 4.5) { ey = min(in.uv.y, 1.0 - in.uv.y) / max(fuv.y, 1e-5); }
     if (min(ex, ey) < 1.0) { out_c = pal(RAMP_INK, 0); }
     return vec4<f32>(out_c, 1.0);
 }
