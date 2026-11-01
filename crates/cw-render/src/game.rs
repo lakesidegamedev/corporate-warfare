@@ -4,7 +4,9 @@
 
 use std::collections::HashMap;
 
-use crate::data::{KM_PER_DEG_LAT, Owner, Placement, Scene, TINT_HEAT, TINT_PLAY, TINT_PLAYER};
+use crate::data::{
+    KM_PER_DEG_LAT, Look, Owner, Placement, Scene, TINT_HEAT, TINT_PLAY, TINT_PLAYER,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SiteStatus {
@@ -32,6 +34,23 @@ fn size_of(plants: u32) -> u32 {
         4..=8 => 1,
         _ => 2,
     }
+}
+
+/// The palette colours a rival firm's roofs and trim can take (never the player's gold).
+const FIRM_COLOURS: [[u8; 3]; 8] = [
+    [0xD9, 0x59, 0x4A], // brick 3
+    [0x3F, 0xBF, 0x8A], // signal green
+    [0x2D, 0x63, 0x96], // water 3
+    [0xB0, 0xB6, 0x5A], // field 3
+    [0xC9, 0x80, 0x4A], // signal orange
+    [0x54, 0x8A, 0x45], // forest 3
+    [0xE5, 0x60, 0x5E], // signal red
+    [0x6F, 0x86, 0xA8], // snow 0
+];
+
+/// A rival firm's colour, the same for every one of its buildings.
+pub fn firm_colour(firm: u64) -> [u8; 3] {
+    FIRM_COLOURS[(firm.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 59) as usize % FIRM_COLOURS.len()]
 }
 
 /// At most this many buildings stand at one region's hub: the player's first, then the biggest.
@@ -222,6 +241,10 @@ pub fn layout_plants(scene: &Scene, sites: &[PlantSite]) -> Vec<Placement> {
                     Owner::Player
                 } else {
                     Owner::Rival
+                },
+                look: Look {
+                    firm: (!s.player).then(|| firm_colour(s.firm)),
+                    idle: s.status == SiteStatus::Mothballed,
                 },
             });
         }

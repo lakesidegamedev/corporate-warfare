@@ -18,7 +18,7 @@ mod renderer;
 pub use camera::Camera;
 pub use data::{
     AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, KM_PER_DEG_LAT,
-    LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, Line, Mask, Owner, PLANT_MODELS, PLAYER_REGIONS,
+    LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, Line, Look, Mask, Owner, PLANT_MODELS, PLAYER_REGIONS,
     Placement, Projection, RegionInfo, SCENARIOS, ScenarioSpec, Scene, SceneOptions, TINT_HEAT,
     TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel,
 };

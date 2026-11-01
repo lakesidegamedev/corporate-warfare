@@ -589,15 +589,21 @@ pub fn buildings(scene: &Scene) -> Mesh {
         // The plant models mark their own roofs and trim; the player's firm colour replaces them.
         let marked = model.boxes.iter().any(|b| b.trim);
         for b in &model.boxes {
-            let tall = if marked {
+            let tall = if let Some(w) = b.windows {
+                w && !p.look.idle
+            } else if marked {
                 b.max[2] - b.min[2] >= 3.0
                     && b.max[0] - b.min[0] >= 4.0
                     && b.max[1] - b.min[1] >= 4.0
             } else {
                 b.max[2] - b.min[2] >= 2.0 && b.min[2] >= 1.0
             };
-            let colour = if marked && b.trim && p.owner == Owner::Player {
+            let colour = if p.look.idle {
+                idle_grey(b.colour)
+            } else if b.trim && p.owner == Owner::Player && (marked || b.windows.is_some()) {
                 PLAYER_ROOF
+            } else if let (true, Some(firm)) = (b.trim && p.owner == Owner::Rival, p.look.firm) {
+                firm
             } else {
                 b.colour
             };
@@ -631,6 +637,18 @@ pub fn buildings(scene: &Scene) -> Mesh {
         }
     }
     m
+}
+
+/// A mothballed plant: every colour becomes the rock ramp step of the same lightness.
+fn idle_grey(c: [u8; 3]) -> [u8; 3] {
+    const ROCK: [[u8; 3]; 4] = [
+        [0x3B, 0x3F, 0x46],
+        [0x56, 0x5B, 0x63],
+        [0x7A, 0x7F, 0x86],
+        [0xA3, 0xA8, 0xAE],
+    ];
+    let lum = 0.3 * c[0] as f32 + 0.59 * c[1] as f32 + 0.11 * c[2] as f32;
+    ROCK[((lum - 40.0) / 45.0).clamp(0.0, 3.0) as usize]
 }
 
 /// Roof colour of the player's own buildings (the palette's gold).

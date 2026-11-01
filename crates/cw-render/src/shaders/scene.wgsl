@@ -387,13 +387,17 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let base = nearest_colour(in.colour);
     var step2 = clamp(base.y + shade - 1, 0, 3);
     var out_c = pal(u32(base.x), step2);
-    if (night && in.kind == 2u && abs(n.z) < 0.5) {
-        // Lit windows: a one voxel grid on the side faces, about half of them lit.
+    if (in.kind == 2u && abs(n.z) < 0.5) {
+        // Window rows on the side faces: a one voxel texel in every two by two cells, dark by
+        // day; at night about half of them are lit and the rest stay dark.
         var u = in.local.x;
         if (abs(n.x) > 0.5) { u = in.local.y; }
         let cell = vec3<f32>(floor(u * 0.5), floor(in.local.z * 0.5), floor(in.local.x + in.local.y));
         let inside = (fract(u * 0.5) < 0.5) && (fract(in.local.z * 0.5) > 0.5);
-        if (inside && hash3(cell) > 0.45) { out_c = pal(RAMP_SIGNAL, 1); }
+        if (inside) {
+            if (night && hash3(cell) > 0.45) { out_c = pal(RAMP_SIGNAL, 1); }
+            else { out_c = pal(RAMP_INK, 2 - select(0, 1, sh < 0.5)); }
+        }
     }
     let ex = min(in.uv.x, 1.0 - in.uv.x) / max(fuv.x, 1e-5);
     let ey = min(in.uv.y, 1.0 - in.uv.y) / max(fuv.y, 1e-5);
