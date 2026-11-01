@@ -14,7 +14,6 @@ fn main() {
     let only = args.next();
     let only_season = args.next();
     std::fs::create_dir_all(&out).expect("out dir");
-    let mut renderer = Renderer::new().expect("renderer");
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let dirs = AssetDirs {
         resources: &repo.join("apple/Resources"),
@@ -52,6 +51,16 @@ fn main() {
         ),
         (
             "great-lakes-2000",
+            "columbus-edge",
+            cam(-83.25, 40.0, 25.0, 50.0, 270.0),
+        ),
+        (
+            "great-lakes-2000",
+            "woods-wide",
+            cam(-84.2, 46.6, 55.0, 50.0, 0.0),
+        ),
+        (
+            "great-lakes-2000",
             "mid",
             cam(-83.0, 39.96, 150.0, 50.0, 0.0),
         ),
@@ -73,9 +82,12 @@ fn main() {
         ),
     ];
     for spec in SCENARIOS.iter() {
+        // One renderer per scenario: its cache is keyed by the scene's address, which a scene
+        // rebuilt in the same place would share.
+        let mut renderer = Renderer::new().expect("renderer");
         let mut scene = Scene::for_scenario(
             &dirs,
-            &spec,
+            spec,
             &SceneOptions {
                 player_regions: Vec::new(),
                 hub_buildings: true,

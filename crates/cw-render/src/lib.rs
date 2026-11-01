@@ -43,7 +43,8 @@ pub use mesh::{
     road_chains_for_band,
 };
 pub use props::{
-    CHUNK_MAX_PROPS, ChunkKey, MAX_WIDTH_KM as PROPS_MAX_KM, PropIndex,
-    chunk_mesh as prop_chunk_mesh, stride_for as prop_stride, visible_chunks as prop_chunks,
+    CHUNK_MAX_PROPS, ChunkKey, MAX_WIDTH_KM as PROPS_MAX_KM, Placed, PropIndex, PropKind,
+    chunk_mesh as prop_chunk_mesh, chunk_placed as prop_chunk_placed, stride_for as prop_stride,
+    visible_chunks as prop_chunks,
 };
 pub use renderer::texel_step;

@@ -270,7 +270,13 @@ fn ground_at(scene: &Scene, x: f32, y: f32) -> Option<Ground> {
 fn is_water(scene: &Scene, x: f32, y: f32) -> bool {
     let (lon, lat) = scene.projection.to_lonlat(x, y);
     let k = scene.mask.at(lon, lat)[2];
-    k == WATER_OCEAN || k == WATER_LAKE
+    if k == WATER_OCEAN || k == WATER_LAKE {
+        return true;
+    }
+    // A city's outline can cover a bay: the mask says urban but the ground is at or under sea
+    // level, and the terrain draws it as water.
+    let (c, r) = scene.heightmap.cell_of(lon, lat);
+    scene.heightmap.at(c, r) <= 0
 }
 
 /// Land all round a footprint of half side `r`, with the ground level everywhere under it
@@ -575,7 +581,7 @@ fn broadleaf(b: &mut Build, drop: f32, leaves: Leaves, snow: bool, r: u32) {
             _ => (pc(ramp::SOIL, 2), pc(ramp::GOLD, 1)),
         }
     } else {
-        (pc(ramp::FOREST, 1), pc(ramp::FOREST, 2))
+        (pc(ramp::FOREST, 0), pc(ramp::FOREST, 2))
     };
     b.block(crown, 0.05, 0.1, lower);
     b.block(crown * 0.62, 0.1, 0.135, upper);
@@ -585,7 +591,7 @@ fn broadleaf(b: &mut Build, drop: f32, leaves: Leaves, snow: bool, r: u32) {
 }
 
 fn scrub(b: &mut Build, drop: f32, r: u32) {
-    let (lo, hi) = if r % 3 == 0 {
+    let (lo, hi) = if r.is_multiple_of(3) {
         (pc(ramp::FOREST, 0), pc(ramp::FOREST, 1))
     } else {
         (pc(ramp::SOIL, 1), pc(ramp::FIELD, 0))
@@ -712,8 +718,35 @@ fn plant_tree(b: &mut Build, g: &Ground, patch: f32, week: u32, drop: f32, r: u3
 }
 
 /// Everything standing in one chunk, as a mesh in world kilometres.
+/// What a chunk holds, for tests and the interface: each prop's kind and position (km).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Placed {
+    pub kind: PropKind,
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PropKind {
+    Tree,
+    Scrub,
+    House,
+    Farm,
+}
+
+/// The mesh of one chunk.
 pub fn chunk_mesh(scene: &Scene, index: &PropIndex, key: ChunkKey) -> Mesh {
+    build_chunk(scene, index, key).0
+}
+
+/// The props of one chunk, without building their geometry's meaning: positions only.
+pub fn chunk_placed(scene: &Scene, index: &PropIndex, key: ChunkKey) -> Vec<Placed> {
+    build_chunk(scene, index, key).1
+}
+
+fn build_chunk(scene: &Scene, index: &PropIndex, key: ChunkKey) -> (Mesh, Vec<Placed>) {
     let mut m = Mesh::default();
+    let mut placed: Vec<Placed> = Vec::new();
     let stride = key.stride as i32;
     let scale = scale_for(key.stride);
     let ck = chunk_km(key.stride);
@@ -816,6 +849,15 @@ pub fn chunk_mesh(scene: &Scene, index: &PropIndex, key: ChunkKey) -> Mesh {
         } else {
             plant_tree(&mut b, &g, patch, scene.week, (z - low) / ts, rh);
         }
+        placed.push(Placed {
+            kind: if g.base == G_SOIL {
+                PropKind::Scrub
+            } else {
+                PropKind::Tree
+            },
+            x,
+            y,
+        });
         count += 1;
     }
 
@@ -852,6 +894,11 @@ pub fn chunk_mesh(scene: &Scene, index: &PropIndex, key: ChunkKey) -> Mesh {
                         (z - low) / ts,
                         hash(i, j, 0x92),
                     );
+                    placed.push(Placed {
+                        kind: PropKind::Tree,
+                        x,
+                        y,
+                    });
                     count += 1;
                 }
             }
@@ -884,6 +931,11 @@ pub fn chunk_mesh(scene: &Scene, index: &PropIndex, key: ChunkKey) -> Mesh {
             b.block(0.04, -(z - low) / scale, 0.0, pc(ramp::SOIL, 1));
         }
         house(&mut b, snowy(scene, x, y), hash(i, j, 0x93));
+        placed.push(Placed {
+            kind: PropKind::House,
+            x,
+            y,
+        });
         count += 1;
     }
 
@@ -947,10 +999,14 @@ pub fn chunk_mesh(scene: &Scene, index: &PropIndex, key: ChunkKey) -> Mesh {
                     );
                 }
             }
-            count += 1;
+            placed.push(Placed {
+                kind: PropKind::Farm,
+                x,
+                y,
+            });
         }
     }
-    m
+    (m, placed)
 }
 
 /// Rank a house needs to stand: steady at 45, 55 percent more (or fewer) at two percent net

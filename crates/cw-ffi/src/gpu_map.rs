@@ -43,6 +43,9 @@ pub struct Update {
     pub clouds: Option<u8>,
     /// Week of the year (1 to 52) for the snow, from the game's calendar.
     pub week: Option<u32>,
+    /// Net migration over the year by region code, in basis points of its people: the
+    /// suburban houses thin out where people leave and fill in where they arrive.
+    pub migration: Option<HashMap<String, i32>>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -270,6 +273,9 @@ impl GpuMap {
             *self.sites.lock().unwrap() = identify_sites(&scene, &sites, &placed);
             all.extend(placed);
             scene.set_buildings(all);
+        }
+        if let Some(m) = &u.migration {
+            scene.set_region_trends(m);
         }
         let mut tints_changed = false;
         if let Some(h) = &u.holdings {
