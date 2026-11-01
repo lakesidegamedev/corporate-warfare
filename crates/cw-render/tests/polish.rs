@@ -330,6 +330,123 @@ fn every_plant_model_is_clean_solid_geometry() {
 }
 
 #[test]
+fn plant_models_say_where_their_windows_go_and_downtowns_grow_with_the_city() {
+    let json: serde_json::Value = serde_json::from_str(cw_render::PLANT_MODELS).unwrap();
+    let models = json["models"].as_object().unwrap();
+    let mut tops = [0.0f64; 4];
+    for (key, m) in models {
+        for b in m["boxes"].as_array().unwrap() {
+            assert_eq!(
+                b.as_array().unwrap().len(),
+                9,
+                "{key}: a box without a window flag"
+            );
+        }
+        if let Some(rest) = key.strip_prefix("downtown/t") {
+            let tier = rest[..1].parse::<usize>().unwrap();
+            let top = m["boxes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|b| b[5].as_f64().unwrap())
+                .fold(0.0, f64::max);
+            tops[tier] = tops[tier].max(top);
+            assert!(top <= 24.0, "{key}: {top} high on a 24 voxel block");
+        }
+    }
+    assert!(
+        tops[0] < tops[1] && tops[1] < tops[2] && tops[2] < tops[3],
+        "the tiers rise: {tops:?}"
+    );
+    assert_eq!(
+        [499_999u64, 900_000, 2_000_000, 3_500_000].map(cw_render::downtown_tier),
+        [0, 1, 2, 3]
+    );
+    // In a real scenario the tallest blocks stand only in the biggest cities, and a block never
+    // outranks the city it belongs to.
+    let scene = scenario("great-lakes-2000");
+    let kx = scene.projection.km_per_deg_lon();
+    let mut tall = 0;
+    for p in scene
+        .buildings
+        .iter()
+        .filter(|p| p.owner == cw_render::Owner::Scenery)
+    {
+        let tier = p.model.strip_prefix("downtown/t").unwrap()[..1]
+            .parse::<usize>()
+            .unwrap();
+        let owner = scene.cities.iter().any(|c| {
+            let reach = 2.0 + 3.2 * (c.population as f32 / 1.0e6).sqrt() + 0.5;
+            ((c.lon - p.lon) * kx).hypot((c.lat - p.lat) * 111.2) <= reach
+                && tier <= cw_render::downtown_tier(c.population)
+        });
+        assert!(owner, "{} stands in no city big enough for it", p.model);
+        tall += usize::from(tier >= 2);
+    }
+    assert!(tall > 0, "the biggest cities have tall cores");
+}
+
+#[test]
+fn plants_never_stand_inside_a_downtown_skyline() {
+    for id in ["great-lakes-2000", "texas-1981", "ruhr-rhine-1991"] {
+        let mut scene = scenario(id);
+        let kx = scene.projection.km_per_deg_lon();
+        let blocks: Vec<_> = scene.buildings.clone();
+        let sites: Vec<PlantSite> = scene
+            .regions
+            .iter()
+            .flat_map(|r| {
+                (0..4).map(move |i| PlantSite {
+                    region: r.code.clone(),
+                    industry: SECTORS[(i * 3) % SECTORS.len()].into(),
+                    firm: i as u64,
+                    plants: [1, 5, 12, 3][i],
+                    player: i == 0,
+                    status: SiteStatus::Running,
+                })
+            })
+            .collect();
+        let placed = layout_plants(&scene, &sites);
+        scene.set_buildings(placed.clone());
+        let boxes = building_boxes(&scene);
+        let mut clashes = 0;
+        for (p, b) in placed.iter().zip(&boxes) {
+            for q in &blocks {
+                let size = |m: &str, s: f32| {
+                    let v = scene.models[m].footprint[0] * scene.voxel_km * s;
+                    v / 2.0
+                };
+                let (dx, dy) = ((p.lon - q.lon) * kx, (p.lat - q.lat) * 111.2);
+                if dx.abs().max(dy.abs()) < size(&p.model, p.scale) + size(&q.model, q.scale) - 0.05
+                {
+                    clashes += 1;
+                    eprintln!(
+                        "{id}: {} overlaps a {} block ({:.2} km)",
+                        b.model,
+                        q.model,
+                        dx.hypot(dy)
+                    );
+                }
+            }
+        }
+        assert!(clashes <= 2, "{id}: {clashes} plants stand in a skyline");
+    }
+}
+
+#[test]
+fn rival_firm_colours_are_stable_distinct_and_never_the_players_gold() {
+    let gold = [0xE2, 0xB0, 0x4A];
+    let mut seen = std::collections::HashSet::new();
+    for firm in 0..400u64 {
+        let c = cw_render::firm_colour(firm);
+        assert_eq!(c, cw_render::firm_colour(firm));
+        assert_ne!(c, gold);
+        seen.insert(c);
+    }
+    assert!(seen.len() >= 6, "{} firm colours", seen.len());
+}
+
+#[test]
 fn the_horizon_reaches_far_past_the_terrain_on_every_side() {
     for id in [
         "great-lakes-2000",

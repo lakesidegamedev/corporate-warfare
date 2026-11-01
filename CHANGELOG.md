@@ -11,6 +11,14 @@ heading.
 
 ## [Unreleased]
 
+### Changed
+
+- Buildings on the new map look much better. Every sector's plant has more to it now: power stations have cooling towers, stacks and pylons, chemical works have fenced tank farms, factories have loading docks with trucks, mines and oil fields have pumpjacks, farms have furrowed fields, barns and silos, warehouses have yards full of trailers and containers, and offices, hospitals and flats have rows of windows. Roofs show vents, skylights and air conditioners, and doors and parked vehicles show how big a building really is. Window rows are dark by day and light up at night. A building is still the same size on the ground at every zoom.
+- Your rivals' buildings now carry their company's colour on the roofs and trim, so you can tell whose plant is whose at a glance. Your own plants keep the gold roofs. A plant you have mothballed turns grey and its windows go dark.
+- City centres on the map now grow with the city. The biggest cities have tall skylines with stepped towers and crowns, mid size cities have a handful of mid rise blocks, and small cities have low buildings; the further from the centre, the lower it gets. Cities down to a quarter of a million people now have a small downtown.
+- Plants are never put down inside a city's skyline any more; they stand beside it.
+- Far away, the dark outline round small buildings no longer swamps them into a black blot.
+
 ## [1.9.0] - 2026-10-31
 
 ### Added

@@ -187,6 +187,9 @@ pub struct VoxelBox {
     pub colour: Rgb,
     /// Roof or trim that takes the player's firm colour (gold) when the building is theirs.
     pub trim: bool,
+    /// Window rows on the side faces, by day and lit at night. `None` leaves it to the mesh's
+    /// size rule (the classic models); the GPU map's plant models always say.
+    pub windows: Option<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -216,6 +219,15 @@ pub struct Placement {
     /// (`Placement::sized`), so a building is the same size on the ground at every zoom.
     pub scale: f32,
     pub owner: Owner,
+    pub look: Look,
+}
+
+/// How a placed building is dressed beyond its owner: a rival's firm colour on the roofs and
+/// trim, and whether the plant stands idle (mothballed, drawn grey and dark).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Look {
+    pub firm: Option<Rgb>,
+    pub idle: bool,
 }
 
 impl Placement {
@@ -439,6 +451,7 @@ fn parse_models(json: &str) -> Result<HashMap<String, VoxelModel>, String> {
     #[derive(Deserialize)]
     #[serde(untagged)]
     enum RawBox {
+        Full(f32, f32, f32, f32, f32, f32, String, bool, bool),
         Trim(f32, f32, f32, f32, f32, f32, String, bool),
         Plain(f32, f32, f32, f32, f32, f32, String),
     }
@@ -455,12 +468,15 @@ fn parse_models(json: &str) -> Result<HashMap<String, VoxelModel>, String> {
                 .boxes
                 .iter()
                 .map(|b| {
-                    let (v, colour, trim) = match b {
+                    let (v, colour, trim, windows) = match b {
+                        RawBox::Full(a, b, c, d, e, f, col, t, w) => {
+                            ([*a, *b, *c, *d, *e, *f], col, *t, Some(*w))
+                        }
                         RawBox::Trim(a, b, c, d, e, f, col, t) => {
-                            ([*a, *b, *c, *d, *e, *f], col, *t)
+                            ([*a, *b, *c, *d, *e, *f], col, *t, None)
                         }
                         RawBox::Plain(a, b, c, d, e, f, col) => {
-                            ([*a, *b, *c, *d, *e, *f], col, false)
+                            ([*a, *b, *c, *d, *e, *f], col, false, None)
                         }
                     };
                     VoxelBox {
@@ -468,6 +484,7 @@ fn parse_models(json: &str) -> Result<HashMap<String, VoxelModel>, String> {
                         max: [v[3], v[4], v[5]],
                         colour: hex(colour),
                         trim,
+                        windows,
                     }
                 })
                 .collect();
@@ -757,7 +774,18 @@ fn collect_lines(map: &RawMap, scenario: &str, b: &Bounds) -> Vec<Line> {
 }
 
 /// Footprint of one downtown block in kilometres: a real city block cluster, not a district.
-const BLOCK_KM: f32 = 0.55;
+const BLOCK_KM: f32 = 0.6;
+
+/// How tall a city's downtown core stands, 0 (a small city) to 3 (a metropolis): the tallest
+/// towers belong to the biggest cities only.
+pub fn downtown_tier(population: u64) -> usize {
+    match population {
+        0..=799_999 => 0,
+        800_000..=1_499_999 => 1,
+        1_500_000..=2_999_999 => 2,
+        _ => 3,
+    }
+}
 
 /// A few small voxel blocks round the centre of every big city: more blocks for bigger cities,
 /// each picked and turned from the city's own position so the same map always builds the same
@@ -769,22 +797,15 @@ fn downtown_blocks(
     lat: f32,
     voxel_km: f32,
 ) -> Vec<Placement> {
-    const KINDS: [&str; 6] = [
-        "financial/1",
-        "city/1",
-        "real_estate/2",
-        "technology/1",
-        "city/2",
-        "telecommunications/1",
-    ];
     let kx = KM_PER_DEG_LON_EQ * lat.to_radians().cos();
     let mut out = Vec::new();
-    for c in cities.iter().filter(|c| c.population >= 600_000) {
-        let n = (2.0 + (c.population as f32 / 1.0e6).sqrt()).min(7.0) as usize;
+    for c in cities.iter().filter(|c| c.population >= 250_000) {
+        let n = (2.0 + 1.6 * (c.population as f32 / 1.0e6).sqrt()).min(9.0) as usize;
         let reach = 2.0 + 3.2 * (c.population as f32 / 1.0e6).sqrt();
         let seed = ((c.lon * 977.0 + c.lat * 313.0).sin() * 43758.5)
             .fract()
             .abs();
+        let core = downtown_tier(c.population);
         for i in 0..n {
             let a = (seed + i as f32 / n as f32) * std::f32::consts::TAU;
             let ring = if i == 0 {
@@ -792,17 +813,30 @@ fn downtown_blocks(
             } else {
                 reach * (0.3 + 0.12 * ((i * 7) % 5) as f32)
             };
-            let kind = KINDS[((seed * 97.0) as usize + i * 5) % KINDS.len()];
-            let Some(model) = models.get(kind) else {
+            // The tallest block stands at the centre; the blocks round it step down, and the
+            // outermost are suburbs.
+            let tier = match i {
+                0 => core,
+                1 | 2 => core.saturating_sub(1),
+                _ => core.saturating_sub(2),
+            };
+            let variant = if (seed * 97.0) as usize % 2 == (i % 2) {
+                'a'
+            } else {
+                'b'
+            };
+            let kind = format!("downtown/t{tier}{variant}");
+            let Some(model) = models.get(&kind) else {
                 continue;
             };
             out.push(Placement {
-                model: kind.into(),
+                model: kind,
                 lon: c.lon + a.cos() * ring / kx,
                 lat: c.lat + a.sin() * ring / KM_PER_DEG_LAT,
                 yaw: (((seed * 31.0) as usize + i) % 4) as f32 * 90.0,
-                scale: Placement::scale_for_km(voxel_km, model, BLOCK_KM),
+                scale: Placement::scale_for_km(voxel_km, model, BLOCK_KM + 0.06 * tier as f32),
                 owner: Owner::Scenery,
+                look: Look::default(),
             });
         }
     }
@@ -977,6 +1011,7 @@ impl Scene {
                             .get(model)
                             .map_or(1.0, |m| Placement::scale_for_km(VOXEL_KM, m, 1.2)),
                         owner: Owner::Rival,
+                        look: Look::default(),
                     }
                 })
                 .filter(|b| {
@@ -1107,12 +1142,14 @@ impl Scene {
                         max: [3.0, 3.0, 1.0],
                         colour: [0x6F, 0xA8, 0x3B],
                         trim: false,
+                        windows: None,
                     },
                     VoxelBox {
                         min: [-2.0, -2.0, 1.0],
                         max: [2.0, 2.0, 6.0],
                         colour: [0xB2, 0x3A, 0x2E],
                         trim: false,
+                        windows: None,
                     },
                 ],
                 footprint: [6.0, 6.0],
@@ -1141,6 +1178,7 @@ impl Scene {
                 yaw: 0.0,
                 scale: 1.0,
                 owner: Owner::Rival,
+                look: Look::default(),
             }],
             lines: vec![
                 // An interstate across the ridge and its terrace walls, a main road and a railway.
