@@ -43,6 +43,9 @@ pub struct Update {
     pub clouds: Option<u8>,
     /// Week of the year (1 to 52) for the snow, from the game's calendar.
     pub week: Option<u32>,
+    /// Net migration over the year by region code, in basis points of its people: the
+    /// suburban houses thin out where people leave and fill in where they arrive.
+    pub migration: Option<HashMap<String, i32>>,
     /// This week's freight lanes: vehicles run along them between the regions.
     pub lanes: Option<Vec<LaneIn>>,
     /// The building (index into the placed buildings) under the pointer and the selected one;
@@ -304,6 +307,9 @@ impl GpuMap {
             *self.sites.lock().unwrap() = identify_sites(&scene, &sites, &placed);
             all.extend(placed);
             scene.set_buildings(all);
+        }
+        if let Some(m) = &u.migration {
+            scene.set_region_trends(m);
         }
         if let Some(lanes) = &u.lanes {
             scene.set_lanes(
@@ -1084,7 +1090,15 @@ mod tests {
 
     /// The scenario folder, assembled the way the desktop build does: the shared images and models
     /// from the Apple resources, the baked terrain from the renderer's assets.
+    /// The map's asset files copied into one folder, once per test run. Tests run in parallel
+    /// threads, and copying in every test let one test read a heightmap while another was
+    /// rewriting it (a flaky "heightmap size mismatch").
     fn assets() -> std::path::PathBuf {
+        static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+        DIR.get_or_init(copy_assets).clone()
+    }
+
+    fn copy_assets() -> std::path::PathBuf {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let dir = std::env::temp_dir().join(format!("cw-gpu-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

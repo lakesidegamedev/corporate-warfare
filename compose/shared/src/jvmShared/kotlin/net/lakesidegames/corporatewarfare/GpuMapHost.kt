@@ -216,7 +216,7 @@ internal fun MapLayer.gpuRamp(): String = when (this) {
 /** Game state as the GPU map's update JSON. */
 internal fun gpuUpdateJson(
     plants: List<uniffi.cw_ffi.MapPlantDto>, divisions: List<uniffi.cw_ffi.MapDivisionDto>, layer: MapLayer,
-    shaded: Map<String, Double>, night: Boolean, clouds: Int, week: Int = 28,
+    shaded: Map<String, Double>, night: Boolean, clouds: Int, week: Int = 28, migration: Map<String, Int> = emptyMap(),
     lanes: List<uniffi.cw_ffi.LaneDto> = emptyList(),
 ): String {
     fun q(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
@@ -226,11 +226,12 @@ internal fun gpuUpdateJson(
     val holdings = divisions.map { it.region }.distinct().joinToString(",", "[", "]") { q(it) }
     val heat = if (layer == MapLayer.Presence || layer == MapLayer.Freight) "{}"
     else shaded.entries.joinToString(",", "{", "}") { "${q(it.key)}:${(it.value * 3.999).toInt().coerceIn(0, 3)}" }
+    val migrationJson = migration.entries.joinToString(",", "{", "}") { "${q(it.key)}:${it.value}" }
     val top = lanes.maxOfOrNull { it.capacityLots + it.outsideLots }?.coerceAtLeast(1) ?: 1
     val laneJson = lanes.joinToString(",", "[", "]") {
         """{"from":${q(it.a)},"to":${q(it.b)},"mode":${q(it.modeId)},"volume":${(it.usedLots + it.outsideLots).toFloat() / top}}"""
     }
-    return """{"plants":$plantJson,"holdings":$holdings,"heat":$heat,"heat_ramp":${q(layer.gpuRamp())},"night":$night,"clouds":$clouds,"week":$week,"lanes":$laneJson}"""
+    return """{"plants":$plantJson,"holdings":$holdings,"heat":$heat,"heat_ramp":${q(layer.gpuRamp())},"night":$night,"clouds":$clouds,"week":$week,"migration":$migrationJson,"lanes":$laneJson}"""
 }
 
 /** The hovered and selected building ids for the renderer's outline (-1 for none). */

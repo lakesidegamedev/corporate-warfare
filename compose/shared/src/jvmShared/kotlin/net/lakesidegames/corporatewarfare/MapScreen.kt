@@ -266,9 +266,10 @@ fun WorldMapView(
         }
     }
     val gpuWeek = if (graphics.seasons) Earth.weekOf(store.overview?.weekLabel) else 28
-    LaunchedEffect(gpu, store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds, gpuWeek, store.lanes) {
+    val gpuMigration = store.boards.associate { it.code to it.migrationBps }
+    LaunchedEffect(gpu, store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds, gpuWeek, gpuMigration, store.lanes) {
         val session = gpu ?: return@LaunchedEffect
-        val json = gpuUpdateJson(store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds, gpuWeek, store.lanes)
+        val json = gpuUpdateJson(store.mapPlants, store.mapDivisions, layer, shaded, gpuNight, graphics.clouds, gpuWeek, migration = gpuMigration, lanes = store.lanes)
         withContext(Dispatchers.Default) { runCatching { session.update(json) } }
     }
 

@@ -15,6 +15,8 @@ use crate::game::SiteStatus;
 use crate::mesh::{self, KIND_PLAIN, Mesh, box_faces};
 use crate::palette::{Palette, Rgb, ramp};
 
+mod night;
+
 /// Wind on the map, a unit vector in world kilometres (x east, y north): smoke drifts along it.
 /// The sun comes from the north west, so the smoke leans away from it.
 pub const WIND: [f32; 2] = [0.94, 0.34];
@@ -38,6 +40,28 @@ pub fn clock(time_s: f64, animate: bool) -> f32 {
     } else {
         0.0
     }
+}
+
+/// How fast the clouds drift along [`WIND`], in kilometres a second.
+pub const CLOUD_SPEED_KM_S: f64 = 0.03;
+
+/// Where the cloud image is read from, as an offset in image units (u east, v south), at host
+/// time `time_s`. The shader samples the image at `uv - drift` and mirrors it at its edges, so
+/// the picture is continuous however far the clouds have gone, and the offset is kept below one
+/// mirror period so f32 stays exact. Zero when animations are off.
+pub fn cloud_drift_uv(
+    time_s: f64,
+    animate: bool,
+    image_deg: [f32; 2],
+    km_per_deg: [f32; 2],
+) -> [f32; 2] {
+    if !animate {
+        return [0.0, 0.0];
+    }
+    let km = time_s * CLOUD_SPEED_KM_S;
+    let u = km * WIND[0] as f64 / km_per_deg[0] as f64 / image_deg[0] as f64;
+    let v = -km * WIND[1] as f64 / km_per_deg[1] as f64 / image_deg[1] as f64;
+    [u.rem_euclid(2.0) as f32, v.rem_euclid(2.0) as f32]
 }
 
 /// A period near `seconds` that divides the wrap exactly.
@@ -458,14 +482,7 @@ pub fn frame_mesh(scene: &Scene, plan: &Plan, v: &FrameView) -> Mesh {
                 let ph = hash(bi as u32, k as u32 + 11);
                 let on = (v.t / period(1.6) + ph).fract() < 0.45;
                 if on {
-                    let c = place(s);
-                    let h = size / 2.0;
-                    put(
-                        &mut m,
-                        [c[0] - h, c[1] - h, c[2]],
-                        [c[0] + h, c[1] + h, c[2] + size],
-                        colour(ramp::SIGNAL, 1),
-                    );
+                    night::beacon(&mut m, place(s), size);
                 }
             }
         }
@@ -782,6 +799,9 @@ fn vehicle(
             };
             fleet::ship(m, at, yaw, u, r.ship, seed)
         }
+    }
+    if v.night {
+        night::vehicle_lights(m, r, s, dir, night::Pose { at, yaw }, u, v.px_km);
     }
 }
 

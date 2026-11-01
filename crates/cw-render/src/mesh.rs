@@ -18,6 +18,10 @@ pub const KIND_ROAD: u8 = 5;
 pub const KIND_APRON_TOP: u8 = 6;
 pub const KIND_APRON_WALL: u8 = 7;
 pub const APRON_WATER: u8 = 7;
+/// A lamp: drawn flat in a step of the signal ramp (the red byte), never shaded or outlined.
+pub const KIND_LIGHT: u8 = 15;
+/// Countryside props: lit and shaded like buildings, without the ink outline.
+pub const KIND_PROP: u8 = 8;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]

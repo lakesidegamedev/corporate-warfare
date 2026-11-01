@@ -16,6 +16,7 @@ mod ground;
 mod mesh;
 mod palette;
 mod pick;
+mod props;
 mod renderer;
 
 pub use camera::Camera;
@@ -36,7 +37,8 @@ pub use renderer::{
 };
 
 pub use anim::{
-    ANIM_MAX_KM, CLOCK_WRAP_S, WIND, clock as anim_clock, route_counts, scene_animates,
+    ANIM_MAX_KM, CLOCK_WRAP_S, CLOUD_SPEED_KM_S, WIND, clock as anim_clock, cloud_drift_uv,
+    route_counts, scene_animates,
 };
 pub use freight::{harbour_sites, summary as fleet_summary, vehicles_at};
 pub use ground::{G_CORE, G_URBAN, snow_cover};
@@ -44,5 +46,10 @@ pub use mesh::{
     BuildingBox, ROAD_BANDS, RoadPoint, apron_extent_km, apron_land_boxes, apron_seam_steps,
     bridge_sites, building_boxes, ground_z, river_chains, road_band, road_chains,
     road_chains_for_band,
+};
+pub use props::{
+    CHUNK_MAX_PROPS, ChunkKey, MAX_WIDTH_KM as PROPS_MAX_KM, Placed, PropIndex, PropKind,
+    chunk_mesh as prop_chunk_mesh, chunk_placed as prop_chunk_placed, stride_for as prop_stride,
+    visible_chunks as prop_chunks,
 };
 pub use renderer::texel_step;

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use bytemuck::{Pod, Zeroable};
@@ -9,6 +10,7 @@ use crate::camera::Camera;
 use crate::data::Scene;
 use crate::mesh::{self, Mesh, VERTEX_BYTES, Vertex};
 use crate::palette::{COLOURS, Palette, STEPS, ramp};
+use crate::props;
 
 const SHADER: &str = include_str!("shaders/scene.wgsl");
 /// The offscreen target's format. A window surface uses its own (see `SurfaceState`).
@@ -28,6 +30,8 @@ pub struct Style {
     /// The 1.8 cloud setting: off, thin, light (the default) or heavy.
     pub clouds: CloudLevel,
     pub buildings: bool,
+    /// Trees, farmsteads and suburban houses in the close-zoom band.
+    pub props: bool,
     pub roads: bool,
     /// Camera width in km below which the gold centre dashes and the sleepers show.
     pub road_detail_km: f32,
@@ -89,6 +93,7 @@ impl Default for Style {
             sun_elevation_deg: 34.0,
             clouds: CloudLevel::Light,
             buildings: true,
+            props: true,
             roads: true,
             road_detail_km: 450.0,
             texel_km: (0.125, 4.0),
@@ -264,6 +269,16 @@ struct GpuRoads {
     mesh: mesh::RoadMesh,
 }
 
+/// The countryside props: one mesh per chunk, built when a camera first needs it and kept while
+/// it stays in use. A chunk depends only on the scene, so a change of season, buildings or
+/// migration trends drops them all.
+struct PropCache {
+    index: props::PropIndex,
+    rev: (u64, u64, u64),
+    chunks: HashMap<props::ChunkKey, (GpuMesh, u64)>,
+    frame: u64,
+}
+
 struct GpuScene {
     /// Address of the scene it was built from; identity only, never dereferenced.
     id: usize,
@@ -281,6 +296,7 @@ struct GpuScene {
     /// Buildings the static mesh leaves out because the animated layer draws them.
     skip: Vec<bool>,
     plan: anim::Plan,
+    props: PropCache,
     earth: wgpu::TextureView,
     cloud_tex: wgpu::TextureView,
     mask: wgpu::TextureView,
@@ -823,6 +839,12 @@ impl Renderer {
                 .upload_mesh(&mesh::buildings_where(scene, |i, _| !skip[i]), "buildings"),
             skip,
             plan: anim::Plan::build(scene),
+            props: PropCache {
+                index: props::PropIndex::build(scene),
+                rev: (scene.season_rev, scene.buildings_rev, scene.props_rev),
+                chunks: HashMap::new(),
+                frame: 0,
+            },
             season_rev: scene.season_rev,
             mask_rev: scene.mask_rev,
             buildings_rev: scene.buildings_rev,
@@ -845,6 +867,45 @@ impl Renderer {
             ground: ground_texture(&self.device, &self.queue, scene),
         };
         self.cache = Some(gpu);
+    }
+
+    /// Build the prop chunks a camera needs that are not built yet, drop the ones that stopped
+    /// being used, and return the keys to draw. Nothing here depends on the camera but the choice
+    /// of chunks, so a still camera costs a hash lookup.
+    fn prepare_props(
+        &mut self,
+        scene: &Scene,
+        target: (f32, f32),
+        width_km: f32,
+    ) -> Vec<props::ChunkKey> {
+        let keys = props::visible_chunks(target, width_km);
+        let Some(c) = &mut self.cache else {
+            return Vec::new();
+        };
+        let rev = (scene.season_rev, scene.buildings_rev, scene.props_rev);
+        if c.props.rev != rev {
+            if c.props.rev.1 != rev.1 {
+                c.props.index = props::PropIndex::build(scene);
+            }
+            c.props.rev = rev;
+            c.props.chunks.clear();
+        }
+        c.props.frame += 1;
+        let frame = c.props.frame;
+        for k in &keys {
+            match c.props.chunks.get_mut(k) {
+                Some(entry) => entry.1 = frame,
+                None => {
+                    let m = props::chunk_mesh(scene, &c.props.index, *k);
+                    c.props
+                        .chunks
+                        .insert(*k, (upload(&self.device, &m, "props"), frame));
+                }
+            }
+        }
+        // Keep a margin of chunks for panning back, drop what has been idle for a while.
+        c.props.chunks.retain(|_, e| frame - e.1 < 240);
+        keys
     }
 
     fn ensure_roads(&mut self, scene: &Scene, band: usize) {
@@ -1083,6 +1144,12 @@ impl Renderer {
         };
         let gb = scene.ground.bounds;
         let clock = anim::clock(style.time_s, style.animate);
+        let cloud_drift = anim::cloud_drift_uv(
+            style.time_s,
+            style.animate,
+            [em.east - em.west, em.north - em.south],
+            [km_lon, crate::data::KM_PER_DEG_LAT],
+        );
         let globals = Globals {
             view_proj: view.view_proj.to_cols_array_2d(),
             light_vp: light_vp.to_cols_array_2d(),
@@ -1129,7 +1196,7 @@ impl Renderer {
             ],
             palette: palette.flat(),
             day: Palette::day().flat(),
-            anim: [clock, 0.0, 0.0, 0.0],
+            anim: [clock, cloud_drift[0], cloud_drift[1], 0.0],
         };
         self.queue
             .write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&globals));
@@ -1139,6 +1206,11 @@ impl Renderer {
         {
             c.plan.build_routes(scene);
         }
+        let prop_keys = if style.props && style.buildings {
+            self.prepare_props(scene, (tx, ty), camera.width_km)
+        } else {
+            Vec::new()
+        };
         let gpu = self.cache.as_ref().expect("prepared");
         // Smoke, construction, growth, beacons and vehicles: built for this clock and camera.
         let anim_gpu = (style.buildings
@@ -1315,6 +1387,11 @@ impl Renderer {
                 meshes.push(&gpu.buildings);
             }
             meshes.extend(anim_gpu.as_ref());
+            meshes.extend(
+                prop_keys
+                    .iter()
+                    .filter_map(|k| gpu.props.chunks.get(k).map(|c| &c.0)),
+            );
             for m in meshes {
                 draw(&mut pass, m, &mut stats, false);
             }
@@ -1363,6 +1440,11 @@ impl Renderer {
                 meshes.push(&gpu.buildings);
             }
             meshes.extend(anim_gpu.as_ref());
+            meshes.extend(
+                prop_keys
+                    .iter()
+                    .filter_map(|k| gpu.props.chunks.get(k).map(|c| &c.0)),
+            );
             for m in meshes {
                 draw(&mut pass, m, &mut stats, true);
             }

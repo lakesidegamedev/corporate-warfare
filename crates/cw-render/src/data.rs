@@ -318,12 +318,17 @@ pub struct Scene {
     /// The scenario's regions in mask order: region `i` is painted `i + 1` in the mask's red
     /// channel. Hub positions are where a region's own buildings stand.
     pub regions: Vec<RegionInfo>,
+    /// Net migration of each region over the year in basis points of its people (region order
+    /// like `regions`; empty means steady everywhere). More houses stand where people arrive.
+    pub region_trend_bps: Vec<i32>,
     /// Bumped when the mask tints or the building placements change, so the renderer re-uploads
     /// only what moved.
     pub mask_rev: u64,
     pub buildings_rev: u64,
     /// The freight lanes that vehicles run along (empty before the game sends any).
     pub lanes: Vec<Lane>,
+    /// Bumped when something the props stand on changes (the migration trends).
+    pub props_rev: u64,
 }
 
 /// One playable region of a scenario.
@@ -351,6 +356,20 @@ impl Scene {
             }
         }
         self.mask_rev += 1;
+    }
+
+    /// Set each region's net migration over the year (region code to basis points of its
+    /// people). Codes not listed count as steady. Houses in the suburbs follow it.
+    pub fn set_region_trends(&mut self, trends: &HashMap<String, i32>) {
+        let bps: Vec<i32> = self
+            .regions
+            .iter()
+            .map(|r| trends.get(&r.code).copied().unwrap_or(0))
+            .collect();
+        if bps != self.region_trend_bps {
+            self.region_trend_bps = bps;
+            self.props_rev += 1;
+        }
     }
 
     /// Set the season: snow follows the week of the year, by latitude and height.
@@ -1134,9 +1153,11 @@ impl Scene {
             week: 28,
             season_rev: 0,
             regions,
+            region_trend_bps: Vec::new(),
             mask_rev: 0,
             buildings_rev: 0,
             lanes: Vec::new(),
+            props_rev: 0,
         }
         .finish())
     }
@@ -1271,9 +1292,11 @@ impl Scene {
                     lat: 41.0,
                 },
             ],
+            region_trend_bps: Vec::new(),
             mask_rev: 0,
             buildings_rev: 0,
             lanes: Vec::new(),
+            props_rev: 0,
         }
         .finish()
     }
