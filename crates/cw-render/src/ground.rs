@@ -116,6 +116,7 @@ pub fn build(scene: &Scene) -> Ground {
     let mut raw = vec![G_FOREST; w * h];
     let mut votes = vec![0.0f32; w * h]; // 1 where the texel is land and counts
     let mut urban = vec![false; w * h];
+    let mut wet = vec![false; w * h];
     let mut elev = vec![NO_SNOW; w * h];
     for y in 0..h {
         for x in 0..w {
@@ -124,6 +125,7 @@ pub fn build(scene: &Scene) -> Ground {
             let i = y * w + x;
             let kind = scene.mask.at(lon, lat)[2];
             if kind == WATER_OCEAN || kind == WATER_LAKE {
+                wet[i] = true;
                 continue;
             }
             urban[i] = kind == WATER_URBAN;
@@ -214,6 +216,7 @@ pub fn build(scene: &Scene) -> Ground {
             elev[i] = NO_SNOW;
         }
     }
+    city_zones(scene, &classes, &wet, w, h, &mut variant);
     Ground {
         w,
         h,
@@ -223,6 +226,83 @@ pub fn build(scene: &Scene) -> Ground {
         elev,
         classes,
         variant,
+    }
+}
+
+/// Zones of city ground, stored in the low two bits of the variant of every urban texel.
+pub const ZONE_OUTER: u8 = 0;
+pub const ZONE_INNER: u8 = 1;
+pub const ZONE_INDUSTRIAL: u8 = 2;
+
+/// Sort the city ground into zones by how far each texel is from the nearest city centre, in
+/// units of that city's downtown radius: inside one is downtown (class 6, already set), up to
+/// 2.2 the inner city, beyond it outer residential. Patches of industry and port ground are
+/// scattered through the outer and inner city by a hash of coarse cells, and are likelier right
+/// at the water's edge.
+fn city_zones(scene: &Scene, classes: &[u8], wet: &[bool], w: usize, h: usize, variant: &mut [u8]) {
+    let b = scene.heightmap.bounds;
+    let ppd = GROUND_PPD;
+    let kx = crate::data::KM_PER_DEG_LON_EQ * scene.projection.lat0.to_radians().cos();
+    let ky = crate::data::KM_PER_DEG_LAT;
+    let mut near = vec![f32::MAX; w * h];
+    for c in scene.cities.iter().filter(|c| c.population >= 20_000) {
+        let r_km = 2.0 + 3.2 * (c.population as f32 / 1.0e6).sqrt();
+        let reach = r_km * 2.4;
+        let (cx, cy) = ((c.lon - b.west) * ppd, (b.north - c.lat) * ppd);
+        let (rx, ry) = (reach / kx * ppd, reach / ky * ppd);
+        for y in (cy - ry).max(0.0) as usize..((cy + ry) as usize + 1).min(h) {
+            for x in (cx - rx).max(0.0) as usize..((cx + rx) as usize + 1).min(w) {
+                let (dx, dy) = ((x as f32 - cx) / ppd * kx, (y as f32 - cy) / ppd * ky);
+                let d = (dx * dx + dy * dy).sqrt() / r_km;
+                if d < near[y * w + x] {
+                    near[y * w + x] = d;
+                }
+            }
+        }
+    }
+    let hash = |a: usize, b: usize, salt: u32| -> u32 {
+        ((a as u32).wrapping_mul(0x9E37_79B1) ^ (b as u32).wrapping_mul(0x85EB_CA6B) ^ salt)
+            .wrapping_mul(0x2C1B_3C6D)
+            .rotate_left(11)
+            .wrapping_mul(0x297A_2D39)
+            >> 8
+    };
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            if classes[i] != G_URBAN {
+                continue;
+            }
+            let mut zone = if near[i] < 2.2 {
+                ZONE_INNER
+            } else {
+                ZONE_OUTER
+            };
+            // Water within two texels: a harbour or river frontage.
+            let mut port = false;
+            'look: for dy in -2i32..=2 {
+                for dx in -2i32..=2 {
+                    let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                    if nx >= 0 && ny >= 0 && (nx as usize) < w && (ny as usize) < h {
+                        if wet[ny as usize * w + nx as usize] {
+                            port = true;
+                            break 'look;
+                        }
+                    }
+                }
+            }
+            let roll = hash(x / 2, y / 2, 0x51) % 100;
+            if near[i] > 0.8 && (roll < 12 || (port && roll < 60)) {
+                zone = ZONE_INDUSTRIAL;
+            }
+            variant[i] = zone;
+        }
+    }
+    // Downtown texels carry no zone.
+    for i in 0..w * h {
+        if classes[i] == G_CORE {
+            variant[i] = 0;
+        }
     }
 }
 

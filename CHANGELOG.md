@@ -13,6 +13,8 @@ heading.
 
 ### Changed
 
+- Cities no longer read as one repeating grid. Downtown is a tight, bright block grid, the inner city has medium blocks with the odd park, outer suburbs have larger blocks with lawns, scattered trees and green patches, and industrial and harbour districts have big grey lots. Streets run unbroken across the map but the gaps between them differ block to block, so no pattern repeats at city scale.
+- Major rivers are drawn as water ribbons that get wider as you zoom in, with a lighter bank edge. The Rhine, the Ohio, the Mississippi and the other rivers of the map data now show on every scenario. Roads and railways that cross a river get a bridge deck with dark edges.
 - Map ground is finer and clearer up close. Forests are canopy clumps with a hard shadow, cities are street grids with avenues and lighter and darker blocks, farmland has crop rows that run one way per field, and desert and scrub carry a sparse scatter of brush and sand. Tiles are mirrored and turned block by block so patterns no longer repeat over a few kilometres.
 - Fields change with the season: pale young crops and dark ploughed ground in spring, ripe gold fields and dense dark crops in summer, ripe and ploughed in autumn.
 - Lakes and coasts get a lighter shallow band along the shore with a clean stepped edge, and open water has a sparser, less regular scatter of wave marks.

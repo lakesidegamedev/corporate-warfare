@@ -1054,12 +1054,12 @@ pub fn river_chains(scene: &Scene, band: usize) -> Vec<Vec<RoadPoint>> {
 }
 
 /// Where a road or railway crosses a river: the crossing point on the ground, the direction of
-/// the road there and its class. Crossings within a few hundred metres of each other merge
+/// the road there, its class and how much longer than the river is wide the deck must be. Crossings within a few hundred metres of each other merge
 /// (map duplicates of one corridor).
 pub fn bridge_sites(
     roads: &[(u8, Vec<RoadPoint>)],
     rivers: &[Vec<RoadPoint>],
-) -> Vec<(u8, [f32; 3], [f32; 2])> {
+) -> Vec<(u8, [f32; 3], [f32; 2], f32)> {
     const CELL: f32 = 4.0;
     let mut grid: HashMap<(i32, i32), Vec<(u8, usize, usize)>> = HashMap::new();
     for (ri, (_, pts)) in roads.iter().enumerate() {
@@ -1069,12 +1069,14 @@ pub fn bridge_sites(
             let (y0, y1) = (a[1].min(b[1]), a[1].max(b[1]));
             for cx in (x0 / CELL).floor() as i32..=(x1 / CELL).floor() as i32 {
                 for cy in (y0 / CELL).floor() as i32..=(y1 / CELL).floor() as i32 {
-                    grid.entry((cx, cy)).or_default().push((roads[ri].0, ri, si));
+                    grid.entry((cx, cy))
+                        .or_default()
+                        .push((roads[ri].0, ri, si));
                 }
             }
         }
     }
-    let mut found: Vec<(u8, [f32; 3], [f32; 2])> = Vec::new();
+    let mut found: Vec<(u8, [f32; 3], [f32; 2], f32)> = Vec::new();
     let mut seen: std::collections::HashSet<(usize, usize, usize, usize)> = Default::default();
     for (vi, river) in rivers.iter().enumerate() {
         for ei in 0..river.len().saturating_sub(1) {
@@ -1105,12 +1107,14 @@ pub fn bridge_sites(
                         }
                         let len = (rx * rx + ry * ry).sqrt().max(1e-9);
                         let at = [a[0] + rx * t, a[1] + ry * t, a[2] + (b[2] - a[2]) * t];
-                        let dup = found.iter().any(|f| {
-                            f.0 == class
-                                && (f.1[0] - at[0]).hypot(f.1[1] - at[1]) < 0.4
-                        });
+                        let dup = found
+                            .iter()
+                            .any(|f| f.0 == class && (f.1[0] - at[0]).hypot(f.1[1] - at[1]) < 0.4);
                         if !dup {
-                            found.push((class, at, [rx / len, ry / len]));
+                            // A slanted crossing needs a longer deck: 1 / sin of the angle.
+                            let slen = (sx * sx + sy * sy).sqrt().max(1e-9);
+                            let sin = ((rx * sy - ry * sx) / (len * slen)).abs();
+                            found.push((class, at, [rx / len, ry / len], 1.0 / sin.max(0.3)));
                         }
                     }
                 }
@@ -1157,13 +1161,19 @@ pub fn roads(scene: &Scene, band: usize) -> RoadMesh {
     // Bridge decks: a degenerate segment at the crossing whose far end only gives the road's
     // direction. Class 4 + the road's class; the shader sizes the deck by the river's width.
     let mut all: Vec<(u8, Vec<RoadPoint>)> = road_lines.clone();
-    for (class, at, dir) in bridge_sites(&road_lines, &rivers) {
+    for (class, at, dir, stretch) in bridge_sites(&road_lines, &rivers) {
         let far = [at[0] + dir[0] * 0.05, at[1] + dir[1] * 0.05, at[2]];
         all.push((
             BRIDGE_KIND + class,
             vec![
-                RoadPoint { xyz: at, along: 0.0 },
-                RoadPoint { xyz: far, along: 0.05 },
+                RoadPoint {
+                    xyz: at,
+                    along: stretch,
+                },
+                RoadPoint {
+                    xyz: far,
+                    along: stretch,
+                },
             ],
         ));
     }

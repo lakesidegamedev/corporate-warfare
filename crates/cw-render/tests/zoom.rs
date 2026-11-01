@@ -73,15 +73,28 @@ fn slow_zoom_has_no_jump_in_mean_colour() {
         let m = mean(&f.rgba);
         if let Some(p) = prev {
             let d = (0..3).map(|c| (m[c] - p[c]).abs()).sum::<f32>() / 3.0;
-            if d > 1.5 { eprintln!("  jump {d:.2} to {w:.1} km (frame {frames})"); }
+            if d > 1.5 {
+                eprintln!("  jump {d:.2} to {w:.1} km (frame {frames})");
+            }
             if d > worst {
                 worst = d;
                 at = w;
             }
         }
         if let Ok(dir) = std::env::var("CW_SAVE_FRAMES") {
-            let rgb: Vec<u8> = f.rgba.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2]]).collect();
-            image::save_buffer(format!("{dir}/f{w:07.1}.png"), &rgb, f.width, f.height, image::ExtendedColorType::Rgb8).unwrap();
+            let rgb: Vec<u8> = f
+                .rgba
+                .chunks_exact(4)
+                .flat_map(|p| [p[0], p[1], p[2]])
+                .collect();
+            image::save_buffer(
+                format!("{dir}/f{w:07.1}.png"),
+                &rgb,
+                f.width,
+                f.height,
+                image::ExtendedColorType::Rgb8,
+            )
+            .unwrap();
         }
         prev = Some(m);
         frames += 1;

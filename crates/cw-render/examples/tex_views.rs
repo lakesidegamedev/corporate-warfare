@@ -31,8 +31,16 @@ fn main() {
     };
     // (scenario, view name, camera)
     let views = [
-        ("great-lakes-2000", "columbus", cam(-83.0, 39.96, 25.0, 50.0)),
-        ("great-lakes-2000", "chicago", cam(-87.6, 41.88, 25.0, 50.0)),
+        (
+            "great-lakes-2000",
+            "columbus",
+            cam(-83.0, 39.96, 25.0, 50.0),
+        ),
+        (
+            "great-lakes-2000",
+            "chicago",
+            cam(-87.64, 41.88, 25.0, 50.0),
+        ),
         ("texas-1981", "houston", cam(-95.37, 29.76, 25.0, 50.0)),
         ("ruhr-rhine-1991", "duisburg", cam(6.76, 51.43, 25.0, 50.0)),
         ("great-lakes-2000", "bridge", cam(-84.52, 39.10, 12.0, 50.0)),
@@ -47,6 +55,7 @@ fn main() {
             continue;
         }
         if last != *sid {
+            renderer.forget_scene();
             scene = Some(
                 Scene::for_scenario(
                     &dirs,
@@ -92,7 +101,10 @@ fn check_view(scene: &Scene, name: &str, c: &Camera) {
     let kx = cw_render::KM_PER_DEG_LAT * c.lat.to_radians().cos();
     let kind = |lon: f32, lat: f32| scene.mask.at(lon, lat)[2];
     let is_land = |k: u8| k == 0 || k == 3;
-    assert!(is_land(kind(c.lon, c.lat)), "{name}: view centre is not land");
+    assert!(
+        is_land(kind(c.lon, c.lat)),
+        "{name}: view centre is not land"
+    );
     let (mut land, mut n) = (0, 0);
     for i in -10..=10 {
         for j in -10..=10 {
@@ -105,13 +117,21 @@ fn check_view(scene: &Scene, name: &str, c: &Camera) {
         }
     }
     let frac = land as f32 / n as f32;
-    let (lo, hi) = if name == "chicago" { (0.25, 0.85) } else { (0.6, 1.01) };
-    assert!(frac >= lo && frac <= hi, "{name}: land share {frac:.2} outside {lo}..{hi}");
+    let (lo, hi) = if name == "chicago" {
+        (0.25, 0.85)
+    } else {
+        (0.6, 1.01)
+    };
+    assert!(
+        frac >= lo && frac <= hi,
+        "{name}: land share {frac:.2} outside {lo}..{hi}"
+    );
     if name == "duisburg" || name == "bridge" {
         let near = cw_render::river_chains(scene, 2).iter().any(|ch| {
             ch.iter().any(|p| {
                 let (lon, lat) = scene.projection.to_lonlat(p.xyz[0], p.xyz[1]);
-                ((lon - c.lon) * kx).hypot((lat - c.lat) * cw_render::KM_PER_DEG_LAT) < c.width_km * 0.5
+                ((lon - c.lon) * kx).hypot((lat - c.lat) * cw_render::KM_PER_DEG_LAT)
+                    < c.width_km * 0.5
             })
         });
         assert!(near, "{name}: no river in view");

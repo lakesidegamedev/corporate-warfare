@@ -160,8 +160,6 @@ const TILE_FOREST = array<u32, 8>(0x02200000u, 0x02210000u, 0x00110220u, 0x00000
 const TILE_ROCK = array<u32, 8>(0x00100002u, 0x00002000u, 0x10000010u, 0x00200000u, 0x00001000u, 0x02000002u, 0x00010000u, 0x00000200u);
 const TILE_SOIL = array<u32, 8>(0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u);
 const TILE_SNOW = array<u32, 8>(0x00000000u, 0x01110000u, 0x00000000u, 0x00000000u, 0x00000001u, 0x00000000u, 0x11100000u, 0x00000000u);
-const TILE_URBAN = array<u32, 8>(0x11111111u, 0x10000000u, 0x10000000u, 0x10000000u, 0x10000000u, 0x10000000u, 0x10000000u, 0x10000000u);
-const TILE_CORE = array<u32, 8>(0x11111111u, 0x10002221u, 0x10002221u, 0x10002221u, 0x11111111u, 0x12220001u, 0x12220001u, 0x12220001u);
 const TILE_WAVE = array<u32, 8>(0x00000000u, 0x02220000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000222u, 0x00000000u, 0x00000000u);
 
 fn nib(row: u32, tx: i32) -> u32 {
@@ -260,21 +258,68 @@ fn class_texel(cls: u32, variant: u32, tx: i32, ty: i32) -> i32 {
     else if (cls == 4u) {
         v = tile_oriented(TILE_SNOW, tx, ty, h8);
     }
-    else if (cls == 5u) {
-        // Streets every four texels, an avenue two wide every sixteen, blocks lighter or plain.
-        let sx = imod(tx, 16);
-        let sy = imod(ty, 16);
-        if (sx < 2 || sy < 2 || (tx & 3) == 0 || (ty & 3) == 0) { v = 1u; }
-        else if (ihash(tx >> 2, ty >> 2) % 6u == 0u) { v = 2u; }
-    }
-    else {
-        // Downtown: tighter blocks, more of them bright.
-        if (imod(tx, 8) < 2 || imod(ty, 8) < 2 || (tx & 3) == 0 || (ty & 3) == 0) { v = 1u; }
-        else if (ihash(tx >> 2, ty >> 2) % 2u == 0u) { v = 2u; }
-    }
+    // City ground (classes 5 and 6) is drawn by city_texel.
     if (v == 1u) { return -1; }
     if (v == 2u) { return 1; }
     return 0;
+}
+
+// ---- City ground ---------------------------------------------------------------------------
+// A city is not one repeating grid. The raster says which zone a texel is in (class 6 downtown,
+// class 5 with a zone number: 0 outer residential, 1 inner city, 2 industrial and port). Streets
+// are placed per axis from a hash of the street's own index, so every street runs unbroken
+// across tiles, while the gaps between them differ block to block. A second, wider avenue grid
+// is independent of the first, and the offsets shift every 64 texels so no 5 km piece repeats.
+
+// Position of one axis' street: x = 1 on a street texel, y = the index of the block between streets.
+fn axis_street(t: i32, band: i32, salt: i32, span: i32, lo: i32, rng: u32, width: i32) -> vec2<i32> {
+    let k = (t - imod(t, span)) / span;
+    let off = k * span + lo + i32(ihash(k + salt, band) % rng);
+    let on = select(0, 1, t >= off && t < off + width);
+    return vec2<i32>(on, select(k - 1, k, t >= off));
+}
+
+// Returns (tone, green): tone -2 avenue, -1 street, 0 block, 1 light block; green 0 none, 1 lawn,
+// 2 tree, 3 dark lawn of a park.
+fn city_texel(cls: u32, zone: u32, tx: i32, ty: i32) -> vec2<i32> {
+    var span = 8;
+    var lo = 2;
+    var rng = 4u;
+    var av = 32;
+    if (cls == 6u) { span = 6; lo = 2; rng = 2u; av = 24; }
+    else if (zone == 0u) { span = 12; lo = 3; rng = 6u; av = 48; }
+    else if (zone == 2u) { span = 20; lo = 4; rng = 10u; av = 64; }
+    // Avenues: two texels wide, continuous over the whole map.
+    let avx = imod(tx - i32(ihash(tx >> 6, 91) % 5u), av);
+    let avy = imod(ty - i32(ihash(ty >> 6, 92) % 5u), av);
+    if (avx < 2 || avy < 2) { return vec2<i32>(select(-2, -1, cls == 5u && zone != 1u), 0); }
+    let sx = axis_street(tx, ty >> 6, 11, span, lo, rng, 1);
+    let sy = axis_street(ty, tx >> 6, 23, span, lo, rng, 1);
+    if (sx.x == 1 || sy.x == 1) { return vec2<i32>(-1, 0); }
+    let bh = ihash(sx.y * 7 + 3, sy.y * 13 + 5) % 100u;
+    let th = ihash(tx + 17, ty + 29) % 100u;
+    if (cls == 6u) {
+        // Downtown: tight blocks, most of them the lightest.
+        if (bh < 72u) { return vec2<i32>(1, 0); }
+        return vec2<i32>(0, 0);
+    }
+    if (zone == 0u) {
+        // Outer residential: lawns between the houses, whole green blocks, scattered trees.
+        if (bh < 30u) { return vec2<i32>(0, select(1, 2, th < 14u)); }
+        if (bh < 38u) { return vec2<i32>(1, 0); }
+        if (th < 12u) { return vec2<i32>(0, 1); }
+        if (th < 16u) { return vec2<i32>(0, 2); }
+        return vec2<i32>(0, 0);
+    }
+    if (zone == 2u) {
+        // Industrial and port: big grey lots, now and then a lighter roof.
+        if (bh < 22u) { return vec2<i32>(1, 0); }
+        return vec2<i32>(0, 0);
+    }
+    // Inner city: medium blocks, a few light ones and the odd park.
+    if (bh < 7u) { return vec2<i32>(0, select(3, 2, th < 10u)); }
+    if (bh < 30u) { return vec2<i32>(1, 0); }
+    return vec2<i32>(0, 0);
 }
 
 fn ramp_of(cls: u32) -> u32 {
@@ -467,7 +512,18 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         if (g.tex.y > 0.5 && !heat) {
             let tx = i32(floor(in.world.x / g.tex.x));
             let ty = i32(floor(in.world.y / g.tex.x));
-            let tv = class_texel(cls, variant_at(tc), tx, ty);
+            var tv = 0;
+            if (cls >= 5u) {
+                let ct = city_texel(cls, variant_at(tc) & 3u, tx, ty);
+                tv = clamp(ct.x, -2, 1);
+                if (ct.y != 0 && !player) {
+                    if (ct.y == 2) { return vec4<f32>(pal(RAMP_FOREST, step - 1), 1.0); }
+                    if (ct.y == 3) { return vec4<f32>(pal(RAMP_FOREST, step), 1.0); }
+                    return vec4<f32>(pal(RAMP_FIELD, step - 1), 1.0);
+                }
+            } else {
+                tv = class_texel(cls, variant_at(tc), tx, ty);
+            }
             if (player) {
                 // Gold holdings: every other textured texel shows the land through.
                 if (tv != 0 && cls < 5u && ((tx + ty) & 1) == 0) { return vec4<f32>(pal(ramp_of(cls), 2 - shade), 1.0); }
@@ -561,7 +617,7 @@ fn vs_road(v: VIn) -> ROut {
     let nrm = vec2<f32>(-d.y, d.x);
     let ext = road_width(cls) * 0.5 + 1.0;
     // A deck runs along its road for the river's width plus two pixels of bank each side.
-    let ext_along = select(ext, river_width() * 0.5 + 2.0, bridge_deck);
+    let ext_along = select(ext, river_width() * 0.5 * v.local.z + 2.0, bridge_deck);
     let end_sign = select(-1.0, 1.0, v.local.y > 0.5);
     let p = p_this + nrm * v.local.x * ext + d * end_sign * ext_along;
     let ndc = vec2<f32>(p.x / g.tex.z * 2.0 - 1.0, 1.0 - p.y / g.tex.w * 2.0);
@@ -612,11 +668,11 @@ fn fs_road(in: ROut) -> RFOut {
     if (in.kind >= 4u) {
         // Bridge deck over a river: ink kerb, light deck.
         if (d >= hw) { discard; }
-        var dc = pal(RAMP_URBAN, 3);
+        var dc = pal(RAMP_ROCK, 3);
         if (w > 2.5 && d >= hw - 1.0) { dc = pal(RAMP_INK, 3); }
         var dout: RFOut;
         dout.colour = vec4<f32>(dc, 1.0);
-        dout.depth = in.clip.z - 9.0e-5;
+        dout.depth = in.clip.z - 4.0e-4;
         return dout;
     }
     if (is_water(m)) {
