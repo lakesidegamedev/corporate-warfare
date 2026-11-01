@@ -523,9 +523,17 @@ fn screen_of(c: vec4<f32>) -> vec2<f32> {
     return vec2<f32>((c.x / c.w * 0.5 + 0.5) * g.tex.z, (0.5 - c.y / c.w * 0.5) * g.tex.w);
 }
 
+// River ribbon width in pixels: the interstate's width, wider up close.
+fn river_width() -> f32 {
+    return select(g.road.x, g.road.x + 4.0, g.road.x > 6.5);
+}
+
 fn road_width(cls: u32) -> f32 {
-    if (cls == 0u) { return g.road.x; }
-    if (cls == 1u) { return g.road.y; }
+    if (cls == 3u) { return river_width(); }
+    // Bridge decks (4 + the carried road's class) are as wide as their road.
+    let c = select(cls, cls - 4u, cls >= 4u);
+    if (c == 0u) { return g.road.x; }
+    if (c == 1u) { return g.road.y; }
     return g.road.z;
 }
 
@@ -539,7 +547,8 @@ fn vs_road(v: VIn) -> ROut {
     o.kind = cls;
     o.across = 0.0;
     o.along = v.local.z;
-    if (this_c.w < 1e-3 || other_c.w < 1e-3 || road_width(cls) < 0.5) {
+    let bridge_deck = cls >= 4u;
+    if (this_c.w < 1e-3 || other_c.w < 1e-3 || road_width(cls) < 0.5 || (bridge_deck && river_width() < 0.5)) {
         o.clip = vec4<f32>(2.0, 2.0, 2.0, 1.0);
         return o;
     }
@@ -551,8 +560,10 @@ fn vs_road(v: VIn) -> ROut {
     d = normalize(d);
     let nrm = vec2<f32>(-d.y, d.x);
     let ext = road_width(cls) * 0.5 + 1.0;
+    // A deck runs along its road for the river's width plus two pixels of bank each side.
+    let ext_along = select(ext, river_width() * 0.5 + 2.0, bridge_deck);
     let end_sign = select(-1.0, 1.0, v.local.y > 0.5);
-    let p = p_this + nrm * v.local.x * ext + d * end_sign * ext;
+    let p = p_this + nrm * v.local.x * ext + d * end_sign * ext_along;
     let ndc = vec2<f32>(p.x / g.tex.z * 2.0 - 1.0, 1.0 - p.y / g.tex.w * 2.0);
     o.clip = vec4<f32>(ndc * this_c.w, this_c.z, this_c.w);
     o.across = v.local.x * ext;
@@ -587,6 +598,27 @@ fn fs_road(in: ROut) -> RFOut {
     let hw = w * 0.5;
     let d = abs(in.across);
     var bridge = false;
+    if (in.kind == 3u) {
+        // River: water body with a lighter rim on each bank once it is wide enough; the open
+        // lake and sea keep their own water.
+        if (d >= hw || is_water(m)) { discard; }
+        var rc = pal(RAMP_WATER, 2);
+        if (w > 4.5 && d >= hw - 1.0) { rc = pal(RAMP_WATER, 3); }
+        var rout: RFOut;
+        rout.colour = vec4<f32>(rc, 1.0);
+        rout.depth = in.clip.z - 2.0e-5;
+        return rout;
+    }
+    if (in.kind >= 4u) {
+        // Bridge deck over a river: ink kerb, light deck.
+        if (d >= hw) { discard; }
+        var dc = pal(RAMP_URBAN, 3);
+        if (w > 2.5 && d >= hw - 1.0) { dc = pal(RAMP_INK, 3); }
+        var dout: RFOut;
+        dout.colour = vec4<f32>(dc, 1.0);
+        dout.depth = in.clip.z - 9.0e-5;
+        return dout;
+    }
     if (is_water(m)) {
         if (d >= hw || !narrow_water(in.world.xy)) { discard; }
         bridge = true;

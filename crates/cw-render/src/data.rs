@@ -229,6 +229,8 @@ impl Placement {
 pub const LINE_INTERSTATE: u8 = 0;
 pub const LINE_MAIN: u8 = 1;
 pub const LINE_RAIL: u8 = 2;
+/// Major rivers of the map's own data, drawn as water ribbons under the roads.
+pub const LINE_RIVER: u8 = 3;
 
 /// A polyline of the map's own road and railway data, in degrees.
 #[derive(Clone, Debug)]
@@ -383,6 +385,8 @@ struct RawMap {
     interstates: Vec<RawLines>,
     #[serde(default)]
     railroads: Vec<RawLines>,
+    #[serde(default)]
+    rivers: Vec<RawLines>,
 }
 #[derive(Deserialize)]
 struct RawLines {
@@ -744,6 +748,7 @@ fn collect_lines(map: &RawMap, scenario: &str, b: &Bounds) -> Vec<Line> {
     for (class, set) in [
         (LINE_INTERSTATE, &map.interstates),
         (LINE_RAIL, &map.railroads),
+        (LINE_RIVER, &map.rivers),
     ] {
         for g in set {
             if g.scenario.as_deref().is_none_or(|s| s == scenario) {

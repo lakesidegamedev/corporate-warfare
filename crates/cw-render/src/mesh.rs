@@ -758,6 +758,7 @@ pub fn ground_z(scene: &Scene, x: f32, y: f32) -> f32 {
 }
 
 /// One end of a road segment ribbon: the vertex shader widens it in screen pixels.
+#[derive(Clone)]
 pub struct RoadPoint {
     pub xyz: [f32; 3],
     /// Kilometres along the line, for dashes and sleepers cut on the ground.
@@ -931,6 +932,7 @@ pub fn road_chains(scene: &Scene) -> Vec<(u8, Vec<RoadPoint>)> {
     scene
         .lines
         .iter()
+        .filter(|line| line.class != crate::data::LINE_RIVER)
         .map(|line| {
             let km: Vec<(f32, f32)> = line
                 .points
@@ -1009,9 +1011,121 @@ pub fn road_chains_for_band(scene: &Scene, band: &RoadBand) -> Vec<(u8, Vec<Road
     out
 }
 
+/// Corner cutting: each pass replaces every corner with two points a quarter of the way along
+/// the neighbouring segments, so a coarse polyline becomes a smooth bend. Both ends stay.
+fn chaikin(pts: &[(f32, f32)], passes: usize) -> Vec<(f32, f32)> {
+    let mut cur = pts.to_vec();
+    for _ in 0..passes {
+        if cur.len() < 3 {
+            break;
+        }
+        let mut next = vec![cur[0]];
+        for w in cur.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            next.push((a.0 * 0.75 + b.0 * 0.25, a.1 * 0.75 + b.1 * 0.25));
+            next.push((a.0 * 0.25 + b.0 * 0.75, a.1 * 0.25 + b.1 * 0.75));
+        }
+        next.push(*cur.last().unwrap());
+        cur = next;
+    }
+    cur
+}
+
+/// Rivers of one zoom band: Douglas-Peucker simplified chains on the ground. Rivers are
+/// not drawn from the far band, where a ribbon would be a pixel of noise.
+pub fn river_chains(scene: &Scene, band: usize) -> Vec<Vec<RoadPoint>> {
+    if band == 0 {
+        return Vec::new();
+    }
+    let tol = ROAD_BANDS[band].merge_km * 0.25;
+    scene
+        .lines
+        .iter()
+        .filter(|l| l.class == crate::data::LINE_RIVER && l.points.len() >= 2)
+        .map(|line| {
+            let km: Vec<(f32, f32)> = line
+                .points
+                .iter()
+                .map(|p| scene.projection.to_km(p.0, p.1))
+                .collect();
+            ground_chain(scene, &chaikin(&douglas_peucker(&km, tol), 3))
+        })
+        .collect()
+}
+
+/// Where a road or railway crosses a river: the crossing point on the ground, the direction of
+/// the road there and its class. Crossings within a few hundred metres of each other merge
+/// (map duplicates of one corridor).
+pub fn bridge_sites(
+    roads: &[(u8, Vec<RoadPoint>)],
+    rivers: &[Vec<RoadPoint>],
+) -> Vec<(u8, [f32; 3], [f32; 2])> {
+    const CELL: f32 = 4.0;
+    let mut grid: HashMap<(i32, i32), Vec<(u8, usize, usize)>> = HashMap::new();
+    for (ri, (_, pts)) in roads.iter().enumerate() {
+        for si in 0..pts.len().saturating_sub(1) {
+            let (a, b) = (&pts[si].xyz, &pts[si + 1].xyz);
+            let (x0, x1) = (a[0].min(b[0]), a[0].max(b[0]));
+            let (y0, y1) = (a[1].min(b[1]), a[1].max(b[1]));
+            for cx in (x0 / CELL).floor() as i32..=(x1 / CELL).floor() as i32 {
+                for cy in (y0 / CELL).floor() as i32..=(y1 / CELL).floor() as i32 {
+                    grid.entry((cx, cy)).or_default().push((roads[ri].0, ri, si));
+                }
+            }
+        }
+    }
+    let mut found: Vec<(u8, [f32; 3], [f32; 2])> = Vec::new();
+    let mut seen: std::collections::HashSet<(usize, usize, usize, usize)> = Default::default();
+    for (vi, river) in rivers.iter().enumerate() {
+        for ei in 0..river.len().saturating_sub(1) {
+            let (p, q) = (&river[ei].xyz, &river[ei + 1].xyz);
+            let (x0, x1) = (p[0].min(q[0]), p[0].max(q[0]));
+            let (y0, y1) = (p[1].min(q[1]), p[1].max(q[1]));
+            for cx in (x0 / CELL).floor() as i32..=(x1 / CELL).floor() as i32 {
+                for cy in (y0 / CELL).floor() as i32..=(y1 / CELL).floor() as i32 {
+                    let Some(list) = grid.get(&(cx, cy)) else {
+                        continue;
+                    };
+                    for &(class, ri, si) in list {
+                        if !seen.insert((vi, ei, ri, si)) {
+                            continue;
+                        }
+                        let (a, b) = (&roads[ri].1[si].xyz, &roads[ri].1[si + 1].xyz);
+                        let (rx, ry) = (b[0] - a[0], b[1] - a[1]);
+                        let (sx, sy) = (q[0] - p[0], q[1] - p[1]);
+                        let den = rx * sy - ry * sx;
+                        if den.abs() < 1e-9 {
+                            continue;
+                        }
+                        let (ox, oy) = (p[0] - a[0], p[1] - a[1]);
+                        let t = (ox * sy - oy * sx) / den;
+                        let u = (ox * ry - oy * rx) / den;
+                        if !(0.0..=1.0).contains(&t) || !(0.0..=1.0).contains(&u) {
+                            continue;
+                        }
+                        let len = (rx * rx + ry * ry).sqrt().max(1e-9);
+                        let at = [a[0] + rx * t, a[1] + ry * t, a[2] + (b[2] - a[2]) * t];
+                        let dup = found.iter().any(|f| {
+                            f.0 == class
+                                && (f.1[0] - at[0]).hypot(f.1[1] - at[1]) < 0.4
+                        });
+                        if !dup {
+                            found.push((class, at, [rx / len, ry / len]));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    found
+}
+
 fn line_lonlat(scene: &Scene, p: (f32, f32)) -> (f32, f32) {
     scene.projection.to_lonlat(p.0, p.1)
 }
+
+/// Class number of the first bridge deck segment: 4 plus the class of the road it carries.
+pub const BRIDGE_KIND: u8 = 4;
 
 /// Edge of a road tile in kilometres. Roads are grouped by tile so a frame draws only the
 /// tiles in view.
@@ -1038,7 +1152,25 @@ pub struct RoadMesh {
 pub fn roads(scene: &Scene, band: usize) -> RoadMesh {
     type Seg = (u8, [f32; 3], f32, [f32; 3], f32);
     let mut by_tile: BTreeMap<(i32, i32), Vec<Seg>> = BTreeMap::new();
-    for (class, pts) in road_chains_for_band(scene, &ROAD_BANDS[band]) {
+    let road_lines = road_chains_for_band(scene, &ROAD_BANDS[band]);
+    let rivers = river_chains(scene, band);
+    // Bridge decks: a degenerate segment at the crossing whose far end only gives the road's
+    // direction. Class 4 + the road's class; the shader sizes the deck by the river's width.
+    let mut all: Vec<(u8, Vec<RoadPoint>)> = road_lines.clone();
+    for (class, at, dir) in bridge_sites(&road_lines, &rivers) {
+        let far = [at[0] + dir[0] * 0.05, at[1] + dir[1] * 0.05, at[2]];
+        all.push((
+            BRIDGE_KIND + class,
+            vec![
+                RoadPoint { xyz: at, along: 0.0 },
+                RoadPoint { xyz: far, along: 0.05 },
+            ],
+        ));
+    }
+    for pts in rivers {
+        all.push((crate::data::LINE_RIVER, pts));
+    }
+    for (class, pts) in all {
         for w in pts.windows(2) {
             let (a, b) = (&w[0], &w[1]);
             if (a.xyz[0] - b.xyz[0]).abs() + (a.xyz[1] - b.xyz[1]).abs() < 1e-5 {

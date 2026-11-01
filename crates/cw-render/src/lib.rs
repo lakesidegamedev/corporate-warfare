@@ -18,7 +18,7 @@ mod renderer;
 pub use camera::Camera;
 pub use data::{
     AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, KM_PER_DEG_LAT,
-    LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, Line, Mask, Owner, PLANT_MODELS, PLAYER_REGIONS,
+    LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, LINE_RIVER, Line, Mask, Owner, PLANT_MODELS, PLAYER_REGIONS,
     Placement, Projection, RegionInfo, SCENARIOS, ScenarioSpec, Scene, SceneOptions, TINT_HEAT,
     TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel,
 };
@@ -33,5 +33,5 @@ pub use ground::snow_cover;
 pub use renderer::texel_step;
 pub use mesh::{
     BuildingBox, ROAD_BANDS, RoadPoint, apron_extent_km, apron_land_boxes, apron_seam_steps,
-    building_boxes, ground_z, road_band, road_chains, road_chains_for_band,
+    bridge_sites, building_boxes, ground_z, river_chains, road_band, road_chains, road_chains_for_band,
 };
