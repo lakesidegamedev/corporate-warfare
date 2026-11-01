@@ -17,6 +17,10 @@ heading.
 - Construction sites now show how far the build has got: a foundation first, then a steel frame going up floor by floor, then walls rising up the frame, with a tower crane whose arm turns slowly. A new plant (or one that has just finished building) grows up out of the ground over about a second instead of popping in.
 - Trucks run along the roads between your plants and the nearest city, trains run on the railways, and ships sail over the lakes and the sea from coastal plants. Busier plants send more trucks. Vehicles keep a minimum size on screen so they stay visible when you zoom out.
 - A few windows in lit buildings flip on or off now and then at night.
+- The map at night now has a living city. Lit windows and street lamps are scattered over every city by district: plenty in the centre, fewer in the suburbs and hardly any in factory districts. Roads and motorways carry a line of lamps close up, and from far away the big cities show as small clusters of lights. Every light is a single flat pixel in the game's own colours, with no glow.
+- Trucks and trains show white lights at the front and red at the back after dark, and ships carry a mast light with a red and a green light at the bow. Tower beacons are now red.
+- Clouds drift slowly across the map with the wind, taking their shadows with them, and never run out or jump, however long you leave the map open. With animations off the sky stays still.
+- Water moves: the little wave marks on the sea and on lakes shift along in whole steps, quicker at sea and slower on a lake. Rivers stay calm.
 - While the map is showing and "Animations" is on in Settings under Graphics, the map redraws every refresh of your display when something is moving at the zoom you are at. It rests when you leave the map or turn animations off, and it keeps moving while the game is paused. With animations off the map is a still picture: no smoke, vehicles or blinking lights (construction stages and grown buildings still show).
 
 ### Changed

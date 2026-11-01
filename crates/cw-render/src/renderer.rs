@@ -1129,12 +1129,7 @@ impl Renderer {
             ],
             palette: palette.flat(),
             day: Palette::day().flat(),
-            anim: [
-                clock,
-                cloud_drift[0],
-                cloud_drift[1],
-                0.0,
-            ],
+            anim: [clock, cloud_drift[0], cloud_drift[1], 0.0],
         };
         self.queue
             .write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&globals));

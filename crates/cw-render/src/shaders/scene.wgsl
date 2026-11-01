@@ -333,13 +333,14 @@ fn city_texel(cls: u32, zone: u32, tx: i32, ty: i32) -> vec2<i32> {
 
 // A lit pixel on city ground at night: a block texel with a lamp or a window behind it. How many
 // depends on the zone (per mille: downtown 140, inner city 70, outer residential 28, industrial and
-// port 8). Returns the step of the signal ramp, or -1 for none. A texel flickers off for a couple
+// port 8), times `boost` where the ground is too coarse to show blocks. Returns the step of the signal ramp, or -1 for none. A texel flickers off for a couple
 // of seconds now and then, like the windows on the buildings.
-fn city_light(cls: u32, zone: u32, tx: i32, ty: i32) -> i32 {
+fn city_light(cls: u32, zone: u32, tx: i32, ty: i32, boost: u32) -> i32 {
     var per_mille = 70u;
     if (cls == 6u) { per_mille = 140u; }
     else if (zone == 0u) { per_mille = 28u; }
     else if (zone == 2u) { per_mille = 8u; }
+    per_mille = per_mille * boost;
     let h = ihash(tx * 3 + 101, ty * 5 + 7);
     if (h % 1000u >= per_mille) { return -1; }
     let flick = ihash(tx + 977, ty + i32(floor(g.anim.x * 0.5))) % 160u == 0u;
@@ -545,6 +546,14 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         var step = base;
         if (sh < 0.5 || ndl <= 0.0) { step = step - 1; }
         step = step - shade;
+        // Far out the city is a scatter of lit texels on its flat colour, three times as many as up
+        // close where the streets and blocks take their share.
+        if (night && cls >= 5u && !heat && g.tex.y < 0.5) {
+            let lx = i32(floor(in.world.x / g.tex.x));
+            let ly = i32(floor(in.world.y / g.tex.x));
+            let lamp = city_light(cls, variant_at(tc) & 3u, lx, ly, 3u);
+            if (lamp >= 0) { return vec4<f32>(pal(RAMP_SIGNAL, lamp), 1.0); }
+        }
         // Pixel texture of the class, in world space, at a texel that is always a few screen
         // pixels wide; gone (flat class colour) once the camera is too far out.
         if (g.tex.y > 0.5 && !heat) {
@@ -555,7 +564,7 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
                 let ct = city_texel(cls, variant_at(tc) & 3u, tx, ty);
                 tv = clamp(ct.x, -2, 1);
                 if (night && ct.y == 0 && ct.x >= 0) {
-                    let lamp = city_light(cls, variant_at(tc) & 3u, tx, ty);
+                    let lamp = city_light(cls, variant_at(tc) & 3u, tx, ty, 1u);
                     if (lamp >= 0) { return vec4<f32>(pal(RAMP_SIGNAL, lamp), 1.0); }
                 }
                 if (ct.y != 0 && !player) {
@@ -771,12 +780,12 @@ fn fs_road(in: ROut) -> RFOut {
             c = pal(RAMP_URBAN, 3);
         }
     }
-    if (g.sun.w > 0.5 && detail && !bridge && in.kind <= 1u && w > 2.5 && d >= hw - 1.0) {
+    if (g.sun.w > 0.5 && detail && g.road.x > 6.5 && !bridge && in.kind <= 1u && w > 2.5 && d >= hw - 1.0) {
         // Streetlights at night: one lit pixel on a kerb every so often, alternating sides.
         // Dense in town, sparse along an interstate in the country, none on a country road.
         let urban = class_at(vec2<i32>(floor(ground_tc(ll)))) >= 5u;
         var spacing = 0.0;
-        if (urban) { spacing = select(0.35, 0.5, in.kind == 0u); }
+        if (urban) { spacing = select(0.22, 0.3, in.kind == 0u); }
         else if (in.kind == 0u) { spacing = 2.0; }
         if (spacing > 0.0) {
             let idx = i32(floor(in.along / spacing));

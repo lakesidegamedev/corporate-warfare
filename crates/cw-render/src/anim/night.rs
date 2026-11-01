@@ -48,19 +48,26 @@ fn lamp_at(m: &mut Mesh, at: [f32; 3], yaw: f32, local: [f32; 3], size: f32, ste
     );
 }
 
+/// Where a vehicle is and which way it faces.
+#[derive(Clone, Copy)]
+pub(super) struct Pose {
+    pub at: [f32; 3],
+    pub yaw: f32,
+}
+
 /// A pair of lamps `spread` either side of the centre line, or one on it when they would touch.
-fn pair(m: &mut Mesh, at: [f32; 3], yaw: f32, x: f32, z: f32, spread: f32, size: f32, step: u8) {
+fn pair(m: &mut Mesh, pose: Pose, x: f32, z: f32, spread: f32, size: f32, step: u8) {
     if spread >= size * 1.5 {
         for side in [-1.0f32, 1.0] {
-            lamp_at(m, at, yaw, [x, side * spread, z], size, step);
+            lamp_at(m, pose.at, pose.yaw, [x, side * spread, z], size, step);
         }
     } else {
-        lamp_at(m, at, yaw, [x, 0.0, z], size, step);
+        lamp_at(m, pose.at, pose.yaw, [x, 0.0, z], size, step);
     }
 }
 
-/// The lamps of one vehicle at `s` kilometres along its route facing `dir`; `at` and `yaw` are its
-/// front car's position and heading and `u` its unit (see `vehicle`). Trucks and trains show
+/// The lamps of one vehicle at `s` kilometres along its route facing `dir`; `pose` is its
+/// front car's pose and `u` its unit (see `vehicle`). Trucks and trains show
 /// white at the front and red at the back, ships a masthead light, a stern light and red and green
 /// sidelights.
 pub(super) fn vehicle_lights(
@@ -68,30 +75,72 @@ pub(super) fn vehicle_lights(
     r: &Route,
     s: f32,
     dir: f32,
-    at: [f32; 3],
-    yaw: f32,
+    pose: Pose,
     u: f32,
     px_km: f32,
 ) {
     let size = (0.3 * u).max(1.2 * px_km);
     match r.kind {
         Kind::Truck => {
-            pair(m, at, yaw, 1.4 * u + size / 2.0, 0.45 * u, 0.5 * u, size, WARM);
-            pair(m, at, yaw, -1.6 * u - size / 2.0, 0.45 * u, 0.5 * u, size, RED);
+            pair(m, pose, 1.4 * u + size / 2.0, 0.45 * u, 0.5 * u, size, WARM);
+            pair(m, pose, -1.6 * u - size / 2.0, 0.45 * u, 0.5 * u, size, RED);
         }
         Kind::Train => {
-            pair(m, at, yaw, u + size / 2.0, 0.7 * u, 0.4 * u, size, WARM);
+            pair(m, pose, u + size / 2.0, 0.7 * u, 0.4 * u, size, WARM);
             // The last of the four cars, placed as `vehicle` places it.
             let back = 3.0 * 2.3 * u * -dir;
             let (p, h) = r.at((s + back).clamp(0.0, r.length()));
-            let tail_yaw = if dir > 0.0 { h } else { h + std::f32::consts::PI };
-            pair(m, p, tail_yaw, -u - size / 2.0, 0.6 * u, 0.4 * u, size, RED);
+            let tail_yaw = if dir > 0.0 {
+                h
+            } else {
+                h + std::f32::consts::PI
+            };
+            pair(
+                m,
+                Pose {
+                    at: p,
+                    yaw: tail_yaw,
+                },
+                -u - size / 2.0,
+                0.6 * u,
+                0.4 * u,
+                size,
+                RED,
+            );
         }
         Kind::Ship => {
-            lamp_at(m, at, yaw, [-0.75 * u, 0.0, 1.9 * u + size / 2.0], size, WARM);
-            lamp_at(m, at, yaw, [-1.8 * u - size / 2.0, 0.0, 0.4 * u], size, WARM);
-            lamp_at(m, at, yaw, [1.5 * u, 0.8 * u + size / 2.0, 0.45 * u], size, RED);
-            lamp_at(m, at, yaw, [1.5 * u, -0.8 * u - size / 2.0, 0.45 * u], size, GREEN);
+            lamp_at(
+                m,
+                pose.at,
+                pose.yaw,
+                [-0.75 * u, 0.0, 1.9 * u + size / 2.0],
+                size,
+                WARM,
+            );
+            lamp_at(
+                m,
+                pose.at,
+                pose.yaw,
+                [-1.8 * u - size / 2.0, 0.0, 0.4 * u],
+                size,
+                WARM,
+            );
+            lamp_at(
+                m,
+                pose.at,
+                pose.yaw,
+                [1.5 * u, 0.8 * u + size / 2.0, 0.45 * u],
+                size,
+                RED,
+            );
+            lamp_at(
+                m,
+                pose.at,
+                pose.yaw,
+                [1.5 * u, -0.8 * u - size / 2.0, 0.45 * u],
+                size,
+                GREEN,
+            );
         }
     }
 }
@@ -114,20 +163,26 @@ mod tests {
 
     #[test]
     fn a_vehicle_shows_a_white_front_and_a_red_back() {
-        let r = Route::new(
-            Kind::Truck,
-            vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
-            1,
-            1,
-        )
-        .unwrap();
+        let r = Route::new(Kind::Truck, vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]], 1, 1).unwrap();
         let mut m = Mesh::default();
-        vehicle_lights(&mut m, &r, 5.0, 1.0, [5.0, 0.0, 0.0], 0.0, 0.035, 0.001);
+        vehicle_lights(
+            &mut m,
+            &r,
+            5.0,
+            1.0,
+            Pose {
+                at: [5.0, 0.0, 0.0],
+                yaw: 0.0,
+            },
+            0.035,
+            0.001,
+        );
         let front: Vec<_> = m.vertices.iter().filter(|v| v.colour[0] == WARM).collect();
         let back: Vec<_> = m.vertices.iter().filter(|v| v.colour[0] == RED).collect();
         assert!(!front.is_empty() && !back.is_empty());
         // Facing +x: the white lamps are ahead of the red ones.
-        let mean = |v: &[&crate::mesh::Vertex]| v.iter().map(|q| q.pos[0]).sum::<f32>() / v.len() as f32;
+        let mean =
+            |v: &[&crate::mesh::Vertex]| v.iter().map(|q| q.pos[0]).sum::<f32>() / v.len() as f32;
         assert!(mean(&front) > 5.0 && mean(&back) < 5.0);
     }
 }

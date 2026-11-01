@@ -929,7 +929,7 @@ fn vehicle(
         }
     }
     if v.night {
-        night::vehicle_lights(m, r, s, dir, at, yaw, u, v.px_km);
+        night::vehicle_lights(m, r, s, dir, night::Pose { at, yaw }, u, v.px_km);
     }
 }
 
