@@ -83,6 +83,12 @@ interface GpuMapSession {
     /** Sends game state as JSON (plants, holdings, map mode, night, clouds). */
     fun update(json: String)
 
+    /**
+     * Turns the map's animations (smoke, cranes, beacons, vehicles, growth) on while the map is showing and the player has them
+     * on. While on and anything moves, frames are drawn every display refresh; off, the picture is still and the map idles.
+     */
+    fun setAnimation(on: Boolean) {}
+
     /** Asks the render thread for a frame of the view; only the newest request is drawn. [moving] tells it the camera is in motion (a smaller, quicker frame). */
     fun request(camera: GpuCamera, width: Int, height: Int, moving: Boolean)
 
@@ -212,7 +218,7 @@ internal fun gpuUpdateJson(
 ): String {
     fun q(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
     val plantJson = plants.joinToString(",", "[", "]") {
-        """{"region":${q(it.region)},"industry":${q(it.industry)},"firm":${it.firm},"blocks":${it.blocks},"player":${it.player},"status":${q(it.status.lowercase())}}"""
+        """{"region":${q(it.region)},"industry":${q(it.industry)},"firm":${it.firm},"blocks":${it.blocks},"player":${it.player},"status":${q(it.status.lowercase())},"utilisation_bps":${it.utilisationBps},"progress_bps":${it.progressBps}}"""
     }
     val holdings = divisions.map { it.region }.distinct().joinToString(",", "[", "]") { q(it) }
     val heat = if (layer == MapLayer.Presence || layer == MapLayer.Freight) "{}"

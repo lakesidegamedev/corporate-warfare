@@ -194,6 +194,11 @@ internal class DirectGpuSession(
         redraw.run()
     }
 
+    override fun setAnimation(on: Boolean) {
+        animate = on
+        redraw.run()
+    }
+
     override fun request(camera: GpuCamera, width: Int, height: Int, moving: Boolean) {
         if (width <= 0 || height <= 0) return
         firstRequestAt.compareAndSet(0, System.nanoTime())
@@ -237,6 +242,7 @@ internal class DirectGpuSession(
                 }
             }
             val t0 = System.nanoTime()
+            val animating = tick(job.camera.widthKm)
             val code = try {
                 lib.cw_gpu_render_surface(id, cam(job.camera), job.width, job.height, timing)
             } catch (_: Throwable) { -1 }
@@ -257,6 +263,8 @@ internal class DirectGpuSession(
             renderMs = timing[0]
             copyMs = timing[1]
             if (timing[1] > 250.0) { if (++slowRun >= 10) slowWhy = "frames took over 250 ms to present, ten in a row" } else slowRun = 0
+            // Something moves: the next frame follows at once; presenting waits for the display, which paces it.
+            if (animating) lock.withLock { dirty = true }
             val seq = presented.incrementAndGet()
             frameListener?.invoke(DirectFrame(seq, job.camera, job.width, job.height, timing[0], timing[1], total, t0))
         }

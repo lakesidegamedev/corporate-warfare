@@ -296,10 +296,22 @@ impl Plan {
             || scene
                 .buildings
                 .iter()
-                .any(|p| p.activity.status == Some(SiteStatus::Site))
+                .any(|p| p.activity.status == Some(SiteStatus::Site) || p.activity.born.is_some())
             || !self.routes.is_empty()
             || !self.routes_built
     }
+}
+
+/// True when the scene has anything that moves on its own at clock `t`: a running or building
+/// plant (smoke, vehicles, a crane) or a building still growing. The shell uses it to decide
+/// whether frames must keep coming.
+pub fn scene_animates(scene: &Scene, t: f32) -> bool {
+    scene.buildings.iter().any(|p| {
+        matches!(
+            p.activity.status,
+            Some(SiteStatus::Running) | Some(SiteStatus::Site)
+        ) || growth(p, t).is_some_and(|g| g < 1.0)
+    })
 }
 
 /// Whether the static building mesh leaves building `index` out because the animated layer draws
@@ -889,5 +901,100 @@ fn vehicle(
                 white,
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn placement(born: Option<f32>) -> Placement {
+        Placement {
+            activity: crate::data::Activity {
+                born,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn growth_goes_up_in_whole_steps_and_settles() {
+        let p = placement(Some(100.0));
+        assert_eq!(growth(&placement(None), 5.0), None);
+        let steps: Vec<f32> = [100.0, 100.25, 100.45, 100.65, 100.85, 101.0, 500.0]
+            .iter()
+            .map(|t| growth(&p, *t).unwrap())
+            .collect();
+        assert_eq!(steps, vec![0.2, 0.4, 0.6, 0.8, 1.0, 1.0, 1.0]);
+        assert!(drawn_by_anim(&p, 100.1));
+        assert!(!drawn_by_anim(&p, 102.0));
+    }
+
+    #[test]
+    fn the_clock_wraps_and_stills() {
+        assert_eq!(clock(5.0, false), 0.0);
+        assert_eq!(clock(3600.0 + 5.0, true), 5.0);
+        // Every period divides the wrap, so the wrap never shows.
+        for p in [1.6f32, 6.0, 48.0, 91.7] {
+            let q = period(p);
+            let n = CLOCK_WRAP_S as f32 / q;
+            assert!((n - n.round()).abs() < 1e-3, "{p} gave {q}");
+        }
+    }
+
+    #[test]
+    fn vehicles_go_out_and_come_back_along_their_route() {
+        let r = Route::new(
+            Kind::Truck,
+            vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [10.0, 10.0, 0.0]],
+            2,
+            1,
+        )
+        .unwrap();
+        assert!((r.length() - 20.0).abs() < 1e-4);
+        let (s, dir) = r.state(0, 0.0);
+        let (s2, _) = r.state(0, period(2.0 * r.length() / r.speed_km_s));
+        // After one full lap it is back where it started.
+        assert!((s - s2).abs() < 1e-3 && dir > 0.0 || dir < 0.0);
+        let (p, _) = r.at(15.0);
+        assert!((p[0] - 10.0).abs() < 1e-4 && (p[1] - 5.0).abs() < 1e-4);
+        for k in 0..40 {
+            let (s, _) = r.state(1, k as f32 * 3.7);
+            assert!((0.0..=r.length()).contains(&s));
+        }
+    }
+
+    #[test]
+    fn chimneys_are_found_from_the_boxes() {
+        let model = VoxelModel {
+            boxes: vec![
+                crate::data::VoxelBox {
+                    min: [-8.0, -8.0, 0.0],
+                    max: [8.0, 8.0, 5.0],
+                    colour: [1, 2, 3],
+                    trim: false,
+                },
+                crate::data::VoxelBox {
+                    min: [3.0, 3.0, 5.0],
+                    max: [5.0, 5.0, 14.0],
+                    colour: [1, 2, 3],
+                    trim: false,
+                },
+            ],
+            footprint: [16.0, 16.0],
+        };
+        let s = stacks_of(&model, "energy");
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].at, [4.0, 4.0, 14.0]);
+        // A smoking sector with no chimney gets roof vents; a quiet one gets nothing.
+        let mut body = model.boxes[0].clone();
+        body.min[2] = 0.5;
+        let flat = VoxelModel {
+            boxes: vec![body],
+            footprint: [16.0, 16.0],
+        };
+        assert_eq!(stacks_of(&flat, "manufacturing").len(), 2);
+        assert!(stacks_of(&flat, "retail").is_empty());
     }
 }
