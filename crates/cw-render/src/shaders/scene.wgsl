@@ -212,6 +212,13 @@ fn crop_state(variant: u32) -> u32 {
     return 0u;
 }
 
+fn crown(tx: i32, ty: i32) -> bool {
+    // Crowns are a 2x2 texel block, the odd rows of blocks shifted by one texel so they are not a grid.
+    let by = ty >> 1;
+    let sx = tx + select(0, 1, (by & 1) == 1);
+    return ihash(sx >> 1, by) % 16u < 5u;
+}
+
 // Class texture at a world texel: 0 the class colour, -1 one step darker, 1 one step lighter.
 // Every pattern keeps about the same share of dark and light at any texel size, so the mean
 // colour does not jump when the texel doubles as the camera pulls back.
@@ -219,8 +226,10 @@ fn class_texel(cls: u32, variant: u32, tx: i32, ty: i32) -> i32 {
     var v = 0u;
     let h8 = ihash(tx >> 3, ty >> 3);
     if (cls == 0u) {
-        if (((h8 >> 3u) & 1u) == 1u) { v = tile_oriented(TILE_FOREST2, tx, ty, h8); }
-        else { v = tile_oriented(TILE_FOREST, tx, ty, h8); }
+        // Canopy: crowns two texels across on a hashed lattice, each casting a one texel
+        // shadow down and to the left of the sun side.
+        if (crown(tx, ty)) { v = 2u; }
+        else if (crown(tx + 1, ty - 1)) { v = 1u; }
     }
     else if (cls == 1u) {
         // Rows run east-west or north-south by patch (never diagonal), one dark row in four or
@@ -254,7 +263,7 @@ fn class_texel(cls: u32, variant: u32, tx: i32, ty: i32) -> i32 {
         let sx = imod(tx, 16);
         let sy = imod(ty, 16);
         if (sx < 2 || sy < 2 || (tx & 3) == 0 || (ty & 3) == 0) { v = 1u; }
-        else if (ihash(tx >> 2, ty >> 2) % 4u == 0u) { v = 2u; }
+        else if (ihash(tx >> 2, ty >> 2) % 6u == 0u) { v = 2u; }
     }
     else {
         // Downtown: tighter blocks, more of them bright.
@@ -553,6 +562,21 @@ struct RFOut {
     @builtin(frag_depth) depth: f32,
 };
 
+// Narrow water between two shores, tested at about 8 km each way: a road or rail line crossing
+// it is a bridge, drawn over the water. Open lake and sea stay clear of lines.
+fn narrow_water(p: vec2<f32>) -> bool {
+    let r = 8.0;
+    let e = !is_water(mask_at(lonlat(p + vec2<f32>(r, 0.0))));
+    let w = !is_water(mask_at(lonlat(p - vec2<f32>(r, 0.0))));
+    let n = !is_water(mask_at(lonlat(p + vec2<f32>(0.0, r))));
+    let s = !is_water(mask_at(lonlat(p - vec2<f32>(0.0, r))));
+    let ne = !is_water(mask_at(lonlat(p + vec2<f32>(r, r) * 0.7)));
+    let sw = !is_water(mask_at(lonlat(p - vec2<f32>(r, r) * 0.7)));
+    let nw = !is_water(mask_at(lonlat(p + vec2<f32>(-r, r) * 0.7)));
+    let se = !is_water(mask_at(lonlat(p + vec2<f32>(r, -r) * 0.7)));
+    return (e && w) || (n && s) || (ne && sw) || (nw && se);
+}
+
 @fragment
 fn fs_road(in: ROut) -> RFOut {
     let ll = lonlat(in.world.xy);
@@ -560,26 +584,46 @@ fn fs_road(in: ROut) -> RFOut {
     let w = road_width(in.kind);
     let hw = w * 0.5;
     let d = abs(in.across);
-    if (is_water(m) || d >= hw) { discard; }
+    var bridge = false;
+    if (is_water(m)) {
+        if (d >= hw || !narrow_water(in.world.xy)) { discard; }
+        bridge = true;
+    }
+    if (d >= hw) { discard; }
     var c = pal(RAMP_ROCK, 2);
     let detail = g.road.w > 0.5;
     if (in.kind == 0u) {
-        // Interstate: mid grey asphalt, a slightly darker one pixel edge and, up close, a gold
-        // dashed centre line.
+        // Interstate: mid grey asphalt with a darker one pixel kerb. Up close a light edge line
+        // inside each kerb and a gold dashed centre line.
         if (w > 2.5 && d >= hw - 1.0) { c = pal(RAMP_ROCK, 1); }
+        else if (detail && w > 6.5 && d >= hw - 2.0) { c = pal(RAMP_CLOUD, 1); }
         else if (detail && w > 4.5 && d < 0.75 && fract(in.along / 7.0) < 0.5) { c = pal(RAMP_GOLD, 3); }
     } else if (in.kind == 1u) {
         // Main road: one step lighter than the ground it crosses, so it reads as a faint line.
+        // Up close it widens to a grey road with a darker kerb.
         let cls = class_at(vec2<i32>(floor(ground_tc(ll))));
         var ramp = ramp_of(cls);
         var base = 2;
         if (m.a > 1.5 && m.a < 2.5) { ramp = RAMP_GOLD; base = gold_base(cls); }
         c = pal(ramp, base + 1);
+        if (w > 2.5) {
+            c = pal(RAMP_ROCK, 3);
+            if (d >= hw - 1.0) { c = pal(RAMP_ROCK, 1); }
+        }
     } else {
         // Railway: a thin light grey-brown line, with sleepers across it up close.
         c = pal(RAMP_SOIL, 3);
         if (detail && d >= 0.75) {
             if (fract(in.along / 3.5) < 0.43) { c = pal(RAMP_SOIL, 2); } else { discard; }
+        }
+    }
+    if (bridge) {
+        // Bridge deck: the kerb is ink, the deck a step lighter than the road, so it reads as a
+        // structure crossing the water.
+        if (in.kind != 2u && w > 2.5) {
+            if (d >= hw - 1.0) { c = pal(RAMP_INK, 3); } else { c = pal(RAMP_URBAN, 3); }
+        } else if (in.kind == 2u) {
+            c = pal(RAMP_URBAN, 3);
         }
     }
     var out: RFOut;

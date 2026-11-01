@@ -33,8 +33,9 @@ fn main() {
     let views = [
         ("great-lakes-2000", "columbus", cam(-83.0, 39.96, 25.0, 50.0)),
         ("great-lakes-2000", "chicago", cam(-87.6, 41.85, 25.0, 50.0)),
-        ("texas-1981", "houston", cam(-94.9, 29.45, 25.0, 50.0)),
+        ("texas-1981", "houston", cam(-94.95, 29.6, 25.0, 50.0)),
         ("ruhr-rhine-1991", "duisburg", cam(6.78, 51.43, 25.0, 50.0)),
+        ("great-lakes-2000", "bridge", cam(-76.38, 39.0, 40.0, 50.0)),
         ("great-lakes-2000", "mid", cam(-82.0, 41.5, 150.0, 40.0)),
         ("great-lakes-2000", "far", cam(-82.0, 41.5, 1500.0, 24.0)),
     ];
