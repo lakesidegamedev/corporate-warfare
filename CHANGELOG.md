@@ -26,6 +26,13 @@ heading.
 - City centres on the map now grow with the city. The biggest cities have tall skylines with stepped towers and crowns, mid size cities have a handful of mid rise blocks, and small cities have low buildings; the further from the centre, the lower it gets. Cities down to a quarter of a million people now have a small downtown.
 - Plants are never put down inside a city's skyline any more; they stand beside it.
 - Far away, the dark outline round small buildings no longer swamps them into a black blot.
+- Cities no longer read as one repeating grid. Downtown is a tight, bright block grid, the inner city has medium blocks with the odd park, outer suburbs have larger blocks with lawns, scattered trees and green patches, and industrial and harbour districts have big grey lots. Streets run unbroken across the map but the gaps between them differ block to block, so no pattern repeats at city scale.
+- Major rivers are drawn as water ribbons that get wider as you zoom in, with a lighter bank edge. The Rhine, the Ohio, the Mississippi and the other rivers of the map data now show on every scenario. Roads and railways that cross a river get a bridge deck with dark edges.
+- Map ground is finer and clearer up close. Forests are canopy clumps with a hard shadow, cities are street grids with avenues and lighter and darker blocks, farmland has crop rows that run one way per field, and desert and scrub carry a sparse scatter of brush and sand. Tiles are mirrored and turned block by block so patterns no longer repeat over a few kilometres.
+- Fields change with the season: pale young crops and dark ploughed ground in spring, ripe gold fields and dense dark crops in summer, ripe and ploughed in autumn.
+- Lakes and coasts get a lighter shallow band along the shore with a clean stepped edge, and open water has a sparser, less regular scatter of wave marks.
+- Roads and bridges: close up, interstates and main roads are wider with a darker kerb and a light edge line, and any road or railway that crosses a narrow strait is drawn as a bridge deck.
+- The ground texture step while zooming now has hysteresis, so it no longer flips back and forth when the camera hovers at a boundary. A new zoom test checks that no frame jumps in average colour.
 
 ## [1.9.0] - 2026-10-31
 

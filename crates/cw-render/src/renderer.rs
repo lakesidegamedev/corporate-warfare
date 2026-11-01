@@ -87,7 +87,7 @@ impl Default for Style {
             buildings: true,
             roads: true,
             road_detail_km: 450.0,
-            texel_km: (0.5, 4.0),
+            texel_km: (0.125, 4.0),
             texel_min_px: 2.0,
             cloud_altitude_km: 18.0,
             dither: 2.5,
@@ -297,6 +297,8 @@ pub struct Renderer {
     cache: Option<GpuScene>,
     targets: Option<Targets>,
     surface: Option<SurfaceState>,
+    /// The texture texel of the last frame, so the step has hysteresis while zooming.
+    texel_prev: f32,
 }
 
 /// A window surface the renderer presents to, with the linear format its pipelines were built for.
@@ -678,6 +680,7 @@ impl Renderer {
             cache: None,
             targets: None,
             surface,
+            texel_prev: 0.0,
         })
     }
 
@@ -1054,10 +1057,8 @@ impl Renderer {
         let target_dist = (view.eye - view.target).length();
         let px_km = px_per_dist * target_dist;
         let (tmin, tmax) = style.texel_km;
-        let mut texel = tmin;
-        while texel < style.texel_min_px * px_km && texel < tmax * 4.0 {
-            texel *= 2.0;
-        }
+        let texel = texel_step(tmin, tmax, style.texel_min_px, px_km, self.texel_prev);
+        self.texel_prev = texel;
         let tex_on = if texel <= tmax { 1.0 } else { 0.0 };
         // Road widths in render pixels, one set per zoom band (0 hides the class). Interstates
         // are always there, main roads and railways join as the camera closes in, and every
@@ -1066,7 +1067,8 @@ impl Renderer {
             w if w > 1500.0 => (1.0, 0.0, 0.0),
             w if w > 900.0 => (3.0, 0.0, 0.0),
             w if w > 450.0 => (3.0, 0.0, 1.0),
-            _ => (5.0, 1.0, 3.0),
+            w if w > 80.0 => (5.0, 1.0, 3.0),
+            _ => (7.0, 3.0, 3.0),
         };
         let detail = if camera.width_km <= style.road_detail_km {
             1.0
@@ -1117,7 +1119,7 @@ impl Renderer {
                 scene.ground.w as f32,
                 scene.ground.h as f32,
                 scene.ground.ppd,
-                0.0,
+                season_of(scene.week),
             ],
             palette: palette.flat(),
             day: Palette::day().flat(),
@@ -1466,6 +1468,35 @@ impl Renderer {
             }
         }
         None
+    }
+}
+
+/// The ground texture texel for a pixel size in km: the smallest power of two times `tmin` that is
+/// at least `min_px` pixels wide. The step the last frame used is kept while its texel is still
+/// between 0.8 and 2.5 times `min_px` pixels wide, so a camera hovering at a boundary (or a
+/// zoom that reverses) does not flip the pattern back and forth; it changes only when a zoom
+/// has clearly crossed to the next step.
+pub fn texel_step(tmin: f32, tmax: f32, min_px: f32, px_km: f32, prev: f32) -> f32 {
+    if prev >= tmin && prev <= tmax * 4.0 {
+        let px = prev / px_km.max(1e-6);
+        if px >= min_px * 0.8 && px <= min_px * 2.5 {
+            return prev;
+        }
+    }
+    let mut texel = tmin;
+    while texel < min_px * px_km && texel < tmax * 4.0 {
+        texel *= 2.0;
+    }
+    texel
+}
+
+/// Farming season of a week for the field colours: 0 winter, 1 spring, 2 summer, 3 autumn.
+fn season_of(week: u32) -> f32 {
+    match week {
+        10..=21 => 1.0,
+        22..=36 => 2.0,
+        37..=46 => 3.0,
+        _ => 0.0,
     }
 }
 
