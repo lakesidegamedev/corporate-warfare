@@ -55,6 +55,10 @@ pub struct Style {
     /// Map animations on. Off is the still mode: time frozen at zero, so a frame is the same
     /// every time it is drawn.
     pub animate: bool,
+    /// The building under the pointer and the selected one, as indices into the scene's
+    /// buildings: each is drawn with a bright outline.
+    pub hover: Option<usize>,
+    pub selected: Option<usize>,
 }
 
 /// The 1.8 cloud setting levels. Each is a threshold on the cloud image: a higher one leaves
@@ -100,6 +104,8 @@ impl Default for Style {
             heat_ramp: ramp::BRICK,
             time_s: 0.0,
             animate: false,
+            hover: None,
+            selected: None,
         }
     }
 }
@@ -1195,8 +1201,7 @@ impl Renderer {
         self.queue
             .write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&globals));
 
-        if style.animate
-            && style.buildings
+        if style.buildings
             && let Some(c) = &mut self.cache
         {
             c.plan.build_routes(scene);
@@ -1208,23 +1213,26 @@ impl Renderer {
         };
         let gpu = self.cache.as_ref().expect("prepared");
         // Smoke, construction, growth, beacons and vehicles: built for this clock and camera.
-        let anim_gpu = (style.buildings && gpu.plan.has_motion(scene))
-            .then(|| {
-                anim::frame_mesh(
-                    scene,
-                    &gpu.plan,
-                    &anim::FrameView {
-                        target: (tx, ty),
-                        width_km: camera.width_km,
-                        px_km,
-                        night: style.night,
-                        t: clock,
-                        animated: style.animate,
-                    },
-                )
-            })
-            .filter(|m| !m.vertices.is_empty())
-            .map(|m| upload(&self.device, &m, "anim"));
+        let anim_gpu = (style.buildings
+            && (gpu.plan.has_motion(scene) || style.hover.is_some() || style.selected.is_some()))
+        .then(|| {
+            anim::frame_mesh(
+                scene,
+                &gpu.plan,
+                &anim::FrameView {
+                    target: (tx, ty),
+                    width_km: camera.width_km,
+                    px_km,
+                    night: style.night,
+                    t: clock,
+                    animated: style.animate,
+                    hover: style.hover,
+                    selected: style.selected,
+                },
+            )
+        })
+        .filter(|m| !m.vertices.is_empty())
+        .map(|m| upload(&self.device, &m, "anim"));
         // Road tiles in view: their indices are gathered into the band's index buffer.
         let mut visible_road_indices = 0u32;
         if style.roads

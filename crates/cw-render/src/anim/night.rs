@@ -82,13 +82,13 @@ pub(super) fn vehicle_lights(
     let size = (0.3 * u).max(1.2 * px_km);
     match r.kind {
         Kind::Truck => {
-            pair(m, pose, 1.4 * u + size / 2.0, 0.45 * u, 0.5 * u, size, WARM);
-            pair(m, pose, -1.6 * u - size / 2.0, 0.45 * u, 0.5 * u, size, RED);
+            pair(m, pose, 1.6 * u + size / 2.0, 0.45 * u, 0.5 * u, size, WARM);
+            pair(m, pose, -1.7 * u - size / 2.0, 0.45 * u, 0.5 * u, size, RED);
         }
         Kind::Train => {
             pair(m, pose, u + size / 2.0, 0.7 * u, 0.4 * u, size, WARM);
-            // The last of the four cars, placed as `vehicle` places it.
-            let back = 3.0 * 2.3 * u * -dir;
+            // The last wagon, placed as fleet::train places it (2.3 u apart behind the locomotive).
+            let back = r.wagons.max(1) as f32 * 2.3 * u * -dir;
             let (p, h) = r.at((s + back).clamp(0.0, r.length()));
             let tail_yaw = if dir > 0.0 {
                 h
@@ -113,7 +113,7 @@ pub(super) fn vehicle_lights(
                 m,
                 pose.at,
                 pose.yaw,
-                [-0.75 * u, 0.0, 1.9 * u + size / 2.0],
+                [-1.3 * u, 0.0, 1.9 * u + size / 2.0],
                 size,
                 WARM,
             );
@@ -129,7 +129,7 @@ pub(super) fn vehicle_lights(
                 m,
                 pose.at,
                 pose.yaw,
-                [1.5 * u, 0.8 * u + size / 2.0, 0.45 * u],
+                [1.5 * u, 0.55 * u + size / 2.0, 0.45 * u],
                 size,
                 RED,
             );
@@ -137,7 +137,7 @@ pub(super) fn vehicle_lights(
                 m,
                 pose.at,
                 pose.yaw,
-                [1.5 * u, -0.8 * u - size / 2.0, 0.45 * u],
+                [1.5 * u, -0.55 * u - size / 2.0, 0.45 * u],
                 size,
                 GREEN,
             );

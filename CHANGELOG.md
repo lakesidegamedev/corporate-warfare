@@ -22,6 +22,10 @@ heading.
 - Trucks and trains show white lights at the front and red at the back after dark, and ships carry a mast light with a red and a green light at the bow. Tower beacons are now red.
 - Clouds drift slowly across the map with the wind, taking their shadows with them, and never run out or jump, however long you leave the map open. With animations off the sky stays still.
 - Water moves: the little wave marks on the sea and on lakes shift along in whole steps, quicker at sea and slower on a lake. Rivers stay calm.
+- Vehicles on the new map are proper models now. A truck has a cab and a trailer that matches what it carries: a round tank for fuel and chemicals, an open deck with steel plates or logs for steel and timber, a closed box for goods and a hopper with a heap for grain and ore. A train is a locomotive with four to eight wagons of the matching kind. Ships come as bulk carriers, tankers, container ships and, on rivers, barges pushed by a tug.
+- Freight now runs where your freight lanes run. Trucks follow the roads, trains the railways and barges the rivers between the two regions of a lane, and ships cross the lakes and the sea between coastal harbours. A busier lane gets more vehicles. Without any lanes the map falls back to the old plant based traffic.
+- Coastal and river port cities now have a harbour: a paved quay with stacks of containers behind it and gantry cranes whose trolleys run out to the ship and back. Ships come in, lie at the quay for a while and sail again.
+- Point at a plant and it gets a thin bright outline, gold for your own plants and white for a rival's. The plant whose report is open gets a pulsing outline that steps between two colours and between one and two pixels wide.
 - While the map is showing and "Animations" is on in Settings under Graphics, the map redraws every refresh of your display when something is moving at the zoom you are at. It rests when you leave the map or turn animations off, and it keeps moving while the game is paused. With animations off the map is a still picture: no smoke, vehicles or blinking lights (construction stages and grown buildings still show).
 
 ### Changed
