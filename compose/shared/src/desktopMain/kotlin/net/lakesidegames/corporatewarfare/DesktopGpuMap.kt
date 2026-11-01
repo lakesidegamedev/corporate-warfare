@@ -28,6 +28,7 @@ internal interface CwGpu : Library {
     fun cw_gpu_last_error(buf: ByteArray, len: Long): Int
     fun cw_gpu_info(id: Long, buf: ByteArray, len: Long): Int
     fun cw_gpu_update(id: Long, json: String): Int
+    fun cw_gpu_set_clock(id: Long, seconds: Double, animate: Int, widthKm: Double): Int
     fun cw_gpu_render(id: Long, cam: DoubleArray, width: Int, height: Int, scale: Int, out: ByteArray, outLen: Long, timing: DoubleArray): Int
     fun cw_gpu_project(id: Long, cam: DoubleArray, width: Float, height: Float, pts: DoubleArray, n: Long, out: FloatArray): Int
     fun cw_gpu_pick(id: Long, cam: DoubleArray, width: Float, height: Float, px: Float, py: Float, buf: ByteArray, len: Long): Int
@@ -88,6 +89,13 @@ internal abstract class FfiGpuSession(
     final override val software: Boolean,
 ) : GpuMapSession {
     @Volatile private var placed: List<GpuBuilding> = emptyList()
+
+    /** Map animations on and the map showing: the draw loop keeps rendering while the engine says something moves. */
+    @Volatile protected var animate = false
+
+    /** Sets the engine's animation clock for the next frame; true when frames must keep coming (smoke, cranes, vehicles at this zoom). */
+    protected fun tick(widthKm: Double): Boolean =
+        lib.cw_gpu_set_clock(id, System.nanoTime() / 1e9, if (animate) 1 else 0, widthKm) == 1
 
     /** Sends the update to the engine and refreshes the building list; false when the engine refused it. */
     protected fun push(json: String): Boolean {
@@ -178,6 +186,11 @@ private class DesktopGpuSession(
         lock.withLock { dirty = true; wake.signalAll() }
     }
 
+    override fun setAnimation(on: Boolean) {
+        animate = on
+        lock.withLock { dirty = true; wake.signalAll() }
+    }
+
     override fun request(camera: GpuCamera, width: Int, height: Int, moving: Boolean) {
         if (width <= 0 || height <= 0) return
         lock.withLock {
@@ -231,6 +244,7 @@ private class DesktopGpuSession(
             val need = rw * rh * 4
             if (buffers[next].size < need) buffers[next] = ByteArray(need)
             val pixels = buffers[next]
+            val animating = tick(camera.widthKm)
             val code = try {
                 lib.cw_gpu_render(id, cam(camera), rw, rh, 1, pixels, need.toLong(), timing)
             } catch (_: Throwable) { -1 }
@@ -242,6 +256,13 @@ private class DesktopGpuSession(
             renderMs = timing[0]
             val gpuCopy = timing[1]
             lock.withLock { rendered = job; renderedFactor = factor }
+            // Something moves: draw the next frame as soon as this one is out, paced so a software adapter is not saturated. The pause
+            // does not stop it (smoke does not wait for the game clock); it ends when the map is hidden or animations go off.
+            if (animating) lock.withLock {
+                dirty = true
+                val pace = (if (software) 100_000_000L else 16_000_000L) - ((timing[0] + timing[1]) * 1e6).toLong()
+                if (pace > 0) wake.awaitNanos(pace)
+            }
             val view = job.camera
             pending[next] = uploader.submit {
                 val t0 = System.nanoTime()

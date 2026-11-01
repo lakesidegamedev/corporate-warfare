@@ -11,8 +11,21 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- The new map now lives. Running oil, power, chemical and heavy industry plants give off crisp pixel smoke that rises from their chimneys and leans downwind. A plant that is running hard smokes more, a plant that is mothballed does not smoke at all, and the smoke fades by shrinking, never by blurring. At night the tops of tall towers and chimneys blink red.
+- Construction sites now show how far the build has got: a foundation first, then a steel frame going up floor by floor, then walls rising up the frame, with a tower crane whose arm turns slowly. A new plant (or one that has just finished building) grows up out of the ground over about a second instead of popping in.
+- Trucks run along the roads between your plants and the nearest city, trains run on the railways, and ships sail over the lakes and the sea from coastal plants. Busier plants send more trucks. Vehicles keep a minimum size on screen so they stay visible when you zoom out.
+- A few windows in lit buildings flip on or off now and then at night.
+- While the map is showing and "Animations" is on in Settings under Graphics, the map redraws every refresh of your display when something is moving at the zoom you are at. It rests when you leave the map or turn animations off, and it keeps moving while the game is paused. With animations off the map is a still picture: no smoke, vehicles or blinking lights (construction stages and grown buildings still show).
+
 ### Changed
 
+- Buildings on the new map look much better. Every sector's plant has more to it now: power stations have cooling towers, stacks and pylons, chemical works have fenced tank farms, factories have loading docks with trucks, mines and oil fields have pumpjacks, farms have furrowed fields, barns and silos, warehouses have yards full of trailers and containers, and offices, hospitals and flats have rows of windows. Roofs show vents, skylights and air conditioners, and doors and parked vehicles show how big a building really is. Window rows are dark by day and light up at night. A building is still the same size on the ground at every zoom.
+- Your rivals' buildings now carry their company's colour on the roofs and trim, so you can tell whose plant is whose at a glance. Your own plants keep the gold roofs. A plant you have mothballed turns grey and its windows go dark.
+- City centres on the map now grow with the city. The biggest cities have tall skylines with stepped towers and crowns, mid size cities have a handful of mid rise blocks, and small cities have low buildings; the further from the centre, the lower it gets. Cities down to a quarter of a million people now have a small downtown.
+- Plants are never put down inside a city's skyline any more; they stand beside it.
+- Far away, the dark outline round small buildings no longer swamps them into a black blot.
 - Cities no longer read as one repeating grid. Downtown is a tight, bright block grid, the inner city has medium blocks with the odd park, outer suburbs have larger blocks with lawns, scattered trees and green patches, and industrial and harbour districts have big grey lots. Streets run unbroken across the map but the gaps between them differ block to block, so no pattern repeats at city scale.
 - Major rivers are drawn as water ribbons that get wider as you zoom in, with a lighter bank edge. The Rhine, the Ohio, the Mississippi and the other rivers of the map data now show on every scenario. Roads and railways that cross a river get a bridge deck with dark edges.
 - Map ground is finer and clearer up close. Forests are canopy clumps with a hard shadow, cities are street grids with avenues and lighter and darker blocks, farmland has crop rows that run one way per field, and desert and scrub carry a sparse scatter of brush and sand. Tiles are mirrored and turned block by block so patterns no longer repeat over a few kilometres.

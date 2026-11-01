@@ -1816,7 +1816,7 @@ struct WorldMapView: View {
             let gpuOn = newMap && layer != .freight && current.zoom >= MapCamera.flatEnd && (gpu?.isReady ?? false)
             ZStack(alignment: .topLeading) {
                 if gpuOn, let gpu {
-                    GpuMapSurface(session: gpu, camera: current, size: size, tilt: GraphicsSettings.pitch(forTilt: tiltSetting))
+                    GpuMapSurface(session: gpu, camera: current, size: size, tilt: GraphicsSettings.pitch(forTilt: tiltSetting), animate: animate)
                         .allowsHitTesting(false)
                     GpuLabels(session: gpu, map: map, divisions: divisions, labels: look.labels, planner: labelPlanner, version: gpuTick)
                 } else {

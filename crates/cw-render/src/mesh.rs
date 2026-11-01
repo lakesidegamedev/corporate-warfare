@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::data::{Owner, Scene, VoxelModel, WATER_LAKE};
+use crate::data::{Owner, Placement, Scene, VoxelModel, WATER_LAKE};
 
 /// Vertex kinds, carried in the colour alpha byte.
 pub const KIND_TOP: u8 = 0;
@@ -469,7 +469,7 @@ pub fn terrain(scene: &Scene) -> Mesh {
     m
 }
 
-fn box_faces(
+pub(crate) fn box_faces(
     m: &mut Mesh,
     tf: &dyn Fn([f32; 3]) -> [f32; 3],
     rot: &dyn Fn([f32; 3]) -> [f32; 3],
@@ -553,9 +553,19 @@ fn box_faces(
 }
 
 /// Voxel buildings standing on the terrain, each on a plinth down to the lowest ground under it.
+#[allow(dead_code)]
 pub fn buildings(scene: &Scene) -> Mesh {
+    buildings_where(scene, |_, _| true)
+}
+
+/// The same, for the buildings `keep` accepts (index and placement). The animated layer draws
+/// the others itself.
+pub fn buildings_where(scene: &Scene, keep: impl Fn(usize, &Placement) -> bool) -> Mesh {
     let mut m = Mesh::default();
-    for p in &scene.buildings {
+    for (index, p) in scene.buildings.iter().enumerate() {
+        if !keep(index, p) {
+            continue;
+        }
         let Some(model) = scene.models.get(&p.model) else {
             continue;
         };
@@ -589,15 +599,21 @@ pub fn buildings(scene: &Scene) -> Mesh {
         // The plant models mark their own roofs and trim; the player's firm colour replaces them.
         let marked = model.boxes.iter().any(|b| b.trim);
         for b in &model.boxes {
-            let tall = if marked {
+            let tall = if let Some(w) = b.windows {
+                w && !p.look.idle
+            } else if marked {
                 b.max[2] - b.min[2] >= 3.0
                     && b.max[0] - b.min[0] >= 4.0
                     && b.max[1] - b.min[1] >= 4.0
             } else {
                 b.max[2] - b.min[2] >= 2.0 && b.min[2] >= 1.0
             };
-            let colour = if marked && b.trim && p.owner == Owner::Player {
+            let colour = if p.look.idle {
+                idle_grey(b.colour)
+            } else if b.trim && p.owner == Owner::Player && (marked || b.windows.is_some()) {
                 PLAYER_ROOF
+            } else if let (true, Some(firm)) = (b.trim && p.owner == Owner::Rival, p.look.firm) {
+                firm
             } else {
                 b.colour
             };
@@ -631,6 +647,27 @@ pub fn buildings(scene: &Scene) -> Mesh {
         }
     }
     m
+}
+
+/// Where a placed building stands: its centre in kilometres, the height of its base and of the
+/// lowest ground under it (the plinth reaches down to it). None when its model is missing.
+pub(crate) fn placement_frame(scene: &Scene, p: &Placement) -> Option<[f32; 4]> {
+    let model = scene.models.get(&p.model)?;
+    let (cx, cy) = scene.projection.to_km(p.lon, p.lat);
+    let (hi, lo) = ground_range(scene, model, p.scale, cx, cy);
+    Some([cx, cy, level_z_km(scene, hi), level_z_km(scene, lo)])
+}
+
+/// A mothballed plant: every colour becomes the rock ramp step of the same lightness.
+fn idle_grey(c: [u8; 3]) -> [u8; 3] {
+    const ROCK: [[u8; 3]; 4] = [
+        [0x3B, 0x3F, 0x46],
+        [0x56, 0x5B, 0x63],
+        [0x7A, 0x7F, 0x86],
+        [0xA3, 0xA8, 0xAE],
+    ];
+    let lum = 0.3 * c[0] as f32 + 0.59 * c[1] as f32 + 0.11 * c[2] as f32;
+    ROCK[((lum - 40.0) / 45.0).clamp(0.0, 3.0) as usize]
 }
 
 /// Roof colour of the player's own buildings (the palette's gold).
@@ -1834,4 +1871,117 @@ pub fn apron_seam_steps(scene: &Scene) -> usize {
         }
     }
     bad
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::{Look, Placement, VoxelBox, VoxelModel};
+    use crate::palette::Rgb;
+
+    fn scene_with(model: VoxelModel, owner: Owner, look: Look) -> Scene {
+        let mut scene = Scene::tiny();
+        scene.models.insert("t/0".into(), model);
+        scene.set_buildings(vec![Placement {
+            model: "t/0".into(),
+            lon: -83.0,
+            lat: 41.0,
+            yaw: 0.0,
+            scale: 0.05,
+            owner,
+            look,
+            activity: Default::default(),
+        }]);
+        scene
+    }
+
+    fn model() -> VoxelModel {
+        let b = |min: [f32; 3], max: [f32; 3], colour: Rgb, trim: bool, windows: bool| VoxelBox {
+            min,
+            max,
+            colour,
+            trim,
+            windows: Some(windows),
+        };
+        VoxelModel {
+            footprint: [24.0, 24.0],
+            boxes: vec![
+                b(
+                    [-8.0, -8.0, 0.0],
+                    [8.0, 8.0, 5.0],
+                    [0xB2, 0x3A, 0x2E],
+                    false,
+                    true,
+                ),
+                b(
+                    [-8.0, -8.0, 5.0],
+                    [8.0, 8.0, 5.5],
+                    [0xC9, 0xD4, 0xE2],
+                    true,
+                    false,
+                ),
+            ],
+        }
+    }
+
+    fn colours(m: &Mesh) -> Vec<[u8; 3]> {
+        let mut v: Vec<[u8; 3]> = m
+            .vertices
+            .iter()
+            .map(|v| [v.colour[0], v.colour[1], v.colour[2]])
+            .collect();
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    #[test]
+    fn a_rivals_roof_takes_its_firm_colour_and_the_players_stays_gold() {
+        let firm = [0x2D, 0x63, 0x96];
+        let rival = buildings(&scene_with(
+            model(),
+            Owner::Rival,
+            Look {
+                firm: Some(firm),
+                idle: false,
+            },
+        ));
+        assert!(colours(&rival).contains(&firm));
+        assert!(!colours(&rival).contains(&PLAYER_ROOF));
+        let plain = buildings(&scene_with(model(), Owner::Rival, Look::default()));
+        assert!(!colours(&plain).contains(&firm));
+        let mine = buildings(&scene_with(
+            model(),
+            Owner::Player,
+            Look {
+                firm: Some(firm),
+                idle: false,
+            },
+        ));
+        assert!(colours(&mine).contains(&PLAYER_ROOF) && !colours(&mine).contains(&firm));
+        // The walls keep the sector's colour either way.
+        assert!(colours(&mine).contains(&[0xB2, 0x3A, 0x2E]));
+    }
+
+    #[test]
+    fn a_mothballed_plant_is_grey_and_has_no_windows() {
+        let idle = buildings(&scene_with(
+            model(),
+            Owner::Rival,
+            Look {
+                firm: Some([0x2D, 0x63, 0x96]),
+                idle: true,
+            },
+        ));
+        for c in colours(&idle) {
+            let spread = c.iter().max().unwrap() - c.iter().min().unwrap();
+            assert!(spread <= 16 || c == [0x8C, 0x75, 0x56], "{c:?} is not grey");
+        }
+        assert!(idle.vertices.iter().all(|v| v.colour[3] != KIND_BUILDING));
+        let live = buildings(&scene_with(model(), Owner::Rival, Look::default()));
+        assert!(
+            live.vertices.iter().any(|v| v.colour[3] == KIND_BUILDING),
+            "windows on a live plant"
+        );
+    }
 }
