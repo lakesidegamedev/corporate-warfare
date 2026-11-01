@@ -11,6 +11,14 @@ heading.
 
 ## [Unreleased]
 
+### Changed
+
+- Map ground is finer and clearer up close. Forests are canopy clumps with a hard shadow, cities are street grids with avenues and lighter and darker blocks, farmland has crop rows that run one way per field, and desert and scrub carry a sparse scatter of brush and sand. Tiles are mirrored and turned block by block so patterns no longer repeat over a few kilometres.
+- Fields change with the season: pale young crops and dark ploughed ground in spring, ripe gold fields and dense dark crops in summer, ripe and ploughed in autumn.
+- Lakes and coasts get a lighter shallow band along the shore with a clean stepped edge, and open water has a sparser, less regular scatter of wave marks.
+- Roads and bridges: close up, interstates and main roads are wider with a darker kerb and a light edge line, and any road or railway that crosses a narrow strait is drawn as a bridge deck.
+- The ground texture step while zooming now has hysteresis, so it no longer flips back and forth when the camera hovers at a boundary. A new zoom test checks that no frame jumps in average colour.
+
 ## [1.9.0] - 2026-10-31
 
 ### Added

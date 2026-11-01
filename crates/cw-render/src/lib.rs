@@ -30,6 +30,7 @@ pub use renderer::{
 };
 
 pub use ground::snow_cover;
+pub use renderer::texel_step;
 pub use mesh::{
     BuildingBox, ROAD_BANDS, RoadPoint, apron_extent_km, apron_land_boxes, apron_seam_steps,
     building_boxes, ground_z, road_band, road_chains, road_chains_for_band,

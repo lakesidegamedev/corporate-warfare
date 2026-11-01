@@ -199,16 +199,18 @@ fn imod(a: i32, m: i32) -> i32 {
     return ((a % m) + m) % m;
 }
 
-// Crop of a field patch this season: 0 green, 1 ripe, 2 ploughed, 3 pasture. The patch's own
-// crop number picks a column, the season a row.
+// Crop of a field patch this season: 0 plain green, 1 light (ripe, or young and pale), 2 dark
+// (ploughed, or dense), 3 pasture. The patch's own crop number picks a column, the season a
+// row. Light and dark patches come in equal numbers each season, so the mean colour of the
+// fields stays put when the crops drop out a few zoom steps further out.
 fn crop_state(variant: u32) -> u32 {
     let c = (variant >> 2u) & 3u;
     let season = i32(round(g.ground_dim.w));
     if (c == 3u) { return 3u; }
-    if (season == 1) { if (c == 2u) { return 2u; } return 0u; }
-    if (season == 2) { if (c == 2u) { return 1u; } return 0u; }
+    if (season == 2) { if (c == 2u) { return 1u; } if (c == 1u) { return 2u; } return 0u; }
     if (season == 3) { if (c == 0u) { return 1u; } if (c == 1u) { return 2u; } return 0u; }
     if (c == 2u) { return 2u; }
+    if (c == 1u) { return 1u; }
     return 0u;
 }
 
@@ -425,7 +427,7 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
             // Crops by the season, only while the texel is small: far out the fields are one green.
             let crop = crop_state(variant_at(tc));
             if (crop == 1u) { base = 3; }
-            if (crop == 2u) { ramp = RAMP_SOIL; }
+            if (crop == 2u) { base = 1; }
         }
         if (in.kind == 1u) {
             // Terrace wall: one shade darker than the ground above, with a one pixel highlight
