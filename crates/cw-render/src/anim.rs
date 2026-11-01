@@ -8,7 +8,9 @@
 //! a world size, apart from a minimum size in screen pixels so a puff or a truck never shrinks to
 //! nothing at a distance.
 
-use crate::data::{Owner, Placement, Scene, VoxelModel, WATER_LAKE, WATER_OCEAN};
+use crate::data::{Placement, Scene, VoxelModel};
+use crate::fleet::{self, Cargo, ShipKind};
+use crate::freight::{self, Fleet};
 use crate::game::SiteStatus;
 use crate::mesh::{self, KIND_PLAIN, Mesh, box_faces};
 use crate::palette::{Palette, Rgb, ramp};
@@ -39,12 +41,12 @@ pub fn clock(time_s: f64, animate: bool) -> f32 {
 }
 
 /// A period near `seconds` that divides the wrap exactly.
-fn period(seconds: f32) -> f32 {
+pub(crate) fn period(seconds: f32) -> f32 {
     let n = (CLOCK_WRAP_S as f32 / seconds).round().max(1.0);
     CLOCK_WRAP_S as f32 / n
 }
 
-fn hash(a: u32, b: u32) -> f32 {
+pub(crate) fn hash(a: u32, b: u32) -> f32 {
     let mut h = a.wrapping_mul(0x9E37_79B1) ^ b.wrapping_mul(0x85EB_CA6B) ^ 0xC2B2_AE35;
     h ^= h >> 15;
     h = h.wrapping_mul(0x2C1B_3C6D);
@@ -54,16 +56,23 @@ fn hash(a: u32, b: u32) -> f32 {
     (h & 0xFFFF) as f32 / 65536.0
 }
 
-fn colour(ramp: usize, step: usize) -> Rgb {
+pub(crate) fn colour(ramp: usize, step: usize) -> Rgb {
     Palette::day().ramps[ramp][step]
 }
 
-fn put(m: &mut Mesh, min: [f32; 3], max: [f32; 3], rgb: Rgb) {
+pub(crate) fn put(m: &mut Mesh, min: [f32; 3], max: [f32; 3], rgb: Rgb) {
     box_faces(m, &|q| q, &|n| n, min, max, rgb, KIND_PLAIN);
 }
 
 /// A box in a frame turned by `yaw` about the vertical through `at` (local axes: x ahead).
-fn put_turned(m: &mut Mesh, at: [f32; 3], yaw: f32, min: [f32; 3], max: [f32; 3], rgb: Rgb) {
+pub(crate) fn put_turned(
+    m: &mut Mesh,
+    at: [f32; 3],
+    yaw: f32,
+    min: [f32; 3],
+    max: [f32; 3],
+    rgb: Rgb,
+) {
     let (s, c) = yaw.sin_cos();
     let tf = move |q: [f32; 3]| {
         [
@@ -168,26 +177,34 @@ fn tower_of(model: &VoxelModel) -> Option<Spot> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Kind {
+pub(crate) enum Kind {
     Truck,
     Train,
     Ship,
 }
 
 /// A path vehicles run to and fro along, in world kilometres.
-struct Route {
-    kind: Kind,
-    pts: Vec<[f32; 3]>,
+pub(crate) struct Route {
+    pub kind: Kind,
+    pub pts: Vec<[f32; 3]>,
     /// Distance from the start to each point.
     cum: Vec<f32>,
-    speed_km_s: f32,
+    pub speed_km_s: f32,
     /// How many vehicles share it and the phase offset of the first.
-    count: u32,
-    seed: u32,
+    pub count: u32,
+    pub seed: u32,
+    /// What the vehicles carry and, for ships, what kind they are; wagons per train.
+    pub cargo: Cargo,
+    pub ship: ShipKind,
+    pub wagons: u32,
+    /// Seconds a vehicle waits at each end (a ship lying at its berth).
+    pub dwell: f32,
+    /// The yaw a vehicle takes while it waits at the start and at the end, when set.
+    pub ends: [Option<f32>; 2],
 }
 
 impl Route {
-    fn new(kind: Kind, pts: Vec<[f32; 3]>, count: u32, seed: u32) -> Option<Route> {
+    pub fn new(kind: Kind, pts: Vec<[f32; 3]>, count: u32, seed: u32) -> Option<Route> {
         if pts.len() < 2 {
             return None;
         }
@@ -208,15 +225,20 @@ impl Route {
             },
             count,
             seed,
+            cargo: Cargo::Box,
+            ship: ShipKind::Bulk,
+            wagons: 4,
+            dwell: 0.0,
+            ends: [None, None],
         })
     }
 
-    fn length(&self) -> f32 {
+    pub fn length(&self) -> f32 {
         *self.cum.last().unwrap_or(&0.0)
     }
 
     /// Position and heading (radians) at `s` kilometres from the start.
-    fn at(&self, s: f32) -> ([f32; 3], f32) {
+    pub fn at(&self, s: f32) -> ([f32; 3], f32) {
         let s = s.clamp(0.0, self.length());
         let i = self
             .cum
@@ -235,16 +257,24 @@ impl Route {
         )
     }
 
-    /// Distance along the route of vehicle `k` at clock `t`, going out and coming back, and the
-    /// direction it faces (+1 out, -1 back).
-    fn state(&self, k: u32, t: f32) -> (f32, f32) {
+    /// Distance along the route of vehicle `k` at clock `t`, going out, waiting at the far end,
+    /// coming back and waiting at the start, and the direction it faces (+1 out, -1 back).
+    pub fn state(&self, k: u32, t: f32) -> (f32, f32) {
         let len = self.length();
-        let lap = period(2.0 * len / self.speed_km_s);
-        let phase = (t / lap + k as f32 / self.count.max(1) as f32 + hash(self.seed, 7)).fract();
-        if phase < 0.5 {
-            (phase * 2.0 * len, 1.0)
+        let travel = len / self.speed_km_s;
+        let lap = period(2.0 * travel + 2.0 * self.dwell);
+        let u = (t / lap + k as f32 / self.count.max(1) as f32 + hash(self.seed, 7)).fract() * lap;
+        // The laps are scaled by the period rounding, so work in shares of the lap.
+        let scale = lap / (2.0 * travel + 2.0 * self.dwell);
+        let (travel, dwell) = (travel * scale, self.dwell * scale);
+        if u < travel {
+            (u / travel * len, 1.0)
+        } else if u < travel + dwell {
+            (len, 1.0)
+        } else if u < 2.0 * travel + dwell {
+            ((1.0 - (u - travel - dwell) / travel) * len, -1.0)
         } else {
-            ((1.0 - phase) * 2.0 * len, -1.0)
+            (0.0, -1.0)
         }
     }
 }
@@ -254,7 +284,7 @@ pub struct Plan {
     /// Smoke and beacon spots per building index.
     stacks: Vec<Vec<Spot>>,
     towers: Vec<Option<Spot>>,
-    routes: Vec<Route>,
+    fleet: Fleet,
     routes_built: bool,
 }
 
@@ -275,7 +305,7 @@ impl Plan {
         Plan {
             stacks,
             towers,
-            routes: Vec::new(),
+            fleet: Fleet::default(),
             routes_built: false,
         }
     }
@@ -287,7 +317,7 @@ impl Plan {
             return;
         }
         self.routes_built = true;
-        self.routes = routes_for(scene);
+        self.fleet = freight::build(scene);
     }
 
     /// True when anything of the plan moves at all.
@@ -297,7 +327,8 @@ impl Plan {
                 .buildings
                 .iter()
                 .any(|p| p.activity.status == Some(SiteStatus::Site) || p.activity.born.is_some())
-            || !self.routes.is_empty()
+            || !self.fleet.routes.is_empty()
+            || !self.fleet.harbours.is_empty()
             || !self.routes_built
     }
 }
@@ -330,170 +361,10 @@ pub fn growth(p: &Placement, t: f32) -> Option<f32> {
     Some(((age / GROW_S * GROW_STEPS).floor() + 1.0).min(GROW_STEPS) / GROW_STEPS)
 }
 
-fn km_of(scene: &Scene, p: (f32, f32)) -> (f32, f32) {
-    scene.projection.to_km(p.0, p.1)
-}
-
-fn routes_for(scene: &Scene) -> Vec<Route> {
-    let chains = mesh::road_chains_for_band(scene, &mesh::ROAD_BANDS[2]);
-    let cities: Vec<(f32, f32)> = scene
-        .cities
-        .iter()
-        .map(|c| km_of(scene, (c.lon, c.lat)))
-        .collect();
-    let mut out = Vec::new();
-    for (bi, p) in scene.buildings.iter().enumerate() {
-        if p.owner == Owner::Scenery || p.activity.status != Some(SiteStatus::Running) {
-            continue;
-        }
-        let (cx, cy) = km_of(scene, (p.lon, p.lat));
-        let util = p.activity.utilisation;
-        let n = 1 + (util * 2.0).round() as u32;
-        let seed = bi as u32 * 31 + 5;
-        // Trucks: the nearest road, followed toward the nearest city.
-        let city = cities
-            .iter()
-            .copied()
-            .filter(|c| dist(*c, (cx, cy)) > 4.0)
-            .min_by(|a, b| dist(*a, (cx, cy)).total_cmp(&dist(*b, (cx, cy))));
-        if let Some(path) = chain_path(&chains, (cx, cy), 0..=1, 9.0, 28.0, city)
-            && let Some(r) = Route::new(Kind::Truck, path, n, seed)
-        {
-            out.push(r);
-        }
-        // Trains: the nearest railway, both ways from the plant, for the bigger plants.
-        if p.activity.utilisation > 0.2
-            && let Some(path) = chain_path(&chains, (cx, cy), 2..=2, 22.0, 34.0, None)
-            && let Some(r) = Route::new(Kind::Train, path, 1, seed + 1)
-        {
-            out.push(r);
-        }
-        // Ships: a plant on a coast sends one along a straight lane over open water.
-        if matches!(
-            industry_of(&p.model),
-            "energy" | "extraction" | "logistics" | "chemical_industries" | "agriculture"
-        ) && let Some(path) = sea_lane(scene, (cx, cy))
-            && let Some(r) = Route::new(Kind::Ship, path, 2, seed + 2)
-        {
-            out.push(r);
-        }
-    }
-    out
-}
-
-/// How many truck, train and ship routes the scene's buildings get (for diagnostics and tests).
+/// How many truck, train and ship routes the scene's fleet gets, and how many harbours (for
+/// diagnostics and tests).
 pub fn route_counts(scene: &Scene) -> [usize; 3] {
-    let mut n = [0; 3];
-    for r in routes_for(scene) {
-        n[r.kind as usize] += 1;
-    }
-    n
-}
-
-fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
-    ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
-}
-
-/// The stretch of the nearest chain of the given classes within `reach` km of `from`, walked
-/// away from the plant for up to `max_len` km (toward `city` when given, else both ways).
-fn chain_path(
-    chains: &[(u8, Vec<mesh::RoadPoint>)],
-    from: (f32, f32),
-    classes: std::ops::RangeInclusive<u8>,
-    reach: f32,
-    max_len: f32,
-    city: Option<(f32, f32)>,
-) -> Option<Vec<[f32; 3]>> {
-    let mut best: Option<(usize, usize, f32)> = None;
-    for (ci, (class, pts)) in chains.iter().enumerate() {
-        if !classes.contains(class) {
-            continue;
-        }
-        for (pi, q) in pts.iter().enumerate() {
-            let d = dist((q.xyz[0], q.xyz[1]), from);
-            if d <= reach && best.is_none_or(|b| d < b.2) {
-                best = Some((ci, pi, d));
-            }
-        }
-    }
-    let (ci, pi, _) = best?;
-    let pts = &chains[ci].1;
-    let walk = |dir: isize, limit: f32| -> Vec<[f32; 3]> {
-        let mut out = vec![pts[pi].xyz];
-        let (mut i, mut len) = (pi as isize, 0.0f32);
-        loop {
-            let j = i + dir;
-            if j < 0 || j >= pts.len() as isize || len >= limit {
-                break;
-            }
-            let (a, b) = (pts[i as usize].xyz, pts[j as usize].xyz);
-            len += dist((a[0], a[1]), (b[0], b[1]));
-            out.push(b);
-            i = j;
-            if let Some(c) = city
-                && dist((b[0], b[1]), c) < 2.5
-            {
-                break;
-            }
-        }
-        out
-    };
-    let path = match city {
-        Some(c) => {
-            let (fwd, back) = (walk(1, max_len), walk(-1, max_len));
-            let gap = |p: &Vec<[f32; 3]>| {
-                let e = p[p.len() - 1];
-                dist((e[0], e[1]), c)
-            };
-            if gap(&fwd) <= gap(&back) { fwd } else { back }
-        }
-        None => {
-            let mut back = walk(-1, max_len / 2.0);
-            back.reverse();
-            let fwd = walk(1, max_len / 2.0);
-            back.extend(fwd.into_iter().skip(1));
-            back
-        }
-    };
-    (path.len() >= 2).then_some(path)
-}
-
-/// A straight lane over water starting near the shore of a coastal plant: the longest of sixteen
-/// directions that reach water within 8 km of it.
-fn sea_lane(scene: &Scene, from: (f32, f32)) -> Option<Vec<[f32; 3]>> {
-    let water = |x: f32, y: f32| {
-        let (lon, lat) = scene.projection.to_lonlat(x, y);
-        let w = scene.mask.at(lon, lat)[2];
-        w == WATER_OCEAN || w == WATER_LAKE
-    };
-    let mut best: Option<(f32, [f32; 2], f32)> = None;
-    for k in 0..16 {
-        let a = k as f32 * std::f32::consts::TAU / 16.0;
-        let dir = [a.cos(), a.sin()];
-        let at = |d: f32| (from.0 + dir[0] * d, from.1 + dir[1] * d);
-        let Some(start) = (1..=8).map(|i| i as f32).find(|&d| {
-            let (x, y) = at(d);
-            water(x, y)
-        }) else {
-            continue;
-        };
-        let mut end = start;
-        while end < start + 30.0 && {
-            let (x, y) = at(end + 1.0);
-            water(x, y)
-        } {
-            end += 1.0;
-        }
-        if end - start >= 12.0 && best.is_none_or(|b| end - start > b.2 - b.0) {
-            best = Some((start + 2.0, dir, end - 2.0));
-        }
-    }
-    let (a, dir, b) = best?;
-    let pt = |d: f32| {
-        let (x, y) = (from.0 + dir[0] * d, from.1 + dir[1] * d);
-        [x, y, mesh::ground_z(scene, x, y) + 0.012]
-    };
-    Some(vec![pt(a), pt(b)])
+    freight::summary(scene).0
 }
 
 /// Inputs of one animated frame.
@@ -508,6 +379,10 @@ pub struct FrameView {
     /// Animations on: smoke, beacons and vehicles are drawn only then. Construction stages and
     /// grown buildings are state, so they always are.
     pub animated: bool,
+    /// The building (index into the scene's buildings) under the pointer and the selected one:
+    /// each gets a bright outline. State, not animation, so they show with animations off.
+    pub hover: Option<usize>,
+    pub selected: Option<usize>,
 }
 
 /// The animated geometry of one frame.
@@ -534,6 +409,11 @@ pub fn frame_mesh(scene: &Scene, plan: &Plan, v: &FrameView) -> Mesh {
                 if let Some(g) = growth(p, v.t).filter(|g| *g < 1.0) {
                     grow(&mut m, scene, bi, [cx, cy, z_top], g);
                 }
+            }
+        }
+        for (id, selected) in [(v.hover, false), (v.selected, true)] {
+            if id == Some(bi) && p.owner != crate::data::Owner::Scenery {
+                highlight(&mut m, p, model, frame, vx, v, selected);
             }
         }
         if v.width_km > ANIM_MAX_KM || !v.animated {
@@ -590,15 +470,52 @@ pub fn frame_mesh(scene: &Scene, plan: &Plan, v: &FrameView) -> Mesh {
             }
         }
     }
-    if v.width_km <= ANIM_MAX_KM && v.animated {
-        for r in &plan.routes {
-            for k in 0..r.count {
-                let (s, dir) = r.state(k, v.t);
-                vehicle(&mut m, r, s, dir, v, &near);
+    if v.width_km <= ANIM_MAX_KM {
+        for h in &plan.fleet.harbours {
+            if near(h.at[0], h.at[1]) {
+                fleet::harbour(&mut m, h, v.px_km, v.t, v.animated);
+            }
+        }
+        if v.animated {
+            for r in &plan.fleet.routes {
+                for k in 0..r.count {
+                    let (s, dir) = r.state(k, v.t);
+                    vehicle(&mut m, r, k, s, dir, v, &near);
+                }
             }
         }
     }
     m
+}
+
+/// The outline of building `p`: its footprint turned by its yaw, never smaller than a few pixels
+/// across so a far away plant still shows it.
+fn highlight(
+    m: &mut Mesh,
+    p: &Placement,
+    model: &VoxelModel,
+    frame: [f32; 4],
+    vx: f32,
+    v: &FrameView,
+    selected: bool,
+) {
+    let floor = 3.0 * v.px_km;
+    let half = [
+        (model.footprint[0] / 2.0 * vx).max(floor),
+        (model.footprint[1] / 2.0 * vx).max(floor),
+    ];
+    let top = model.boxes.iter().map(|b| b.max[2]).fold(0.0f32, f32::max) * vx;
+    fleet::outline(
+        m,
+        p,
+        frame,
+        half,
+        top.max(2.0 * floor),
+        v.px_km,
+        v.t,
+        selected,
+        v.animated,
+    );
 }
 
 /// Puffs of smoke rising from `top` and drifting with the wind. Each puff is a cube in palette
@@ -805,10 +722,11 @@ fn grow(m: &mut Mesh, scene: &Scene, index: usize, base: [f32; 3], g: f32) {
     m.indices.extend(one.indices.iter().map(|i| i + first));
 }
 
-/// One vehicle at `s` kilometres along its route, facing `dir`.
+/// One vehicle `k` of a route at `s` kilometres along it, facing `dir`.
 fn vehicle(
     m: &mut Mesh,
     r: &Route,
+    k: u32,
     s: f32,
     dir: f32,
     v: &FrameView,
@@ -818,97 +736,51 @@ fn vehicle(
     if !near(at[0], at[1]) {
         return;
     }
-    let yaw = if dir > 0.0 {
-        heading
+    // Waiting at an end with a berth yaw: lie along the quay.
+    let waiting = if s <= 1e-4 {
+        r.ends[0]
+    } else if s >= r.length() - 1e-4 {
+        r.ends[1]
     } else {
-        heading + std::f32::consts::PI
+        None
     };
-    let u = match r.kind {
+    let flip = |h: f32| {
+        if dir > 0.0 {
+            h
+        } else {
+            h + std::f32::consts::PI
+        }
+    };
+    let yaw = waiting.unwrap_or_else(|| flip(heading));
+    let seed = r.seed.wrapping_mul(13).wrapping_add(k);
+    let min_px = match r.kind {
+        Kind::Truck => 2.2,
+        Kind::Train => 2.4,
+        Kind::Ship => 3.2,
+    };
+    let base = match r.kind {
         Kind::Truck => 0.035f32,
         Kind::Train => 0.05,
         Kind::Ship => 0.09,
-    }
-    .max(
-        match r.kind {
-            Kind::Truck => 2.2,
-            Kind::Train => 2.4,
-            Kind::Ship => 3.2,
-        } * v.px_km,
-    );
-    let white = colour(ramp::CLOUD, 3);
-    let dark = colour(ramp::ROCK, 1);
-    let red = colour(ramp::BRICK, 2);
+    };
+    let u = base.max(min_px * v.px_km);
     match r.kind {
-        Kind::Truck => {
-            put_turned(
-                m,
-                at,
-                yaw,
-                [-1.6 * u, -0.75 * u, 0.15 * u],
-                [0.5 * u, 0.75 * u, 1.5 * u],
-                white,
-            );
-            put_turned(
-                m,
-                at,
-                yaw,
-                [0.6 * u, -0.75 * u, 0.15 * u],
-                [1.4 * u, 0.75 * u, 1.2 * u],
-                red,
-            );
-        }
+        Kind::Truck => fleet::truck(m, at, yaw, u, r.cargo, seed),
         Kind::Train => {
-            // A locomotive and three wagons, each following the rail at its own distance.
-            for car in 0..4 {
-                let back = car as f32 * 2.3 * u * -dir;
-                let (p, h) = r.at((s + back).clamp(0.0, r.length()));
-                let y = if dir > 0.0 {
-                    h
-                } else {
-                    h + std::f32::consts::PI
-                };
-                let rgb = if car == 0 {
-                    red
-                } else if car % 2 == 1 {
-                    colour(ramp::ROCK, 2)
-                } else {
-                    dark
-                };
-                put_turned(
-                    m,
-                    p,
-                    y,
-                    [-u, -0.7 * u, 0.1 * u],
-                    [1.0 * u, 0.7 * u, 1.3 * u],
-                    rgb,
-                );
-            }
+            // The locomotive leads and each wagon follows the rail at its own distance.
+            let place = |back: f32| {
+                let (p, h) = r.at((s - dir * back).clamp(0.0, r.length()));
+                (p, flip(h))
+            };
+            fleet::train(m, &place, u, r.cargo, r.wagons, seed);
         }
         Kind::Ship => {
-            put_turned(
-                m,
-                at,
-                yaw,
-                [-1.8 * u, -0.8 * u, 0.0],
-                [1.8 * u, 0.8 * u, 0.7 * u],
-                dark,
-            );
-            put_turned(
-                m,
-                at,
-                yaw,
-                [-1.4 * u, -0.7 * u, 0.7 * u],
-                [0.9 * u, 0.7 * u, 1.3 * u],
-                red,
-            );
-            put_turned(
-                m,
-                at,
-                yaw,
-                [-1.1 * u, -0.5 * u, 1.3 * u],
-                [-0.4 * u, 0.5 * u, 1.9 * u],
-                white,
-            );
+            let u = if r.ship == ShipKind::Barge {
+                u * 0.8
+            } else {
+                u
+            };
+            fleet::ship(m, at, yaw, u, r.ship, seed)
         }
     }
 }

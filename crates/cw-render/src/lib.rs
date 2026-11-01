@@ -9,6 +9,8 @@ mod anim;
 mod camera;
 mod data;
 mod far;
+mod fleet;
+mod freight;
 mod game;
 mod ground;
 mod mesh;
@@ -19,7 +21,7 @@ mod renderer;
 pub use camera::Camera;
 pub use data::{
     Activity, AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, KM_PER_DEG_LAT,
-    LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, LINE_RIVER, Line, Look, Mask, Owner, PLANT_MODELS,
+    LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, LINE_RIVER, Lane, Line, Look, Mask, Owner, PLANT_MODELS,
     PLAYER_REGIONS, Placement, Projection, RegionInfo, SCENARIOS, ScenarioSpec, Scene,
     SceneOptions, TINT_HEAT, TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel, downtown_tier,
 };
@@ -35,6 +37,7 @@ pub use renderer::{
 pub use anim::{
     ANIM_MAX_KM, CLOCK_WRAP_S, WIND, clock as anim_clock, route_counts, scene_animates,
 };
+pub use freight::{harbour_sites, summary as fleet_summary, vehicles_at};
 pub use ground::{G_CORE, G_URBAN, snow_cover};
 pub use mesh::{
     BuildingBox, ROAD_BANDS, RoadPoint, apron_extent_km, apron_land_boxes, apron_seam_steps,

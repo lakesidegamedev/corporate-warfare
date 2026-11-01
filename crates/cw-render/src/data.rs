@@ -274,6 +274,18 @@ pub struct City {
     pub population: u64,
 }
 
+/// One freight lane of the game this week, for the vehicles: two regions, how the goods move,
+/// how much (0 to 1 of the busiest lane) and what they are.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Lane {
+    pub from: String,
+    pub to: String,
+    /// "truck" (or "road"), "rail", "sea", "river" or "pipeline".
+    pub mode: String,
+    pub volume: f32,
+    pub goods: String,
+}
+
 pub struct Scene {
     pub projection: Projection,
     pub heightmap: Heightmap,
@@ -310,6 +322,8 @@ pub struct Scene {
     /// only what moved.
     pub mask_rev: u64,
     pub buildings_rev: u64,
+    /// The freight lanes that vehicles run along (empty before the game sends any).
+    pub lanes: Vec<Lane>,
 }
 
 /// One playable region of a scenario.
@@ -350,6 +364,14 @@ impl Scene {
     }
 
     /// Replace the placed buildings and mark them for upload.
+    /// Replace the freight lanes; the vehicle routes are laid again from them.
+    pub fn set_lanes(&mut self, lanes: Vec<Lane>) {
+        if self.lanes != lanes {
+            self.lanes = lanes;
+            self.buildings_rev += 1;
+        }
+    }
+
     pub fn set_buildings(&mut self, buildings: Vec<Placement>) {
         self.buildings = buildings;
         self.buildings_rev += 1;
@@ -1114,6 +1136,7 @@ impl Scene {
             regions,
             mask_rev: 0,
             buildings_rev: 0,
+            lanes: Vec::new(),
         }
         .finish())
     }
@@ -1250,6 +1273,7 @@ impl Scene {
             ],
             mask_rev: 0,
             buildings_rev: 0,
+            lanes: Vec::new(),
         }
         .finish()
     }
