@@ -36,16 +36,17 @@ fn size_of(plants: u32) -> u32 {
     }
 }
 
-/// The palette colours a rival firm's roofs and trim can take (never the player's gold).
+/// The palette colours a rival firm's roofs and trim can take (never the player's gold). Each
+/// sits on a ramp that only gets darker in shade, so a shadow never turns a roof another hue.
 const FIRM_COLOURS: [[u8; 3]; 8] = [
     [0xD9, 0x59, 0x4A], // brick 3
-    [0x3F, 0xBF, 0x8A], // signal green
+    [0x54, 0x8A, 0x45], // forest 3
     [0x2D, 0x63, 0x96], // water 3
     [0xB0, 0xB6, 0x5A], // field 3
-    [0xC9, 0x80, 0x4A], // signal orange
-    [0x54, 0x8A, 0x45], // forest 3
-    [0xE5, 0x60, 0x5E], // signal red
-    [0x6F, 0x86, 0xA8], // snow 0
+    [0x9D, 0xB2, 0xCC], // snow 1
+    [0xAF, 0x9A, 0x74], // soil 3
+    [0x7F, 0x2B, 0x23], // brick 1
+    [0x1E, 0x47, 0x72], // water 2
 ];
 
 /// A rival firm's colour, the same for every one of its buildings.

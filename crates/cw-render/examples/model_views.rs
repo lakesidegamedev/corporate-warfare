@@ -136,7 +136,7 @@ const VIEWS: [View; 8] = [
         tilt: 42.0,
         heading: 0.0,
         set: 0,
-        grid: false,
+        grid: true,
     },
     View {
         name: "far",
@@ -264,7 +264,7 @@ fn main() {
     }
 }
 
-fn placement(model: String, lon: f32, lat: f32, scale: f32, owner: Owner, _i: usize) -> Placement {
+fn placement(model: String, lon: f32, lat: f32, scale: f32, owner: Owner, i: usize) -> Placement {
     Placement {
         model,
         lon,
@@ -272,6 +272,9 @@ fn placement(model: String, lon: f32, lat: f32, scale: f32, owner: Owner, _i: us
         yaw: 0.0,
         scale,
         owner,
-        look: cw_render::Look::default(),
+        look: cw_render::Look {
+            firm: (owner == Owner::Rival).then(|| cw_render::firm_colour(i as u64 + 2)),
+            idle: i == 6,
+        },
     }
 }
