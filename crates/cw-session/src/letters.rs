@@ -643,6 +643,16 @@ fn raid_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Lett
             // A failed raid on you is not a letter: the raider has nothing to say.
             (false, false) => continue,
         };
+        let fact = if !you_attack
+            && raid.success
+            && world
+                .firm(raid.defender)
+                .is_some_and(|f| f.operative() && f.facilities.is_empty())
+        {
+            format!("{fact} That was the last of your plants.")
+        } else {
+            fact
+        };
         out.push(finish(
             world,
             Draft {

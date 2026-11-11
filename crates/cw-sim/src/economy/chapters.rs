@@ -456,7 +456,7 @@ pub fn progress(world: &World, dataset: &Dataset, mandate: &Mandate) -> Progress
             let cost = weekly_costs(world, firm, 1).unwrap_or(0);
             let cash = world.firms.get(firm).map(|f| f.book.cash()).unwrap_or(0);
             let tenths = if cost > 0 { cash.max(0) * 10 / cost } else { 0 };
-            let span = (mandate.due - mandate.set).max(1) as i64;
+            let span = i64::from(mandate.due.saturating_sub(mandate.set)).max(1);
             let elapsed = (world.tick.0.saturating_sub(mandate.set) as i64).min(span);
             Progress {
                 bps: if mandate.broken {

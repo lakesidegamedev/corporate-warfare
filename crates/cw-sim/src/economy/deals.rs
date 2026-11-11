@@ -23,7 +23,9 @@ use cw_core::ids::Handle;
 use cw_core::ledger::{Account, Txn};
 use cw_core::money::round_even_div;
 
-use crate::state::{Deal, DealKind, DealState, HolderId, World};
+use crate::state::{
+    CONTROL_DENOMINATOR, CONTROL_NUMERATOR, Deal, DealKind, DealState, HolderId, World,
+};
 
 const DILIGENCE_WEEKS: u32 = 2;
 const OFFER_WEEKS: u32 = 4;
@@ -590,6 +592,80 @@ fn tender_plan(world: &World, deal: &Deal) -> Vec<(HolderId, i64)> {
         .filter(|(_, qty, _)| *qty > 0)
         .map(|(holder, qty, _)| (holder, qty))
         .collect()
+}
+
+/// What tendering the player's shares into a bid would do to the player's votes in the target.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TenderOutlook {
+    pub target: Handle,
+    pub buyer: Handle,
+    /// Shares the player would hand over (the bid may take only part of them).
+    pub shares_sold: i64,
+    pub held_before: i64,
+    pub held_after: i64,
+    /// Votes in the target, treasury shares excluded.
+    pub eligible: i64,
+    /// The player holds a majority of the votes today.
+    pub controls_now: bool,
+    pub offer_cents: i64,
+    /// The share's fair value now, the figure the premium is measured against.
+    pub fair_cents: i64,
+}
+
+impl TenderOutlook {
+    /// The player controls the company today and would not after tendering.
+    pub fn loses_control(&self) -> bool {
+        self.controls_now
+            && self.held_after * CONTROL_DENOMINATOR <= self.eligible * CONTROL_NUMERATOR
+    }
+
+    /// Votes held after the sale, in basis points rounded down, so a hair under half never
+    /// reads as half.
+    pub fn after_bps(&self) -> i64 {
+        if self.eligible <= 0 {
+            return 0;
+        }
+        (i128::from(self.held_after) * 10_000 / i128::from(self.eligible)) as i64
+    }
+
+    /// The bid against fair value, in basis points (negative when below fair value).
+    pub fn premium_bps(&self) -> i64 {
+        let fair = i128::from(self.fair_cents.max(1));
+        ((i128::from(self.offer_cents) - fair) * 10_000 / fair) as i64
+    }
+}
+
+/// The effect on the player's stake of answering a tender card with "tender". None when the bid
+/// or the target is gone or the player holds nothing.
+pub fn tender_outlook(world: &World, deal: Handle) -> Option<TenderOutlook> {
+    let stored = world.deals.get(deal)?;
+    let target = world.firm(stored.target)?;
+    let held = target.shares.qty(HolderId::Investor);
+    if held <= 0 {
+        return None;
+    }
+    let mut as_tendered = stored.clone();
+    as_tendered.investor_tendered = true;
+    let sold = tender_plan(world, &as_tendered)
+        .iter()
+        .find(|(holder, _)| *holder == HolderId::Investor)
+        .map(|(_, qty)| *qty)
+        .unwrap_or(0);
+    Some(TenderOutlook {
+        target: stored.target,
+        buyer: stored.buyer,
+        shares_sold: sold,
+        held_before: held,
+        held_after: held - sold,
+        eligible: target.shares.eligible_votes(),
+        controls_now: target.shares.controller() == Some(HolderId::Investor),
+        offer_cents: stored.offer_price_cents,
+        fair_cents: if target.shares.fair_cents > 0 {
+            target.shares.fair_cents
+        } else {
+            stored.frozen_fair_cents
+        },
+    })
 }
 
 fn collect_tenders(world: &mut World, handle: Handle, deal: &Deal) {

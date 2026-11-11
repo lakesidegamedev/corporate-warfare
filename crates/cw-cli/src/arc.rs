@@ -227,6 +227,9 @@ pub struct Turnover {
     /// Times a firm other than the player's came under a different ultimate controller (a settled
     /// deal that changed control). The firm stays in the league's books, so it is not an exit.
     pub control_changes: u32,
+    /// Firms outside the player's group that some other firm came to hold at ninety percent or
+    /// more, the point where a merger could fold them in. The rival AI never proposes one.
+    pub rival_owned_90: u32,
     pub entries: u32,
     pub exits: u32,
 }
@@ -484,6 +487,8 @@ struct Observer {
     restructured_week: Option<u32>,
     prev_status: BTreeMap<u64, FirmStatus>,
     last_controller: BTreeMap<u64, Option<HolderId>>,
+    /// Firms outside the player's group that a single other firm held at ninety percent or more.
+    ninety_seen: std::collections::BTreeSet<u64>,
 }
 
 impl Observer {
@@ -518,6 +523,7 @@ impl Observer {
             restructured_week: None,
             prev_status: BTreeMap::new(),
             last_controller: BTreeMap::new(),
+            ninety_seen: Default::default(),
         }
     }
 
@@ -609,6 +615,13 @@ impl Observer {
                 match self.last_controller.insert(id, controller) {
                     Some(before) if before != controller => self.turnover.control_changes += 1,
                     _ => {}
+                }
+                if firm.shares.holders.keys().any(|holder| {
+                    matches!(holder, HolderId::Firm(owner) if *owner != handle)
+                        && firm.shares.meets_squeeze_out(*holder)
+                }) && self.ninety_seen.insert(id)
+                {
+                    self.turnover.rival_owned_90 += 1;
                 }
             }
             if after_week {
@@ -1613,6 +1626,10 @@ pub(crate) fn apply_markets_override(session: &mut Session) -> Result<(), String
 pub fn run(arguments: &[String]) {
     VERBOSE.store(
         arguments.iter().any(|a| a == "--verbose"),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    crate::policy::LEGACY_CARDS.store(
+        arguments.iter().any(|a| a == "--legacy-cards"),
         std::sync::atomic::Ordering::Relaxed,
     );
     let seeds: u64 = flag(arguments, "--seeds")
