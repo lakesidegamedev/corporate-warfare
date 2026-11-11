@@ -288,14 +288,38 @@ fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onR
     val moves = store.rivalFeed.filter { recent(it.week) }
         .sortedWith(compareByDescending<RivalMoveFeedDto> { mine.isNotEmpty() && it.text.contains(mine) }.thenByDescending { it.week })
         .take(8)
-    Column(modifier.background(Palette.panel).verticalScroll(rememberScrollState()).padding(vertical = 6.dp)) {
+    val watchPrefs = LocalAppSettings.current
+    remember(watchPrefs) { watchPrefs?.let(Watchlist::load); 0 }
+    // A decision already shows under Needs you; do not list it twice.
+    val alerts = o?.alerts.orEmpty().filter { a -> decisions.none { d -> a.contains(d.title) } }
+    val needs = decisions.size + alerts.size + store.unreadLetters + if (o?.pauseInfo != null) 1 else 0
+    var tab by remember { mutableStateOf(GridDemo.railTab ?: "Needs you") }
+    Column(modifier.background(Palette.panel)) {
+        // Three tabs: what needs you, what you watch, and what rivals did.
+        Row(Modifier.fillMaxWidth().background(Palette.ink).padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            listOf("Needs you" to needs, "Watch" to Watchlist.items.size, "Feed" to raids.size + moves.size).forEach { (name, n) ->
+                GridButton(if (n > 0) "$name $n" else name, tab == name, 9.sp) { tab = name }
+            }
+        }
+        Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 6.dp)) {
+            when (tab) {
+                "Watch" -> WatchTab(store, onOpen, onRival)
+                "Feed" -> FeedTab(store, raids, moves, onOpen, onRival)
+                else -> NeedsTab(store, decisions, alerts, onOpen)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NeedsTab(store: GameStore, decisions: List<uniffi.cw_ffi.EventDto>, alerts: List<String>, onOpen: (Place) -> Unit) {
+    val o = store.overview
+    run {
         if (decisions.isNotEmpty() || o?.pauseInfo != null) {
             RailHeading("Needs you", decisions.size)
             o?.pauseInfo?.let { RailLine(it.title, it.detail, Palette.warning) { onOpen(Place.Inbox) } }
             decisions.forEach { e -> RailLine(e.title, if (e.deadline > 0u) "Decide by ${ResultBuckets.weekLabel(e.deadline.toInt())}" else "Decision", Palette.warning) { onOpen(Place.Inbox) } }
         }
-        // A decision already shows under Needs you; do not list it twice.
-        val alerts = o?.alerts.orEmpty().filter { a -> decisions.none { d -> a.contains(d.title) } }
         if (alerts.isNotEmpty()) {
             RailHeading("Company", alerts.size)
             alerts.forEach { a -> RailLine(a, null, Palette.gold) { onOpen(Place.Overview) } }
@@ -304,6 +328,59 @@ fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onR
             RailHeading("Letters", store.unreadLetters)
             store.letters.filter { !it.read }.take(4).forEach { l -> RailLine(l.summary.ifEmpty { l.salutation }, l.sender.name, Palette.primaryText) { onOpen(Place.Inbox) } }
         }
+        if (decisions.isEmpty() && alerts.isEmpty() && store.unreadLetters == 0 && o?.pauseInfo == null) {
+            Text("Nothing needs you this week.", color = Palette.secondary, fontSize = 11.sp, modifier = Modifier.padding(10.dp))
+        }
+    }
+}
+
+/** Starred goods and companies with this week's figure and its change over the game's timeframe. Each opens its screen. */
+@Composable
+private fun WatchTab(store: GameStore, onOpen: (Place) -> Unit, onRival: (ULong) -> Unit) {
+    val tf = GridPrefs.timeframe
+    val goods = store.commodities.filter { Watchlist.has("good:" + it.productId) }
+    val firms = store.stocks.filter { Watchlist.has("firm:" + it.name) }
+    if (goods.isEmpty() && firms.isEmpty()) {
+        Text("Star a good or a company in its table (the star shows under the pointer) to keep it here.", color = Palette.secondary, fontSize = 11.sp, lineHeight = 14.sp, modifier = Modifier.padding(10.dp))
+        return
+    }
+    if (goods.isNotEmpty()) {
+        RailHeading("Goods, ${tf.label}", goods.size)
+        goods.forEach { g ->
+            val bps = seriesChangeBps(g.historyCents, tf)
+            WatchLine(g.name, Format.money(g.priceCents), bps) { onOpen(Place.Goods) }
+        }
+    }
+    if (firms.isNotEmpty()) {
+        RailHeading("Companies, ${tf.label}", firms.size)
+        firms.forEach { s ->
+            val bps = seriesChangeBps(s.historyCents, tf)
+            WatchLine(s.name, Format.price(s.priceCents), bps) { onRival(s.firm) }
+        }
+    }
+}
+
+@Composable
+private fun WatchLine(name: String, value: String, bps: Long?, onClick: () -> Unit) {
+    val hover = remember { MutableInteractionSource() }
+    val hovered by hover.collectIsHoveredAsState()
+    Row(
+        Modifier.fillMaxWidth().background(if (hovered) Palette.panelRaised else Color.Transparent).hoverable(hover)
+            .pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("*", color = Palette.gold, fontFamily = Pixel.font, fontSize = 11.sp)
+        Spacer(Modifier.width(6.dp))
+        Text(name, color = Palette.primaryText, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(value, color = Palette.primaryText, style = GridFigures, fontSize = 11.sp)
+        Text(bps?.let(::changeText) ?: DASH, color = bps?.let(::changeTint) ?: Palette.secondary, style = GridFigures, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.width(54.dp))
+    }
+}
+
+@Composable
+private fun FeedTab(store: GameStore, raids: List<uniffi.cw_ffi.RaidRecordDto>, moves: List<RivalMoveFeedDto>, onOpen: (Place) -> Unit, onRival: (ULong) -> Unit) {
+    run {
+        if (raids.isEmpty() && moves.isEmpty()) Text("No raids or rival moves in the last 13 weeks.", color = Palette.secondary, fontSize = 11.sp, modifier = Modifier.padding(10.dp))
         if (raids.isNotEmpty()) {
             RailHeading("Raids on you", raids.size)
             raids.forEach { r ->
@@ -529,6 +606,7 @@ fun GoodsScreen(store: GameStore, startPick: UInt? = null) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DataGrid(
                 "Goods", goods, goodsColumns(shares), key = { it.product },
+                watchKey = { "good:" + it.productId },
                 views = GridViews("goods", GoodsViews, mine = { it.yours || (shares[it.product] ?: 0L) > 0 }, scopes = goodsScopes(goods)),
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 filterText = { "${it.name} ${Sectors.name(it.sector)}" },
@@ -598,6 +676,7 @@ fun LeagueScreen(store: GameStore, pick: ULong?, onPick: (ULong) -> Unit) {
     Row(Modifier.fillMaxSize().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         DataGrid(
             "League table", rows, leagueColumns(rank, maxCap, stocks, periods, contest, raidsOnYou), key = { it.firm },
+            watchKey = { "firm:" + it.name },
             views = GridViews("league", LeagueViews, mine = { it.yours }, scopes = leagueScopes(rows)),
             modifier = Modifier.weight(1f).fillMaxHeight(),
             filterText = { "${it.name} ${Sectors.name(it.industry)}" },
@@ -642,9 +721,9 @@ private fun leagueColumns(
             SectorBadge(r.industry, 14)
         }),
     GridColumn("sector", "Sector", 118.dp, numeric = false, text = { Sectors.name(it.industry) }, tone = { Palette.secondary }, topic = "About"),
-    GridColumn("revenue", "Revenue", 84.dp, text = { Format.compact(it.revenueCents) }, sort = { it.revenueCents }, series = { r -> periods[r.firm].orEmpty().map { it.revenueCents } }, step = 4,
-        fmt = { Format.compact(it) }, scale = 100.0, total = true, topic = "Results", tip = "Revenue. Its change, percent and trend compare four-week results, which the game keeps for five years."),
-    GridColumn("profit", "Profit", 80.dp, text = { Format.compact(it.profitCents) }, sort = { it.profitCents }, tone = { tint(it.profitCents) }, series = { r -> periods[r.firm].orEmpty().map { it.netIncomeCents } }, step = 4,
+    GridColumn("revenue", "Revenue", 84.dp, text = { Format.compact(it.revenueCents) }, sort = { it.revenueCents }, series = { r -> periods[r.firm].orEmpty().filter { it.weeks >= 4u }.map { it.revenueCents } }, step = 4,
+        fmt = { Format.compact(it) }, scale = 100.0, total = true, topic = "Results", tip = "Revenue. Its change, percent and trend compare whole four-week results (the period still running is left out), which the game keeps for five years."),
+    GridColumn("profit", "Profit", 80.dp, text = { Format.compact(it.profitCents) }, sort = { it.profitCents }, tone = { tint(it.profitCents) }, series = { r -> periods[r.firm].orEmpty().filter { it.weeks >= 4u }.map { it.netIncomeCents } }, step = 4,
         fmt = { Format.compact(it) }, scale = 100.0, total = true, topic = "Results", tip = "Profit after interest and tax. Its change and trend compare four-week results."),
     GridColumn("margin", "Margin", 62.dp, text = { it.netMarginBps?.let(::gridPct) ?: "" }, sort = { it.netMarginBps ?: Long.MIN_VALUE }, tone = { tint(it.netMarginBps ?: 0) }, dropOrder = 2, scale = 100.0, topic = "Results"),
     GridColumn("cash", "Cash", 78.dp, text = { Format.compact(it.cashCents) }, sort = { it.cashCents }, series = { r -> periods[r.firm].orEmpty().map { it.cashCents } }, step = 4, fmt = { Format.compact(it) }, dropOrder = 3, scale = 100.0, total = true, topic = "Balance sheet"),

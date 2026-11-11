@@ -103,6 +103,12 @@ class GridViewTest {
         assertEquals("price.Spark", spark.sort)
         // Two ways that would collide are refused.
         assertEquals(v, v.withMode("price.Percent", ColumnMode.Value))
+        // A second way of showing goes right after the first; the last way cannot go.
+        val two = v.toggleMode("price", ColumnMode.Rank)
+        assertEquals(listOf("name", "price", "price.Percent", "price.Rank"), two.columns.map { it.key })
+        assertEquals(listOf("name", "price.Percent"), v.toggleMode("price", ColumnMode.Value).columns.map { it.key })
+        val one = ViewState("x", cols("name", "cap"))
+        assertEquals(one, one.toggleMode("cap", ColumnMode.Value))
         // The name is not part of the shape.
         assertTrue(v.sameShape(v.copy(name = "Mine")))
         assertFalse(v.sameShape(v.copy(groupBy = "sector")))

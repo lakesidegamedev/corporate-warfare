@@ -78,7 +78,7 @@ internal fun <T> ControlBar(
         Anchor {
             BarButton("View: " + view.name + if (modified) " *" else "", menu == "view", wide = true) { onMenu(if (menu == "view") null else "view") }
             if (menu == "view") PixelMenu({ onMenu(null) }, 280.dp) {
-                ViewMenu(view, modified, book, ::pick, onView, onMenu)
+                ViewMenu(view, modified, book, ::pick, onView, onMenu, phone)
                 if (phone) {
                     MenuRule()
                     TimeframeMenu(view, tf, onView)
@@ -104,7 +104,7 @@ internal fun <T> ControlBar(
                 if (menu == "time") PixelMenu({ onMenu(null) }, 220.dp) { TimeframeMenu(view, tf, onView) }
             }
         }
-        GridSearch(search, if (phone) "Search" else "Search, or sector:chemicals margin>10 mine", 240.dp, onTyping, onSearch, onCommitSearch, Modifier.weight(1f, fill = false))
+        GridSearch(search, if (phone) "Search" else "Search, or type sector:energy", 240.dp, onTyping, onSearch, onCommitSearch, Modifier.weight(1f, fill = false))
         if (!phone) {
             Anchor {
                 BarButton("+ Filter", menu?.startsWith("filter") == true) { onMenu(if (menu?.startsWith("filter") == true) null else "filter") }
@@ -127,7 +127,7 @@ internal fun <T> ControlBar(
                     MenuItem("Comfortable", on = !GridPrefs.compact) { GridPrefs.chooseCompact(false, prefs) }
                     MenuRule()
                     MenuItem("Copy the grid for a spreadsheet", hint = "CSV") { clip.setText(AnnotatedString(csv())); onMenu(null) }
-                    MenuItem("Reset view", enabled = modified) { book.named(view.name)?.let(onView); onMenu(null) }
+                    if (modified) MenuItem("Reset view") { book.named(view.name)?.let(onView); onMenu(null) }
                 }
             }
         }
@@ -225,8 +225,8 @@ internal fun MenuItem(
             )
             Spacer(Modifier.width(7.dp))
         }
-        Box(Modifier.width(3.dp).height(12.dp).background(if (on) Palette.gold else Color.Transparent))
-        Spacer(Modifier.width(5.dp))
+        // A tick box already marks what is on; the bar marks the current choice in a plain list.
+        if (box == null) { Box(Modifier.width(3.dp).height(12.dp).background(if (on) Palette.gold else Color.Transparent)); Spacer(Modifier.width(5.dp)) }
         if (color != null) { Box(Modifier.width(9.dp).height(9.dp).background(color)); Spacer(Modifier.width(6.dp)) }
         Text(
             text, color = if (!enabled) Palette.secondary.copy(alpha = 0.5f) else if (on) Palette.gold else Palette.primaryText, fontSize = 12.sp,
@@ -238,11 +238,11 @@ internal fun MenuItem(
 }
 
 @Composable
-private fun ViewMenu(view: ViewState, modified: Boolean, book: ViewBook, pick: (ViewState) -> Unit, onView: (ViewState) -> Unit, onMenu: (String?) -> Unit) {
+private fun ViewMenu(view: ViewState, modified: Boolean, book: ViewBook, pick: (ViewState) -> Unit, onView: (ViewState) -> Unit, onMenu: (String?) -> Unit, phone: Boolean) {
     val clip = LocalClipboardManager.current
     var naming by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
-    MenuHeading("Views", "keys 1 to 9")
+    MenuHeading("Views", if (phone) "" else "keys 1 to 9")
     book.all.forEachIndexed { i, v ->
         val active = v.name == view.name
         MenuItem(
@@ -251,7 +251,8 @@ private fun ViewMenu(view: ViewState, modified: Boolean, book: ViewBook, pick: (
         ) { pick(v) }
     }
     MenuRule()
-    MenuItem("Save \"${view.name}\"", enabled = modified) { book.save(view); onView(view); onMenu(null) }
+    // Only what can be done now: Save and Reset appear once the view has changed.
+    if (modified) MenuItem("Save \"${view.name}\"") { book.save(view); onView(view); onMenu(null) }
     if (!naming) MenuItem("Save as a new view") { naming = true }
     else Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         GridSearch(name, "Name", 170.dp, {}, { name = it }, {
@@ -260,10 +261,10 @@ private fun ViewMenu(view: ViewState, modified: Boolean, book: ViewBook, pick: (
         Spacer(Modifier.width(6.dp))
         GridButton("Save", false) { if (name.isNotBlank()) { val v = view.copy(name = name.trim()); book.save(v); onView(v); onMenu(null) } }
     }
-    MenuItem("Reset view", enabled = modified) { book.named(view.name)?.let(onView); onMenu(null) }
+    if (modified) MenuItem("Reset view") { book.named(view.name)?.let(onView); onMenu(null) }
     if (book.isBuiltIn(view.name)) {
         val built = book.builtIn.first { it.name == view.name }
-        MenuItem("Back to the view as it came", enabled = !view.sameShape(built)) { book.restoreBuiltIn(view.name); onView(built); onMenu(null) }
+        if (!view.sameShape(built)) MenuItem("Back to the view as it came") { book.restoreBuiltIn(view.name); onView(built); onMenu(null) }
     }
     MenuRule()
     MenuItem("Copy this view to share") { clip.setText(AnnotatedString(ViewJson.exportView(view))); onMenu(null) }
@@ -277,11 +278,15 @@ private fun ViewMenu(view: ViewState, modified: Boolean, book: ViewBook, pick: (
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TimeframeMenu(view: ViewState, tf: Timeframe, onView: (ViewState) -> Unit) {
     MenuHeading("Timeframe", "changes, trends, bars")
     MenuItem("Follow the game: ${GridPrefs.timeframe.label}", on = view.timeframe == null) { onView(view.copy(timeframe = null)) }
-    Timeframe.entries.forEach { t -> MenuItem(t.label + " in this grid only", on = view.timeframe == t) { onView(view.copy(timeframe = t)) } }
+    Text("Or keep this grid at:", color = Palette.secondary, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+    FlowRow(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Timeframe.entries.forEach { t -> GridButton(t.label, view.timeframe == t, 10.sp) { onView(view.copy(timeframe = t)) } }
+    }
 }
 
 @Composable
@@ -340,18 +345,22 @@ private fun <T> FilterMenu(view: ViewState, columns: List<GridColumn<T>>, menu: 
 @Composable
 private fun <T> ColumnsMenu(view: ViewState, columns: List<GridColumn<T>>, onView: (ViewState) -> Unit, onExtra: (String) -> Unit) {
     var find by remember { mutableStateOf("") }
+    var open by remember { mutableStateOf<String?>(null) }
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp)) { GridSearch(find, "Find a column", 300.dp, {}, { find = it }, {}) }
     columns.drop(1).filter { find.isBlank() || it.title.contains(find, true) || it.topic.contains(find, true) }.groupBy { it.topic }.forEach { (topic, cols) ->
         MenuHeading(topic)
         cols.forEach { c ->
             val specs = view.columns.filter { it.id == c.id }
             val on = specs.isNotEmpty()
-            MenuItem(c.title, on = on, box = on, onBox = { onView(view.withColumn(c.id, !on)); if (!on) onExtra(c.id) }) { onView(view.withColumn(c.id, !on)); if (!on) onExtra(c.id) }
             val modes = modesOf(c)
-            if (on && modes.size > 1) specs.forEach { s ->
-                FlowRow(Modifier.fillMaxWidth().padding(start = 34.dp, end = 8.dp, bottom = 3.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    modes.forEach { m -> GridButton(m.label, s.mode == m, 9.sp) { onView(view.withMode(s.key, m)) } }
-                }
+            // How it shows stays folded away until asked: one line per column, "show as" opens the ways.
+            MenuItem(
+                c.title, on = on, box = on, onBox = { onView(view.withColumn(c.id, !on)); if (!on) onExtra(c.id) },
+                hint = if (on && open != c.id) specs.joinToString(", ") { it.mode.label.lowercase() } else "",
+                action = if (on && modes.size > 1 && open != c.id) "show as" else null, onAction = { open = c.id },
+            ) { onView(view.withColumn(c.id, !on)); if (!on) onExtra(c.id) }
+            if (open == c.id) FlowRow(Modifier.fillMaxWidth().padding(start = 34.dp, end = 8.dp, bottom = 3.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                modes.forEach { m -> GridButton(m.label, specs.any { it.mode == m }, 9.sp) { onView(view.toggleMode(c.id, m)); onExtra(ColumnSpec(c.id, m).key) } }
             }
         }
     }

@@ -88,6 +88,21 @@ data class ViewState(
         else -> this
     }
 
+    /**
+     * Show a column one more way, or one fewer (a column can show as the figure and its change
+     * side by side). The last way it shows cannot go: switch the column off for that.
+     */
+    fun toggleMode(id: String, mode: ColumnMode): ViewState {
+        val spec = ColumnSpec(id, mode)
+        val mine = columns.filter { it.id == id }
+        return when {
+            spec in columns && mine.size > 1 -> copy(columns = columns - spec, sort = sort.takeIf { it != spec.key })
+            spec in columns -> this
+            mine.isEmpty() -> copy(columns = columns + spec)
+            else -> copy(columns = columns.toMutableList().apply { add(indexOf(mine.last()) + 1, spec) })
+        }
+    }
+
     /** Show the column with [key] another way; the sort follows it. */
     fun withMode(key: String, mode: ColumnMode): ViewState {
         val at = columns.indexOfFirst { it.key == key }

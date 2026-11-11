@@ -29,6 +29,14 @@ class ProposalAfterRenderTest {
         demo(store, settings, "league-finance", "league", shape = { LeagueViews[1] }, place = Place.League, pick = rival)
         // A page not yet converted, inside the new shell, to show nothing is lost.
         ProposalCareer.shoot("after-shell-legacy-finance", 1920, 1080, settings) { TycoonShell(store, onSettings = {}, start = Place.Finance) }
+        // The watchlist: two goods and the largest rival starred, the rail on its Watch tab; starred goods lead the grid.
+        Watchlist.load(settings)
+        val starred = listOf("good:" + store.commodities.first { it.sector == sector }.productId, "good:" + store.commodities.maxBy { it.priceCents }.productId) +
+            listOfNotNull(store.stocks.firstOrNull { it.firm == rival }?.let { "firm:" + it.name })
+        starred.forEach { if (!Watchlist.has(it)) Watchlist.toggle(it) }
+        GridDemo.railTab = "Watch"
+        try { ProposalCareer.shoot("watch-rail", 1920, 1080, settings) { TycoonShell(store, onSettings = {}, start = Place.Goods) } } finally { GridDemo.clear() }
+        starred.forEach { if (Watchlist.has(it)) Watchlist.toggle(it) }
         // The phone: the same grid in two-line rows with the same sort and filter.
         ProposalCareer.shoot("after-goods-phone", 390, 844, settings, density = 2f) { GoodsScreen(store) }
         GridDemo.screen = "goods"; GridDemo.menu = "view"

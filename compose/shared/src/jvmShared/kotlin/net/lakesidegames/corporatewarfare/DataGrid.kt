@@ -140,13 +140,33 @@ object GridPrefs {
     fun chooseCompact(on: Boolean, prefs: ViewPrefs?) { compact = on; prefs?.write("grid.density", if (on) "compact" else "comfortable") }
 }
 
+/** Rows the player starred (goods, rivals): they lead their grids and fill the Watch tab of the rail. Kept in the settings file. */
+object Watchlist {
+    val items = androidx.compose.runtime.mutableStateListOf<String>()
+    private var prefs: ViewPrefs? = null
+
+    fun load(p: ViewPrefs) {
+        if (prefs != null) return
+        prefs = p
+        items.clear()
+        items.addAll(p.read("watch")?.split('|')?.filter { it.isNotBlank() }.orEmpty())
+    }
+
+    fun has(id: String) = id in items
+    fun toggle(id: String) {
+        if (id in items) items.remove(id) else items.add(id)
+        prefs?.write("watch", items.joinToString("|"))
+    }
+}
+
 /** Pictures and tests only: open a menu, type a search or reshape a screen's view when its grid first draws. */
 object GridDemo {
     var screen: String? = null
     var menu: String? = null
     var search: String = ""
     var shape: ((ViewState) -> ViewState)? = null
-    fun clear() { screen = null; menu = null; search = ""; shape = null }
+    var railTab: String? = null
+    fun clear() { screen = null; menu = null; search = ""; shape = null; railTab = null }
 }
 
 private val fallbackPrefs = MapViewPrefs()
@@ -173,8 +193,12 @@ fun <T> DataGrid(
     initialDescending: Boolean = true,
     phoneBelow: Dp = 640.dp,
     views: GridViews<T>? = null,
+    /** A row's id on the watchlist; with it every row can be starred, and starred rows lead the grid. */
+    watchKey: ((T) -> String)? = null,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
+    val watchPrefs = LocalAppSettings.current
+    remember(watchPrefs) { watchPrefs?.let(Watchlist::load); 0 }
     val prefs: ViewPrefs = LocalAppSettings.current ?: fallbackPrefs
     remember(prefs) { GridPrefs.load(prefs); 0 }
     val book = remember(views?.screen) { views?.let { ViewBook(it.screen, it.builtIn, prefs) } }
@@ -224,7 +248,9 @@ fun <T> DataGrid(
             sortCol.sort != null -> kept.sortedWith(compareBy<T, Long?>(nullsFirst(naturalOrder())) { r -> sortCol.sort.invoke(r).takeIf { it != Long.MIN_VALUE } })
             else -> kept.sortedBy { sortCol.text(it).lowercase() }
         }
-        if (sortCol != null && view.descending) sorted.reversed() else sorted
+        val ordered = if (sortCol != null && view.descending) sorted.reversed() else sorted
+        // Starred rows lead, in the same order.
+        if (watchKey == null) ordered else ordered.partition { Watchlist.has(watchKey(it)) }.let { (a, b) -> a + b }
     }
     fun pickSort(col: GridColumn<T>) {
         change(if (view.sort == col.id) view.copy(descending = !view.descending) else view.copy(sort = col.id, descending = col.numeric))
@@ -331,7 +357,7 @@ fun <T> DataGrid(
                         items(shown.size, key = { i -> key(shown[i]) }) { i ->
                             val r = shown[i]
                             GridRow(i, r, firstCol, firstWidth, rest, widths, restWidth, hScroll, key(r) == selected, rowHeight, cellMenu,
-                                onHover = { hovered = if (it) key(r) else if (hovered == key(r)) null else hovered }, onClick = { onSelect(r) }, onOpen = onOpen?.let { o -> { o(r) } })
+                                onHover = { hovered = if (it) key(r) else if (hovered == key(r)) null else hovered }, onClick = { onSelect(r) }, onOpen = onOpen?.let { o -> { o(r) } }, watch = watchKey?.invoke(r))
                         }
                     } else {
                         groupRows(shown) { group.text(it) }.forEach { (name, members) ->
@@ -341,7 +367,7 @@ fun <T> DataGrid(
                             if (name !in collapsed) items(members.size, key = { i -> key(members[i]) }) { i ->
                                 val r = members[i]
                                 GridRow(i, r, firstCol, firstWidth, rest, widths, restWidth, hScroll, key(r) == selected, rowHeight, cellMenu,
-                                    onHover = { hovered = if (it) key(r) else if (hovered == key(r)) null else hovered }, onClick = { onSelect(r) }, onOpen = onOpen?.let { o -> { o(r) } })
+                                    onHover = { hovered = if (it) key(r) else if (hovered == key(r)) null else hovered }, onClick = { onSelect(r) }, onOpen = onOpen?.let { o -> { o(r) } }, watch = watchKey?.invoke(r))
                             }
                         }
                     }
@@ -349,7 +375,7 @@ fun <T> DataGrid(
                 // The total of what is shown when the player has narrowed it, then the breakdown line.
                 if (views != null && (view.scope.isNotEmpty() || view.filters.isNotEmpty() || typed.isNotEmpty()) && rest.any { byId[it.id]?.total == true }) {
                     Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
-                    GroupRow("Total of ${shown.size} shown", shown, firstWidth, rest, widths, restWidth, hScroll, null, byId) {}
+                    GroupRow("Total of what is shown", shown, firstWidth, rest, widths, restWidth, hScroll, null, byId) {}
                 }
                 if (breakdown != null) {
                     val focus = shown.firstOrNull { key(it) == hovered } ?: shown.firstOrNull { key(it) == selected }
@@ -450,7 +476,7 @@ private fun <T> HeaderCell(c: GridColumn<T>, width: Dp, sorted: Boolean, descend
 private fun <T> GridRow(
     index: Int, row: T, first: GridColumn<T>, firstWidth: Dp, rest: List<GridColumn<T>>, widths: Map<String, Dp>, restWidth: Dp,
     hScroll: androidx.compose.foundation.ScrollState, selected: Boolean, height: Dp, cellMenu: ((Filter) -> Unit)?,
-    onHover: (Boolean) -> Unit, onClick: () -> Unit, onOpen: (() -> Unit)?,
+    onHover: (Boolean) -> Unit, onClick: () -> Unit, onOpen: (() -> Unit)?, watch: String? = null,
 ) {
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
@@ -463,7 +489,15 @@ private fun <T> GridRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(2.dp).fillMaxHeight().background(if (selected) Palette.gold else Color.Transparent))
-        GridCell(row, first, firstWidth, null, onClick)
+        if (watch != null) {
+            // The star shows on a watched row, or under the pointer, so an unwatched grid stays calm.
+            val on = Watchlist.has(watch)
+            Text(
+                "*", color = if (on) Palette.gold else if (hovered) Palette.secondary else Color.Transparent, fontFamily = Pixel.font, fontSize = 12.sp,
+                modifier = Modifier.width(16.dp).clickable { Watchlist.toggle(watch) }.padding(start = 4.dp),
+            )
+        }
+        GridCell(row, first, if (watch != null) firstWidth - 16.dp else firstWidth, null, onClick)
         Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(hScroll)) {
             Row(Modifier.width(restWidth).fillMaxHeight()) {
                 rest.forEach { c ->
