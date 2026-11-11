@@ -397,6 +397,9 @@ pub struct CareerResult {
     pub end_week: Option<u32>,
     pub lost: bool,
     pub board_warned: bool,
+    /// The player's place in the wealth league at the end, and its size.
+    pub wealth_rank: u32,
+    pub wealth_league: u32,
     pub sentence: String,
     /// The medal each ambition would earn in this same career.
     pub medals: BTreeMap<String, String>,
@@ -1541,6 +1544,8 @@ fn career_result(session: &Session) -> Option<CareerResult> {
         end_week: state.ending.as_ref().map(|e| e.week),
         lost,
         board_warned: state.events.iter().any(|e| e.key == "board_warning"),
+        wealth_rank: c::wealth_league(world).1,
+        wealth_league: c::wealth_league(world).2,
         sentence: state
             .ending
             .as_ref()
@@ -1606,18 +1611,16 @@ fn career_opt_from(arguments: &[String]) -> Option<CareerOpt> {
 }
 
 /// Start the run's career on a fresh session: the helm start takes the first company the
-/// engine offers in the band (rank order, different sectors first).
-fn begin_career(session: &mut Session, opt: &CareerOpt) -> Result<(), String> {
+/// engine offers in the band, rotating through the offers by seed.
+fn begin_career(session: &mut Session, opt: &CareerOpt, seed: u64) -> Result<(), String> {
     use cw_sim::economy::career as c;
     let helm_firm = if opt.helm {
         let offers = c::helm_offers_in(&session.world, opt.band);
-        Some(
-            offers
-                .first()
-                .ok_or_else(|| "no company on offer for the helm start".to_owned())?
-                .firm
-                .0,
-        )
+        if offers.is_empty() {
+            return Err("no company on offer for the helm start".to_owned());
+        }
+        // Seeds rotate through the offers so a grid plays every company on offer.
+        Some(offers[(seed as usize) % offers.len()].firm.0)
     } else {
         None
     };
@@ -1693,7 +1696,7 @@ fn play(
     // The comparison run with no player plays the world without a career.
     let opt = CAREER_OPT.lock().ok().and_then(|o| o.clone());
     if let Some(opt) = opt.filter(|_| policy != ReferencePolicy::None) {
-        begin_career(&mut session, &opt).map_err(|e| format!("seed {seed}: career: {e}"))?;
+        begin_career(&mut session, &opt, seed).map_err(|e| format!("seed {seed}: career: {e}"))?;
     }
     let check = scenario_check(&session, scenario_id);
     let mut runner = PolicyRunner::new(policy, VERBOSE.load(std::sync::atomic::Ordering::Relaxed));
@@ -2531,10 +2534,12 @@ pub fn run(arguments: &[String]) {
                 );
                 if let Some(r) = &career.career {
                     println!(
-                        "  career start={} helm={:?} rank={:?} ending={} lost={} warned={} medals={:?} value={} ai={:?} beats_ai={:?} | {}",
+                        "  career start={} helm={:?} rank={:?} wealth={}/{} ending={} lost={} warned={} medals={:?} value={} ai={:?} beats_ai={:?} | {}",
                         r.start,
                         r.helm_name,
                         r.helm_rank,
+                        r.wealth_rank,
+                        r.wealth_league,
                         r.ending,
                         r.lost,
                         r.board_warned,

@@ -89,6 +89,9 @@ pub struct CareerTable {
     pub found_grace_weeks: u32,
     pub board: Board,
     pub dominant: Dominant,
+    /// Places in the wealth league (the player and the outside investors) for Richest.
+    pub richest: Ranks,
+    /// Places in the company league for Biggest.
     pub ranks: Ranks,
     pub survivor: Survivor,
     pub events_kept: usize,
@@ -112,9 +115,10 @@ impl CareerTable {
         {
             return Err("dominant thresholds out of order".into());
         }
-        let r = &self.ranks;
-        if !(r.gold >= 1 && r.gold <= r.silver && r.silver <= r.bronze) {
-            return Err("rank thresholds out of order".into());
+        for r in [&self.ranks, &self.richest] {
+            if !(r.gold >= 1 && r.gold <= r.silver && r.silver <= r.bronze) {
+                return Err("rank thresholds out of order".into());
+            }
         }
         if !(0 < self.survivor.gold_top_bps
             && self.survivor.gold_top_bps <= self.survivor.silver_top_bps

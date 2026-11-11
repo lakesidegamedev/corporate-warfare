@@ -24,6 +24,11 @@
     "silver_bps": 3000,
     "gold_bps": 4000
   },
+  "richest": {
+    "bronze": 4,
+    "silver": 2,
+    "gold": 1
+  },
   "ranks": {
     "bronze": 10,
     "silver": 3,

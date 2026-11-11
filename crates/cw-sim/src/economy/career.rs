@@ -147,6 +147,9 @@ pub struct Rules {
     pub rank_bronze: u32,
     pub rank_silver: u32,
     pub rank_gold: u32,
+    pub richest_bronze: u32,
+    pub richest_silver: u32,
+    pub richest_gold: u32,
     pub dominant_quarters: u32,
     pub dominant_min_producers: u32,
     pub dominant_bronze_bps: i64,
@@ -168,6 +171,9 @@ impl Rules {
             rank_bronze: t.ranks.bronze,
             rank_silver: t.ranks.silver,
             rank_gold: t.ranks.gold,
+            richest_bronze: t.richest.bronze,
+            richest_silver: t.richest.silver,
+            richest_gold: t.richest.gold,
             dominant_quarters: t.dominant.quarters,
             dominant_min_producers: t.dominant.min_producers,
             dominant_bronze_bps: t.dominant.bronze_bps,
@@ -656,7 +662,12 @@ pub fn standing(world: &World, state: &CareerState) -> Medal {
     let league = company_league(world);
     let primary = live_primary(world);
     match ambition {
-        Ambition::Richest => by_rank(Some(wealth_league(world).1)),
+        Ambition::Richest => match wealth_league(world).1 {
+            x if x <= r.richest_gold => Medal::Gold,
+            x if x <= r.richest_silver => Medal::Silver,
+            x if x <= r.richest_bronze => Medal::Bronze,
+            _ => Medal::None,
+        },
         Ambition::Biggest => by_rank(primary.and_then(|p| rank_in(&league, p))),
         Ambition::Dominant => state.tracking.dominant_best,
         Ambition::Survivor => {
