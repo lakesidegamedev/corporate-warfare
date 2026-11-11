@@ -547,10 +547,13 @@ struct Life {
     exit: bool,
 }
 
+/// One good's year: (min, max, observations, sum of the week's price anchor, sum of price).
+type PriceYear = (i64, i64, u32, i128, i128);
+
 #[derive(Default)]
 struct PriceTrack {
-    /// (good, year) -> (min, max, observations, sum of the week's price anchor, sum of price)
-    windows: BTreeMap<(u16, u32), (i64, i64, u32, i128, i128)>,
+    /// (good, year) -> that good's year.
+    windows: BTreeMap<(u16, u32), PriceYear>,
     /// good -> (last price, last material move's sign, reversals, price weeks)
     swings: BTreeMap<u16, (i64, i64, u64, u64)>,
     weeks: BTreeMap<u16, (u64, u64, u64)>,
