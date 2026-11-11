@@ -1513,3 +1513,109 @@ pub fn fx_view(world: &World, dataset: &Dataset, reporting: u8) -> Option<FxView
         open_foreign_sales_cents: open,
     })
 }
+
+/// One established company the helm start offers (2.0, careers).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HelmOfferDto {
+    pub firm: u64,
+    pub name: String,
+    pub industry: String,
+    pub region: String,
+    /// League rank by company value at the start (1 is the largest).
+    pub rank: u32,
+    pub value_cents: i64,
+    pub revenue_year_cents: i64,
+    pub plants: u32,
+    pub workers: i64,
+    /// Shares to buy for control, the opening mark and the price of the block.
+    pub shares_needed: i64,
+    pub mark_cents: i64,
+    pub price_cents: i64,
+    /// The scenario's standard fortune, and the fortune this start gives (larger when the
+    /// standard one cannot pay for control).
+    pub standard_fortune_cents: i64,
+    pub fortune_cents: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CareerYearDto {
+    pub year: u32,
+    /// The company's league rank by value; 0 when the player ran none.
+    pub rank: u32,
+    pub league: u32,
+    pub company_value_cents: i64,
+    pub net_worth_cents: i64,
+    /// The player's place among the investors the engine can value.
+    pub wealth_rank: u32,
+    pub medal: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CareerEventDto {
+    pub week: u32,
+    pub key: String,
+    pub text: String,
+}
+
+/// The career summary (2.0): what the career played for, how it stands or how it ended.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CareerSummaryDto {
+    /// `founder` or `helm`.
+    pub start: String,
+    pub helm_company: Option<String>,
+    /// True when the standard fortune could not buy control and was raised (said so at start).
+    pub helm_fortune_scaled: bool,
+    /// `richest`, `biggest`, `dominant`, `survivor`, or none for a sandbox career.
+    pub ambition: Option<String>,
+    pub years: u32,
+    pub end_week: u32,
+    /// The medal the ambition stands at now: `none`, `bronze`, `silver` or `gold`.
+    pub standing: String,
+    pub ended: bool,
+    /// `completed`, `won`, `no_company`, `removed` or `taken_over`; empty while running.
+    pub ending: String,
+    pub lost: bool,
+    /// The medal at the ending; empty while running.
+    pub medal: String,
+    /// Why it ended as it did, in one plain sentence; empty while running.
+    pub sentence: String,
+    /// The board has warned the player and removal is pending.
+    pub board_warned: bool,
+    /// Richest's measure: the fortune the career started from, net worth now and the growth
+    /// over the start in basis points (10000 = no growth).
+    #[serde(default)]
+    pub start_worth_cents: i64,
+    #[serde(default)]
+    pub net_worth_cents: i64,
+    #[serde(default)]
+    pub growth_bps: i64,
+    pub years_log: Vec<CareerYearDto>,
+    /// The events that mattered, in date order.
+    pub events: Vec<CareerEventDto>,
+}
+
+/// Where a career stands this week (2.0): for the career line on the main screen and the
+/// quarterly progress line in the weekly brief.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CareerStandingDto {
+    /// `richest`, `biggest`, `dominant`, `survivor`, or none for a sandbox career.
+    pub ambition: Option<String>,
+    /// `none`, `bronze`, `silver` or `gold`.
+    pub medal: String,
+    /// The primary company's league place and the league's size; 0 when it runs none.
+    pub rank: u32,
+    pub league: u32,
+    /// Net worth over the starting fortune, basis points (10000 = no growth).
+    pub growth_bps: i64,
+    /// What the standing rests on, one plain sentence.
+    pub detail: String,
+    /// What the next medal needs, one plain sentence; empty at gold.
+    pub next: String,
+    pub weeks_left: u32,
+    pub ended: bool,
+    /// The board's warning is in force, its words, and whether the board can act on it (the
+    /// player holds less than half the votes).
+    pub board_warned: bool,
+    pub board_warning: String,
+    pub board_can_remove: bool,
+}

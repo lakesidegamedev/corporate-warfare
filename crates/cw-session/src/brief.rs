@@ -45,7 +45,7 @@ const NUDGE_BPS: i32 = 500;
 /// One fact about the week just closed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BriefChange {
-    /// profit, price, rival, event or mandate.
+    /// profit, price, rival, event, mandate or career.
     pub kind: String,
     pub text: String,
 }
@@ -273,6 +273,29 @@ fn changes(world: &World, dataset: &Dataset, firm: Handle) -> Vec<BriefChange> {
                 text: format!("{}: {}", event.title, event.summary),
             },
         ));
+    }
+
+    // The career (2.0): the quarterly progress line, the board's warning and the ending, in
+    // the engine's own words, the week they are written.
+    if world.career.is_some() && world.investor.primary_group == Some(firm) {
+        for item in world
+            .news
+            .iter()
+            .filter(|n| n.key.starts_with("career.") && n.week.0 + 1 >= now)
+        {
+            let weight = if item.key == "career.progress" {
+                i64::MAX / 8
+            } else {
+                i64::MAX / 4
+            };
+            items.push((
+                weight,
+                BriefChange {
+                    kind: "career".to_owned(),
+                    text: item.subject.clone(),
+                },
+            ));
+        }
     }
 
     // A mandate that has been met.
