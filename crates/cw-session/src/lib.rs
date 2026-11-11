@@ -2251,7 +2251,10 @@ mod tests {
         // began pricing on capacity against regional demand, plants ramping five points a week.
         // In 2.0 it moved again from 04e9740b... when the capacity rules joined the dataset hash
         // (build prices follow prices; rivals build, enter, close and pay out on one room-to-build
-        // signal). The Swift
+        // signal). In 2.0 it moved again from 24eeba2c... when home sellers began reading the
+        // average export discount instead of the last lot's step, households began asking for no
+        // more than their budget buys (unspent budgets return to savings), and openings began
+        // reading the inputs a new plant could buy. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2277,7 +2280,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "24eeba2c8504faa0ae503cd5308fdad16fe9e94afc803c9a0e7f20d2e3813d56"
+            "db4856ed71710e0694e1bf99d6472358301a97f8e1bc0a955eaf0766f387f74e"
         );
     }
 
