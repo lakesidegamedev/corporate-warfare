@@ -1272,6 +1272,53 @@ fn board_letters(world: &World, since: u32, out: &mut Vec<Letter>) {
     }
 }
 
+/// The career frame (2.0): the chair of the board writes each quarter with progress against the
+/// ambition, when the board's confidence turns (the warning before removal, and its lifting), and
+/// when the career ends. The text is the engine's own sentence from `economy::career`.
+fn career_letters(world: &World, since: u32, out: &mut Vec<Letter>) {
+    if world.career.is_none() {
+        return;
+    }
+    let firm = world.investor.primary_group;
+    let org = firm
+        .and_then(|f| paper::firm_name(world, f))
+        .unwrap_or_else(|| "Your career".to_owned());
+    for (i, item) in world.news.iter().enumerate() {
+        let Some(kind) = item.key.strip_prefix("career.") else {
+            continue;
+        };
+        if item.week.0 < since {
+            continue;
+        }
+        let mut facts = vec![item.subject.clone()];
+        match kind {
+            "board_warning" => facts.push(
+                "Open the company's results to see where the money is going. Close or sell what loses, cut costs, or raise prices where the market allows."
+                    .to_owned(),
+            ),
+            "ended" => facts.push(
+                "Open the career summary to read how it went. You may play on in the same world."
+                    .to_owned(),
+            ),
+            _ => {}
+        }
+        out.push(finish(
+            world,
+            Draft {
+                id: format!("career:{}:{}", item.week.0, i),
+                kind: "board",
+                week: item.week.0,
+                sender: office_sender("The chair of the board", "Chair of the board", &org),
+                tone: Tone::Formal,
+                addressee: org.clone(),
+                facts,
+                link: firm.map(PaperLink::company).unwrap_or_default(),
+            },
+            None,
+        ));
+    }
+}
+
 /// Hires, departures, poaching, and the board naming a chief executive for the player's company.
 /// The new executive introduces themselves in their temperament's voice; a poached executive's old
 /// boss writes; the board chair writes when the board replaces the chief.
@@ -1706,6 +1753,7 @@ pub fn letters(world: &World, dataset: &Dataset, since_week: u32) -> Vec<Letter>
     earnings_letters(world, dataset, since, &mut out);
     cfo_letters(world, dataset, since, &mut out);
     board_letters(world, since, &mut out);
+    career_letters(world, since, &mut out);
     executive_letters(world, dataset, since, &mut out);
     stake_letters(world, dataset, since, &mut out);
     decision_letters(world, dataset, 1, &mut out);

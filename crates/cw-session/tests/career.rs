@@ -185,3 +185,23 @@ fn a_pick_off_the_list_is_refused_in_plain_words() {
     );
     assert!(refused.is_err(), "lengths are 5, 10 or 20 years");
 }
+
+#[test]
+fn the_board_writes_each_quarter_with_progress() {
+    let cfg = config(39, ScenarioMode::Sandbox);
+    let offer = Session::helm_offers(cfg.clone()).unwrap().remove(0);
+    let mut session =
+        Session::create_career(cfg, &helm_setup(offer.firm, Ambition::Biggest, 10)).unwrap();
+    run(&mut session, 27);
+    let letters = cw_session::letters::letters(&session.world, &session.dataset, 0);
+    let progress: Vec<_> = letters
+        .iter()
+        .filter(|l| l.id.starts_with("career:"))
+        .collect();
+    assert_eq!(progress.len(), 2, "two quarters, two progress letters");
+    assert!(
+        progress
+            .iter()
+            .all(|l| l.paragraphs.iter().any(|f| f.contains("ranks")))
+    );
+}
