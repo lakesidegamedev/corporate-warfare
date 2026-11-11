@@ -188,11 +188,11 @@ fun FinanceScreen(store: GameStore) {
             Triple("Your votes", "%.1f%%".format(firm.investorVotesBps / 100.0), Palette.gold),
             Triple("Net income, ${last?.label ?: "last period"}", last?.let { Format.compact(it.netIncomeCents, cur) } ?: DASH, last?.let { if (it.netIncomeCents < 0) Palette.negative else Palette.positive } ?: Palette.secondary),
         )
-        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SplitOrStack(Modifier.fillMaxWidth().weight(1f), 1.5f, 1f, 560.dp, 760.dp, left = { m ->
             DataGrid(
                 "Statements", StatementLines, statementColumns(statements, step, count), key = { it.group + it.title },
                 views = GridViews("finance", FinanceViews),
-                modifier = Modifier.weight(1.5f).fillMaxHeight(),
+                modifier = m,
                 filterText = { "${it.group} ${it.title}" },
                 breakdown = { l -> "${l.group}: ${l.title}" + (statements.lastOrNull()?.let { s -> ", ${s.label}: ${show(l.kind, l.value(s))}" } ?: "") },
                 trailing = {
@@ -201,8 +201,9 @@ fun FinanceScreen(store: GameStore) {
                     }
                 },
             )
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                DataGrid(
+        }, right = { m ->
+            Column(m, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (debtRows.isNotEmpty()) DataGrid(
                     "Debt", debtRows, debtColumns(), key = { it.key }, phoneBelow = 380.dp,
                     views = GridViews("debt", DebtViews),
                     modifier = Modifier.fillMaxWidth().height(gridNaturalHeight(debtRows.size.coerceAtLeast(3)) + 30.dp),
@@ -232,6 +233,6 @@ fun FinanceScreen(store: GameStore) {
                     own?.controller?.let { Text("Controlled by $it. Next shareholder meeting: week ${own.nextMeeting}.", color = Palette.secondary, fontSize = 11.sp) }
                 }
             }
-        }
+        })
     }
 }

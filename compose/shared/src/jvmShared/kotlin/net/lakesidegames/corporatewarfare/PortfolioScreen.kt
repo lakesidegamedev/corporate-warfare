@@ -101,8 +101,8 @@ fun PortfolioScreen(store: GameStore) {
             Triple("Company cash", Format.compact(overview.firmCashCents, overview.primaryCurrency), Palette.primaryText),
             Triple("Cash in 4 wk", Format.compact(overview.forecastFourWeekCents, overview.primaryCurrency), if (overview.forecastFourWeekCents < 0) Palette.negative else Palette.primaryText),
         )
-        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1.5f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SplitOrStack(Modifier.fillMaxWidth().weight(1f), 1.5f, 1f, 640.dp, 560.dp, left = { m ->
+            Column(m, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 DataGrid(
                     "Your shareholdings", held, holdingColumns(), key = { it.firm },
                     views = GridViews("holdings", HoldingViews, mine = { it.controlledByYou }),
@@ -123,7 +123,8 @@ fun PortfolioScreen(store: GameStore) {
                     initialSort = "equity",
                 )
             }
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        }, right = { m ->
+            Column(m, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 DetailPane(chosen?.name ?: "Holding", Modifier.fillMaxWidth().weight(1f)) {
                     if (chosen == null) {
                         Text("You hold no shares outside your companies. Pick a company on the League table to buy in.", color = Palette.secondary, fontSize = 12.sp)
@@ -145,7 +146,7 @@ fun PortfolioScreen(store: GameStore) {
                         GridButton("Sell", false) { act("PlaceShareOrder", mapOf("firm" to "${chosen.firm}", "buy" to "0")) }
                     }
                 }
-                DataGrid(
+                if (bonds.isNotEmpty()) DataGrid(
                     "Bonds you hold", bonds, bondColumns(), key = { it.bond },
                     views = GridViews("bonds", BondHeldViews),
                     modifier = Modifier.fillMaxWidth().height(gridNaturalHeight(bonds.size.coerceAtLeast(3)) + 30.dp),
@@ -156,6 +157,6 @@ fun PortfolioScreen(store: GameStore) {
                     initialSort = "face",
                 )
             }
-        }
+        })
     }
 }

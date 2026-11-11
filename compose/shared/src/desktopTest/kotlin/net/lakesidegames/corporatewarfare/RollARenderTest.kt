@@ -38,6 +38,8 @@ class RollARenderTest {
         ProposalCareer.shoot("roll-a-finance-phone", 390, 844, settings, density = 2f) { FinanceScreen(store) }
         ProposalCareer.shoot("roll-a-plants-phone", 390, 844, settings, density = 2f) { PlantsScreen(store) }
         ProposalCareer.shoot("roll-a-portfolio-phone", 390, 844, settings, density = 2f) { PortfolioScreen(store) }
+        ProposalCareer.shoot("roll-a-career-phone", 390, 844, settings, density = 2f) { CareerScreen(store) }
+        ProposalCareer.shoot("roll-a-research-phone", 390, 844, settings, density = 2f) { ResearchGridScreen(store) }
         ProposalCareer.shoot("roll-a-people-phone", 390, 844, settings, density = 2f) { PeopleScreen(store) }
     }
 }

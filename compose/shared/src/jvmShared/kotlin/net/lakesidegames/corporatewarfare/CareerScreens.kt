@@ -42,7 +42,7 @@ internal val LevelViews = listOf(
 )
 
 private fun levelColumns(): List<GridColumn<LevelRow>> = listOf(
-    GridColumn("level", "Level", null, numeric = false, text = { "Level ${it.level}" }, minWidth = 90.dp, bold = true, topic = "About"),
+    GridColumn("level", "Level", null, numeric = false, text = { "Level ${it.level}" }, sort = { it.level.toLong() }, minWidth = 90.dp, bold = true, topic = "About"),
     GridColumn("state", "State", 110.dp, numeric = false, text = { it.state }, tone = { if (it.state == "Reached") Palette.gold else if (it.state == "Next") Palette.positive else Palette.secondary }, topic = "About"),
     GridColumn("intensity", "Inputs per unit", 110.dp, text = { l -> l.intensityBps?.let { "%.0f%%".format(it / 100.0) } ?: DASH }, sort = { (it.intensityBps ?: 0).toLong() }, scale = 100.0, topic = "Effect",
         tip = "Inputs and labour per unit, as a share of the baseline. The engine gives it for your level and the next only."),
@@ -52,13 +52,12 @@ private fun levelColumns(): List<GridColumn<LevelRow>> = listOf(
 @Composable
 fun ResearchGridScreen(store: GameStore) {
     val r = store.research
-    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.weight(1.3f).fillMaxHeight()) { ResearchScreen(store) }
+    SplitOrStack(Modifier.fillMaxSize(), 1.3f, 1f, 900.dp, 560.dp, left = { m -> Box(m) { ResearchScreen(store) } }, right = { m ->
         if (r != null) {
             val rows = (1..r.maxLevel.toInt()).map { n ->
                 LevelRow(
                     n,
-                    when { n <= r.level.toInt() -> "Reached"; n == r.level.toInt() + 1 -> "Next"; n <= r.frontier.toInt() + 1 -> "Within reach"; else -> "Beyond the frontier" },
+                    when { n <= r.level.toInt() -> "Reached"; n == r.level.toInt() + 1 -> "Next"; n <= r.frontier.toInt() + 1 -> "Within reach"; else -> "Beyond" },
                     when (n) { r.level.toInt() -> r.intensityBps; r.level.toInt() + 1 -> r.nextIntensityBps; else -> null },
                     when (n) { r.level.toInt() -> r.qualityBps; r.level.toInt() + 1 -> r.nextQualityBps; else -> null },
                 )
@@ -66,13 +65,13 @@ fun ResearchGridScreen(store: GameStore) {
             DataGrid(
                 "Levels", rows, levelColumns(), key = { it.level },
                 views = GridViews("research-levels", LevelViews),
-                modifier = Modifier.width(420.dp).fillMaxHeight().padding(top = 8.dp, end = 8.dp, bottom = 8.dp), phoneBelow = 380.dp,
+                modifier = m.padding(top = 8.dp, end = 8.dp, bottom = 8.dp), phoneBelow = 380.dp,
                 filterText = { "Level ${it.level} ${it.state}" },
                 breakdown = { l -> "Level ${l.level}: ${l.state}" + (if (l.level == r.frontier.toInt() + 1) ". One past the industry frontier, the furthest you can research." else "") },
                 initialSort = "level", initialDescending = false,
             )
         }
-    }
+    })
 }
 
 // MARK: Career
@@ -111,25 +110,28 @@ fun CareerScreen(store: GameStore) {
     val score = store.score
     Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FigureLine(
-            Triple("Five-year score", score?.total?.toString() ?: DASH, Palette.gold),
-            Triple("Return", score?.returnComponent?.toString() ?: DASH, Palette.primaryText),
-            Triple("Expansion", score?.expansionComponent?.toString() ?: DASH, Palette.primaryText),
-            Triple("Leadership", score?.leadershipComponent?.toString() ?: DASH, Palette.primaryText),
-            Triple("Resilience", score?.resilienceComponent?.toString() ?: DASH, Palette.primaryText),
-            Triple("Goals met", "${hall.mandatesMet} of ${hall.mandatesMet + hall.mandatesMissed}", Palette.positive),
-            Triple("Years in", "${hall.weeks / 52u}", Palette.primaryText),
+            *listOfNotNull(
+                score?.let { Triple("Five-year score", it.total.toString(), Palette.gold) },
+                score?.let { Triple("Return", it.returnComponent.toString(), Palette.primaryText) },
+                score?.let { Triple("Expansion", it.expansionComponent.toString(), Palette.primaryText) },
+                score?.let { Triple("Leadership", it.leadershipComponent.toString(), Palette.primaryText) },
+                score?.let { Triple("Resilience", it.resilienceComponent.toString(), Palette.primaryText) },
+                Triple("Goals met", "${hall.mandatesMet} of ${hall.mandatesMet + hall.mandatesMissed}", Palette.positive),
+                Triple("Years in", "${hall.weeks / 52u}", Palette.primaryText),
+            ).toTypedArray(),
         )
-        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SplitOrStack(Modifier.fillMaxWidth().weight(1f), 1.8f, 1f, 360.dp, 420.dp, left = { m ->
             DataGrid(
                 "Chapters", chapters, chapterColumns(), key = { it.number },
                 views = GridViews("career-chapters", ChapterViews, mine = { true }),
-                modifier = Modifier.weight(1f).fillMaxHeight(),
+                modifier = m,
                 filterText = { "${it.name} ${chosenOf(it)?.title.orEmpty()}" },
                 selected = chosen?.number, onSelect = { pick = it.number },
                 breakdown = { c -> "${c.name}: ${outcomeWords(c)}" + (chosenOf(c)?.let { ", goal: ${it.title}" } ?: "") },
                 initialSort = "num",
             )
-            DetailPane(chosen?.name ?: "Chapter", Modifier.width(420.dp).fillMaxHeight()) {
+        }, right = { m ->
+            DetailPane(chosen?.name ?: "Chapter", m) {
                 if (chosen == null) { Text("The first chapter opens in week 1.", color = Palette.secondary, fontSize = 12.sp); return@DetailPane }
                 val taken = chosenOf(chosen)
                 if (chosen.offered.isEmpty()) Text("The board made no offer this chapter.", color = Palette.secondary, fontSize = 12.sp)
@@ -149,9 +151,10 @@ fun CareerScreen(store: GameStore) {
                         chosen.offered.forEachIndexed { i, m -> GridButton("Take goal ${i + 1}", false) { act("ChooseMandate", mapOf("firm" to "${chosen.firm}", "pick" to "$i")) } }
                     }
                 }
+                if (taken == null && chosen.status != "current") Text("You did not take a goal this chapter.", color = Palette.secondary, fontSize = 12.sp)
                 if (taken != null && chosen.outcome != "open") Text("Result: ${outcomeWords(chosen)}. Bonus ${Format.compact(chosen.bonusCents)}, reputation ${changeText(chosen.reputationBps.toLong())}.", color = Palette.primaryText, fontSize = 12.sp)
             }
-        }
+        })
     }
 }
 
@@ -195,21 +198,22 @@ fun HallGridScreen(store: GameStore, settings: AppSettings? = LocalAppSettings.c
             Triple("Achievements", "${hall?.achievementsEarned ?: 0} of ${hall?.achievements?.size ?: 0}", Palette.gold),
             Triple("Earlier careers", "${earlier.size}", Palette.primaryText),
         )
-        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SplitOrStack(Modifier.fillMaxWidth().weight(1f), 1.4f, 1f, 560.dp, 300.dp, left = { m ->
             DataGrid(
                 "Achievements", hall?.achievements.orEmpty(), achievementColumns(), key = { it.id },
                 views = GridViews("hall-achievements", AchievementViews),
-                modifier = Modifier.weight(1.4f).fillMaxHeight(),
+                modifier = m,
                 filterText = { "${it.title} ${it.detail}" },
                 breakdown = { a -> "${a.title}: ${a.detail}" + if (a.earned) " Earned in week ${a.week}." else "" },
                 initialSort = "state",
             )
-            DataGrid(
+        }, right = { m ->
+            if (earlier.isEmpty()) Box(m.padding(8.dp)) { Text("Careers you finish are kept here.", color = Palette.secondary, fontSize = 12.sp) } else DataGrid(
                 "Earlier careers", earlier, earlierColumns(), key = { it.title + it.weeks + it.scenario },
                 views = GridViews("hall-earlier", EarlierViews),
-                modifier = Modifier.weight(1f).fillMaxHeight(), phoneBelow = 380.dp,
+                modifier = m, phoneBelow = 380.dp,
                 filterText = { "${it.title} ${it.scenario}" },
             )
-        }
+        })
     }
 }

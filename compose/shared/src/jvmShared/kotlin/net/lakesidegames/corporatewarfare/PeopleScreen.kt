@@ -96,8 +96,8 @@ fun PeopleScreen(store: GameStore) {
             Triple("Employees", labour?.let { Format.count(it.employees) } ?: DASH, Palette.primaryText),
             Triple("Union", labour?.let { unionState(it.state) } ?: DASH, if (labour?.state == "striking") Palette.negative else Palette.primaryText),
         )
-        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1.6f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SplitOrStack(Modifier.fillMaxWidth().weight(1f), 1.6f, 1f, 640.dp, 640.dp, left = { m ->
+            Column(m, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 DataGrid(
                     "Executives", posts, postColumns(), key = { it.postCode },
                     views = GridViews("people-posts", PostViews),
@@ -116,7 +116,8 @@ fun PeopleScreen(store: GameStore) {
                     initialSort = "payback", initialDescending = false,
                 )
             }
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        }, right = { m ->
+            Column(m, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 DetailPane(post?.title ?: "Post", Modifier.fillMaxWidth().height(190.dp)) {
                     val h = post?.holder
                     if (post == null) Text("No posts yet.", color = Palette.secondary, fontSize = 12.sp)
@@ -131,7 +132,7 @@ fun PeopleScreen(store: GameStore) {
                         }
                     }
                 }
-                DataGrid(
+                if (votes.isNotEmpty()) DataGrid(
                     "Board and shareholders", votes, voteColumns(), key = { it.id },
                     views = GridViews("people-board", VoteViews),
                     modifier = Modifier.fillMaxWidth().weight(1f), phoneBelow = 380.dp,
@@ -140,7 +141,7 @@ fun PeopleScreen(store: GameStore) {
                     breakdown = { v -> "${v.subject}: ${v.yes} for, ${v.no} against, closes in week ${v.deadline}." + if (!v.resolved) " Press Enter to vote." else "" },
                     initialSort = "deadline", initialDescending = false,
                 )
-                DetailPane("Board and workforce", Modifier.fillMaxWidth().height(250.dp)) {
+                DetailPane("Board and workforce", Modifier.fillMaxWidth().weight(1f)) {
                     own?.let {
                         Text("Controlled by ${it.controller ?: "nobody"}. Board seats: ${it.boardSeats.joinToString().ifEmpty { "none filled" }}. Next shareholder meeting: week ${it.nextMeeting}.", color = Palette.primaryText, fontSize = 12.sp, lineHeight = 16.sp)
                     }
@@ -161,7 +162,7 @@ fun PeopleScreen(store: GameStore) {
                     }
                 }
             }
-        }
+        })
     }
 }
 
