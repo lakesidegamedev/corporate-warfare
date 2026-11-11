@@ -28,6 +28,8 @@ object ProposalCareer {
         MeshCanvas.shader = desktopLinearShader
         Pixel.font = desktopPixelFont()
         ExplainTiming.delayMs = 0
+        // A week 156 player has long put the guide away.
+        Tutorial.hidden = true
     }
 
     fun open(): Pair<GameStore, AppSettings> {
