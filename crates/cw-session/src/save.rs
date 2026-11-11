@@ -649,6 +649,38 @@ mod tests {
     }
 
     #[test]
+    fn plants_on_offer_survive_a_save_and_move_the_hash() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = world();
+        let plain = cw_sim::state::canonical_hash(&world);
+        let plant = world
+            .facilities
+            .iter()
+            .find(|(handle, _)| cw_sim::economy::disposal::offerable(&world, *handle))
+            .map(|(handle, _)| handle)
+            .expect("a running plant");
+        let id = cw_sim::economy::auctions::list(&mut world, &dataset, plant).unwrap();
+        let player = world.investor.primary_group.unwrap();
+        if world.facilities.get(plant).unwrap().firm != player {
+            cw_sim::economy::auctions::bid(&mut world, player, id, 1).unwrap();
+        }
+        let hash = cw_sim::state::canonical_hash(&world);
+        assert_ne!(hash, plain, "a plant on offer is part of the state");
+        let bytes = encode(&world, 9).unwrap();
+        assert!(bytes.windows(4).any(|w| w == AUCTIONS_MAGIC));
+        let (restored, _) = decode(&bytes).unwrap();
+        assert_eq!(restored.auctions, world.auctions);
+        assert_eq!(cw_sim::state::canonical_hash(&restored), hash);
+        // A save from before plant auctions has no trailer and loads with nothing on offer.
+        world.auctions = Default::default();
+        let bytes = encode(&world, 9).unwrap();
+        assert!(!bytes.windows(4).any(|w| w == AUCTIONS_MAGIC));
+        let (old, _) = decode(&bytes).unwrap();
+        assert!(old.auctions.is_empty());
+        assert_eq!(cw_sim::state::canonical_hash(&old), plain);
+    }
+
+    #[test]
     fn round_trip_preserves_the_canonical_hash() {
         let world = world();
         let bytes = encode(&world, 9).unwrap();
