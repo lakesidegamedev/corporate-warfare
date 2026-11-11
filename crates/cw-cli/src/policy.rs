@@ -255,6 +255,8 @@ pub struct PolicyRunner {
     last_target: BTreeMap<u64, i32>,
     /// The passive player has founded its company and set its target; it never acts again.
     passive_done: bool,
+    skilled: skilled::SkilledState,
+    verbose_skilled: bool,
     pub stats: PolicyStats,
 }
 
@@ -295,6 +297,8 @@ impl PolicyRunner {
             verbose,
             last_target: BTreeMap::new(),
             passive_done: false,
+            skilled: Default::default(),
+            verbose_skilled: verbose,
             stats: PolicyStats::default(),
         }
     }
