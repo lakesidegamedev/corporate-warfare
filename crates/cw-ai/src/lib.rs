@@ -2303,10 +2303,12 @@ fn structural_contribution(world: &World, dataset: &Dataset, firm: Handle) -> i6
 /// Outside a pass (tests, single helpers) every read is computed fresh.
 #[derive(Default)]
 struct Memo {
-    room: BTreeMap<(u16, u8), i64>,
+    /// Indexed by product then region, with one extra column for the corridor-wide figure of a
+    /// goods product; `i64::MIN` is unread.
+    room: Vec<i64>,
     public_price: BTreeMap<(u16, u8), i64>,
     /// Holders of each (region, industry) cell with their shares.
-    cells: BTreeMap<(u8, u8), cw_sim::economy::sectors::Cell>,
+    cells: BTreeMap<(u8, u8), std::rc::Rc<cw_sim::economy::sectors::Cell>>,
     /// Imports against home output per good (`pricing::import_dependence_bps`).
     import_dependence: BTreeMap<u16, Option<i64>>,
     /// A block's contribution by home region, strategy and plant region; it reads the firm only
@@ -2320,12 +2322,13 @@ struct Memo {
     reserve_phase: BTreeMap<u16, cw_sim::economy::reserve::Phase>,
     /// Lots of each corridor good a new plant could still buy (`capacity::input_rooms`), one
     /// list for the pass (the key is unit).
-    input_rooms: BTreeMap<(), cw_sim::economy::capacity::InputRooms>,
+    input_rooms: BTreeMap<(), std::rc::Rc<cw_sim::economy::capacity::InputRooms>>,
     /// A new block's contribution (`new_block_contribution`), keyed like `block_contribution`.
     new_block_contribution: BTreeMap<(u8, u16, u8), i64>,
     /// Room for a new plant of a strategy in a region (`recipe_room`), so the input table is not
     /// copied out of the memo for every candidate.
-    recipe_room: BTreeMap<(u16, u16, u8), i64>,
+    /// Indexed by recipe then region (the output follows from the recipe); `i64::MIN` is unread.
+    recipe_room: Vec<i64>,
 }
 
 thread_local! {
@@ -2371,7 +2374,7 @@ impl Drop for MemoPass {
 
 /// The holders of a cell and their shares (`cw_sim::economy::sectors::cell`).
 fn cell_holders(world: &World, dataset: &Dataset, region: u8, sector: u8) -> Vec<(Handle, i64)> {
-    cell_read(world, dataset, region, sector).0
+    cell_read(world, dataset, region, sector).0.clone()
 }
 
 fn cell_read(
@@ -2379,11 +2382,15 @@ fn cell_read(
     dataset: &Dataset,
     region: u8,
     sector: u8,
-) -> cw_sim::economy::sectors::Cell {
+) -> std::rc::Rc<cw_sim::economy::sectors::Cell> {
     Memo::read(
         |m| &mut m.cells,
         (region, sector),
-        || cw_sim::economy::sectors::cell(world, dataset, region, sector),
+        || {
+            std::rc::Rc::new(cw_sim::economy::sectors::cell(
+                world, dataset, region, sector,
+            ))
+        },
     )
 }
 
@@ -2405,12 +2412,29 @@ fn public_price_now(world: &World, dataset: &Dataset, product: u16, region: u8) 
 fn room(world: &World, dataset: &Dataset, product: u16, region: u8) -> i64 {
     let corridor = dataset.products[product as usize].kind == cw_data::ProductKind::Goods;
     // A good's room is the corridor's, the same from every region.
-    let key = (product, if corridor { u8::MAX } else { region });
-    Memo::read(
-        |m| &mut m.room,
-        key,
-        || room_now(world, dataset, product, region, corridor),
-    )
+    let width = world.regions.len() + 1;
+    let column = if corridor { width - 1 } else { region as usize };
+    let slot = product as usize * width + column;
+    let hit = MEMO.with(|memo| {
+        memo.borrow_mut().as_mut().and_then(|m| {
+            if m.room.is_empty() {
+                m.room = vec![i64::MIN; dataset.products.len() * width];
+            }
+            m.room.get(slot).copied().filter(|v| *v != i64::MIN)
+        })
+    });
+    if let Some(hit) = hit {
+        return hit;
+    }
+    let value = room_now(world, dataset, product, region, corridor);
+    MEMO.with(|memo| {
+        if let Some(m) = memo.borrow_mut().as_mut()
+            && let Some(cell) = m.room.get_mut(slot)
+        {
+            *cell = value;
+        }
+    });
+    value
 }
 
 fn room_now(world: &World, dataset: &Dataset, product: u16, region: u8, corridor: bool) -> i64 {
@@ -2567,29 +2591,48 @@ fn build_size(
 }
 
 /// Lots of each corridor good a new plant could still buy, read once per pass.
-fn input_rooms(world: &World, dataset: &Dataset) -> cw_sim::economy::capacity::InputRooms {
+fn input_rooms(
+    world: &World,
+    dataset: &Dataset,
+) -> std::rc::Rc<cw_sim::economy::capacity::InputRooms> {
     Memo::read(
         |m| &mut m.input_rooms,
         (),
-        || cw_sim::economy::capacity::input_rooms(world, dataset),
+        || std::rc::Rc::new(cw_sim::economy::capacity::input_rooms(world, dataset)),
     )
 }
 
 /// Room for a new plant of a strategy in a state: the room for its output (`room`), no more than
 /// the corridor's spare inputs could feed (`capacity::input_cap_lots`).
 fn recipe_room(world: &World, dataset: &Dataset, recipe: u16, output: u16, region: u8) -> i64 {
-    Memo::read(
-        |m| &mut m.recipe_room,
-        (recipe, output, region),
-        || {
-            room(world, dataset, output, region).min(cw_sim::economy::capacity::input_cap_lots(
-                dataset,
-                &input_rooms(world, dataset),
-                recipe,
-                region,
-            ))
-        },
-    )
+    let regions = world.regions.len();
+    let slot = recipe as usize * regions + region as usize;
+    let hit = MEMO.with(|memo| {
+        memo.borrow_mut().as_mut().and_then(|m| {
+            if m.recipe_room.is_empty() {
+                m.recipe_room = vec![i64::MIN; dataset.recipes.len() * regions];
+            }
+            m.recipe_room.get(slot).copied().filter(|v| *v != i64::MIN)
+        })
+    });
+    if let Some(hit) = hit {
+        return hit;
+    }
+    let value =
+        room(world, dataset, output, region).min(cw_sim::economy::capacity::input_cap_lots(
+            dataset,
+            &input_rooms(world, dataset),
+            recipe,
+            region,
+        ));
+    MEMO.with(|memo| {
+        if let Some(m) = memo.borrow_mut().as_mut()
+            && let Some(cell) = m.recipe_room.get_mut(slot)
+        {
+            *cell = value;
+        }
+    });
+    value
 }
 
 /// The best new plant for the firm: a strategy of its primary (or secondary) sector in the state
