@@ -1615,7 +1615,7 @@ mod tests {
         let history: Vec<crate::state::PeriodClose> = (0..periods + 20)
             .map(|i| crate::state::PeriodClose {
                 first_week: i * PERIOD_WEEKS,
-                net_income: -1_000_00,
+                net_income: -100_000,
                 ..Default::default()
             })
             .collect();
