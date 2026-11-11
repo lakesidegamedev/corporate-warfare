@@ -1202,6 +1202,57 @@ fn replay(arguments: &[String]) {
     }
 }
 
+/// Household demand per product over the whole corridor last week: lots wanted, lots the
+/// corridor's operating plants make at full capacity and what is left of that for households,
+/// gateway imports, the share wanted that found no seller, and spending against the budget.
+fn demand_summary(world: &cw_sim::World, dataset: &cw_data::Dataset) {
+    println!(
+        "{:<12} {:>8} {:>8} {:>8} {:>8} {:>6} {:>12} {:>12} {:>6}",
+        "product", "wanted", "made", "for_hh", "imported", "unmet%", "spent$", "budget$", "spend%"
+    );
+    let mut totals: std::collections::BTreeMap<u16, [i64; 4]> = Default::default();
+    for state in &world.regions {
+        let h = &state.households;
+        let budget = h.last_income_cents.max(0) * 90 / 100;
+        for (product, weight) in &h.weights {
+            let t = totals.entry(*product).or_default();
+            t[0] += h.wanted_milli.get(product).copied().unwrap_or(0);
+            t[1] += h.unmet_milli.get(product).copied().unwrap_or(0);
+            t[2] += h.spend_cents.get(product).copied().unwrap_or(0);
+            t[3] += budget * weight / 10_000;
+        }
+    }
+    for (product, [wanted, unmet, spent, budget]) in totals {
+        let id = dataset.products[product as usize].id.as_str();
+        let made: i64 = world
+            .facilities
+            .iter()
+            .filter(|(_, f)| f.status == cw_sim::state::FacilityStatus::Operating)
+            .map(|(_, f)| dataset.recipes[f.recipe as usize].lots_of(id) * f.blocks as i64)
+            .sum();
+        let imported: i64 = world
+            .gateways
+            .iter()
+            .filter(|g| g.product == product)
+            .map(|g| g.last_import_lots)
+            .sum();
+        println!(
+            "{:<12} {:>8} {:>8} {:>8} {:>8} {:>6.1} {:>12} {:>12} {:>6.1}",
+            id,
+            wanted / 1_000,
+            made,
+            cw_sim::economy::seed::household_supply_by_region(world, dataset, product)
+                .iter()
+                .sum::<i64>(),
+            imported,
+            unmet as f64 * 100.0 / wanted.max(1) as f64,
+            spent / 100,
+            budget / 100,
+            spent as f64 * 100.0 / budget.max(1) as f64
+        );
+    }
+}
+
 /// `openings --scenario-id ID [--seed N] [--weeks W] [--limit N] [--all]`: play W weeks with no
 /// player and print the room-to-build signal the rivals read (`Session::capacity_openings`).
 /// With `--all`, every strategy and state, paying or not.
@@ -1229,6 +1280,10 @@ fn openings(arguments: &[String]) {
         // price they last paid (or the public price where nobody sold), region by region.
         let world = &session.world;
         let dataset = &session.dataset;
+        if arguments.iter().any(|a| a == "--summary") {
+            demand_summary(world, dataset);
+            return;
+        }
         for (region, state) in world.regions.iter().enumerate() {
             let h = &state.households;
             let budget = h.last_income_cents.max(0) * 90 / 100;

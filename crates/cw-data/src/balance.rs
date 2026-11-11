@@ -311,6 +311,15 @@ pub struct CapacityRules {
     pub payout_share_bps: i64,
     /// Weeks between a raid being announced and its resolution. Zero resolves a raid at once.
     pub raid_warning_weeks: u32,
+    /// How households' opening demand for what they buy is sized to the playable market, in basis
+    /// points. Household income is the whole scaled regional economy, but only the named firms
+    /// sell to households. Where named sellers stand, households ask for what those sellers make
+    /// for them over `household_cover_bps`; elsewhere they ask for an even slice of their budget,
+    /// sized so the whole corridor opens with `household_unmet_bps` of what households ask for
+    /// finding no seller. What households no longer ask for stays in savings. Zero cover:
+    /// households ask for their whole category budget (the rule before 2.0).
+    pub household_cover_bps: i64,
+    pub household_unmet_bps: i64,
 }
 
 impl Default for CapacityRules {
@@ -330,6 +339,8 @@ impl Default for CapacityRules {
             payout_buffer_weeks: 0,
             payout_share_bps: 0,
             raid_warning_weeks: 0,
+            household_cover_bps: 0,
+            household_unmet_bps: 0,
         }
     }
 }

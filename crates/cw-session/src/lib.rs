@@ -2254,7 +2254,9 @@ mod tests {
         // signal). In 2.0 it moved again from 24eeba2c... when home sellers began reading the
         // average export discount instead of the last lot's step, households began asking for no
         // more than their budget buys (unspent budgets return to savings), and openings began
-        // reading the inputs a new plant could buy. The Swift
+        // reading the inputs a new plant could buy, and again when households' opening demand was
+        // sized to what the named plants serve (household_cover_bps and household_unmet_bps
+        // joined the dataset hash). The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2280,7 +2282,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "db4856ed71710e0694e1bf99d6472358301a97f8e1bc0a955eaf0766f387f74e"
+            "79bc991600ed6e29ee90132bd36a62a0c627da62ff3b2d8b88cb2c796e78e35f"
         );
     }
 

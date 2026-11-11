@@ -288,6 +288,7 @@ impl Dataset {
                     || dataset.legacy_hash() == hash
                     || dataset.pre_markets_hashes().iter().any(|old| old == hash)
                     || dataset.pre_capacity_hash() == hash
+                    || dataset.pre_household_hash() == hash
             })
     }
 
@@ -949,6 +950,16 @@ impl Dataset {
         plain.hash_with(self.cast.len(), true)
     }
 
+    /// The hash this dataset had before households' opening demand was sized to the playable
+    /// market (2.0, after the capacity rules): a save written then names it and loads against the
+    /// current dataset.
+    pub fn pre_household_hash(&self) -> String {
+        let mut plain = self.clone();
+        plain.capacity.household_cover_bps = 0;
+        plain.capacity.household_unmet_bps = 0;
+        plain.hash_with(self.cast.len(), true)
+    }
+
     fn hash_with(&self, cast_people: usize, with_markets: bool) -> String {
         let mut hasher = CanonicalHasher::new(DOMAIN_STATE);
         hasher.string("cw-dataset-v1");
@@ -1142,6 +1153,14 @@ impl Dataset {
                 .i64(c.payout_buffer_weeks)
                 .i64(c.payout_share_bps)
                 .i64(c.raid_warning_weeks as i64);
+            // Sizing households' opening demand to the playable market came later in 2.0; it
+            // names the dataset only when it is on, so a save written before it still loads.
+            if c.household_cover_bps != 0 {
+                hasher
+                    .string("cw-households-v1")
+                    .i64(c.household_cover_bps)
+                    .i64(c.household_unmet_bps);
+            }
         }
         // The opening macro data is deliberately outside the hash: it only sets where the cycle
         // starts and how opening wages fade, never a row a save indexes into, so saves written
