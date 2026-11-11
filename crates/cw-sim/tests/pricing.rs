@@ -786,3 +786,106 @@ fn service_prices_and_freight_rates_follow_the_price_level() {
         "{base} at the start, {inflated} after 15 percent inflation"
     );
 }
+
+/// The shipped rules with a known step schedule: half the room at the quote for imports, all of
+/// it for exports, then four further steps of a quarter each, ten percent apart, exports never
+/// under half the quote.
+fn stepped(dataset: &mut Dataset) {
+    let rules = &mut dataset.markets;
+    rules.import_first_step_bps = 5_000;
+    rules.export_first_step_bps = 10_000;
+    rules.gateway_step_bps = 2_500;
+    rules.gateway_steps = 5;
+    rules.import_step_premium_bps = 1_000;
+    rules.export_step_discount_bps = 1_000;
+    rules.export_floor_bps = 5_000;
+    rules.trade_pressure_pass_bps = 10_000;
+    rules.anchor_to_outside = true;
+}
+
+#[test]
+fn gateway_steps_get_dearer_to_import_and_cheaper_to_export() {
+    let mut dataset = Dataset::load().unwrap();
+    stepped(&mut dataset);
+    // A gateway with 1,000 lots of room: imports 500 at the quote, then four steps of 250;
+    // exports 1,000 at the quote, then four steps of 250.
+    assert_eq!(pricing::step_lots(&dataset, 1_000, 0, true), 500);
+    assert_eq!(pricing::step_lots(&dataset, 1_000, 0, false), 1_000);
+    assert_eq!(pricing::step_lots(&dataset, 1_000, 3, true), 250);
+    assert_eq!(pricing::room_lots(&dataset, 1_000, true), 1_500);
+    assert_eq!(pricing::room_lots(&dataset, 1_000, false), 2_000);
+    // A $100 quote: the third import step costs 120, the third export step pays 80.
+    assert_eq!(pricing::import_step_price(&dataset, 10_000, 2), 12_000);
+    assert_eq!(pricing::export_step_price(&dataset, 10_000, 2), 8_000);
+    // Exports never pay under half the quote, however deep.
+    assert_eq!(pricing::export_step_price(&dataset, 10_000, 9), 5_000);
+    // A step of a tiny gateway is still one lot.
+    assert_eq!(pricing::step_lots(&dataset, 2, 1, true), 1);
+}
+
+#[test]
+fn trade_past_the_normal_room_presses_on_home_prices() {
+    let (mut world, mut dataset, firm, food) = food_firm(64, 10_000, 200);
+    stepped(&mut dataset);
+    fill_buyers(&mut world, &dataset, food);
+    let calm = pricing::target_price(&world, &dataset, firm, food);
+    assert_eq!(pricing::trade_pressure_bps(&world, &dataset, food), (0, 0));
+    // Every food gateway imports 80 percent of its room: 50 at the quote, 25 in the first dear
+    // step and the last 5 in the second, so the marginal lot cost 20 percent over the quote.
+    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
+        gateway.last_import_lots = gateway.capacity_lots * 8 / 10;
+    }
+    let (premium, discount) = pricing::trade_pressure_bps(&world, &dataset, food);
+    assert_eq!((premium, discount), (2_000, 0));
+    let short = pricing::target_price(&world, &dataset, firm, food);
+    assert!(
+        short > calm,
+        "a short corridor asks more: {short} vs {calm}"
+    );
+    assert!(pricing::price_reason(&world, &dataset, food).contains("Short of supply"));
+    // The same food exported 110 percent of the room instead: the last lots sold in the first
+    // cheap step, ten percent under the quote.
+    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
+        gateway.last_import_lots = 0;
+        gateway.last_export_lots = gateway.capacity_lots * 11 / 10;
+    }
+    assert_eq!(
+        pricing::trade_pressure_bps(&world, &dataset, food),
+        (0, 1_000)
+    );
+    let glut = pricing::target_price(&world, &dataset, firm, food);
+    assert!(
+        glut < calm,
+        "a glutted corridor asks less: {glut} vs {calm}"
+    );
+    assert!(pricing::price_reason(&world, &dataset, food).contains("Glut"));
+}
+
+#[test]
+fn goods_are_priced_around_the_outside_world_price() {
+    let (mut world, mut dataset, firm, food) = food_firm(64, 10_000, 200);
+    stepped(&mut dataset);
+    fill_buyers(&mut world, &dataset, food);
+    // At the start the gateways quote 15 percent either side of reference: the middle is the
+    // catalogue price.
+    assert_eq!(
+        pricing::price_anchor(&world, &dataset, food),
+        dataset.reference_price(food)
+    );
+    // The outside world's food price rises a fifth: both quotes move and so does the anchor.
+    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
+        gateway.sell_price_cents = gateway.sell_price_cents * 12 / 10;
+        gateway.buy_price_cents = gateway.buy_price_cents * 12 / 10;
+    }
+    let anchor = pricing::price_anchor(&world, &dataset, food);
+    assert_eq!(anchor, dataset.reference_price(food) * 12 / 10);
+    // The seller moves toward it, two percent at most this week.
+    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_200);
+    assert!(pricing::price_reason(&world, &dataset, food).contains("world price is 20% above"));
+    // With anchoring off the seller keeps pricing around the catalogue price.
+    dataset.markets.anchor_to_outside = false;
+    assert_eq!(
+        pricing::price_anchor(&world, &dataset, food),
+        dataset.reference_price(food)
+    );
+}

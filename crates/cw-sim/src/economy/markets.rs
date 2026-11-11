@@ -589,7 +589,8 @@ fn clear_goods_exchange(
         /// The buying firm's own stock in another region, moved to its plants at cost: the firm
         /// pays only the freight, and the goods keep their carrying cost.
         Own(u8),
-        Gateway(usize),
+        /// One volume step of a gateway's imports: each further step costs more.
+        Gateway(usize, i64),
         /// The strategic reserve's stock in one region, sold in that region only.
         Reserve(u8),
     }
@@ -645,20 +646,27 @@ fn clear_goods_exchange(
             ));
         }
         for (index, gateway) in world.gateways.iter().enumerate() {
-            if gateway.region == to
-                && gateway.product == product
-                && gateway.sell_price_cents > 0
-                && caps
-                    .get(buyer_key)
-                    .is_none_or(|cap| gateway.sell_price_cents <= *cap)
-            {
-                pairs.push((
+            if gateway.region != to || gateway.product != product || gateway.sell_price_cents <= 0 {
+                continue;
+            }
+            // A gateway's imports come in volume steps, each dearer than the last: a corridor
+            // that leans on imports pays more for the last lots it brings in.
+            for step in 0..dataset.markets.gateway_steps.max(1) {
+                let price = crate::economy::pricing::import_step_price(
+                    dataset,
                     gateway.sell_price_cents,
-                    // Each gateway is its own source, after every firm seller at equal price.
-                    u64::MAX - index as u64,
+                    step,
+                );
+                if caps.get(buyer_key).is_some_and(|cap| price > *cap) {
+                    break;
+                }
+                pairs.push((
+                    price,
+                    // Each gateway step is its own source, after every firm seller at equal price.
+                    u64::MAX - (index as u64) * 64 - step as u64,
                     buyer.0 ^ ((to as u64) << 56),
                     *buyer_key,
-                    Source::Gateway(index),
+                    Source::Gateway(index, step),
                 ));
             }
         }
@@ -673,7 +681,7 @@ fn clear_goods_exchange(
             *buyer,
         )
     });
-    let mut import_left: BTreeMap<usize, i64> = BTreeMap::new();
+    let mut import_left: BTreeMap<(usize, i64), i64> = BTreeMap::new();
     // Work through the pairings one price tier and source at a time. Buyers tied on the same
     // source at the same delivered price share it in proportion to what each still wants and
     // can pay for, so a large buyer cannot starve a small one by handle order.
@@ -691,9 +699,14 @@ fn clear_goods_exchange(
         let available = match source {
             Source::Firm(seller, from) => supply.get(&(seller, from)).copied().unwrap_or(0),
             Source::Own(from) => supply.get(&(tier[0].0.0, from)).copied().unwrap_or(0),
-            Source::Gateway(gate) => *import_left
-                .entry(gate)
-                .or_insert(world.gateways[gate].capacity_lots * 1_000),
+            Source::Gateway(gate, step) => *import_left.entry((gate, step)).or_insert(
+                crate::economy::pricing::step_lots(
+                    dataset,
+                    world.gateways[gate].capacity_lots,
+                    step,
+                    true,
+                ) * 1_000,
+            ),
             Source::Reserve(region) => reserve_left.get(&region).copied().unwrap_or(0),
         };
         if available <= 0 {
@@ -860,7 +873,7 @@ fn clear_goods_exchange(
                     entry.0 -= qty;
                     entry.1 -= paid + freight;
                 }
-                Source::Gateway(gate) => {
+                Source::Gateway(gate, step) => {
                     let paid = qty_lots.value_at(Cents(delivered)).unwrap_or(Cents::ZERO).0;
                     if paid <= 0 {
                         continue;
@@ -888,7 +901,7 @@ fn clear_goods_exchange(
                             .debit(Account::Cash, received, "export receipt")
                             .credit(Account::Revenue, received, "export receipt"),
                     );
-                    *import_left.get_mut(&gate).unwrap() -= qty;
+                    *import_left.get_mut(&(gate, step)).unwrap() -= qty;
                     let entry = demand.get_mut(&buyer_key).unwrap();
                     entry.0 -= qty;
                     entry.1 -= paid;
@@ -969,18 +982,16 @@ fn sell_surplus_to_gateway_from(
     if gateway.buy_price_cents <= 0 {
         return;
     }
-    let mut remaining = MilliLots::from_lots(
-        gateway
-            .capacity_lots
-            .max(coproduct_room(world, dataset, region, product)),
-    );
-    if remaining.0 <= 0 {
-        return;
-    }
+    // The gateway's room in volume steps, each paying less than the last. A co-product's room
+    // is never smaller than what the plants making it throw off.
+    let base_room = gateway
+        .capacity_lots
+        .max(coproduct_room(world, dataset, region, product));
+    let steps = dataset.markets.gateway_steps.max(1);
+    // What each seller can export: its stock beyond its own plants' input cover and its active
+    // sell contracts.
+    let mut offered: Vec<(Handle, i64)> = Vec::new();
     for seller in sellers {
-        if remaining.0 <= 0 {
-            break;
-        }
         let Some(firm) = world.firms.get(seller) else {
             continue;
         };
@@ -999,25 +1010,71 @@ fn sell_surplus_to_gateway_from(
             .sum();
         let available = firm.stock(product, region).lots();
         let exportable = (available - own_need - committed).max(0);
-        if exportable <= 0 {
+        if exportable > 0 {
+            offered.push((seller, exportable));
+        }
+    }
+    let total: i64 = offered.iter().map(|(_, lots)| *lots).sum();
+    if total <= 0 {
+        return;
+    }
+    // The value of the first `lots` of the week's exports, walking down the steps.
+    let value_of = |lots: i64| -> i64 {
+        let mut left = lots;
+        let mut value = 0i64;
+        for step in 0..steps {
+            let here = left.min(crate::economy::pricing::step_lots(
+                dataset, base_room, step, false,
+            ));
+            if here <= 0 {
+                break;
+            }
+            value += here
+                * crate::economy::pricing::export_step_price(
+                    dataset,
+                    gateway.buy_price_cents,
+                    step,
+                );
+            left -= here;
+        }
+        value
+    };
+    let mut take = total.min(crate::economy::pricing::room_lots(
+        dataset, base_room, false,
+    ));
+    // The gateway buys only what its paced cash pays for in full; a seller never hands over
+    // goods for part of their price.
+    let spendable = world.outside.gateway_spendable();
+    while take > 0
+        && crate::economy::fx::region_to_numeraire(world, dataset, region, value_of(take))
+            > spendable
+    {
+        take = take * 9 / 10;
+    }
+    if take <= 0 {
+        return;
+    }
+    let value = value_of(take);
+    // Every seller exports the same share of what it offered and is paid the week's average
+    // price, so no seller gets the dear steps by being first in line.
+    let shares = allocate_cents(
+        Cents(take),
+        &offered
+            .iter()
+            .map(|(seller, lots)| (seller.0, *lots))
+            .collect::<Vec<_>>(),
+    );
+    for ((seller, _), (_, share)) in offered.iter().zip(shares) {
+        let lots = share.0;
+        if lots <= 0 {
             continue;
         }
-        // The gateway buys only what its paced cash pays for in full; a seller never hands
-        // over goods for part of their price.
-        let price = gateway.buy_price_cents.max(1);
-        let price_numeraire =
-            crate::economy::fx::region_to_numeraire(world, dataset, region, price).max(1);
-        let affordable = world.outside.gateway_spendable() / price_numeraire * 1_000;
-        let qty = MilliLots::from_lots(exportable)
-            .min(remaining)
-            .min(MilliLots(affordable));
-        if qty.0 <= 0 {
-            break;
-        }
-        let paid = qty.value_at(Cents(price)).unwrap_or(Cents::ZERO).0;
+        let qty = MilliLots::from_lots(lots);
+        let paid = (value as i128 * lots as i128 / take as i128) as i64;
         if paid <= 0 {
-            break;
+            continue;
         }
+        let seller = *seller;
         let (removed, carrying) = remove_stock(world, seller, product, region, qty);
         if !removed {
             continue;
@@ -1040,8 +1097,7 @@ fn sell_surplus_to_gateway_from(
                 .credit(Account::Cash, spent, "export purchase")
                 .debit(Account::Inventory, spent, "export purchase"),
         );
-        world.gateways[index].last_export_lots += qty.lots();
-        remaining = MilliLots(remaining.0 - qty.0);
+        world.gateways[index].last_export_lots += lots;
     }
 }
 

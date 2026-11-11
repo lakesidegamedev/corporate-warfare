@@ -229,6 +229,8 @@ pub struct Dataset {
     pub baseline_weekly_wage_cents: [i64; 3],
     pub maintenance_annual_bps: i32,
     pub fixture_land_rent_cents_weekly: i64,
+    /// Gateway volume steps and sellers' response to trade (2.0).
+    pub markets: balance::MarketRules,
     pub geometry_note: String,
     /// Freight modes, public terminals and sea systems.
     pub logistics: LogisticsData,
@@ -408,6 +410,7 @@ impl Dataset {
             baseline_weekly_wage_cents: balance.baseline_weekly_wage_cents,
             maintenance_annual_bps: balance.maintenance_annual_bps,
             fixture_land_rent_cents_weekly: balance.fixture_land_rent_cents_weekly,
+            markets: balance.markets.clone(),
             geometry_note,
             logistics,
             km_matrix,

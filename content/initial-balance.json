@@ -1744,6 +1744,17 @@
   ],
   "maintenance_annual_bps": 200,
   "fixture_land_rent_cents_weekly": 20000,
+  "markets": {
+    "import_first_step_bps": 5000,
+    "export_first_step_bps": 10000,
+    "gateway_step_bps": 2500,
+    "gateway_steps": 5,
+    "import_step_premium_bps": 1000,
+    "export_step_discount_bps": 1000,
+    "export_floor_bps": 5000,
+    "trade_pressure_pass_bps": 10000,
+    "anchor_to_outside": true
+  },
   "plant_scale": 5,
   "margin_floor": 0.2
 }

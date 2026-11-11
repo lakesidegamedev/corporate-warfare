@@ -936,7 +936,11 @@ fn finish_career(
 // Running
 // ---------------------------------------------------------------------------------------------
 
-fn arc_config(seed: u64, scenario_id: &str, difficulty: cw_data::Difficulty) -> ScenarioConfig {
+pub(crate) fn arc_config(
+    seed: u64,
+    scenario_id: &str,
+    difficulty: cw_data::Difficulty,
+) -> ScenarioConfig {
     // The new-game screen's own path: founder, sandbox, the scenario named in the price setup
     // (which loads that scenario's dataset: regions, firms, logistics, currencies).
     ScenarioConfig {

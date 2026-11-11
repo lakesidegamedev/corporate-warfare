@@ -258,6 +258,62 @@ pub struct Balance {
     pub financial_businesses: Vec<String>,
     pub maintenance_annual_bps: i32,
     pub fixture_land_rent_cents_weekly: i64,
+    /// How gateways and sellers respond to trade volume (2.0). Absent in older content files,
+    /// which then get the defaults.
+    #[serde(default)]
+    pub markets: MarketRules,
+}
+
+/// How the outside world's gateways and the corridor's sellers respond to trade volume. Shared by
+/// every scenario: a scenario supplies its own gateways, prices and plants, never its own rules.
+///
+/// A gateway's weekly room is split into steps. The first step trades at the gateway's quote;
+/// each further step costs more to import and pays less to export, so a large shortage or glut
+/// moves the price paid at the margin instead of hitting a hard pin. Sellers read last week's
+/// marginal step: imports in the dear steps mean the corridor is short and home prices rise,
+/// exports in the cheap steps mean it is glutted and home prices fall.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MarketRules {
+    /// The first import step, traded at the quote, as a share of a gateway's weekly room, in
+    /// basis points.
+    pub import_first_step_bps: i64,
+    /// The first export step, paid at the quote, as a share of a gateway's weekly room. A
+    /// gateway's room grows to what the corridor exports, so this is normally all of it.
+    pub export_first_step_bps: i64,
+    /// Every further step's size as a share of a gateway's weekly room, in basis points.
+    pub gateway_step_bps: i64,
+    /// Steps a gateway trades in a week, each way. Volume beyond the last step is not traded.
+    pub gateway_steps: i64,
+    /// How much dearer each further import step is than the quote, in basis points of it.
+    pub import_step_premium_bps: i64,
+    /// How much less each further export step pays than the quote, in basis points of it.
+    pub export_step_discount_bps: i64,
+    /// The least an export step pays, in basis points of the quote.
+    pub export_floor_bps: i64,
+    /// Share of last week's marginal import premium or export discount a home seller passes into
+    /// the price it wants, in basis points.
+    pub trade_pressure_pass_bps: i64,
+    /// Whether a good is priced against the outside world's middle quote (halfway between the
+    /// gateway's import and export prices) rather than its fixed opening catalogue price, so home
+    /// prices follow world prices and inflation the way the gateways do.
+    pub anchor_to_outside: bool,
+}
+
+impl Default for MarketRules {
+    fn default() -> Self {
+        MarketRules {
+            import_first_step_bps: 10_000,
+            export_first_step_bps: 10_000,
+            gateway_step_bps: 10_000,
+            gateway_steps: 1,
+            import_step_premium_bps: 0,
+            export_step_discount_bps: 0,
+            export_floor_bps: 10_000,
+            trade_pressure_pass_bps: 0,
+            anchor_to_outside: false,
+        }
+    }
 }
 
 /// A scenario's starting balance on top of the shared products and strategies: the wage level

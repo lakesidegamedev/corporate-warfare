@@ -299,6 +299,12 @@ pub struct MarketLine {
     pub last_week_sales_lots: i64,
     pub gateway_buy_cents: i64,
     pub gateway_sell_cents: i64,
+    /// The corridor price's move over the last quarter, in basis points.
+    #[serde(default)]
+    pub price_change_quarter_bps: i64,
+    /// Why the price moved, in plain words: the strongest cause acting on it now.
+    #[serde(default)]
+    pub price_reason: String,
 }
 
 fn holder_name(world: &World, holder: HolderId) -> String {
@@ -656,6 +662,9 @@ pub fn market(world: &World, dataset: &Dataset, region: u8, product: u16) -> Mar
         last_week_sales_lots: sales,
         gateway_buy_cents: gateway.map(|g| g.buy_price_cents).unwrap_or(0),
         gateway_sell_cents: gateway.map(|g| g.sell_price_cents).unwrap_or(0),
+        price_change_quarter_bps: cw_sim::economy::pricing::price_drivers(world, dataset, product)
+            .0,
+        price_reason: cw_sim::economy::pricing::price_reason(world, dataset, product),
     }
 }
 
