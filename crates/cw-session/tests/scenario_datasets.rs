@@ -103,7 +103,9 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// Every pin here moved again in 2.0 when plant auctions joined the dataset hash (four weeks for a
 /// failed company's break-up and for a listing) and a failed company's plants began going to the
 /// best bid as running plants instead of being sold off at once for scrap. A save that names the
-/// pre-auction hash loads.
+/// pre-auction hash loads. The founder world (seed 4) moved once more when rivals began listing
+/// plants they had kept mothballed for half a year and folding in companies they hold at 90
+/// percent.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -166,7 +168,7 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "957e1a9e82667379fc6aab29f0e44941f232c0d37fb1bd1e1b7eb586442d348c"
+        "2ce54e27c1f6c91c5f3ca3f6e0b1123a61df32abcf42dd89c88244b42af06471"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
