@@ -227,7 +227,7 @@ private fun auctionScopes(rows: List<PlantLotDto>): List<ScopeOption<PlantLotDto
     rows.map { it.regionName }.distinct().sorted().map { r -> ScopeOption<PlantLotDto>("region:$r", r, "Region") { it.regionName == r } }
 
 internal val AuctionViews = listOf(
-    ViewState("On offer", cols("name", "route", "region", "blocks", "weekly", "reserve", "best", "yourbid", "left"), sort = "left", descending = false, filters = listOf(Filter(FilterOp.Not, "name", "(yours)"))),
+    ViewState("On offer", cols("name", "route", "region", "blocks", "weekly", "reserve", "best", "yourbid", "left"), sort = "left", descending = false),
     ViewState("Closing soon", cols("name", "seller", "blocks", "best", "bids", "left"), sort = "left", descending = false),
     ViewState("Best earners", cols("name", "region", "blocks", "weekly", "book", "reserve", "best"), sort = "weekly"),
     ViewState("My listings", cols("name", "region", "blocks", "bids", "best", "left"), sort = "left", descending = false, filters = listOf(Filter(FilterOp.Mine))),

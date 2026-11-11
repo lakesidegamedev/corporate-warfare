@@ -77,7 +77,7 @@ object SidePanes {
 }
 
 /** Colours for the lines of a multi-series chart, from the game's palette, in a fixed order. */
-internal val SeriesColors: List<Color> get() = listOf(Palette.gold, Palette.positive, Palette.negative, Color(0xFF6EC6FF), Color(0xFFC792EA), Palette.warning, Palette.primaryText, Palette.secondary)
+internal val SeriesColors: List<Color> get() = listOf(Palette.gold, Palette.positive, Palette.negative, Color(0xFF6EC6FF), Color(0xFFC792EA), Palette.primaryText, Palette.secondary)
 
 /** Calls [action] when the secondary (right) button goes down on this element. */
 internal fun Modifier.onSecondaryPress(action: (() -> Unit)?): Modifier = if (action == null) this else composedSecondary(action)

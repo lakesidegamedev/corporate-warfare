@@ -98,10 +98,34 @@ class ProposalAfterRenderTest {
         // The three new screens and the overview's product lines and results with their bars.
         shot("openings", Place.Openings)
         shot("openings-by-region", Place.Openings) { GridDemo.screen = "openings"; GridDemo.shape = { OpeningViews[2] } }
-        shot("auctions", Place.Auctions)
-        shot("raids", Place.Raids) { GridDemo.screen = "raids"; GridDemo.shape = { RaidViews[3] } }
         shot("overview-lines-results", Place.Overview) { GridDemo.screen = "lines"; GridDemo.shape = { LineViews[1] } }
         ProposalCareer.shoot("openings-phone", 390, 844, settings, density = 2f) { OpeningsScreen(store) }
+        // Week 156 has no plant on offer and no raid announced: show the empty screens, then play on
+        // (at most a year, the player doing nothing) until the engine has both, and show them again.
+        shot("auctions-empty", Place.Auctions)
+        shot("raids-empty", Place.Raids)
+        val played = kotlinx.coroutines.runBlocking {
+            store.read { h ->
+                var n = 0
+                // A decision the week waits for (a tender offer) gets its first answer, as a player who refuses would give.
+                while (n < 52 && (h.plantLots().isEmpty() || h.raidCampaigns().isEmpty())) {
+                    h.events().filter { it.mandatory }.forEach { e -> e.choices.firstOrNull()?.let { c -> h.submitJson("{\"RespondEvent\":{\"event\":${e.id},\"choice\":\"${c.id}\"}}") } }
+                    h.dismissPause()
+                    val before = h.overview().tick
+                    h.advance(1u)
+                    if (h.overview().tick == before) break
+                    n++
+                }
+                n
+            }
+        } ?: 0
+        store.refresh()
+        val until = System.currentTimeMillis() + 30_000
+        while ((store.overview?.tick ?: 0u) < (156 + played).toUInt() && System.currentTimeMillis() < until) Thread.sleep(100)
+        Thread.sleep(1500)
+        System.getenv("CW_MAP_RENDER_DIR")?.let { java.io.File(it, "round2-played.txt").writeText("weeks played after week 156: $played, now ${store.overview?.weekLabel}, lots ${kotlinx.coroutines.runBlocking { store.read { it.plantLots().size } }}, campaigns ${kotlinx.coroutines.runBlocking { store.read { it.raidCampaigns().size } }}\n") }
+        shot("auctions", Place.Auctions)
+        shot("raids", Place.Raids) { GridDemo.screen = "raids"; GridDemo.shape = { RaidViews[3] } }
     }
 
     @Test

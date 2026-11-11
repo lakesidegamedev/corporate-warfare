@@ -228,7 +228,7 @@ object GridDemo {
     var head: String? = null
     var drill: String? = null
     var chart: Boolean = false
-    fun clear() { screen = null; menu = null; search = ""; shape = null; railTab = null; find = null; alertEdit = null; head = null; drill = null; chart = false }
+    fun clear() { screen = null; menu = null; search = ""; shape = null; railTab = null; RailState.tab = "Needs you"; find = null; alertEdit = null; head = null; drill = null; chart = false }
 }
 
 private val fallbackPrefs = MapViewPrefs()
