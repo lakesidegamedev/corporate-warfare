@@ -103,14 +103,24 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// Every pin moved again in 2.0 when the demand rules joined the dataset hash (openings count
 /// only what their room, inputs and labour allow, households turn to sellers with stock left and
 /// grow toward their budget where served, demand follows the cycle by product) and a new company began offering at least the going wage. A save that names the
-/// pre-demand hash still loads.
+/// pre-demand hash still loads. Every pin moved again in 2.0 when world prices gained their
+/// seeded texture (variance became the default, the texture rules and the street rule joined the
+/// dataset hash), seller markets began opening near balance and shops and services began
+/// pricing on their street. A save that names the pre-prices hash still loads.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
     assert_eq!(data.scenario_id, "great-lakes-2000");
     assert_eq!(
         data.hash,
-        "3856624d8fe911499f1f62988f0f25b533c4b455404c70bfb0095aee9c5cf110"
+        "ef21f23f840364d1ce4367e4eb74e1937bd491cf1c2ab2c2d5badf7f8e776963"
+    );
+    // The hash before the prices round (the 2.0 demand pin) still finds this dataset.
+    let before_prices = "3856624d8fe911499f1f62988f0f25b533c4b455404c70bfb0095aee9c5cf110";
+    assert_eq!(data.pre_prices_hash(), before_prices);
+    assert_eq!(
+        cw_data::Dataset::for_hash(before_prices).unwrap().hash,
+        data.hash
     );
     // The hash before market rules joined it (the 2.0 round one pin) still finds this dataset,
     // so a save that names it loads.
@@ -147,15 +157,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "908023f9298ad126785f83facdebba1f329375075177ecdc6edc3fbd29532f4d",
+            "2d5cde3868a75dc55da1b463fc8efd8b41a95ada1f1a030f782dce0c3aa4fb36",
         ),
         (
             2,
-            "6f19794d0e883b46497cde0306c06cff4a47b7b26d166bf57b11e102be102b52",
+            "a6688d31ef29227469bcd44dcd2f30165247bccef3b0fd9c64a5af442b9ddfb8",
         ),
         (
             3,
-            "c939a4c43b39de8df5c34887023370fb3fca65912e87204d111624319b7b5839",
+            "064f71ac4382686c7ffb8783aba368173124c103d0295be6967e5e8aaba7e11d",
         ),
     ];
     for (seed, hash) in pins {
@@ -167,12 +177,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "9b5c3cf5df7b4798b6f56aa68c52cd05876cbb56afd82e6a2558f1980e6da5b6"
+        "3b7bfc39c74c98a6004b28afd7992cfacda99fb083907e30f25ac732e8b27efd"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "d6df1237f2420215d49153ed8e3e181638783be41cb5897cc944f0bf445e7a5e"
+        "a8c4c5629b8ffdbdd586bdc90aed670d3834b59a4a1972f0b1cc4a93f313b3ca"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();
@@ -360,18 +370,21 @@ fn silicon_valley_opens_the_bakersfield_pipelines() {
 
 #[test]
 fn silicon_valley_electronics_prices_follow_the_chip_cycle() {
-    // Components are in the scenario's own family; Great Lakes and Texas have no such family.
+    // Components follow the chip cycle in Silicon Valley; since the prices round Great Lakes and
+    // Texas hold them on a flat path with only the world's texture.
     let valley = run_answering(3, "silicon-valley-1995", 1);
-    let family = |s: &Session| {
+    let anchors = |s: &Session| {
         s.world
             .world_prices
             .families
             .iter()
-            .any(|f| f.key == "electronics")
+            .find(|f| f.key == "electronics")
+            .map(|f| f.anchors.len())
+            .unwrap_or(0)
     };
-    assert!(family(&valley));
-    assert!(!family(&run_answering(3, "great-lakes-2000", 1)));
-    assert!(!family(&run_answering(3, "texas-1981", 1)));
+    assert!(anchors(&valley) > 1);
+    assert_eq!(anchors(&run_answering(3, "great-lakes-2000", 1)), 1);
+    assert_eq!(anchors(&run_answering(3, "texas-1981", 1)), 1);
 }
 
 #[test]

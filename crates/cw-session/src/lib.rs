@@ -2330,7 +2330,10 @@ mod tests {
         // when raids began to be announced four weeks ahead (the warning joined the dataset hash
         // and the world gained the list of campaigns in progress, save schema 4), and again when the demand rules joined the dataset hash (a new seller counts
         // only what its room, inputs and labour allow, households turn to sellers with stock left
-        // and grow toward their budget where served, demand follows the cycle by product) and a new company began offering at least the going wage. The Swift
+        // and grow toward their budget where served, demand follows the cycle by product) and a new company began offering at least the going wage, and again
+        // when the texture and street rules joined the dataset hash (world prices stray from their
+        // paths by a seeded texture, seller markets open near balance, shops and services price on
+        // their street). The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2356,7 +2359,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "0bf8b07f4d0b48106ff9f4c65f3c84c278f00a67be06ecb681f5ab5f2481b0d8"
+            "f129732dab89e26bec5371a6a38ca307df8da144561ec96b708cfb52c5b493c2"
         );
     }
 
