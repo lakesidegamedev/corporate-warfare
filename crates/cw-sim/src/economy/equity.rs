@@ -928,6 +928,20 @@ fn settle_one(
     );
 }
 
+/// Move `qty` shares from `seller` to `buyer` for `cost` cents paid now from the buyer's cash, by
+/// the same settlement as a trade on the exchange (the seller is paid, cost bases move). Used by
+/// the helm start of a career to buy its controlling block.
+pub fn transfer_paid(
+    world: &mut World,
+    firm: Handle,
+    seller: HolderId,
+    buyer: HolderId,
+    qty: i64,
+    cost: i64,
+) {
+    settle_cost(world, firm, seller, buyer, qty, cost, false);
+}
+
 /// Move `qty` shares for `cost` cents. `reserved` means the buyer's cash was set aside when a
 /// resting order was placed; otherwise (an immediate float trade) it is paid now, from cash.
 fn settle_cost(
