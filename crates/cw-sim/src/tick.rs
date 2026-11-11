@@ -115,6 +115,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         "insurance::weekly",
         crate::economy::insurance::weekly(world)
     );
+    crate::ph!(
+        "auctions::weekly",
+        crate::economy::auctions::weekly(world, dataset)
+    );
     let solvency = crate::ph!(
         "insolvency::settle",
         crate::economy::insolvency::settle(world, dataset)

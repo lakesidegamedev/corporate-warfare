@@ -1797,7 +1797,8 @@
     "payout_share_bps": 5000,
     "raid_warning_weeks": 4,
     "household_cover_bps": 8500,
-    "household_unmet_bps": 3000
+    "household_unmet_bps": 3000,
+    "plant_auction_weeks": 4
   },
   "demand": {
     "sell_within_room": true,

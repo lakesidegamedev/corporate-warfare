@@ -246,6 +246,10 @@ pub struct PolicyStats {
 /// file's order, kept for comparing with earlier baselines.
 pub static LEGACY_CARDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// `--no-plant-bids`: the `skilled` style never bids for plants on offer, to measure what its
+/// bidding is worth on the same engine.
+pub static NO_PLANT_BIDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 pub struct PolicyRunner {
     policy: ReferencePolicy,
     legacy_cards: bool,

@@ -6,6 +6,7 @@ use cw_core::ids::Handle;
 use cw_core::ledger::{Account, Txn};
 use cw_session::{ScenarioConfig, Session};
 use cw_sim::commands::{CommandEnvelope, CommandIntent, INVESTOR_ACTOR};
+use cw_sim::economy::auctions::LotOutcome;
 use cw_sim::economy::insolvency::wind_down_blocker;
 use cw_sim::state::{FacilityStatus, FirmStatus, ScenarioKind, ScenarioMode};
 
@@ -70,11 +71,39 @@ fn candidates(session: &Session) -> Vec<Handle> {
         .collect()
 }
 
+/// One week of play, dismissing any event that pauses it.
+fn advance_week(session: &mut Session) {
+    if session.advance(1).pause.is_some() {
+        for event in session.world.events.pending.iter_mut() {
+            event.resolved = true;
+        }
+        session.dismiss_pause();
+    }
+}
+
+/// Cash a company's journal shows arriving under `memo`.
+fn cash_in(book: &cw_core::ledger::Ledger, memo: &str) -> i64 {
+    book.journal()
+        .iter()
+        .filter(|p| p.memo == memo && p.account == Account::Cash)
+        .map(|p| p.delta)
+        .sum()
+}
+
+/// 2.0: a voluntary wind-down sells its idle plants through the same break-up auction as a
+/// failed company (the best rival bid at or above the scrap floor, otherwise scrap value), so
+/// the company stays in liquidation for the auction weeks. Creditors are still paid in full
+/// and shareholders receive everything left, now including what the plants fetched above scrap.
+/// An owner who wants to see the bids and choose can list the plants before winding down.
 #[test]
 fn an_idle_solvent_company_pays_creditors_then_returns_the_rest_to_shareholders() {
     let mut session = session();
     let mut tried = 0;
+    let mut auctioned = 0;
     for firm in candidates(&session) {
+        if session.world.firm(firm).is_none_or(|f| !f.operative()) {
+            continue;
+        }
         // A working plant is refused, and nothing changes.
         assert!(!wind_down(&mut session, firm.0, firm, 1 + firm.0));
         mothball_all(&mut session, firm);
@@ -95,6 +124,13 @@ fn an_idle_solvent_company_pays_creditors_then_returns_the_rest_to_shareholders(
         .iter()
         .map(|a| book.balance(*a))
         .sum();
+        // Each plant's book value: cost less depreciation, from the plant records.
+        let plants: Vec<(Handle, i64)> = world
+            .facilities
+            .iter()
+            .filter(|(_, p)| p.firm == firm)
+            .map(|(h, p)| (h, (p.capex_cents - p.accumulated_depreciation).max(0)))
+            .collect();
         let loans: i64 = world
             .firm(firm)
             .unwrap()
@@ -107,15 +143,38 @@ fn an_idle_solvent_company_pays_creditors_then_returns_the_rest_to_shareholders(
             - book.balance(Account::Deposits)
             - book.balance(Account::OverduePayables)
             - book.balance(Account::TaxesPayable);
-        // Independent oracle: cash plus 40 percent of what is sold, less every claim in full.
-        let estate =
-            book.cash() + book.balance(Account::RestrictedCash) + carrying.max(0) * 40 / 100;
-        let residual = estate - owed;
         let holders = world.firm(firm).unwrap().shares.holders.len() as i64;
         let tax_before = world.government.book.cash();
-        assert!(residual >= 0);
+        let rivals_cash: Vec<(Handle, i64)> = world
+            .firms
+            .iter()
+            .map(|(h, f)| (h, f.book.cash()))
+            .collect();
 
         assert!(wind_down(&mut session, firm.0, firm, 1_000 + firm.0));
+        // Every plant is on offer and the company waits in liquidation for the deadline.
+        let lots: Vec<(u32, Handle)> = session
+            .world
+            .auctions
+            .lots
+            .iter()
+            .filter(|lot| lot.seller == firm)
+            .map(|lot| (lot.id, lot.facility))
+            .collect();
+        assert_eq!(lots.len(), plants.len());
+        if !lots.is_empty() {
+            auctioned += 1;
+            assert_eq!(
+                session.world.firm(firm).unwrap().status,
+                FirmStatus::Liquidating
+            );
+        }
+        for _ in 0..12 {
+            if session.world.firm(firm).unwrap().status == FirmStatus::Dissolved {
+                break;
+            }
+            advance_week(&mut session);
+        }
         let world = &session.world;
         let entity = world.firm(firm).unwrap();
         assert_eq!(entity.status, FirmStatus::Dissolved);
@@ -132,15 +191,63 @@ fn an_idle_solvent_company_pays_creditors_then_returns_the_rest_to_shareholders(
         assert_eq!(entity.book.balance(Account::OverduePayables), 0);
         assert_eq!(entity.book.balance(Account::TaxesPayable), 0);
         assert!(world.government.book.cash() - tax_before >= -book.balance(Account::TaxesPayable));
-        // Outside buyers paid exactly the forced-sale value; nothing was minted.
-        let proceeds: i64 = entity
-            .book
-            .journal()
-            .iter()
-            .filter(|p| p.memo == "liquidation proceeds")
-            .map(|p| p.delta)
-            .sum();
-        assert_eq!(proceeds, carrying.max(0) * 40 / 100);
+
+        // Outside buyers paid exactly the forced-sale value of everything but the plants.
+        let plant_book: i64 = plants.iter().map(|(_, b)| *b).sum();
+        assert_eq!(
+            cash_in(&entity.book, "liquidation proceeds"),
+            (carrying - plant_book).max(0) * 40 / 100
+        );
+        // Each plant fetched at least scrap value: a buyer paid exactly the price it received,
+        // or the scrap buyers paid 40 percent of book.
+        let mut plant_money = 0i64;
+        for (_, facility) in &lots {
+            let book_value = plants.iter().find(|(h, _)| h == facility).unwrap().1;
+            let closed = world
+                .auctions
+                .closed
+                .iter()
+                .rev()
+                .find(|c| c.lot.facility == *facility && c.lot.seller == firm)
+                .expect("the lot closed");
+            match closed.outcome {
+                LotOutcome::Sold {
+                    buyer, price_cents, ..
+                } => {
+                    assert!(price_cents >= book_value * 40 / 100);
+                    let paid = -world
+                        .firm(buyer)
+                        .unwrap()
+                        .book
+                        .journal()
+                        .iter()
+                        .filter(|p| p.memo == "plant purchase" && p.account == Account::Cash)
+                        .map(|p| p.delta)
+                        .sum::<i64>();
+                    assert!(paid >= price_cents, "buyer paid {paid} for {price_cents}");
+                    assert!(world.facilities.get(*facility).unwrap().firm == buyer);
+                    assert!(rivals_cash.iter().any(|(h, _)| *h == buyer));
+                    plant_money += price_cents;
+                }
+                LotOutcome::Scrapped { proceeds_cents } => {
+                    assert_eq!(proceeds_cents, book_value * 40 / 100);
+                    plant_money += proceeds_cents;
+                }
+                other => panic!("plant lot ended {other:?}"),
+            }
+        }
+        assert_eq!(
+            cash_in(&entity.book, "plant sale") + cash_in(&entity.book, "plant scrapped"),
+            plant_money
+        );
+        // Independent oracle: cash plus 40 percent of what outside buyers took plus what the
+        // plants fetched, less every claim in full.
+        let estate = book.cash()
+            + book.balance(Account::RestrictedCash)
+            + (carrying - plant_book).max(0) * 40 / 100
+            + plant_money;
+        let residual = estate - owed;
+        assert!(residual >= 0);
         let distributed: i64 = entity
             .book
             .journal()
@@ -159,6 +266,7 @@ fn an_idle_solvent_company_pays_creditors_then_returns_the_rest_to_shareholders(
         }
     }
     assert!(tried > 0, "no idle candidate found");
+    assert!(auctioned > 0, "no wind-down had a plant to auction");
 }
 
 #[test]

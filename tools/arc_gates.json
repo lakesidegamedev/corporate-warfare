@@ -49,6 +49,10 @@
     { "id": "career_helm_beats_ai", "policy": "skilled", "start": "helm", "metric": "helm_beats_ai_share", "min": 0.51,
       "text": "career: the helm company ends worth more than the same company left to its AI (cw-cli helm) in most careers" },
     { "id": "career_reckless_loses", "policy": "reckless", "start": "founder", "metric": "career_lost_or_bust_share", "min": 0.51,
-      "text": "career: a reckless founder loses (its company goes bust, or the career is lost: no company and too little to found one, removed by the board or taken over) in most careers" }
+      "text": "career: a reckless founder loses (its company goes bust, or the career is lost: no company and too little to found one, removed by the board or taken over) in most careers" },
+    { "id": "plants_change_hands", "policy": "any", "metric": "plants_changing_hands_per_decade_per_ten_firms_median", "min": 1.0,
+      "text": "at least one plant changes hands a decade for every ten companies (median, every route: auction, listing, direct sale)" },
+    { "id": "mergers", "policy": "any", "metric": "careers_with_merger_share", "min": 0.5,
+      "text": "a company is folded into its 90 percent owner in most careers" }
   ]
 }

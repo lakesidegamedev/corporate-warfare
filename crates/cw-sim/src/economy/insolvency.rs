@@ -305,6 +305,12 @@ fn cut_debt(world: &mut World, firm: Handle, debt: i64) {
 /// loans, then administrative and payroll arrears, then unsecured loans, bonds and deposits pro
 /// rata, then equity. Every payment reaches a real claimant; nothing is minted or left behind
 /// in a dissolved shell. Open contracts and deals end with the firm.
+///
+/// 2.0: plants that could still run are kept out of the forced sale and go to a break-up auction
+/// (`economy::auctions`). The company stays in liquidation, its plants idle, until the last lot
+/// closes; the proceeds then reach the creditors in the same order, guarantees cover what is
+/// still unpaid, the rest goes to the shareholders and the company is dissolved
+/// (`finish_liquidation`). With no plant to auction this all happens at once, as before.
 pub fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
     let book = match world.firms.get(firm) {
         Some(entity) => entity.book.clone(),
@@ -333,9 +339,25 @@ pub fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
         Account::OtherAssets,
         Account::WorkInProgress,
     ];
+    // Plants for the break-up auction stay on the books until their lot closes.
+    let lots = crate::economy::auctions::breakup_plants(world, dataset, firm);
+    let (kept_cost, kept_depreciation) = lots
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .fold((0i64, 0i64), |(cost, dep), plant| {
+            (
+                cost + plant.capex_cents,
+                dep + plant.accumulated_depreciation,
+            )
+        });
+    let kept = |account: Account| match account {
+        Account::FixedAssets => kept_cost,
+        Account::AccumulatedDepreciation => -kept_depreciation,
+        _ => 0,
+    };
     let carrying: i64 = asset_accounts
         .iter()
-        .map(|account| book.balance(*account))
+        .map(|account| book.balance(*account) - kept(*account))
         .sum();
     let wanted = carrying.max(0) * 40 / 100;
     let mut proceeds = 0i64;
@@ -350,7 +372,7 @@ pub fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
     if let Some(entity) = world.firms.get_mut(firm) {
         let mut sale = Txn::new().debit(Account::Cash, proceeds, "liquidation proceeds");
         for account in asset_accounts {
-            let balance = book.balance(account);
+            let balance = book.balance(account) - kept(account);
             if balance != 0 {
                 sale = sale.signed(account, -balance, "liquidation sale");
             }
@@ -378,6 +400,27 @@ pub fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
         }
         entity.status = FirmStatus::Liquidating;
     }
+    // Goods still in transit to the firm were paid for and booked to its inventory account at
+    // dispatch, so the sale above sold them too: they go to the outside buyers, not into the
+    // estate's warehouse, where they would draw storage fees from the creditors' money while
+    // the plants are at auction.
+    world.shipments.retain(|shipment| shipment.buyer != firm);
+    pay_creditors(world, firm);
+    if world.investor.primary_group == Some(firm) {
+        world.investor.primary_group = None;
+    }
+    end_contracts(world, firm);
+    if lots.is_empty() {
+        finish_liquidation(world, firm, dataset);
+    } else {
+        crate::economy::auctions::open_breakup(world, dataset, &lots);
+    }
+}
+
+/// The end of a liquidation, once no plant of the company is left on offer: the auction proceeds
+/// reach the creditors, explicit guarantees cover what is still unpaid, any residual goes to the
+/// shareholders and the company is dissolved.
+pub fn finish_liquidation(world: &mut World, firm: Handle, dataset: &Dataset) {
     pay_creditors(world, firm);
 
     // Explicit guarantees: a guarantor covers the failed firm's unpaid claims up to its
@@ -491,11 +534,50 @@ pub fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
                 ),
         );
     }
-    if world.investor.primary_group == Some(firm) {
-        world.investor.primary_group = None;
+    if let Some(entity) = world.firms.get_mut(firm) {
+        // Whatever cost and depreciation the plant records did not account for leaves with the
+        // company; no cash moves.
+        let cost = entity.book.balance(Account::FixedAssets);
+        let depreciation = entity.book.balance(Account::AccumulatedDepreciation);
+        if cost != 0 || depreciation != 0 {
+            let _ = entity.book.commit(
+                world.tick,
+                Txn::new()
+                    .signed(Account::FixedAssets, -cost, "liquidation close")
+                    .signed(
+                        Account::AccumulatedDepreciation,
+                        -depreciation,
+                        "liquidation close",
+                    )
+                    .signed(
+                        Account::OtherIncome,
+                        cost + depreciation,
+                        "liquidation close",
+                    ),
+            );
+        }
+        entity.status = FirmStatus::Dissolved;
+        entity.facilities.clear();
+        entity
+            .shares
+            .holders
+            .retain(|holder, _| holder.is_treasury());
     }
-    // Contracts end with the firm: no dead company keeps buying or selling. A surviving
-    // buyer's escrow for the dead seller comes back; the dead buyer's escrow was pooled above.
+    let facilities: Vec<Handle> = world
+        .facilities
+        .iter()
+        .filter(|(_, facility)| facility.firm == firm)
+        .map(|(handle, _)| handle)
+        .collect();
+    for handle in facilities {
+        world.facilities.remove(handle);
+    }
+    let _ = dataset;
+}
+
+/// Contracts end with the firm: no dead company keeps buying or selling. A surviving buyer's
+/// escrow for the dead seller comes back; the dead buyer's escrow was pooled into the estate.
+fn end_contracts(world: &mut World, firm: Handle) {
     let ended: Vec<Handle> = world
         .contracts
         .iter()
@@ -524,24 +606,6 @@ pub fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
             );
         }
     }
-    if let Some(entity) = world.firms.get_mut(firm) {
-        entity.status = FirmStatus::Dissolved;
-        entity.facilities.clear();
-        entity
-            .shares
-            .holders
-            .retain(|holder, _| holder.is_treasury());
-    }
-    let facilities: Vec<Handle> = world
-        .facilities
-        .iter()
-        .filter(|(_, facility)| facility.firm == firm)
-        .map(|(handle, _)| handle)
-        .collect();
-    for handle in facilities {
-        world.facilities.remove(handle);
-    }
-    let _ = dataset;
 }
 
 /// Why a company may not wind itself down, or `None` when it may. A voluntary wind-down is for a

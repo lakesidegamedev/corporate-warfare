@@ -1692,6 +1692,13 @@ pub struct World {
     /// save without it has none. See `economy::career`.
     #[serde(skip)]
     pub career: Option<crate::economy::career::CareerState>,
+    /// Plants on offer and the plant auction log (2.0): a failed company's break-up lots and plants
+    /// their owners listed. A new self-contained list no existing struct reads, so it sits outside
+    /// the postcard encoding like the chapter state, folded into the hash while not empty and saved
+    /// in its own `AUCT` trailer. A save without it loads with no plant on offer. See
+    /// `economy::auctions`.
+    #[serde(skip)]
+    pub auctions: crate::economy::auctions::AuctionState,
 }
 
 /// Who governs. The two parties differ on tax, the wage floor, merger review and unions.
@@ -2155,6 +2162,12 @@ pub fn canonical_hash(world: &World) -> String {
             if !world.plans.is_empty() {
                 match postcard::to_allocvec(&world.plans) {
                     Ok(plans) => bytes.extend_from_slice(&plans),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if !world.auctions.is_empty() {
+                match postcard::to_allocvec(&world.auctions) {
+                    Ok(auctions) => bytes.extend_from_slice(&auctions),
                     Err(_) => return String::from("unhashable"),
                 }
             }
