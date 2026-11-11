@@ -45,6 +45,12 @@ heading.
 - Roads and bridges: close up, interstates and main roads are wider with a darker kerb and a light edge line, and any road or railway that crosses a narrow strait is drawn as a bridge deck.
 - The ground texture step while zooming now has hysteresis, so it no longer flips back and forth when the camera hovers at a boundary. A new zoom test checks that no frame jumps in average colour.
 
+### Fixed
+
+- Company alerts no longer show raw text such as "alert.decision" in the overview: decisions, past due payments, frozen payouts, incidents and law changes now read as sentences, and an alert the game has no wording for shows what it is about instead of its internal name.
+- The 2.0 tables no longer drop their name column when the other columns need the room: the name stays pinned on the left, the other columns scroll sideways together when they do not fit, and no column heading is ever cut off. The league table leads with the company name (your own in gold) after its rank and sector badge. Figures that do not apply (a division's usual stock cover, regions served when it ships anywhere) read as a dash instead of a zero.
+- The 2.0 alert rail shows only raids and rival moves from the last 13 weeks, with the moves that involve your company first, and the company overview sizes its tables to their rows so a small company has no empty panes.
+
 ## [1.9.0] - 2026-10-31
 
 ### Added

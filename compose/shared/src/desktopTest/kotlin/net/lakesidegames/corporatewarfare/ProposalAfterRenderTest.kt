@@ -25,6 +25,15 @@ class ProposalAfterRenderTest {
     }
 
     @Test
+    fun overviewOfALargeCompany() {
+        // A company with many plants: the tables scroll and nothing is lost to dead space.
+        val (store, settings) = ProposalCareer.openBig()
+        assertTrue(store.divisions.isNotEmpty(), "the large company needs divisions")
+        println("large company: ${store.divisions.size} divisions, ${store.divisions.sumOf { it.blocks.toInt() }} plants, ${store.productLines.size} product lines")
+        ProposalCareer.shoot("after-overview-big", 1920, 1080, settings) { TycoonShell(store, onSettings = {}, start = Place.Overview) }
+    }
+
+    @Test
     fun gridSortsAndFilters() {
         // The grid's sort and filter are plain list operations on the engine's rows; check the column keys line up.
         val cols = listOf(

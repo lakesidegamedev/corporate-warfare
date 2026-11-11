@@ -32,14 +32,20 @@ object ProposalCareer {
         Tutorial.hidden = true
     }
 
-    fun open(): Pair<GameStore, AppSettings> {
+    /**
+     * A large company for the sizing checks: the same seed with a big war chest, building a plant every
+     * other week across the player's recipes. CW_PROPOSAL_BIG_SAVE keeps the save.
+     */
+    fun openBig(): Pair<GameStore, AppSettings> = open(big = true)
+
+    fun open(big: Boolean = false): Pair<GameStore, AppSettings> {
         init()
         val dir = kotlin.io.path.createTempDirectory("cwproposal").toFile()
         val store = GameStore(dir, CoroutineScope(Dispatchers.Default))
         val settings = AppSettings(File(dir, "settings.properties")).apply {
             finishSetup(); chooseTutorial(emptySet(), true); chooseGraphics(graphics.copy(animations = false))
         }
-        val cached = System.getenv("CW_PROPOSAL_SAVE")?.let(::File)
+        val cached = System.getenv(if (big) "CW_PROPOSAL_BIG_SAVE" else "CW_PROPOSAL_SAVE")?.let(::File)
         if (cached != null && cached.isFile) {
             store.loadSave(cached)
             waitReady(store)
@@ -47,7 +53,7 @@ object ProposalCareer {
             store.startCareer(
                 uniffi.cw_ffi.NewGameDto(
                     seed = 7uL, scenarioId = "great-lakes-2000", guided = true, fiveYear = false, difficulty = "standard", economy = "historic",
-                    startingCapitalCents = null, pricePath = "historical",
+                    startingCapitalCents = if (big) 60_000_000_00L else null, pricePath = "historical",
                 ),
             )
             waitReady(store)
@@ -60,11 +66,12 @@ object ProposalCareer {
                     while (h.overview().tick < WEEK && guard++ < 400) {
                         h.dismissPause()
                         // A plant a quarter in the next region along, when the company can afford it twice over.
-                        if (h.overview().tick % 13u == 2u) {
+                        if (if (big) h.overview().tick % 2u == 0u else h.overview().tick % 13u == 2u) {
                             val cash = h.firm(me)!!.cashCents
                             val boards = h.regionBoards(me)
-                            val pick = boards.getOrNull((h.overview().tick / 13u).toInt() % boards.size.coerceAtLeast(1))
-                            val recipe = recipes.getOrNull((h.overview().tick / 26u).toInt() % recipes.size.coerceAtLeast(1))
+                            val step = if (big) 2u else 13u
+                            val pick = boards.getOrNull((h.overview().tick / step).toInt() % boards.size.coerceAtLeast(1))
+                            val recipe = recipes.getOrNull((h.overview().tick / (step * 2u)).toInt() % recipes.size.coerceAtLeast(1))
                             if (pick != null && recipe != null && cash > recipe.capexCents * 2) {
                                 runCatching { h.buildFacility(me, pick.index, recipe.index, 1u) }
                             }
@@ -106,6 +113,8 @@ object ProposalCareer {
         Thread.sleep(600)
         scene.render(2_000_000_000L)
         val image = scene.render(3_000_000_000L)
+        // Count what is drawn from the semantics tree, before the scene is closed.
+        ProposalCounts.keep(out, name, ProposalCounts.count(scene, width, height, density))
         scene.close()
         out?.let { File(it, "$name.png").writeBytes(image.encodeToData(EncodedImageFormat.PNG)!!.bytes) }
     }

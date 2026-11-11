@@ -23,6 +23,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -76,6 +81,8 @@ class GridColumn<T>(
     val tip: String? = null,
     val shown: Boolean = true,
     val bold: Boolean = false,
+    /** Something small drawn before the text, such as a logo or a rank. */
+    val lead: (@Composable (T) -> Unit)? = null,
 )
 
 /** Body text for figures: the readable face with every digit the same width, so columns line up. */
@@ -116,7 +123,8 @@ fun <T> DataGrid(
     var choosing by remember { mutableStateOf(false) }
     val hidden = remember { mutableStateListOf<String>().apply { addAll(columns.filter { !it.shown }.map { it.id }) } }
     var hovered by remember { mutableStateOf<Any?>(null) }
-    val visible = columns.filter { it.id !in hidden }
+    // The first column is the row's name: pinned, and never hidden by the chooser.
+    val visible = columns.filter { it === columns.first() || it.id !in hidden }
     val sortCol = columns.firstOrNull { it.id == sortId }
     val shown = remember(rows, filter, sortId, descending) {
         val needle = filter.trim().lowercase()
@@ -172,27 +180,35 @@ fun <T> DataGrid(
                 TwoLineRows(shown, visible, sortCol, descending, key, selected, onSelect, onOpen, { pickSort(it) })
                 return@BoxWithConstraints
             }
+            // A column is never narrower than its heading, so a heading cannot clip. The first column is
+            // pinned and takes the room that is left; the rest scroll sideways together when they do not fit.
+            val measurer = rememberTextMeasurer()
+            val density = LocalDensity.current
+            val headStyle = remember { TextStyle(fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp) }
+            fun headingWidth(c: GridColumn<T>): Dp = with(density) { measurer.measure(AnnotatedString(c.title.uppercase() + " v"), headStyle, maxLines = 1).size.width.toDp() } + 12.dp
+            val first = visible.first()
+            val rest = visible.drop(1)
+            val widths = rest.associate { c -> c.id to maxOf(c.width ?: 110.dp, headingWidth(c)) }
+            val restWidth = widths.values.fold(0.dp) { a, w -> a + w }
+            val chrome = 14.dp + if (onOpen != null) 18.dp else 0.dp
+            val firstMin = maxOf(first.width ?: 0.dp, headingWidth(first), 150.dp)
+            val firstWidth = (maxWidth - chrome - restWidth).coerceAtLeast(firstMin).let { if (first.width != null) maxOf(first.width, headingWidth(first)) else it }
+            val hScroll = rememberScrollState()
+            val pad = 6.dp
             Column(Modifier.fillMaxSize()) {
                 // The header stays put while the rows scroll under it.
-                Row(Modifier.fillMaxWidth().height(22.dp).background(Palette.ink).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().height(22.dp).background(Palette.ink).padding(horizontal = pad), verticalAlignment = Alignment.CenterVertically) {
                     Spacer(Modifier.width(2.dp))
-                    visible.forEach { c ->
-                        val arrow = if (c.id == sortId) (if (descending) " v" else " ^") else ""
-                        Explain(c.tip ?: Words.about(c.title), cellModifier(c)) {
-                            Text(
-                                c.title.uppercase() + arrow, color = if (c.id == sortId) Palette.gold else Palette.secondary,
-                                fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp, maxLines = 1, overflow = TextOverflow.Clip,
-                                textAlign = if (c.numeric) TextAlign.End else TextAlign.Start,
-                                modifier = Modifier.fillMaxWidth().pointerHoverIcon(PointerIcon.Hand).clickable { pickSort(c) }.padding(horizontal = 4.dp),
-                            )
-                        }
+                    HeaderCell(first, firstWidth, first.id == sortId, descending) { pickSort(first) }
+                    Box(Modifier.weight(1f).horizontalScroll(hScroll)) {
+                        Row(Modifier.width(restWidth)) { rest.forEach { c -> HeaderCell(c, widths.getValue(c.id), c.id == sortId, descending) { pickSort(c) } } }
                     }
                     if (onOpen != null) Spacer(Modifier.width(18.dp))
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
                 LazyColumn(Modifier.fillMaxWidth().weight(1f), state = list) {
                     itemsIndexed(shown, key = { _, r -> key(r) }) { i, r ->
-                        GridRow(i, r, visible, key(r) == selected, onHover = { hovered = if (it) key(r) else if (hovered == key(r)) null else hovered }, onClick = { onSelect(r) }, onOpen = onOpen?.let { o -> { o(r) } })
+                        GridRow(i, r, first, firstWidth, rest, widths, restWidth, hScroll, key(r) == selected, onHover = { hovered = if (it) key(r) else if (hovered == key(r)) null else hovered }, onClick = { onSelect(r) }, onOpen = onOpen?.let { o -> { o(r) } })
                     }
                 }
                 // The breakdown of the row under the pointer, or of the selected row.
@@ -210,10 +226,30 @@ fun <T> DataGrid(
     }
 }
 
-private fun <T> RowScope.cellModifier(c: GridColumn<T>): Modifier = if (c.width == null) Modifier.weight(1f) else Modifier.width(c.width)
+/** What one grid needs besides its rows: the title bar, the column heading, the breakdown line and the frame. */
+val GridChromeHeight: Dp = 84.dp
+
+/** The height a grid wants for [rows] rows, so a small table does not sit in a tall empty pane. */
+fun gridNaturalHeight(rows: Int): Dp = GridChromeHeight + GridRowHeight * rows.coerceAtLeast(2)
 
 @Composable
-private fun <T> GridRow(index: Int, row: T, columns: List<GridColumn<T>>, selected: Boolean, onHover: (Boolean) -> Unit, onClick: () -> Unit, onOpen: (() -> Unit)?) {
+private fun <T> HeaderCell(c: GridColumn<T>, width: Dp, sorted: Boolean, descending: Boolean, onClick: () -> Unit) {
+    val arrow = if (sorted) (if (descending) " v" else " ^") else ""
+    Explain(c.tip ?: Words.about(c.title), Modifier.width(width)) {
+        Text(
+            c.title.uppercase() + arrow, color = if (sorted) Palette.gold else Palette.secondary,
+            fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Visible,
+            textAlign = if (c.numeric) TextAlign.End else TextAlign.Start,
+            modifier = Modifier.fillMaxWidth().pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onClick).padding(horizontal = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun <T> GridRow(
+    index: Int, row: T, first: GridColumn<T>, firstWidth: Dp, rest: List<GridColumn<T>>, widths: Map<String, Dp>, restWidth: Dp,
+    hScroll: androidx.compose.foundation.ScrollState, selected: Boolean, onHover: (Boolean) -> Unit, onClick: () -> Unit, onOpen: (() -> Unit)?,
+) {
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
     LaunchedEffect(hovered) { onHover(hovered) }
@@ -225,7 +261,10 @@ private fun <T> GridRow(index: Int, row: T, columns: List<GridColumn<T>>, select
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(2.dp).fillMaxHeight().background(if (selected) Palette.gold else Color.Transparent))
-        columns.forEach { c -> GridCell(row, c) }
+        GridCell(row, first, firstWidth)
+        Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(hScroll)) {
+            Row(Modifier.width(restWidth).fillMaxHeight()) { rest.forEach { c -> GridCell(row, c, widths.getValue(c.id)) } }
+        }
         if (onOpen != null) {
             Text(
                 ">", color = if (hovered || selected) Palette.gold else Palette.stroke, fontFamily = Pixel.font, fontSize = 11.sp,
@@ -236,8 +275,8 @@ private fun <T> GridRow(index: Int, row: T, columns: List<GridColumn<T>>, select
 }
 
 @Composable
-private fun <T> RowScope.GridCell(row: T, c: GridColumn<T>) {
-    val m = (if (c.width == null) Modifier.weight(1f) else Modifier.width(c.width)).fillMaxHeight().padding(horizontal = 4.dp)
+private fun <T> GridCell(row: T, c: GridColumn<T>, width: Dp) {
+    val m = Modifier.width(width).fillMaxHeight().padding(horizontal = 4.dp)
     val spark = c.spark
     if (spark != null) {
         Box(m.padding(vertical = 4.dp)) { GridSpark(spark(row), Modifier.fillMaxSize()) }
@@ -248,10 +287,14 @@ private fun <T> RowScope.GridCell(row: T, c: GridColumn<T>) {
             val f = bar(row).coerceIn(0f, 1f)
             if (f > 0f) Box(Modifier.align(Alignment.CenterStart).fillMaxWidth(f).height(14.dp).background(Palette.gold.copy(alpha = 0.22f)))
         }
-        Text(
-            c.text(row), color = c.tone(row), style = GridFigures, fontWeight = if (c.bold) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = if (c.numeric) TextAlign.End else TextAlign.Start,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            c.lead?.let { lead -> lead(row); Spacer(Modifier.width(6.dp)) }
+            Text(
+                c.text(row), color = c.tone(row), style = GridFigures, fontWeight = if (c.bold) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = if (c.numeric) TextAlign.End else TextAlign.Start,
+                modifier = if (c.numeric) Modifier else Modifier.weight(1f, fill = false),
+            )
+        }
     }
 }
 
