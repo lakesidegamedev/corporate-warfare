@@ -324,6 +324,33 @@ fn slot_moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Proposal> {
             None => moves.push(Move::routine(proposal)),
         }
     }
+    // Capacity rules in live play (they were reached only through `strategic_for`): close a
+    // plant that loses money, and pay out cash the firm has no use for while it is not building.
+    // Both are routine moves, outside the selector, so neither crowds out a build.
+    if let Some(plant) = losing_plant(world, dataset, firm) {
+        moves.push(Move::routine(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::MothballFacility { facility: plant },
+        }));
+    }
+    let building = moves.iter().any(|m| {
+        matches!(
+            m.proposal.intent,
+            CommandIntent::BuildFacility { .. }
+                | CommandIntent::RetoolFacility { .. }
+                | CommandIntent::StartDiligence { .. }
+                | CommandIntent::RaidMarket { .. }
+        )
+    });
+    if !building && let Some(amount) = idle_payout(world, dataset, firm) {
+        moves.push(Move::routine(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::PayDividend {
+                firm,
+                amount_cents: amount,
+            },
+        }));
+    }
     if let Some(candidate) = cw_sim::ph!("ai::supplier_bid", supplier_bid(world, dataset, firm)) {
         let proposal = Proposal {
             actor: firm.0,

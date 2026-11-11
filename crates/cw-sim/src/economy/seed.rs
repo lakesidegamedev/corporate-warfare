@@ -1015,8 +1015,13 @@ pub fn household_lots(world: &World, dataset: &Dataset, product: u16, full: &[i6
         made[market[r]] += supply[r] as i128;
         budget[market[r]] += full[r] as i128;
     }
-    // Where every market has a named seller, those markets carry the whole opening gap.
-    let cover = if (0..regions).all(|m| budget[m] == 0 || made[m] > 0) {
+    // Markets with named sellers open near balance (the cover share); the corridor's room to
+    // build is the markets no one serves yet. Under the old street-free rules a corridor where
+    // every market had a seller put its whole opening gap on those sellers, so every incumbent
+    // opened short and any price that read shortage rose everywhere at once.
+    let cover = if !dataset.demand.street_short_bps.is_positive()
+        && (0..regions).all(|m| budget[m] == 0 || made[m] > 0)
+    {
         (10_000 - target).max(1)
     } else {
         cover as i128

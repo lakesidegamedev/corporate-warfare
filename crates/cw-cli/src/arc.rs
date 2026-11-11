@@ -257,6 +257,10 @@ pub struct CapacityStats {
     pub rival_plants_mothballed: u32,
     /// Rival plants that disappeared (sold, or their firm wound up).
     pub rival_plants_gone: u32,
+    /// Mothballed rival plants that went back to operating (reopened, or won at auction and
+    /// reopened).
+    #[serde(default)]
+    pub rival_plants_reopened: u32,
     /// Cash rivals paid out as dividends, cents (from retained earnings against net income).
     pub rival_payout_cents: i64,
     /// Of the ten largest rivals at week 0 that survive: blocks at the end less blocks at the start.
@@ -366,6 +370,10 @@ pub struct GoodPrice {
     /// Whether the good has a gateway (traded) or not (services and retail goods: local).
     #[serde(default)]
     pub traded: bool,
+    /// Whether households buy the good (the engine's own list: a good in the regions' household
+    /// budget weights). Only meaningful for a local good: the others are business services.
+    #[serde(default)]
+    pub household: bool,
     /// Median over years of (max - min) / reference, in percent.
     pub median_year_range_pct: f64,
     /// Median over years of (max - min) / the year's own mean price, in percent: the whole
@@ -529,6 +537,12 @@ pub struct Aggregate {
     pub price_total_traded_pct_median: Option<f64>,
     #[serde(default)]
     pub price_total_local_pct_median: Option<f64>,
+    /// The local class split by who buys: goods households buy (gated) and business services
+    /// (reported only).
+    #[serde(default)]
+    pub price_total_household_pct_median: Option<f64>,
+    #[serde(default)]
+    pub price_total_business_pct_median: Option<f64>,
     #[serde(default)]
     pub price_swings_per_year_max: Option<f64>,
     #[serde(default)]
@@ -581,6 +595,8 @@ pub struct Aggregate {
     pub rival_plants_mothballed_per_decade_median: Option<f64>,
     #[serde(default)]
     pub rival_plants_gone_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub rival_plants_reopened_per_decade_median: Option<f64>,
     #[serde(default)]
     pub rival_payout_per_decade_median_cents: Option<f64>,
     /// Median over careers of the median surviving top-ten rival's change in blocks.
@@ -756,6 +772,8 @@ struct Observer {
     capacity: CapacityStats,
     /// Every plant seen: (owner, operating last week).
     plants_seen: BTreeMap<u64, (u64, bool)>,
+    /// Plants last seen mothballed, to count a reopening when one runs again.
+    mothballed_seen: BTreeSet<u64>,
     retained: BTreeMap<u64, i64>,
     last_dividend: BTreeMap<u64, u32>,
     top_ten_start: Vec<(u64, i64)>,
@@ -806,6 +824,7 @@ impl Observer {
             ninety_seen: Default::default(),
             capacity: CapacityStats::default(),
             plants_seen: BTreeMap::new(),
+            mothballed_seen: BTreeSet::new(),
             retained: BTreeMap::new(),
             last_dividend: BTreeMap::new(),
             top_ten_start: Vec::new(),
@@ -1011,6 +1030,11 @@ impl Observer {
                 }
                 _ => {}
             }
+            if plant.status == cw_sim::state::FacilityStatus::Mothballed {
+                self.mothballed_seen.insert(handle.0);
+            } else if operating && self.mothballed_seen.remove(&handle.0) && after_week && outside {
+                self.capacity.rival_plants_reopened += 1;
+            }
         }
         let gone: Vec<u64> = self
             .plants_seen
@@ -1019,6 +1043,7 @@ impl Observer {
             .filter(|id| !alive.contains(id))
             .collect();
         for id in gone {
+            self.mothballed_seen.remove(&id);
             if let Some((owner, _)) = self.plants_seen.remove(&id)
                 && after_week
                 && !group.contains(&owner)
@@ -1613,6 +1638,11 @@ fn finish_career(
                 && session.world.gateways.iter().any(|g| {
                     g.product == *good && (g.sell_price_cents > 0 || g.buy_price_cents > 0)
                 }),
+            household: session
+                .world
+                .regions
+                .iter()
+                .any(|r| r.households.weights.get(good).is_some_and(|w| *w > 0)),
             median_year_range_pct: median_f64(ranges).unwrap_or(0.0),
             median_year_total_range_pct: total_by_good
                 .get(good)
@@ -2093,8 +2123,10 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
     type GoodSeries = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>);
     let mut per_good: BTreeMap<String, GoodSeries> = BTreeMap::new();
     let mut traded_goods: BTreeMap<String, bool> = BTreeMap::new();
+    let mut household_goods: BTreeMap<String, bool> = BTreeMap::new();
     for c in careers {
         for g in &c.goods {
+            *household_goods.entry(g.good.clone()).or_default() |= g.household;
             *traded_goods.entry(g.good.clone()).or_default() |= g.traded;
             let slot = per_good.entry(g.good.clone()).or_default();
             slot.0.push(g.median_year_range_pct);
@@ -2119,6 +2151,15 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         total_by_good
             .iter()
             .filter(|(_, t, _, _)| *t == traded)
+            .map(|(_, _, r, _)| *r)
+            .collect()
+    };
+    // Local goods split by who buys them: households (a good households have a budget for) or
+    // businesses (maintenance, research, advertising, freight and the like).
+    let local_class = |household: bool| -> Vec<f64> {
+        total_by_good
+            .iter()
+            .filter(|(good, t, _, _)| !*t && household_goods[good] == household)
             .map(|(_, _, r, _)| *r)
             .collect()
     };
@@ -2210,6 +2251,8 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         price_range_local_pct_median: median_f64(&local_range),
         price_total_traded_pct_median: median_f64(&total_class(true)),
         price_total_local_pct_median: median_f64(&total_class(false)),
+        price_total_household_pct_median: median_f64(&local_class(true)),
+        price_total_business_pct_median: median_f64(&local_class(false)),
         price_swings_per_year_max: swings.iter().copied().reduce(f64::max),
         price_swings_per_year_mean: (!swings.is_empty())
             .then(|| swings.iter().sum::<f64>() / swings.len() as f64),
@@ -2301,6 +2344,10 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         rival_plants_mothballed_per_decade_median: med(careers
             .iter()
             .map(|c| per_decade(c.capacity.rival_plants_mothballed, c.weeks_played))
+            .collect()),
+        rival_plants_reopened_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.rival_plants_reopened, c.weeks_played))
             .collect()),
         rival_plants_gone_per_decade_median: med(careers
             .iter()
@@ -2497,6 +2544,8 @@ fn metric_value(aggregate: &Aggregate, metric: &str) -> Option<f64> {
         "price_range_local_pct_median" => aggregate.price_range_local_pct_median,
         "price_total_traded_pct_median" => aggregate.price_total_traded_pct_median,
         "price_total_local_pct_median" => aggregate.price_total_local_pct_median,
+        "price_total_household_pct_median" => aggregate.price_total_household_pct_median,
+        "price_total_business_pct_median" => aggregate.price_total_business_pct_median,
         "price_swings_per_year_max" => aggregate.price_swings_per_year_max,
         "price_swings_per_year_mean" => aggregate.price_swings_per_year_mean,
         "hostile_top3_median" => aggregate.hostile_top3_median,
@@ -2935,7 +2984,7 @@ pub fn run(arguments: &[String]) {
     }
     let a = &report.aggregate;
     println!(
-        "arc scenario={} loaded={} policy={} seeds={} weeks={} companies={} bust={:?} first={:?} bottom_half={:?} zombie={:?} price_range_pct={:?} traded={:?} local={:?} total_traded={:?} total_local={:?} swings_max={:?} swings_mean={:?} ms/wk={:.1}",
+        "arc scenario={} loaded={} policy={} seeds={} weeks={} companies={} bust={:?} first={:?} bottom_half={:?} zombie={:?} price_range_pct={:?} traded={:?} local={:?} total_traded={:?} total_local={:?} total_household={:?} total_business={:?} swings_max={:?} swings_mean={:?} ms/wk={:.1}",
         report.scenario.requested,
         report.scenario.loaded,
         report.policy,
@@ -2951,6 +3000,8 @@ pub fn run(arguments: &[String]) {
         a.price_range_local_pct_median,
         a.price_total_traded_pct_median,
         a.price_total_local_pct_median,
+        a.price_total_household_pct_median,
+        a.price_total_business_pct_median,
         a.price_swings_per_year_max,
         a.price_swings_per_year_mean,
         a.ms_per_week_mean
