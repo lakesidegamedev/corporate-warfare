@@ -288,6 +288,7 @@ impl Dataset {
                     || dataset.legacy_hash() == hash
                     || dataset.pre_markets_hashes().iter().any(|old| old == hash)
                     || dataset.pre_capacity_hash() == hash
+                    || dataset.pre_household_hash() == hash
                     || dataset.pre_raid_warning_hash() == hash
             })
     }
@@ -945,18 +946,39 @@ impl Dataset {
     /// The hash this dataset had before the capacity rules joined it (2.0, after the market
     /// rules): a save written then names it and loads against the current dataset.
     pub fn pre_capacity_hash(&self) -> String {
-        let mut plain = self.clone();
+        let mut plain = self.before_households();
         plain.capacity = balance::CapacityRules::default();
         plain.hash_with(self.cast.len(), true)
     }
 
-    /// The hash this dataset had before raids were announced ahead (2.0, after the capacity
-    /// rules): the same content with no raid warning. A save written then names it and loads
-    /// against the current dataset, where its next raid is announced.
+    /// The hash this dataset had before households' opening demand was sized to the playable
+    /// market and local prices were given more room (2.0, after the capacity rules: services
+    /// then topped out at 110 percent of reference and sellers with no import at 130 percent): a
+    /// save written then names it and loads against the current dataset.
+    pub fn pre_household_hash(&self) -> String {
+        self.before_households().hash_with(self.cast.len(), true)
+    }
+
+    fn before_households(&self) -> Dataset {
+        let mut plain = self.before_raid_warning();
+        plain.capacity.household_cover_bps = 0;
+        plain.capacity.household_unmet_bps = 0;
+        plain.markets.service_max_bps = 11_000;
+        plain.markets.local_ceiling_bps = 13_000;
+        plain
+    }
+
+    /// The hash this dataset had before raids were announced ahead (2.0, after the household
+    /// demand round): the same content with no raid warning. A save written then names it and
+    /// loads against the current dataset, where its next raid is announced.
     pub fn pre_raid_warning_hash(&self) -> String {
+        self.before_raid_warning().hash_with(self.cast.len(), true)
+    }
+
+    fn before_raid_warning(&self) -> Dataset {
         let mut plain = self.clone();
         plain.capacity.raid_warning_weeks = 0;
-        plain.hash_with(self.cast.len(), true)
+        plain
     }
 
     fn hash_with(&self, cast_people: usize, with_markets: bool) -> String {
@@ -1152,6 +1174,14 @@ impl Dataset {
                 .i64(c.payout_buffer_weeks)
                 .i64(c.payout_share_bps)
                 .i64(c.raid_warning_weeks as i64);
+            // Sizing households' opening demand to the playable market came later in 2.0; it
+            // names the dataset only when it is on, so a save written before it still loads.
+            if c.household_cover_bps != 0 {
+                hasher
+                    .string("cw-households-v1")
+                    .i64(c.household_cover_bps)
+                    .i64(c.household_unmet_bps);
+            }
         }
         // The opening macro data is deliberately outside the hash: it only sets where the cycle
         // starts and how opening wages fade, never a row a save indexes into, so saves written

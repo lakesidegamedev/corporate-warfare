@@ -1762,9 +1762,9 @@
     "service_balance_bps": 9000,
     "service_slope_pct": 200,
     "service_min_bps": 7500,
-    "service_max_bps": 11000,
+    "service_max_bps": 13000,
     "service_counts_unmet": true,
-    "local_ceiling_bps": 13000
+    "local_ceiling_bps": 15000
   },
   "plant_scale": 5,
   "margin_floor": 0.2,
@@ -1795,6 +1795,8 @@
     "close_after_loss_weeks": 26,
     "payout_buffer_weeks": 26,
     "payout_share_bps": 5000,
-    "raid_warning_weeks": 4
+    "raid_warning_weeks": 4,
+    "household_cover_bps": 8500,
+    "household_unmet_bps": 3000
   }
 }

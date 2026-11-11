@@ -37,6 +37,21 @@ week's income times the product's spending weight) buys at the price they last p
 demand is money households would pay at today's price that found no seller. A category's budget
 that finds no seller, or that sellers could not fill, goes back to the households' savings.
 
+Household income is the whole scaled regional economy, but only the named firms sell to
+households, so each household product's opening baseline is sized to the playable market
+(content `household_cover_bps`, `household_unmet_bps`). Each market (a region for shops, a
+state for services) where named plants sell asks for what those plants make for households, less
+what plants use of it, over the cover share (85 percent), never more than its budget buys. Markets
+with no named seller ask for an even slice of their budget, sized so the corridor as a whole opens
+with 30 percent of what households ask for finding no seller. Where every market has a named
+seller, those markets carry the whole 30 percent. A product no named plant makes keeps its whole
+budget. What households no longer ask for stays in savings, as any unspent budget does. Measured
+at week 4 of every scenario, every household product opens 24 to 39 percent unmet.
+
+With supply and demand in the same range, the service band tops out at 130 percent of reference
+(`service_max_bps` 13000) and a seller with no import to compete with at 150 percent
+(`local_ceiling_bps` 15000).
+
 ## Rivals build and close
 - Growth: after a quarter of results, profitable, staffed to nine tenths in the target region, with
   cash over twice the reserve plus the build cost. A rival orders one plant the size of the gap:

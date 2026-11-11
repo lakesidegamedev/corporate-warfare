@@ -2323,9 +2323,12 @@ mod tests {
         // signal). In 2.0 it moved again from 24eeba2c... when home sellers began reading the
         // average export discount instead of the last lot's step, households began asking for no
         // more than their budget buys (unspent budgets return to savings), and openings began
-        // reading the inputs a new plant could buy. In 2.0 it moved again from that value when
-        // raids began to be announced four weeks ahead (the warning joined the dataset hash and
-        // the world gained the list of campaigns in progress, save schema 4). The Swift
+        // reading the inputs a new plant could buy, and again when households' opening demand was
+        // sized to what the named plants serve (household_cover_bps and household_unmet_bps
+        // joined the dataset hash), and again when services and sellers with no import were given
+        // more room over reference (130 and 150 percent). In 2.0 it moved again from b2a6baa7...
+        // when raids began to be announced four weeks ahead (the warning joined the dataset hash
+        // and the world gained the list of campaigns in progress, save schema 4). The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2351,7 +2354,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "096f4cdac009316cb5eb4dca9e9c6472377f22b2899ed68038232581b45512b9"
+            "b2a6baa74f5b3a901959aa864d3894b35c8e10aced637154b4c657cb7b2718f6"
         );
     }
 

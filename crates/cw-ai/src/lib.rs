@@ -2323,6 +2323,9 @@ struct Memo {
     input_rooms: BTreeMap<(), cw_sim::economy::capacity::InputRooms>,
     /// A new block's contribution (`new_block_contribution`), keyed like `block_contribution`.
     new_block_contribution: BTreeMap<(u8, u16, u8), i64>,
+    /// Room for a new plant of a strategy in a region (`recipe_room`), so the input table is not
+    /// copied out of the memo for every candidate.
+    recipe_room: BTreeMap<(u16, u16, u8), i64>,
 }
 
 thread_local! {
@@ -2575,12 +2578,18 @@ fn input_rooms(world: &World, dataset: &Dataset) -> cw_sim::economy::capacity::I
 /// Room for a new plant of a strategy in a state: the room for its output (`room`), no more than
 /// the corridor's spare inputs could feed (`capacity::input_cap_lots`).
 fn recipe_room(world: &World, dataset: &Dataset, recipe: u16, output: u16, region: u8) -> i64 {
-    room(world, dataset, output, region).min(cw_sim::economy::capacity::input_cap_lots(
-        dataset,
-        &input_rooms(world, dataset),
-        recipe,
-        region,
-    ))
+    Memo::read(
+        |m| &mut m.recipe_room,
+        (recipe, output, region),
+        || {
+            room(world, dataset, output, region).min(cw_sim::economy::capacity::input_cap_lots(
+                dataset,
+                &input_rooms(world, dataset),
+                recipe,
+                region,
+            ))
+        },
+    )
 }
 
 /// The best new plant for the firm: a strategy of its primary (or secondary) sector in the state
