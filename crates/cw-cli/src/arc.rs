@@ -313,6 +313,11 @@ pub struct CapacityStats {
     /// Companies in the league when the career began.
     #[serde(default)]
     pub firms_at_start: u32,
+    /// Companies folded into their 90 percent owner, all owners and by rivals only.
+    #[serde(default)]
+    pub mergers: u32,
+    #[serde(default)]
+    pub rival_mergers: u32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -537,6 +542,11 @@ pub struct Aggregate {
     pub lots_player_could_buy_per_decade_median: Option<f64>,
     #[serde(default)]
     pub lots_won_by_player_total: u32,
+    #[serde(default)]
+    pub mergers_per_decade_median: Option<f64>,
+    /// Share of careers in which at least one company was folded into its owner.
+    #[serde(default)]
+    pub careers_with_merger_share: Option<f64>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -1033,6 +1043,13 @@ impl Observer {
             c.lots_won_by_player = t.sold_to_player;
             c.breakup_proceeds_cents = t.breakup_proceeds_cents;
             c.breakup_scrap_cents = t.breakup_scrap_cents;
+            c.mergers = t.mergers;
+            c.rival_mergers = world
+                .auctions
+                .mergers
+                .iter()
+                .filter(|m| !group.contains(&m.buyer.0))
+                .count() as u32;
         }
         let new_lots: Vec<&cw_sim::economy::auctions::PlantLot> = world
             .auctions
@@ -1975,6 +1992,13 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
             .map(|c| per_decade(c.capacity.lots_player_could_buy, c.weeks_played))
             .collect()),
         lots_won_by_player_total: careers.iter().map(|c| c.capacity.lots_won_by_player).sum(),
+        mergers_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.mergers, c.weeks_played))
+            .collect()),
+        careers_with_merger_share: (!careers.is_empty()).then(|| {
+            careers.iter().filter(|c| c.capacity.mergers > 0).count() as f64 / careers.len() as f64
+        }),
         old_rule_payout_per_decade_median: med(careers
             .iter()
             .map(|c| {
@@ -2021,6 +2045,7 @@ fn metric_value(aggregate: &Aggregate, metric: &str) -> Option<f64> {
         "top_ten_block_change_median" => aggregate.top_ten_block_change_median,
         "unmet_local_fall_pct_median" => aggregate.unmet_local_fall_pct_median,
         "raid_warning_weeks_median" => aggregate.raid_warning_weeks_median,
+        "careers_with_merger_share" => aggregate.careers_with_merger_share,
         "plants_changing_hands_per_decade_per_ten_firms_median" => {
             aggregate.plants_changing_hands_per_decade_per_ten_firms_median
         }

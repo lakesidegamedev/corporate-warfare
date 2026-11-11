@@ -808,6 +808,42 @@ fn auction_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<L
     }
 }
 
+/// A company folding in one the player holds shares in writes to say the shares were bought out
+/// (2.0).
+fn merger_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
+    for m in world
+        .auctions
+        .mergers
+        .iter()
+        .filter(|m| m.tick.0 >= since && m.investor_shares > 0 && !player_side(world, m.buyer))
+    {
+        let (Some(buyer), Some(target)) = (
+            paper::firm_name(world, m.buyer),
+            paper::firm_name(world, m.target),
+        ) else {
+            continue;
+        };
+        out.push(finish(
+            world,
+            Draft {
+                id: format!("merger:{}:{}", m.tick.0, m.target.0),
+                kind: "bid",
+                week: m.tick.0,
+                sender: rival_sender(world, dataset, m.buyer, m.tick.0),
+                tone: Tone::Formal,
+                addressee: "Investor".to_owned(),
+                facts: vec![format!(
+                    "{buyer} has folded {target} into itself. Your {} shares in {target} were bought out for cash with the other minority holders, {} in all.",
+                    m.investor_shares,
+                    paper::money(world, dataset, m.buyer, m.minority_cents),
+                )],
+                link: PaperLink::company(m.buyer),
+            },
+            None,
+        ));
+    }
+}
+
 /// A rival that announces a raid campaign on one of the player's companies writes to say so, in
 /// its chief's voice (2.0). The facts are the campaign's: business, region, budget, the week it is
 /// decided.
@@ -1840,6 +1876,7 @@ pub fn letters(world: &World, dataset: &Dataset, since_week: u32) -> Vec<Letter>
     executive_letters(world, dataset, since, &mut out);
     stake_letters(world, dataset, since, &mut out);
     auction_letters(world, dataset, since, &mut out);
+    merger_letters(world, dataset, since, &mut out);
     decision_letters(world, dataset, 1, &mut out);
 
     out.sort_by(|a, b| {

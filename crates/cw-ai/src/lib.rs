@@ -313,6 +313,10 @@ fn slot_moves(world: &World, dataset: &Dataset, firm: Handle) -> Vec<Proposal> {
         "ai::storage_moves",
         storage_moves(world, dataset, firm, &mut generated)
     );
+    cw_sim::ph!(
+        "ai::asset_moves",
+        asset_moves(world, dataset, firm, &mut generated)
+    );
     for proposal in generated {
         let class = selector::classify(dataset, &proposal.intent);
         match class {
@@ -1767,35 +1771,17 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
             actor: firm.0,
             intent,
         });
-    } else if let Some(plant) = idle_plant(world, firm) {
-        // With plant auctions on, a plant left mothballed for half a year is listed, at most
-        // once in that time, so the player can bid for it too; otherwise it is sold at once when
-        // a bid appears.
-        if auctions::auction_weeks(dataset) > 0 {
-            if relist_due(world, plant) {
-                proposals.push(Proposal {
-                    actor: firm.0,
-                    intent: CommandIntent::ListPlant { facility: plant },
-                });
-            }
-        } else if !cw_sim::economy::disposal::plant_bids(world, dataset, plant).is_empty() {
-            proposals.push(Proposal {
-                actor: firm.0,
-                intent: CommandIntent::DisposeFacility { facility: plant },
-            });
-        }
-    }
-    // A listing whose bids are in: the best is accepted (the plant was idle).
-    for lot in world
-        .auctions
-        .lots
-        .iter()
-        .filter(|lot| lot.seller == firm && !lot.offered.is_empty())
+    } else if auctions::auction_weeks(dataset) == 0
+        && let Some(plant) = idle_plant(world, firm)
+        && !cw_sim::economy::disposal::plant_bids(world, dataset, plant).is_empty()
     {
         proposals.push(Proposal {
             actor: firm.0,
-            intent: CommandIntent::AcceptPlantBid { lot: lot.id },
+            intent: CommandIntent::DisposeFacility { facility: plant },
         });
+    }
+    if auctions::auction_weeks(dataset) > 0 {
+        asset_moves(world, dataset, firm, proposals);
     }
     let building = proposals[start..].iter().any(|p| {
         matches!(
@@ -1898,6 +1884,80 @@ fn losing_plant(world: &World, dataset: &Dataset, firm: Handle) -> Option<Handle
 }
 
 /// The plant a rival has kept mothballed longest, once that is at least half a year.
+/// Plant listings and mergers (2.0), routine moves in every strategic slot: a plant left
+/// mothballed for half a year is listed, at most once in that time, so other companies and the
+/// player can bid for it; a listing whose bids are in is sold to the best (the plant was idle);
+/// and a company held at 90 percent is folded in when the merger checks pass. The same commands and checks as the player's.
+fn asset_moves(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
+    if auctions::auction_weeks(dataset) > 0
+        && let Some(plant) = idle_plant(world, firm)
+        && relist_due(world, plant)
+    {
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::ListPlant { facility: plant },
+        });
+    }
+    for lot in world
+        .auctions
+        .lots
+        .iter()
+        .filter(|lot| lot.seller == firm && !lot.offered.is_empty())
+    {
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::AcceptPlantBid { lot: lot.id },
+        });
+    }
+    if let Some(target) = merger_target(world, firm) {
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::FoldInCompany {
+                buyer: firm,
+                target,
+            },
+        });
+    }
+}
+
+/// A company this rival holds at 90 percent or more, however it came to hold it, to fold in: no
+/// merger by this rival in the last year, no review or remedy on a deal between them, the board's
+/// authority for a large action, and cash for the minority buyout at fair value with eight weeks
+/// of mandatory outflow left over. The lowest handle first.
+fn merger_target(world: &World, firm: Handle) -> Option<Handle> {
+    if world.auctions.merged_lately(firm, world.tick)
+        || !cw_sim::economy::governance::large_action_authorised(world, firm)
+    {
+        return None;
+    }
+    let cash = world.firm(firm)?.book.cash();
+    let reserve = cw_sim::economy::insolvency::mandatory_weekly_outflow(world, firm)
+        .saturating_mul(cw_sim::economy::disposal::BID_RESERVE_WEEKS);
+    world
+        .firms
+        .iter()
+        .filter(|(target, company)| {
+            *target != firm
+                && company.operative()
+                && company.shares.meets_squeeze_out(HolderId::Firm(firm))
+                && cw_sim::economy::fx::currency_of(world, *target)
+                    == cw_sim::economy::fx::currency_of(world, firm)
+        })
+        .filter(|(target, _)| {
+            !world.deals.iter().any(|(_, deal)| {
+                deal.buyer == firm
+                    && deal.target == *target
+                    && (deal.review_required || deal.remedy_share_bps != 0)
+            })
+        })
+        .filter(|(target, _)| {
+            cw_sim::economy::deals::minority_cost(world, firm, *target, 0).saturating_add(reserve)
+                <= cash
+        })
+        .map(|(target, _)| target)
+        .min()
+}
+
 /// Whether an idle plant may be listed now: not on offer, and not listed in the last
 /// `IDLE_WIND_DOWN_WEEKS` weeks.
 fn relist_due(world: &World, plant: Handle) -> bool {

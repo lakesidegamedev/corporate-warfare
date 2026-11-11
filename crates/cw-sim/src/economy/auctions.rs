@@ -14,6 +14,7 @@
 //! wins a tie, since it was made first. The rival bids are worked out only at the deadline, so
 //! the player sees the engine's opening figures for the plant, never the rivals' bids, until then.
 //!
+//! The same state keeps the merger log (`ProposeMerger`), which a company's merger cooldown reads.
 //! The state is a self-contained list outside the postcard payload, in its own save trailer, so
 //! no save schema moves (docs/rules/INTERFACE.md).
 
@@ -116,7 +117,22 @@ pub struct AuctionTotals {
     /// What the break-up lots would have fetched at the scrap rate (the rule before 2.0).
     pub breakup_scrap_cents: i64,
     pub listing_proceeds_cents: i64,
+    pub mergers: u32,
 }
+
+/// A company folded into the one holding 90 percent of it (`ProposeMerger`), with the cash its
+/// last minority holders were paid and the shares the player held then.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MergerRecord {
+    pub tick: Tick,
+    pub buyer: Handle,
+    pub target: Handle,
+    pub minority_cents: i64,
+    pub investor_shares: i64,
+}
+
+/// Weeks a company waits after one merger before it proposes another.
+pub const MERGER_COOLDOWN_WEEKS: u32 = 52;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuctionState {
@@ -124,11 +140,32 @@ pub struct AuctionState {
     pub lots: Vec<PlantLot>,
     pub closed: Vec<ClosedLot>,
     pub totals: AuctionTotals,
+    /// Mergers, newest last (the last `LOG_LEN`); `totals.mergers` counts them all.
+    pub mergers: Vec<MergerRecord>,
 }
 
 impl AuctionState {
     pub fn is_empty(&self) -> bool {
-        self.lots.is_empty() && self.closed.is_empty() && self.next_id == 0
+        self.lots.is_empty()
+            && self.closed.is_empty()
+            && self.next_id == 0
+            && self.mergers.is_empty()
+    }
+
+    /// Whether `buyer` merged a company in within the cooldown.
+    pub fn merged_lately(&self, buyer: Handle, now: Tick) -> bool {
+        self.mergers
+            .iter()
+            .any(|m| m.buyer == buyer && now.0.saturating_sub(m.tick.0) < MERGER_COOLDOWN_WEEKS)
+    }
+
+    pub fn record_merger(&mut self, record: MergerRecord) {
+        self.totals.mergers += 1;
+        self.mergers.push(record);
+        let excess = self.mergers.len().saturating_sub(LOG_LEN);
+        if excess > 0 {
+            self.mergers.drain(..excess);
+        }
     }
 
     pub fn lot(&self, id: u32) -> Option<&PlantLot> {
