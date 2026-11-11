@@ -5122,11 +5122,26 @@ mod tests {
     #[test]
     fn every_alert_key_reads_as_a_sentence() {
         let keys = [
-            "alert.decision", "alert.past_due", "alert.payout_frozen", "alert.incident",
-            "alert.law_carrier", "alert.law_rescue", "alert.state_rescue", "alert.quota",
-            "alert.reserve", "alert.storage_full", "alert.storage_fees", "alert.spoilage",
-            "alert.lane_congested", "alert.carrier_hike", "alert.activist", "alert.squeeze",
-            "alert.captive_markdown", "alert.bond_due", "alert.lane_reserved", "alert.something_new",
+            "alert.decision",
+            "alert.past_due",
+            "alert.payout_frozen",
+            "alert.incident",
+            "alert.law_carrier",
+            "alert.law_rescue",
+            "alert.state_rescue",
+            "alert.quota",
+            "alert.reserve",
+            "alert.storage_full",
+            "alert.storage_fees",
+            "alert.spoilage",
+            "alert.lane_congested",
+            "alert.carrier_hike",
+            "alert.activist",
+            "alert.squeeze",
+            "alert.captive_markdown",
+            "alert.bond_due",
+            "alert.lane_reserved",
+            "alert.something_new",
         ];
         for key in keys {
             let text = super::alert_text(cw_session::Alert {
@@ -5135,7 +5150,10 @@ mod tests {
                 severity: 1,
                 detail: String::new(),
             });
-            assert!(!text.starts_with("alert."), "{key} reached the player raw: {text}");
+            assert!(
+                !text.starts_with("alert."),
+                "{key} reached the player raw: {text}"
+            );
         }
     }
 
