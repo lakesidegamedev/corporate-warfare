@@ -923,6 +923,27 @@ impl Observer {
             .and_then(|p| world.firm(p))
             .map(valuation)
             .unwrap_or(0);
+        // League raids: every raid decided this week, whoever the player is (none careers too).
+        for raid in &world.raids {
+            if self.seen_all_raids.insert((
+                raid.tick,
+                raid.attacker.0,
+                raid.defender.0,
+                raid.region,
+                raid.industry,
+            )) {
+                self.capacity.raids_all += 1;
+                if raid.success {
+                    self.capacity.raids_won += 1;
+                    if world
+                        .firm(raid.defender)
+                        .is_some_and(|f| f.facilities.is_empty())
+                    {
+                        self.capacity.raids_emptied_company += 1;
+                    }
+                }
+            }
+        }
         if !group.is_empty() {
             let mut plan_deals: BTreeSet<u64> = BTreeSet::new();
             for plan in &world.plans.plans {
@@ -964,26 +985,6 @@ impl Observer {
                     self.capacity
                         .raid_warning_weeks
                         .push(c.resolves.saturating_sub(c.announced));
-                }
-            }
-            for raid in &world.raids {
-                if self.seen_all_raids.insert((
-                    raid.tick,
-                    raid.attacker.0,
-                    raid.defender.0,
-                    raid.region,
-                    raid.industry,
-                )) {
-                    self.capacity.raids_all += 1;
-                    if raid.success {
-                        self.capacity.raids_won += 1;
-                        if world
-                            .firm(raid.defender)
-                            .is_some_and(|f| f.facilities.is_empty())
-                        {
-                            self.capacity.raids_emptied_company += 1;
-                        }
-                    }
                 }
             }
             for raid in &world.raids {
