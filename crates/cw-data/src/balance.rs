@@ -262,6 +262,76 @@ pub struct Balance {
     /// which then get the defaults.
     #[serde(default)]
     pub markets: MarketRules,
+    /// How building costs follow prices, when rivals build and close, how idle cash is paid out
+    /// and how raids are announced (2.0). Absent in older content files, which then get the
+    /// defaults (the rules before 2.0).
+    #[serde(default)]
+    pub capacity: CapacityRules,
+}
+
+/// Capacity as the contest: what a new plant costs today, when a company adds or closes one, and
+/// what it does with cash it has no use for. Shared by every scenario and by the player and the
+/// rivals alike; a scenario supplies prices and plants, never its own rules.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CapacityRules {
+    /// Weight of the general price index in a plant's build price, in basis points. The weights
+    /// of the index and of `build_inputs` add to 10,000 when build prices follow prices; all
+    /// zero means a plant costs its catalogue price for ever (the rule before 2.0).
+    pub build_price_level_bps: i64,
+    /// Goods and services a plant is built from, each with its weight in the build price, in
+    /// basis points. Each counts at last week's closing corridor price against its catalogue
+    /// price, so a steel boom makes new mills dearer for everyone who orders one.
+    pub build_inputs: Vec<(String, i64)>,
+    /// The least and most the build price may be, in basis points of the catalogue price.
+    pub build_price_min_bps: i64,
+    pub build_price_max_bps: i64,
+    /// Whether households going without a service or retail good count as room to build, and
+    /// such products are valued at last week's closing price rather than the catalogue's.
+    pub local_room: bool,
+    /// Weeks of a block's output the opening must absorb, in tenths of a block, before a firm
+    /// that waits for proof (a cautious temperament) builds. A keen builder needs less.
+    pub opening_patient_tenths: i64,
+    pub opening_keen_tenths: i64,
+    /// Room, in tenths of a block, an opening outside a firm's own sectors must hold before a
+    /// builder with idle cash enters it as a new business. Zero: firms keep to their sectors.
+    pub opening_entry_tenths: i64,
+    /// Plants a company may run before each further one must pay back faster: the payback a
+    /// build must beat shortens by this many weeks for every plant already run. A smooth cost
+    /// of size in place of a hard cap on plants.
+    pub span_plants: i64,
+    pub span_weeks_per_plant: i64,
+    /// Weeks a plant must have run before a rival losing money over the quarter mothballs it for
+    /// losing money at its own figures. Zero: rivals never close a plant for losses.
+    pub close_after_loss_weeks: u32,
+    /// Weeks of mandatory outflow a firm keeps as a prudence buffer on top of its plans before
+    /// it counts cash as idle. Zero turns payouts off.
+    pub payout_buffer_weeks: i64,
+    /// Share of idle cash paid out each quarter, in basis points.
+    pub payout_share_bps: i64,
+    /// Weeks between a raid being announced and its resolution. Zero resolves a raid at once.
+    pub raid_warning_weeks: u32,
+}
+
+impl Default for CapacityRules {
+    fn default() -> Self {
+        CapacityRules {
+            build_price_level_bps: 0,
+            build_inputs: Vec::new(),
+            build_price_min_bps: 10_000,
+            build_price_max_bps: 10_000,
+            local_room: false,
+            opening_patient_tenths: 0,
+            opening_keen_tenths: 0,
+            opening_entry_tenths: 0,
+            span_plants: 0,
+            span_weeks_per_plant: 0,
+            close_after_loss_weeks: 0,
+            payout_buffer_weeks: 0,
+            payout_share_bps: 0,
+            raid_warning_weeks: 0,
+        }
+    }
 }
 
 /// How the outside world's gateways and the corridor's sellers respond to trade volume. Shared by

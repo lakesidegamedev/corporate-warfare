@@ -1006,6 +1006,45 @@ impl Session {
         dto::fx_view(&self.world, &self.dataset, self.reporting_currency)
     }
 
+    /// Openings to build, fastest payback first, valued from the player's primary company's head
+    /// office (or the first region before one is founded): every strategy and state where the
+    /// market is short of at least a fifth of a block and a block pays back. The rivals read the
+    /// same signal (`cw_sim::economy::capacity`).
+    pub fn capacity_openings(&self, limit: usize) -> Vec<dto::CapacityOpening> {
+        let world = &self.world;
+        let dataset = &self.dataset;
+        let home = world
+            .investor
+            .primary_group
+            .and_then(|firm| world.firm(firm))
+            .map(|firm| firm.region)
+            .unwrap_or(0);
+        cw_sim::economy::capacity::openings(world, dataset, home)
+            .into_iter()
+            .take(limit)
+            .map(|open| {
+                let recipe = &dataset.recipes[open.recipe as usize];
+                dto::CapacityOpening {
+                    recipe_id: recipe.id.clone(),
+                    industry: recipe.industry.clone(),
+                    region: open.region,
+                    region_code: dataset.regions[open.region as usize].code.clone(),
+                    product_id: dataset.products[open.product as usize].id.clone(),
+                    traded: open.traded,
+                    room_lots: open.room_lots,
+                    block_lots: open.block_lots,
+                    price_cents: open.price_cents,
+                    price_vs_reference_bps: open.price_vs_reference_bps,
+                    unmet_lots: open.unmet_lots,
+                    wanted_lots: open.wanted_lots,
+                    weekly_contribution_cents: open.weekly_contribution_cents,
+                    build_cost_cents: open.build_cost_cents,
+                    payback_weeks: open.payback_weeks,
+                }
+            })
+            .collect()
+    }
+
     pub fn overview(&self) -> Overview {
         let world = &self.world;
         let reporting = self.reporting_currency;

@@ -1767,5 +1767,34 @@
     "local_ceiling_bps": 13000
   },
   "plant_scale": 5,
-  "margin_floor": 0.2
+  "margin_floor": 0.2,
+  "capacity": {
+    "build_price_level_bps": 4000,
+    "build_inputs": [
+      [
+        "steel",
+        2000
+      ],
+      [
+        "building_materials",
+        2000
+      ],
+      [
+        "construction",
+        2000
+      ]
+    ],
+    "build_price_min_bps": 5000,
+    "build_price_max_bps": 30000,
+    "local_room": true,
+    "opening_patient_tenths": 12,
+    "opening_keen_tenths": 5,
+    "opening_entry_tenths": 30,
+    "span_plants": 4,
+    "span_weeks_per_plant": 8,
+    "close_after_loss_weeks": 26,
+    "payout_buffer_weeks": 26,
+    "payout_share_bps": 5000,
+    "raid_warning_weeks": 0
+  }
 }

@@ -29,6 +29,7 @@ fn main() {
         Some("market-trace") => trace::run(&arguments[1..]),
         Some("probe") => policy::skilled::probe_all(&arguments[1..]),
         Some("opps") => policy::skilled::explore(&arguments[1..]),
+        Some("openings") => openings(&arguments[1..]),
         _ => {
             eprintln!(
                 "Usage: cw-cli <doctor|run|sweep|replay|diagnose|report>\n\
@@ -1198,5 +1199,73 @@ fn replay(arguments: &[String]) {
             eprintln!("replay failed: {:?}", error);
             std::process::exit(1);
         }
+    }
+}
+
+/// `openings --scenario-id ID [--seed N] [--weeks W] [--limit N] [--all]`: play W weeks with no
+/// player and print the room-to-build signal the rivals read (`Session::capacity_openings`).
+/// With `--all`, every strategy and state, paying or not.
+fn openings(arguments: &[String]) {
+    let scenario = flag(arguments, "--scenario-id").unwrap_or_else(|| "great-lakes-2000".into());
+    let seed: u64 = flag(arguments, "--seed")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1);
+    let weeks: u32 = flag(arguments, "--weeks")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(52);
+    let limit: usize = flag(arguments, "--limit")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(40);
+    let mut session = cw_session::Session::create(arc::arc_config_pub(seed, &scenario)).unwrap();
+    let mut runner = PolicyRunner::new(ReferencePolicy::None, false);
+    let _ = drive_with(&mut session, weeks, &mut runner, &mut |_, _| {});
+    println!(
+        "week {} build price {} bps of catalogue",
+        session.world.tick.0,
+        cw_sim::economy::sectors::build_price_bps(&session.world, &session.dataset)
+    );
+    if arguments.iter().any(|a| a == "--all") {
+        let world = &session.world;
+        let dataset = &session.dataset;
+        for (index, recipe) in dataset.recipes.iter().enumerate() {
+            for region in 0..world.regions.len() as u8 {
+                if let Some(o) =
+                    cw_sim::economy::capacity::opening(world, dataset, region, index as u16, region)
+                    && (o.room_lots > 0 || o.unmet_lots > 0)
+                {
+                    println!(
+                        "ALL {} {} room={} block={} unmet={}/{} price={} vs_ref={} weekly={} cost={} payback={:?}",
+                        recipe.id,
+                        dataset.regions[region as usize].code,
+                        o.room_lots,
+                        o.block_lots,
+                        o.unmet_lots,
+                        o.wanted_lots,
+                        o.price_cents,
+                        o.price_vs_reference_bps,
+                        o.weekly_contribution_cents,
+                        o.build_cost_cents,
+                        o.payback_weeks
+                    );
+                }
+            }
+        }
+        return;
+    }
+    for o in session.capacity_openings(limit) {
+        println!(
+            "{:<28} {:<8} traded={} room={:>6} block={:>5} unmet={}/{} price_vs_ref={:>5} weekly=${:>8} cost=${:>9} payback={:?}w",
+            o.recipe_id,
+            o.region_code,
+            o.traded as u8,
+            o.room_lots,
+            o.block_lots,
+            o.unmet_lots,
+            o.wanted_lots,
+            o.price_vs_reference_bps,
+            o.weekly_contribution_cents / 100,
+            o.build_cost_cents / 100,
+            o.payback_weeks
+        );
     }
 }

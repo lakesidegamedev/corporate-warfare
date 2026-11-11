@@ -1198,7 +1198,7 @@ fn apply_intent(
                 }
                 blocks += plant.blocks as i64;
             }
-            let cost = template.capex_cents * blocks / 4;
+            let cost = sectors::build_price(world, dataset, template.capex_cents) * blocks / 4;
             let weeks = (template.build_weeks / 3).max(4);
             spend_firm_cash(world, owner, cost, "retool escrow")?;
             // The cost is spread over the plants by blocks; the last plant takes the remainder.
