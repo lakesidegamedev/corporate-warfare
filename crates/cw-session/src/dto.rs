@@ -307,6 +307,31 @@ pub struct MarketLine {
     pub price_reason: String,
 }
 
+/// One opening to build: would one more block of a strategy in a state pay, and how fast. The
+/// same figures the rivals build on (`cw_sim::economy::capacity::opening`).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CapacityOpening {
+    pub recipe_id: String,
+    pub industry: String,
+    pub region: u8,
+    pub region_code: String,
+    pub product_id: String,
+    /// Whether the output trades on the corridor exchange; else it sells where it is made.
+    pub traded: bool,
+    /// Lots a week the market is short of, net of plants on their way, and one block's output.
+    pub room_lots: i64,
+    pub block_lots: i64,
+    /// What a lot fetches and that price against its reference, in basis points.
+    pub price_cents: i64,
+    pub price_vs_reference_bps: i64,
+    /// Households going without in the regions served, and what they asked for, lots a week.
+    pub unmet_lots: i64,
+    pub wanted_lots: i64,
+    pub weekly_contribution_cents: i64,
+    pub build_cost_cents: i64,
+    pub payback_weeks: Option<i64>,
+}
+
 fn holder_name(world: &World, holder: HolderId) -> String {
     match holder {
         HolderId::Investor => "You".to_owned(),

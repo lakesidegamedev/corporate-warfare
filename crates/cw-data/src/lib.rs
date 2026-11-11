@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 const CAST_BEFORE_1_9: usize = 12;
 
 pub use balance::{
-    Balance, BalanceOverlay, MarketRules, Product, ProductKind, Recipe, StorageClass,
+    Balance, BalanceOverlay, CapacityRules, MarketRules, Product, ProductKind, Recipe, StorageClass,
 };
 pub use cast::{Mood, Person, Role, Temperament};
 pub use currency::{CountryDef, CurrencyDef, CurrencySet, PegDef};
@@ -233,6 +233,8 @@ pub struct Dataset {
     pub fixture_land_rent_cents_weekly: i64,
     /// Gateway volume steps and sellers' response to trade (2.0).
     pub markets: balance::MarketRules,
+    /// Build prices, rival building and closing, payouts and raid warnings (2.0).
+    pub capacity: balance::CapacityRules,
     pub geometry_note: String,
     /// Freight modes, public terminals and sea systems.
     pub logistics: LogisticsData,
@@ -285,6 +287,8 @@ impl Dataset {
                 dataset.hash == hash
                     || dataset.legacy_hash() == hash
                     || dataset.pre_markets_hashes().iter().any(|old| old == hash)
+                    || dataset.pre_capacity_hash() == hash
+                    || dataset.pre_household_hash() == hash
             })
     }
 
@@ -417,6 +421,7 @@ impl Dataset {
             maintenance_annual_bps: balance.maintenance_annual_bps,
             fixture_land_rent_cents_weekly: balance.fixture_land_rent_cents_weekly,
             markets: balance.markets.clone(),
+            capacity: balance.capacity.clone(),
             geometry_note,
             logistics,
             km_matrix,
@@ -937,6 +942,31 @@ impl Dataset {
         ]
     }
 
+    /// The hash this dataset had before the capacity rules joined it (2.0, after the market
+    /// rules): a save written then names it and loads against the current dataset.
+    pub fn pre_capacity_hash(&self) -> String {
+        let mut plain = self.before_households();
+        plain.capacity = balance::CapacityRules::default();
+        plain.hash_with(self.cast.len(), true)
+    }
+
+    /// The hash this dataset had before households' opening demand was sized to the playable
+    /// market and local prices were given more room (2.0, after the capacity rules: services
+    /// then topped out at 110 percent of reference and sellers with no import at 130 percent): a
+    /// save written then names it and loads against the current dataset.
+    pub fn pre_household_hash(&self) -> String {
+        self.before_households().hash_with(self.cast.len(), true)
+    }
+
+    fn before_households(&self) -> Dataset {
+        let mut plain = self.clone();
+        plain.capacity.household_cover_bps = 0;
+        plain.capacity.household_unmet_bps = 0;
+        plain.markets.service_max_bps = 11_000;
+        plain.markets.local_ceiling_bps = 13_000;
+        plain
+    }
+
     fn hash_with(&self, cast_people: usize, with_markets: bool) -> String {
         let mut hasher = CanonicalHasher::new(DOMAIN_STATE);
         hasher.string("cw-dataset-v1");
@@ -1108,6 +1138,36 @@ impl Dataset {
                 .i64(m.service_max_bps)
                 .bool(m.service_counts_unmet)
                 .i64(m.local_ceiling_bps);
+        }
+        // Capacity rules change what every plant costs and how rivals build, so they name the
+        // dataset too, again only when they differ from the rules before 2.0.
+        if with_markets && self.capacity != balance::CapacityRules::default() {
+            let c = &self.capacity;
+            hasher.string("cw-capacity-v1").i64(c.build_price_level_bps);
+            for (input, weight) in &c.build_inputs {
+                hasher.string(input).i64(*weight);
+            }
+            hasher
+                .i64(c.build_price_min_bps)
+                .i64(c.build_price_max_bps)
+                .bool(c.local_room)
+                .i64(c.opening_patient_tenths)
+                .i64(c.opening_keen_tenths)
+                .i64(c.opening_entry_tenths)
+                .i64(c.span_plants)
+                .i64(c.span_weeks_per_plant)
+                .i64(c.close_after_loss_weeks as i64)
+                .i64(c.payout_buffer_weeks)
+                .i64(c.payout_share_bps)
+                .i64(c.raid_warning_weeks as i64);
+            // Sizing households' opening demand to the playable market came later in 2.0; it
+            // names the dataset only when it is on, so a save written before it still loads.
+            if c.household_cover_bps != 0 {
+                hasher
+                    .string("cw-households-v1")
+                    .i64(c.household_cover_bps)
+                    .i64(c.household_unmet_bps);
+            }
         }
         // The opening macro data is deliberately outside the hash: it only sets where the cycle
         // starts and how opening wages fade, never a row a save indexes into, so saves written

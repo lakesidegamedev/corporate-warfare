@@ -237,12 +237,13 @@ and the rest of their state for a service sold statewide), so a region short of 
 more than full. A region with no seller at all is not counted: that is a gap for whoever builds
 there, not a shortage this seller's price can answer. In 2.0 content (`service_balance_bps`,
 `service_slope_pct`, `service_min_bps`, `service_max_bps`) it asks reference at 90 percent, 2
-percent of reference more or less for every point above or below, up to 10 percent over and down
+percent of reference more or less for every point above or below, up to 30 percent over and down
 to 25 percent under; before 2.0 it was reference at 85 percent, 0.6 percent a point, 15 percent
-over and 20 percent under. The ceiling is low on purpose: nothing yet builds service capacity in
-answer to a shortage (rivals read their room to build from imports only), so a higher ceiling only
-raised every incumbent's margin. A good with no import quote may ask up to `local_ceiling_bps` of
-its reference (130 percent in 2.0 content, 115 before). A service's reference is its
+over and 20 percent under. The ceiling was 10 percent over while nothing built service capacity
+in answer to a shortage; now rivals build into households going without (CAPACITY.md) and
+household demand is sized to the playable market, so a shortage's price draws a new plant. A
+good with no import quote may ask up to `local_ceiling_bps` of its reference (150 percent in 2.0
+content, 130 earlier in 2.0, 115 before). A service's reference is its
 catalogue price carried to today's price index (the index background wages follow), so its band,
 floor and ceiling rise with its payroll; goods keep their catalogue reference and follow the price
 level through import and export prices. Household demand and public works read services against

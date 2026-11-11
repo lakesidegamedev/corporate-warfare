@@ -1006,6 +1006,45 @@ impl Session {
         dto::fx_view(&self.world, &self.dataset, self.reporting_currency)
     }
 
+    /// Openings to build, fastest payback first, valued from the player's primary company's head
+    /// office (or the first region before one is founded): every strategy and state where the
+    /// market is short of at least a fifth of a block and a block pays back. The rivals read the
+    /// same signal (`cw_sim::economy::capacity`).
+    pub fn capacity_openings(&self, limit: usize) -> Vec<dto::CapacityOpening> {
+        let world = &self.world;
+        let dataset = &self.dataset;
+        let home = world
+            .investor
+            .primary_group
+            .and_then(|firm| world.firm(firm))
+            .map(|firm| firm.region)
+            .unwrap_or(0);
+        cw_sim::economy::capacity::openings(world, dataset, home)
+            .into_iter()
+            .take(limit)
+            .map(|open| {
+                let recipe = &dataset.recipes[open.recipe as usize];
+                dto::CapacityOpening {
+                    recipe_id: recipe.id.clone(),
+                    industry: recipe.industry.clone(),
+                    region: open.region,
+                    region_code: dataset.regions[open.region as usize].code.clone(),
+                    product_id: dataset.products[open.product as usize].id.clone(),
+                    traded: open.traded,
+                    room_lots: open.room_lots,
+                    block_lots: open.block_lots,
+                    price_cents: open.price_cents,
+                    price_vs_reference_bps: open.price_vs_reference_bps,
+                    unmet_lots: open.unmet_lots,
+                    wanted_lots: open.wanted_lots,
+                    weekly_contribution_cents: open.weekly_contribution_cents,
+                    build_cost_cents: open.build_cost_cents,
+                    payback_weeks: open.payback_weeks,
+                }
+            })
+            .collect()
+    }
+
     pub fn overview(&self) -> Overview {
         let world = &self.world;
         let reporting = self.reporting_currency;
@@ -2210,7 +2249,15 @@ mod tests {
         // around the outside world's middle quote. In 2.0 it moved again from 8440e658... when
         // the market rules joined the dataset hash (the hash string is in the world) and services
         // began pricing on capacity against regional demand, plants ramping five points a week.
-        // The Swift
+        // In 2.0 it moved again from 04e9740b... when the capacity rules joined the dataset hash
+        // (build prices follow prices; rivals build, enter, close and pay out on one room-to-build
+        // signal). In 2.0 it moved again from 24eeba2c... when home sellers began reading the
+        // average export discount instead of the last lot's step, households began asking for no
+        // more than their budget buys (unspent budgets return to savings), and openings began
+        // reading the inputs a new plant could buy, and again when households' opening demand was
+        // sized to what the named plants serve (household_cover_bps and household_unmet_bps
+        // joined the dataset hash), and again when services and sellers with no import were given
+        // more room over reference (130 and 150 percent). The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2236,7 +2283,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "04e9740b72580258dd3d52e4ecfe19a1a41104ef99327d84ed85cd04f4986e99"
+            "b2a6baa74f5b3a901959aa864d3894b35c8e10aced637154b4c657cb7b2718f6"
         );
     }
 

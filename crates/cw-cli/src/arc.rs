@@ -234,6 +234,34 @@ pub struct Turnover {
     pub exits: u32,
 }
 
+/// Capacity as the contest: what rivals built, closed and paid out, and how much household
+/// demand for services and retail goods went without.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct CapacityStats {
+    /// Plants ordered by firms outside the player's group after week 0.
+    pub rival_plants_built: u32,
+    /// Blocks in those plants.
+    pub rival_blocks_built: u32,
+    /// Rival plants that went from operating to mothballed.
+    pub rival_plants_mothballed: u32,
+    /// Rival plants that disappeared (sold, or their firm wound up).
+    pub rival_plants_gone: u32,
+    /// Cash rivals paid out as dividends, cents (from retained earnings against net income).
+    pub rival_payout_cents: i64,
+    /// Of the ten largest rivals at week 0 that survive: blocks at the end less blocks at the start.
+    pub top_ten_block_change: Vec<i64>,
+    /// Per year: share of household demand for services and retail goods (no gateway) that found
+    /// no seller, in percent, averaged over the year's weeks.
+    pub unmet_local_pct_by_year: Vec<f64>,
+    /// Plants in the world (operating, building or mothballed, every owner) at week 0 and at
+    /// the end of each year.
+    #[serde(default)]
+    pub world_plants_by_year: Vec<u32>,
+    /// Raids announced against the player's group, with the weeks of warning before they resolve.
+    pub raids_announced_on_player: u32,
+    pub raid_warning_weeks: Vec<u32>,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct ZombieFirm {
     pub name: String,
@@ -322,6 +350,8 @@ pub struct Career {
     pub zombies: Zombies,
     pub deals: DealCounts,
     pub goods: Vec<GoodPrice>,
+    #[serde(default)]
+    pub capacity: CapacityStats,
     pub influence: Option<Influence>,
     /// The same comparison for the inert noise run, when one was supplied: the floor.
     pub influence_floor: Option<Influence>,
@@ -392,6 +422,38 @@ pub struct Aggregate {
     /// Influence less the floor, in percentage points: what the player moved beyond chaos.
     pub influence_net_pct_median: Option<f64>,
     pub ms_per_week_mean: f64,
+    /// Capacity: medians per decade over careers.
+    #[serde(default)]
+    pub rival_plants_built_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub rival_plants_mothballed_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub rival_plants_gone_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub rival_payout_per_decade_median_cents: Option<f64>,
+    /// Median over careers of the median surviving top-ten rival's change in blocks.
+    #[serde(default)]
+    pub top_ten_block_change_median: Option<f64>,
+    /// Household demand for services and retail goods that went without, percent: median over
+    /// careers of the first year and of the last year, and the fall between them.
+    #[serde(default)]
+    pub unmet_local_first_year_pct_median: Option<f64>,
+    #[serde(default)]
+    pub unmet_local_last_year_pct_median: Option<f64>,
+    #[serde(default)]
+    pub unmet_local_fall_pct_median: Option<f64>,
+    /// Plants in the world at week 0 and at the end of the career, median over careers.
+    #[serde(default)]
+    pub world_plants_start_median: Option<f64>,
+    #[serde(default)]
+    pub world_plants_final_median: Option<f64>,
+    /// Median over careers of the plants in the world at the end of each year (index 0 is week 0).
+    #[serde(default)]
+    pub world_plants_by_year_median: Vec<f64>,
+    #[serde(default)]
+    pub raids_announced_on_player_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub raid_warning_weeks_median: Option<f64>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -489,6 +551,14 @@ struct Observer {
     last_controller: BTreeMap<u64, Option<HolderId>>,
     /// Firms outside the player's group that a single other firm held at ninety percent or more.
     ninety_seen: std::collections::BTreeSet<u64>,
+    capacity: CapacityStats,
+    /// Every plant seen: (owner, operating last week).
+    plants_seen: BTreeMap<u64, (u64, bool)>,
+    retained: BTreeMap<u64, i64>,
+    last_dividend: BTreeMap<u64, u32>,
+    top_ten_start: Vec<(u64, i64)>,
+    /// (unmet, wanted) lots summed over the weeks of each year.
+    unmet_year: BTreeMap<u32, (i64, i64)>,
 }
 
 impl Observer {
@@ -524,6 +594,12 @@ impl Observer {
             prev_status: BTreeMap::new(),
             last_controller: BTreeMap::new(),
             ninety_seen: Default::default(),
+            capacity: CapacityStats::default(),
+            plants_seen: BTreeMap::new(),
+            retained: BTreeMap::new(),
+            last_dividend: BTreeMap::new(),
+            top_ten_start: Vec::new(),
+            unmet_year: BTreeMap::new(),
         }
     }
 
@@ -699,8 +775,110 @@ impl Observer {
             self.best_rank = Some(self.best_rank.map_or(rank, |b| b.min(rank)));
         }
 
+        // Capacity: plants built, mothballed and gone; payouts; household demand going without.
+        if !after_week || week.is_multiple_of(YEAR) {
+            self.capacity
+                .world_plants_by_year
+                .push(world.facilities.iter().count() as u32);
+        }
+        let mut alive: BTreeSet<u64> = BTreeSet::new();
+        for (handle, plant) in world.facilities.iter() {
+            alive.insert(handle.0);
+            let owner = plant.firm.0;
+            let operating = plant.status == cw_sim::state::FacilityStatus::Operating;
+            let outside = !group.contains(&owner);
+            match self.plants_seen.insert(handle.0, (owner, operating)) {
+                None if after_week && outside => {
+                    self.capacity.rival_plants_built += 1;
+                    self.capacity.rival_blocks_built += plant.blocks as u32;
+                }
+                Some((_, true))
+                    if after_week
+                        && outside
+                        && plant.status == cw_sim::state::FacilityStatus::Mothballed =>
+                {
+                    self.capacity.rival_plants_mothballed += 1;
+                }
+                _ => {}
+            }
+        }
+        let gone: Vec<u64> = self
+            .plants_seen
+            .keys()
+            .copied()
+            .filter(|id| !alive.contains(id))
+            .collect();
+        for id in gone {
+            if let Some((owner, _)) = self.plants_seen.remove(&id)
+                && after_week
+                && !group.contains(&owner)
+            {
+                self.capacity.rival_plants_gone += 1;
+            }
+        }
+        for (handle, firm) in world.firms.iter() {
+            if group.contains(&handle.0) || !firm.status.operative() {
+                continue;
+            }
+            let retained = -firm
+                .book
+                .balance(cw_core::ledger::Account::RetainedEarnings);
+            let paid_week = world
+                .structure
+                .last_dividend
+                .get(&handle)
+                .copied()
+                .unwrap_or(0);
+            let before = self.retained.insert(handle.0, retained);
+            let seen = self.last_dividend.insert(handle.0, paid_week);
+            if after_week
+                && let Some(before) = before
+                && seen.is_some_and(|w| w != paid_week)
+            {
+                let income = firm
+                    .book
+                    .recent_weeks()
+                    .last()
+                    .map(|w| w.net_income)
+                    .unwrap_or(0);
+                let paid = before + income - retained;
+                if paid > 0 {
+                    self.capacity.rival_payout_cents += paid;
+                }
+            }
+        }
+        if after_week {
+            let dataset = &session.dataset;
+            let (mut unmet, mut wanted) = (0i64, 0i64);
+            for region in &world.regions {
+                for (product, lots) in &region.households.wanted_milli {
+                    if cw_sim::economy::capacity::corridor(dataset, *product)
+                        || !cw_sim::economy::capacity::household_good(dataset, *product)
+                    {
+                        continue;
+                    }
+                    wanted += lots;
+                    unmet += region
+                        .households
+                        .unmet_milli
+                        .get(product)
+                        .copied()
+                        .unwrap_or(0);
+                }
+            }
+            let slot = self.unmet_year.entry(year_index).or_default();
+            slot.0 += unmet;
+            slot.1 += wanted;
+        }
+
         if !after_week {
             // Opening snapshot: the league's starting sizes.
+            self.top_ten_start = rows
+                .iter()
+                .filter(|(id, _)| Some(Handle(*id)) != primary)
+                .take(10)
+                .map(|(id, _)| (*id, firm_blocks(world, Handle(*id))))
+                .collect();
             for (id, size) in &rows {
                 if Some(Handle(*id)) != primary {
                     self.start_rivals.insert(*id, *size);
@@ -915,6 +1093,19 @@ impl Observer {
     }
 }
 
+fn firm_blocks(world: &World, firm: Handle) -> i64 {
+    world
+        .firm(firm)
+        .map(|f| {
+            f.facilities
+                .iter()
+                .filter_map(|h| world.facilities.get(*h))
+                .map(|p| p.blocks as i64)
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
 fn bump(counts: &mut Vec<u32>, index: u32) {
     let index = index as usize;
     if counts.len() <= index {
@@ -1088,6 +1279,31 @@ fn finish_career(
         zombies,
         deals,
         goods,
+        capacity: {
+            let mut stats = observer.capacity.clone();
+            stats.top_ten_block_change = observer
+                .top_ten_start
+                .iter()
+                .filter(|(id, _)| {
+                    world
+                        .firm(Handle(*id))
+                        .is_some_and(|f| f.status.operative())
+                })
+                .map(|(id, start)| firm_blocks(world, Handle(*id)) - start)
+                .collect();
+            stats.unmet_local_pct_by_year = observer
+                .unmet_year
+                .values()
+                .map(|(unmet, wanted)| {
+                    if *wanted > 0 {
+                        *unmet as f64 * 100.0 / *wanted as f64
+                    } else {
+                        0.0
+                    }
+                })
+                .collect();
+            stats
+        },
         influence: None,
         influence_floor: None,
         policy_attempted: runner.stats.attempted,
@@ -1425,6 +1641,73 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         } else {
             careers.iter().map(|c| c.ms_per_week).sum::<f64>() / careers.len() as f64
         },
+        rival_plants_built_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.rival_plants_built, c.weeks_played))
+            .collect()),
+        rival_plants_mothballed_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.rival_plants_mothballed, c.weeks_played))
+            .collect()),
+        rival_plants_gone_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.rival_plants_gone, c.weeks_played))
+            .collect()),
+        rival_payout_per_decade_median_cents: med(careers
+            .iter()
+            .map(|c| c.capacity.rival_payout_cents as f64 * 520.0 / c.weeks_played.max(1) as f64)
+            .collect()),
+        top_ten_block_change_median: med(careers
+            .iter()
+            .filter_map(|c| median_i64(&c.capacity.top_ten_block_change).map(|v| v as f64))
+            .collect()),
+        unmet_local_first_year_pct_median: med(careers
+            .iter()
+            .filter_map(|c| c.capacity.unmet_local_pct_by_year.first().copied())
+            .collect()),
+        unmet_local_last_year_pct_median: med(careers
+            .iter()
+            .filter_map(|c| c.capacity.unmet_local_pct_by_year.last().copied())
+            .collect()),
+        unmet_local_fall_pct_median: med(careers
+            .iter()
+            .filter_map(|c| {
+                let years = &c.capacity.unmet_local_pct_by_year;
+                Some(years.first()? - years.last()?)
+            })
+            .collect()),
+        world_plants_start_median: med(careers
+            .iter()
+            .filter_map(|c| c.capacity.world_plants_by_year.first().map(|v| *v as f64))
+            .collect()),
+        world_plants_final_median: med(careers
+            .iter()
+            .filter_map(|c| c.capacity.world_plants_by_year.last().map(|v| *v as f64))
+            .collect()),
+        world_plants_by_year_median: {
+            let years = careers
+                .iter()
+                .map(|c| c.capacity.world_plants_by_year.len())
+                .max()
+                .unwrap_or(0);
+            (0..years)
+                .filter_map(|y| {
+                    med(careers
+                        .iter()
+                        .filter_map(|c| c.capacity.world_plants_by_year.get(y).map(|v| *v as f64))
+                        .collect())
+                })
+                .collect()
+        },
+        raids_announced_on_player_per_decade_median: med(careers
+            .iter()
+            .filter(|c| c.had_company)
+            .map(|c| per_decade(c.capacity.raids_announced_on_player, c.weeks_played))
+            .collect()),
+        raid_warning_weeks_median: med(careers
+            .iter()
+            .flat_map(|c| c.capacity.raid_warning_weeks.iter().map(|w| *w as f64))
+            .collect()),
     }
 }
 
@@ -1457,6 +1740,10 @@ fn metric_value(aggregate: &Aggregate, metric: &str) -> Option<f64> {
         "price_range_traded_pct_median" => aggregate.price_range_traded_pct_median,
         "price_range_local_pct_median" => aggregate.price_range_local_pct_median,
         "hostile_top3_median" => aggregate.hostile_top3_median,
+        "rival_plants_built_per_decade_median" => aggregate.rival_plants_built_per_decade_median,
+        "top_ten_block_change_median" => aggregate.top_ten_block_change_median,
+        "unmet_local_fall_pct_median" => aggregate.unmet_local_fall_pct_median,
+        "raid_warning_weeks_median" => aggregate.raid_warning_weeks_median,
         _ => None,
     }
 }

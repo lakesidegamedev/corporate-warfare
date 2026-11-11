@@ -21,6 +21,14 @@
     { "id": "price_range_local", "policy": "any", "metric": "price_range_local_pct_median", "min": 8.0,
       "text": "median local good's (services and retail goods, no gateway) yearly price range at least 8 percent of its anchor" },
     { "id": "hostile_top3", "policy": "any", "metric": "hostile_top3_median", "min": 2.0,
-      "text": "a player ranked in the top three is the target of at least 2 hostile moves a decade (median)" }
+      "text": "a player ranked in the top three is the target of at least 2 hostile moves a decade (median)" },
+    { "id": "rivals_build", "policy": "any", "metric": "rival_plants_built_per_decade_median", "min": 30.0,
+      "text": "rivals order at least 30 plants a decade (median)" },
+    { "id": "top_ten_add_capacity", "policy": "any", "metric": "top_ten_block_change_median", "min": 1.0,
+      "text": "the median surviving top-ten rival ends the decade with more blocks than it started" },
+    { "id": "unmet_local_falls", "policy": "any", "metric": "unmet_local_fall_pct_median", "min": 5.0,
+      "text": "household demand for services and retail that goes without falls at least 5 points over the decade (median)" },
+    { "id": "raid_warning", "policy": "any", "metric": "raid_warning_weeks_median", "min": 4.0,
+      "text": "raids on the player are announced at least 4 weeks before they resolve (median; n/a until raid warnings exist)" }
   ]
 }

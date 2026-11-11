@@ -1031,9 +1031,37 @@ pub fn marginal_export_price(dataset: &Dataset, gateway: &crate::state::Gateway)
     )
 }
 
+/// The discount under the quote that `lots` exported through a gateway with `room` lots of normal
+/// room took on average, in basis points: what every exporter there is paid (one average price
+/// per seller). It grows smoothly with the volume, so a week that exports a few lots more or less
+/// than the last moves it a little; the step of the last lot jumps a whole step discount when the
+/// volume crosses a step edge, and home prices read from it saw-toothed with the lumpy surplus
+/// left over after home buyers top up their cover.
+pub fn average_export_discount_bps(dataset: &Dataset, room: i64, lots: i64) -> i64 {
+    if lots <= 0 {
+        return 0;
+    }
+    let steps = dataset.markets.gateway_steps.max(1);
+    let (mut left, mut total) = (lots, 0i64);
+    for step in 0..steps {
+        let size = if step == steps - 1 {
+            left
+        } else {
+            step_lots(dataset, room, step, false).min(left)
+        };
+        total += (10_000 - export_step_price(dataset, 10_000, step)) * size;
+        left -= size;
+        if left <= 0 {
+            break;
+        }
+    }
+    total / lots
+}
+
 /// How hard last week's trade pressed on a good, in basis points of the quotes: the import
-/// premium and the export discount at the margin, each averaged over the good's gateways by the
-/// lots they moved. Zero and zero when the corridor traded inside every gateway's first step.
+/// premium at the margin (home sellers may ask up to what the last imported lot cost) and the
+/// average export discount (what exporters were paid), each averaged over the good's gateways by
+/// the lots they moved. Zero and zero when the corridor traded inside every gateway's first step.
 pub fn trade_pressure_bps(world: &World, dataset: &Dataset, product: u16) -> (i64, i64) {
     let (mut premium, mut imported, mut discount, mut exported) = (0i64, 0i64, 0i64, 0i64);
     for gateway in world.gateways.iter().filter(|g| g.product == product) {
@@ -1048,14 +1076,11 @@ pub fn trade_pressure_bps(world: &World, dataset: &Dataset, product: u16) -> (i6
             imported += gateway.last_import_lots;
         }
         if gateway.last_export_lots > 0 && gateway.buy_price_cents > 0 {
-            let step = last_step(
+            discount += average_export_discount_bps(
                 dataset,
                 gateway.capacity_lots,
                 gateway.last_export_lots,
-                false,
-            );
-            let price = export_step_price(dataset, 10_000, step);
-            discount += (10_000 - price) * gateway.last_export_lots;
+            ) * gateway.last_export_lots;
             exported += gateway.last_export_lots;
         }
     }
@@ -1071,8 +1096,8 @@ pub enum PriceDriver {
     /// Imports ran past the gateways' normal room and the last lots cost more: the corridor is
     /// short. Carries the marginal import premium in basis points.
     ImportsDear(i64),
-    /// Exports ran past the normal room abroad and the last lots paid less: the corridor is
-    /// glutted. Carries the marginal export discount in basis points.
+    /// Exports ran past the normal room abroad and sold under the export price on average: the
+    /// corridor is glutted. Carries the average export discount in basis points.
     ExportsCheap(i64),
     /// Plants that use the good are short of their input cover, in hundredths of a week of use.
     BuyersShort(i64),
@@ -1184,7 +1209,7 @@ pub fn driver_text(driver: PriceDriver) -> String {
             pct(bps)
         ),
         PriceDriver::ExportsCheap(bps) => format!(
-            "Glut: exports ran past the normal room abroad and the last lots sold {} under the export price.",
+            "Glut: exports ran past the normal room abroad and sold {} under the export price on average.",
             pct(bps)
         ),
         PriceDriver::BuyersShort(h) => format!(

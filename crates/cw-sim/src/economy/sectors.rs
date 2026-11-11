@@ -357,6 +357,43 @@ impl BuildCost {
     }
 }
 
+/// What building costs this week against the catalogue, in basis points: the content's weight
+/// on the general price index plus, for each good or service a plant is built from (steel,
+/// building materials, construction), its weight times last week's closing corridor price over
+/// its catalogue price. 10,000 when the content sets no weights (the rule before 2.0). The same
+/// figure for every builder, player or rival, so a boom in steel raises the price of new mills
+/// as well as the price they sell at.
+pub fn build_price_bps(world: &World, dataset: &Dataset) -> i64 {
+    let rules = &dataset.capacity;
+    let inputs: i64 = rules.build_inputs.iter().map(|(_, weight)| *weight).sum();
+    if rules.build_price_level_bps + inputs <= 0 {
+        return 10_000;
+    }
+    let level = world.macro_state.price_index_bps.max(1) as i128;
+    let mut total = level * rules.build_price_level_bps as i128;
+    let closing = world.price_history.last();
+    for (id, weight) in &rules.build_inputs {
+        let ratio = dataset
+            .product_index
+            .get(id)
+            .and_then(|code| {
+                let reference = dataset.reference_price(*code).max(1) as i128;
+                let price = *closing?.goods.get(code)? as i128;
+                Some(price * 10_000 / reference)
+            })
+            // A build input nobody has priced yet counts at the price level.
+            .unwrap_or(level);
+        total += ratio * *weight as i128;
+    }
+    let weights = (rules.build_price_level_bps + inputs) as i128;
+    ((total / weights) as i64).clamp(rules.build_price_min_bps, rules.build_price_max_bps)
+}
+
+/// A catalogue cost in today's build prices (`build_price_bps`).
+pub fn build_price(world: &World, dataset: &Dataset, catalogue_cents: i64) -> i64 {
+    (catalogue_cents as i128 * build_price_bps(world, dataset) as i128 / 10_000) as i64
+}
+
 /// The cost of building `blocks` of `recipe` in `region` for `firm`.
 pub fn build_cost(
     world: &World,
@@ -391,7 +428,7 @@ pub fn build_cost_in(
 ) -> BuildCost {
     let industry = recipe_industry(dataset, recipe);
     let opens = division_plants(world, dataset, firm, region, industry).is_empty();
-    let capex = dataset.recipes[recipe as usize].capex_cents;
+    let capex = build_price(world, dataset, dataset.recipes[recipe as usize].capex_cents);
     let mut base = capex * blocks as i64;
     if opens {
         base -= capex * (10_000 - FOUNDING_BPS) / 10_000;
