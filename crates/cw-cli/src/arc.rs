@@ -185,7 +185,23 @@ pub struct YearEnd {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct HostileEvent {
+    pub week: u32,
+    /// raid, deal, activist or plan.
+    pub kind: String,
+    pub actor: String,
+    pub target: String,
+    /// What happened, as far as the harness could see by the end of the run.
+    pub outcome: String,
+    /// Blocks taken (raid), shares sought (deal) or empty.
+    pub detail: String,
+    pub player_equity_cents: i64,
+    pub deal: Option<u64>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Hostile {
+    pub log: Vec<HostileEvent>,
     pub raids: u32,
     pub raids_succeeded: u32,
     pub hostile_deals: u32,
@@ -204,6 +220,13 @@ pub struct Turnover {
     pub dissolved: u32,
     pub acquired: u32,
     pub wound_down: u32,
+    /// Of `dissolved`: firms that were past due or restructuring the week before (insolvency).
+    pub dissolved_after_distress: u32,
+    /// Of `dissolved`: firms that were healthy the week before (a voluntary wind down).
+    pub dissolved_voluntary: u32,
+    /// Times a firm other than the player's came under a different ultimate controller (a settled
+    /// deal that changed control). The firm stays in the league's books, so it is not an exit.
+    pub control_changes: u32,
     pub entries: u32,
     pub exits: u32,
 }
@@ -294,6 +317,8 @@ pub struct Career {
     pub deals: DealCounts,
     pub goods: Vec<GoodPrice>,
     pub influence: Option<Influence>,
+    /// The same comparison for the inert noise run, when one was supplied: the floor.
+    pub influence_floor: Option<Influence>,
     pub policy_attempted: u32,
     pub policy_accepted: u32,
     pub policy_rejected: u32,
@@ -332,6 +357,9 @@ pub struct Aggregate {
     pub entries_per_decade_median: Option<f64>,
     pub exits_per_decade_median: Option<f64>,
     pub exits_dissolved: u32,
+    pub exits_after_distress: u32,
+    pub exits_voluntary: u32,
+    pub control_changes_total: u32,
     pub exits_acquired: u32,
     pub exits_wound_down: u32,
     pub zombie_share: Option<f64>,
@@ -345,6 +373,9 @@ pub struct Aggregate {
     pub hostile_top3_careers: u32,
     pub deals: DealCounts,
     pub influence_share_differs_pct_median: Option<f64>,
+    pub influence_floor_pct_median: Option<f64>,
+    /// Influence less the floor, in percentage points: what the player moved beyond chaos.
+    pub influence_net_pct_median: Option<f64>,
     pub ms_per_week_mean: f64,
 }
 
@@ -439,6 +470,8 @@ struct Observer {
     lost_control_votes_bps: Option<i32>,
     lost_control_to: Option<String>,
     restructured_week: Option<u32>,
+    prev_status: BTreeMap<u64, FirmStatus>,
+    last_controller: BTreeMap<u64, Option<HolderId>>,
 }
 
 impl Observer {
@@ -471,6 +504,8 @@ impl Observer {
             lost_control_votes_bps: None,
             lost_control_to: None,
             restructured_week: None,
+            prev_status: BTreeMap::new(),
+            last_controller: BTreeMap::new(),
         }
     }
 
@@ -540,10 +575,32 @@ impl Observer {
                     bump(&mut self.turnover.exits_by_year, year_index);
                     match kind {
                         "acquired" => self.turnover.acquired += 1,
-                        "dissolved" => self.turnover.dissolved += 1,
+                        "dissolved" => {
+                            self.turnover.dissolved += 1;
+                            // The engine liquidates and dissolves inside one week, so the status
+                            // never reads Liquidating; the week before tells the two causes apart.
+                            if matches!(
+                                self.prev_status.get(&id),
+                                Some(FirmStatus::PastDue { .. } | FirmStatus::Restructuring { .. })
+                            ) {
+                                self.turnover.dissolved_after_distress += 1;
+                            } else {
+                                self.turnover.dissolved_voluntary += 1;
+                            }
+                        }
                         _ => self.turnover.wound_down += 1,
                     }
                 }
+            }
+            if after_week && firm.status.operative() && !group.contains(&id) {
+                let controller = ultimate_controller(world, handle);
+                match self.last_controller.insert(id, controller) {
+                    Some(before) if before != controller => self.turnover.control_changes += 1,
+                    _ => {}
+                }
+            }
+            if after_week {
+                self.prev_status.insert(id, firm.status);
             }
             if after_week && firm.status.operative() {
                 self.zombies.firm_weeks += 1;
@@ -635,6 +692,16 @@ impl Observer {
 
         // Hostile moves aimed at the player's group.
         let mut fresh = 0;
+        let name_of = |h: Handle| {
+            world
+                .firm(h)
+                .map(|f| f.name.clone())
+                .unwrap_or_else(|| format!("firm {}", h.0))
+        };
+        let player_equity = primary
+            .and_then(|p| world.firm(p))
+            .map(valuation)
+            .unwrap_or(0);
         if !group.is_empty() {
             let mut plan_deals: BTreeSet<u64> = BTreeSet::new();
             for plan in &world.plans.plans {
@@ -649,6 +716,16 @@ impl Observer {
                 {
                     self.hostile.takeover_plans += 1;
                     fresh += 1;
+                    self.hostile.log.push(HostileEvent {
+                        week,
+                        kind: "plan".to_owned(),
+                        actor: name_of(plan.raider),
+                        target: name_of(plan.target),
+                        outcome: format!("{:?}", plan.stage),
+                        detail: String::new(),
+                        player_equity_cents: player_equity,
+                        deal: plan.deal.map(|d| d.0),
+                    });
                 }
             }
             for raid in &world.raids {
@@ -667,6 +744,26 @@ impl Observer {
                         self.hostile.raids_succeeded += 1;
                     }
                     fresh += 1;
+                    self.hostile.log.push(HostileEvent {
+                        week,
+                        kind: "raid".to_owned(),
+                        actor: name_of(raid.attacker),
+                        target: name_of(raid.defender),
+                        outcome: if raid.success {
+                            format!(
+                                "won: took {} block(s), paid the player {} cents",
+                                raid.blocks, raid.price_cents
+                            )
+                        } else {
+                            "failed".to_owned()
+                        },
+                        detail: format!(
+                            "chance {} bps, budget {} cents, region {}",
+                            raid.chance_bps, raid.budget_cents, raid.region
+                        ),
+                        player_equity_cents: player_equity,
+                        deal: None,
+                    });
                 }
             }
             for (handle, deal) in world.deals.iter() {
@@ -678,12 +775,41 @@ impl Observer {
                 {
                     self.hostile.hostile_deals += 1;
                     fresh += 1;
+                    self.hostile.log.push(HostileEvent {
+                        week,
+                        kind: "deal".to_owned(),
+                        actor: name_of(deal.buyer),
+                        target: name_of(deal.target),
+                        outcome: format!("{:?}", deal.state),
+                        detail: format!(
+                            "{} shares at {} cents",
+                            deal.max_shares, deal.offer_price_cents
+                        ),
+                        player_equity_cents: player_equity,
+                        deal: Some(handle.0),
+                    });
                 }
             }
             for campaign in &world.structure.campaigns {
                 if group.contains(&campaign.target.0) && self.seen_campaigns.insert(campaign.id) {
                     self.hostile.activist_campaigns += 1;
                     fresh += 1;
+                    self.hostile.log.push(HostileEvent {
+                        week,
+                        kind: "activist".to_owned(),
+                        actor: format!("outside activist {}", campaign.activist),
+                        target: name_of(campaign.target),
+                        outcome: format!("{:?}", campaign.outcome),
+                        detail: format!(
+                            "{:?}, demand {:?}, stake {} bps, {} cents",
+                            campaign.reason,
+                            campaign.demand,
+                            campaign.stake_bps,
+                            campaign.amount_cents
+                        ),
+                        player_equity_cents: player_equity,
+                        deal: None,
+                    });
                 }
             }
         }
@@ -831,6 +957,16 @@ fn finish_career(
     worst.truncate(5);
     zombies.worst = worst;
 
+    // Hostile deals and plans: the state the deal ended in.
+    let mut hostile = observer.hostile.clone();
+    for event in &mut hostile.log {
+        if let Some(deal) = event.deal
+            && let Some((state, _)) = observer.deals.get(&deal)
+        {
+            event.outcome = format!("{} (deal ended {:?})", event.outcome, state);
+        }
+    }
+
     // Deals.
     let mut deals = DealCounts::default();
     for (state, player) in observer.deals.values() {
@@ -904,7 +1040,7 @@ fn finish_career(
         lost_control_week: observer.lost_control_week,
         past_due_weeks: observer.past_due_weeks,
         best_rank: observer.best_rank,
-        hostile: observer.hostile.clone(),
+        hostile,
         league: League {
             leader_changes_raw: leader_changes(&observer.leaders, 1),
             leader_changes_held_13w: leader_changes(&observer.leaders, LEADER_HOLD_WEEKS),
@@ -919,6 +1055,7 @@ fn finish_career(
         deals,
         goods,
         influence: None,
+        influence_floor: None,
         policy_attempted: runner.stats.attempted,
         policy_accepted: runner.stats.accepted,
         policy_rejected: runner.stats.rejected,
@@ -935,6 +1072,10 @@ fn finish_career(
 // ---------------------------------------------------------------------------------------------
 // Running
 // ---------------------------------------------------------------------------------------------
+
+pub fn arc_config_pub(seed: u64, scenario_id: &str) -> ScenarioConfig {
+    arc_config(seed, scenario_id, cw_data::Difficulty::Standard)
+}
 
 pub(crate) fn arc_config(
     seed: u64,
@@ -984,7 +1125,7 @@ fn play(
     let mut session = Session::create(arc_config(seed, scenario_id, difficulty))
         .map_err(|e| format!("seed {seed}: session failed: {e:?}"))?;
     let check = scenario_check(&session, scenario_id);
-    let mut runner = PolicyRunner::new(policy, false);
+    let mut runner = PolicyRunner::new(policy, VERBOSE.load(std::sync::atomic::Ordering::Relaxed));
     let mut observer = Observer::new();
     let wall = Instant::now();
     let (advanced, paused) =
@@ -1086,6 +1227,7 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
     let (mut firm_weeks, mut zombie_weeks, mut stressed) = (0u64, 0u64, 0u64);
     let mut worst: Vec<ZombieFirm> = Vec::new();
     let (mut dissolved, mut acquired, mut wound) = (0, 0, 0);
+    let (mut distress, mut voluntary, mut control_changes) = (0, 0, 0);
     for c in careers {
         deals.attempted += c.deals.attempted;
         deals.settled += c.deals.settled;
@@ -1106,6 +1248,9 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         dissolved += c.turnover.dissolved;
         acquired += c.turnover.acquired;
         wound += c.turnover.wound_down;
+        distress += c.turnover.dissolved_after_distress;
+        voluntary += c.turnover.dissolved_voluntary;
+        control_changes += c.turnover.control_changes;
     }
     worst.sort_by(|a, b| {
         b.zombie_weeks
@@ -1187,6 +1332,9 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
             .map(|c| per_decade(c.turnover.exits, c.weeks_played))
             .collect()),
         exits_dissolved: dissolved,
+        exits_after_distress: distress,
+        exits_voluntary: voluntary,
+        control_changes_total: control_changes,
         exits_acquired: acquired,
         exits_wound_down: wound,
         zombie_share: (firm_weeks > 0).then(|| zombie_weeks as f64 / firm_weeks as f64),
@@ -1206,6 +1354,20 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
             .iter()
             .filter_map(|c| c.influence.as_ref().map(|i| i.share_differs_pct))
             .collect()),
+        influence_floor_pct_median: med(careers
+            .iter()
+            .filter_map(|c| c.influence_floor.as_ref().map(|i| i.share_differs_pct))
+            .collect()),
+        influence_net_pct_median: {
+            let net: Vec<f64> = careers
+                .iter()
+                .filter_map(|c| match (&c.influence, &c.influence_floor) {
+                    (Some(a), Some(f)) => Some(a.share_differs_pct - f.share_differs_pct),
+                    _ => None,
+                })
+                .collect();
+            med(net)
+        },
         ms_per_week_mean: if careers.is_empty() {
             0.0
         } else {
@@ -1290,6 +1452,18 @@ fn definitions() -> BTreeMap<String, String> {
     let mut m = BTreeMap::new();
     for (k, v) in [
         (
+            "dissolved_split",
+            "dissolved = the firm's status read Dissolved. The engine liquidates and dissolves inside one week, so Liquidating is never seen and wound_down stays 0. dissolved_after_distress = it was past due or restructuring the week before (insolvency); dissolved_voluntary = it was healthy the week before (a wind down)",
+        ),
+        (
+            "control_changes",
+            "weeks in which a firm outside the player's group had a different ultimate controller than the week before (a settled share deal that moved control). The firm stays in the league's books; the engine only sets Merged through the player's ProposeMerger command",
+        ),
+        (
+            "influence_floor",
+            "influence of the inert `noise` policy (one random draw shifted at week 0) against none; influence_net = policy influence less that floor",
+        ),
+        (
             "size",
             "firm.valuation.equity_cents (engine valuation); book equity before the first valuation",
         ),
@@ -1363,7 +1537,14 @@ fn flag(arguments: &[String], name: &str) -> Option<String> {
     crate::flag(arguments, name)
 }
 
+/// Print every policy command as it is accepted or rejected (`--verbose`).
+static VERBOSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 pub fn run(arguments: &[String]) {
+    VERBOSE.store(
+        arguments.iter().any(|a| a == "--verbose"),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     let seeds: u64 = flag(arguments, "--seeds")
         .and_then(|v| v.parse().ok())
         .unwrap_or(10);
@@ -1397,6 +1578,19 @@ pub fn run(arguments: &[String]) {
         })
         .unwrap_or_default();
 
+    // A prior `--policy noise` JSON gives each seed's floor against the same none run.
+    let noise_cache: BTreeMap<u64, Vec<(u64, bool, i64)>> = flag(arguments, "--noise-json")
+        .and_then(|path| fs::read_to_string(path).ok())
+        .and_then(|text| serde_json::from_str::<ArcReport>(&text).ok())
+        .map(|r| {
+            r.careers
+                .into_iter()
+                .filter(|c| c.weeks_played == weeks)
+                .map(|c| (c.seed, c.final_firms))
+                .collect()
+        })
+        .unwrap_or_default();
+
     let mut careers = Vec::new();
     let mut errors = Vec::new();
     let mut check = ScenarioCheck::default();
@@ -1411,7 +1605,12 @@ pub fn run(arguments: &[String]) {
                             .map_err(|e| errors.push(e))
                             .ok(),
                     };
-                    career.influence = none.map(|n| compare(&n, &career.final_firms));
+                    career.influence = none.as_ref().map(|n| compare(n, &career.final_firms));
+                    if !policy.is_noise()
+                        && let (Some(n), Some(noise)) = (none.as_ref(), noise_cache.get(&seed))
+                    {
+                        career.influence_floor = Some(compare(n, noise));
+                    }
                 }
                 println!(
                     "seed={} weeks={} rank={:?}/{} bust={} lost={} nw={} leader_changes={} entries={} exits={} hostile={} ms/wk={:.1}",
