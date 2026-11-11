@@ -1753,7 +1753,18 @@
     "export_step_discount_bps": 1000,
     "export_floor_bps": 5000,
     "trade_pressure_pass_bps": 10000,
-    "anchor_to_outside": true
+    "anchor_to_outside": true,
+    "anchor_pass_bps": 10000,
+    "room_growth_bps": 25,
+    "room_shrink_bps": 25,
+    "room_shrink_below_bps": 7500,
+    "plan_step_bps": 500,
+    "service_balance_bps": 9000,
+    "service_slope_pct": 200,
+    "service_min_bps": 7500,
+    "service_max_bps": 12500,
+    "service_counts_unmet": true,
+    "local_ceiling_bps": 13000
   },
   "plant_scale": 5,
   "margin_floor": 0.2

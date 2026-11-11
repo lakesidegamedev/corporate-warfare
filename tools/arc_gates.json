@@ -16,8 +16,10 @@
       "text": "at least 4 exits a decade (median)" },
     { "id": "entries", "policy": "any", "metric": "entries_per_decade_median", "min": 4.0,
       "text": "at least 4 entries a decade (median)" },
-    { "id": "price_range", "policy": "any", "metric": "price_range_pct_median", "min": 15.0,
-      "text": "median good's yearly price range at least 15 percent of reference" },
+    { "id": "price_range_traded", "policy": "any", "metric": "price_range_traded_pct_median", "min": 15.0,
+      "text": "median traded good's (one with a gateway) yearly price range at least 15 percent of its anchor" },
+    { "id": "price_range_local", "policy": "any", "metric": "price_range_local_pct_median", "min": 8.0,
+      "text": "median local good's (services and retail goods, no gateway) yearly price range at least 8 percent of its anchor" },
     { "id": "hostile_top3", "policy": "any", "metric": "hostile_top3_median", "min": 2.0,
       "text": "a player ranked in the top three is the target of at least 2 hostile moves a decade (median)" }
   ]

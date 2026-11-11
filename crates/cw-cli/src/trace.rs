@@ -8,7 +8,7 @@ use std::fs;
 use cw_core::ids::Handle;
 use cw_sim::economy::pricing;
 
-use crate::policy::{PolicyRunner, ReferencePolicy};
+use crate::policy::PolicyRunner;
 
 fn flag(arguments: &[String], name: &str) -> Option<String> {
     arguments
@@ -118,11 +118,8 @@ pub fn run(arguments: &[String]) {
         .and_then(|s| s.parse().ok())
         .unwrap_or(156);
     let scenario = flag(arguments, "--scenario-id").unwrap_or_else(|| "great-lakes-2000".into());
-    let policy = match flag(arguments, "--policy").as_deref() {
-        Some("expander") => ReferencePolicy::Expander,
-        Some("passive") => ReferencePolicy::Passive,
-        _ => ReferencePolicy::None,
-    };
+    let policy = crate::policy_flag(arguments);
+    crate::arc::load_markets_override(arguments);
     let path = flag(arguments, "--csv").unwrap_or_else(|| "market-trace.csv".into());
     let config = crate::arc::arc_config(seed, &scenario, cw_data::Difficulty::Standard);
     let mut session = match cw_session::Session::create(config) {
@@ -132,6 +129,10 @@ pub fn run(arguments: &[String]) {
             std::process::exit(1);
         }
     };
+    if let Err(error) = crate::arc::apply_markets_override(&mut session) {
+        eprintln!("{error}");
+        std::process::exit(2);
+    }
     let mut out = String::from(
         "week,good,kind,ref,price,import,export,makers,capacity,made,sold,stock,short,need,hh_unmet,hh_wanted,imported,exported,gateway_room,wanted_bps,reason\n",
     );

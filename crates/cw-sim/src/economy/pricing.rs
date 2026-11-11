@@ -176,8 +176,17 @@ pub fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
         if capacity <= 0 {
             return None;
         }
-        let used_bps = (sold.saturating_mul(10_000) / capacity).clamp(0, 10_000);
-        return Some(service_wanted_bps(used_bps));
+        let mut used_bps = (sold.saturating_mul(10_000) / capacity).clamp(0, 10_000);
+        // Households that found no seller are demand the region's capacity could not meet: a
+        // region short of capacity reads as more than full, and its price keeps rising until
+        // demand eases or new capacity opens.
+        if dataset.markets.service_counts_unmet {
+            let (unmet, wanted) = seller_household_unmet(world, dataset, firm, product);
+            if wanted > 0 && unmet > 0 {
+                used_bps = used_bps.saturating_add(unmet.saturating_mul(10_000) / wanted);
+            }
+        }
+        return Some(service_wanted_bps_with(&dataset.markets, used_bps));
     }
     let stock = free_stock(world, dataset, firm, product);
     if sold <= 0 {
@@ -190,7 +199,11 @@ pub fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
     // Households keep no stock: a week of their demand that found nothing on the shelf counts
     // as being short the seller's whole target cover, so a good households cannot find reads as
     // scarce the way an empty shelf used to.
-    let (unmet, wanted) = household_unmet(world, product);
+    let (unmet, wanted) = if dataset.markets.service_counts_unmet {
+        seller_household_unmet(world, dataset, firm, product)
+    } else {
+        household_unmet(world, product)
+    };
     if wanted > 0 {
         need = need.saturating_add(wanted);
         short = short.saturating_add(unmet.saturating_mul(target) / 100);
@@ -212,6 +225,44 @@ pub fn household_unmet(world: &World, product: u16) -> (i64, i64) {
     let (mut unmet, mut wanted) = (0i64, 0i64);
     for region in &world.regions {
         let households = &region.households;
+        unmet = unmet.saturating_add(households.unmet_milli.get(&product).copied().unwrap_or(0));
+        wanted = wanted.saturating_add(households.wanted_milli.get(&product).copied().unwrap_or(0));
+    }
+    (unmet / 1_000, wanted / 1_000)
+}
+
+/// Whole lots of a good households went without last week, and the lots they asked for, in the
+/// regions one seller's operating plants serve: its plants' regions, and the rest of their
+/// state for a good sold statewide. A region with no seller at all is a gap for whoever builds
+/// there, not a shortage this seller's price can answer, so it is not counted.
+pub fn seller_household_unmet(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    product: u16,
+) -> (i64, i64) {
+    let Some(entity) = world.firms.get(firm) else {
+        return (0, 0);
+    };
+    let id = &dataset.products[product as usize].id;
+    let mut regions: std::collections::BTreeSet<u8> = Default::default();
+    for plant in entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter(|plant| plant.is_operating() && dataset.recipes[plant.recipe as usize].makes(id))
+    {
+        regions.extend(crate::economy::markets::supply_regions(
+            dataset,
+            plant.region,
+            product,
+        ));
+    }
+    let (mut unmet, mut wanted) = (0i64, 0i64);
+    for region in regions {
+        let Some(households) = world.regions.get(region as usize).map(|r| &r.households) else {
+            continue;
+        };
         unmet = unmet.saturating_add(households.unmet_milli.get(&product).copied().unwrap_or(0));
         wanted = wanted.saturating_add(households.wanted_milli.get(&product).copied().unwrap_or(0));
     }
@@ -262,7 +313,15 @@ pub fn goods_wanted_bps(cover: i64, target: i64, short: i64, need: i64) -> i64 {
 /// percent (nine percent over when sold out) and every point below takes the same off, down to
 /// twenty percent under reference, where an idle plant still wins work from its rivals.
 pub fn service_wanted_bps(used_bps: i64) -> i64 {
-    (10_000 + (used_bps.clamp(0, 10_000) - 8_500) * 6 / 10).clamp(8_000, 11_500)
+    service_wanted_bps_with(&cw_data::MarketRules::default(), used_bps.clamp(0, 10_000))
+}
+
+/// The same rule with the content's balance point, slope and band. `used_bps` may pass 10,000
+/// when households went without (see `wanted_bps`), up to twice full.
+pub fn service_wanted_bps_with(rules: &cw_data::MarketRules, used_bps: i64) -> i64 {
+    let used = used_bps.clamp(0, 20_000);
+    (10_000 + (used - rules.service_balance_bps) * rules.service_slope_pct / 100)
+        .clamp(rules.service_min_bps, rules.service_max_bps)
 }
 
 /// Lots that the operating plants buying a good are short of their input cover after this
@@ -412,7 +471,7 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
         .min();
     let ceiling = import
         .map(|import| import * 95 / 100)
-        .unwrap_or(reference + reference * 15 / 100);
+        .unwrap_or(reference * dataset.markets.local_ceiling_bps.max(10_000) / 10_000);
     // Last week's trade at the margin: imports bought in dear steps lift the price a seller
     // wants, exports sold in cheap steps cut it, by the content's pass-through share.
     let (premium, discount) = trade_pressure_bps(world, dataset, product);
@@ -456,10 +515,11 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
 }
 
 /// Production planning from sell-through, plant by plant: each plant follows the good it makes.
-/// Goods: more than four weeks of unsold stock (beyond the firm's own input cover) cuts fifteen
-/// points, down to thirty percent; under a week and a half raises fifteen points, up to full
-/// capacity. Services keep no stock: the plant moves fifteen points a week toward what the firm
-/// sold of the service plus a tenth, between ten percent and full. Otherwise the
+/// Goods: more than four weeks of unsold stock (beyond the firm's own input cover) cuts the
+/// content's plan step (`MarketRules::plan_step_bps`), down to thirty percent; under a week and
+/// a half raises it the same, up to full capacity. Services keep no stock: the plant moves one
+/// plan step a week toward what the firm sold of the service plus a tenth, between ten percent
+/// and full. Otherwise the
 /// plant holds. A plant whose good has not sold yet, such as a new plant still waiting for
 /// inputs, holds too.
 pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Handle, i32)> {
@@ -468,6 +528,7 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
     };
     let mut capacity: std::collections::BTreeMap<u16, i64> = std::collections::BTreeMap::new();
     let mut plants: Vec<(Handle, u16, i32)> = Vec::new();
+    let step = dataset.markets.plan_step_bps.max(1);
     for handle in &entity.facilities {
         let Some(plant) = world.facilities.get(*handle) else {
             continue;
@@ -514,13 +575,13 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
                 }
             } else if dataset.products[product as usize].kind.is_service() {
                 // A service that goes unsold expires, so the plant is run toward what sold plus
-                // a tenth, fifteen points a week, rather than held anywhere between half and
+                // a tenth, one plan step a week, rather than held anywhere between half and
                 // nine-tenths of capacity where it could waste a third of its output.
                 let wanted = (sold * 11_000 / full.max(1)).clamp(1_000, 10_000) as i32;
                 let target = if wanted < current {
-                    (current - 1_500).max(wanted)
+                    (current - step).max(wanted)
                 } else {
-                    (current + 1_500).min(wanted)
+                    (current + step).min(wanted)
                 };
                 return (handle, target);
             } else {
@@ -534,9 +595,9 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
                 )
             };
             let target = if glut {
-                (current - 1_500).max(3_000)
+                (current - step).max(3_000)
             } else if tight {
-                (current + 1_500).min(10_000)
+                (current + step).min(10_000)
             } else {
                 current
             };
@@ -884,7 +945,11 @@ pub fn price_anchor(world: &World, dataset: &Dataset, product: u16) -> i64 {
     if !dataset.markets.anchor_to_outside || dataset.products[product as usize].kind.is_service() {
         return reference;
     }
-    outside_mid(world, product).unwrap_or(reference)
+    let Some(mid) = outside_mid(world, product) else {
+        return reference;
+    };
+    let pass = dataset.markets.anchor_pass_bps.clamp(0, 10_000) as i128;
+    (reference as i128 + (mid - reference) as i128 * pass / 10_000).max(1) as i64
 }
 
 /// Lots in one volume step of a gateway with `room` lots of normal weekly room. The first step,

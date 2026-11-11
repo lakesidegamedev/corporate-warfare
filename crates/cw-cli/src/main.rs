@@ -156,7 +156,7 @@ fn prices_flag(arguments: &[String]) -> cw_session::PriceSetup {
     }
 }
 
-fn policy_flag(arguments: &[String]) -> ReferencePolicy {
+pub(crate) fn policy_flag(arguments: &[String]) -> ReferencePolicy {
     let name = flag(arguments, "--policy").unwrap_or_else(|| "none".to_owned());
     match ReferencePolicy::parse(&name) {
         Some(policy) => policy,

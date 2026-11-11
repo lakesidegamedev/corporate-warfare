@@ -298,6 +298,40 @@ pub struct MarketRules {
     /// gateway's import and export prices) rather than its fixed opening catalogue price, so home
     /// prices follow world prices and inflation the way the gateways do.
     pub anchor_to_outside: bool,
+    /// Share of the outside middle quote's move away from the catalogue price that the anchor
+    /// follows, in basis points (10,000 follows it fully). Plant building costs do not follow
+    /// world prices, so a full pass-through turned a world boom into a windfall for whoever
+    /// built new plants in it, and a bust into a loss.
+    pub anchor_pass_bps: i64,
+    /// Room a gateway adds in a week its trade ran past the first step (exports filled it, or
+    /// imports reached the dear steps), in basis points of its room. Ports and rail are extended
+    /// slowly, so a glut or shortage lasts months, not weeks.
+    pub room_growth_bps: i64,
+    /// Room a gateway gives up in a week its busier direction used less than
+    /// `room_shrink_below_bps` of it, in basis points of its room. A gateway that moved nothing
+    /// keeps its room: there is no use to read.
+    pub room_shrink_bps: i64,
+    /// Use below this share of a gateway's room, in basis points, lets the room shrink.
+    pub room_shrink_below_bps: i64,
+    /// Points of capacity, in basis points, a plant's run rate moves in a week toward what its
+    /// good sells. A slow ramp keeps a new plant's surplus, or a closed plant's gap, in the
+    /// market for months.
+    pub plan_step_bps: i32,
+    /// The share of its full capacity a service seller sells at the reference price, in basis
+    /// points. Selling more asks more, selling less asks less.
+    pub service_balance_bps: i64,
+    /// Basis points of price a service seller adds for every basis point of capacity sold over
+    /// the balance point (and takes off under it), in hundredths: 60 is 0.6.
+    pub service_slope_pct: i64,
+    /// The least and most a service seller asks, in basis points of reference.
+    pub service_min_bps: i64,
+    pub service_max_bps: i64,
+    /// Whether households that found no service count as demand on top of what sold, so a
+    /// region short of capacity reads as more than full.
+    pub service_counts_unmet: bool,
+    /// The highest price a good with no import, or a service, may ask, in basis points of its
+    /// reference. A good with an import is held under the import instead.
+    pub local_ceiling_bps: i64,
 }
 
 impl Default for MarketRules {
@@ -312,6 +346,17 @@ impl Default for MarketRules {
             export_floor_bps: 10_000,
             trade_pressure_pass_bps: 0,
             anchor_to_outside: false,
+            anchor_pass_bps: 10_000,
+            room_growth_bps: 100,
+            room_shrink_bps: 0,
+            room_shrink_below_bps: 0,
+            plan_step_bps: 1_500,
+            service_balance_bps: 8_500,
+            service_slope_pct: 60,
+            service_min_bps: 8_000,
+            service_max_bps: 11_500,
+            service_counts_unmet: false,
+            local_ceiling_bps: 11_500,
         }
     }
 }

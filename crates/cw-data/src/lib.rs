@@ -29,7 +29,9 @@ use serde::{Deserialize, Serialize};
 /// People in the cast before 1.9; see `Dataset::legacy_hash`.
 const CAST_BEFORE_1_9: usize = 12;
 
-pub use balance::{Balance, BalanceOverlay, Product, ProductKind, Recipe, StorageClass};
+pub use balance::{
+    Balance, BalanceOverlay, MarketRules, Product, ProductKind, Recipe, StorageClass,
+};
 pub use cast::{Mood, Person, Role, Temperament};
 pub use currency::{CountryDef, CurrencyDef, CurrencySet, PegDef};
 pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetting};
@@ -279,7 +281,11 @@ impl Dataset {
         SCENARIO_CONTENT
             .iter()
             .filter_map(|content| Dataset::load_scenario(content.id).ok())
-            .find(|dataset| dataset.hash == hash || dataset.legacy_hash() == hash)
+            .find(|dataset| {
+                dataset.hash == hash
+                    || dataset.legacy_hash() == hash
+                    || dataset.pre_markets_hashes().iter().any(|old| old == hash)
+            })
     }
 
     /// The hash this dataset had before the 1.9 cast grew from twelve people to forty: the same
@@ -918,6 +924,20 @@ impl Dataset {
     }
 
     fn hash_with_cast(&self, cast_people: usize) -> String {
+        self.hash_with(cast_people, true)
+    }
+
+    /// The hash this dataset had before market rules joined it (2.0): a save written then names
+    /// it. It loads against the current dataset and plays on under the current rules, as a save
+    /// does after any rules change; its stored hash is kept as written.
+    pub fn pre_markets_hashes(&self) -> [String; 2] {
+        [
+            self.hash_with(self.cast.len(), false),
+            self.hash_with(CAST_BEFORE_1_9, false),
+        ]
+    }
+
+    fn hash_with(&self, cast_people: usize, with_markets: bool) -> String {
         let mut hasher = CanonicalHasher::new(DOMAIN_STATE);
         hasher.string("cw-dataset-v1");
         for product in &self.products {
@@ -1060,6 +1080,34 @@ impl Dataset {
             for region in self.region_currency.iter() {
                 hasher.u8(*region);
             }
+        }
+        // Market rules change how every price and trade settles, so content that sets them is a
+        // different dataset. They join the hash only when they differ from the defaults (the rules
+        // before 2.0), so the content hash names the rules a career is played under.
+        if with_markets && self.markets != balance::MarketRules::default() {
+            let m = &self.markets;
+            hasher
+                .string("cw-markets-v1")
+                .i64(m.import_first_step_bps)
+                .i64(m.export_first_step_bps)
+                .i64(m.gateway_step_bps)
+                .i64(m.gateway_steps)
+                .i64(m.import_step_premium_bps)
+                .i64(m.export_step_discount_bps)
+                .i64(m.export_floor_bps)
+                .i64(m.trade_pressure_pass_bps)
+                .bool(m.anchor_to_outside)
+                .i64(m.anchor_pass_bps)
+                .i64(m.room_growth_bps)
+                .i64(m.room_shrink_bps)
+                .i64(m.room_shrink_below_bps)
+                .i32(m.plan_step_bps)
+                .i64(m.service_balance_bps)
+                .i64(m.service_slope_pct)
+                .i64(m.service_min_bps)
+                .i64(m.service_max_bps)
+                .bool(m.service_counts_unmet)
+                .i64(m.local_ceiling_bps);
         }
         // The opening macro data is deliberately outside the hash: it only sets where the cycle
         // starts and how opening wages fade, never a row a save indexes into, so saves written

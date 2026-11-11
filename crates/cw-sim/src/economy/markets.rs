@@ -157,7 +157,7 @@ fn ceil_cost(price_cents: i64, milli_lots: i64) -> i64 {
 pub fn clear_week(world: &mut World, dataset: &Dataset) {
     // Roll the gateway volume signal: last week's imports feed the smoothed average.
     for gateway in &mut world.gateways {
-        grow_export_room(gateway);
+        adapt_gateway_room(gateway, &dataset.markets);
         gateway.smoothed_import_lots =
             (gateway.smoothed_import_lots * 3 + gateway.last_import_lots) / 4;
         gateway.last_import_lots = 0;
@@ -201,18 +201,43 @@ fn resell_exports_abroad(world: &mut World) {
     );
 }
 
-/// Room a gateway adds after a week its exports filled it, in basis points of its capacity.
+/// Room a gateway adds after a week its exports filled it, in basis points of its capacity,
+/// under the default rules. Content sets its own (`MarketRules::room_growth_bps`).
 pub const EXPORT_ROOM_GROWTH_BPS: i64 = 100;
 
-/// A gateway is sized at the start to the plants then running. When sellers fill its export room
-/// the port and rail behind it are used to the limit, and like any used infrastructure it is
-/// extended: a full week adds one percent of room, at least one lot. Growth stops as soon as a
-/// week leaves room unused, so it follows sustained use, never a single spike, and the outside
-/// account's paced cash still limits what the room can pay for.
-fn grow_export_room(gateway: &mut crate::state::Gateway) {
-    if gateway.last_export_lots > 0 && gateway.last_export_lots >= gateway.capacity_lots {
-        let added = (gateway.capacity_lots * EXPORT_ROOM_GROWTH_BPS / 10_000).max(1);
-        gateway.capacity_lots = gateway.capacity_lots.saturating_add(added);
+/// A gateway is sized at the start to the plants then running. When the corridor's trade runs
+/// past its first step (exports fill it, or imports reach the dear steps) the port and rail
+/// behind it are used to the limit, and like any used infrastructure they are extended: a full
+/// week adds the content's growth share of room, at least one lot. When its busier direction
+/// uses less than the content's shrink threshold the room slowly falls back toward what is
+/// used, so the next plant to open or close spills into the steps again. A gateway that moved
+/// nothing at all keeps its room. Both moves are slow, so a glut or a shortage lasts months, and
+/// the outside account's paced cash still limits what the room can pay for.
+fn adapt_gateway_room(gateway: &mut crate::state::Gateway, rules: &cw_data::MarketRules) {
+    let room = gateway.capacity_lots;
+    let import_first = (room.max(0) * rules.import_first_step_bps / 10_000).max(1);
+    let exports_full = gateway.last_export_lots > 0 && gateway.last_export_lots >= room;
+    let imports_deep = rules.gateway_steps > 1
+        && gateway.sell_price_cents > 0
+        && gateway.last_import_lots > import_first;
+    if exports_full || imports_deep {
+        let added = (room * rules.room_growth_bps / 10_000).max(1);
+        gateway.capacity_lots = room.saturating_add(added);
+        return;
+    }
+    // Each direction is read against its own first step, so the room settles between "the
+    // first step is full" (grow) and "the first step is under three quarters used" (shrink) and
+    // never flips week to week around one line.
+    let export_first = (room.max(0) * rules.export_first_step_bps / 10_000).max(1);
+    let (imported, exported) = (gateway.last_import_lots, gateway.last_export_lots);
+    let below = |used: i64, first: i64| used * 10_000 < first * rules.room_shrink_below_bps;
+    if rules.room_shrink_bps > 0
+        && imported.max(exported) > 0
+        && below(imported, import_first)
+        && below(exported, export_first)
+    {
+        let cut = (room * rules.room_shrink_bps / 10_000).max(1);
+        gateway.capacity_lots = (room - cut).max(imported.max(exported)).max(1);
     }
 }
 
@@ -1127,7 +1152,7 @@ fn statewide(dataset: &Dataset, product: u16) -> bool {
 }
 
 /// Regions whose stock can be offered in `region`'s market, the market's own region first.
-fn supply_regions(dataset: &Dataset, region: u8, product: u16) -> Vec<u8> {
+pub(crate) fn supply_regions(dataset: &Dataset, region: u8, product: u16) -> Vec<u8> {
     if !statewide(dataset, product) {
         return vec![region];
     }
@@ -2167,7 +2192,7 @@ mod tests {
             (0, 0, 0),
         ] {
             let mut g = gateway(capacity, exported);
-            grow_export_room(&mut g);
+            adapt_gateway_room(&mut g, &cw_data::MarketRules::default());
             assert_eq!(
                 g.capacity_lots, expected,
                 "{capacity} lots, {exported} exported"
@@ -2177,9 +2202,62 @@ mod tests {
         let mut g = gateway(100, 0);
         for _ in 0..12 {
             g.last_export_lots = g.capacity_lots;
-            grow_export_room(&mut g);
+            adapt_gateway_room(&mut g, &cw_data::MarketRules::default());
         }
         assert_eq!(g.capacity_lots, 112);
+    }
+
+    #[test]
+    fn gateway_room_follows_use_slowly_both_ways() {
+        let rules = cw_data::MarketRules {
+            import_first_step_bps: 5_000,
+            gateway_steps: 5,
+            room_growth_bps: 25,
+            room_shrink_bps: 25,
+            room_shrink_below_bps: 7_500,
+            ..cw_data::MarketRules::default()
+        };
+        let gateway = |capacity_lots: i64, imported: i64, exported: i64| crate::state::Gateway {
+            region: 0,
+            product: 0,
+            capacity_lots,
+            sell_price_cents: 115,
+            buy_price_cents: 85,
+            last_import_lots: imported,
+            last_export_lots: exported,
+            smoothed_import_lots: 0,
+        };
+        // Worked by hand, room 4,000: the first import step is 2,000 lots, the first export
+        // step all 4,000. Imports of 2,001 reach the dear steps: grow a quarter percent, 10 lots.
+        // Imports of 2,000 fill the first step: hold. 1,500 is exactly three quarters of it:
+        // hold. 1,499 is under: shrink 10 lots. Exports of 4,000 fill the room: grow 10 lots.
+        // 3,000 is three quarters of the export step: hold. Nothing moved: hold. Use of 10
+        // lots: shrink, never under the use.
+        for (imported, exported, expected) in [
+            (2_001, 0, 4_010),
+            (2_000, 0, 4_000),
+            (1_500, 0, 4_000),
+            (1_499, 0, 3_990),
+            (0, 4_000, 4_010),
+            (0, 3_000, 4_000),
+            (0, 0, 4_000),
+            (10, 0, 3_990),
+        ] {
+            let mut g = gateway(4_000, imported, exported);
+            adapt_gateway_room(&mut g, &rules);
+            assert_eq!(g.capacity_lots, expected, "{imported} in, {exported} out");
+        }
+        // A year of quarter use takes the room down about 12 percent, not to the use at once.
+        let mut g = gateway(4_000, 1_000, 0);
+        for _ in 0..52 {
+            g.last_import_lots = 1_000;
+            adapt_gateway_room(&mut g, &rules);
+        }
+        assert!(
+            (3_500..3_560).contains(&g.capacity_lots),
+            "{}",
+            g.capacity_lots
+        );
     }
 
     #[test]

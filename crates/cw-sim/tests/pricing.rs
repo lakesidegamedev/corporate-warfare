@@ -235,7 +235,9 @@ fn the_player_prices_automatically_until_setting_a_price_by_hand() {
 
 #[test]
 fn production_follows_stock_against_sales_plant_by_plant() {
-    let dataset = Dataset::load().unwrap();
+    let mut dataset = Dataset::load().unwrap();
+    // Worked with the pre-2.0 plan step of fifteen points a week; content sets its own.
+    dataset.markets.plan_step_bps = 1_500;
     let mut world = seed::build(&dataset, 57, ScenarioKind::Guided, ScenarioMode::Sandbox);
     let firm = world.investor.primary_group.unwrap();
     let food = dataset.product_index["food_raw"];
@@ -659,7 +661,9 @@ fn an_older_production_command_loads_without_a_lock_and_writes_the_same() {
 
 #[test]
 fn a_hand_set_rate_caps_service_plants_that_still_follow_sales_unless_locked() {
-    let dataset = Dataset::load().unwrap();
+    let mut dataset = Dataset::load().unwrap();
+    // Worked with the pre-2.0 plan step of fifteen points a week; content sets its own.
+    dataset.markets.plan_step_bps = 1_500;
     let mut world = seed::build(&dataset, 5, ScenarioKind::Guided, ScenarioMode::Sandbox);
     let firm = world.investor.primary_group.unwrap();
     // Hand the player company a rival's operating service plant (not a carrier).
@@ -737,9 +741,8 @@ fn service_prices_and_freight_rates_follow_the_price_level() {
         r_tel * 115 / 100
     );
     assert_eq!(pricing::price_reference(&world, &dataset, steel), r_steel);
-    // An idle telecom firm (nothing sold) walks down to the floor, 80 percent of the reference
-    // carried to today's level (92 percent of the catalogue price), not 80 percent of the
-    // catalogue price as when wages were fifteen percent lower.
+    // An idle telecom firm (nothing sold) walks down to the floor of the reference carried to
+    // today's level, not of the catalogue price as when wages were fifteen percent lower.
     let firm = world
         .firms
         .iter()
@@ -764,11 +767,13 @@ fn service_prices_and_freight_rates_follow_the_price_level() {
             .prices
             .insert(telecom, price);
     }
+    // The floor is the content's least service price (75 percent in 2.0 content, 80 before),
+    // of the reference carried to today's level.
+    let floor = r_tel * 115 / 100 * dataset.markets.service_min_bps / 10_000;
     let settled = world.firms.get(firm).unwrap().policies.prices[&telecom];
     assert!(
-        (settled - r_tel * 92 / 100).abs() <= r_tel / 100,
-        "settled at {settled}, floor {}",
-        r_tel * 92 / 100
+        (settled - floor).abs() <= r_tel / 100,
+        "settled at {settled}, floor {floor}"
     );
     // Freight: every rate a shipper pays, outside carriers' included, scales with the level.
     use cw_sim::economy::logistics as lg;
@@ -888,4 +893,34 @@ fn goods_are_priced_around_the_outside_world_price() {
         pricing::price_anchor(&world, &dataset, food),
         dataset.reference_price(food)
     );
+}
+
+#[test]
+fn service_price_follows_capacity_against_demand_within_the_content_band() {
+    let rules = cw_data::MarketRules {
+        service_balance_bps: 9_000,
+        service_slope_pct: 200,
+        service_min_bps: 7_500,
+        service_max_bps: 12_500,
+        ..cw_data::MarketRules::default()
+    };
+    // Worked by hand: at 90 percent sold the price is reference; each point over adds two
+    // points of price, each under takes two off; a region short of capacity (households went
+    // without, reading over 100 percent) climbs to the ceiling, an overbuilt one falls to the
+    // floor.
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 9_000), 10_000);
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 10_000), 12_000);
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 10_250), 12_500);
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 15_000), 12_500);
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 8_000), 8_000);
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 7_750), 7_500);
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 0), 7_500);
+    // The default rules are the pre-2.0 rule.
+    let old = cw_data::MarketRules::default();
+    for used in [0, 6_000, 8_500, 10_000] {
+        assert_eq!(
+            pricing::service_wanted_bps_with(&old, used),
+            pricing::service_wanted_bps(used)
+        );
+    }
 }
