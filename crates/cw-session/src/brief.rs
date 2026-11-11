@@ -742,7 +742,7 @@ fn mandate_move(world: &World, dataset: &Dataset, firm: Handle) -> Option<BriefM
             firm,
             chapter: offer.chapter,
             set: offer.set,
-            due: 0,
+            due: chapters::chapter_start(offer.chapter + 1),
             kind: kind.clone(),
             met: false,
             broken: false,

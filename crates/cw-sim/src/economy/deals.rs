@@ -23,7 +23,9 @@ use cw_core::ids::Handle;
 use cw_core::ledger::{Account, Txn};
 use cw_core::money::round_even_div;
 
-use crate::state::{Deal, DealKind, DealState, HolderId, World};
+use crate::state::{
+    CONTROL_DENOMINATOR, CONTROL_NUMERATOR, Deal, DealKind, DealState, HolderId, World,
+};
 
 const DILIGENCE_WEEKS: u32 = 2;
 const OFFER_WEEKS: u32 = 4;
@@ -592,6 +594,80 @@ fn tender_plan(world: &World, deal: &Deal) -> Vec<(HolderId, i64)> {
         .collect()
 }
 
+/// What tendering the player's shares into a bid would do to the player's votes in the target.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TenderOutlook {
+    pub target: Handle,
+    pub buyer: Handle,
+    /// Shares the player would hand over (the bid may take only part of them).
+    pub shares_sold: i64,
+    pub held_before: i64,
+    pub held_after: i64,
+    /// Votes in the target, treasury shares excluded.
+    pub eligible: i64,
+    /// The player holds a majority of the votes today.
+    pub controls_now: bool,
+    pub offer_cents: i64,
+    /// The share's fair value now, the figure the premium is measured against.
+    pub fair_cents: i64,
+}
+
+impl TenderOutlook {
+    /// The player controls the company today and would not after tendering.
+    pub fn loses_control(&self) -> bool {
+        self.controls_now
+            && self.held_after * CONTROL_DENOMINATOR <= self.eligible * CONTROL_NUMERATOR
+    }
+
+    /// Votes held after the sale, in basis points rounded down, so a hair under half never
+    /// reads as half.
+    pub fn after_bps(&self) -> i64 {
+        if self.eligible <= 0 {
+            return 0;
+        }
+        (i128::from(self.held_after) * 10_000 / i128::from(self.eligible)) as i64
+    }
+
+    /// The bid against fair value, in basis points (negative when below fair value).
+    pub fn premium_bps(&self) -> i64 {
+        let fair = i128::from(self.fair_cents.max(1));
+        ((i128::from(self.offer_cents) - fair) * 10_000 / fair) as i64
+    }
+}
+
+/// The effect on the player's stake of answering a tender card with "tender". None when the bid
+/// or the target is gone or the player holds nothing.
+pub fn tender_outlook(world: &World, deal: Handle) -> Option<TenderOutlook> {
+    let stored = world.deals.get(deal)?;
+    let target = world.firm(stored.target)?;
+    let held = target.shares.qty(HolderId::Investor);
+    if held <= 0 {
+        return None;
+    }
+    let mut as_tendered = stored.clone();
+    as_tendered.investor_tendered = true;
+    let sold = tender_plan(world, &as_tendered)
+        .iter()
+        .find(|(holder, _)| *holder == HolderId::Investor)
+        .map(|(_, qty)| *qty)
+        .unwrap_or(0);
+    Some(TenderOutlook {
+        target: stored.target,
+        buyer: stored.buyer,
+        shares_sold: sold,
+        held_before: held,
+        held_after: held - sold,
+        eligible: target.shares.eligible_votes(),
+        controls_now: target.shares.controller() == Some(HolderId::Investor),
+        offer_cents: stored.offer_price_cents,
+        fair_cents: if target.shares.fair_cents > 0 {
+            target.shares.fair_cents
+        } else {
+            stored.frozen_fair_cents
+        },
+    })
+}
+
 fn collect_tenders(world: &mut World, handle: Handle, deal: &Deal) {
     let committed: i64 = tender_plan(world, deal).iter().map(|(_, qty)| *qty).sum();
     if let Some(stored) = world.deals.get_mut(handle) {
@@ -875,15 +951,20 @@ fn pay_seller(world: &mut World, holder: HolderId, amount: i64, basis: i64, memo
 
 /// Cash the merger must pay remaining minority holders: max(offer, fair value) per share.
 pub fn minority_buyout_cost(world: &World, deal: &Deal) -> i64 {
-    let Some(target) = world.firm(deal.target) else {
+    minority_cost(world, deal.buyer, deal.target, deal.offer_price_cents)
+}
+
+/// What paying out every holder of `target` other than `buyer` costs at max(offer, fair value).
+pub fn minority_cost(world: &World, buyer: Handle, target: Handle, offer_cents: i64) -> i64 {
+    let Some(target) = world.firm(target) else {
         return 0;
     };
-    let price = deal.offer_price_cents.max(target.shares.fair_cents);
+    let price = offer_cents.max(target.shares.fair_cents);
     target
         .shares
         .holders
         .iter()
-        .filter(|(holder, _)| !holder.is_treasury() && **holder != HolderId::Firm(deal.buyer))
+        .filter(|(holder, _)| !holder.is_treasury() && **holder != HolderId::Firm(buyer))
         .map(|(_, lot)| lot.qty.saturating_mul(price))
         .sum()
 }
@@ -891,38 +972,49 @@ pub fn minority_buyout_cost(world: &World, deal: &Deal) -> i64 {
 /// Before a legal merger retires the target's shares, every remaining minority holder is paid in
 /// cash from the buyer at max(offer, fair value). Fails without posting if the buyer cannot pay.
 pub fn buy_out_minorities(world: &mut World, deal: &Deal) -> DomainResult<()> {
-    let cost = minority_buyout_cost(world, deal);
-    let cash = world.firm(deal.buyer).map(|f| f.book.cash()).unwrap_or(0);
+    buy_out(world, deal.buyer, deal.target, deal.offer_price_cents)
+}
+
+/// `buy_out_minorities` for a buyer, target and offer price, with or without a deal (2.0: a
+/// holder at 90 percent through the market folds its company in at fair value).
+pub fn buy_out(
+    world: &mut World,
+    buyer: Handle,
+    target: Handle,
+    offer_cents: i64,
+) -> DomainResult<()> {
+    let cost = minority_cost(world, buyer, target, offer_cents);
+    let cash = world.firm(buyer).map(|f| f.book.cash()).unwrap_or(0);
     if cash < cost {
         return Err(DomainError::InsufficientCash {
-            entity: deal.buyer.0,
+            entity: buyer.0,
             required: cost,
             available: cash,
         });
     }
-    let Some(target) = world.firm(deal.target) else {
+    let Some(company) = world.firm(target) else {
         return Ok(());
     };
-    let price = deal.offer_price_cents.max(target.shares.fair_cents);
-    let legs: Vec<(HolderId, i64)> = target
+    let price = offer_cents.max(company.shares.fair_cents);
+    let legs: Vec<(HolderId, i64)> = company
         .shares
         .holders
         .iter()
         .filter(|(holder, lot)| {
-            lot.qty > 0 && !holder.is_treasury() && **holder != HolderId::Firm(deal.buyer)
+            lot.qty > 0 && !holder.is_treasury() && **holder != HolderId::Firm(buyer)
         })
         .map(|(holder, lot)| (*holder, lot.qty))
         .collect();
     for (holder, qty) in legs {
         let cash = qty.saturating_mul(price);
-        let basis = lot_basis(world, deal.target, holder, qty);
+        let basis = lot_basis(world, target, holder, qty);
         pay_seller(world, holder, cash, basis, "merger minority payout");
-        if let Some(target) = world.firms.get_mut(deal.target) {
+        if let Some(target) = world.firms.get_mut(target) {
             target
                 .shares
-                .transfer(holder, HolderId::Firm(deal.buyer), qty, cash);
+                .transfer(holder, HolderId::Firm(buyer), qty, cash);
         }
-        if let Some(bidder) = world.firms.get_mut(deal.buyer) {
+        if let Some(bidder) = world.firms.get_mut(buyer) {
             let _ = bidder.book.commit(
                 world.tick,
                 Txn::new()
@@ -931,7 +1023,7 @@ pub fn buy_out_minorities(world: &mut World, deal: &Deal) -> DomainResult<()> {
             );
         }
     }
-    if world.investor.primary_group == Some(deal.target) {
+    if world.investor.primary_group == Some(target) {
         world.investor.primary_group = None;
     }
     Ok(())

@@ -743,7 +743,10 @@ fn construction_is_paid_in_stages_and_waits_for_the_equipment_payment() {
         cw_sim::economy::sectors::build_cost(&world, &dataset, builder, region, farm_recipe, 1);
     assert!(quote.opens_division);
     assert_eq!(quote.entry_fee_cents, 10_000_000);
-    assert_eq!(quote.capex_cents, list_capex / 2);
+    // Today's build price (capacity rules: price level, steel, building materials and
+    // construction against the catalogue), founding plant at half.
+    let priced = cw_sim::economy::sectors::build_price(&world, &dataset, list_capex);
+    assert_eq!(quote.capex_cents, priced - priced / 2);
     let capex = quote.capex_cents;
     let fee = quote.entry_fee_cents;
     fund(&mut world, builder, capex + fee);
@@ -868,7 +871,15 @@ fn construction_is_paid_in_stages_and_waits_for_the_equipment_payment() {
     // With the money in hand the equipment is paid for and the plant opens.
     fund(&mut world, builder, equipment + 50_000_000);
     let cash_before_delivery = world.firm(builder).unwrap().book.cash();
+    let revenue_before = world.firm(builder).unwrap().book.balance(Account::Revenue);
+    let loans_before = world.firm(builder).unwrap().book.balance(Account::Loans);
     tick::advance(&mut world, &dataset);
+    // The builder's own plants may sell, and the builder may borrow, in the delivery week; that
+    // cash coming in is not the payment going out.
+    let revenue =
+        (world.firm(builder).unwrap().book.balance(Account::Revenue) - revenue_before).abs();
+    let borrowed =
+        (world.firm(builder).unwrap().book.balance(Account::Loans) - loans_before).max(0);
     let facility = world.facilities.get(project).expect("completed project");
     assert_eq!(facility.status, FacilityStatus::Operating);
     assert_eq!(facility.escrow_cents, 0);
@@ -877,7 +888,8 @@ fn construction_is_paid_in_stages_and_waits_for_the_equipment_payment() {
         "equipment paid on delivery"
     );
     assert!(
-        world.firm(builder).unwrap().book.cash() <= cash_before_delivery - equipment,
+        world.firm(builder).unwrap().book.cash()
+            <= cash_before_delivery - equipment + revenue + borrowed,
         "the equipment payment left cash"
     );
     assert_eq!(

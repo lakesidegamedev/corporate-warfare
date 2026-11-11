@@ -1744,6 +1744,169 @@
   ],
   "maintenance_annual_bps": 200,
   "fixture_land_rent_cents_weekly": 20000,
+  "markets": {
+    "import_first_step_bps": 5000,
+    "export_first_step_bps": 10000,
+    "gateway_step_bps": 2500,
+    "gateway_steps": 5,
+    "import_step_premium_bps": 1000,
+    "export_step_discount_bps": 1000,
+    "export_floor_bps": 5000,
+    "trade_pressure_pass_bps": 10000,
+    "anchor_to_outside": true,
+    "anchor_pass_bps": 10000,
+    "room_growth_bps": 25,
+    "room_shrink_bps": 25,
+    "room_shrink_below_bps": 7500,
+    "plan_step_bps": 500,
+    "service_balance_bps": 9000,
+    "service_slope_pct": 200,
+    "service_min_bps": 7500,
+    "service_max_bps": 13000,
+    "service_counts_unmet": true,
+    "local_ceiling_bps": 15000
+  },
   "plant_scale": 5,
-  "margin_floor": 0.2
+  "margin_floor": 0.2,
+  "capacity": {
+    "build_price_level_bps": 4000,
+    "build_inputs": [
+      [
+        "steel",
+        2000
+      ],
+      [
+        "building_materials",
+        2000
+      ],
+      [
+        "construction",
+        2000
+      ]
+    ],
+    "build_price_min_bps": 5000,
+    "build_price_max_bps": 30000,
+    "local_room": true,
+    "opening_patient_tenths": 12,
+    "opening_keen_tenths": 5,
+    "opening_entry_tenths": 30,
+    "span_plants": 4,
+    "span_weeks_per_plant": 8,
+    "close_after_loss_weeks": 26,
+    "payout_buffer_weeks": 26,
+    "payout_share_bps": 5000,
+    "raid_warning_weeks": 4,
+    "household_cover_bps": 8500,
+    "household_unmet_bps": 3000,
+    "plant_auction_weeks": 4
+  },
+  "demand": {
+    "sell_within_room": true,
+    "latent_growth_bps": 600,
+    "latent_content_bps": 1000,
+    "cycle_elasticity": [
+      [
+        "construction",
+        30000
+      ],
+      [
+        "building_materials",
+        30000
+      ],
+      [
+        "steel",
+        25000
+      ],
+      [
+        "vehicles",
+        25000
+      ],
+      [
+        "components",
+        20000
+      ],
+      [
+        "advertising",
+        25000
+      ],
+      [
+        "freight",
+        20000
+      ],
+      [
+        "timber",
+        20000
+      ],
+      [
+        "pig_iron",
+        20000
+      ],
+      [
+        "ore",
+        18000
+      ],
+      [
+        "goods_retail",
+        15000
+      ],
+      [
+        "goods",
+        15000
+      ],
+      [
+        "lease",
+        8000
+      ],
+      [
+        "telecom",
+        6000
+      ],
+      [
+        "software",
+        10000
+      ],
+      [
+        "food_retail",
+        4000
+      ],
+      [
+        "food_raw",
+        4000
+      ],
+      [
+        "grain",
+        4000
+      ],
+      [
+        "livestock",
+        4000
+      ],
+      [
+        "care",
+        3000
+      ],
+      [
+        "pharmaceuticals",
+        3000
+      ],
+      [
+        "electricity",
+        4000
+      ],
+      [
+        "water",
+        2000
+      ]
+    ],
+    "cycle_default_bps": 12000,
+    "investment_goods": [
+      "construction",
+      "building_materials",
+      "steel",
+      "vehicles",
+      "components"
+    ],
+    "credit_elasticity_bps": 5000,
+    "retail_reads_street": false
+  }
 }

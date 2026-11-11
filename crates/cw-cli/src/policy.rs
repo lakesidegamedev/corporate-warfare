@@ -31,6 +31,9 @@
 
 use std::collections::BTreeMap;
 
+#[path = "skilled.rs"]
+pub mod skilled;
+
 use cw_core::ids::Handle;
 use cw_session::{Detail, FinanceSummary, Query, Session};
 use cw_sim::commands::{CommandEnvelope, CommandIntent, INVESTOR_ACTOR};
@@ -61,9 +64,30 @@ pub enum ReferencePolicy {
     Passive,
     /// Borrows everything the lenders allow, overbuilds every cadence and never cuts back.
     Reckless,
+    /// A careful human: best sector by the sheet, probation for new sectors, CFO and brief
+    /// advice, sensible credit, refuses tender offers that give up control.
+    Skilled,
+    /// `skilled` without buying other companies: organic growth only.
+    SkilledOrganic,
+    /// Changes nothing but one random draw in the events stream at week 0: the noise floor for
+    /// the influence comparison with `none`.
+    Noise,
+    /// The same with one draw from the macro cycle stream.
+    NoiseMacro,
 }
 
 impl ReferencePolicy {
+    pub const fn is_skilled(self) -> bool {
+        matches!(
+            self,
+            ReferencePolicy::Skilled | ReferencePolicy::SkilledOrganic
+        )
+    }
+
+    pub const fn is_noise(self) -> bool {
+        matches!(self, ReferencePolicy::Noise | ReferencePolicy::NoiseMacro)
+    }
+
     pub fn parse(text: &str) -> Option<ReferencePolicy> {
         match text {
             "none" => Some(ReferencePolicy::None),
@@ -73,6 +97,10 @@ impl ReferencePolicy {
             "expander" => Some(ReferencePolicy::Expander),
             "passive" => Some(ReferencePolicy::Passive),
             "reckless" => Some(ReferencePolicy::Reckless),
+            "skilled" => Some(ReferencePolicy::Skilled),
+            "skilled-organic" => Some(ReferencePolicy::SkilledOrganic),
+            "noise" => Some(ReferencePolicy::Noise),
+            "noise-macro" => Some(ReferencePolicy::NoiseMacro),
             _ => None,
         }
     }
@@ -86,17 +114,23 @@ impl ReferencePolicy {
             ReferencePolicy::Expander => "expander",
             ReferencePolicy::Passive => "passive",
             ReferencePolicy::Reckless => "reckless",
+            ReferencePolicy::Skilled => "skilled",
+            ReferencePolicy::SkilledOrganic => "skilled-organic",
+            ReferencePolicy::Noise => "noise",
+            ReferencePolicy::NoiseMacro => "noise-macro",
         }
     }
 
     /// Weeks of mandatory payroll and debt service kept as a cash floor.
     const fn reserve_weeks(self) -> i64 {
         match self {
-            ReferencePolicy::None => 0,
+            ReferencePolicy::None | ReferencePolicy::Noise | ReferencePolicy::NoiseMacro => 0,
             ReferencePolicy::Conservative => 13,
             ReferencePolicy::Growth => 8,
             ReferencePolicy::Acquirer => 10,
-            ReferencePolicy::Expander => 8,
+            ReferencePolicy::Expander
+            | ReferencePolicy::Skilled
+            | ReferencePolicy::SkilledOrganic => 8,
             ReferencePolicy::Passive | ReferencePolicy::Reckless => 0,
         }
     }
@@ -104,12 +138,15 @@ impl ReferencePolicy {
     /// Marketing as a percentage of trailing weekly revenue.
     const fn marketing_percent(self) -> i64 {
         match self {
-            ReferencePolicy::None => 0,
+            ReferencePolicy::None | ReferencePolicy::Noise | ReferencePolicy::NoiseMacro => 0,
             ReferencePolicy::Conservative => 1,
             ReferencePolicy::Growth => 4,
             ReferencePolicy::Acquirer => 2,
             ReferencePolicy::Expander => 2,
-            ReferencePolicy::Passive | ReferencePolicy::Reckless => 0,
+            ReferencePolicy::Passive
+            | ReferencePolicy::Reckless
+            | ReferencePolicy::Skilled
+            | ReferencePolicy::SkilledOrganic => 0,
         }
     }
 
@@ -133,6 +170,24 @@ fn plant_contribution(
     region: u8,
     recipe: u16,
 ) -> i64 {
+    plant_contribution_for(
+        world,
+        dataset,
+        (firm.industry, firm.secondary_industry, firm.region),
+        region,
+        recipe,
+    )
+}
+
+/// `plant_contribution` for a company described by its focus: primary sector, optional
+/// secondary sector and home region. Lets a founder price a plant before the company exists.
+fn plant_contribution_for(
+    world: &cw_sim::state::World,
+    dataset: &cw_data::Dataset,
+    (firm_industry, firm_secondary, firm_region): (u8, Option<u8>, u8),
+    region: u8,
+    recipe: u16,
+) -> i64 {
     use cw_sim::economy::{operations, sectors};
     let template = &dataset.recipes[recipe as usize];
     let price = |id: &str| {
@@ -143,15 +198,15 @@ fn plant_contribution(
             .unwrap_or(0)
     };
     let industry = sectors::recipe_industry(dataset, recipe);
-    let (focus_bps, overhead_bps) = if industry == firm.industry {
+    let (focus_bps, overhead_bps) = if industry == firm_industry {
         (operations::PRIMARY_INPUT_BPS as i64, 0)
-    } else if Some(industry) == firm.secondary_industry {
+    } else if Some(industry) == firm_secondary {
         (operations::SECONDARY_INPUT_BPS as i64, 0)
     } else {
         (10_000, operations::OFF_FOCUS_OVERHEAD_BPS)
     };
     let location =
-        sectors::location_factor_bps(dataset, firm.region, region, &template.industry) as i64;
+        sectors::location_factor_bps(dataset, firm_region, region, &template.industry) as i64;
     let inputs: i64 = template
         .weekly_inputs_lots
         .iter()
@@ -187,25 +242,67 @@ pub struct PolicyStats {
     pub rejections: BTreeMap<String, u32>,
 }
 
+/// `--legacy-cards`: the old harness answer to every card, the first choice in the content
+/// file's order, kept for comparing with earlier baselines.
+pub static LEGACY_CARDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// `--no-plant-bids`: the `skilled` style never bids for plants on offer, to measure what its
+/// bidding is worth on the same engine.
+pub static NO_PLANT_BIDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 pub struct PolicyRunner {
     policy: ReferencePolicy,
+    legacy_cards: bool,
     next_low: u64,
     verbose: bool,
     /// Last production target per firm, so a cash dip cannot churn staffing every cadence.
     last_target: BTreeMap<u64, i32>,
     /// The passive player has founded its company and set its target; it never acts again.
     passive_done: bool,
+    skilled: skilled::SkilledState,
+    verbose_skilled: bool,
     pub stats: PolicyStats,
+}
+
+/// The answer an active policy gives a card: never a choice that gives up control of a company
+/// the player runs, otherwise the first choice the engine offers (the engine lists its
+/// recommended answer first, in the order the player's screen shows).
+fn engine_card_answer(session: &Session, event: u64) -> Option<String> {
+    let line = cw_session::dto::events(&session.world, &session.dataset)
+        .into_iter()
+        .find(|line| line.id == event)?;
+    if line.card == "tender_offer" {
+        let deal = session
+            .world
+            .events
+            .pending
+            .iter()
+            .find(|pending| pending.id == event)
+            .and_then(|pending| pending.deal)?;
+        let sells_control = cw_sim::economy::deals::tender_outlook(&session.world, deal)
+            .is_some_and(|outlook| outlook.loses_control());
+        if sells_control {
+            return line
+                .choices
+                .iter()
+                .find(|choice| choice.id == "refuse")
+                .map(|choice| choice.id.clone());
+        }
+    }
+    line.choices.first().map(|choice| choice.id.clone())
 }
 
 impl PolicyRunner {
     pub fn new(policy: ReferencePolicy, verbose: bool) -> PolicyRunner {
         PolicyRunner {
             policy,
+            legacy_cards: LEGACY_CARDS.load(std::sync::atomic::Ordering::Relaxed),
             next_low: 1,
             verbose,
             last_target: BTreeMap::new(),
             passive_done: false,
+            skilled: Default::default(),
+            verbose_skilled: verbose,
             stats: PolicyStats::default(),
         }
     }
@@ -213,6 +310,17 @@ impl PolicyRunner {
     /// Decide for this week, if this is a cadence week and the clock is not paused.
     pub fn act(&mut self, session: &mut Session) {
         if self.policy == ReferencePolicy::None {
+            return;
+        }
+        if self.policy.is_noise() {
+            if !self.passive_done {
+                self.passive_done = true;
+                if self.policy == ReferencePolicy::Noise {
+                    session.world.events.rng.next_u64();
+                } else {
+                    session.world.macro_state.rng.next_u64();
+                }
+            }
             return;
         }
         if self.policy == ReferencePolicy::Passive {
@@ -231,10 +339,18 @@ impl PolicyRunner {
             if session.config.scenario != cw_sim::state::ScenarioKind::Founder {
                 return;
             }
-            self.found_firm(session);
+            if self.policy.is_skilled() {
+                self.found_skilled(session);
+            } else {
+                self.found_firm(session);
+            }
             if session.world.investor.primary_group.is_none() {
                 return;
             }
+        }
+        if self.policy.is_skilled() {
+            self.act_skilled(session);
+            return;
         }
         if self.policy == ReferencePolicy::Reckless {
             self.act_reckless(session);
@@ -643,20 +759,51 @@ impl PolicyRunner {
         else {
             return false;
         };
-        let choice = if matches!(
+        let skilled_pick = self
+            .policy
+            .is_skilled()
+            .then(|| PolicyRunner::skilled_choice(&card.id))
+            .flatten()
+            .and_then(|key| card.choices.iter().find(|choice| choice.id == key));
+        let choice = if skilled_pick.is_some() {
+            skilled_pick
+        } else if matches!(
             self.policy,
-            ReferencePolicy::None | ReferencePolicy::Passive
+            ReferencePolicy::None
+                | ReferencePolicy::Passive
+                | ReferencePolicy::Noise
+                | ReferencePolicy::NoiseMacro
         ) {
             card.choices
                 .iter()
                 .find(|choice| choice.handler == "no_action")
                 .or_else(|| card.choices.last())
-        } else {
+        } else if self.legacy_cards {
             card.choices.first()
+        } else {
+            None
         };
-        let Some(choice) = choice.map(|choice| choice.id.clone()) else {
+        let engine_pick = (choice.is_none() && !self.legacy_cards)
+            .then(|| engine_card_answer(session, event))
+            .flatten();
+        let Some(choice) = engine_pick.or_else(|| choice.map(|choice| choice.id.clone())) else {
             return false;
         };
+        if self.verbose {
+            println!(
+                "w{} EVENT card={} choice={}",
+                session.world.tick.0,
+                session
+                    .world
+                    .events
+                    .pending
+                    .iter()
+                    .find(|p| p.id == event)
+                    .map(|p| p.card.clone())
+                    .unwrap_or_default(),
+                choice
+            );
+        }
         self.submit(session, CommandIntent::RespondEvent { event, choice })
     }
 
@@ -902,5 +1049,68 @@ mod tests {
             session.world.firm(primary).unwrap().facilities.len() > before
                 || !session.world.firm(primary).unwrap().loans.is_empty()
         );
+    }
+
+    #[test]
+    fn an_active_policy_refuses_a_tender_that_costs_control_and_legacy_takes_the_first_button() {
+        use cw_sim::state::{Deal, DealKind, DealState, HolderId, ShareBook, ShareLot};
+        let mut session = guided(193);
+        let target = session.world.investor.primary_group.unwrap();
+        let buyer = session
+            .world
+            .firms
+            .iter()
+            .map(|(h, _)| h)
+            .find(|h| {
+                *h != target && !cw_sim::economy::events_engine::player_side(&session.world, *h)
+            })
+            .unwrap();
+        let mut holders = BTreeMap::new();
+        holders.insert(
+            HolderId::Investor,
+            ShareLot {
+                qty: 1_000_000,
+                cost_cents: 0,
+            },
+        );
+        let firm = session.world.firms.get_mut(target).unwrap();
+        firm.shares = ShareBook::new(holders);
+        firm.shares.fair_cents = 300;
+        let tick = session.world.tick;
+        let deal = session.world.deals.insert(Deal {
+            buyer,
+            target,
+            kind: DealKind::SharePurchase,
+            state: DealState::OfferOpen,
+            escrow_cents: 0,
+            offer_price_cents: 372,
+            max_shares: 500_001,
+            committed_shares: 0,
+            started: tick,
+            diligence_until: tick,
+            offer_deadline: cw_core::calendar::Tick(tick.0 + 4),
+            review_deadline: None,
+            frozen_fair_cents: 300,
+            review_required: false,
+            remedy_share_bps: 0,
+            hostile: false,
+            diligence_paid: true,
+            investor_tendered: false,
+        });
+        let event = cw_sim::economy::events_engine::open_tender(&mut session.world, deal);
+        let mut runner = PolicyRunner::new(ReferencePolicy::Expander, false);
+        assert!(runner.answer_event(&mut session, event));
+        assert!(
+            !session.world.deals.get(deal).unwrap().investor_tendered,
+            "the new answer refuses"
+        );
+        // The old behaviour, kept for comparison: the content file's first choice, tender.
+        let mut legacy = PolicyRunner::new(ReferencePolicy::Expander, false);
+        legacy.legacy_cards = true;
+        let again = cw_sim::economy::events_engine::open_tender(&mut session.world, deal);
+        if again != 0 {
+            assert!(legacy.answer_event(&mut session, again));
+            assert!(session.world.deals.get(deal).unwrap().investor_tendered);
+        }
     }
 }

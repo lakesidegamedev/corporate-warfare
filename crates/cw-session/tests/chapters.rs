@@ -599,3 +599,44 @@ fn two_missed_mandates_in_a_row_count_for_the_activist_trigger() {
         &[Outcome::Missed, Outcome::Missed]
     );
 }
+
+/// Oracle: opening the weekly brief while the board has an offer on the table must not panic. The
+/// brief scores each offered mandate with a trial mandate; a trial whose due week precedes its
+/// set week used to overflow the cash cover span (`due - set` on u32) and crash the game.
+#[test]
+fn the_weekly_brief_survives_a_cash_cover_offer() {
+    let mut session = Session::create(config(13)).unwrap();
+    run(&mut session, 2);
+    let firm = primary(&session);
+    session.world.chapters.active.remove(&firm);
+    session.world.chapters.offers.insert(
+        firm,
+        chapters::Offer {
+            chapter: 1,
+            set: 1,
+            kinds: vec![MandateKind::CashCover { cover_weeks: 8 }],
+        },
+    );
+    let brief = cw_session::brief::weekly_brief(&session.world, &session.dataset, firm.0);
+    let pick = brief.moves.iter().find(|m| m.key == "mandate");
+    assert!(pick.is_some(), "the brief offers the cash cover mandate");
+}
+
+/// Oracle: a mandate whose due week precedes its set week (a hand built or damaged one) reads as
+/// a one week span, so progress is 0 or 10,000 basis points, never a panic.
+#[test]
+fn cash_cover_progress_tolerates_a_due_week_before_the_set_week() {
+    let session = Session::create(config(13)).unwrap();
+    let firm = primary(&session);
+    let mandate = Mandate {
+        firm,
+        chapter: 1,
+        set: 40,
+        due: 0,
+        kind: MandateKind::CashCover { cover_weeks: 4 },
+        met: false,
+        broken: false,
+    };
+    let p = chapters::progress(&session.world, &session.dataset, &mandate);
+    assert!((0..=10_000).contains(&p.bps));
+}

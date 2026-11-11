@@ -185,7 +185,23 @@ pub struct YearEnd {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct HostileEvent {
+    pub week: u32,
+    /// raid, deal, activist or plan.
+    pub kind: String,
+    pub actor: String,
+    pub target: String,
+    /// What happened, as far as the harness could see by the end of the run.
+    pub outcome: String,
+    /// Blocks taken (raid), shares sought (deal) or empty.
+    pub detail: String,
+    pub player_equity_cents: i64,
+    pub deal: Option<u64>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Hostile {
+    pub log: Vec<HostileEvent>,
     pub raids: u32,
     pub raids_succeeded: u32,
     pub hostile_deals: u32,
@@ -195,6 +211,17 @@ pub struct Hostile {
     /// Hostile moves that landed in weeks the player ranked in the top three.
     pub while_top_three: u32,
     pub weeks_top_three: u32,
+    /// Raids on the player by a firm that had earlier bought a plant at a break-up auction or
+    /// listing in the raided region, and how many of those it won (2.0 attribution).
+    #[serde(default)]
+    pub raids_by_plant_buyers: u32,
+    #[serde(default)]
+    pub raids_won_by_plant_buyers: u32,
+    /// Raids on the player by a firm that had earlier folded in a company, and wins.
+    #[serde(default)]
+    pub raids_by_mergers: u32,
+    #[serde(default)]
+    pub raids_won_by_mergers: u32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -204,8 +231,104 @@ pub struct Turnover {
     pub dissolved: u32,
     pub acquired: u32,
     pub wound_down: u32,
+    /// Of `dissolved`: firms that were past due or restructuring the week before (insolvency).
+    pub dissolved_after_distress: u32,
+    /// Of `dissolved`: firms that were healthy the week before (a voluntary wind down).
+    pub dissolved_voluntary: u32,
+    /// Times a firm other than the player's came under a different ultimate controller (a settled
+    /// deal that changed control). The firm stays in the league's books, so it is not an exit.
+    pub control_changes: u32,
+    /// Firms outside the player's group that some other firm came to hold at ninety percent or
+    /// more, the point where a merger could fold them in. The rival AI never proposes one.
+    pub rival_owned_90: u32,
     pub entries: u32,
     pub exits: u32,
+}
+
+/// Capacity as the contest: what rivals built, closed and paid out, and how much household
+/// demand for services and retail goods went without.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct CapacityStats {
+    /// Plants ordered by firms outside the player's group after week 0.
+    pub rival_plants_built: u32,
+    /// Blocks in those plants.
+    pub rival_blocks_built: u32,
+    /// Rival plants that went from operating to mothballed.
+    pub rival_plants_mothballed: u32,
+    /// Rival plants that disappeared (sold, or their firm wound up).
+    pub rival_plants_gone: u32,
+    /// Cash rivals paid out as dividends, cents (from retained earnings against net income).
+    pub rival_payout_cents: i64,
+    /// Of the ten largest rivals at week 0 that survive: blocks at the end less blocks at the start.
+    pub top_ten_block_change: Vec<i64>,
+    /// Per year: share of household demand for services and retail goods (no gateway) that found
+    /// no seller, in percent, averaged over the year's weeks.
+    pub unmet_local_pct_by_year: Vec<f64>,
+    /// Plants in the world (operating, building or mothballed, every owner) at week 0 and at
+    /// the end of each year.
+    #[serde(default)]
+    pub world_plants_by_year: Vec<u32>,
+    /// Raids announced against the player's group, with the weeks of warning before they resolve.
+    pub raids_announced_on_player: u32,
+    pub raid_warning_weeks: Vec<u32>,
+    /// Raids decided anywhere in the league, won, and won raids that left the defender with no
+    /// plants at all (a company losing its only business).
+    #[serde(default)]
+    pub raids_all: u32,
+    #[serde(default)]
+    pub raids_won: u32,
+    #[serde(default)]
+    pub raids_emptied_company: u32,
+    /// Plants sold to another company, by the player's group and by everyone, the cash they
+    /// fetched, plants written off with no buyer, and what the pre-2.0 rule (40 percent of book
+    /// from no payer) would have paid for the same disposals, in cents.
+    #[serde(default)]
+    pub plants_sold: u32,
+    #[serde(default)]
+    pub plants_sold_by_player: u32,
+    #[serde(default)]
+    pub plant_sale_cents: i64,
+    #[serde(default)]
+    pub plants_written_off: u32,
+    #[serde(default)]
+    pub old_rule_payout_cents: i64,
+    /// Plant auctions (2.0), from the engine's own totals at the end: a failed company's plants
+    /// offered, sold and scrapped, listings made, sold and withdrawn, lots won by the player's
+    /// side, and what the break-up lots fetched against what the scrap rate (the rule before)
+    /// would have paid, in cents.
+    #[serde(default)]
+    pub breakup_lots: u32,
+    #[serde(default)]
+    pub breakup_sold: u32,
+    #[serde(default)]
+    pub breakup_scrapped: u32,
+    #[serde(default)]
+    pub listings: u32,
+    #[serde(default)]
+    pub listings_sold: u32,
+    #[serde(default)]
+    pub listings_withdrawn: u32,
+    #[serde(default)]
+    pub lots_won_by_player: u32,
+    #[serde(default)]
+    pub breakup_proceeds_cents: i64,
+    #[serde(default)]
+    pub breakup_scrap_cents: i64,
+    /// Lots offered by companies outside the player's side, and how many of them the player's
+    /// main company could have bought when offered: trading, reading the plant as worth running,
+    /// and holding cash above the scrap price.
+    #[serde(default)]
+    pub lots_offered_to_player: u32,
+    #[serde(default)]
+    pub lots_player_could_buy: u32,
+    /// Companies in the league when the career began.
+    #[serde(default)]
+    pub firms_at_start: u32,
+    /// Companies folded into their 90 percent owner, all owners and by rivals only.
+    #[serde(default)]
+    pub mergers: u32,
+    #[serde(default)]
+    pub rival_mergers: u32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -240,8 +363,19 @@ pub struct DealCounts {
 pub struct GoodPrice {
     pub good: String,
     pub reference_cents: i64,
+    /// Whether the good has a gateway (traded) or not (services and retail goods: local).
+    #[serde(default)]
+    pub traded: bool,
     /// Median over years of (max - min) / reference, in percent.
     pub median_year_range_pct: f64,
+    /// Median over years of (max - min) / the year's own mean price, in percent: the whole
+    /// movement a player sees, world price swings and the cycle included.
+    #[serde(default)]
+    pub median_year_total_range_pct: f64,
+    /// Direction reversals of material weekly moves (half a percent or more) per 52 weeks, as
+    /// the market health test counts them.
+    #[serde(default)]
+    pub swings_per_year: f64,
     pub years: u32,
     pub weeks_at_cap_share_pct: f64,
     pub weeks_at_floor_share_pct: f64,
@@ -293,7 +427,11 @@ pub struct Career {
     pub zombies: Zombies,
     pub deals: DealCounts,
     pub goods: Vec<GoodPrice>,
+    #[serde(default)]
+    pub capacity: CapacityStats,
     pub influence: Option<Influence>,
+    /// The same comparison for the inert noise run, when one was supplied: the floor.
+    pub influence_floor: Option<Influence>,
     pub policy_attempted: u32,
     pub policy_accepted: u32,
     pub policy_rejected: u32,
@@ -332,12 +470,38 @@ pub struct Aggregate {
     pub entries_per_decade_median: Option<f64>,
     pub exits_per_decade_median: Option<f64>,
     pub exits_dissolved: u32,
+    pub exits_after_distress: u32,
+    pub exits_voluntary: u32,
+    pub control_changes_total: u32,
     pub exits_acquired: u32,
     pub exits_wound_down: u32,
     pub zombie_share: Option<f64>,
     pub stressed_share: Option<f64>,
     pub worst_zombies: Vec<ZombieFirm>,
     pub price_range_pct_median: Option<f64>,
+    /// The same median over goods with a gateway only, and over goods without one (services and
+    /// retail goods).
+    #[serde(default)]
+    pub price_range_traded_pct_median: Option<f64>,
+    #[serde(default)]
+    pub price_range_local_pct_median: Option<f64>,
+    /// The same split, against each year's own mean price (what a player sees, world swings
+    /// and the cycle included), and the swings: the worst good's and the mean good's direction
+    /// reversals a year (market_health's limits are 10 and 2).
+    #[serde(default)]
+    pub price_total_traded_pct_median: Option<f64>,
+    #[serde(default)]
+    pub price_total_local_pct_median: Option<f64>,
+    #[serde(default)]
+    pub price_swings_per_year_max: Option<f64>,
+    #[serde(default)]
+    pub price_swings_per_year_mean: Option<f64>,
+    /// Per good: (good, traded, median total range, median swings a year) over seeds.
+    #[serde(default)]
+    pub price_total_by_good: Vec<(String, bool, f64, f64)>,
+    /// Per good: (good, traded, median range in percent over seeds).
+    #[serde(default)]
+    pub price_range_by_good: Vec<(String, bool, f64)>,
     pub weeks_at_cap_share_pct_median: Option<f64>,
     pub weeks_at_floor_share_pct_median: Option<f64>,
     pub hostile_total_median: Option<f64>,
@@ -345,7 +509,77 @@ pub struct Aggregate {
     pub hostile_top3_careers: u32,
     pub deals: DealCounts,
     pub influence_share_differs_pct_median: Option<f64>,
+    pub influence_floor_pct_median: Option<f64>,
+    /// Influence less the floor, in percentage points: what the player moved beyond chaos.
+    pub influence_net_pct_median: Option<f64>,
     pub ms_per_week_mean: f64,
+    /// Capacity: medians per decade over careers.
+    #[serde(default)]
+    pub rival_plants_built_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub rival_plants_mothballed_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub rival_plants_gone_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub rival_payout_per_decade_median_cents: Option<f64>,
+    /// Median over careers of the median surviving top-ten rival's change in blocks.
+    #[serde(default)]
+    pub top_ten_block_change_median: Option<f64>,
+    /// Household demand for services and retail goods that went without, percent: median over
+    /// careers of the first year and of the last year, and the fall between them.
+    #[serde(default)]
+    pub unmet_local_first_year_pct_median: Option<f64>,
+    #[serde(default)]
+    pub unmet_local_last_year_pct_median: Option<f64>,
+    #[serde(default)]
+    pub unmet_local_fall_pct_median: Option<f64>,
+    /// Plants in the world at week 0 and at the end of the career, median over careers.
+    #[serde(default)]
+    pub world_plants_start_median: Option<f64>,
+    #[serde(default)]
+    pub world_plants_final_median: Option<f64>,
+    /// Median over careers of the plants in the world at the end of each year (index 0 is week 0).
+    #[serde(default)]
+    pub world_plants_by_year_median: Vec<f64>,
+    #[serde(default)]
+    pub raids_announced_on_player_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub raid_warning_weeks_median: Option<f64>,
+    #[serde(default)]
+    pub raids_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub raids_won_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub raids_emptied_company_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub plants_sold_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub plants_written_off_per_decade_median: Option<f64>,
+    /// Dollars a decade the pre-2.0 disposal rule would have paid for the same disposals.
+    #[serde(default)]
+    pub old_rule_payout_per_decade_median: Option<f64>,
+    /// Plants that changed hands (every route) per decade per ten companies at the start.
+    #[serde(default)]
+    pub plants_changing_hands_per_decade_per_ten_firms_median: Option<f64>,
+    #[serde(default)]
+    pub breakup_sold_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub listing_sold_per_decade_median: Option<f64>,
+    /// Share of a failed company's plants that found a buyer, over every career pooled.
+    #[serde(default)]
+    pub breakup_buyer_share: Option<f64>,
+    /// Break-up proceeds over what the scrap rate would have paid, every career pooled.
+    #[serde(default)]
+    pub breakup_proceeds_over_scrap: Option<f64>,
+    #[serde(default)]
+    pub lots_player_could_buy_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub lots_won_by_player_total: u32,
+    #[serde(default)]
+    pub mergers_per_decade_median: Option<f64>,
+    /// Share of careers in which at least one company was folded into its owner.
+    #[serde(default)]
+    pub careers_with_merger_share: Option<f64>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -403,10 +637,15 @@ struct Life {
     exit: bool,
 }
 
+/// One good's year: (min, max, observations, sum of the week's price anchor, sum of price).
+type PriceYear = (i64, i64, u32, i128, i128);
+
 #[derive(Default)]
 struct PriceTrack {
-    /// (good, year) -> (min, max, observations)
-    windows: BTreeMap<(u16, u32), (i64, i64, u32)>,
+    /// (good, year) -> that good's year.
+    windows: BTreeMap<(u16, u32), PriceYear>,
+    /// good -> (last price, last material move's sign, reversals, price weeks)
+    swings: BTreeMap<u16, (i64, i64, u64, u64)>,
     weeks: BTreeMap<u16, (u64, u64, u64)>,
     last_week: u32,
 }
@@ -429,6 +668,16 @@ struct Observer {
     best_rank: Option<u32>,
     hostile: Hostile,
     seen_raids: BTreeSet<(u32, u64, u64, u8, u8)>,
+    seen_all_raids: BTreeSet<(u32, u64, u64, u8, u8)>,
+    seen_disposals: BTreeSet<(u64, u64)>,
+    seen_lots: BTreeSet<u32>,
+    /// Closed lots read, and every (buyer, region) that bought a plant on offer.
+    seen_closed: BTreeSet<u32>,
+    plant_buys: BTreeSet<(u64, u8)>,
+    /// Firms that folded in a company, and how many merger records were read.
+    folded_in: BTreeSet<u64>,
+    mergers_read: usize,
+    seen_raid_campaigns: BTreeSet<(u32, u64, u64, u8, u8)>,
     seen_deals: BTreeSet<(u64, u32)>,
     seen_campaigns: BTreeSet<u32>,
     seen_plans: BTreeSet<(u64, u64, u32)>,
@@ -439,6 +688,18 @@ struct Observer {
     lost_control_votes_bps: Option<i32>,
     lost_control_to: Option<String>,
     restructured_week: Option<u32>,
+    prev_status: BTreeMap<u64, FirmStatus>,
+    last_controller: BTreeMap<u64, Option<HolderId>>,
+    /// Firms outside the player's group that a single other firm held at ninety percent or more.
+    ninety_seen: std::collections::BTreeSet<u64>,
+    capacity: CapacityStats,
+    /// Every plant seen: (owner, operating last week).
+    plants_seen: BTreeMap<u64, (u64, bool)>,
+    retained: BTreeMap<u64, i64>,
+    last_dividend: BTreeMap<u64, u32>,
+    top_ten_start: Vec<(u64, i64)>,
+    /// (unmet, wanted) lots summed over the weeks of each year.
+    unmet_year: BTreeMap<u32, (i64, i64)>,
 }
 
 impl Observer {
@@ -461,6 +722,14 @@ impl Observer {
             best_rank: None,
             hostile: Hostile::default(),
             seen_raids: BTreeSet::new(),
+            seen_all_raids: BTreeSet::new(),
+            seen_disposals: BTreeSet::new(),
+            seen_lots: BTreeSet::new(),
+            seen_closed: BTreeSet::new(),
+            plant_buys: BTreeSet::new(),
+            folded_in: BTreeSet::new(),
+            mergers_read: 0,
+            seen_raid_campaigns: BTreeSet::new(),
             seen_deals: BTreeSet::new(),
             seen_campaigns: BTreeSet::new(),
             seen_plans: BTreeSet::new(),
@@ -471,6 +740,15 @@ impl Observer {
             lost_control_votes_bps: None,
             lost_control_to: None,
             restructured_week: None,
+            prev_status: BTreeMap::new(),
+            last_controller: BTreeMap::new(),
+            ninety_seen: Default::default(),
+            capacity: CapacityStats::default(),
+            plants_seen: BTreeMap::new(),
+            retained: BTreeMap::new(),
+            last_dividend: BTreeMap::new(),
+            top_ten_start: Vec::new(),
+            unmet_year: BTreeMap::new(),
         }
     }
 
@@ -540,10 +818,39 @@ impl Observer {
                     bump(&mut self.turnover.exits_by_year, year_index);
                     match kind {
                         "acquired" => self.turnover.acquired += 1,
-                        "dissolved" => self.turnover.dissolved += 1,
+                        "dissolved" => {
+                            self.turnover.dissolved += 1;
+                            // The engine liquidates and dissolves inside one week, so the status
+                            // never reads Liquidating; the week before tells the two causes apart.
+                            if matches!(
+                                self.prev_status.get(&id),
+                                Some(FirmStatus::PastDue { .. } | FirmStatus::Restructuring { .. })
+                            ) {
+                                self.turnover.dissolved_after_distress += 1;
+                            } else {
+                                self.turnover.dissolved_voluntary += 1;
+                            }
+                        }
                         _ => self.turnover.wound_down += 1,
                     }
                 }
+            }
+            if after_week && firm.status.operative() && !group.contains(&id) {
+                let controller = ultimate_controller(world, handle);
+                match self.last_controller.insert(id, controller) {
+                    Some(before) if before != controller => self.turnover.control_changes += 1,
+                    _ => {}
+                }
+                if firm.shares.holders.keys().any(|holder| {
+                    matches!(holder, HolderId::Firm(owner) if *owner != handle)
+                        && firm.shares.meets_squeeze_out(*holder)
+                }) && self.ninety_seen.insert(id)
+                {
+                    self.turnover.rival_owned_90 += 1;
+                }
+            }
+            if after_week {
+                self.prev_status.insert(id, firm.status);
             }
             if after_week && firm.status.operative() {
                 self.zombies.firm_weeks += 1;
@@ -617,8 +924,110 @@ impl Observer {
             self.best_rank = Some(self.best_rank.map_or(rank, |b| b.min(rank)));
         }
 
+        // Capacity: plants built, mothballed and gone; payouts; household demand going without.
+        if !after_week || week.is_multiple_of(YEAR) {
+            self.capacity
+                .world_plants_by_year
+                .push(world.facilities.iter().count() as u32);
+        }
+        let mut alive: BTreeSet<u64> = BTreeSet::new();
+        for (handle, plant) in world.facilities.iter() {
+            alive.insert(handle.0);
+            let owner = plant.firm.0;
+            let operating = plant.status == cw_sim::state::FacilityStatus::Operating;
+            let outside = !group.contains(&owner);
+            match self.plants_seen.insert(handle.0, (owner, operating)) {
+                None if after_week && outside => {
+                    self.capacity.rival_plants_built += 1;
+                    self.capacity.rival_blocks_built += plant.blocks as u32;
+                }
+                Some((_, true))
+                    if after_week
+                        && outside
+                        && plant.status == cw_sim::state::FacilityStatus::Mothballed =>
+                {
+                    self.capacity.rival_plants_mothballed += 1;
+                }
+                _ => {}
+            }
+        }
+        let gone: Vec<u64> = self
+            .plants_seen
+            .keys()
+            .copied()
+            .filter(|id| !alive.contains(id))
+            .collect();
+        for id in gone {
+            if let Some((owner, _)) = self.plants_seen.remove(&id)
+                && after_week
+                && !group.contains(&owner)
+            {
+                self.capacity.rival_plants_gone += 1;
+            }
+        }
+        for (handle, firm) in world.firms.iter() {
+            if group.contains(&handle.0) || !firm.status.operative() {
+                continue;
+            }
+            let retained = -firm
+                .book
+                .balance(cw_core::ledger::Account::RetainedEarnings);
+            let paid_week = world
+                .structure
+                .last_dividend
+                .get(&handle)
+                .copied()
+                .unwrap_or(0);
+            let before = self.retained.insert(handle.0, retained);
+            let seen = self.last_dividend.insert(handle.0, paid_week);
+            if after_week
+                && let Some(before) = before
+                && seen.is_some_and(|w| w != paid_week)
+            {
+                let income = firm
+                    .book
+                    .recent_weeks()
+                    .last()
+                    .map(|w| w.net_income)
+                    .unwrap_or(0);
+                let paid = before + income - retained;
+                if paid > 0 {
+                    self.capacity.rival_payout_cents += paid;
+                }
+            }
+        }
+        if after_week {
+            let dataset = &session.dataset;
+            let (mut unmet, mut wanted) = (0i64, 0i64);
+            for region in &world.regions {
+                for (product, lots) in &region.households.wanted_milli {
+                    if cw_sim::economy::capacity::corridor(dataset, *product)
+                        || !cw_sim::economy::capacity::household_good(dataset, *product)
+                    {
+                        continue;
+                    }
+                    wanted += lots;
+                    unmet += region
+                        .households
+                        .unmet_milli
+                        .get(product)
+                        .copied()
+                        .unwrap_or(0);
+                }
+            }
+            let slot = self.unmet_year.entry(year_index).or_default();
+            slot.0 += unmet;
+            slot.1 += wanted;
+        }
+
         if !after_week {
             // Opening snapshot: the league's starting sizes.
+            self.top_ten_start = rows
+                .iter()
+                .filter(|(id, _)| Some(Handle(*id)) != primary)
+                .take(10)
+                .map(|(id, _)| (*id, firm_blocks(world, Handle(*id))))
+                .collect();
             for (id, size) in &rows {
                 if Some(Handle(*id)) != primary {
                     self.start_rivals.insert(*id, *size);
@@ -635,6 +1044,140 @@ impl Observer {
 
         // Hostile moves aimed at the player's group.
         let mut fresh = 0;
+        let name_of = |h: Handle| {
+            world
+                .firm(h)
+                .map(|f| f.name.clone())
+                .unwrap_or_else(|| format!("firm {}", h.0))
+        };
+        let player_equity = primary
+            .and_then(|p| world.firm(p))
+            .map(valuation)
+            .unwrap_or(0);
+        // League raids: every raid decided this week, whoever the player is (none careers too).
+        for raid in &world.raids {
+            if self.seen_all_raids.insert((
+                raid.tick,
+                raid.attacker.0,
+                raid.defender.0,
+                raid.region,
+                raid.industry,
+            )) {
+                self.capacity.raids_all += 1;
+                if raid.success {
+                    self.capacity.raids_won += 1;
+                    if world
+                        .firm(raid.defender)
+                        .is_some_and(|f| f.facilities.is_empty())
+                    {
+                        self.capacity.raids_emptied_company += 1;
+                    }
+                }
+            }
+        }
+        // Plant auctions: the engine's totals, and each new lot from outside the player's side.
+        if self.capacity.firms_at_start == 0 {
+            self.capacity.firms_at_start = world.firms.len() as u32;
+        }
+        {
+            let t = &world.auctions.totals;
+            let c = &mut self.capacity;
+            c.breakup_lots = t.breakup_lots;
+            c.breakup_sold = t.breakup_sold;
+            c.breakup_scrapped = t.breakup_scrapped;
+            c.listings = t.listings;
+            c.listings_sold = t.listings_sold;
+            c.listings_withdrawn = t.listings_withdrawn;
+            c.lots_won_by_player = t.sold_to_player;
+            c.breakup_proceeds_cents = t.breakup_proceeds_cents;
+            c.breakup_scrap_cents = t.breakup_scrap_cents;
+            c.mergers = t.mergers;
+            c.rival_mergers = world
+                .auctions
+                .mergers
+                .iter()
+                .filter(|m| !group.contains(&m.buyer.0))
+                .count() as u32;
+        }
+        for closed in &world.auctions.closed {
+            if self.seen_closed.insert(closed.lot.id)
+                && let cw_sim::economy::auctions::LotOutcome::Sold { buyer, .. } = closed.outcome
+            {
+                self.plant_buys.insert((buyer.0, closed.lot.region));
+            }
+        }
+        for merger in world.auctions.mergers.iter().skip(self.mergers_read) {
+            self.folded_in.insert(merger.buyer.0);
+        }
+        self.mergers_read = world.auctions.mergers.len();
+        let new_lots: Vec<&cw_sim::economy::auctions::PlantLot> = world
+            .auctions
+            .lots
+            .iter()
+            .filter(|lot| !group.contains(&lot.seller.0))
+            .filter(|lot| !self.seen_lots.contains(&lot.id))
+            .collect();
+        if !new_lots.is_empty() {
+            let rooms = cw_sim::economy::capacity::input_rooms(world, &session.dataset);
+            for lot in new_lots {
+                self.seen_lots.insert(lot.id);
+                self.capacity.lots_offered_to_player += 1;
+                let could = primary
+                    .filter(|p| world.firm(*p).is_some_and(|f| f.operative()))
+                    .and_then(|p| {
+                        cw_sim::economy::disposal::appraise(
+                            world,
+                            &session.dataset,
+                            &rooms,
+                            p,
+                            lot.facility,
+                        )
+                    })
+                    .is_some_and(|view| {
+                        view.earnings_cents.min(view.replacement_cents) > lot.reserve_cents
+                            && view.spare_cents > lot.reserve_cents
+                    });
+                if could {
+                    self.capacity.lots_player_could_buy += 1;
+                }
+            }
+        }
+        // Plant disposals: read from each seller's journal (one transaction per sale or write-off).
+        for (handle, firm) in world.firms.iter() {
+            let mut found: BTreeMap<u64, (bool, i64, i64, i64)> = BTreeMap::new();
+            for posting in firm.book.journal().iter().rev() {
+                if posting.week.0 + 2 < week {
+                    break;
+                }
+                let sold = match posting.memo.as_str() {
+                    "plant sale" => true,
+                    "plant written off" => false,
+                    _ => continue,
+                };
+                let entry = found.entry(posting.txn).or_insert((sold, 0, 0, 0));
+                match posting.account {
+                    cw_core::ledger::Account::FixedAssets => entry.1 -= posting.delta,
+                    cw_core::ledger::Account::AccumulatedDepreciation => entry.2 += posting.delta,
+                    cw_core::ledger::Account::Cash => entry.3 += posting.delta,
+                    _ => {}
+                }
+            }
+            for (txn, (sold, capex, depreciation, cash)) in found {
+                if !self.seen_disposals.insert((handle.0, txn)) {
+                    continue;
+                }
+                self.capacity.old_rule_payout_cents += (capex - depreciation).max(0) * 40 / 100;
+                if sold {
+                    self.capacity.plants_sold += 1;
+                    self.capacity.plant_sale_cents += cash;
+                    if group.contains(&handle.0) {
+                        self.capacity.plants_sold_by_player += 1;
+                    }
+                } else {
+                    self.capacity.plants_written_off += 1;
+                }
+            }
+        }
         if !group.is_empty() {
             let mut plan_deals: BTreeSet<u64> = BTreeSet::new();
             for plan in &world.plans.plans {
@@ -649,6 +1192,33 @@ impl Observer {
                 {
                     self.hostile.takeover_plans += 1;
                     fresh += 1;
+                    self.hostile.log.push(HostileEvent {
+                        week,
+                        kind: "plan".to_owned(),
+                        actor: name_of(plan.raider),
+                        target: name_of(plan.target),
+                        outcome: format!("{:?}", plan.stage),
+                        detail: String::new(),
+                        player_equity_cents: player_equity,
+                        deal: plan.deal.map(|d| d.0),
+                    });
+                }
+            }
+            for c in &world.raids.campaigns {
+                if group.contains(&c.defender.0)
+                    && !group.contains(&c.attacker.0)
+                    && self.seen_raid_campaigns.insert((
+                        c.announced,
+                        c.attacker.0,
+                        c.defender.0,
+                        c.region,
+                        c.industry,
+                    ))
+                {
+                    self.capacity.raids_announced_on_player += 1;
+                    self.capacity
+                        .raid_warning_weeks
+                        .push(c.resolves.saturating_sub(c.announced));
                 }
             }
             for raid in &world.raids {
@@ -666,7 +1236,35 @@ impl Observer {
                     if raid.success {
                         self.hostile.raids_succeeded += 1;
                     }
+                    if self.plant_buys.contains(&(raid.attacker.0, raid.region)) {
+                        self.hostile.raids_by_plant_buyers += 1;
+                        self.hostile.raids_won_by_plant_buyers += raid.success as u32;
+                    }
+                    if self.folded_in.contains(&raid.attacker.0) {
+                        self.hostile.raids_by_mergers += 1;
+                        self.hostile.raids_won_by_mergers += raid.success as u32;
+                    }
                     fresh += 1;
+                    self.hostile.log.push(HostileEvent {
+                        week,
+                        kind: "raid".to_owned(),
+                        actor: name_of(raid.attacker),
+                        target: name_of(raid.defender),
+                        outcome: if raid.success {
+                            format!(
+                                "won: took {} block(s), paid the player {} cents",
+                                raid.blocks, raid.price_cents
+                            )
+                        } else {
+                            "failed".to_owned()
+                        },
+                        detail: format!(
+                            "chance {} bps, budget {} cents, region {}",
+                            raid.chance_bps, raid.budget_cents, raid.region
+                        ),
+                        player_equity_cents: player_equity,
+                        deal: None,
+                    });
                 }
             }
             for (handle, deal) in world.deals.iter() {
@@ -678,12 +1276,41 @@ impl Observer {
                 {
                     self.hostile.hostile_deals += 1;
                     fresh += 1;
+                    self.hostile.log.push(HostileEvent {
+                        week,
+                        kind: "deal".to_owned(),
+                        actor: name_of(deal.buyer),
+                        target: name_of(deal.target),
+                        outcome: format!("{:?}", deal.state),
+                        detail: format!(
+                            "{} shares at {} cents",
+                            deal.max_shares, deal.offer_price_cents
+                        ),
+                        player_equity_cents: player_equity,
+                        deal: Some(handle.0),
+                    });
                 }
             }
             for campaign in &world.structure.campaigns {
                 if group.contains(&campaign.target.0) && self.seen_campaigns.insert(campaign.id) {
                     self.hostile.activist_campaigns += 1;
                     fresh += 1;
+                    self.hostile.log.push(HostileEvent {
+                        week,
+                        kind: "activist".to_owned(),
+                        actor: format!("outside activist {}", campaign.activist),
+                        target: name_of(campaign.target),
+                        outcome: format!("{:?}", campaign.outcome),
+                        detail: format!(
+                            "{:?}, demand {:?}, stake {} bps, {} cents",
+                            campaign.reason,
+                            campaign.demand,
+                            campaign.stake_bps,
+                            campaign.amount_cents
+                        ),
+                        player_equity_cents: player_equity,
+                        deal: None,
+                    });
                 }
             }
         }
@@ -718,14 +1345,32 @@ impl Observer {
                 }
             }
             for (good, price) in &point.goods {
-                let window =
-                    self.prices
-                        .windows
-                        .entry((*good, year))
-                        .or_insert((i64::MAX, i64::MIN, 0));
+                let anchor = cw_sim::economy::pricing::price_anchor(world, &session.dataset, *good);
+                let window = self.prices.windows.entry((*good, year)).or_insert((
+                    i64::MAX,
+                    i64::MIN,
+                    0,
+                    0,
+                    0,
+                ));
                 window.0 = window.0.min(*price);
                 window.1 = window.1.max(*price);
                 window.2 += 1;
+                window.3 += anchor as i128;
+                window.4 += *price as i128;
+                let swing = self.prices.swings.entry(*good).or_insert((0, 0, 0, 0));
+                if swing.0 > 0 {
+                    swing.3 += 1;
+                    let delta = *price - swing.0;
+                    // Moves under half a percent are not a swing (market_health's rule).
+                    if delta.abs() * 10_000 >= swing.0 * 50 {
+                        if swing.1 != 0 && delta.signum() != swing.1 {
+                            swing.2 += 1;
+                        }
+                        swing.1 = delta.signum();
+                    }
+                }
+                swing.0 = *price;
                 let counts = self.prices.weeks.entry(*good).or_default();
                 counts.0 += 1;
                 if sell.get(good).is_some_and(|cap| *price >= *cap) {
@@ -760,6 +1405,19 @@ impl Observer {
         }
         self.hook_seconds += started.elapsed().as_secs_f64();
     }
+}
+
+fn firm_blocks(world: &World, firm: Handle) -> i64 {
+    world
+        .firm(firm)
+        .map(|f| {
+            f.facilities
+                .iter()
+                .filter_map(|h| world.facilities.get(*h))
+                .map(|p| p.blocks as i64)
+                .sum()
+        })
+        .unwrap_or(0)
 }
 
 fn bump(counts: &mut Vec<u32>, index: u32) {
@@ -831,6 +1489,16 @@ fn finish_career(
     worst.truncate(5);
     zombies.worst = worst;
 
+    // Hostile deals and plans: the state the deal ended in.
+    let mut hostile = observer.hostile.clone();
+    for event in &mut hostile.log {
+        if let Some(deal) = event.deal
+            && let Some((state, _)) = observer.deals.get(&deal)
+        {
+            event.outcome = format!("{} (deal ended {:?})", event.outcome, state);
+        }
+    }
+
     // Deals.
     let mut deals = DealCounts::default();
     for (state, player) in observer.deals.values() {
@@ -855,13 +1523,24 @@ fn finish_career(
     // Prices.
     let mut goods = Vec::new();
     let mut by_good: BTreeMap<u16, Vec<f64>> = BTreeMap::new();
-    for ((good, _year), (min, max, count)) in &observer.prices.windows {
+    let mut total_by_good: BTreeMap<u16, Vec<f64>> = BTreeMap::new();
+    for ((good, _year), (min, max, count, anchor_sum, price_sum)) in &observer.prices.windows {
         if *count < 13 {
             continue;
         }
-        let reference = session.dataset.reference_price(*good);
+        // Range against the year's mean anchor: the outside middle quote for a traded good, the
+        // price-level reference for a service, the catalogue price otherwise. A world price
+        // path that drifts is not counted as range.
+        let reference = (*anchor_sum / *count as i128).max(1) as i64;
         if let Some(range) = range_pct_x100(*min, *max, reference) {
             by_good.entry(*good).or_default().push(range as f64 / 100.0);
+        }
+        let mean = (*price_sum / *count as i128).max(1) as i64;
+        if let Some(range) = range_pct_x100(*min, *max, mean) {
+            total_by_good
+                .entry(*good)
+                .or_default()
+                .push(range as f64 / 100.0);
         }
     }
     for (good, ranges) in &by_good {
@@ -869,7 +1548,21 @@ fn finish_career(
         goods.push(GoodPrice {
             good: session.dataset.products[*good as usize].id.clone(),
             reference_cents: session.dataset.reference_price(*good),
+            traded: !session.dataset.products[*good as usize].kind.is_service()
+                && session.world.gateways.iter().any(|g| {
+                    g.product == *good && (g.sell_price_cents > 0 || g.buy_price_cents > 0)
+                }),
             median_year_range_pct: median_f64(ranges).unwrap_or(0.0),
+            median_year_total_range_pct: total_by_good
+                .get(good)
+                .and_then(|r| median_f64(r))
+                .unwrap_or(0.0),
+            swings_per_year: observer
+                .prices
+                .swings
+                .get(good)
+                .filter(|s| s.3 > 0)
+                .map_or(0.0, |s| (s.2 * 52) as f64 / s.3 as f64),
             years: ranges.len() as u32,
             weeks_at_cap_share_pct: share_x100(cap, weeks) as f64 / 100.0,
             weeks_at_floor_share_pct: share_x100(floor, weeks) as f64 / 100.0,
@@ -904,7 +1597,7 @@ fn finish_career(
         lost_control_week: observer.lost_control_week,
         past_due_weeks: observer.past_due_weeks,
         best_rank: observer.best_rank,
-        hostile: observer.hostile.clone(),
+        hostile,
         league: League {
             leader_changes_raw: leader_changes(&observer.leaders, 1),
             leader_changes_held_13w: leader_changes(&observer.leaders, LEADER_HOLD_WEEKS),
@@ -918,7 +1611,33 @@ fn finish_career(
         zombies,
         deals,
         goods,
+        capacity: {
+            let mut stats = observer.capacity.clone();
+            stats.top_ten_block_change = observer
+                .top_ten_start
+                .iter()
+                .filter(|(id, _)| {
+                    world
+                        .firm(Handle(*id))
+                        .is_some_and(|f| f.status.operative())
+                })
+                .map(|(id, start)| firm_blocks(world, Handle(*id)) - start)
+                .collect();
+            stats.unmet_local_pct_by_year = observer
+                .unmet_year
+                .values()
+                .map(|(unmet, wanted)| {
+                    if *wanted > 0 {
+                        *unmet as f64 * 100.0 / *wanted as f64
+                    } else {
+                        0.0
+                    }
+                })
+                .collect();
+            stats
+        },
         influence: None,
+        influence_floor: None,
         policy_attempted: runner.stats.attempted,
         policy_accepted: runner.stats.accepted,
         policy_rejected: runner.stats.rejected,
@@ -936,7 +1655,15 @@ fn finish_career(
 // Running
 // ---------------------------------------------------------------------------------------------
 
-fn arc_config(seed: u64, scenario_id: &str, difficulty: cw_data::Difficulty) -> ScenarioConfig {
+pub fn arc_config_pub(seed: u64, scenario_id: &str) -> ScenarioConfig {
+    arc_config(seed, scenario_id, cw_data::Difficulty::Standard)
+}
+
+pub(crate) fn arc_config(
+    seed: u64,
+    scenario_id: &str,
+    difficulty: cw_data::Difficulty,
+) -> ScenarioConfig {
     // The new-game screen's own path: founder, sandbox, the scenario named in the price setup
     // (which loads that scenario's dataset: regions, firms, logistics, currencies).
     ScenarioConfig {
@@ -979,8 +1706,9 @@ fn play(
 ) -> Result<(Career, ScenarioCheck), String> {
     let mut session = Session::create(arc_config(seed, scenario_id, difficulty))
         .map_err(|e| format!("seed {seed}: session failed: {e:?}"))?;
+    apply_markets_override(&mut session)?;
     let check = scenario_check(&session, scenario_id);
-    let mut runner = PolicyRunner::new(policy, false);
+    let mut runner = PolicyRunner::new(policy, VERBOSE.load(std::sync::atomic::Ordering::Relaxed));
     let mut observer = Observer::new();
     let wall = Instant::now();
     let (advanced, paused) =
@@ -1082,6 +1810,7 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
     let (mut firm_weeks, mut zombie_weeks, mut stressed) = (0u64, 0u64, 0u64);
     let mut worst: Vec<ZombieFirm> = Vec::new();
     let (mut dissolved, mut acquired, mut wound) = (0, 0, 0);
+    let (mut distress, mut voluntary, mut control_changes) = (0, 0, 0);
     for c in careers {
         deals.attempted += c.deals.attempted;
         deals.settled += c.deals.settled;
@@ -1102,6 +1831,9 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         dissolved += c.turnover.dissolved;
         acquired += c.turnover.acquired;
         wound += c.turnover.wound_down;
+        distress += c.turnover.dissolved_after_distress;
+        voluntary += c.turnover.dissolved_voluntary;
+        control_changes += c.turnover.control_changes;
     }
     worst.sort_by(|a, b| {
         b.zombie_weeks
@@ -1111,17 +1843,52 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
     worst.truncate(5);
 
     // Prices: per good, median over seeds of the career median range; then the median over goods.
-    type GoodSeries = (Vec<f64>, Vec<f64>, Vec<f64>);
+    type GoodSeries = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>);
     let mut per_good: BTreeMap<String, GoodSeries> = BTreeMap::new();
+    let mut traded_goods: BTreeMap<String, bool> = BTreeMap::new();
     for c in careers {
         for g in &c.goods {
+            *traded_goods.entry(g.good.clone()).or_default() |= g.traded;
             let slot = per_good.entry(g.good.clone()).or_default();
             slot.0.push(g.median_year_range_pct);
             slot.1.push(g.weeks_at_cap_share_pct);
             slot.2.push(g.weeks_at_floor_share_pct);
+            slot.3.push(g.median_year_total_range_pct);
+            slot.4.push(g.swings_per_year);
         }
     }
+    let total_by_good: Vec<(String, bool, f64, f64)> = per_good
+        .iter()
+        .filter_map(|(good, v)| {
+            Some((
+                good.clone(),
+                traded_goods[good],
+                median_f64(&v.3)?,
+                median_f64(&v.4).unwrap_or(0.0),
+            ))
+        })
+        .collect();
+    let total_class = |traded: bool| -> Vec<f64> {
+        total_by_good
+            .iter()
+            .filter(|(_, t, _, _)| *t == traded)
+            .map(|(_, _, r, _)| *r)
+            .collect()
+    };
+    let swings: Vec<f64> = total_by_good.iter().map(|(_, _, _, s)| *s).collect();
     let good_range: Vec<f64> = per_good.values().filter_map(|v| median_f64(&v.0)).collect();
+    let by_good: Vec<(String, bool, f64)> = per_good
+        .iter()
+        .filter_map(|(good, v)| median_f64(&v.0).map(|r| (good.clone(), traded_goods[good], r)))
+        .collect();
+    let class_range = |traded: bool| -> Vec<f64> {
+        by_good
+            .iter()
+            .filter(|(_, t, _)| *t == traded)
+            .map(|(_, _, r)| *r)
+            .collect()
+    };
+    let (traded_range, local_range) = (class_range(true), class_range(false));
     let good_cap: Vec<f64> = per_good.values().filter_map(|v| median_f64(&v.1)).collect();
     let good_floor: Vec<f64> = per_good.values().filter_map(|v| median_f64(&v.2)).collect();
 
@@ -1183,12 +1950,24 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
             .map(|c| per_decade(c.turnover.exits, c.weeks_played))
             .collect()),
         exits_dissolved: dissolved,
+        exits_after_distress: distress,
+        exits_voluntary: voluntary,
+        control_changes_total: control_changes,
         exits_acquired: acquired,
         exits_wound_down: wound,
         zombie_share: (firm_weeks > 0).then(|| zombie_weeks as f64 / firm_weeks as f64),
         stressed_share: (firm_weeks > 0).then(|| stressed as f64 / firm_weeks as f64),
         worst_zombies: worst,
         price_range_pct_median: median_f64(&good_range),
+        price_range_traded_pct_median: median_f64(&traded_range),
+        price_range_local_pct_median: median_f64(&local_range),
+        price_total_traded_pct_median: median_f64(&total_class(true)),
+        price_total_local_pct_median: median_f64(&total_class(false)),
+        price_swings_per_year_max: swings.iter().copied().reduce(f64::max),
+        price_swings_per_year_mean: (!swings.is_empty())
+            .then(|| swings.iter().sum::<f64>() / swings.len() as f64),
+        price_total_by_good: total_by_good,
+        price_range_by_good: by_good,
         weeks_at_cap_share_pct_median: median_f64(&good_cap),
         weeks_at_floor_share_pct_median: median_f64(&good_floor),
         hostile_total_median: med(careers
@@ -1202,11 +1981,162 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
             .iter()
             .filter_map(|c| c.influence.as_ref().map(|i| i.share_differs_pct))
             .collect()),
+        influence_floor_pct_median: med(careers
+            .iter()
+            .filter_map(|c| c.influence_floor.as_ref().map(|i| i.share_differs_pct))
+            .collect()),
+        influence_net_pct_median: {
+            let net: Vec<f64> = careers
+                .iter()
+                .filter_map(|c| match (&c.influence, &c.influence_floor) {
+                    (Some(a), Some(f)) => Some(a.share_differs_pct - f.share_differs_pct),
+                    _ => None,
+                })
+                .collect();
+            med(net)
+        },
         ms_per_week_mean: if careers.is_empty() {
             0.0
         } else {
             careers.iter().map(|c| c.ms_per_week).sum::<f64>() / careers.len() as f64
         },
+        rival_plants_built_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.rival_plants_built, c.weeks_played))
+            .collect()),
+        rival_plants_mothballed_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.rival_plants_mothballed, c.weeks_played))
+            .collect()),
+        rival_plants_gone_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.rival_plants_gone, c.weeks_played))
+            .collect()),
+        rival_payout_per_decade_median_cents: med(careers
+            .iter()
+            .map(|c| c.capacity.rival_payout_cents as f64 * 520.0 / c.weeks_played.max(1) as f64)
+            .collect()),
+        top_ten_block_change_median: med(careers
+            .iter()
+            .filter_map(|c| median_i64(&c.capacity.top_ten_block_change).map(|v| v as f64))
+            .collect()),
+        unmet_local_first_year_pct_median: med(careers
+            .iter()
+            .filter_map(|c| c.capacity.unmet_local_pct_by_year.first().copied())
+            .collect()),
+        unmet_local_last_year_pct_median: med(careers
+            .iter()
+            .filter_map(|c| c.capacity.unmet_local_pct_by_year.last().copied())
+            .collect()),
+        unmet_local_fall_pct_median: med(careers
+            .iter()
+            .filter_map(|c| {
+                let years = &c.capacity.unmet_local_pct_by_year;
+                Some(years.first()? - years.last()?)
+            })
+            .collect()),
+        world_plants_start_median: med(careers
+            .iter()
+            .filter_map(|c| c.capacity.world_plants_by_year.first().map(|v| *v as f64))
+            .collect()),
+        world_plants_final_median: med(careers
+            .iter()
+            .filter_map(|c| c.capacity.world_plants_by_year.last().map(|v| *v as f64))
+            .collect()),
+        world_plants_by_year_median: {
+            let years = careers
+                .iter()
+                .map(|c| c.capacity.world_plants_by_year.len())
+                .max()
+                .unwrap_or(0);
+            (0..years)
+                .filter_map(|y| {
+                    med(careers
+                        .iter()
+                        .filter_map(|c| c.capacity.world_plants_by_year.get(y).map(|v| *v as f64))
+                        .collect())
+                })
+                .collect()
+        },
+        raids_announced_on_player_per_decade_median: med(careers
+            .iter()
+            .filter(|c| c.had_company)
+            .map(|c| per_decade(c.capacity.raids_announced_on_player, c.weeks_played))
+            .collect()),
+        raid_warning_weeks_median: med(careers
+            .iter()
+            .flat_map(|c| c.capacity.raid_warning_weeks.iter().map(|w| *w as f64))
+            .collect()),
+        raids_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.raids_all, c.weeks_played))
+            .collect()),
+        raids_won_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.raids_won, c.weeks_played))
+            .collect()),
+        raids_emptied_company_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.raids_emptied_company, c.weeks_played))
+            .collect()),
+        plants_sold_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.plants_sold, c.weeks_played))
+            .collect()),
+        plants_written_off_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.plants_written_off, c.weeks_played))
+            .collect()),
+        plants_changing_hands_per_decade_per_ten_firms_median: med(careers
+            .iter()
+            .map(|c| {
+                per_decade(c.capacity.plants_sold, c.weeks_played) * 10.0
+                    / c.capacity.firms_at_start.max(1) as f64
+            })
+            .collect()),
+        breakup_sold_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.breakup_sold, c.weeks_played))
+            .collect()),
+        listing_sold_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.listings_sold, c.weeks_played))
+            .collect()),
+        breakup_buyer_share: {
+            let lots: u32 = careers.iter().map(|c| c.capacity.breakup_lots).sum();
+            let sold: u32 = careers.iter().map(|c| c.capacity.breakup_sold).sum();
+            (lots > 0).then(|| sold as f64 / lots as f64)
+        },
+        breakup_proceeds_over_scrap: {
+            let scrap: i64 = careers.iter().map(|c| c.capacity.breakup_scrap_cents).sum();
+            let got: i64 = careers
+                .iter()
+                .map(|c| c.capacity.breakup_proceeds_cents)
+                .sum();
+            (scrap > 0).then(|| got as f64 / scrap as f64)
+        },
+        lots_player_could_buy_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.lots_player_could_buy, c.weeks_played))
+            .collect()),
+        lots_won_by_player_total: careers.iter().map(|c| c.capacity.lots_won_by_player).sum(),
+        mergers_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.mergers, c.weeks_played))
+            .collect()),
+        careers_with_merger_share: (!careers.is_empty()).then(|| {
+            careers.iter().filter(|c| c.capacity.mergers > 0).count() as f64 / careers.len() as f64
+        }),
+        old_rule_payout_per_decade_median: med(careers
+            .iter()
+            .map(|c| {
+                if c.weeks_played == 0 {
+                    0.0
+                } else {
+                    c.capacity.old_rule_payout_cents as f64 / 100.0 * 520.0 / c.weeks_played as f64
+                }
+            })
+            .collect()),
     }
 }
 
@@ -1236,7 +2166,21 @@ fn metric_value(aggregate: &Aggregate, metric: &str) -> Option<f64> {
         "exits_per_decade_median" => aggregate.exits_per_decade_median,
         "entries_per_decade_median" => aggregate.entries_per_decade_median,
         "price_range_pct_median" => aggregate.price_range_pct_median,
+        "price_range_traded_pct_median" => aggregate.price_range_traded_pct_median,
+        "price_range_local_pct_median" => aggregate.price_range_local_pct_median,
+        "price_total_traded_pct_median" => aggregate.price_total_traded_pct_median,
+        "price_total_local_pct_median" => aggregate.price_total_local_pct_median,
+        "price_swings_per_year_max" => aggregate.price_swings_per_year_max,
+        "price_swings_per_year_mean" => aggregate.price_swings_per_year_mean,
         "hostile_top3_median" => aggregate.hostile_top3_median,
+        "rival_plants_built_per_decade_median" => aggregate.rival_plants_built_per_decade_median,
+        "top_ten_block_change_median" => aggregate.top_ten_block_change_median,
+        "unmet_local_fall_pct_median" => aggregate.unmet_local_fall_pct_median,
+        "raid_warning_weeks_median" => aggregate.raid_warning_weeks_median,
+        "careers_with_merger_share" => aggregate.careers_with_merger_share,
+        "plants_changing_hands_per_decade_per_ten_firms_median" => {
+            aggregate.plants_changing_hands_per_decade_per_ten_firms_median
+        }
         _ => None,
     }
 }
@@ -1286,6 +2230,18 @@ fn definitions() -> BTreeMap<String, String> {
     let mut m = BTreeMap::new();
     for (k, v) in [
         (
+            "dissolved_split",
+            "dissolved = the firm's status read Dissolved. The engine liquidates and dissolves inside one week, so Liquidating is never seen and wound_down stays 0. dissolved_after_distress = it was past due or restructuring the week before (insolvency); dissolved_voluntary = it was healthy the week before (a wind down)",
+        ),
+        (
+            "control_changes",
+            "weeks in which a firm outside the player's group had a different ultimate controller than the week before (a settled share deal that moved control). The firm stays in the league's books; the engine only sets Merged through the player's ProposeMerger command",
+        ),
+        (
+            "influence_floor",
+            "influence of the inert `noise` policy (one random draw shifted at week 0) against none; influence_net = policy influence less that floor",
+        ),
+        (
             "size",
             "firm.valuation.equity_cents (engine valuation); book equity before the first valuation",
         ),
@@ -1331,7 +2287,7 @@ fn definitions() -> BTreeMap<String, String> {
         ),
         (
             "price_range",
-            "per good and year (max - min) of weekly closing price over reference price, median over years then seeds then goods",
+            "per good and year (max - min) of weekly closing price over the year's mean price anchor (outside middle quote for a good with a gateway, price-level reference for a service, catalogue price otherwise), median over years then seeds then goods; split into traded (has a gateway) and local (services and goods with none)",
         ),
         (
             "cap_floor",
@@ -1359,7 +2315,118 @@ fn flag(arguments: &[String], name: &str) -> Option<String> {
     crate::flag(arguments, name)
 }
 
+/// Print every policy command as it is accepted or rejected (`--verbose`).
+static VERBOSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// `--markets-json PATH`: market rule fields that replace the content's for this run (developer
+/// experiments only; the career's dataset hash is not changed, so such a run is not a replay).
+static MARKETS_OVERRIDE: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
+
+pub(crate) fn load_markets_override(arguments: &[String]) {
+    if let Some(path) = flag(arguments, "--markets-json") {
+        let text = std::fs::read_to_string(&path).expect("--markets-json file");
+        let value: serde_json::Value = serde_json::from_str(&text).expect("--markets-json JSON");
+        let _ = MARKETS_OVERRIDE.set(value);
+    }
+}
+
+pub(crate) fn apply_markets_override(session: &mut Session) -> Result<(), String> {
+    let Some(overlay) = MARKETS_OVERRIDE.get() else {
+        return Ok(());
+    };
+    let mut rules = serde_json::to_value(&session.dataset.markets).map_err(|e| e.to_string())?;
+    if let (Some(rules), Some(overlay)) = (rules.as_object_mut(), overlay.as_object()) {
+        for (key, value) in overlay {
+            if !rules.contains_key(key) {
+                return Err(format!("--markets-json: unknown market rule {key}"));
+            }
+            rules.insert(key.clone(), value.clone());
+        }
+    }
+    session.dataset.markets = serde_json::from_value(rules).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// `cw-cli helm`: a harness-only estimate of what a player who started at the helm of a
+/// mid-table company would face. No rule changes: the firms ranked `--from-rank` to `--to-rank`
+/// (default 10 to 15) at week 0 are simply left to the rival AI, and their final rank in the
+/// league and valuation are reported (median over seeds).
+pub fn helm(arguments: &[String]) {
+    let scenario = flag(arguments, "--scenario-id").unwrap_or_else(|| "great-lakes-2000".into());
+    let seeds: u64 = flag(arguments, "--seeds")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    let weeks: u32 = flag(arguments, "--weeks")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(520);
+    let from: usize = flag(arguments, "--from-rank")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    let to: usize = flag(arguments, "--to-rank")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(15);
+    let mut rows_out = Vec::new();
+    for seed in 1..=seeds {
+        let mut session =
+            Session::create(arc_config(seed, &scenario, cw_data::Difficulty::Standard)).unwrap();
+        let (start, _) = Observer::league(&session.world);
+        let picked: Vec<(usize, u64, i64)> = start
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| (from..=to).contains(&(i + 1)))
+            .map(|(i, (h, v))| (i + 1, *h, *v))
+            .collect();
+        let mut runner = PolicyRunner::new(ReferencePolicy::None, false);
+        crate::drive_with(&mut session, weeks, &mut runner, &mut |_, _| {});
+        let (end, _) = Observer::league(&session.world);
+        for (start_rank, handle, start_value) in picked {
+            let end_rank = rank_of(&end, handle);
+            let end_value = end
+                .iter()
+                .find(|(h, _)| *h == handle)
+                .map_or(0, |(_, v)| *v);
+            println!(
+                "{scenario} seed {seed} start_rank {start_rank} start_value {start_value} end_rank {} end_value {end_value} league {}",
+                end_rank.map_or("gone".to_owned(), |r| r.to_string()),
+                end.len()
+            );
+            rows_out.push((start_rank, start_value, end_rank, end_value, end.len()));
+        }
+    }
+    let ranks: Vec<i64> = rows_out
+        .iter()
+        .map(|r| r.2.map_or(i64::MAX, |x| x as i64))
+        .collect();
+    let values: Vec<i64> = rows_out.iter().map(|r| r.3).collect();
+    let starts: Vec<i64> = rows_out.iter().map(|r| r.1).collect();
+    let gone = rows_out.iter().filter(|r| r.2.is_none()).count();
+    println!(
+        "HELM {scenario} firms {} median_start_value {} median_end_rank {} median_end_value {} gone {gone} median_league {}",
+        rows_out.len(),
+        median_i64(&starts).unwrap_or(0),
+        median_i64(&ranks).map_or("n/a".to_owned(), |r| if r == i64::MAX {
+            "gone".into()
+        } else {
+            r.to_string()
+        }),
+        median_i64(&values).unwrap_or(0),
+        median_i64(&rows_out.iter().map(|r| r.4 as i64).collect::<Vec<_>>()).unwrap_or(0)
+    );
+}
+
 pub fn run(arguments: &[String]) {
+    VERBOSE.store(
+        arguments.iter().any(|a| a == "--verbose"),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    crate::policy::LEGACY_CARDS.store(
+        arguments.iter().any(|a| a == "--legacy-cards"),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    crate::policy::NO_PLANT_BIDS.store(
+        arguments.iter().any(|a| a == "--no-plant-bids"),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     let seeds: u64 = flag(arguments, "--seeds")
         .and_then(|v| v.parse().ok())
         .unwrap_or(10);
@@ -1371,6 +2438,7 @@ pub fn run(arguments: &[String]) {
         .unwrap_or(520);
     let scenario_id = flag(arguments, "--scenario-id").unwrap_or_else(|| "great-lakes-2000".into());
     let difficulty_key = flag(arguments, "--difficulty").unwrap_or_else(|| "standard".into());
+    load_markets_override(arguments);
     let difficulty = cw_data::Difficulty::from_key(&difficulty_key);
     let policy = crate::policy_flag(arguments);
     let gates_json = match flag(arguments, "--gates") {
@@ -1382,6 +2450,19 @@ pub fn run(arguments: &[String]) {
     };
     // A prior `--policy none` JSON for the same scenario, seeds and weeks avoids replaying none.
     let none_cache: BTreeMap<u64, Vec<(u64, bool, i64)>> = flag(arguments, "--none-json")
+        .and_then(|path| fs::read_to_string(path).ok())
+        .and_then(|text| serde_json::from_str::<ArcReport>(&text).ok())
+        .map(|r| {
+            r.careers
+                .into_iter()
+                .filter(|c| c.weeks_played == weeks)
+                .map(|c| (c.seed, c.final_firms))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // A prior `--policy noise` JSON gives each seed's floor against the same none run.
+    let noise_cache: BTreeMap<u64, Vec<(u64, bool, i64)>> = flag(arguments, "--noise-json")
         .and_then(|path| fs::read_to_string(path).ok())
         .and_then(|text| serde_json::from_str::<ArcReport>(&text).ok())
         .map(|r| {
@@ -1407,7 +2488,12 @@ pub fn run(arguments: &[String]) {
                             .map_err(|e| errors.push(e))
                             .ok(),
                     };
-                    career.influence = none.map(|n| compare(&n, &career.final_firms));
+                    career.influence = none.as_ref().map(|n| compare(n, &career.final_firms));
+                    if !policy.is_noise()
+                        && let (Some(n), Some(noise)) = (none.as_ref(), noise_cache.get(&seed))
+                    {
+                        career.influence_floor = Some(compare(n, noise));
+                    }
                 }
                 println!(
                     "seed={} weeks={} rank={:?}/{} bust={} lost={} nw={} leader_changes={} entries={} exits={} hostile={} ms/wk={:.1}",
@@ -1464,7 +2550,7 @@ pub fn run(arguments: &[String]) {
     }
     let a = &report.aggregate;
     println!(
-        "arc scenario={} loaded={} policy={} seeds={} weeks={} companies={} bust={:?} first={:?} bottom_half={:?} zombie={:?} price_range_pct={:?} ms/wk={:.1}",
+        "arc scenario={} loaded={} policy={} seeds={} weeks={} companies={} bust={:?} first={:?} bottom_half={:?} zombie={:?} price_range_pct={:?} traded={:?} local={:?} total_traded={:?} total_local={:?} swings_max={:?} swings_mean={:?} ms/wk={:.1}",
         report.scenario.requested,
         report.scenario.loaded,
         report.policy,
@@ -1476,6 +2562,12 @@ pub fn run(arguments: &[String]) {
         a.bottom_half_share,
         a.zombie_share,
         a.price_range_pct_median,
+        a.price_range_traded_pct_median,
+        a.price_range_local_pct_median,
+        a.price_total_traded_pct_median,
+        a.price_total_local_pct_median,
+        a.price_swings_per_year_max,
+        a.price_swings_per_year_mean,
         a.ms_per_week_mean
     );
     for gate in &report.gates {

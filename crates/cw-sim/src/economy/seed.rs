@@ -178,7 +178,7 @@ pub fn build_with(
         pending_pause: None,
         cast: Default::default(),
         construction_orders: BTreeMap::new(),
-        raids: Vec::new(),
+        raids: Default::default(),
         objective: None,
         objective_history: Vec::new(),
         price_history: Vec::new(),
@@ -192,6 +192,7 @@ pub fn build_with(
         systems: Default::default(),
         mail: Default::default(),
         player_chief: None,
+        auctions: Default::default(),
         politics: crate::state::Politics::default(),
         logistics: Default::default(),
         systemic: Default::default(),
@@ -948,24 +949,127 @@ fn compute_household_baselines(world: &mut World, dataset: &Dataset) {
         .iter()
         .map(|id| dataset.product_index[*id])
         .collect();
-    for region in &mut world.regions {
+    // Lots each region's whole category budget buys at the catalogue price, then sized to the
+    // playable market (`household_lots`).
+    let mut lots: BTreeMap<u16, Vec<i64>> = BTreeMap::new();
+    for (index, code) in codes.iter().enumerate() {
+        let price = dataset.reference_price(*code).max(1);
+        let full: Vec<i64> = world
+            .regions
+            .iter()
+            .map(|r| {
+                r.households.last_income_cents * 80 / 100 * 90 / 100 * HOUSEHOLD_WEIGHTS[index]
+                    / 10_000
+                    / price
+            })
+            .collect();
+        lots.insert(*code, household_lots(world, dataset, *code, &full));
+    }
+    for (region_index, region) in world.regions.iter_mut().enumerate() {
         // The opening baseline is disposable income: labour income pays twenty percent tax.
         let disposable = region.households.last_income_cents * 80 / 100;
         region.households.baseline_income_cents = disposable;
         region.households.savings_cents = disposable * 90 / 100 * 13;
-        let budget = disposable * 90 / 100;
         let mut weights = BTreeMap::new();
         let mut baseline = BTreeMap::new();
         for (index, code) in codes.iter().enumerate() {
-            let weight = HOUSEHOLD_WEIGHTS[index];
-            weights.insert(*code, weight);
-            let category_budget = budget * weight / 10_000;
-            let price = dataset.reference_price(*code).max(1);
-            baseline.insert(*code, (category_budget / price).max(1));
+            weights.insert(*code, HOUSEHOLD_WEIGHTS[index]);
+            baseline.insert(*code, lots[code][region_index].max(1));
         }
         region.households.weights = weights;
         region.households.baseline_lots = baseline;
     }
+}
+
+/// Households' opening baseline lots of one product, region by region, from `full`: the lots
+/// each region's whole category budget buys at the catalogue price. Household income is the
+/// whole scaled regional economy, but only the named plants sell to households, and they sell
+/// where they stand (a store in its region, a service across its state). So under
+/// `household_cover_bps` each market with named sellers asks for what its sellers make for
+/// households over the cover share, never more than its budget buys; markets with no named
+/// seller ask for an even slice of their budget, sized so the corridor as a whole opens with
+/// `household_unmet_bps` of what households ask for finding no seller: room to build, not a void.
+/// Where every market has a named seller, the sellers' markets carry that whole gap.
+/// A product no named plant makes keeps the whole budget. What households do not ask for stays
+/// in savings.
+pub fn household_lots(world: &World, dataset: &Dataset, product: u16, full: &[i64]) -> Vec<i64> {
+    let cover = dataset.capacity.household_cover_bps;
+    if cover <= 0 {
+        return full.to_vec();
+    }
+    let target = dataset.capacity.household_unmet_bps.clamp(0, 9_999) as i128;
+    let regions = world.regions.len();
+    // Each region's market: the first region of the regions its sellers stand in.
+    let market: Vec<usize> = (0..regions)
+        .map(|r| {
+            crate::economy::markets::supply_regions(dataset, r as u8, product)
+                .into_iter()
+                .min()
+                .unwrap_or(r as u8) as usize
+        })
+        .collect();
+    let supply = household_supply_by_region(world, dataset, product);
+    let (mut made, mut budget) = (vec![0i128; regions], vec![0i128; regions]);
+    for r in 0..regions {
+        made[market[r]] += supply[r] as i128;
+        budget[market[r]] += full[r] as i128;
+    }
+    // Where every market has a named seller, those markets carry the whole opening gap.
+    let cover = if (0..regions).all(|m| budget[m] == 0 || made[m] > 0) {
+        (10_000 - target).max(1)
+    } else {
+        cover as i128
+    };
+    let mut asked = vec![0i128; regions];
+    let (mut supplied, mut short, mut empty) = (0i128, 0i128, 0i128);
+    for m in 0..regions {
+        if made[m] > 0 {
+            asked[m] = (made[m] * 10_000 / cover).min(budget[m]);
+            supplied += asked[m];
+            short += (asked[m] - made[m]).max(0);
+        } else {
+            empty += budget[m];
+        }
+    }
+    if supplied <= 0 {
+        return full.to_vec();
+    }
+    let elsewhere = if empty > 0 {
+        ((target * supplied - 10_000 * short) / (10_000 - target)).clamp(0, empty)
+    } else {
+        0
+    };
+    (0..regions)
+        .map(|r| {
+            let m = market[r];
+            let lots = if made[m] > 0 {
+                full[r] as i128 * asked[m] / budget[m].max(1)
+            } else {
+                full[r] as i128 * elsewhere / empty.max(1)
+            };
+            (lots as i64).max(1)
+        })
+        .collect()
+}
+
+/// Weekly lots of a household product the operating plants in each region make at full
+/// capacity, less what plants there use of it: what is left for households. Households clear
+/// before the state's healthcare budget, so care the state buys is not taken off.
+pub fn household_supply_by_region(world: &World, dataset: &Dataset, product: u16) -> Vec<i64> {
+    let id = dataset.products[product as usize].id.as_str();
+    let mut supply = vec![0i64; world.regions.len()];
+    for (_, facility) in world.facilities.iter() {
+        if facility.status != crate::state::FacilityStatus::Operating {
+            continue;
+        }
+        let recipe = &dataset.recipes[facility.recipe as usize];
+        let blocks = facility.blocks as i64;
+        if let Some(slot) = supply.get_mut(facility.region as usize) {
+            *slot += recipe.lots_of(id) * blocks
+                - recipe.weekly_inputs_lots.get(id).copied().unwrap_or(0) * blocks;
+        }
+    }
+    supply.iter().map(|lots| (*lots).max(0)).collect()
 }
 
 /// The outside account's opening cash floor: five hundred million dollars.

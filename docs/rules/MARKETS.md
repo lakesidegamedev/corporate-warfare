@@ -128,11 +128,27 @@ A gateway quotes finite buy and sell offers at the outside world's price +/-15 p
 freight. The outside price is the reference index scaled by the product's world price level
 (see World commodity prices below) and by inflation. Each state's weekly gateway capacity per product = the larger of the corridor's
 weekly input demand and weekly output for that product at seed, floor 100 lots, so a
-shortage can be filled and a producing region's surplus has a buyer. Export room grows with
-use the way infrastructure does: after a week whose exports filled a gateway's capacity, the
-capacity rises by one percent (at least one lot) for every later week, player and rival sellers
-alike. A week that leaves room unused adds nothing, and the outside account's paced cash still
-limits what the room pays for. Gateways record the
+shortage can be filled and a producing region's surplus has a buyer. Room follows use the way
+infrastructure does, slowly and both ways (2.0, `room_growth_bps`, `room_shrink_bps` and
+`room_shrink_below_bps` in the `markets` block): after a week whose exports filled a gateway's
+first export step or whose imports reached its dearer steps, the room rises a quarter of a
+percent (at least one lot); after a week in which each direction used under three quarters of its
+own first step, it falls a quarter of a percent, never below what moved. A gateway that moved
+nothing keeps its room, and between the two lines the room holds, so it never flips week to week.
+So a new plant's surplus overflows into the cheap export steps, and a closed plant's gap pulls
+imports into the dear steps, for months before the room catches up (a quarter percent a week is
+about 12 percent a year). Before 2.0 export room grew one percent a week and never shrank, and
+the outside account's paced cash still limits what the room pays for. Since 2.0 a gateway trades in volume steps (`markets` in
+`content/initial-balance.json`): the first import step is half its room at the quote and the first
+export step all of it; four more steps of a quarter of the room each cost 10 percent more to import
+or pay 10 percent less to export than the step before, exports never under half the quote, and
+nothing trades past the last step. So a corridor that leans hard on imports pays more for its last
+lots and a glut that overflows the ports sells its last lots cheap: a smooth rising cost instead
+of a hard pin. Every seller exporting through one gateway in a week ships the same share of what it
+offered and is paid the same average price over the steps it filled, so nobody gets the good steps
+by being first in line. The market rules are part of the dataset hash (2.0), so content that
+changes them names a different dataset; a save written under the hash from before they joined it
+still loads and plays on under the current rules, as after any rules change. Gateways record the
 lots they import and export each week and keep a smoothed import average; that average is
 the "room to build" shown on a state's board and used by rival expansion. No local
 back-to-back transaction can profit from the bid/ask spread.
@@ -199,18 +215,35 @@ against their weekly asks. A good that no plant or household at home buys, that 
 exported last week, is never read as scarce: its shelf is empty because the surplus left at the
 export bid. Any other good no plant or household buys reads the seller's own cover against its
 target both ways: a week too little wants 6 percent more. The gap is held to five weeks either
-way (30 percent). The price then moves a sixth of the way there, at most 2 percent in a week, within
-half to twice reference and never above 95 percent of the cheapest import, so local goods beat
-imports once normal freight is added. Where the corridor's gateways import at least a quarter more
+way (30 percent). Since 2.0 a traded good is priced around the outside world's middle quote, halfway between its
+cheapest import price and its dearest export price before any volume step, instead of its fixed
+catalogue price, so home prices follow world prices and inflation the way the gateways do; a
+good with no gateway and every service keep their reference. Last week's trade at the margin then
+presses on the wanted price: the import premium of the step the last imported lot came from adds
+to it and the export discount of the step the last exported lot went in takes from it, each
+averaged over the good's gateways by lots moved. The price then moves a sixth of the way there, at
+most 2 percent in a week, within half to twice that middle quote and never above 95 percent of
+the cheapest marginal import price (last week's dearest step used), so local goods beat imports
+once normal freight is added. Where the corridor's gateways import at least a quarter more
 than its plants made (smoothed imports at least 125 percent of last week's home output), the seller
 wants that 95 percent import ceiling whatever its own shelf says: buyers pay the import price for
 the rest anyway. Nothing sold with stock on the shelf wants 30 percent under; nothing sold and
 nothing held gives no signal and the price eases a 26th of the way back to reference a week. There
 is no dead band and no fixed step, so a price moves continuously with supply and demand and settles
 instead of swinging. A service cannot be stored, so spare capacity is its unsold stock: it reads
-the share of its installed capacity (operating plants at full run) that sold, asks reference at 85
-percent, 0.6 percent of reference more or less for every point above or below, up to 15 percent
-over reference (no import quote) and down to 20 percent under. A service's reference is its
+the share of its installed capacity (operating plants at full run) that sold, plus, since 2.0, the
+share of household demand that went without in the regions its plants serve (its plants' regions,
+and the rest of their state for a service sold statewide), so a region short of capacity reads as
+more than full. A region with no seller at all is not counted: that is a gap for whoever builds
+there, not a shortage this seller's price can answer. In 2.0 content (`service_balance_bps`,
+`service_slope_pct`, `service_min_bps`, `service_max_bps`) it asks reference at 90 percent, 2
+percent of reference more or less for every point above or below, up to 30 percent over and down
+to 25 percent under; before 2.0 it was reference at 85 percent, 0.6 percent a point, 15 percent
+over and 20 percent under. The ceiling was 10 percent over while nothing built service capacity
+in answer to a shortage; now rivals build into households going without (CAPACITY.md) and
+household demand is sized to the playable market, so a shortage's price draws a new plant. A
+good with no import quote may ask up to `local_ceiling_bps` of its reference (150 percent in 2.0
+content, 130 earlier in 2.0, 115 before). A service's reference is its
 catalogue price carried to today's price index (the index background wages follow), so its band,
 floor and ceiling rise with its payroll; goods keep their catalogue reference and follow the price
 level through import and export prices. Household demand and public works read services against
@@ -218,8 +251,9 @@ the same indexed reference. Unsold service output expires each
 week. Stock a firm keeps as input cover for its own plants does not count as unsold. Rivals price
 this way in the weekly tick, not through their slower strategic review.
 
-Production is planned plant by plant: each plant's target moves 15 points a week toward what its
-good sold, floor 30 percent, so one product's glut never idles a firm's other plants. A goods
+Production is planned plant by plant: each plant's target moves one plan step a week toward what
+its good sold (`plan_step_bps`, 5 points in 2.0 content so a glut or a gap persists for months
+after a plant opens or closes; 15 points before), floor 30 percent, so one product's glut never idles a firm's other plants. A goods
 plant with more than four weeks of unsold stock cuts, one under a week and a half raises; a
 service plant moves toward what the firm sold of it plus a tenth, between 10 percent and full, so
 it neither wastes a third of its output nor stays throttled below demand; a carrier cuts when its
@@ -234,6 +268,12 @@ false in older commands). The CFO names any service or carrier division of a han
 that made at least one and a half times what it sold last week, with the weekly cost of the excess
 and a button that hands production back to the plan. Contract deliveries, power dispatched to the
 grid and construction services all count as sales.
+
+The Market query says in plain words why a good's price moved over the last quarter: its move
+against the closing price thirteen weeks earlier and the strongest cause acting on it now, out of
+imports past the normal room, exports past the normal room, buyers short of input cover, sellers
+holding unsold stock, plants opened this quarter, and the world price (or, for a service, the
+general price level) against its opening level.
 
 The corridor price on the Markets board is the average asking price of the firms that make a good,
 each weighted by the lots it sells (plus one), including firms in restructuring, or the cheapest

@@ -541,6 +541,41 @@ pub enum CommandIntent {
         price_cents: i64,
         weeks: u32,
     },
+    /// Give up a raid campaign the firm announced and that has not resolved. The escrowed budget
+    /// is lost all the same (2.0). Last so older journals keep their variant numbers.
+    AbandonRaid {
+        firm: Handle,
+        target: Handle,
+        region: u8,
+        industry: u8,
+    },
+    /// Offer a running or mothballed plant for sale for the content's auction weeks (2.0). The
+    /// bids are put to the owner at the deadline.
+    ListPlant {
+        facility: Handle,
+    },
+    /// A sealed bid for a plant on offer through `firm`; zero withdraws the bid (2.0).
+    BidForPlant {
+        firm: Handle,
+        lot: u32,
+        price_cents: i64,
+    },
+    /// Sell a listed plant to the best bid put to its owner that can still pay (2.0).
+    AcceptPlantBid {
+        lot: u32,
+    },
+    /// Take a listed plant off the market (2.0).
+    WithdrawListing {
+        lot: u32,
+    },
+    /// Fold in a company `buyer` holds at least 90 percent of, however it came to hold it (2.0):
+    /// the merger `ProposeMerger` does for a settled deal, with the last minority holders paid fair
+    /// value. Refused while any deal between the two went to a competition review or carried a
+    /// remedy.
+    FoldInCompany {
+        buyer: Handle,
+        target: Handle,
+    },
 }
 
 fn yes() -> bool {
@@ -630,6 +665,12 @@ impl CommandIntent {
             CommandIntent::GiveGuidance { .. } => "give_guidance",
             CommandIntent::GiveToCandidate { .. } => "give_to_candidate",
             CommandIntent::BidOnTender { .. } => "bid_on_tender",
+            CommandIntent::AbandonRaid { .. } => "abandon_raid",
+            CommandIntent::ListPlant { .. } => "list_plant",
+            CommandIntent::BidForPlant { .. } => "bid_for_plant",
+            CommandIntent::AcceptPlantBid { .. } => "accept_plant_bid",
+            CommandIntent::WithdrawListing { .. } => "withdraw_listing",
+            CommandIntent::FoldInCompany { .. } => "fold_in_company",
             CommandIntent::SetTransferPrice { .. } => "set_transfer_price",
             CommandIntent::CarveOutDivision { .. } => "carve_out_division",
             CommandIntent::ListSubsidiary { .. } => "list_subsidiary",
@@ -844,6 +885,9 @@ fn fx_gate(world: &World, dataset: &Dataset, intent: &CommandIntent) -> DomainRe
             if matches!(kind, DealKind::Merger) {
                 require_same_currency(world, *buyer, *target)?;
             }
+        }
+        CommandIntent::FoldInCompany { buyer, target } => {
+            require_same_currency(world, *buyer, *target)?;
         }
         CommandIntent::RaidMarket { firm, target, .. } => {
             require_same_currency(world, *firm, *target)?
@@ -1198,7 +1242,7 @@ fn apply_intent(
                 }
                 blocks += plant.blocks as i64;
             }
-            let cost = template.capex_cents * blocks / 4;
+            let cost = sectors::build_price(world, dataset, template.capex_cents) * blocks / 4;
             let weeks = (template.build_weeks / 3).max(4);
             spend_firm_cash(world, owner, cost, "retool escrow")?;
             // The cost is spread over the plants by blocks; the last plant takes the remainder.
@@ -1280,39 +1324,17 @@ fn apply_intent(
             Ok(())
         }
         CommandIntent::DisposeFacility { facility } => {
-            let (firm, book) = world
+            let firm = world
                 .facilities
                 .get(*facility)
-                .map(|entity| {
-                    (
-                        entity.firm,
-                        (entity.capex_cents - entity.accumulated_depreciation).max(0),
-                    )
-                })
+                .map(|entity| entity.firm)
                 .ok_or(DomainError::InvalidEntity {
                     handle: facility.0,
                     kind: EntityKind::Facility,
                 })?;
             require_control(world, actor, firm)?;
-            let proceeds = book * 40 / 100;
-            if let Some(stored) = world.facilities.get_mut(*facility) {
-                stored.status = FacilityStatus::Mothballed;
-            }
-            world.facilities.remove(*facility);
-            if let Some(entity) = world.firms.get_mut(firm) {
-                entity.facilities.retain(|handle| *handle != *facility);
-                let _ = entity.book.commit(
-                    world.tick,
-                    Txn::new()
-                        .debit(Account::Cash, proceeds, "facility sale")
-                        .debit(
-                            Account::OperatingExpense,
-                            book - proceeds,
-                            "facility disposal",
-                        )
-                        .credit(Account::FixedAssets, book, "facility sale"),
-                );
-            }
+            // 2.0: the plant goes to the best bidder, or is written off when nobody bids.
+            crate::economy::disposal::sell_plant(world, dataset, *facility)?;
             Ok(())
         }
         CommandIntent::SetPrice {
@@ -2331,149 +2353,39 @@ fn apply_intent(
                     reason: AuthorityReason::BoardApprovalRequired,
                 });
             }
-            // Legal merger: move every target balance into the buyer, retire the target shares,
-            // and reattach facilities, debt, contracts and policies to the surviving entity.
-            let target = entity.target;
-            let buyer = entity.buyer;
-            if target == buyer {
-                return Err(DomainError::OwnershipCycle {
-                    buyer: buyer.0,
-                    target: target.0,
+            let (buyer, target, offer) = (entity.buyer, entity.target, entity.offer_price_cents);
+            merge_into(world, buyer, target, offer)
+        }
+        CommandIntent::FoldInCompany { buyer, target } => {
+            require_control(world, actor, *buyer)?;
+            let (buyer, target) = (*buyer, *target);
+            let held = world.firm(target).is_some_and(|firm| {
+                firm.operative() && firm.shares.meets_squeeze_out(HolderId::Firm(buyer))
+            });
+            if !held {
+                return Err(DomainError::SolvencyRestriction {
+                    entity: target.0,
+                    reason: SolvencyReason::CoverageTooLow,
                 });
             }
-            // Remaining minority holders are paid in cash before their shares are retired.
-            let settled = entity.clone();
-            deals::buy_out_minorities(world, &settled)?;
-            let target_book = firm_ref(world, target)?.book.clone();
-            let investment_cost = world
-                .firm(target)
-                .and_then(|firm| firm.shares.holders.get(&HolderId::Firm(buyer)).copied())
-                .map(|lot| lot.cost_cents)
-                .unwrap_or(0);
-            // Buyer takes every account, drops its investment in the target and books the
-            // difference to retained earnings. The two postings each sum to zero.
-            let mut buyer_txn = Txn::new();
-            for account in Account::ALL {
-                let balance = target_book.balance(account);
-                if balance != 0 {
-                    buyer_txn = buyer_txn.signed(account, balance, "merger");
-                }
+            // A competition review or a remedy on any deal between the two stands in the way.
+            if world.deals.iter().any(|(_, deal)| {
+                deal.buyer == buyer
+                    && deal.target == target
+                    && (deal.review_required || deal.remedy_share_bps != 0)
+            }) {
+                return Err(DomainError::WrongPhase {
+                    expected: "no_review_or_remedy",
+                    actual: "reviewed",
+                });
             }
-            buyer_txn = buyer_txn
-                .signed(Account::Investments, -investment_cost, "merger stake")
-                .signed(Account::RetainedEarnings, investment_cost, "merger stake");
-            let _ = world
-                .firms
-                .get_mut(buyer)
-                .unwrap()
-                .book
-                .commit(world.tick, buyer_txn);
-            let mut target_txn = Txn::new();
-            for account in Account::ALL {
-                let balance = target_book.balance(account);
-                if balance != 0 {
-                    target_txn = target_txn.signed(account, -balance, "merger");
-                }
+            if !governance::large_action_authorised(world, buyer) {
+                return Err(DomainError::NoAuthority {
+                    actor,
+                    reason: AuthorityReason::BoardApprovalRequired,
+                });
             }
-            let _ = world
-                .firms
-                .get_mut(target)
-                .unwrap()
-                .book
-                .commit(world.tick, target_txn);
-
-            let facilities: Vec<Handle> = world
-                .firm(target)
-                .map(|firm| firm.facilities.clone())
-                .unwrap_or_default();
-            for facility in &facilities {
-                if let Some(stored) = world.facilities.get_mut(*facility) {
-                    stored.firm = buyer;
-                }
-                let bidder = world.firms.get_mut(buyer).unwrap();
-                if !bidder.facilities.contains(facility) {
-                    bidder.facilities.push(*facility);
-                }
-            }
-            let contract_handles: Vec<Handle> = world
-                .contracts
-                .iter()
-                .filter(|(_, contract)| contract.buyer == target || contract.seller == target)
-                .map(|(handle, _)| handle)
-                .collect();
-            for handle in contract_handles {
-                if let Some(contract) = world.contracts.get_mut(handle) {
-                    if contract.buyer == target {
-                        contract.buyer = buyer;
-                    }
-                    if contract.seller == target {
-                        contract.seller = buyer;
-                    }
-                }
-                let bidder = world.firms.get_mut(buyer).unwrap();
-                if !bidder.contracts_buy.contains(&handle)
-                    && !bidder.contracts_sell.contains(&handle)
-                {
-                    bidder.contracts_buy.push(handle);
-                }
-            }
-            let loan_handles = world
-                .firm(target)
-                .map(|firm| firm.loans.clone())
-                .unwrap_or_default();
-            for handle in loan_handles {
-                if let Some(loan) = world.loans.get_mut(handle) {
-                    loan.borrower = buyer;
-                }
-                let bidder = world.firms.get_mut(buyer).unwrap();
-                if !bidder.loans.contains(&handle) {
-                    bidder.loans.push(handle);
-                }
-            }
-            let bond_handles = world
-                .firm(target)
-                .map(|firm| firm.bonds.clone())
-                .unwrap_or_default();
-            for handle in bond_handles {
-                if let Some(bond) = world.bonds.get_mut(handle) {
-                    bond.issuer = buyer;
-                }
-                let bidder = world.firms.get_mut(buyer).unwrap();
-                if !bidder.bonds.contains(&handle) {
-                    bidder.bonds.push(handle);
-                }
-            }
-            let policy_handles = world
-                .firm(target)
-                .map(|firm| firm.insurance.clone())
-                .unwrap_or_default();
-            for handle in policy_handles {
-                if let Some(policy) = world.insurance.get_mut(handle) {
-                    if policy.insured == target {
-                        policy.insured = buyer;
-                    }
-                    if policy.insurer == target {
-                        policy.insurer = buyer;
-                    }
-                }
-                let bidder = world.firms.get_mut(buyer).unwrap();
-                if !bidder.insurance.contains(&handle) {
-                    bidder.insurance.push(handle);
-                }
-            }
-            if let Some(target) = world.firms.get_mut(target) {
-                target.facilities.clear();
-                target.loans.clear();
-                target.bonds.clear();
-                target.insurance.clear();
-                target.contracts_buy.clear();
-                target.contracts_sell.clear();
-                target.status = FirmStatus::Merged { into: buyer };
-                target.merged_into = Some(buyer);
-                target.shares.holders.clear();
-                target.shares.issued = 0;
-            }
-            Ok(())
+            merge_into(world, buyer, target, 0)
         }
         CommandIntent::SubmitRemedy {
             deal,
@@ -2817,15 +2729,39 @@ fn apply_intent(
             require_control(world, actor, *firm)?;
             require_region(world, *region)?;
             firm_ref(world, *target)?;
-            sectors::raid(
-                world,
-                dataset,
-                *firm,
-                *target,
-                *region,
-                *industry,
-                *budget_cents,
-            )?;
+            // Under a warning period the raid is announced and resolves weeks later against the
+            // defence the target has by then; without one it resolves at once.
+            if sectors::raid_warning_weeks(dataset) > 0 {
+                sectors::announce_raid(
+                    world,
+                    dataset,
+                    *firm,
+                    *target,
+                    *region,
+                    *industry,
+                    *budget_cents,
+                )?;
+            } else {
+                sectors::raid(
+                    world,
+                    dataset,
+                    *firm,
+                    *target,
+                    *region,
+                    *industry,
+                    *budget_cents,
+                )?;
+            }
+            Ok(())
+        }
+        CommandIntent::AbandonRaid {
+            firm,
+            target,
+            region,
+            industry,
+        } => {
+            require_control(world, actor, *firm)?;
+            sectors::abandon_raid(world, dataset, *firm, *target, *region, *industry)?;
             Ok(())
         }
         CommandIntent::FileLobbyRequest {
@@ -3039,11 +2975,214 @@ fn apply_intent(
             require_control(world, actor, *firm)?;
             structure::buyout_jv(world, *venture, *firm)
         }
+        CommandIntent::ListPlant { facility } => {
+            let owner = world
+                .facilities
+                .get(*facility)
+                .map(|entity| entity.firm)
+                .ok_or(DomainError::InvalidEntity {
+                    handle: facility.0,
+                    kind: EntityKind::Facility,
+                })?;
+            require_control(world, actor, owner)?;
+            crate::economy::auctions::list(world, dataset, *facility).map(|_| ())
+        }
+        CommandIntent::BidForPlant {
+            firm,
+            lot,
+            price_cents,
+        } => {
+            require_control(world, actor, *firm)?;
+            crate::economy::auctions::bid(world, *firm, *lot, *price_cents)
+        }
+        CommandIntent::AcceptPlantBid { lot } | CommandIntent::WithdrawListing { lot } => {
+            let seller = world
+                .auctions
+                .lot(*lot)
+                .filter(|entry| entry.route == crate::economy::auctions::LotRoute::Listing)
+                .map(|entry| entry.seller)
+                .ok_or(DomainError::InvalidEntity {
+                    handle: *lot as u64,
+                    kind: EntityKind::Facility,
+                })?;
+            require_control(world, actor, seller)?;
+            if matches!(intent, CommandIntent::AcceptPlantBid { .. }) {
+                crate::economy::auctions::accept(world, *lot)
+            } else {
+                crate::economy::auctions::withdraw(world, *lot)
+            }
+        }
         CommandIntent::ExitVenture { venture, firm } => {
             require_control(world, actor, *firm)?;
             structure::exit_jv(world, *venture, *firm)
         }
     }
+}
+
+/// Legal merger of `target` into `buyer`, which holds at least 90 percent of it: the last minority
+/// holders are paid in cash at max(`offer_cents`, fair value), every target balance moves into the
+/// buyer, the target's shares are retired and its plants, debt, contracts and policies reattach to
+/// the buyer. Recorded in the merger log.
+fn merge_into(
+    world: &mut World,
+    buyer: Handle,
+    target: Handle,
+    offer_cents: i64,
+) -> DomainResult<()> {
+    // Legal merger: move every target balance into the buyer, retire the target shares,
+    // and reattach facilities, debt, contracts and policies to the surviving entity.
+    if target == buyer {
+        return Err(DomainError::OwnershipCycle {
+            buyer: buyer.0,
+            target: target.0,
+        });
+    }
+    // Remaining minority holders are paid in cash before their shares are retired.
+    let minority_cents = deals::minority_cost(world, buyer, target, offer_cents);
+    let investor_shares = world
+        .firm(target)
+        .and_then(|firm| firm.shares.holders.get(&HolderId::Investor))
+        .map(|lot| lot.qty)
+        .unwrap_or(0);
+    deals::buy_out(world, buyer, target, offer_cents)?;
+    let now = world.tick;
+    world
+        .auctions
+        .record_merger(crate::economy::auctions::MergerRecord {
+            tick: now,
+            buyer,
+            target,
+            minority_cents,
+            investor_shares,
+        });
+    let target_book = firm_ref(world, target)?.book.clone();
+    let investment_cost = world
+        .firm(target)
+        .and_then(|firm| firm.shares.holders.get(&HolderId::Firm(buyer)).copied())
+        .map(|lot| lot.cost_cents)
+        .unwrap_or(0);
+    // Buyer takes every account, drops its investment in the target and books the
+    // difference to retained earnings. The two postings each sum to zero.
+    let mut buyer_txn = Txn::new();
+    for account in Account::ALL {
+        let balance = target_book.balance(account);
+        if balance != 0 {
+            buyer_txn = buyer_txn.signed(account, balance, "merger");
+        }
+    }
+    buyer_txn = buyer_txn
+        .signed(Account::Investments, -investment_cost, "merger stake")
+        .signed(Account::RetainedEarnings, investment_cost, "merger stake");
+    let _ = world
+        .firms
+        .get_mut(buyer)
+        .unwrap()
+        .book
+        .commit(world.tick, buyer_txn);
+    let mut target_txn = Txn::new();
+    for account in Account::ALL {
+        let balance = target_book.balance(account);
+        if balance != 0 {
+            target_txn = target_txn.signed(account, -balance, "merger");
+        }
+    }
+    let _ = world
+        .firms
+        .get_mut(target)
+        .unwrap()
+        .book
+        .commit(world.tick, target_txn);
+
+    let facilities: Vec<Handle> = world
+        .firm(target)
+        .map(|firm| firm.facilities.clone())
+        .unwrap_or_default();
+    for facility in &facilities {
+        if let Some(stored) = world.facilities.get_mut(*facility) {
+            stored.firm = buyer;
+        }
+        let bidder = world.firms.get_mut(buyer).unwrap();
+        if !bidder.facilities.contains(facility) {
+            bidder.facilities.push(*facility);
+        }
+    }
+    let contract_handles: Vec<Handle> = world
+        .contracts
+        .iter()
+        .filter(|(_, contract)| contract.buyer == target || contract.seller == target)
+        .map(|(handle, _)| handle)
+        .collect();
+    for handle in contract_handles {
+        if let Some(contract) = world.contracts.get_mut(handle) {
+            if contract.buyer == target {
+                contract.buyer = buyer;
+            }
+            if contract.seller == target {
+                contract.seller = buyer;
+            }
+        }
+        let bidder = world.firms.get_mut(buyer).unwrap();
+        if !bidder.contracts_buy.contains(&handle) && !bidder.contracts_sell.contains(&handle) {
+            bidder.contracts_buy.push(handle);
+        }
+    }
+    let loan_handles = world
+        .firm(target)
+        .map(|firm| firm.loans.clone())
+        .unwrap_or_default();
+    for handle in loan_handles {
+        if let Some(loan) = world.loans.get_mut(handle) {
+            loan.borrower = buyer;
+        }
+        let bidder = world.firms.get_mut(buyer).unwrap();
+        if !bidder.loans.contains(&handle) {
+            bidder.loans.push(handle);
+        }
+    }
+    let bond_handles = world
+        .firm(target)
+        .map(|firm| firm.bonds.clone())
+        .unwrap_or_default();
+    for handle in bond_handles {
+        if let Some(bond) = world.bonds.get_mut(handle) {
+            bond.issuer = buyer;
+        }
+        let bidder = world.firms.get_mut(buyer).unwrap();
+        if !bidder.bonds.contains(&handle) {
+            bidder.bonds.push(handle);
+        }
+    }
+    let policy_handles = world
+        .firm(target)
+        .map(|firm| firm.insurance.clone())
+        .unwrap_or_default();
+    for handle in policy_handles {
+        if let Some(policy) = world.insurance.get_mut(handle) {
+            if policy.insured == target {
+                policy.insured = buyer;
+            }
+            if policy.insurer == target {
+                policy.insurer = buyer;
+            }
+        }
+        let bidder = world.firms.get_mut(buyer).unwrap();
+        if !bidder.insurance.contains(&handle) {
+            bidder.insurance.push(handle);
+        }
+    }
+    if let Some(target) = world.firms.get_mut(target) {
+        target.facilities.clear();
+        target.loans.clear();
+        target.bonds.clear();
+        target.insurance.clear();
+        target.contracts_buy.clear();
+        target.contracts_sell.clear();
+        target.status = FirmStatus::Merged { into: buyer };
+        target.merged_into = Some(buyer);
+        target.shares.holders.clear();
+        target.shares.issued = 0;
+    }
+    Ok(())
 }
 
 fn executive_post(code: u8) -> DomainResult<crate::economy::executives::Post> {
@@ -3190,10 +3329,15 @@ pub(crate) fn blank_firm(
         intercompany_inventory: Default::default(),
         storage: Default::default(),
     };
+    // A new company offers at least the region's going wage: wages drift with inflation, and an
+    // offer under four fifths of the going wage hires nobody, so a plant founded on the catalogue
+    // wage alone would open with no staff and make nothing.
     for tier in 0..3 {
-        firm.policies.wage_offer[tier] = dataset.baseline_weekly_wage_cents[tier]
+        let catalogue = dataset.baseline_weekly_wage_cents[tier]
             * world.regions[region as usize].wage_index_bps as i64
             / 10_000;
+        let going = world.regions[region as usize].labour[tier].prevailing_wage_cents;
+        firm.policies.wage_offer[tier] = catalogue.max(going);
     }
     firm
 }

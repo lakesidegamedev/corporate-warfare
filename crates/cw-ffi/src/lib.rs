@@ -1452,9 +1452,57 @@ fn alert_text(alert: cw_session::Alert) -> String {
         // These carry their whole sentence in the subject.
         "alert.incident" | "alert.law_carrier" | "alert.law_rescue" | "alert.state_rescue"
         | "alert.quota" | "alert.reserve" => alert.subject,
+        "alert.raid_announced" => format!(
+            "{}: a rival has announced a raid on one of its businesses. Raise marketing before it is decided to cut their chance.",
+            alert.subject
+        ),
+        "alert.raid" => format!("{}: a rival raided one of its businesses.", alert.subject),
+        "alert.raid_last_block" => format!(
+            "{}: a raid took its last plant. Build a new plant or found a new company.",
+            alert.subject
+        ),
+        "alert.raid_exposed" => format!(
+            "{}: its whole business is one block, which a raid could take. Marketing is its defence.",
+            alert.subject
+        ),
+        "alert.plant_auction" => format!(
+            "{} is in liquidation and a plant is up for auction. Bid before the deadline.",
+            alert.subject
+        ),
+        "alert.plant_listed" => format!("{} has put a plant up for sale.", alert.subject),
+        "alert.plant_bids_in" => format!(
+            "Bids are in for a plant {} listed. Accept the best or keep the plant.",
+            alert.subject
+        ),
         // An unknown key never reaches the player as a raw key: show what it is about instead.
         _ if !alert.subject.is_empty() => alert.subject,
         _ => alert.key,
+    }
+}
+
+/// Every raid alert key the session raises (cw_session::raid_alerts).
+#[cfg(test)]
+const RAID_ALERT_KEYS: [&str; 4] = [
+    "alert.raid_announced",
+    "alert.raid",
+    "alert.raid_last_block",
+    "alert.raid_exposed",
+];
+
+#[cfg(test)]
+mod raid_alert_text {
+    #[test]
+    fn every_raid_alert_key_has_text_of_its_own() {
+        for key in super::RAID_ALERT_KEYS {
+            let text = super::alert_text(cw_session::Alert {
+                key: key.to_owned(),
+                subject: "Acme".to_owned(),
+                severity: 2,
+                detail: String::new(),
+            });
+            assert!(text.starts_with("Acme: "), "{key} -> {text}");
+            assert_ne!(text, key);
+        }
     }
 }
 
@@ -5141,6 +5189,9 @@ mod tests {
             "alert.captive_markdown",
             "alert.bond_due",
             "alert.lane_reserved",
+            "alert.plant_auction",
+            "alert.plant_listed",
+            "alert.plant_bids_in",
             "alert.something_new",
         ];
         for key in keys {

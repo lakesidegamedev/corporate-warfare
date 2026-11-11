@@ -87,6 +87,105 @@ pub struct PauseInfo {
     pub firm: Option<u64>,
 }
 
+/// Whose raid campaign this is, from the player's side.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CampaignRole {
+    /// A rival raiding one of the player's companies.
+    AgainstPlayer,
+    /// One of the player's companies raiding a rival; it can be abandoned (`AbandonRaid`).
+    ByPlayer,
+    /// One rival raiding another.
+    BetweenRivals,
+}
+
+/// What selling a plant would bring (2.0), for the player to read before confirming
+/// `DisposeFacility`. `bids` is best first; the first one buys. With no bids the plant is written
+/// off for nothing. `book_cents` is what the plant stands at on the books, so the gain or loss on
+/// the sale is the best bid less it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlantSaleView {
+    pub facility: u64,
+    pub book_cents: i64,
+    pub bids: Vec<PlantBidView>,
+}
+
+/// One company's offer for a plant: its price, and the weekly contribution and blocks it reads
+/// the plant as worth to it at public prices.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlantBidView {
+    pub bidder: u64,
+    pub bidder_name: String,
+    pub price_cents: i64,
+    pub weekly_cents: i64,
+    pub blocks_used: i64,
+}
+
+/// A plant on offer (2.0): a failed company's plant in its break-up auction, or a plant its owner
+/// listed. `route` is "break_up" or "listing". Rival bids are sealed until the deadline, so `bids`
+/// is empty while bidding is open; once a listing's bids are put to its owner they are listed best
+/// first (public to everyone, since the sale is). `reserve_cents` is what a scrap buyer pays for a
+/// break-up plant, the least a bid must reach. The opening figures are how the player's main
+/// company reads the plant, by the same rule rivals bid with: `weekly_cents` for `blocks_used`
+/// blocks, `earnings_cents` over the payback horizon and `replacement_cents` for building the same
+/// blocks today, scaled by the share not yet written off. `player_bid_cents` and
+/// `player_bid_firm` are the player's sealed bid, zero when none. `yours` is true when the player
+/// owns the plant (its bids are the player's to accept or refuse until `answer_by`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlantLotView {
+    pub lot: u32,
+    pub facility: u64,
+    pub route: String,
+    pub seller: u64,
+    pub seller_name: String,
+    pub plant_name: String,
+    pub region: u8,
+    pub region_name: String,
+    pub blocks: u8,
+    pub book_cents: i64,
+    pub reserve_cents: i64,
+    pub opened_week: u32,
+    pub closes_week: u32,
+    pub weeks_left: u32,
+    pub weekly_cents: i64,
+    pub blocks_used: i64,
+    pub earnings_cents: i64,
+    pub replacement_cents: i64,
+    pub player_bid_cents: i64,
+    pub player_bid_firm: u64,
+    pub yours: bool,
+    pub bids: Vec<PlantBidView>,
+    pub answer_by_week: u32,
+}
+
+/// A raid campaign announced and not yet decided (2.0), with today's figures. The chance and
+/// stake are what the raid would be if it were decided now; the defence measured at resolution
+/// decides it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RaidCampaignView {
+    pub role: CampaignRole,
+    pub attacker: u64,
+    pub attacker_name: String,
+    pub defender: u64,
+    pub defender_name: String,
+    pub region: u8,
+    pub region_name: String,
+    pub industry: u8,
+    pub industry_name: String,
+    pub budget_cents: i64,
+    /// The campaign budget plus a quarter of the raider's weekly marketing.
+    pub attack_cents: i64,
+    pub defence_cents: i64,
+    pub chance_bps: i32,
+    pub blocks_at_stake: u8,
+    /// Blocks in the defender's division.
+    pub division_blocks: u32,
+    /// What the raider would pay for the blocks if it wins (half of book).
+    pub price_cents: i64,
+    pub announced_week: u32,
+    pub resolves_week: u32,
+    pub weeks_left: u32,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Alert {
     pub key: String,
@@ -299,6 +398,37 @@ pub struct MarketLine {
     pub last_week_sales_lots: i64,
     pub gateway_buy_cents: i64,
     pub gateway_sell_cents: i64,
+    /// The corridor price's move over the last quarter, in basis points.
+    #[serde(default)]
+    pub price_change_quarter_bps: i64,
+    /// Why the price moved, in plain words: the strongest cause acting on it now.
+    #[serde(default)]
+    pub price_reason: String,
+}
+
+/// One opening to build: would one more block of a strategy in a state pay, and how fast. The
+/// same figures the rivals build on (`cw_sim::economy::capacity::opening`).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CapacityOpening {
+    pub recipe_id: String,
+    pub industry: String,
+    pub region: u8,
+    pub region_code: String,
+    pub product_id: String,
+    /// Whether the output trades on the corridor exchange; else it sells where it is made.
+    pub traded: bool,
+    /// Lots a week the market is short of, net of plants on their way, and one block's output.
+    pub room_lots: i64,
+    pub block_lots: i64,
+    /// What a lot fetches and that price against its reference, in basis points.
+    pub price_cents: i64,
+    pub price_vs_reference_bps: i64,
+    /// Households going without in the regions served, and what they asked for, lots a week.
+    pub unmet_lots: i64,
+    pub wanted_lots: i64,
+    pub weekly_contribution_cents: i64,
+    pub build_cost_cents: i64,
+    pub payback_weeks: Option<i64>,
 }
 
 fn holder_name(world: &World, holder: HolderId) -> String {
@@ -585,17 +715,88 @@ pub fn events(world: &World, dataset: &Dataset) -> Vec<EventLine> {
                     }),
                 mandatory: event.mandatory,
                 deadline: event.deadline.0,
-                choices: card
-                    .choices
-                    .iter()
-                    .map(|choice| ChoiceLine {
-                        id: choice.id.clone(),
-                        label: choice.label.clone(),
-                    })
-                    .collect(),
+                choices: tender_choices(world, dataset, event.deal, &card.choices).unwrap_or_else(
+                    || {
+                        card.choices
+                            .iter()
+                            .map(|choice| ChoiceLine {
+                                id: choice.id.clone(),
+                                label: choice.label.clone(),
+                            })
+                            .collect()
+                    },
+                ),
             })
         })
         .collect()
+}
+
+/// A tender card that would cost the player control of a company they run: the engine puts the
+/// refusal first and says in plain words what tendering costs, with the bid against fair value.
+/// None for every other card and for tenders that leave the player's majority alone.
+fn grouped(n: i64) -> String {
+    let digits = n.abs().to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    if n < 0 { format!("-{out}") } else { out }
+}
+
+fn tender_choices(
+    world: &World,
+    dataset: &Dataset,
+    deal: Option<cw_core::ids::Handle>,
+    card_choices: &[cw_data::events::EventChoice],
+) -> Option<Vec<ChoiceLine>> {
+    let outlook = cw_sim::economy::deals::tender_outlook(world, deal?)?;
+    if !outlook.loses_control() {
+        return None;
+    }
+    let company = world.firm(outlook.target)?.name.clone();
+    let paper_money = |cents: i64| crate::paper::money(world, dataset, outlook.target, cents);
+    let symbol = paper_money(0).trim_end_matches('0').to_owned();
+    let price = |cents: i64| format!("{symbol}{}.{:02}", cents / 100, cents % 100);
+    let after = outlook.after_bps();
+    let premium = outlook.premium_bps();
+    let against_fair = match premium.cmp(&0) {
+        std::cmp::Ordering::Greater => format!(
+            "{}.{:02} percent above fair value of {}",
+            premium / 100,
+            premium % 100,
+            price(outlook.fair_cents)
+        ),
+        std::cmp::Ordering::Less => format!(
+            "{}.{:02} percent below fair value of {}",
+            -premium / 100,
+            -premium % 100,
+            price(outlook.fair_cents)
+        ),
+        std::cmp::Ordering::Equal => format!("at fair value of {}", price(outlook.fair_cents)),
+    };
+    let mut lines: Vec<ChoiceLine> = card_choices
+        .iter()
+        .map(|choice| ChoiceLine {
+            id: choice.id.clone(),
+            label: match choice.id.as_str() {
+                "tender" => format!(
+                    "Tender {} shares at {} each ({against_fair}). You would hold {}.{:02} percent and lose control of {company}",
+                    grouped(outlook.shares_sold),
+                    price(outlook.offer_cents),
+                    after / 100,
+                    after % 100
+                ),
+                "refuse" => format!("Refuse the terms and keep control of {company}"),
+                _ => choice.label.clone(),
+            },
+        })
+        .collect();
+    // The safe answer comes first; the order of the rest is the card's own.
+    lines.sort_by_key(|line| line.id != "refuse");
+    Some(lines)
 }
 
 pub fn market(world: &World, dataset: &Dataset, region: u8, product: u16) -> MarketLine {
@@ -656,6 +857,9 @@ pub fn market(world: &World, dataset: &Dataset, region: u8, product: u16) -> Mar
         last_week_sales_lots: sales,
         gateway_buy_cents: gateway.map(|g| g.buy_price_cents).unwrap_or(0),
         gateway_sell_cents: gateway.map(|g| g.sell_price_cents).unwrap_or(0),
+        price_change_quarter_bps: cw_sim::economy::pricing::price_drivers(world, dataset, product)
+            .0,
+        price_reason: cw_sim::economy::pricing::price_reason(world, dataset, product),
     }
 }
 
