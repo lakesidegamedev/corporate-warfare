@@ -9,6 +9,7 @@ pub mod cfo;
 pub mod dto;
 pub mod letters;
 pub mod paper;
+pub mod raid_alerts;
 pub mod save;
 pub mod telemetry;
 
@@ -1083,6 +1084,7 @@ impl Session {
         logistics_alerts(world, &self.dataset, &mut alerts);
         government_alerts(world, &self.dataset, &mut alerts);
         structure_alerts(world, &mut alerts);
+        raid_alerts::raid_alerts(world, &self.dataset, &mut alerts);
         for event in dto::events(world, &self.dataset) {
             if event.mandatory {
                 alerts.push(Alert {

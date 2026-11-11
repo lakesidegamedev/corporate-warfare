@@ -242,27 +242,59 @@ pub struct PolicyStats {
     pub rejections: BTreeMap<String, u32>,
 }
 
+/// `--legacy-cards`: the old harness answer to every card, the first choice in the content
+/// file's order, kept for comparing with earlier baselines.
+pub static LEGACY_CARDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 pub struct PolicyRunner {
     policy: ReferencePolicy,
+    legacy_cards: bool,
     next_low: u64,
     verbose: bool,
     /// Last production target per firm, so a cash dip cannot churn staffing every cadence.
     last_target: BTreeMap<u64, i32>,
     /// The passive player has founded its company and set its target; it never acts again.
     passive_done: bool,
-    skilled: skilled::SkilledState,
     pub stats: PolicyStats,
+}
+
+/// The answer an active policy gives a card: never a choice that gives up control of a company
+/// the player runs, otherwise the first choice the engine offers (the engine lists its
+/// recommended answer first, in the order the player's screen shows).
+fn engine_card_answer(session: &Session, event: u64) -> Option<String> {
+    let line = cw_session::dto::events(&session.world, &session.dataset)
+        .into_iter()
+        .find(|line| line.id == event)?;
+    if line.card == "tender_offer" {
+        let deal = session
+            .world
+            .events
+            .pending
+            .iter()
+            .find(|pending| pending.id == event)
+            .and_then(|pending| pending.deal)?;
+        let sells_control = cw_sim::economy::deals::tender_outlook(&session.world, deal)
+            .is_some_and(|outlook| outlook.loses_control());
+        if sells_control {
+            return line
+                .choices
+                .iter()
+                .find(|choice| choice.id == "refuse")
+                .map(|choice| choice.id.clone());
+        }
+    }
+    line.choices.first().map(|choice| choice.id.clone())
 }
 
 impl PolicyRunner {
     pub fn new(policy: ReferencePolicy, verbose: bool) -> PolicyRunner {
         PolicyRunner {
             policy,
+            legacy_cards: LEGACY_CARDS.load(std::sync::atomic::Ordering::Relaxed),
             next_low: 1,
             verbose,
             last_target: BTreeMap::new(),
             passive_done: false,
-            skilled: Default::default(),
             stats: PolicyStats::default(),
         }
     }
@@ -738,10 +770,15 @@ impl PolicyRunner {
                 .iter()
                 .find(|choice| choice.handler == "no_action")
                 .or_else(|| card.choices.last())
-        } else {
+        } else if self.legacy_cards {
             card.choices.first()
+        } else {
+            None
         };
-        let Some(choice) = choice.map(|choice| choice.id.clone()) else {
+        let engine_pick = (choice.is_none() && !self.legacy_cards)
+            .then(|| engine_card_answer(session, event))
+            .flatten();
+        let Some(choice) = engine_pick.or_else(|| choice.map(|choice| choice.id.clone())) else {
             return false;
         };
         if self.verbose {
@@ -1004,5 +1041,68 @@ mod tests {
             session.world.firm(primary).unwrap().facilities.len() > before
                 || !session.world.firm(primary).unwrap().loans.is_empty()
         );
+    }
+
+    #[test]
+    fn an_active_policy_refuses_a_tender_that_costs_control_and_legacy_takes_the_first_button() {
+        use cw_sim::state::{Deal, DealKind, DealState, HolderId, ShareBook, ShareLot};
+        let mut session = guided(193);
+        let target = session.world.investor.primary_group.unwrap();
+        let buyer = session
+            .world
+            .firms
+            .iter()
+            .map(|(h, _)| h)
+            .find(|h| {
+                *h != target && !cw_sim::economy::events_engine::player_side(&session.world, *h)
+            })
+            .unwrap();
+        let mut holders = BTreeMap::new();
+        holders.insert(
+            HolderId::Investor,
+            ShareLot {
+                qty: 1_000_000,
+                cost_cents: 0,
+            },
+        );
+        let firm = session.world.firms.get_mut(target).unwrap();
+        firm.shares = ShareBook::new(holders);
+        firm.shares.fair_cents = 300;
+        let tick = session.world.tick;
+        let deal = session.world.deals.insert(Deal {
+            buyer,
+            target,
+            kind: DealKind::SharePurchase,
+            state: DealState::OfferOpen,
+            escrow_cents: 0,
+            offer_price_cents: 372,
+            max_shares: 500_001,
+            committed_shares: 0,
+            started: tick,
+            diligence_until: tick,
+            offer_deadline: cw_core::calendar::Tick(tick.0 + 4),
+            review_deadline: None,
+            frozen_fair_cents: 300,
+            review_required: false,
+            remedy_share_bps: 0,
+            hostile: false,
+            diligence_paid: true,
+            investor_tendered: false,
+        });
+        let event = cw_sim::economy::events_engine::open_tender(&mut session.world, deal);
+        let mut runner = PolicyRunner::new(ReferencePolicy::Expander, false);
+        assert!(runner.answer_event(&mut session, event));
+        assert!(
+            !session.world.deals.get(deal).unwrap().investor_tendered,
+            "the new answer refuses"
+        );
+        // The old behaviour, kept for comparison: the content file's first choice, tender.
+        let mut legacy = PolicyRunner::new(ReferencePolicy::Expander, false);
+        legacy.legacy_cards = true;
+        let again = cw_sim::economy::events_engine::open_tender(&mut session.world, deal);
+        if again != 0 {
+            assert!(legacy.answer_event(&mut session, again));
+            assert!(session.world.deals.get(deal).unwrap().investor_tendered);
+        }
     }
 }
