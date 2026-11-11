@@ -53,7 +53,7 @@ const val DOCK_MIN = 0.2f
 const val DOCK_MAX = 0.8f
 const val DOCK_DEFAULT = 0.45f
 
-class AppSettings(private val file: File) {
+class AppSettings(private val file: File) : ViewPrefs {
     /** Whether a settings file was already there: a player upgrading from 1.8 has one, a first launch does not. */
     private val existedAtLaunch = file.exists()
     private val props = Properties().apply { if (file.exists()) file.inputStream().use { load(it) } }
@@ -155,6 +155,13 @@ class AppSettings(private val file: File) {
     fun chooseUiScale(value: Float) { uiScale = value; store() }
     fun chooseWindowMode(value: WindowMode) { windowMode = value; store() }
     fun chooseResolution(value: Pair<Int, Int>) { resolution = value; store() }
+
+    /** Saved grid views and the game's timeframe (the 2.0 grids): kept here so they outlast any one career. */
+    override fun read(key: String): String? = props.getProperty(key)
+    override fun write(key: String, value: String?) {
+        if (value == null) props.remove(key) else props.setProperty(key, value)
+        store()
+    }
 
     private fun store() {
         if (graphicsChosen) graphics.let { g ->

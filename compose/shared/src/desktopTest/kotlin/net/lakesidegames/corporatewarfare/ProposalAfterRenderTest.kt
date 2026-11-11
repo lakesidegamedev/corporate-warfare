@@ -18,10 +18,31 @@ class ProposalAfterRenderTest {
         val me = store.selectedFirm
         val rival = store.stocks.filter { it.firm != me && !it.controlledByYou }.maxByOrNull { it.marketCapCents }?.firm
         ProposalCareer.shoot("after-league", 1920, 1080, settings) { TycoonShell(store, onSettings = {}, start = Place.League, startPick = rival) }
+        // The control bar at work on the goods grid, each from the same game.
+        val sector = store.commodities.filter { it.sector != "other" }.groupBy { it.sector }.maxByOrNull { it.value.size }!!.key
+        demo(store, settings, "views-open", "goods", menu = "view")
+        demo(store, settings, "columns-chooser", "goods", menu = "columns")
+        demo(store, settings, "filters-active", "goods", search = "sold>0", shape = { v ->
+            v.withFilter(Filter(FilterOp.Is, "sector", Sectors.name(sector))).withFilter(Filter(FilterOp.Above, "price", number = 1.0))
+        })
+        demo(store, settings, "grouped", "goods", shape = { v -> v.copy(groupBy = "sector") })
+        demo(store, settings, "league-finance", "league", shape = { LeagueViews[1] }, place = Place.League, pick = rival)
         // A page not yet converted, inside the new shell, to show nothing is lost.
         ProposalCareer.shoot("after-shell-legacy-finance", 1920, 1080, settings) { TycoonShell(store, onSettings = {}, start = Place.Finance) }
         // The phone: the same grid in two-line rows with the same sort and filter.
         ProposalCareer.shoot("after-goods-phone", 390, 844, settings, density = 2f) { GoodsScreen(store) }
+        GridDemo.screen = "goods"; GridDemo.menu = "view"
+        try { ProposalCareer.shoot("phone-view-sheet", 390, 844, settings, density = 2f) { GoodsScreen(store) } } finally { GridDemo.clear() }
+    }
+
+    /** One shell picture with a grid's menu open, a search typed or its view reshaped, as a player would leave it. */
+    private fun demo(s: GameStore, settings: AppSettings, name: String, screen: String, menu: String? = null, search: String = "", shape: ((ViewState) -> ViewState)? = null, place: Place = Place.Goods, pick: ULong? = null) {
+        GridDemo.screen = screen; GridDemo.menu = menu; GridDemo.search = search; GridDemo.shape = shape
+        try {
+            ProposalCareer.shoot(name, 1920, 1080, settings) { TycoonShell(s, onSettings = {}, start = place, startPick = pick) }
+        } finally {
+            GridDemo.clear()
+        }
     }
 
     @Test
